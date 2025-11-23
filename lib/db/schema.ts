@@ -126,3 +126,32 @@ export const templateUsage = pgTable("template_usage", {
   executionTime: integer("execution_time"), // milliseconds
   createdAt: timestamp("created_at").defaultNow(),
 })
+
+// n8n 连接配置（支持用户自定义 n8n 实例/域名）
+export const n8nConnections = pgTable("n8n_connections", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  baseUrl: text("base_url").notNull(),
+  apiKey: varchar("api_key", { length: 500 }), // 可加密存储
+  webhookSecret: varchar("webhook_secret", { length: 500 }),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// 通用任务执行表（统一跟踪 n8n 执行与结果）
+export const tasks = pgTable("tasks", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  connectionId: integer("connection_id").references(() => n8nConnections.id),
+  workflowName: varchar("workflow_name", { length: 255 }),
+  webhookPath: varchar("webhook_path", { length: 255 }),
+  executionId: varchar("execution_id", { length: 255 }),
+  payload: text("payload"),
+  result: text("result"),
+  status: varchar("status", { length: 30 }).default("pending"), // pending, running, approved, rejected, success, failed
+  relatedStorageKey: text("related_storage_key"), // 可用于文件处理等
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})

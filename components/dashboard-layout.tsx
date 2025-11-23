@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Sparkles, Plus, MessageSquare, Database, Settings, LogOut, Menu, X, FileText } from "lucide-react"
+import { Sparkles, Plus, MessageSquare, Database, Settings, LogOut, Menu, X, FileText, Video } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/components/auth-provider" // Fixed import path
 
@@ -104,6 +104,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
                 <Sparkles className="w-4 h-4 mr-2" />
                 内容生成
+              </Button>
+            </Link>
+            <Link href="/dashboard/video">
+              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
+                <Video className="w-4 h-4 mr-2" />
+                视频生成
               </Button>
             </Link>
             <Link href="/dashboard/knowledge-base">
