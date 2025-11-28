@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Send, Sparkles, Loader2, CheckCircle2, RefreshCw, Upload, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -33,6 +32,24 @@ type StoryboardScene = {
   }>
 }
 
+type VideoClip = {
+  task_idx: number
+  video_url: string
+  status: "succeeded" | "failed" | "pending" | "submitted"
+  error?: string
+}
+
+type AgentOutput = {
+  agent: string
+  type: string
+  delta: string
+  timestamp: number
+  progress?: {
+    current: number
+    total: number
+  }
+}
+
 type Message = {
   id: string
   role: "user" | "assistant" | "system"
@@ -42,7 +59,18 @@ type Message = {
   selectedOption?: string // 用户选择的选项
   storyboard?: {
     scenes: StoryboardScene[]
+    requiresConfirmation?: boolean
+    runId?: string
   } // 故事板数据
+  agentOutputs?: AgentOutput[] // 智能体输出
+  videoClips?: {
+    clips: VideoClip[]
+    requiresConfirmation?: boolean
+  } // 视频片段数据
+  finalVideo?: {
+    video_url: string
+    run_id?: string
+  } // 最终视频数据
 }
 
 type ConversationState = {
@@ -91,7 +119,7 @@ export function VideoChat() {
   // 防止重复初始化的 ref
   const hasInitialized = useRef(false)
 
-  const addMessage = useCallback((role: "user" | "assistant" | "system", content: string, options?: string[], storyboard?: { scenes: StoryboardScene[] }) => {
+  const addMessage = useCallback((role: "user" | "assistant" | "system", content: string, options?: string[], storyboard?: { scenes: StoryboardScene[]; requiresConfirmation?: boolean; runId?: string }, videoClips?: { clips: VideoClip[]; requiresConfirmation?: boolean }, finalVideo?: { video_url: string; run_id?: string }) => {
     const message: Message = {
       id: `msg_${Date.now()}_${Math.random()}`,
       role,
@@ -99,6 +127,8 @@ export function VideoChat() {
       timestamp: Date.now(),
       options,
       storyboard,
+      videoClips,
+      finalVideo,
     }
     setMessages((prev) => [...prev, message])
   }, [])
@@ -141,6 +171,67 @@ export function VideoChat() {
         })
         setLoading(false)
       }
+    } else if (event.type === "thought" || event.type === "tool_result" || event.type === "progress" || event.type === "video_clip_completed" || event.type === "heartbeat") {
+      // 智能体输出事件，追加到最后一个消息或创建新消息
+      // 心跳事件只更新最后一条消息，不创建新消息
+      const agentOutput: AgentOutput = {
+        agent: event.agent || "System",
+        type: event.type,
+        delta: event.delta || "",
+        timestamp: event.ts || Date.now(),
+        progress: event.progress,
+      }
+      
+      setMessages((prev) => {
+        const lastMessage = prev[prev.length - 1]
+        if (lastMessage && lastMessage.role !== "user" && lastMessage.role !== "assistant") {
+          // 如果是心跳事件，更新最后一条消息的最后一个输出，而不是追加
+          if (event.type === "heartbeat") {
+            const existingOutputs = lastMessage.agentOutputs || []
+            const lastOutput = existingOutputs[existingOutputs.length - 1]
+            if (lastOutput && lastOutput.type === "heartbeat") {
+              // 更新最后一条心跳消息
+              return prev.map((msg, idx) => 
+                idx === prev.length - 1 
+                  ? { 
+                      ...msg, 
+                      agentOutputs: [
+                        ...existingOutputs.slice(0, -1),
+                        agentOutput
+                      ] 
+                    }
+                  : msg
+              )
+            }
+          }
+          // 追加到最后一个系统消息
+          return prev.map((msg, idx) => 
+            idx === prev.length - 1 
+              ? { ...msg, agentOutputs: [...(msg.agentOutputs || []), agentOutput] }
+              : msg
+          )
+        } else {
+          // 创建新的系统消息
+          const newMessage: Message = {
+            id: `msg_${Date.now()}_${Math.random()}`,
+            role: "system",
+            content: "",
+            timestamp: Date.now(),
+            agentOutputs: [agentOutput],
+          }
+          return [...prev, newMessage]
+        }
+      })
+    } else if (event.type === "video_clips_pending") {
+      // 收到需要确认的视频片段数据
+      const clips = event.payload?.clips || []
+      if (clips.length > 0) {
+        addMessage("system", event.delta || "所有视频片段已生成，请审核并确认", undefined, undefined, {
+          clips: clips,
+          requiresConfirmation: true,
+        })
+        setLoading(false)
+      }
     } else if (event.type === "completed") {
       setConversationState((prev) => ({ ...prev, status: "completed" }))
       addMessage("system", "视频生成完成！")
@@ -148,7 +239,7 @@ export function VideoChat() {
       setLoading(false)
       addMessage("assistant", `错误：${event.delta || event.content || "未知错误"}`)
     }
-  }, [addMessage])
+  }, [addMessage, conversationState.runId])
 
   const startConversation = useCallback(async () => {
     // 防止重复调用
@@ -354,6 +445,136 @@ export function VideoChat() {
     [loading, conversationState, addMessage, handleEvent]
   )
 
+  // 处理场景重新生成
+  const handleRegenerateScene = useCallback(async () => {
+    if (!editingScene || isRegenerating) return
+
+    setIsRegenerating(true)
+    try {
+      const res = await fetch("/api/crewai/scene/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message_id: editingScene.messageId,
+          scene_idx: editingScene.scene.scene_idx,
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error("重新生成失败")
+      }
+
+      const data = await res.json()
+      if (data.scene) {
+        // 更新场景数据
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === editingScene.messageId && msg.storyboard) {
+              const updatedScenes = msg.storyboard.scenes.map((s) =>
+                s.scene_idx === data.scene.scene_idx ? data.scene : s
+              )
+              return {
+                ...msg,
+                storyboard: { ...msg.storyboard, scenes: updatedScenes },
+              }
+            }
+            return msg
+          })
+        )
+
+        // 更新编辑状态
+        setEditingScene({
+          ...editingScene,
+          scene: data.scene,
+          originalScene: data.scene,
+        })
+        setEditedScript(data.scene.clips?.map((clip: any) => clip.desc).join("；") || "")
+        setUploadedImageUrl(data.scene.image_url || null)
+      }
+    } catch (error) {
+      console.error("重新生成场景失败:", error)
+      addMessage("assistant", "重新生成失败，请重试。")
+    } finally {
+      setIsRegenerating(false)
+    }
+  }, [editingScene, isRegenerating, addMessage])
+
+  // 处理图片上传
+  const handleUploadImage = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      addMessage("assistant", "请上传图片文件")
+      return
+    }
+
+    setUploadedImage(file)
+    const url = URL.createObjectURL(file)
+    setUploadedImageUrl(url)
+  }, [addMessage])
+
+  // 保存场景修改
+  const handleSaveScene = useCallback(async () => {
+    if (!editingScene) return
+
+    try {
+      const formData = new FormData()
+      formData.append("message_id", editingScene.messageId)
+      formData.append("scene_idx", editingScene.scene.scene_idx.toString())
+      formData.append("script", editedScript)
+
+      if (uploadedImage) {
+        formData.append("image", uploadedImage)
+      }
+
+      const res = await fetch("/api/crewai/scene/update", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!res.ok) {
+        throw new Error("保存失败")
+      }
+
+      const data = await res.json()
+      if (data.scene) {
+        // 更新消息中的场景数据
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === editingScene.messageId && msg.storyboard) {
+              const updatedScenes = msg.storyboard.scenes.map((s) =>
+                s.scene_idx === data.scene.scene_idx ? data.scene : s
+              )
+              return {
+                ...msg,
+                storyboard: { ...msg.storyboard, scenes: updatedScenes },
+              }
+            }
+            return msg
+          })
+        )
+      }
+
+      // 关闭编辑面板
+      setEditingScene(null)
+      setEditedScript("")
+      setUploadedImage(null)
+      setUploadedImageUrl(null)
+    } catch (error) {
+      console.error("保存场景失败:", error)
+      addMessage("assistant", "保存失败，请重试。")
+    }
+  }, [editingScene, editedScript, uploadedImage, addMessage])
+
+  // 取消编辑
+  const handleCancelEdit = useCallback(() => {
+    setEditingScene(null)
+    setEditedScript("")
+    setUploadedImage(null)
+    setUploadedImageUrl(null)
+  }, [])
+
   return (
     <div className="h-full flex flex-col bg-background">
       {/* 头部 */}
@@ -375,7 +596,19 @@ export function VideoChat() {
       </div>
 
       {/* 对话区域 */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 px-6 py-4">
+      <div 
+        ref={scrollAreaRef}
+        className="flex-1 px-6 py-4 overflow-y-auto"
+        style={{
+          scrollbarWidth: 'none', // Firefox
+          msOverflowStyle: 'none', // IE/Edge
+        }}
+      >
+        <style jsx global>{`
+          div[class*="overflow-y-auto"]::-webkit-scrollbar {
+            display: none; /* Chrome, Safari and Opera */
+          }
+        `}</style>
         <div className="max-w-4xl mx-auto space-y-4">
           {messages.map((message) => (
             <div
@@ -410,14 +643,350 @@ export function VideoChat() {
                   )}
                 >
                   <CardContent className="p-0">
-                    <p
-                      className={cn(
-                        "text-sm whitespace-pre-wrap mb-3",
-                        message.role === "user" ? "text-primary-foreground" : "text-foreground"
-                      )}
-                    >
-                      {message.content}
-                    </p>
+                    {/* 最终视频展示 - 优先显示 */}
+                    {message.finalVideo && message.finalVideo.video_url && (
+                      <div className="mt-4 space-y-4">
+                        <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 border-green-500/20">
+                          <CardContent className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
+                                <CheckCircle2 className="w-6 h-6 text-white" />
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-lg font-bold">最终视频合成完成</h3>
+                                  <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                                    完成
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-6">
+                              {message.content || "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。"}
+                            </p>
+                            <div className="aspect-video bg-black rounded-lg overflow-hidden relative group mb-4">
+                              <video
+                                src={message.finalVideo.video_url}
+                                controls
+                                className="w-full h-full object-contain"
+                                preload="metadata"
+                                playsInline
+                              >
+                                您的浏览器不支持视频播放。
+                              </video>
+                            </div>
+                            <div className="flex gap-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => {
+                                  const link = document.createElement("a")
+                                  link.href = message.finalVideo.video_url
+                                  link.download = `video_${message.finalVideo.run_id || "final"}.mp4`
+                                  link.click()
+                                }}
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                下载视频
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(message.finalVideo.video_url)
+                                  addMessage("system", "视频链接已复制到剪贴板")
+                                }}
+                              >
+                                <Send className="w-4 h-4 mr-2" />
+                                分享链接
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                    
+                    {message.content && !message.finalVideo && (
+                      <p
+                        className={cn(
+                          "text-sm whitespace-pre-wrap mb-3",
+                          message.role === "user" ? "text-primary-foreground" : "text-foreground"
+                        )}
+                      >
+                        {message.content}
+                      </p>
+                    )}
+                    
+                    {/* 智能体输出展示 */}
+                    {message.agentOutputs && message.agentOutputs.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <div className="text-xs font-semibold text-muted-foreground mb-2">智能体执行过程</div>
+                        <div className="bg-muted/50 rounded-lg p-3 space-y-2 max-h-[300px] overflow-y-auto">
+                          {message.agentOutputs.map((output, idx) => (
+                            <div key={idx} className="text-xs space-y-1">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {output.agent}
+                                </Badge>
+                                <span className="text-muted-foreground">{output.type}</span>
+                                {output.progress && (
+                                  <span className="text-muted-foreground">
+                                    ({output.progress.current}/{output.progress.total})
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-foreground ml-2">{output.delta}</div>
+                              {output.progress && (
+                                <div className="w-full bg-background rounded-full h-1.5 mt-1">
+                                  <div
+                                    className="bg-primary h-1.5 rounded-full transition-all"
+                                    style={{ width: `${(output.progress.current / output.progress.total) * 100}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* 最终视频展示 */}
+                    {message.finalVideo && message.finalVideo.video_url && (
+                      <div className="mt-4 space-y-4">
+                        <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 border-green-500/20">
+                          <CardContent className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
+                                <CheckCircle2 className="w-6 h-6 text-white" />
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-lg font-bold">最终视频合成完成</h3>
+                                  <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                                    完成
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-6">
+                              {message.content || "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。"}
+                            </p>
+                            <div className="aspect-video bg-black rounded-lg overflow-hidden relative group mb-4">
+                              <video
+                                src={message.finalVideo.video_url}
+                                controls
+                                className="w-full h-full object-contain"
+                                preload="metadata"
+                                playsInline
+                              >
+                                您的浏览器不支持视频播放。
+                              </video>
+                            </div>
+                            <div className="flex gap-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => {
+                                  const link = document.createElement("a")
+                                  link.href = message.finalVideo.video_url
+                                  link.download = `video_${message.finalVideo.run_id || "final"}.mp4`
+                                  link.click()
+                                }}
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                下载视频
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(message.finalVideo.video_url)
+                                  addMessage("system", "视频链接已复制到剪贴板")
+                                }}
+                              >
+                                <Send className="w-4 h-4 mr-2" />
+                                分享链接
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                    
+                    {/* 视频片段展示 */}
+                    {message.videoClips && message.videoClips.clips && message.videoClips.clips.length > 0 && (
+                      <div className="mt-4 space-y-4">
+                        <div className="text-sm font-semibold">生成的视频片段</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {message.videoClips.clips.map((clip) => (
+                            <Card key={clip.task_idx} className="overflow-hidden">
+                              <div className="aspect-video bg-muted relative">
+                                {clip.status === "succeeded" && clip.video_url ? (
+                                  <video
+                                    src={clip.video_url}
+                                    controls
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : clip.status === "failed" ? (
+                                  <div className="w-full h-full flex items-center justify-center text-destructive">
+                                    <div className="text-center">
+                                      <p className="text-sm font-semibold">生成失败</p>
+                                      {clip.error && <p className="text-xs mt-1">{clip.error}</p>}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                    <Loader2 className="w-8 h-8 animate-spin" />
+                                  </div>
+                                )}
+                              </div>
+                              <CardContent className="p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <Badge variant="outline">场景 {clip.task_idx}</Badge>
+                                  <Badge variant={clip.status === "succeeded" ? "default" : clip.status === "failed" ? "destructive" : "secondary"}>
+                                    {clip.status === "succeeded" ? "已完成" : clip.status === "failed" ? "失败" : "处理中"}
+                                  </Badge>
+                                </div>
+                                <div className="flex gap-2 mt-2">
+                                  {clip.status === "succeeded" && clip.video_url && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        onClick={() => {
+                                          const video = document.createElement("video")
+                                          video.src = clip.video_url
+                                          video.controls = true
+                                          video.play()
+                                          const newWindow = window.open("", "_blank")
+                                          if (newWindow) {
+                                            newWindow.document.write(`
+                                              <html>
+                                                <head><title>场景 ${clip.task_idx} 视频</title></head>
+                                                <body style="margin:0;padding:20px;background:#000;display:flex;justify-content:center;align-items:center;min-height:100vh;">
+                                                  <video src="${clip.video_url}" controls autoplay style="max-width:100%;max-height:100vh;"></video>
+                                                </body>
+                                              </html>
+                                            `)
+                                          }
+                                        }}
+                                      >
+                                        <Send className="w-4 h-4 mr-1" />
+                                        播放
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={async () => {
+                                          // 重新生成视频片段
+                                          setLoading(true)
+                                          try {
+                                            const res = await fetch("/api/crewai/scene/regenerate", {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({
+                                                run_id: conversationState.runId,
+                                                task_idx: clip.task_idx,
+                                              }),
+                                            })
+                                            if (res.ok) {
+                                              addMessage("system", `正在重新生成场景 ${clip.task_idx} 的视频片段...`)
+                                            }
+                                          } catch (error) {
+                                            console.error("重新生成失败:", error)
+                                            addMessage("assistant", "重新生成失败，请重试。")
+                                          } finally {
+                                            setLoading(false)
+                                          }
+                                        }}
+                                        disabled={loading}
+                                      >
+                                        <RefreshCw className="w-4 h-4 mr-1" />
+                                        重新生成
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                        {message.videoClips.requiresConfirmation && (
+                          <div className="flex gap-2 mt-4">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={async () => {
+                                // 确认所有视频片段，继续拼接
+                                setLoading(true)
+                                try {
+                                  const runId = conversationState.runId
+                                  if (!runId) {
+                                    addMessage("system", "错误：缺少 run_id")
+                                    return
+                                  }
+                                  
+                                  addMessage("system", "已确认所有视频片段，开始拼接最终视频...")
+                                  
+                                  const res = await fetch("/api/crewai/video-clips/confirm", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      run_id: runId,
+                                      confirmed: true,
+                                    }),
+                                  })
+                                  
+                                  const data = await res.json()
+                                  console.log("[Video Clips Confirm] Response data:", data)
+                                  
+                                  if (res.ok && data.final_url) {
+                                    console.log("[Video Clips Confirm] Adding final video message with URL:", data.final_url)
+                                    // 添加最终视频消息，包含视频播放器
+                                    addMessage(
+                                      "assistant", 
+                                      "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。", 
+                                      undefined, // options
+                                      undefined, // storyboard
+                                      undefined, // videoClips
+                                      { // finalVideo
+                                        video_url: data.final_url,
+                                        run_id: runId
+                                      }
+                                    )
+                                  } else {
+                                    console.error("[Video Clips Confirm] Error:", data.error || "未知错误")
+                                    addMessage("system", `拼接失败：${data.error || "未知错误"}`)
+                                  }
+                                } catch (error) {
+                                  console.error("拼接失败:", error)
+                                  addMessage("system", `拼接失败：${error instanceof Error ? error.message : "未知错误"}`)
+                                } finally {
+                                  setLoading(false)
+                                }
+                              }}
+                              disabled={loading}
+                            >
+                              接受并继续拼接
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                addMessage("system", "已标记需要修改，请选择要重新生成的片段")
+                              }}
+                              disabled={loading}
+                            >
+                              需要修改
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
                     {/* 故事板展示 */}
                     {message.storyboard && message.storyboard.scenes && message.storyboard.scenes.length > 0 && (
@@ -622,7 +1191,7 @@ export function VideoChat() {
 
           <div ref={messagesEndRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       {/* 输入区域 */}
       <div className="border-t border-border px-6 py-4 bg-card">
@@ -658,6 +1227,130 @@ export function VideoChat() {
           )}
         </div>
       </div>
+
+      {/* 右侧编辑面板 */}
+      <Sheet open={!!editingScene} onOpenChange={(open) => !open && handleCancelEdit()}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          {editingScene && (
+            <>
+              <SheetHeader>
+                <SheetTitle>编辑场景 {editingScene.scene.scene_idx}</SheetTitle>
+                <SheetDescription>
+                  修改场景脚本或上传新图片。修改后点击"确认"保存更改。
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-6 space-y-6">
+                {/* 场景预览图片 */}
+                <div className="space-y-2">
+                  <Label>场景预览</Label>
+                  <div className="aspect-video bg-muted rounded-lg overflow-hidden relative">
+                    {uploadedImageUrl ? (
+                      <img
+                        src={uploadedImageUrl}
+                        alt={`场景 ${editingScene.scene.scene_idx}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : editingScene.scene.image_url ? (
+                      <img
+                        src={editingScene.scene.image_url}
+                        alt={`场景 ${editingScene.scene.scene_idx}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <span>暂无图片</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 场景脚本编辑 */}
+                <div className="space-y-2">
+                  <Label>场景脚本</Label>
+                  <Textarea
+                    value={editedScript}
+                    onChange={(e) => setEditedScript(e.target.value)}
+                    placeholder="输入场景描述，多个镜头用分号（；）分隔"
+                    className="min-h-[120px] resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    提示：每个镜头描述用分号（；）分隔
+                  </p>
+                </div>
+
+                {/* 操作按钮 */}
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleRegenerateScene}
+                      disabled={isRegenerating}
+                      className="flex-1"
+                    >
+                      {isRegenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          重新生成中...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          AI 重新生成
+                        </>
+                      )}
+                    </Button>
+                    <Label htmlFor="image-upload" className="flex-1">
+                      <Button
+                        variant="outline"
+                        asChild
+                        className="w-full"
+                      >
+                        <span>
+                          <Upload className="w-4 h-4 mr-2" />
+                          上传图片
+                        </span>
+                      </Button>
+                      <Input
+                        id="image-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleUploadImage}
+                        className="hidden"
+                      />
+                    </Label>
+                  </div>
+                </div>
+
+                {/* 场景信息 */}
+                <div className="space-y-2 pt-4 border-t">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">场景时长</span>
+                    <span className="font-medium">
+                      {editingScene.scene.begin_s}s - {editingScene.scene.end_s}s
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">镜头数量</span>
+                    <span className="font-medium">
+                      {editingScene.scene.clips?.length || 0} 个
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <SheetFooter className="mt-6">
+                <Button variant="outline" onClick={handleCancelEdit}>
+                  取消
+                </Button>
+                <Button onClick={handleSaveScene} disabled={!editedScript.trim()}>
+                  确认
+                </Button>
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 600 // 增加到 10 分钟，允许用户长时间不操作
 
 const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "http://localhost:8000"
 
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const action = body.action
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 300000)
+    const timeoutId = setTimeout(() => controller.abort(), 600000) // 增加到 10 分钟
 
     try {
       const response = await fetch(`${AGENT_URL}/crewai-chat`, {
