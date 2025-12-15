@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 
 export const maxDuration = 300 // 5 分钟
 
-const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "http://localhost:8000"
+const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "https://api.aimarketingsite.com"
 
 export async function POST(request: NextRequest) {
   try {

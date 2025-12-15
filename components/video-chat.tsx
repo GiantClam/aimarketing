@@ -57,6 +57,7 @@ type Message = {
   timestamp: number
   options?: string[] // 选项按钮
   selectedOption?: string // 用户选择的选项
+  questionType?: string // 问题类型，例如 product_image
   storyboard?: {
     scenes: StoryboardScene[]
     requiresConfirmation?: boolean
@@ -103,6 +104,8 @@ export function VideoChat() {
   })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const productFileInputRef = useRef<HTMLInputElement>(null)
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
   
   // 右侧菜单栏状态
   const [editingScene, setEditingScene] = useState<EditingScene | null>(null)
@@ -110,6 +113,9 @@ export function VideoChat() {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null)
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [isRegenerating, setIsRegenerating] = useState(false)
+  const [productImageFile, setProductImageFile] = useState<File | null>(null)
+  const [productImageUrl, setProductImageUrl] = useState<string>("")
+  const [productUploading, setProductUploading] = useState(false)
 
   // 自动滚动到底部
   useEffect(() => {
@@ -119,13 +125,14 @@ export function VideoChat() {
   // 防止重复初始化的 ref
   const hasInitialized = useRef(false)
 
-  const addMessage = useCallback((role: "user" | "assistant" | "system", content: string, options?: string[], storyboard?: { scenes: StoryboardScene[]; requiresConfirmation?: boolean; runId?: string }, videoClips?: { clips: VideoClip[]; requiresConfirmation?: boolean }, finalVideo?: { video_url: string; run_id?: string }) => {
+  const addMessage = useCallback((role: "user" | "assistant" | "system", content: string, options?: string[], storyboard?: { scenes: StoryboardScene[]; requiresConfirmation?: boolean; runId?: string }, videoClips?: { clips: VideoClip[]; requiresConfirmation?: boolean }, finalVideo?: { video_url: string; run_id?: string }, questionType?: string) => {
     const message: Message = {
       id: `msg_${Date.now()}_${Math.random()}`,
       role,
       content,
       timestamp: Date.now(),
       options,
+      questionType,
       storyboard,
       videoClips,
       finalVideo,
@@ -140,9 +147,9 @@ export function VideoChat() {
       setLoading(false)
     } else if (event.type === "info") {
       addMessage("system", event.delta || "")
-    } else if (event.type === "question") {
+  } else if (event.type === "question") {
       const options = event.payload?.options || []
-      addMessage("assistant", event.delta || event.content || "", options)
+      addMessage("assistant", event.delta || event.content || "", options, undefined, undefined, undefined, event.payload?.question_type)
       setLoading(false)
     } else if (event.type === "collected") {
       setConversationState((prev) => ({
@@ -235,11 +242,51 @@ export function VideoChat() {
     } else if (event.type === "completed") {
       setConversationState((prev) => ({ ...prev, status: "completed" }))
       addMessage("system", "视频生成完成！")
+    } else if (event.type === "run_finished") {
+      const code = event.payload?.code
+      const status = event.payload?.status
+      const runId = event.payload?.run_id || event.run_id || conversationState.runId
+      if (code === "confirmation_required") {
+        addMessage("system", event.delta || "等待您的确认…")
+      } else if (status === "processing") {
+        addMessage("system", event.delta || "任务已提交，后台处理中…")
+        if (runId) {
+          startCrewStatusPolling(runId)
+        }
+      }
     } else if (event.type === "error") {
       setLoading(false)
       addMessage("assistant", `错误：${event.delta || event.content || "未知错误"}`)
     }
   }, [addMessage, conversationState.runId])
+
+  const startCrewStatusPolling = useCallback((runId: string) => {
+    if (pollingRef.current) return
+    const base = process.env.NEXT_PUBLIC_AGENT_URL || ""
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${base}/workflow/crew-status/${encodeURIComponent(runId)}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data && data.status === "completed" && data.result) {
+          clearInterval(pollingRef.current as NodeJS.Timeout)
+          pollingRef.current = null
+          setConversationState((prev) => ({ ...prev, status: "completed" }))
+          addMessage(
+            "assistant",
+            "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。",
+            undefined,
+            undefined,
+            undefined,
+            {
+              video_url: data.result,
+              run_id: runId,
+            }
+          )
+        }
+      } catch {}
+    }, 5000)
+  }, [addMessage])
 
   const startConversation = useCallback(async () => {
     // 防止重复调用
@@ -290,6 +337,7 @@ export function VideoChat() {
 
           try {
             const event = JSON.parse(line)
+            try { console.log("[SSE/crewai-chat]", event) } catch {}
             handleEvent(event)
           } catch (e) {
             console.error("解析事件失败:", e)
@@ -366,6 +414,7 @@ export function VideoChat() {
 
           try {
             const event = JSON.parse(line)
+            try { console.log("[SSE/crewai-chat]", event) } catch {}
             handleEvent(event)
           } catch (e) {
             console.error("解析事件失败:", e)
@@ -430,6 +479,7 @@ export function VideoChat() {
 
             try {
               const event = JSON.parse(line)
+              try { console.log("[SSE/crewai-chat]", event) } catch {}
               handleEvent(event)
             } catch (e) {
               console.error("解析事件失败:", e)
@@ -513,6 +563,120 @@ export function VideoChat() {
     const url = URL.createObjectURL(file)
     setUploadedImageUrl(url)
   }, [addMessage])
+
+  const handleProductImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      addMessage("assistant", "请上传图片文件")
+      return
+    }
+    setProductImageFile(file)
+  }, [addMessage])
+
+  const submitProductImage = useCallback(async (messageId: string) => {
+    if (!productImageFile || !conversationState.runId || productUploading) return
+    setProductUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", productImageFile)
+      const base = process.env.NEXT_PUBLIC_AGENT_URL || "/api"
+      const res = await fetch(`${base}/workflow/upload-image`, { method: "POST", body: fd })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      const fileName = data.fileName || data.filename || data.key || ""
+      if (!fileName) throw new Error("上传失败")
+      addMessage("user", fileName)
+      setProductImageFile(null)
+      setProductImageUrl("")
+      setLoading(true)
+      const resp = await fetch("/api/crewai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "message",
+          thread_id: conversationState.threadId,
+          run_id: conversationState.runId,
+          message: fileName,
+        }),
+      })
+      if (!resp.ok || !resp.body) throw new Error("请求失败")
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder("utf-8")
+      let buffer = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split("\n\n")
+        buffer = parts.pop() || ""
+        for (const part of parts) {
+          const line = part.split("data:").pop()?.trim()
+          if (!line) continue
+          try {
+            const event = JSON.parse(line)
+            try { console.log("[SSE/crewai-chat]", event) } catch {}
+            handleEvent(event)
+          } catch (e) {
+            console.error("解析事件失败:", e)
+          }
+        }
+      }
+    } catch (err) {
+      console.error("产品图片上传失败:", err)
+      addMessage("assistant", "上传失败，请重试或粘贴图片URL")
+    } finally {
+      setProductUploading(false)
+      setLoading(false)
+    }
+  }, [productImageFile, conversationState.threadId, conversationState.runId, productUploading, addMessage, handleEvent])
+
+  const submitProductImageUrl = useCallback(async (messageId: string) => {
+    const url = productImageUrl.trim()
+    if (!url || !conversationState.runId) return
+    addMessage("user", url)
+    setProductImageUrl("")
+    setLoading(true)
+    try {
+      const resp = await fetch("/api/crewai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "message",
+          thread_id: conversationState.threadId,
+          run_id: conversationState.runId,
+          message: url,
+        }),
+      })
+      if (!resp.ok || !resp.body) throw new Error("请求失败")
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder("utf-8")
+      let buffer = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split("\n\n")
+        buffer = parts.pop() || ""
+        for (const part of parts) {
+          const line = part.split("data:").pop()?.trim()
+          if (!line) continue
+          try {
+            const event = JSON.parse(line)
+            try { console.log("[SSE/crewai-chat]", event) } catch {}
+            handleEvent(event)
+          } catch (e) {
+            console.error("解析事件失败:", e)
+          }
+        }
+      }
+    } catch (err) {
+      console.error("提交图片URL失败:", err)
+      addMessage("assistant", "提交失败，请重试")
+    } finally {
+      setLoading(false)
+    }
+  }, [productImageUrl, conversationState.threadId, conversationState.runId, addMessage, handleEvent])
 
   // 保存场景修改
   const handleSaveScene = useCallback(async () => {
@@ -1085,8 +1249,9 @@ export function VideoChat() {
                                   })
                                   
                                   if (res.ok) {
-                                    addMessage("system", "已确认故事板，继续生成视频...")
-                                    // 继续监听后续事件
+                                    addMessage("system", "已确认故事板，后台继续生成视频...")
+                                    const rid = runId
+                                    if (rid) startCrewStatusPolling(rid)
                                     setLoading(false)
                                   }
                                 } catch (error) {
@@ -1152,6 +1317,25 @@ export function VideoChat() {
                         {option}
                       </Button>
                     ))}
+                  </div>
+                )}
+
+                {message.questionType === "product_image" && (
+                  <div className="mt-3 space-y-2">
+                    <div className="text-xs text-muted-foreground">您可以上传图片文件或粘贴图片URL</div>
+                    <div className="flex items-center gap-2">
+                      <Input ref={productFileInputRef} id={`product-image-${message.id}`} type="file" accept="image/*" onChange={handleProductImageSelect} className="hidden" />
+                      <Button variant="outline" type="button" onClick={() => productFileInputRef.current?.click()}>
+                        <Upload className="w-4 h-4 mr-2" /> 选择文件
+                      </Button>
+                      <Button onClick={() => submitProductImage(message.id)} disabled={productUploading || !productImageFile}>
+                        {productUploading ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 上传中...</>) : "上传并回答"}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input placeholder="https://..." value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)} />
+                      <Button variant="outline" onClick={() => submitProductImageUrl(message.id)} disabled={!productImageUrl.trim()}>使用URL回答</Button>
+                    </div>
                   </div>
                 )}
 

@@ -3,7 +3,7 @@ import { NextRequest } from "next/server"
 export const runtime = 'nodejs'
 export const maxDuration = 600 // 增加到 10 分钟，允许用户长时间不操作
 
-const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "http://localhost:8000"
+const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "https://api.aimarketingsite.com"
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "text/event-stream",
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -39,7 +40,31 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      return new Response(response.body, {
+      const upstream = response.body
+      const stream = new ReadableStream({
+        start(controller) {
+          const reader = upstream.getReader()
+          const pump = async () => {
+            try {
+              const { done, value } = await reader.read()
+              if (done) {
+                controller.close()
+                return
+              }
+              controller.enqueue(value)
+              await pump()
+            } catch (err) {
+              controller.error(err)
+            }
+          }
+          pump()
+        },
+        cancel() {
+          try { controller.abort() } catch {}
+        }
+      })
+
+      return new Response(stream, {
         status: response.status,
         statusText: response.statusText,
         headers: {
@@ -68,4 +93,3 @@ export async function POST(request: NextRequest) {
     })
   }
 }
-
