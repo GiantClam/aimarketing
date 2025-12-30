@@ -112,6 +112,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 视频生成
               </Button>
             </Link>
+            <Link href="/dashboard/website-generator">
+              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
+                <Globe className="w-4 h-4 mr-2" />
+                网站生成
+              </Button>
+            </Link>
             <Link href="/dashboard/knowledge-base">
               <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
                 <Database className="w-4 h-4 mr-2" />
