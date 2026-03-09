@@ -18,6 +18,8 @@ yarn-error.log*
 
 # env files
 .env*
+.env.example
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
@@ -59,3 +61,27 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Local tool state and scratch files
+.agent/
+.agents/
+.opencode/
+auth_cookies.txt
+stream-output.txt
+stream.log
+nul
+task_plan.md
+progress.md
+findings.md
+test-db.ts
+test-db2.ts
+test-dify-stream.ts
+test-api-stream.ts
+update-dify-key.ts
+build.log
+server.log
+npm.log
+tmp-next-start.out.log
+tmp-next-start.err.log
+.ruff_cache/
+tests/screenshots/

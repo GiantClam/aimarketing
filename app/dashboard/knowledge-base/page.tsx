@@ -1,10 +1,5 @@
-import { DashboardLayout } from "@/components/dashboard-layout"
-import { KnowledgeBaseManager } from "@/components/knowledge-base-manager"
+import { redirect } from "next/navigation"
 
 export default function KnowledgeBasePage() {
-  return (
-    <DashboardLayout>
-      <KnowledgeBaseManager />
-    </DashboardLayout>
-  )
+  redirect("/dashboard")
 }

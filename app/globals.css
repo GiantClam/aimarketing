@@ -4,76 +4,96 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated color palette to black, white, and deep red theme */
-  --background: oklch(1 0 0); /* #ffffff pure white */
-  --foreground: oklch(0.15 0 0); /* #262626 near black */
-  --card: oklch(0.98 0 0); /* #fafafa light gray */
-  --card-foreground: oklch(0.15 0 0); /* #262626 */
-  --popover: oklch(1 0 0); /* #ffffff */
-  --popover-foreground: oklch(0.15 0 0); /* #262626 */
-  --primary: oklch(0.42 0.22 25); /* #991b1b deep red primary */
-  --primary-foreground: oklch(1 0 0); /* #ffffff */
-  --secondary: oklch(0.96 0 0); /* #f5f5f5 */
-  --secondary-foreground: oklch(0.15 0 0); /* #262626 */
-  --muted: oklch(0.96 0 0); /* #f5f5f5 */
-  --muted-foreground: oklch(0.45 0 0); /* #737373 */
-  --accent: oklch(0.48 0.22 25); /* #b91c1c deep red accent */
-  --accent-foreground: oklch(1 0 0); /* #ffffff */
-  --destructive: oklch(0.42 0.22 25); /* #991b1b */
-  --destructive-foreground: oklch(1 0 0); /* #ffffff */
-  --border: oklch(0.9 0 0); /* #e5e5e5 */
-  --input: oklch(0.96 0 0); /* #f5f5f5 */
-  --ring: oklch(0.42 0.22 25 / 0.5); /* deep red focus ring */
-  --chart-1: oklch(0.15 0 0); /* #262626 black */
-  --chart-2: oklch(0.42 0.22 25); /* #991b1b deep red */
-  --chart-3: oklch(0.45 0 0); /* #737373 gray */
-  --chart-4: oklch(0.48 0.22 25); /* #b91c1c medium deep red */
-  --chart-5: oklch(0.25 0 0); /* #404040 dark gray */
+  /* Radix ScrollArea overflow fix */
+  --radix-scroll-area-viewport-overflow: scroll;
+  
+  /* Minimal & Direct Flat Design: Pink & Cyan Theme */
+  --background: #FDF2F8;
+  /* Pink 50 */
+  --foreground: #831843;
+  /* Pink 900 */
+  --card: #ffffff;
+  --card-foreground: #831843;
+  --popover: #ffffff;
+  --popover-foreground: #831843;
+  --primary: #EC4899;
+  /* Pink 500 */
+  --primary-foreground: #ffffff;
+  --secondary: #F472B6;
+  /* Pink 400 */
+  --secondary-foreground: #ffffff;
+  --muted: #FCE7F3;
+  /* Pink 100 */
+  --muted-foreground: #BE185D;
+  /* Pink 700 */
+  --accent: #06B6D4;
+  /* Cyan 500 */
+  --accent-foreground: #ffffff;
+  --destructive: #E11D48;
+  /* Rose 600 */
+  --destructive-foreground: #ffffff;
+  --border: #FBCFE8;
+  /* Pink 200 */
+  --input: #FBCFE8;
+  --ring: #EC4899;
+  --chart-1: #EC4899;
+  --chart-2: #06B6D4;
+  --chart-3: #F472B6;
+  --chart-4: #22d3ee;
+  --chart-5: #BE185D;
   --radius: 0.5rem;
-  --sidebar: oklch(0.98 0 0); /* #fafafa */
-  --sidebar-foreground: oklch(0.15 0 0); /* #262626 */
-  --sidebar-primary: oklch(0.42 0.22 25); /* #991b1b deep red */
-  --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
-  --sidebar-accent: oklch(0.48 0.22 25); /* #b91c1c */
-  --sidebar-accent-foreground: oklch(1 0 0); /* #ffffff */
-  --sidebar-border: oklch(0.9 0 0); /* #e5e5e5 */
-  --sidebar-ring: oklch(0.42 0.22 25 / 0.5); /* deep red focus ring */
+  --sidebar: #FDF2F8;
+  --sidebar-foreground: #831843;
+  --sidebar-primary: #EC4899;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #06B6D4;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #FBCFE8;
+  --sidebar-ring: #06B6D4;
 }
 
 .dark {
-  /* Enhanced dark mode with pure black, white, and deep red */
-  --background: oklch(0.05 0 0); /* #0d0d0d near black */
-  --foreground: oklch(0.95 0 0); /* #f2f2f2 near white */
-  --card: oklch(0.08 0 0); /* #141414 dark card */
-  --card-foreground: oklch(0.95 0 0); /* #f2f2f2 */
-  --popover: oklch(0.08 0 0); /* #141414 */
-  --popover-foreground: oklch(0.95 0 0); /* #f2f2f2 */
-  --primary: oklch(0.52 0.22 25); /* #dc2626 medium red for dark mode contrast */
-  --primary-foreground: oklch(1 0 0); /* #ffffff */
-  --secondary: oklch(0.12 0 0); /* #1f1f1f */
-  --secondary-foreground: oklch(0.95 0 0); /* #f2f2f2 */
-  --muted: oklch(0.12 0 0); /* #1f1f1f */
-  --muted-foreground: oklch(0.65 0 0); /* #a6a6a6 */
-  --accent: oklch(0.58 0.22 25); /* #ef4444 balanced red accent for dark mode */
-  --accent-foreground: oklch(0.05 0 0); /* #0d0d0d */
-  --destructive: oklch(0.52 0.22 25); /* #dc2626 */
-  --destructive-foreground: oklch(0.95 0 0); /* #f2f2f2 */
-  --border: oklch(0.15 0 0); /* #262626 */
-  --input: oklch(0.12 0 0); /* #1f1f1f */
-  --ring: oklch(0.52 0.22 25 / 0.5); /* red focus ring */
-  --chart-1: oklch(0.95 0 0); /* #f2f2f2 white */
-  --chart-2: oklch(0.52 0.22 25); /* #dc2626 red */
-  --chart-3: oklch(0.65 0 0); /* #a6a6a6 gray */
-  --chart-4: oklch(0.58 0.22 25); /* #ef4444 light red */
-  --chart-5: oklch(0.75 0 0); /* #bfbfbf light gray */
-  --sidebar: oklch(0.07 0 0); /* #121212 slightly lighter than bg */
-  --sidebar-foreground: oklch(0.95 0 0); /* #f2f2f2 */
-  --sidebar-primary: oklch(0.52 0.22 25); /* #dc2626 red */
-  --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
-  --sidebar-accent: oklch(0.58 0.22 25); /* #ef4444 */
-  --sidebar-accent-foreground: oklch(0.05 0 0); /* #0d0d0d */
-  --sidebar-border: oklch(0.15 0 0); /* #262626 */
-  --sidebar-ring: oklch(0.52 0.22 25 / 0.5); /* red focus ring */
+  /* Dark mode mappings for Pink & Cyan Flat Design */
+  --background: #0f172a;
+  /* Slate 900 */
+  --foreground: #FDF2F8;
+  /* Pink 50 */
+  --card: #1e293b;
+  /* Slate 800 */
+  --card-foreground: #FDF2F8;
+  --popover: #1e293b;
+  --popover-foreground: #FDF2F8;
+  --primary: #EC4899;
+  /* Pink 500 */
+  --primary-foreground: #ffffff;
+  --secondary: #F472B6;
+  /* Pink 400 */
+  --secondary-foreground: #ffffff;
+  --muted: #334155;
+  /* Slate 700 */
+  --muted-foreground: #94a3b8;
+  /* Slate 400 */
+  --accent: #06B6D4;
+  /* Cyan 500 */
+  --accent-foreground: #ffffff;
+  --destructive: #E11D48;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  --input: #334155;
+  --ring: #EC4899;
+  --chart-1: #EC4899;
+  --chart-2: #06B6D4;
+  --chart-3: #F472B6;
+  --chart-4: #22d3ee;
+  --chart-5: #BE185D;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #FDF2F8;
+  --sidebar-primary: #EC4899;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #06B6D4;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #334155;
+  --sidebar-ring: #06B6D4;
 }
 
 @theme inline {
@@ -119,7 +139,17 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

@@ -1,11 +1,18 @@
 import { NextRequest } from "next/server"
 
+import { requireSessionUser } from "@/lib/auth/guards"
+
 export const maxDuration = 300 // 5 分钟
 
 const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "https://api.aimarketingsite.com"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
     const body = await request.json()
     const { run_id, confirmed } = body
 
@@ -32,6 +39,8 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         run_id: run_id,
         confirmed: confirmed,
+        user_id: auth.user.id,
+        user_email: auth.user.email,
       }),
     })
 

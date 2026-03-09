@@ -1,8 +1,6 @@
 "use client"
 
-import React from "react"
-
-import { useState, useRef } from "react"
+import React, { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -57,13 +55,12 @@ const knowledgeSources: KnowledgeSource[] = [
   },
 ]
 
-// Mock conversation data
 const mockMessages: Message[] = [
   {
     id: "1",
     role: "assistant",
     content:
-      "您好！我是您的 AI 营销助手。我可以帮您生成各种营销内容，包括文案、社交媒体内容和创意图片。您可以使用 @行业知识库 或 @个人知识库 来指定我参考的信息源。\n\n请告诉我您需要什么样的营销内容？",
+      "您好，我是您的 AI 营销助手。我可以帮您生成营销文案、社媒内容和创意素材。您可以使用 @行业知识库 或 @个人知识库 指定参考来源。\n\n请告诉我，您现在需要什么样的营销内容？",
     timestamp: "刚刚",
   },
 ]
@@ -94,7 +91,6 @@ export function ChatInterface() {
     setInput(value)
     setCursorPosition(position)
 
-    // Check if user typed @ symbol
     if (value.charAt(position - 1) === "@") {
       setShowKnowledgeMenu(true)
     } else {
@@ -106,14 +102,12 @@ export function ChatInterface() {
     setSelectedKnowledgeSource(source)
     setShowKnowledgeMenu(false)
 
-    // Replace @ with the selected knowledge source
     const beforeCursor = input.substring(0, cursorPosition - 1)
     const afterCursor = input.substring(cursorPosition)
     const newInput = `${beforeCursor}@${source.name} ${afterCursor}`
 
     setInput(newInput)
 
-    // Focus back to input
     setTimeout(() => {
       if (inputRef.current) {
         const newPosition = beforeCursor.length + source.name.length + 2
@@ -126,7 +120,6 @@ export function ChatInterface() {
   const handleSend = async () => {
     if (!input.trim()) return
 
-    // Detect knowledge source from input
     let detectedSource: "industry_kb" | "personal_kb" | undefined
     if (input.includes("@行业知识库")) {
       detectedSource = "industry_kb"
@@ -157,7 +150,7 @@ export function ChatInterface() {
         body: JSON.stringify({
           message: currentInput,
           knowledgeSource: detectedSource,
-          conversationId: "default", // You can implement conversation management later
+          conversationId: "default",
         }),
       })
 
@@ -197,7 +190,6 @@ export function ChatInterface() {
     setShowFileUpload(false)
 
     try {
-      // Create file input element
       const inputElement = document.createElement("input")
       inputElement.type = "file"
       inputElement.accept = ".pdf,.docx,.txt,.doc"
@@ -206,17 +198,15 @@ export function ChatInterface() {
         const file = (e.target as HTMLInputElement).files?.[0]
         if (!file) return
 
-        // Show upload message
         const uploadMessage: Message = {
           id: Date.now().toString(),
           role: "user",
-          content: `📎 正在上传文件: ${file.name}`,
+          content: `正在上传文件：${file.name}`,
           timestamp: "刚刚",
         }
         setMessages((prev) => [...prev, uploadMessage])
 
         try {
-          // Get upload URL
           const urlResponse = await fetch("/api/files/upload-url", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -231,7 +221,6 @@ export function ChatInterface() {
 
           const { uploadUrl, fileId } = await urlResponse.json()
 
-          // Upload file to R2/S3
           const uploadResponse = await fetch(uploadUrl, {
             method: "PUT",
             body: file,
@@ -242,18 +231,16 @@ export function ChatInterface() {
 
           if (!uploadResponse.ok) throw new Error("Failed to upload file")
 
-          // Trigger processing
           await fetch("/api/files/process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fileId }),
           })
 
-          // Update message
           const successMessage: Message = {
             id: (Date.now() + 1).toString(),
             role: "assistant",
-            content: `✅ 文件 "${file.name}" 上传成功！正在处理中，处理完成后将自动添加到您的个人知识库。`,
+            content: `文件“${file.name}”上传成功，正在处理中。处理完成后会自动加入您的个人知识库。`,
             timestamp: "刚刚",
           }
           setMessages((prev) => [...prev, successMessage])
@@ -262,7 +249,7 @@ export function ChatInterface() {
           const errorMessage: Message = {
             id: (Date.now() + 1).toString(),
             role: "assistant",
-            content: `❌ 文件上传失败: ${error instanceof Error ? error.message : "未知错误"}`,
+            content: `文件上传失败：${error instanceof Error ? error.message : "未知错误"}`,
             timestamp: "刚刚",
           }
           setMessages((prev) => [...prev, errorMessage])
@@ -284,7 +271,6 @@ export function ChatInterface() {
 
   return (
     <div className="flex flex-col h-screen max-h-screen overflow-hidden">
-      {/* Chat Messages */}
       <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-4xl mx-auto space-y-6 p-4 pb-6">
           {messages.map((message) => (
@@ -382,7 +368,6 @@ export function ChatInterface() {
         </div>
       </ScrollArea>
 
-      {/* Input Area */}
       <div className="flex-shrink-0 border-t border-border bg-card/50 backdrop-blur-sm p-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-end gap-3">
@@ -429,7 +414,7 @@ export function ChatInterface() {
                   <div className="space-y-2">
                     <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleFileUpload}>
                       <FileText className="w-4 h-4 mr-2" />
-                      <span className="font-manrope">上传文档 (PDF, DOCX, TXT)</span>
+                      <span className="font-manrope">上传文档（PDF、DOCX、TXT）</span>
                     </Button>
                     <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleFileUpload}>
                       <Upload className="w-4 h-4 mr-2" />
@@ -462,7 +447,7 @@ export function ChatInterface() {
           </div>
 
           <div className="flex items-center justify-between mt-2">
-            <p className="text-xs text-muted-foreground font-manrope">使用 @ 选择知识库，+ 上传文件</p>
+            <p className="text-xs text-muted-foreground font-manrope">使用 @ 选择知识库，使用 + 上传文件</p>
             {selectedKnowledgeSource && (
               <Badge variant="outline" className="text-xs">
                 已选择: {selectedKnowledgeSource.name}

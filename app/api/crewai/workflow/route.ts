@@ -1,9 +1,16 @@
 import { NextRequest } from "next/server"
 
+import { requireSessionUser } from "@/lib/auth/guards"
+
 const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "https://api.aimarketingsite.com"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
     const body = await request.json()
     const { action, ...payload } = body
 
@@ -39,7 +46,11 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        user_id: auth.user.id,
+        user_email: auth.user.email,
+      }),
     })
 
     const data = await response.json()
@@ -76,6 +87,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
     const { searchParams } = new URL(request.url)
     const runId = searchParams.get("run_id")
     const action = searchParams.get("action")

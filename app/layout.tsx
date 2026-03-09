@@ -1,11 +1,19 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, JetBrains_Mono, Manrope } from "next/font/google"
+import { Fira_Sans, Fira_Code, Manrope } from "next/font/google"
 import { AuthProvider } from "@/components/auth-provider"
 import "./globals.css"
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
-const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" })
+const firaSans = Fira_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-fira-sans"
+})
+const firaCode = Fira_Code({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-fira-code"
+})
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" })
 
 export const metadata: Metadata = {
@@ -20,8 +28,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} ${manrope.variable} antialiased dark`}>
-      <body>
+    <html lang="en" className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased dark`}>
+      <body suppressHydrationWarning>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

@@ -1,4 +1,14 @@
-import { pgTable, serial, integer, varchar, text, timestamp, boolean } from "drizzle-orm/pg-core"
+import { pgTable, serial, integer, varchar, text, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core"
+
+// Enterprise table
+export const enterprises = pgTable("enterprises", {
+  id: serial("id").primaryKey(),
+  enterpriseCode: varchar("enterprise_code", { length: 64 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  createdBy: integer("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
 
 // Users table
 export const users = pgTable("users", {
@@ -6,10 +16,68 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
   password: varchar("password", { length: 255 }),
+  enterpriseId: integer("enterprise_id").references(() => enterprises.id),
+  enterpriseRole: varchar("enterprise_role", { length: 20 }).default("member"), // admin, member
+  enterpriseStatus: varchar("enterprise_status", { length: 20 }).default("active"), // active, pending, rejected
   isDemo: boolean("is_demo").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
+
+export const userSessions = pgTable(
+  "user_sessions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    lastSeenAt: timestamp("last_seen_at").defaultNow(),
+    userAgent: text("user_agent"),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    tokenHashUnique: uniqueIndex("user_sessions_token_hash_idx").on(table.tokenHash),
+  }),
+)
+
+// Enterprise join requests
+export const enterpriseJoinRequests = pgTable("enterprise_join_requests", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  enterpriseId: integer("enterprise_id")
+    .notNull()
+    .references(() => enterprises.id),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, approved, rejected
+  note: text("note"),
+  reviewedBy: integer("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// User feature permissions
+export const userFeaturePermissions = pgTable(
+  "user_feature_permissions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    featureKey: varchar("feature_key", { length: 100 }).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    userFeatureKeyUnique: uniqueIndex("user_feature_permissions_user_feature_idx").on(table.userId, table.featureKey),
+  }),
+)
 
 // User files table for personal knowledge base
 export const userFiles = pgTable("user_files", {
@@ -152,6 +220,18 @@ export const tasks = pgTable("tasks", {
   result: text("result"),
   status: varchar("status", { length: 30 }).default("pending"), // pending, running, approved, rejected, success, failed
   relatedStorageKey: text("related_storage_key"), // 可用于文件处理等
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// Dify 连接配置（支持不同域名/私有 Dify）
+export const difyConnections = pgTable("dify_connections", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  baseUrl: text("base_url").notNull(),
+  apiKey: varchar("api_key", { length: 500 }), // API密钥
+  isDefault: boolean("is_default").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

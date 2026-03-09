@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server"
 
+import { requireSessionUser } from "@/lib/auth/guards"
+
 // 设置运行时配置，避免超时
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 分钟（最大 300 秒）
@@ -8,6 +10,11 @@ const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || 
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
     const body = await request.json()
 
     // 代理请求到 CrewAI 后端，使用较长的超时时间
@@ -20,7 +27,11 @@ export async function POST(request: NextRequest) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          user_id: auth.user.id,
+          user_email: auth.user.email,
+        }),
         signal: controller.signal,
       })
 

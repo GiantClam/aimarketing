@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server"
 
+import { requireSessionUser } from "@/lib/auth/guards"
+
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
@@ -7,6 +9,11 @@ const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || 
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
     const form = await request.formData()
     const file = form.get("file") as File | null
     if (!file) {
@@ -21,6 +28,10 @@ export async function POST(request: NextRequest) {
 
     const res = await fetch(`${AGENT_URL}/workflow/upload-image`, {
       method: "POST",
+      headers: {
+        "x-user-id": String(auth.user.id),
+        "x-user-email": auth.user.email,
+      },
       body: forward,
     })
 
@@ -43,4 +54,3 @@ export async function POST(request: NextRequest) {
     })
   }
 }
-

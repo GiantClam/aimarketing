@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server"
 
+import { requireSessionUser } from "@/lib/auth/guards"
+
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
@@ -7,6 +9,11 @@ const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || 
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
     const body = await request.json()
     const runId = body.run_id
     const confirmed = body.confirmed // true 或 false
@@ -28,6 +35,8 @@ export async function POST(request: NextRequest) {
         run_id: runId,
         confirmed: confirmed,
         feedback: feedback,
+        user_id: auth.user.id,
+        user_email: auth.user.email,
       }),
     })
 

@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server"
 
+import { requireSessionUser } from "@/lib/auth/guards"
+
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
@@ -7,6 +9,11 @@ const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || 
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
     const formData = await request.formData()
     const messageId = formData.get("message_id") as string
     const sceneIdx = parseInt(formData.get("scene_idx") as string)
@@ -43,6 +50,8 @@ export async function POST(request: NextRequest) {
         scene_idx: sceneIdx,
         script,
         image_url: imageUrl,
+        user_id: auth.user.id,
+        user_email: auth.user.email,
       }),
     })
 

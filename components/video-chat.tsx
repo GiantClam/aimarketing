@@ -345,9 +345,9 @@ export function VideoChat() {
         }
       }
     } catch (error) {
-      console.error("对话失败:", error)
+      console.warn("视频 Agent 当前不可用:", error)
       setLoading(false)
-      addMessage("assistant", "抱歉，发生了错误。请刷新页面重试。")
+      addMessage("assistant", "当前视频 Agent 暂时不可用，请稍后重试或联系管理员检查服务配置。")
     }
   }, [conversationState.runId, loading, handleEvent, addMessage])
 
@@ -846,8 +846,8 @@ export function VideoChat() {
                                 className="flex-1"
                                 onClick={() => {
                                   const link = document.createElement("a")
-                                  link.href = message.finalVideo.video_url
-                                  link.download = `video_${message.finalVideo.run_id || "final"}.mp4`
+                                  link.href = message.finalVideo?.video_url || ""
+                                  link.download = `video_${message.finalVideo?.run_id || "final"}.mp4`
                                   link.click()
                                 }}
                               >
@@ -859,7 +859,7 @@ export function VideoChat() {
                                 variant="outline"
                                 className="flex-1"
                                 onClick={() => {
-                                  navigator.clipboard.writeText(message.finalVideo.video_url)
+                                  navigator.clipboard.writeText(message.finalVideo?.video_url || "")
                                   addMessage("system", "视频链接已复制到剪贴板")
                                 }}
                               >
@@ -939,7 +939,7 @@ export function VideoChat() {
                             </p>
                             <div className="aspect-video bg-black rounded-lg overflow-hidden relative group mb-4">
                               <video
-                                src={message.finalVideo.video_url}
+                                src={message.finalVideo?.video_url || ""}
                                 controls
                                 className="w-full h-full object-contain"
                                 preload="metadata"
@@ -955,8 +955,8 @@ export function VideoChat() {
                                 className="flex-1"
                                 onClick={() => {
                                   const link = document.createElement("a")
-                                  link.href = message.finalVideo.video_url
-                                  link.download = `video_${message.finalVideo.run_id || "final"}.mp4`
+                                  link.href = message.finalVideo?.video_url || ""
+                                  link.download = `video_${message.finalVideo?.run_id || "final"}.mp4`
                                   link.click()
                                 }}
                               >
@@ -968,7 +968,7 @@ export function VideoChat() {
                                 variant="outline"
                                 className="flex-1"
                                 onClick={() => {
-                                  navigator.clipboard.writeText(message.finalVideo.video_url)
+                                  navigator.clipboard.writeText(message.finalVideo?.video_url || "")
                                   addMessage("system", "视频链接已复制到剪贴板")
                                 }}
                               >
@@ -1538,4 +1538,3 @@ export function VideoChat() {
     </div>
   )
 }
-
