@@ -3,9 +3,11 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getSessionUser } from "@/lib/auth/session"
 import type { FeatureKey } from "@/lib/enterprise/constants"
 import type { AuthUserPayload } from "@/lib/enterprise/server"
+import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
 
 export function hasFeatureAccess(user: AuthUserPayload, feature?: FeatureKey) {
   if (!feature) return true
+  if (!isFeatureRuntimeEnabled(feature)) return false
   const isEnterpriseAdmin = user.enterpriseRole === "admin" && user.enterpriseStatus === "active"
   if (isEnterpriseAdmin) return true
   return Boolean(user.permissions?.[feature])
@@ -22,6 +24,12 @@ export async function requireSessionUser(request: NextRequest, feature?: Feature
   if (!user) {
     return {
       response: NextResponse.json({ error: "Authentication required" }, { status: 401 }),
+    }
+  }
+
+  if (feature && !isFeatureRuntimeEnabled(feature)) {
+    return {
+      response: NextResponse.json({ error: "Feature disabled" }, { status: 410 }),
     }
   }
 

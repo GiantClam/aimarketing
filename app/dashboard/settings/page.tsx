@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FEATURE_KEYS, FEATURE_LABELS, buildPermissionMap, type PermissionMap } from "@/lib/enterprise/constants"
+import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
 
 type PendingRequest = {
   requestId: number
@@ -159,6 +160,11 @@ export default function SettingsPage() {
     return user.enterpriseStatus
   }, [user?.enterpriseStatus])
 
+  const configurableFeatureKeys = useMemo(
+    () => FEATURE_KEYS.filter((feature) => isFeatureRuntimeEnabled(feature)),
+    [],
+  )
+
   return (
     <DashboardLayout>
       <div className="h-full overflow-y-auto bg-muted/10 p-6 lg:p-8">
@@ -254,7 +260,7 @@ export default function SettingsPage() {
                       </div>
 
                       <div className="grid gap-2 md:grid-cols-2">
-                        {FEATURE_KEYS.map((feature) => (
+                        {configurableFeatureKeys.map((feature) => (
                           <label key={feature} className="flex items-center gap-2 text-sm">
                             <input
                               type="checkbox"

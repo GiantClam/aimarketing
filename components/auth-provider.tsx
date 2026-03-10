@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { usePathname } from "next/navigation"
 
 import { buildPermissionMap, type FeatureKey, type PermissionMap } from "@/lib/enterprise/constants"
+import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
 
 interface User {
   id: number
@@ -248,6 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasFeature = (feature: FeatureKey) => {
     if (!user) return false
+    if (!isFeatureRuntimeEnabled(feature)) return false
     if (isEnterpriseAdmin) return true
     return Boolean(user.permissions?.[feature])
   }
