@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { usePathname } from "next/navigation"
 
 import { buildPermissionMap, type FeatureKey, type PermissionMap } from "@/lib/enterprise/constants"
 
@@ -88,6 +89,7 @@ async function parseUserResponse(res: Response) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const pathname = usePathname()
 
   const isDemoMode = user?.isDemo === true || user?.isAnonymous === true
   const isEnterpriseAdmin = user?.enterpriseRole === "admin" && user?.enterpriseStatus === "active"
@@ -113,8 +115,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true
+    const isPublicRoute = !pathname || pathname === "/" || pathname === "/login" || pathname === "/register"
 
     const bootstrap = async () => {
+      if (isPublicRoute) {
+        setLoading(false)
+        return
+      }
+
       try {
         const res = await fetch("/api/auth/profile", {
           credentials: "same-origin",
@@ -148,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false
     }
-  }, [])
+  }, [pathname])
 
   const login = async (email: string, password: string) => {
     setLoading(true)

@@ -17,9 +17,12 @@ const firaCode = Fira_Code({
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" })
 
 export const metadata: Metadata = {
-  title: "AI Marketing Platform",
-  description: "AI-powered marketing content generation platform",
-  generator: "v0.app",
+  title: {
+    default: "AI Marketing | 企业级 AI 营销作战平台",
+    template: "%s | AI Marketing",
+  },
+  description:
+    "面向企业品牌与增长团队的 AI 营销作战平台，提供战略顾问、增长顾问、文案专家、网站生成和视频生成等专家 Agent，并支持企业权限与多会话协作。",
 }
 
 export default function RootLayout({
@@ -28,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased dark`}>
+    <html lang="zh-CN" className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased dark`}>
       <body suppressHydrationWarning>
         <AuthProvider>{children}</AuthProvider>
       </body>
