@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createHmac, timingSafeEqual } from "crypto"
 import { db } from "@/lib/db"
-import { userFiles, tasks } from "@/lib/db/schema"
+import { userFiles } from "@/lib/db/schema"
 import { updateTaskStatus } from "@/lib/services/tasks"
 import { eq } from "drizzle-orm"
 
@@ -46,8 +46,8 @@ function verifyWebhookSignature(signature: string, body: any): boolean {
     const payload = typeof body === "string" ? body : JSON.stringify(body)
     const mac = createHmac("sha256", secret).update(payload).digest("hex")
     const sig = signature.replace(/^sha256=/, "")
-    const a = Buffer.from(mac)
-    const b = Buffer.from(sig)
+    const a = new Uint8Array(Buffer.from(mac))
+    const b = new Uint8Array(Buffer.from(sig))
     return a.length === b.length && timingSafeEqual(a, b)
   } catch {
     return false
