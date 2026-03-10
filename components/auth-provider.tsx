@@ -116,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
     const isPublicRoute = !pathname || pathname === "/" || pathname === "/login" || pathname === "/register"
 
     const bootstrap = async () => {
@@ -128,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch("/api/auth/profile", {
           credentials: "same-origin",
           cache: "no-store",
+          signal: controller.signal,
         })
 
         if (!active) return
@@ -141,7 +143,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           applyUser(normalized)
         }
       } catch (error) {
+        if (controller.signal.aborted) {
+          return
+        }
         if (active) {
+          if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
+            applyUser(null)
+            return
+          }
           console.error("Auth bootstrap failed:", error)
           applyUser(null)
         }
@@ -156,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false
+      controller.abort()
     }
   }, [pathname])
 

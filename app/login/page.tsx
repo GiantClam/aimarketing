@@ -70,7 +70,7 @@ export default function LoginPage() {
             </div>
             <CardTitle className="font-sans text-2xl font-bold">欢迎回来</CardTitle>
             <CardDescription className="font-manrope">
-              登录企业账号，继续使用专家 Agent、网站生成和视频生成能力。
+              登录企业账号，继续使用专家 Agent 与企业协作能力。
             </CardDescription>
           </CardHeader>
 
