@@ -60,8 +60,13 @@ export default function WebsiteGeneratorPage() {
     try {
       const response = await fetch("/api/webgen/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) })
       if (!response.ok || !response.body) {
-        const errorText = await response.text().catch(() => "")
-        throw new Error(errorText || "网站生成服务暂时不可用")
+        const errorPayload = await response.json().catch(async () => ({ error: await response.text().catch(() => "") }))
+        const rawMessage = String(errorPayload?.error || "").trim()
+        const normalizedMessage =
+          !rawMessage || rawMessage === "fetch failed"
+            ? "网站生成服务暂时不可用，请联系管理员检查 Webgen 服务配置。"
+            : rawMessage
+        throw new Error(normalizedMessage)
       }
 
       const reader = response.body.getReader()
