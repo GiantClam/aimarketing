@@ -1,4 +1,4 @@
-import { db } from "@/lib/db"
+﻿import { db } from "@/lib/db"
 import { difyConnections, users } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 
@@ -198,3 +198,4 @@ export async function getDifyConfigByAdvisorType(advisorType?: string | null, op
 
   return getDefaultDifyConfig(options)
 }
+
