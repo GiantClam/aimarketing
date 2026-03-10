@@ -31,8 +31,21 @@ export async function DELETE(
       return NextResponse.json({ error: "Dify API Error", details: errorData }, { status: difyRes.status })
     }
 
-    const data = await difyRes.json()
-    return NextResponse.json(data)
+    if (difyRes.status === 204) {
+      return NextResponse.json({ success: true })
+    }
+
+    const rawText = await difyRes.text()
+    if (!rawText.trim()) {
+      return NextResponse.json({ success: true })
+    }
+
+    try {
+      const data = JSON.parse(rawText)
+      return NextResponse.json(data)
+    } catch {
+      return NextResponse.json({ success: true, raw: rawText })
+    }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
