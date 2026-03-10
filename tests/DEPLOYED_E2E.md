@@ -25,6 +25,14 @@ It is designed for the current production posture:
 python tests/deployed-e2e.py --base-url https://your-app.vercel.app
 ```
 
+Run the Dify-specific advisor regression with a prepared session cookie:
+
+```bash
+python tests/dify-deployed-check.py \
+  --base-url https://your-app.vercel.app \
+  --session-cookie "$AIMARKETING_SESSION_COOKIE"
+```
+
 Use existing accounts if you want to avoid creating new enterprise data:
 
 ```bash
@@ -42,6 +50,11 @@ python tests/deployed-e2e.py \
 - `--skip-member-flow`: skip member join and approval checks
 - `--artifact-dir`: screenshot output directory for failures
 - `--headed`: run browser in headed mode
+
+For the Dify-specific script:
+
+- `--session-cookie`: `aimarketing_session` cookie for a user with Dify advisor config
+- `--advisors`: optional advisor list, defaults to all three advisor types
 
 ## Output
 
@@ -62,3 +75,4 @@ Failure screenshots are written to `tests/screenshots/deployed/`.
 1. If you do not pass existing account credentials, the script creates new test accounts.
 2. The script does not auto-clean database rows. Cleanup should be handled separately.
 3. The script intentionally checks disabled website/video APIs; expected `410` responses are not treated as console failures.
+4. `tests/dify-deployed-check.py` is intended for a preconfigured advisor account and does not create browser users.

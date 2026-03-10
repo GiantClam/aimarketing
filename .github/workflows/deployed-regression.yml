@@ -1,0 +1,42 @@
+name: Deployed Regression
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types:
+      - deployed-regression
+
+jobs:
+  deployed-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright requests
+          python -m playwright install --with-deps chromium
+
+      - name: Run deployed browser regression
+        env:
+          BASE_URL: ${{ secrets.TEST_BASE_URL }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_MEMBER_EMAIL: ${{ secrets.TEST_MEMBER_EMAIL }}
+          TEST_MEMBER_PASSWORD: ${{ secrets.TEST_MEMBER_PASSWORD }}
+          TEST_TIMEOUT_MS: "45000"
+        run: python tests/deployed-e2e.py
+
+      - name: Run Dify advisor regression
+        if: ${{ secrets.TEST_DIFY_SESSION_COOKIE != '' }}
+        env:
+          BASE_URL: ${{ secrets.TEST_BASE_URL }}
+          TEST_DIFY_SESSION_COOKIE: ${{ secrets.TEST_DIFY_SESSION_COOKIE }}
+        run: python tests/dify-deployed-check.py

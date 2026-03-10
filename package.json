@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "start": "next start",
     "migrate:enterprise": "node scripts/run-enterprise-migration.js",
-    "test:e2e:deployed": "python tests/deployed-e2e.py"
+    "test:e2e:deployed": "python tests/deployed-e2e.py",
+    "test:e2e:deployed:dify": "python tests/dify-deployed-check.py"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "latest",
