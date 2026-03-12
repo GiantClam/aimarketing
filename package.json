@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "start": "next start",
     "migrate:enterprise": "node scripts/run-enterprise-migration.js",
+    "migrate:writer": "node scripts/run-writer-migration.js",
     "test:e2e:deployed": "python tests/deployed-e2e.py",
     "test:e2e:deployed:dify": "python tests/dify-deployed-check.py"
   },

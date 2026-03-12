@@ -7,6 +7,10 @@ import { useAuth } from "@/components/auth-provider"
 import { DifyChatArea } from "@/components/chat/DifyChatArea"
 import { DashboardLayout } from "@/components/dashboard-layout"
 
+function isAbortError(error: unknown) {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
+}
+
 function getAdvisorTitle(advisorType: string) {
   if (advisorType === "brand-strategy") return "品牌战略顾问"
   if (advisorType === "growth") return "增长顾问"
@@ -28,6 +32,12 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
   const difyUser = userEmail ? `${userEmail}_${advisorType}` : null
 
   useEffect(() => {
+    if (advisorType === "copywriting") {
+      const nextConversationId = conversationId ? `/${conversationId}` : ""
+      router.replace(`/dashboard/writer${nextConversationId}`)
+      return
+    }
+
     let cancelled = false
     const controller = new AbortController()
 
@@ -63,6 +73,7 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
         }
       } catch (error) {
         if (controller.signal.aborted || cancelled) return
+        if (isAbortError(error)) return
         if (error instanceof TypeError && error.message.includes("Failed to fetch")) return
         console.error("Failed to check advisor availability:", error)
       }
@@ -74,6 +85,16 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
       controller.abort()
     }
   }, [advisorType, hasFeature, loading, router, user])
+
+  if (advisorType === "copywriting") {
+    return (
+      <DashboardLayout>
+        <div className="flex h-[calc(100vh-65px)] w-full items-center justify-center text-sm text-muted-foreground lg:h-screen">
+          正在跳转到文章写作工作台...
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   if (loading || !user || !difyUser) {
     return (

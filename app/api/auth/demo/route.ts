@@ -7,6 +7,8 @@ import { enterprises, users } from "@/lib/db/schema"
 import { ensurePermissions, getUserAuthPayload, hashPassword } from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
 
+export const runtime = "nodejs"
+
 export async function POST(request: NextRequest) {
   try {
     if (!isDemoLoginEnabled()) {
@@ -60,6 +62,8 @@ export async function POST(request: NextRequest) {
       await db
         .update(users)
         .set({
+          name: "浣撻獙鐢ㄦ埛",
+          password: hashPassword("demo123456"),
           enterpriseId: enterprise.id,
           enterpriseRole: "admin",
           enterpriseStatus: "active",

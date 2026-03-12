@@ -5,6 +5,8 @@ import { getSessionUser } from "@/lib/auth/session"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 
+export const runtime = "nodejs"
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getSessionUser(request)

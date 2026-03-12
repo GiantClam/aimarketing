@@ -115,6 +115,28 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+// Writer conversations table for article writing workspace
+export const writerConversations = pgTable("writer_conversations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  title: varchar("title", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// Writer messages table for article writing workspace
+export const writerMessages = pgTable("writer_messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => writerConversations.id),
+  role: varchar("role", { length: 20 }).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
 // Submitted URLs table for industry knowledge base
 export const submittedUrls = pgTable("submitted_urls", {
   id: serial("id").primaryKey(),

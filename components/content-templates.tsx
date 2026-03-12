@@ -15,7 +15,7 @@ export function ContentTemplates() {
           </CardTitle>
           <CardDescription>该功能和相关管理接口已移除，不再对外提供。</CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">如需生成营销内容，请使用左侧顾问 Agent 或文案写作专家。</CardContent>
+        <CardContent className="text-sm text-muted-foreground">如需生成营销内容，请使用左侧顾问 Agent 或新的文章写作工作台。</CardContent>
       </Card>
     </div>
   )

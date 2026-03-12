@@ -8,6 +8,8 @@ import { ensurePermissions, generateEnterpriseCode, getUserAuthPayload, hashPass
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
+export const runtime = "nodejs"
+
 export async function POST(request: NextRequest) {
   try {
     const rateLimit = checkRateLimit({

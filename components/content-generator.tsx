@@ -17,7 +17,7 @@ export function ContentGenerator({ initialPrompt = "" }: ContentGeneratorProps) 
           <CardDescription>旧版内容生成器不再维护，避免与当前专家 Agent 体系重复。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>如需生成营销文案，请进入文案写作专家。</p>
+          <p>如需生成营销文案，请进入文章写作工作台。</p>
           {initialPrompt && <p>最近一次传入的初始需求：{initialPrompt}</p>}
         </CardContent>
       </Card>

@@ -10,7 +10,10 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 type AdvisorAvailability = {
   brandStrategy: boolean
   growth: boolean
-  copywriting: boolean
+}
+
+function isAbortError(error: unknown) {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
 }
 
 export default function DashboardPage() {
@@ -18,8 +21,8 @@ export default function DashboardPage() {
   const [advisorAvailability, setAdvisorAvailability] = useState<AdvisorAvailability>({
     brandStrategy: false,
     growth: false,
-    copywriting: false,
   })
+  const [writerEnabled, setWriterEnabled] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -27,27 +30,32 @@ export default function DashboardPage() {
     let cancelled = false
     const controller = new AbortController()
 
-    const loadAdvisorAvailability = async () => {
+    const loadAvailability = async () => {
       try {
-        const res = await fetch("/api/dify/advisors/availability", { signal: controller.signal })
-        if (!res.ok) return
+        const [advisorResponse, writerResponse] = await Promise.all([
+          fetch("/api/dify/advisors/availability", { signal: controller.signal }),
+          fetch("/api/writer/availability", { signal: controller.signal }),
+        ])
 
-        const json = await res.json()
-        if (cancelled || !json?.data) return
+        if (!advisorResponse.ok || !writerResponse.ok) return
+
+        const advisorJson = await advisorResponse.json()
+        const writerJson = await writerResponse.json()
+        if (cancelled) return
 
         setAdvisorAvailability({
-          brandStrategy: Boolean(json.data.brandStrategy),
-          growth: Boolean(json.data.growth),
-          copywriting: Boolean(json.data.copywriting),
+          brandStrategy: Boolean(advisorJson?.data?.brandStrategy),
+          growth: Boolean(advisorJson?.data?.growth),
         })
+        setWriterEnabled(Boolean(writerJson?.data?.enabled))
       } catch (error) {
         if (controller.signal.aborted || cancelled) return
-        if (error instanceof TypeError && error.message.includes("Failed to fetch")) return
-        console.error("Failed to load dashboard advisor availability:", error)
+        if (isAbortError(error)) return
+        console.error("Failed to load dashboard availability:", error)
       }
     }
 
-    void loadAdvisorAvailability()
+    void loadAvailability()
 
     return () => {
       cancelled = true
@@ -70,7 +78,7 @@ export default function DashboardPage() {
         href: "/dashboard/advisor/brand-strategy/new",
         label: "品牌战略顾问",
         icon: Target,
-        description: "梳理品牌定位、价值主张和差异化策略。",
+        description: "梳理品牌定位、差异化价值和策略方向。",
       })
     }
 
@@ -83,17 +91,17 @@ export default function DashboardPage() {
       })
     }
 
-    if (hasFeature("copywriting_generation") && advisorAvailability.copywriting) {
+    if (hasFeature("copywriting_generation") && writerEnabled) {
       items.push({
-        href: "/dashboard/advisor/copywriting/new",
-        label: "文案写作专家",
+        href: "/dashboard/writer",
+        label: "文章写作",
         icon: PenSquare,
-        description: "基于目标渠道快速产出结构化营销文案。",
+        description: "统一生成公众号、小红书、X、Facebook 图文内容，并支持 Markdown 微调与发布包导出。",
       })
     }
 
     return items
-  }, [advisorAvailability, hasFeature])
+  }, [advisorAvailability, hasFeature, writerEnabled])
 
   return (
     <DashboardLayout>
@@ -102,9 +110,9 @@ export default function DashboardPage() {
           <section className="rounded-3xl border bg-card p-8 shadow-sm">
             <div className="max-w-3xl space-y-4">
               <p className="text-sm font-medium uppercase tracking-[0.3em] text-primary">AI Marketing Workspace</p>
-              <h1 className="font-sans text-3xl font-bold text-foreground lg:text-4xl">企业级营销工作台</h1>
+              <h1 className="font-sans text-3xl font-bold text-foreground lg:text-4xl">企业级 AI 营销工作台</h1>
               <p className="font-manrope leading-7 text-muted-foreground">
-                当前工作台只展示已授权且已完成配置的专家 Agent。网站生成和视频生成能力已暂时停用，不会在当前环境开放。
+                当前工作台已按能力统一收口。专家 Agent 负责策略与增长咨询，文章写作工作台负责多平台图文创作、编辑和发布准备。
               </p>
             </div>
           </section>
@@ -137,7 +145,7 @@ export default function DashboardPage() {
             <section className="rounded-2xl border border-dashed bg-card/60 p-6">
               <h2 className="font-sans text-lg font-semibold text-foreground">当前暂无可用营销能力</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                你的账号已进入工作台，但尚未分配顾问权限，或当前账号下没有可用的 Dify 顾问配置。请联系企业管理员处理。
+                你的账号已经进入工作台，但当前企业尚未分配顾问或文章写作权限。请联系企业管理员完成功能开通。
               </p>
             </section>
           )}

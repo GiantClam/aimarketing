@@ -1,6 +1,7 @@
 ﻿import { db } from "@/lib/db"
 import { difyConnections, users } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
+import { isDemoLoginEnabled } from "@/lib/auth/session"
 
 type DifyLookupOptions = {
   userId?: number | null
@@ -44,6 +45,21 @@ async function resolveUserId(options?: DifyLookupOptions) {
   }
 
   return normalizedUserId
+}
+
+export async function isWriterMockAvailable(options?: DifyLookupOptions) {
+  const resolvedUserId = await resolveUserId(options)
+  if (!resolvedUserId || !isDemoLoginEnabled()) {
+    return false
+  }
+
+  const rows = await db
+    .select({ isDemo: users.isDemo })
+    .from(users)
+    .where(eq(users.id, resolvedUserId))
+    .limit(1)
+
+  return Boolean(rows[0]?.isDemo)
 }
 
 export function extractUserEmailFromDifyUser(difyUser?: string | null, advisorType?: string | null) {
@@ -167,13 +183,14 @@ export async function hasDifyConfigByName(name: string, options?: DifyLookupOpti
 }
 
 export async function getAdvisorAvailability(options?: DifyLookupOptions) {
-  const [brandStrategy, growth, hasCopywritingNamedConfig, defaultConfig] = await Promise.all([
+  const [brandStrategy, growth, hasCopywritingNamedConfig, defaultConfig, writerMockAvailable] = await Promise.all([
     hasDifyConfigByName("品牌战略顾问", options),
     hasDifyConfigByName("增长顾问", options),
     hasDifyConfigByName("文案写作专家", options),
     getDefaultDifyConfig(options),
+    isWriterMockAvailable(options),
   ])
-  const copywriting = hasCopywritingNamedConfig || Boolean(defaultConfig)
+  const copywriting = hasCopywritingNamedConfig || Boolean(defaultConfig) || writerMockAvailable
 
   return {
     brandStrategy,
