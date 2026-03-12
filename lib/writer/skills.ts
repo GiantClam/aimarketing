@@ -94,6 +94,157 @@ const WRITER_PLATFORM_GUIDE: Record<WriterPlatform, WriterPlatformGuide> = {
   },
 }
 
+function normalizeLineBreaks(value: string) {
+  return value.replace(/\r\n/g, "\n").trim()
+}
+
+function splitMarkdownSections(markdown: string) {
+  const lines = markdown.split("\n")
+  const sections: Array<{ heading: string | null; lines: string[] }> = []
+  let current: { heading: string | null; lines: string[] } = { heading: null, lines: [] }
+
+  for (const line of lines) {
+    if (/^##\s+/.test(line)) {
+      if (current.lines.length > 0) {
+        sections.push(current)
+      }
+      current = { heading: line.replace(/^##\s+/, "").trim(), lines: [line] }
+      continue
+    }
+
+    current.lines.push(line)
+  }
+
+  if (current.lines.length > 0) {
+    sections.push(current)
+  }
+
+  return sections
+}
+
+function stripWechatMetaSections(markdown: string) {
+  const blockedHeadings = [
+    "title options",
+    "publishing notes",
+    "image notes",
+    "配图说明",
+    "图片说明",
+    "发布说明",
+    "发布建议",
+    "标题备选",
+    "备选标题",
+  ]
+
+  const sections = splitMarkdownSections(markdown).filter((section) => {
+    const heading = (section.heading || "").toLowerCase()
+    return !blockedHeadings.some((blocked) => heading.includes(blocked))
+  })
+
+  return sections
+    .map((section) => section.lines.join("\n").trim())
+    .filter(Boolean)
+    .join("\n\n")
+}
+
+function normalizeWechatTitle(markdown: string) {
+  const lines = markdown.split("\n")
+  const titleIndex = lines.findIndex((line) => /^#\s+/.test(line))
+
+  if (titleIndex >= 0) {
+    const title = lines[titleIndex].replace(/^#\s+/, "").trim()
+    const rest = lines.filter((_, index) => index !== titleIndex && !/^#\s+/.test(lines[index]))
+    return [`# ${title}`, ...rest].join("\n").trim()
+  }
+
+  const firstContentIndex = lines.findIndex((line) => line.trim())
+  if (firstContentIndex < 0) {
+    return "# 未命名文章"
+  }
+
+  const title = lines[firstContentIndex].replace(/^#+\s*/, "").trim() || "未命名文章"
+  const rest = lines.filter((_, index) => index !== firstContentIndex)
+  return [`# ${title}`, ...rest].join("\n").trim()
+}
+
+function normalizeWechatIntro(markdown: string) {
+  const lines = markdown.split("\n")
+  const titleIndex = lines.findIndex((line) => /^#\s+/.test(line))
+  if (titleIndex < 0) {
+    return markdown
+  }
+
+  let cursor = titleIndex + 1
+  const introBuffer: string[] = []
+
+  while (cursor < lines.length) {
+    const line = lines[cursor]
+    if (!line.trim()) {
+      introBuffer.push(line)
+      cursor += 1
+      continue
+    }
+
+    if (/^!\[.*\]\(writer-asset:\/\/cover\)/.test(line)) {
+      introBuffer.push(line)
+      cursor += 1
+      continue
+    }
+
+    break
+  }
+
+  const introStart = cursor
+  while (cursor < lines.length) {
+    const line = lines[cursor]
+    if (/^##\s+/.test(line)) {
+      break
+    }
+    introBuffer.push(line)
+    cursor += 1
+  }
+
+  const introContent = introBuffer.join("\n").trim()
+  if (!introContent) {
+    return markdown
+  }
+
+  if (/^##\s+引言\b/m.test(markdown)) {
+    return markdown
+  }
+
+  const beforeIntro = lines.slice(0, introStart).join("\n").replace(/\n+$/, "")
+  const afterIntro = lines.slice(cursor).join("\n").replace(/^\n+/, "")
+  const introSection = `## 引言\n\n${introContent}`
+
+  return [beforeIntro, introSection, afterIntro].filter(Boolean).join("\n\n").trim()
+}
+
+function normalizeWechatEnding(markdown: string) {
+  if (/^##\s+结束语\b/m.test(markdown)) {
+    return markdown
+  }
+
+  return markdown.replace(
+    /^##\s*(总结|结语|写在最后|最后的话|结尾|结论)\s*$/m,
+    "## 结束语",
+  )
+}
+
+function postProcessWriterDraft(platform: WriterPlatform, mode: WriterMode, markdown: string) {
+  const normalized = normalizeLineBreaks(markdown)
+
+  if (platform !== "wechat" || mode !== "article") {
+    return normalized
+  }
+
+  let next = normalizeWechatTitle(normalized)
+  next = stripWechatMetaSections(next)
+  next = normalizeWechatIntro(next)
+  next = normalizeWechatEnding(next)
+
+  return next.replace(/\n{3,}/g, "\n\n").trim()
+}
+
 function compactText(text: string, maxLength: number) {
   const normalized = text.replace(/\s+/g, " ").trim()
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength)}...`
@@ -244,6 +395,44 @@ function buildUserPrompt(query: string, mode: WriterMode, research: WriterResear
   ].join("\n")
 }
 
+function buildWechatArticlePrompt(query: string, research: WriterResearchResult) {
+  const references = research.items
+    .slice(0, 5)
+    .map((item, index) => `${index + 1}. ${item.title}\nURL: ${item.link}\nSummary: ${item.snippet}`)
+    .join("\n\n")
+
+  const extracts = research.extracts
+    .map((item, index) => `Source ${index + 1}: ${item.url}\n${item.content}`)
+    .join("\n\n")
+
+  return [
+    "User request:",
+    query.trim(),
+    "",
+    "Search findings:",
+    references || "No search results.",
+    "",
+    "Extracted source material:",
+    extracts || "No extracted source text.",
+    "",
+    "Return Markdown using exactly this article structure:",
+    "1. # Title",
+    "2. ![Cover](writer-asset://cover)",
+    "3. ## 引言",
+    "4. 3-5 个正文二级标题，每个标题下是完整段落内容",
+    "5. 在正文中自然插入 ![配图 1](writer-asset://section-1) 和 ![配图 2](writer-asset://section-2)",
+    "6. ## 结束语",
+    "",
+    "Strict rules:",
+    "- Do not output '标题备选', 'Title options', 'Publishing notes', 'Image notes', '发布说明', or any explanatory section.",
+    "- Do not output more than one H1 title.",
+    "- Do not use placeholder labels such as '正文', '小节一', '说明', or '示例格式'.",
+    "- The final result must read like a finished WeChat article, not a writing brief.",
+    "- Keep the article fully in Chinese.",
+    "- Use the source material for facts and examples. Do not invent precise data.",
+  ].join("\n")
+}
+
 function extractTextFromOpenRouterResponse(data: any) {
   const choice = Array.isArray(data?.choices) ? data.choices[0] : null
   const message = choice?.message || {}
@@ -337,7 +526,11 @@ export async function generateWriterDraftWithSkills(query: string, platform: Wri
 
   const research = await buildResearchContext(query)
   const systemPrompt = buildSystemPrompt(platform, mode)
-  const userPrompt = buildUserPrompt(query, mode, research)
+  const userPrompt =
+    platform === "wechat" && mode === "article"
+      ? buildWechatArticlePrompt(query, research)
+      : buildUserPrompt(query, mode, research)
 
-  return await generateTextWithOpenRouter(systemPrompt, userPrompt, WRITER_TEXT_MODEL)
+  const answer = await generateTextWithOpenRouter(systemPrompt, userPrompt, WRITER_TEXT_MODEL)
+  return postProcessWriterDraft(platform, mode, answer)
 }

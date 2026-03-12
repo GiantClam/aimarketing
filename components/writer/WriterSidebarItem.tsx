@@ -48,6 +48,9 @@ export function WriterSidebarItem({
   const [editingConvId, setEditingConvId] = useState<string | null>(null)
   const [editingConvName, setEditingConvName] = useState("")
 
+  const isWriterRoute = pathname.startsWith("/dashboard/writer")
+  const isExpanded = isOpen || isWriterRoute
+
   const fetchConversations = async () => {
     setIsLoading(true)
     try {
@@ -63,27 +66,27 @@ export function WriterSidebarItem({
   }
 
   useEffect(() => {
-    if (pathname.startsWith("/dashboard/writer")) {
+    if (isWriterRoute) {
       setIsOpen(true)
     }
-  }, [pathname])
+  }, [isWriterRoute])
 
   useEffect(() => {
-    if (isOpen) {
+    if (isExpanded) {
       void fetchConversations()
     }
-  }, [isOpen])
+  }, [isExpanded])
 
   useEffect(() => {
     const handleRefresh = () => {
-      if (isOpen) {
+      if (isExpanded) {
         void fetchConversations()
       }
     }
 
     window.addEventListener(WRITER_REFRESH_EVENT, handleRefresh)
     return () => window.removeEventListener(WRITER_REFRESH_EVENT, handleRefresh)
-  }, [isOpen])
+  }, [isExpanded])
 
   const handleDelete = async (convId: string, event: MouseEvent) => {
     event.preventDefault()
@@ -143,7 +146,7 @@ export function WriterSidebarItem({
     <div className="mb-2">
       <Button
         variant="ghost"
-        className={cn("w-full justify-between font-manrope", isOpen && "bg-sidebar-accent text-sidebar-accent-foreground")}
+        className={cn("w-full justify-between font-manrope", isExpanded && "bg-sidebar-accent text-sidebar-accent-foreground")}
         size="sm"
         onClick={() => setIsOpen((current) => !current)}
       >
@@ -151,10 +154,10 @@ export function WriterSidebarItem({
           <Icon className="mr-2 h-4 w-4" />
           {title}
         </div>
-        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </Button>
 
-      {isOpen && (
+      {isExpanded && (
         <div className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-2">
           <Link href="/dashboard/writer">
             <Button variant="ghost" className="h-8 w-full justify-start text-xs text-primary hover:text-primary/80">

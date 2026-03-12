@@ -127,7 +127,7 @@ def wait_for_generated_writer_assets(page, timeout_ms: int = 180000):
     preview = page.locator('[role="dialog"]').first
 
     while time() < deadline:
-        image_count = preview.locator('img[src^="data:image"]').count()
+        image_count = preview.locator('img[src^="http"], img[src^="https"]').count()
         ready_downloads = preview.locator("button:not([disabled])").filter(
             has=preview.locator("svg.lucide-download")
         ).count()
@@ -258,7 +258,7 @@ with sync_playwright() as p:
         preview_dialog.wait_for(state="visible", timeout=120000)
         wait_for_generated_writer_assets(page, timeout_ms=180000)
         expect(
-            preview_dialog.locator('img[src^="data:image"]').count() >= 1,
+            preview_dialog.locator('img[src^="http"], img[src^="https"]').count() >= 1,
             "preview drawer missing generated image assets",
         )
 

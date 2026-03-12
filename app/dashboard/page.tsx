@@ -12,10 +12,6 @@ type AdvisorAvailability = {
   growth: boolean
 }
 
-function isAbortError(error: unknown) {
-  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
-}
-
 export default function DashboardPage() {
   const { user, hasFeature } = useAuth()
   const [advisorAvailability, setAdvisorAvailability] = useState<AdvisorAvailability>({
@@ -28,13 +24,12 @@ export default function DashboardPage() {
     if (!user) return
 
     let cancelled = false
-    const controller = new AbortController()
 
     const loadAvailability = async () => {
       try {
         const [advisorResponse, writerResponse] = await Promise.all([
-          fetch("/api/dify/advisors/availability", { signal: controller.signal }),
-          fetch("/api/writer/availability", { signal: controller.signal }),
+          fetch("/api/dify/advisors/availability"),
+          fetch("/api/writer/availability"),
         ])
 
         if (!advisorResponse.ok || !writerResponse.ok) return
@@ -49,8 +44,7 @@ export default function DashboardPage() {
         })
         setWriterEnabled(Boolean(writerJson?.data?.enabled))
       } catch (error) {
-        if (controller.signal.aborted || cancelled) return
-        if (isAbortError(error)) return
+        if (cancelled) return
         console.error("Failed to load dashboard availability:", error)
       }
     }
@@ -59,7 +53,6 @@ export default function DashboardPage() {
 
     return () => {
       cancelled = true
-      controller.abort()
     }
   }, [user])
 

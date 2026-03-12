@@ -1,7 +1,7 @@
-import { execFile } from "child_process"
-import { promisify } from "util"
+import http from "node:http"
+import https from "node:https"
 
-const execFileAsync = promisify(execFile)
+import { HttpsProxyAgent } from "https-proxy-agent"
 
 const WRITER_PROXY_URL =
   process.env.WRITER_HTTP_PROXY ||
@@ -10,8 +10,7 @@ const WRITER_PROXY_URL =
   process.env.ALL_PROXY ||
   ""
 
-const CURL_BINARY = process.platform === "win32" ? "curl.exe" : "curl"
-const CURL_STATUS_MARKER = "__WRITER_HTTP_STATUS__:"
+let proxyAgent: HttpsProxyAgent<string> | null = null
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -28,6 +27,7 @@ function isRetryableError(error: unknown) {
     error.message.includes("other side closed") ||
     error.message.includes("ECONNRESET") ||
     error.message.includes("timed out") ||
+    error.message.includes("socket hang up") ||
     cause?.code === "UND_ERR_SOCKET" ||
     cause?.code === "ECONNRESET" ||
     cause?.code === "ETIMEDOUT"
@@ -40,77 +40,56 @@ type WriterRequestOptions = {
   responseType?: "json" | "text"
 }
 
-type CurlRequestInit = {
-  method?: string
-  headers?: Record<string, string>
-  body?: string
+function getProxyAgent() {
+  if (!WRITER_PROXY_URL) {
+    return undefined
+  }
+
+  if (!proxyAgent) {
+    proxyAgent = new HttpsProxyAgent(WRITER_PROXY_URL)
+  }
+
+  return proxyAgent
 }
 
-async function requestWithCurl(url: string, init: CurlRequestInit, timeoutMs: number) {
-  const args = [
-    "-sS",
-    "-L",
-    "--http1.1",
-    "--max-time",
-    String(Math.max(10, Math.ceil(timeoutMs / 1000))),
-    "-X",
-    (init.method || "GET").toUpperCase(),
-    url,
-    "-w",
-    `\n${CURL_STATUS_MARKER}%{http_code}`,
-  ]
+async function requestWithNode(url: string, init: RequestInit, timeoutMs: number) {
+  const target = new URL(url)
+  const isHttps = target.protocol === "https:"
+  const transport = isHttps ? https : http
 
-  if (WRITER_PROXY_URL) {
-    args.push("-x", WRITER_PROXY_URL)
-  }
+  return await new Promise<{ status: number; bodyText: string }>((resolve, reject) => {
+    const request = transport.request(
+      target,
+      {
+        method: init.method || "GET",
+        headers: init.headers as http.OutgoingHttpHeaders | undefined,
+        agent: getProxyAgent(),
+      },
+      (response) => {
+        const chunks: string[] = []
+        response.on("data", (chunk) =>
+          chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : Buffer.from(chunk).toString("utf8")),
+        )
+        response.on("end", () => {
+          resolve({
+            status: response.statusCode || 0,
+            bodyText: chunks.join(""),
+          })
+        })
+      },
+    )
 
-  for (const [key, value] of Object.entries(init.headers || {})) {
-    args.push("-H", `${key}: ${value}`)
-  }
-
-  if (typeof init.body === "string") {
-    args.push("--data-binary", init.body)
-  }
-
-  const { stdout, stderr } = await execFileAsync(CURL_BINARY, args, {
-    windowsHide: true,
-    maxBuffer: 50 * 1024 * 1024,
-  })
-
-  const markerIndex = stdout.lastIndexOf(`\n${CURL_STATUS_MARKER}`)
-  if (markerIndex < 0) {
-    throw new Error(stderr?.trim() || "curl_missing_status")
-  }
-
-  const bodyText = stdout.slice(0, markerIndex)
-  const statusText = stdout.slice(markerIndex + `\n${CURL_STATUS_MARKER}`.length).trim()
-  const status = Number.parseInt(statusText, 10)
-
-  if (!Number.isFinite(status)) {
-    throw new Error("curl_invalid_status")
-  }
-
-  return { status, bodyText, stderr }
-}
-
-async function requestWithFetch(url: string, init: RequestInit, timeoutMs: number) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(new Error("writer_request_timeout")), timeoutMs)
-
-  try {
-    const response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      cache: "no-store",
+    request.on("error", reject)
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error("writer_request_timeout"))
     })
 
-    return {
-      status: response.status,
-      bodyText: await response.text(),
+    if (typeof init.body === "string") {
+      request.write(init.body)
     }
-  } finally {
-    clearTimeout(timer)
-  }
+
+    request.end()
+  })
 }
 
 export async function writerRequest(
@@ -124,19 +103,7 @@ export async function writerRequest(
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      if (WRITER_PROXY_URL) {
-        return await requestWithCurl(
-          url,
-          {
-            method: init.method,
-            headers: (init.headers as Record<string, string> | undefined) || undefined,
-            body: typeof init.body === "string" ? init.body : undefined,
-          },
-          timeoutMs,
-        )
-      }
-
-      return await requestWithFetch(url, init, timeoutMs)
+      return await requestWithNode(url, init, timeoutMs)
     } catch (error) {
       lastError = error
       if (attempt >= attempts || !isRetryableError(error)) {

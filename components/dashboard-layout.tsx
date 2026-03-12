@@ -117,8 +117,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const showWriterEntry = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
-    return hasCopywritingFeature && advisorAvailability.copywriting
-  }, [advisorAvailability.copywriting, enterprisePending, enterpriseRejected, hasCopywritingFeature])
+    return hasCopywritingFeature
+  }, [enterprisePending, enterpriseRejected, hasCopywritingFeature])
 
   return (
     <div className="flex h-screen bg-background">

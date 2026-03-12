@@ -403,6 +403,44 @@ export async function renameWriterMockConversation(userId: number, conversationI
   return true
 }
 
+export async function updateWriterMockLatestAssistantMessage(userId: number, conversationId: string, content: string) {
+  await ensureWriterTables()
+
+  const conversation = await requireWriterConversation(userId, conversationId)
+  if (!conversation) {
+    return false
+  }
+
+  const latestAssistantRows = await withDbRetry("select-writer-latest-assistant", () =>
+    db
+      .select({
+        id: writerMessages.id,
+      })
+      .from(writerMessages)
+      .where(and(eq(writerMessages.conversationId, conversation.id), eq(writerMessages.role, "assistant")))
+      .orderBy(desc(writerMessages.id))
+      .limit(1),
+  )
+
+  const latestAssistant = latestAssistantRows[0]
+  if (!latestAssistant) {
+    return false
+  }
+
+  await withDbRetry("update-writer-assistant-content", () =>
+    db.update(writerMessages).set({ content }).where(eq(writerMessages.id, latestAssistant.id)),
+  )
+
+  await withDbRetry("touch-writer-conversation-after-asset-resolve", () =>
+    db
+      .update(writerConversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(writerConversations.id, conversation.id)),
+  )
+
+  return true
+}
+
 export async function deleteWriterMockConversation(userId: number, conversationId: string) {
   await ensureWriterTables()
 

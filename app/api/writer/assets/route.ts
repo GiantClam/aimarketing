@@ -1,81 +1,109 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { buildWriterAssetBlueprints, ensureWriterAssetOrder } from "@/lib/writer/assets"
+import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed } from "@/lib/writer/assets"
 import { normalizeWriterPlatform } from "@/lib/writer/config"
 import { writerRequestJson } from "@/lib/writer/network"
+import { isWriterR2Available, uploadWriterImageToR2 } from "@/lib/writer/r2"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
 
-const GOOGLE_AI_API_KEY =
-  process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
-const WRITER_IMAGE_MODEL = process.env.WRITER_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ""
+const OPENROUTER_API_BASE = (process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1").replace(/\/$/, "")
+const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || "https://www.aimarketingsite.com"
+const OPENROUTER_TITLE = process.env.OPENROUTER_TITLE || "AI Marketing Writer"
+const WRITER_IMAGE_MODEL = process.env.WRITER_IMAGE_MODEL || "google/gemini-2.5-flash-image"
+const WRITER_IMAGE_FALLBACK_MODEL = process.env.WRITER_IMAGE_FALLBACK_MODEL || "google/gemini-3-pro-image-preview"
 
-function getAspectRatio(platform: string) {
-  if (platform === "xiaohongshu") {
-    return "3:4"
+function buildOpenRouterHeaders() {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json",
   }
 
-  return "16:9"
+  if (OPENROUTER_API_BASE.includes("openrouter.ai")) {
+    headers["HTTP-Referer"] = OPENROUTER_REFERER
+    headers["X-Title"] = OPENROUTER_TITLE
+  }
+
+  return headers
 }
 
-function extractGeminiImageData(response: any) {
-  const candidates = Array.isArray(response?.candidates) ? response.candidates : []
-  for (const candidate of candidates) {
-    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []
-    for (const part of parts) {
-      const inlineData = part?.inlineData || part?.inline_data
-      const mimeType = inlineData?.mimeType || inlineData?.mime_type || "image/png"
-      const data = inlineData?.data || ""
-      if (typeof data === "string" && data.trim()) {
-        return `data:${mimeType};base64,${data}`
+function extractDataUrl(imageLike: unknown) {
+  if (!imageLike) {
+    return ""
+  }
+
+  if (typeof imageLike === "string") {
+    return imageLike.startsWith("data:image") ? imageLike : ""
+  }
+
+  if (typeof imageLike === "object") {
+    const imageUrl = (imageLike as { image_url?: { url?: string } }).image_url?.url || ""
+    return imageUrl.startsWith("data:image") ? imageUrl : ""
+  }
+
+  return ""
+}
+
+function extractOpenRouterImageData(payload: any) {
+  const choices = Array.isArray(payload?.choices) ? payload.choices : []
+  for (const choice of choices) {
+    const message = choice?.message
+    const images = Array.isArray(message?.images) ? message.images : []
+    for (const image of images) {
+      const dataUrl = extractDataUrl(image)
+      if (dataUrl) {
+        return dataUrl
       }
     }
   }
-  return null
+
+  return ""
 }
 
-async function generateGeminiImage(prompt: string, model: string, platform: string) {
-  if (!GOOGLE_AI_API_KEY) {
-    throw new Error("google_ai_api_key_missing")
+async function generateOpenRouterImage(prompt: string, model = WRITER_IMAGE_MODEL) {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error("openrouter_api_key_missing")
   }
 
   const response = await writerRequestJson(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
-      GOOGLE_AI_API_KEY,
-    )}`,
+    `${OPENROUTER_API_BASE}/chat/completions`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: buildOpenRouterHeaders(),
       body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `${prompt}。输出适合 ${getAspectRatio(platform)} 比例的图片。`,
-              },
-            ],
-          },
-        ],
+        model,
+        messages: [{ role: "user", content: `Create an image of: ${prompt}` }],
       }),
     },
-    { attempts: 2, timeoutMs: 120_000 },
+    { attempts: 3, timeoutMs: 120_000 },
   )
+
   if (!response.ok) {
     const data = response.data as any
-    throw new Error(data?.error?.message || `gemini_image_http_${response.status}`)
+    throw new Error(data?.error?.message || `openrouter_image_http_${response.status}`)
   }
 
-  const imageDataUrl = extractGeminiImageData(response.data)
-  if (!imageDataUrl) {
-    throw new Error("gemini_image_missing")
+  const dataUrl = extractOpenRouterImageData(response.data)
+  if (!dataUrl) {
+    const content = (response.data?.choices?.[0]?.message?.content as string | null) || ""
+    throw new Error(content || "openrouter_image_missing")
   }
 
-  return imageDataUrl
+  return dataUrl
+}
+
+async function generateImageWithRetry(prompt: string) {
+  try {
+    return await generateOpenRouterImage(prompt, WRITER_IMAGE_MODEL)
+  } catch (primaryError) {
+    if (!WRITER_IMAGE_FALLBACK_MODEL || WRITER_IMAGE_FALLBACK_MODEL === WRITER_IMAGE_MODEL) {
+      throw primaryError
+    }
+    return await generateOpenRouterImage(prompt, WRITER_IMAGE_FALLBACK_MODEL)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -88,20 +116,85 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const markdown = typeof body?.markdown === "string" ? body.markdown : ""
     const platform = normalizeWriterPlatform(body?.platform)
+    const conversationId = typeof body?.conversationId === "string" ? body.conversationId : null
 
-    if (!GOOGLE_AI_API_KEY) {
-      return NextResponse.json({ error: "GOOGLE_AI_API_KEY is required for writer image generation" }, { status: 503 })
+    if (!OPENROUTER_API_KEY) {
+      return NextResponse.json(
+        {
+          data: {
+            provider: "nanobanana",
+            model: WRITER_IMAGE_MODEL,
+            assets: ensureWriterAssetOrder(
+              markWriterAssetsFailed(
+                buildPendingWriterAssets(markdown, platform),
+                "OPENROUTER_API_KEY is required for writer image generation",
+              ),
+            ),
+          },
+          error: "OPENROUTER_API_KEY is required for writer image generation",
+        },
+        { status: 503 },
+      )
     }
 
-    const blueprints = buildWriterAssetBlueprints(markdown, platform)
+    if (!isWriterR2Available()) {
+      return NextResponse.json(
+        {
+          data: {
+            provider: "nanobanana",
+            model: WRITER_IMAGE_MODEL,
+            assets: ensureWriterAssetOrder(
+              markWriterAssetsFailed(buildPendingWriterAssets(markdown, platform), "writer_r2_config_missing"),
+            ),
+          },
+          error: "writer_r2_config_missing",
+        },
+        { status: 503 },
+      )
+    }
+
     const assets = []
-    for (const asset of blueprints) {
-      assets.push({
-        ...asset,
-        dataUrl: await generateGeminiImage(asset.prompt, WRITER_IMAGE_MODEL, platform),
-        status: "ready" as const,
-        provider: "nanobanana" as const,
-      })
+    for (const asset of buildPendingWriterAssets(markdown, platform)) {
+      try {
+        const dataUrl = await generateImageWithRetry(asset.prompt)
+        const uploaded = await uploadWriterImageToR2({
+          userId: auth.user.id,
+          conversationId,
+          assetId: asset.id,
+          dataUrl,
+        })
+        assets.push({
+          ...asset,
+          url: uploaded.url,
+          storageKey: uploaded.storageKey,
+          contentType: uploaded.contentType,
+          status: "ready" as const,
+          provider: "nanobanana" as const,
+        })
+      } catch (error: any) {
+        assets.push({
+          ...asset,
+          url: "",
+          status: "failed" as const,
+          provider: "error" as const,
+          error: error?.message || "writer_asset_failed",
+        })
+      }
+    }
+
+    const successCount = assets.filter((asset) => asset.status === "ready" && asset.url).length
+    if (successCount === 0) {
+      return NextResponse.json(
+        {
+          data: {
+            provider: "nanobanana",
+            model: WRITER_IMAGE_MODEL,
+            assets: ensureWriterAssetOrder(assets),
+          },
+          error: "writer_assets_failed",
+        },
+        { status: 200 },
+      )
     }
 
     return NextResponse.json({
