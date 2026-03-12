@@ -1,4 +1,4 @@
-import type { WriterPlatform } from "@/lib/writer/config"
+import type { WriterMode, WriterPlatform } from "@/lib/writer/config"
 
 export type WriterAssetId = "cover" | "section-1" | "section-2"
 
@@ -35,7 +35,7 @@ const PLATFORM_IMAGE_META: Record<
   xiaohongshu: {
     label: "小红书",
     aspectRatio: "3:4",
-    style: "明亮、生活化、封面感强、适合移动端图文笔记",
+    style: "明亮、生活化、封面感强，适合移动端图文笔记",
     promptTone: "适合吸引停留与收藏，画面轻盈，具备社交传播感",
   },
   x: {
@@ -54,6 +54,18 @@ const PLATFORM_IMAGE_META: Record<
 
 const WRITER_ASSET_PLACEHOLDER_RE = /writer-asset:\/\/(cover|section-1|section-2)/
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
+
+export function getWriterAssetPlan(platform: WriterPlatform, mode: WriterMode = "article"): WriterAssetId[] {
+  if (mode === "thread") {
+    return ["cover"]
+  }
+
+  if (platform === "x" || platform === "facebook") {
+    return ["cover", "section-1"]
+  }
+
+  return DEFAULT_ASSET_IDS
+}
 
 export function articleTitle(markdown: string) {
   return (markdown.split(/\r?\n/).find((line) => line.trim()) || "未命名文章")
@@ -98,10 +110,15 @@ export function hasWriterAssetPlaceholders(markdown: string) {
   return WRITER_ASSET_PLACEHOLDER_RE.test(markdown)
 }
 
-export function buildWriterAssetBlueprints(markdown: string, platform: WriterPlatform) {
+export function buildWriterAssetBlueprints(
+  markdown: string,
+  platform: WriterPlatform,
+  mode: WriterMode = "article",
+) {
   const meta = PLATFORM_IMAGE_META[platform]
   const title = articleTitle(markdown || meta.label)
   const focus = compactText(markdown, title)
+  const assetPlan = new Set(getWriterAssetPlan(platform, mode))
 
   return [
     {
@@ -122,11 +139,15 @@ export function buildWriterAssetBlueprints(markdown: string, platform: WriterPla
       title: "行动建议",
       prompt: `${meta.label}文章正文配图，围绕“${title}”表达行动建议、方法步骤或结论总结。画面比例 ${meta.aspectRatio}，风格 ${meta.style}。适合放在文章后段作为总结型配图。`,
     },
-  ]
+  ].filter((asset) => assetPlan.has(asset.id))
 }
 
-export function buildPendingWriterAssets(markdown: string, platform: WriterPlatform): WriterAsset[] {
-  return buildWriterAssetBlueprints(markdown, platform).map((asset) => ({
+export function buildPendingWriterAssets(
+  markdown: string,
+  platform: WriterPlatform,
+  mode: WriterMode = "article",
+): WriterAsset[] {
+  return buildWriterAssetBlueprints(markdown, platform, mode).map((asset) => ({
     ...asset,
     url: "",
     status: "loading",
@@ -143,37 +164,50 @@ export function markWriterAssetsFailed(assets: WriterAsset[], error: string) {
   }))
 }
 
-export function resolveWriterAssetMarkdown(content: string, assets: WriterAsset[]) {
+export function resolveWriterAssetMarkdown(
+  content: string,
+  assets: WriterAsset[],
+  platform: WriterPlatform = "wechat",
+  mode: WriterMode = "article",
+) {
   if (!content.trim()) {
     return ""
   }
 
+  const assetPlan = getWriterAssetPlan(platform, mode)
+  const allowedAssetIds = new Set(assetPlan)
   const assetMap = new Map(assets.map((asset) => [asset.id, asset.url]))
   let next = content.replace(/\((writer-asset:\/\/([^)]+))\)/g, (_, __, assetId: WriterAssetId) => {
     return `(${assetMap.get(assetId) || `writer-asset://${assetId}`})`
   })
 
+  next = next.replace(/^\s*!\[[^\]]*\]\(writer-asset:\/\/(cover|section-1|section-2)\)\s*$/gm, (line, assetId: WriterAssetId) =>
+    allowedAssetIds.has(assetId) ? line : "",
+  )
+
   if (!/!\[[^\]]*\]\((?!\s*\))/m.test(next)) {
-    next = [
-      `![${assets[0]?.label ?? "封面图"}](${assets[0]?.url || "writer-asset://cover"})`,
-      "",
-      next,
-      "",
-      `![${assets[1]?.label ?? "配图 1"}](${assets[1]?.url || "writer-asset://section-1"})`,
-      "",
-      `![${assets[2]?.label ?? "配图 2"}](${assets[2]?.url || "writer-asset://section-2"})`,
-    ].join("\n")
+    const assetLines = assetPlan.map((assetId) => {
+      const asset = assets.find((item) => item.id === assetId)
+      if (!asset) return ""
+      return `![${asset.label}](${asset.url || `writer-asset://${asset.id}`})`
+    }).filter(Boolean)
+
+    next = [...assetLines, "", next].filter(Boolean).join("\n")
   }
 
-  return next
+  return next.replace(/\n{3,}/g, "\n\n").trim()
 }
 
-export function extractWriterAssetsFromMarkdown(markdown: string, platform: WriterPlatform): WriterAsset[] {
-  const blueprints = buildWriterAssetBlueprints(markdown, platform)
+export function extractWriterAssetsFromMarkdown(
+  markdown: string,
+  platform: WriterPlatform,
+  mode: WriterMode = "article",
+): WriterAsset[] {
+  const blueprints = buildWriterAssetBlueprints(markdown, platform, mode)
   const urls = [...markdown.matchAll(MARKDOWN_IMAGE_RE)]
     .map((match) => normalizeMarkdownImageUrl(match[2] || ""))
     .filter((url) => Boolean(url) && !url.startsWith("writer-asset://") && !url.startsWith("data:image"))
-    .slice(0, DEFAULT_ASSET_IDS.length)
+    .slice(0, blueprints.length)
 
   return blueprints.map((asset, index) => ({
     ...asset,
@@ -184,13 +218,22 @@ export function extractWriterAssetsFromMarkdown(markdown: string, platform: Writ
   }))
 }
 
-export function ensureWriterAssetOrder(assets: WriterAsset[]) {
+export function ensureWriterAssetOrder(
+  assets: WriterAsset[],
+  platform: WriterPlatform = "wechat",
+  mode: WriterMode = "article",
+) {
+  const assetPlan = getWriterAssetPlan(platform, mode)
   const byId = new Map(assets.map((asset) => [asset.id, asset]))
-  return DEFAULT_ASSET_IDS.map((id) => byId.get(id)).filter(Boolean) as WriterAsset[]
+  return assetPlan.map((id) => byId.get(id)).filter(Boolean) as WriterAsset[]
 }
 
-export function buildFallbackWriterAssets(markdown: string, platform: WriterPlatform) {
-  return buildWriterAssetBlueprints(markdown, platform).map((asset) => ({
+export function buildFallbackWriterAssets(
+  markdown: string,
+  platform: WriterPlatform,
+  mode: WriterMode = "article",
+) {
+  return buildWriterAssetBlueprints(markdown, platform, mode).map((asset) => ({
     ...asset,
     url: svgDataUrl(asset.title, getAccent(platform), PLATFORM_IMAGE_META[platform].aspectRatio),
     status: "failed" as const,

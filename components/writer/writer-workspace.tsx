@@ -505,7 +505,11 @@ export function WriterWorkspace({
   const [messages, setMessages] = useState<WriterMessage[]>([])
   const [draft, setDraft] = useState("")
   const [assets, setAssets] = useState<WriterAsset[]>(() =>
-    buildPendingWriterAssets("", normalizeWriterPlatform(initialPlatform)),
+    buildPendingWriterAssets(
+      "",
+      normalizeWriterPlatform(initialPlatform),
+      normalizeWriterMode(normalizeWriterPlatform(initialPlatform), initialMode),
+    ),
   )
   const [assetsLoading, setAssetsLoading] = useState(false)
   const [assetsError, setAssetsError] = useState<string | null>(null)
@@ -560,7 +564,7 @@ export function WriterWorkspace({
   const writerConfig = WRITER_PLATFORM_CONFIG[platform]
   const writerModeOptions = useMemo(() => getWriterModeOptions(platform), [platform])
   const baseDraft = useMemo(() => draft || inferDraft(messages), [draft, messages])
-  const renderableDraft = useMemo(() => resolveWriterAssetMarkdown(baseDraft, assets), [assets, baseDraft])
+  const renderableDraft = useMemo(() => resolveWriterAssetMarkdown(baseDraft, assets, platform, mode), [assets, baseDraft, mode, platform])
   const threadSegments = useMemo(() => parseThread(renderableDraft || draft), [draft, renderableDraft])
 
   useEffect(() => {
@@ -651,18 +655,18 @@ export function WriterWorkspace({
   useEffect(() => {
     setAssetsError(null)
     if (!baseDraft.trim()) {
-      setAssets(buildPendingWriterAssets("", platform))
+      setAssets(buildPendingWriterAssets("", platform, mode))
       setAssetsLoading(false)
       return
     }
 
     if (!hasWriterAssetPlaceholders(baseDraft)) {
-      setAssets(extractWriterAssetsFromMarkdown(baseDraft, platform))
+      setAssets(extractWriterAssetsFromMarkdown(baseDraft, platform, mode))
       setAssetsLoading(false)
       return
     }
 
-    const pendingAssets = buildPendingWriterAssets(baseDraft, platform)
+    const pendingAssets = buildPendingWriterAssets(baseDraft, platform, mode)
     setAssets(pendingAssets)
 
     let cancelled = false
@@ -673,7 +677,7 @@ export function WriterWorkspace({
         const response = await fetch("/api/writer/assets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ markdown: baseDraft, platform, conversationId }),
+          body: JSON.stringify({ markdown: baseDraft, platform, mode, conversationId }),
         })
         const data = await response.json().catch(() => null)
         const nextAssets = Array.isArray(data?.data?.assets) ? (data.data.assets as WriterAsset[]) : []
@@ -681,7 +685,7 @@ export function WriterWorkspace({
         if (!cancelled && nextAssets.length > 0) {
           setAssets(nextAssets)
 
-          const resolvedMarkdown = resolveWriterAssetMarkdown(baseDraft, nextAssets)
+          const resolvedMarkdown = resolveWriterAssetMarkdown(baseDraft, nextAssets, platform, mode)
           if (resolvedMarkdown && resolvedMarkdown !== baseDraft) {
             setDraft(resolvedMarkdown)
             setMessages((current) => {
@@ -730,7 +734,7 @@ export function WriterWorkspace({
     return () => {
       cancelled = true
     }
-  }, [baseDraft, conversationId, platform])
+  }, [baseDraft, conversationId, mode, platform])
 
   const patchAssistantMessage = (id: string, content: string) => {
     setMessages((current) =>
@@ -747,7 +751,7 @@ export function WriterWorkspace({
     setInputValue("")
     setPreviewOpen(false)
     setAssetsError(null)
-    setAssets(buildPendingWriterAssets("", platform))
+    setAssets(buildPendingWriterAssets("", platform, mode))
     emitWriterRefresh()
     router.push(`/dashboard/writer?platform=${platform}&mode=${mode}`)
   }
@@ -884,6 +888,8 @@ export function WriterWorkspace({
       ? resolveWriterAssetMarkdown(
           threadSegments.map((segment, index) => `### 第 ${index + 1} 段\n${segment}`).join("\n\n"),
           assets,
+          platform,
+          mode,
         )
       : renderableDraft || "_文章生成后，这里会展示和目标平台更接近的图文排版预览。_"
 
@@ -986,7 +992,9 @@ export function WriterWorkspace({
                           {message.authorLabel || "你"}
                         </div>
                         {renderMarkdown(
-                          message.role === "assistant" ? resolveWriterAssetMarkdown(message.content, assets) : message.content,
+                          message.role === "assistant"
+                            ? resolveWriterAssetMarkdown(message.content, assets, platform, mode)
+                            : message.content,
                           assets,
                           message.role === "assistant"
                             ? "prose-headings:mt-3 prose-p:my-2 prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground"

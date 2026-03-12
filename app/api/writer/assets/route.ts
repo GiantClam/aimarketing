@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed } from "@/lib/writer/assets"
-import { normalizeWriterPlatform } from "@/lib/writer/config"
+import { normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
 import { writerRequestJson } from "@/lib/writer/network"
 import { isWriterR2Available, uploadWriterImageToR2 } from "@/lib/writer/r2"
 
 export const runtime = "nodejs"
-export const maxDuration = 60
+export const maxDuration = 300
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ""
 const OPENROUTER_API_BASE = (process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1").replace(/\/$/, "")
@@ -116,7 +116,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const markdown = typeof body?.markdown === "string" ? body.markdown : ""
     const platform = normalizeWriterPlatform(body?.platform)
+    const mode = normalizeWriterMode(platform, body?.mode)
     const conversationId = typeof body?.conversationId === "string" ? body.conversationId : null
+    const plannedAssets = buildPendingWriterAssets(markdown, platform, mode)
 
     if (!OPENROUTER_API_KEY) {
       return NextResponse.json(
@@ -124,12 +126,7 @@ export async function POST(request: NextRequest) {
           data: {
             provider: "nanobanana",
             model: WRITER_IMAGE_MODEL,
-            assets: ensureWriterAssetOrder(
-              markWriterAssetsFailed(
-                buildPendingWriterAssets(markdown, platform),
-                "OPENROUTER_API_KEY is required for writer image generation",
-              ),
-            ),
+            assets: ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, "OPENROUTER_API_KEY is required for writer image generation"), platform, mode),
           },
           error: "OPENROUTER_API_KEY is required for writer image generation",
         },
@@ -143,9 +140,7 @@ export async function POST(request: NextRequest) {
           data: {
             provider: "nanobanana",
             model: WRITER_IMAGE_MODEL,
-            assets: ensureWriterAssetOrder(
-              markWriterAssetsFailed(buildPendingWriterAssets(markdown, platform), "writer_r2_config_missing"),
-            ),
+            assets: ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, "writer_r2_config_missing"), platform, mode),
           },
           error: "writer_r2_config_missing",
         },
@@ -153,34 +148,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const assets = []
-    for (const asset of buildPendingWriterAssets(markdown, platform)) {
-      try {
-        const dataUrl = await generateImageWithRetry(asset.prompt)
-        const uploaded = await uploadWriterImageToR2({
-          userId: auth.user.id,
-          conversationId,
-          assetId: asset.id,
-          dataUrl,
-        })
-        assets.push({
-          ...asset,
-          url: uploaded.url,
-          storageKey: uploaded.storageKey,
-          contentType: uploaded.contentType,
-          status: "ready" as const,
-          provider: "nanobanana" as const,
-        })
-      } catch (error: any) {
-        assets.push({
-          ...asset,
-          url: "",
-          status: "failed" as const,
-          provider: "error" as const,
-          error: error?.message || "writer_asset_failed",
-        })
-      }
-    }
+    const assets = await Promise.all(
+      plannedAssets.map(async (asset) => {
+        try {
+          const dataUrl = await generateImageWithRetry(asset.prompt)
+          const uploaded = await uploadWriterImageToR2({
+            userId: auth.user.id,
+            conversationId,
+            assetId: asset.id,
+            dataUrl,
+          })
+          return {
+            ...asset,
+            url: uploaded.url,
+            storageKey: uploaded.storageKey,
+            contentType: uploaded.contentType,
+            status: "ready" as const,
+            provider: "nanobanana" as const,
+          }
+        } catch (error: any) {
+          return {
+            ...asset,
+            url: "",
+            status: "failed" as const,
+            provider: "error" as const,
+            error: error?.message || "writer_asset_failed",
+          }
+        }
+      }),
+    )
 
     const successCount = assets.filter((asset) => asset.status === "ready" && asset.url).length
     if (successCount === 0) {
@@ -189,7 +185,7 @@ export async function POST(request: NextRequest) {
           data: {
             provider: "nanobanana",
             model: WRITER_IMAGE_MODEL,
-            assets: ensureWriterAssetOrder(assets),
+            assets: ensureWriterAssetOrder(assets, platform, mode),
           },
           error: "writer_assets_failed",
         },
@@ -201,7 +197,7 @@ export async function POST(request: NextRequest) {
       data: {
         provider: "nanobanana",
         model: WRITER_IMAGE_MODEL,
-        assets: ensureWriterAssetOrder(assets),
+        assets: ensureWriterAssetOrder(assets, platform, mode),
       },
     })
   } catch (error: any) {
