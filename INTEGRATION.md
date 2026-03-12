@@ -1,203 +1,79 @@
-# SaleAgent 整合文档
+# Video Agent Integration
 
-本文档说明如何将 saleagent 整合到 aimarketing 项目中。
+本仓库已经取消 `submodules/saleagent` 的内置方式。
 
-## 项目结构
+当前集成模式是：
 
-```
-aimarketing/
-├── submodules/
-│   └── saleagent/          # SaleAgent 子模块
-│       ├── apps/
-│       │   ├── agent/      # CrewAI 后端（FastAPI）
-│       │   └── web/        # SaleAgent 前端（参考）
-│       └── ...
-├── app/
-│   ├── api/
-│   │   └── crewai/         # CrewAI API 代理路由
-│   └── dashboard/
-│       └── generate/       # 统一的生成页面
-├── components/
-│   ├── content-generator.tsx  # 图文生成组件
-│   └── video-generator.tsx    # 视频生成组件（多智能体）
-└── ...
-```
+- `aimarketing` 负责前端页面、鉴权、代理路由
+- video agent 服务独立部署和运行
+- 本仓库通过 `AGENT_URL` / `NEXT_PUBLIC_AGENT_URL` 调用外部服务
 
-## 功能整合
+## 集成边界
 
-### 1. 图文生成
-- 使用现有的 `ContentGenerator` 组件
-- 支持基于知识库的内容生成
+本仓库内保留的部分：
 
-### 2. 视频生成（多智能体）
-- 使用 `VideoGenerator` 组件
-- 整合 CrewAI 多智能体协作
-- 支持实时 SSE 流式通信
-- 展示智能体工作过程
-- 支持人机协同交互
+- [app/api/crewai](/d:/github/aimarketing/app/api/crewai)
+- [components/video-chat.tsx](/d:/github/aimarketing/components/video-chat.tsx)
+- [lib/saleagent-client.ts](/d:/github/aimarketing/lib/saleagent-client.ts)
 
-### 3. API 路由
-- `/api/crewai/agent` - 代理 CrewAI 智能体请求
-- `/api/crewai/workflow` - 代理工作流操作
-- `/api/crewai/jobs` - 代理任务管理
+外部服务负责的部分：
 
-## 环境变量配置
+- `/crewai-agent`
+- `/crewai-chat`
+- `/workflow/*`
+- 视频任务编排
+- Sora2 / RunningHub / Supabase 等 provider 集成
 
-### 前端环境变量（.env.local）
+## 环境变量
+
+前端 / Node 代理：
 
 ```bash
-# CrewAI 后端地址
+AGENT_URL=http://localhost:8000
 NEXT_PUBLIC_AGENT_URL=http://localhost:8000
-
-# 站点 URL
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-
-# Supabase（可选）
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 ```
 
-### 后端环境变量（submodules/saleagent/apps/agent/.env）
+外部 video agent 服务：
 
-参考 `submodules/saleagent/README.md` 和 `submodules/saleagent/LOCAL_DEVELOPMENT.md`
+- `PROVIDER_VIDEO`
+- `RUNNINGHUB_SORA2_WORKFLOW_ID`
+- `RUNNINGHUB_API_KEY`
+- `OPENROUTER_API_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-主要配置项：
-- `PROVIDER_IMAGE` - 图片生成提供商（qwen_runninghub | seedream | nanobanana）
-- `PROVIDER_VIDEO` - 视频生成提供商（**sora2** | pixverse | runninghub | veo3.1 | hailuo）
-  - **推荐使用 sora2**：`PROVIDER_VIDEO=sora2`
-- `RUNNINGHUB_SORA2_WORKFLOW_ID` - Sora2 工作流 ID（使用 sora2 时必需）
-- `RUNNINGHUB_API_KEY` - RunningHub API 密钥
-- `OPENROUTER_API_KEY` - OpenRouter API 密钥（用于 LLM 调用）
-- `SUPABASE_URL` - Supabase 地址
-- `SUPABASE_SERVICE_ROLE_KEY` - **Supabase Service Role Key（必需，用于绕过 RLS 策略）**
-  - ⚠️ **重要**：后端必须使用 `SUPABASE_SERVICE_ROLE_KEY`，不能使用 `SUPABASE_ANON_KEY`
-  - `SUPABASE_ANON_KEY` 受 RLS 策略限制，会导致插入数据失败
-- `R2_ACCOUNT_ID` - Cloudflare R2 配置
-- 等等...
+这些变量应该配置在外部 video agent 服务自己的 `.env` 中，不再放在本仓库的 `submodules/saleagent/...` 路径下。
 
-**重要**：要使用 Sora2 生成视频，必须设置：
-```bash
-PROVIDER_VIDEO=sora2
-RUNNINGHUB_SORA2_WORKFLOW_ID=your_workflow_id
-RUNNINGHUB_API_KEY=your_api_key
-```
+## 本地联调
 
-详细配置请参考 [SORA2_SETUP.md](./SORA2_SETUP.md)
-
-## 启动步骤
-
-### 1. 初始化子模块
+1. 单独启动 video agent 服务
+2. 确认它监听在例如 `http://localhost:8000`
+3. 在本仓库配置：
 
 ```bash
-git submodule update --init --recursive
+AGENT_URL=http://localhost:8000
+NEXT_PUBLIC_AGENT_URL=http://localhost:8000
 ```
 
-### 2. 启动 CrewAI 后端
-
-**方法一：使用启动脚本（推荐）**
-
-Windows PowerShell:
-```powershell
-.\scripts\start-backend.ps1
-```
-
-Windows CMD:
-```cmd
-scripts\start-backend.bat
-```
-
-**方法二：手动启动**
+4. 启动本仓库前端：
 
 ```bash
-# 切换到后端目录
-cd submodules/saleagent/apps/agent
-
-# 安装依赖（首次运行）
-pip install -r requirements.txt
-
-# 启动服务
-python -m uvicorn main:app --reload --port 8000
-```
-
-**注意**：必须在 `submodules/saleagent/apps/agent` 目录下运行 uvicorn，否则会报 "Could not import module 'main'" 错误。
-
-### 3. 启动前端
-
-```bash
-# 在项目根目录
-pnpm install
 pnpm dev
 ```
 
-访问 http://localhost:3000/dashboard/generate
-
-## 多智能体工作流
-
-视频生成使用以下智能体协作：
-
-1. **创意策划** - 优化提示词和策略
-2. **导演** - 规划分镜脚本
-3. **审核** - 审核分镜质量
-4. **视觉设计** - 生成关键帧（可选）
-5. **制片** - 提交视频生成任务
-6. **剪辑** - 拼接最终视频
-
-## 人机协同交互
-
-在视频生成过程中，用户可以：
-- 查看每个智能体的实时状态
-- 在智能体工作时提供反馈
-- 调整生成参数
-- 干预工作流程
-
 ## 部署
 
-### 前端部署（Vercel）
+生产环境中：
 
-1. 设置环境变量
-2. 确保 `AGENT_URL` 指向部署的后端地址
+- `aimarketing` 部署在 Vercel
+- video agent 部署在独立服务平台
+- Vercel 通过 `AGENT_URL` 访问外部 agent
 
-### 后端部署（Railway）
+## 不再支持的旧方式
 
-参考 `submodules/saleagent/DEPLOYMENT.md`
+以下旧流程已废弃：
 
-## 修改 SaleAgent 代码
-
-由于 saleagent 是作为 submodule 导入的，可以直接修改其代码：
-
-```bash
-cd submodules/saleagent
-# 进行修改
-git add .
-git commit -m "修改说明"
-```
-
-如果需要推送到原仓库，需要：
-1. Fork saleagent 仓库
-2. 修改 submodule 的 remote URL
-3. 推送修改
-
-## 注意事项
-
-1. **API 代理**：前端通过 Next.js API 路由代理请求到 CrewAI 后端，避免 CORS 问题
-2. **SSE 流式响应**：视频生成使用 Server-Sent Events 实时推送进度
-3. **状态管理**：使用 React hooks 管理智能体状态和事件流
-4. **UI 一致性**：视频生成组件使用与项目一致的 UI 组件库（shadcn/ui）
-
-## 故障排查
-
-### 后端连接失败
-- 检查 `NEXT_PUBLIC_AGENT_URL` 是否正确
-- 确认 CrewAI 后端已启动
-- 查看浏览器控制台和网络请求
-
-### SSE 流中断
-- 检查网络连接
-- 查看后端日志
-- 确认后端支持 SSE
-
-### 智能体状态不更新
-- 检查事件解析逻辑
-- 查看浏览器控制台错误
-- 确认事件格式正确
-
+- 在本仓库中执行 `git submodule update --init --recursive`
+- 从 `submodules/saleagent/apps/agent` 目录启动后端
+- 依赖本仓库携带 `saleagent` 代码进行视频能力开发
