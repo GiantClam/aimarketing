@@ -112,6 +112,16 @@ def wait_for_writer_history(page, timeout_ms: int = 45000):
     raise AssertionError("writer history did not render in time")
 
 
+def has_writer_sidebar_entry(page) -> bool:
+    selectors = [
+        'a[href="/dashboard/writer"]',
+        'button:has-text("多平台图文写作")',
+        'a:has-text("多平台图文写作")',
+        'h3:has-text("文章写作")',
+    ]
+    return any(page.locator(selector).count() > 0 for selector in selectors)
+
+
 def wait_for_generated_writer_assets(page, timeout_ms: int = 180000):
     deadline = time() + (timeout_ms / 1000)
     preview = page.locator('[role="dialog"]').first
@@ -205,7 +215,7 @@ with sync_playwright() as p:
         page.goto(with_bypass_url(f"{BASE_URL}/dashboard"), timeout=90000, wait_until="domcontentloaded")
         page.wait_for_load_state("networkidle", timeout=90000)
         save_debug(page, "01-dashboard")
-        expect(page.locator('a[href="/dashboard/writer"]').count() > 0, "dashboard missing writer entry")
+        expect(has_writer_sidebar_entry(page), "dashboard missing writer entry")
 
         page.goto(with_bypass_url(f"{BASE_URL}/dashboard/writer"), timeout=90000, wait_until="domcontentloaded")
         page.wait_for_load_state("networkidle", timeout=90000)
