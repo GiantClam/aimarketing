@@ -456,41 +456,49 @@ function PreviewResourceStrip({
   if (!assetsLoading && !assetsError && visibleAssets.length === 0) return null
 
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white/92 p-4 shadow-sm backdrop-blur-sm">
+    <div className="rounded-[24px] border border-slate-300 bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.28)] ring-1 ring-slate-950/6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">图片操作</p>
-          <p className="mt-1 text-xs text-slate-500">正文中已经按文章样式展示图片，这里只保留发布时需要的操作。</p>
+          <p className="text-sm font-semibold text-slate-950">图片操作</p>
+          <p className="mt-1 text-xs leading-5 text-slate-700">正文中已经按文章样式展示图片，这里只保留发布时需要的下载与复制操作。</p>
         </div>
-        <Badge variant={assetsLoading ? "outline" : "secondary"} className="rounded-full px-3 py-1 text-[11px]">
+        <Badge
+          variant={assetsLoading ? "outline" : "secondary"}
+          className={cn(
+            "rounded-full border px-3 py-1 text-[11px] font-medium",
+            assetsLoading
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-emerald-300 bg-emerald-50 text-emerald-900",
+          )}
+        >
           {assetsLoading ? "图片生成中" : "Gemini 3.1 Flash Image Preview"}
         </Badge>
       </div>
       {assetsError ? (
-        <div className="mt-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive">
+        <div className="mt-3 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-medium leading-5 text-destructive">
           图片生成失败：{assetsError}
         </div>
       ) : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {(visibleAssets.length > 0 ? visibleAssets : assets).map((asset) => (
-          <div key={asset.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+          <div key={asset.id} className="rounded-2xl border border-slate-300 bg-slate-50 p-3 shadow-[0_12px_32px_-26px_rgba(15,23,42,0.35)]">
             {asset.url ? (
               <img src={asset.url} alt="发布配图" className="h-24 w-full rounded-xl object-cover" />
             ) : (
-              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-3 text-center text-xs text-slate-500">
+              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-3 text-center text-xs font-medium text-slate-700">
                 {asset.status === "failed" ? "配图暂不可用" : assetsLoading ? "生成中..." : "等待图片"}
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-slate-950 text-white hover:bg-slate-800 hover:text-white" onClick={() => onDownload(asset)} disabled={!asset.url}>
+              <Button size="sm" variant="outline" className="rounded-full border-slate-950 bg-slate-950 text-white hover:bg-slate-800 hover:text-white" onClick={() => onDownload(asset)} disabled={!asset.url}>
                 <Download className="mr-1.5 h-3.5 w-3.5" />
                 下载
               </Button>
-              <Button size="sm" variant="outline" className="rounded-full border-slate-300 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyLink(asset)} disabled={!asset.url}>
+              <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyLink(asset)} disabled={!asset.url}>
                 <Copy className="mr-1.5 h-3.5 w-3.5" />
                 图链
               </Button>
-              <Button size="sm" variant="outline" className="rounded-full border-slate-300 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyMarkdown(asset)} disabled={!asset.url}>
+              <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyMarkdown(asset)} disabled={!asset.url}>
                 <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
                 Markdown
               </Button>
@@ -1438,20 +1446,20 @@ export function WriterWorkspace({
       <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
         <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 sm:max-w-[920px]">
           <div className={cn("h-full bg-gradient-to-b", getPlatformPreviewPalette(platform))}>
-            <SheetHeader className="border-b bg-white/84 px-4 py-3 backdrop-blur-sm">
+            <SheetHeader className="border-b border-slate-300 bg-white/96 px-4 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm">
               <div className="flex items-center justify-between gap-3 pr-8">
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
+                  <Badge variant="secondary" className="rounded-full border border-slate-300 bg-slate-950 px-2.5 py-1 text-[10px] font-medium text-white">
                     {writerConfig.shortLabel}
                   </Badge>
-                  <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
+                  <Badge variant="outline" className="rounded-full border-slate-400 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-900">
                     {estimateReadingTime(previewMarkdown)}
                   </Badge>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                  className="h-8 rounded-full border-slate-950 bg-slate-950 px-3 text-[11px] text-white hover:bg-slate-800"
                   onClick={() => setPreviewOpen(false)}
                 >
                   <ChevronLeft className="mr-1.5 h-3.5 w-3.5" />
@@ -1465,14 +1473,14 @@ export function WriterWorkspace({
               <div className="space-y-4 p-4">
                 <div
                   className={cn(
-                    "space-y-4 rounded-[32px] border p-5 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.55)]",
+                    "space-y-4 rounded-[32px] border border-slate-300 p-5 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.55)] ring-1 ring-slate-950/5",
                     getPlatformShellClass(platform),
                   )}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-950">成品预览与编辑</p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 max-w-xl text-xs leading-5 text-slate-700">
                         {imagesRequested || hasGeneratedImages
                           ? "图文已合并到同一条文章流；继续调整文案时不会重复生成图片。"
                           : "当前先预览并确认文本，确认无误后再生成配图。"}
@@ -1484,10 +1492,10 @@ export function WriterWorkspace({
                           size="sm"
                           variant={imagesRequested || hasGeneratedImages ? "outline" : "default"}
                           className={cn(
-                            "h-8 rounded-full px-3 text-[11px]",
+                            "h-8 rounded-full border px-3 text-[11px] font-medium shadow-sm",
                             imagesRequested || hasGeneratedImages
-                              ? "border-slate-300 bg-white text-slate-950 hover:bg-slate-100"
-                              : "border border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
+                              ? "border-slate-500 bg-white text-slate-950 hover:bg-slate-100"
+                              : "border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
                           )}
                           onClick={() => void handleGenerateAssets()}
                           disabled={assetsLoading}
@@ -1497,7 +1505,19 @@ export function WriterWorkspace({
                         </Button>
                       ) : null}
                       {hasDraft ? (
-                        <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-[10px] font-medium",
+                            draftSaveState === "saving"
+                              ? "border-amber-300 bg-amber-50 text-amber-900"
+                              : draftSaveState === "saved"
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                                : draftSaveState === "error"
+                                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                                  : "border-slate-400 bg-white text-slate-900",
+                          )}
+                        >
                           {draftSaveState === "saving"
                             ? "保存中"
                             : draftSaveState === "saved"
@@ -1510,7 +1530,7 @@ export function WriterWorkspace({
                       <Button
                         size="sm"
                         variant="default"
-                        className="h-8 rounded-full border border-slate-950 bg-slate-950 px-3 text-[11px] text-white hover:bg-slate-800"
+                        className="h-8 rounded-full border border-slate-950 bg-slate-950 px-3 text-[11px] font-medium text-white shadow-sm hover:bg-slate-800"
                         onClick={() => void handleCopyText()}
                         disabled={!hasDraft}
                       >
@@ -1520,7 +1540,7 @@ export function WriterWorkspace({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                        className="h-8 rounded-full border-slate-400 bg-white px-3 text-[11px] font-medium text-slate-950 hover:bg-slate-100"
                         onClick={() => void handleCopyMarkdown()}
                         disabled={!hasDraft}
                       >
@@ -1529,7 +1549,7 @@ export function WriterWorkspace({
                       </Button>
                     </div>
                   </div>
-                  <div className="overflow-hidden rounded-[28px] bg-white/86 shadow-sm ring-1 ring-black/5 backdrop-blur-sm">
+                  <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_18px_50px_-32px_rgba(15,23,42,0.32)] ring-1 ring-slate-950/8">
                     <div ref={previewContentRef} className="p-6">
                       <PlatformPreview
                         platform={platform}
