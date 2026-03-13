@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -13,7 +13,6 @@ import {
   ImageIcon,
   Loader2,
   MessageCircleMore,
-  MessageSquare,
   Repeat2,
   Send,
   Share2,
@@ -32,17 +31,21 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   buildPendingWriterAssets,
   extractWriterAssetsFromMarkdown,
-  hasWriterAssetPlaceholders,
   markWriterAssetsFailed,
   resolveWriterAssetMarkdown,
   type WriterAsset,
 } from "@/lib/writer/assets"
 import {
+  DEFAULT_WRITER_LANGUAGE,
+  WRITER_LANGUAGE_CONFIG,
+  WRITER_LANGUAGE_ORDER,
+  normalizeWriterLanguage,
   getWriterModeOptions,
   normalizeWriterMode,
   normalizeWriterPlatform,
   WRITER_PLATFORM_CONFIG,
   WRITER_PLATFORM_ORDER,
+  type WriterLanguage,
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
@@ -120,9 +123,16 @@ const extractLead = (markdown: string) =>
   markdown
     .split(/\r?\n\r?\n/)
     .map((block) => stripMarkdown(block))
-    .find((block) => block && block !== extractTitle(markdown)) || "生成完成后，这里会展示完整的图文排版预览。"
+    .find((block) => block && block !== extractTitle(markdown)) || "文章生成后，这里会展示完整的图文排版预览。"
 
 const estimateReadingTime = (markdown: string) => `${Math.max(3, Math.ceil(stripMarkdown(markdown).length / 320))} 分钟`
+const splitMarkdownBlocks = (markdown: string) =>
+  markdown
+    .split(/\r?\n\r?\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+const composeThreadMarkdown = (segments: string[]) =>
+  segments.map((segment, index) => `### 第 ${index + 1} 段\n${segment.trim()}`).join("\n\n")
 
 const findWriterAsset = (src: string, assets: WriterAsset[]) => {
   const match = /^writer-asset:\/\/(.+)$/.exec(src.trim())
@@ -175,39 +185,24 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
             const writerAsset = findWriterAsset(src, assets) || findRenderableWriterAsset(src, assets)
             if (writerAsset) {
               return (
-                <figure className="my-8 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                <figure className="my-8 overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-black/5">
                   <div className="flex min-h-56 items-center justify-center bg-slate-100/60">
                     {writerAsset.url ? (
                       <img
                         src={writerAsset.url}
-                        alt={alt || writerAsset.label}
+                        alt={alt || "文章配图"}
                         {...props}
                         className="max-h-[420px] w-full object-cover"
                       />
                     ) : (
                       <div className="flex w-full flex-col items-center justify-center gap-2 px-5 py-12 text-center text-slate-500">
                         {writerAsset.status === "failed" ? null : <Loader2 className="h-5 w-5 animate-spin" />}
-                        <p className="text-sm font-medium text-slate-700">{writerAsset.label}</p>
-                        <p className="max-w-md text-xs leading-6">
-                          {writerAsset.status === "failed"
-                            ? "配图生成失败，请稍后重试。"
-                            : `${writerAsset.title} 正在生成，完成后会直接出现在正文对应位置。`}
+                        <p className="text-sm font-medium text-slate-700">
+                          {writerAsset.status === "failed" ? "配图暂时不可用" : "配图生成中"}
                         </p>
                       </div>
                     )}
                   </div>
-                  <figcaption className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{writerAsset.label}</p>
-                      <p className="text-xs text-slate-500">{writerAsset.title}</p>
-                    </div>
-                    <Badge
-                      variant={writerAsset.url ? "secondary" : writerAsset.status === "failed" ? "destructive" : "outline"}
-                      className="rounded-full px-2.5 py-0.5 text-[10px]"
-                    >
-                      {writerAsset.url ? "已生成" : writerAsset.status === "failed" ? "失败" : "生成中"}
-                    </Badge>
-                  </figcaption>
                 </figure>
               )
             }
@@ -279,16 +274,30 @@ function PlatformPreview({
   markdown,
   assets,
   copyHint,
+  editable = false,
+  onEditChange,
+  onEditCommit,
+  saveState,
 }: {
   platform: WriterPlatform
   mode: WriterMode
   markdown: string
   assets: WriterAsset[]
   copyHint: string
+  editable?: boolean
+  onEditChange?: (next: string) => void
+  onEditCommit?: () => void
+  saveState?: "idle" | "saving" | "saved" | "error"
 }) {
   const title = extractTitle(markdown)
   const lead = extractLead(markdown)
   const threadPosts = mode === "thread" ? parseThread(markdown) : []
+  const renderArticleBody = (value: string, className?: string) =>
+    editable && onEditChange && onEditCommit ? (
+      <InlineMarkdownCanvas markdown={value} assets={assets} onChange={onEditChange} onCommit={onEditCommit} saveState={saveState} />
+    ) : (
+      renderMarkdown(value, assets, className)
+    )
 
   if (platform === "wechat") {
     return (
@@ -298,8 +307,6 @@ function PlatformPreview({
             <BookText className="h-6 w-6" />
           </div>
           <p className="text-xs uppercase tracking-[0.28em] text-emerald-700">微信公众号文章预览</p>
-          <h2 className="mx-auto mt-4 max-w-2xl text-balance font-serif text-[2.3rem] font-semibold leading-tight text-black">{title}</h2>
-          <p className="mx-auto mt-6 max-w-xl text-[16px] leading-8 text-slate-600">{lead}</p>
           <div className="mt-4 flex items-center justify-center gap-3 text-xs text-slate-400">
             <span>AI Marketing Weekly</span>
             <span>·</span>
@@ -307,9 +314,8 @@ function PlatformPreview({
           </div>
         </div>
         <div className="mx-auto mt-10 max-w-[640px]">
-          {renderMarkdown(
+          {renderArticleBody(
             markdown,
-            assets,
             "prose-p:text-black prose-li:text-black prose-strong:text-black prose-blockquote:bg-emerald-50/70 prose-blockquote:px-5 prose-blockquote:py-3 prose-blockquote:not-italic",
           )}
         </div>
@@ -326,13 +332,10 @@ function PlatformPreview({
               <Badge className="rounded-full bg-rose-500 px-3 py-1 text-[11px] text-white hover:bg-rose-500">小红书图文</Badge>
               <span className="text-[11px] text-slate-400">适合收藏的图文笔记</span>
             </div>
-            <h2 className="text-center text-balance font-serif text-[1.95rem] font-semibold leading-tight text-black">{title}</h2>
-            <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-[15px] leading-7 text-slate-700">{lead}</p>
           </div>
           <div className="px-5 py-5">
-            {renderMarkdown(
+            {renderArticleBody(
               markdown,
-              assets,
               "prose-p:text-black prose-li:text-black prose-strong:text-rose-700 prose-h1:text-center prose-h2:border-0 prose-h2:pt-0 prose-blockquote:bg-rose-50 prose-blockquote:px-4 prose-blockquote:py-3 prose-blockquote:not-italic",
             )}
           </div>
@@ -359,10 +362,24 @@ function PlatformPreview({
                 </div>
                 {mode === "article" && index === 0 ? <p className="mt-2 text-xs text-slate-500">{lead}</p> : null}
                 <div className="mt-4">
-                  {renderMarkdown(
-                    post,
-                    assets,
-                    "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h1:text-[1.8rem] prose-h2:border-0 prose-h2:pt-0",
+                  {editable && onEditChange && onEditCommit ? (
+                    <InlineMarkdownCanvas
+                      markdown={post}
+                      assets={assets}
+                      onChange={(next) => {
+                        const nextPosts = [...posts]
+                        nextPosts[index] = next
+                        onEditChange(composeThreadMarkdown(nextPosts))
+                      }}
+                      onCommit={onEditCommit}
+                      saveState={saveState}
+                    />
+                  ) : (
+                    renderMarkdown(
+                      post,
+                      assets,
+                      "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h1:text-[1.8rem] prose-h2:border-0 prose-h2:pt-0",
+                    )
                   )}
                 </div>
                 <SocialStatRow />
@@ -390,10 +407,24 @@ function PlatformPreview({
               </div>
               <p className="mt-1 text-xs text-slate-500">{index === 0 ? lead : "多段帖文预览"}</p>
               <div className="mt-4">
-                {renderMarkdown(
-                  post,
-                  assets,
-                  "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h1:text-[1.8rem] prose-h2:border-0 prose-h2:pt-0",
+                {editable && onEditChange && onEditCommit ? (
+                  <InlineMarkdownCanvas
+                    markdown={post}
+                    assets={assets}
+                    onChange={(next) => {
+                      const nextPosts = [...posts]
+                      nextPosts[index] = next
+                      onEditChange(composeThreadMarkdown(nextPosts))
+                    }}
+                    onCommit={onEditCommit}
+                    saveState={saveState}
+                  />
+                ) : (
+                  renderMarkdown(
+                    post,
+                    assets,
+                    "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h1:text-[1.8rem] prose-h2:border-0 prose-h2:pt-0",
+                  )
                 )}
               </div>
               <SocialStatRow />
@@ -420,15 +451,19 @@ function PreviewResourceStrip({
   onCopyLink: (asset: WriterAsset) => Promise<void>
   onCopyMarkdown: (asset: WriterAsset) => Promise<void>
 }) {
+  const visibleAssets = assets.filter((asset) => asset.url)
+
+  if (!assetsLoading && !assetsError && visibleAssets.length === 0) return null
+
   return (
     <div className="rounded-[24px] border border-slate-200 bg-white/92 p-4 shadow-sm backdrop-blur-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">发布资源工具条</p>
-          <p className="mt-1 text-xs text-slate-500">图片已经内联到正文预览。这里仅保留下载、图链复制和 Markdown 图片片段复制。</p>
+          <p className="text-sm font-semibold text-slate-900">图片操作</p>
+          <p className="mt-1 text-xs text-slate-500">正文中已经按文章样式展示图片，这里只保留发布时需要的操作。</p>
         </div>
         <Badge variant={assetsLoading ? "outline" : "secondary"} className="rounded-full px-3 py-1 text-[11px]">
-          {assetsLoading ? "图片生成中" : "OpenRouter · Nano Banana"}
+          {assetsLoading ? "图片生成中" : "Gemini 3.1 Flash Image Preview"}
         </Badge>
       </div>
       {assetsError ? (
@@ -437,28 +472,15 @@ function PreviewResourceStrip({
         </div>
       ) : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {assets.map((asset) => (
+        {(visibleAssets.length > 0 ? visibleAssets : assets).map((asset) => (
           <div key={asset.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
             {asset.url ? (
-              <img src={asset.url} alt={asset.label} className="h-20 w-full rounded-xl object-cover" />
+              <img src={asset.url} alt="发布配图" className="h-24 w-full rounded-xl object-cover" />
             ) : (
-              <div className="flex h-20 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-3 text-center text-xs text-slate-500">
-                {asset.status === "failed" ? "该配图生成失败" : assetsLoading ? "生成中..." : "等待图片"}
+              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-3 text-center text-xs text-slate-500">
+                {asset.status === "failed" ? "配图暂不可用" : assetsLoading ? "生成中..." : "等待图片"}
               </div>
             )}
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-medium text-slate-900">{asset.label}</p>
-                <p className="text-[11px] text-slate-500">{asset.title}</p>
-              </div>
-              <Badge
-                variant={asset.url ? "secondary" : asset.status === "failed" ? "destructive" : "outline"}
-                className="rounded-full px-2 py-0 text-[10px]"
-              >
-                {asset.url ? "完成" : asset.status === "failed" ? "失败" : "等待"}
-              </Badge>
-            </div>
-            {asset.error ? <p className="mt-2 text-[11px] leading-5 text-destructive">{asset.error}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-slate-950 text-white hover:bg-slate-800 hover:text-white" onClick={() => onDownload(asset)} disabled={!asset.url}>
                 <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -480,18 +502,185 @@ function PreviewResourceStrip({
   )
 }
 
+const COPYABLE_STYLE_PROPS = [
+  "color",
+  "background-color",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "line-height",
+  "letter-spacing",
+  "text-align",
+  "text-transform",
+  "text-decoration",
+  "margin-top",
+  "margin-right",
+  "margin-bottom",
+  "margin-left",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "border-top",
+  "border-right",
+  "border-bottom",
+  "border-left",
+  "border-radius",
+  "display",
+  "gap",
+  "justify-content",
+  "align-items",
+  "max-width",
+  "min-height",
+  "box-shadow",
+  "white-space",
+  "list-style-type",
+] as const
+
+function buildClipboardHtmlFromPreview(node: HTMLElement) {
+  const clone = node.cloneNode(true) as HTMLElement
+  const originalElements = [node, ...Array.from(node.querySelectorAll<HTMLElement>("*"))]
+  const clonedElements = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))]
+
+  originalElements.forEach((original, index) => {
+    const target = clonedElements[index]
+    if (!target) return
+
+    const computed = window.getComputedStyle(original)
+    const style = COPYABLE_STYLE_PROPS.map((prop) => `${prop}:${computed.getPropertyValue(prop)};`).join("")
+    target.setAttribute("style", style)
+    target.removeAttribute("class")
+  })
+
+  return `
+    <html>
+      <body style="margin:0;padding:24px;background:#ffffff;">
+        ${clone.outerHTML}
+      </body>
+    </html>
+  `.trim()
+}
+
+function InlineMarkdownCanvas({
+  markdown,
+  assets,
+  onChange,
+  onCommit,
+  saveState,
+}: {
+  markdown: string
+  assets: WriterAsset[]
+  onChange: (next: string) => void
+  onCommit: () => void
+  saveState?: "idle" | "saving" | "saved" | "error"
+}) {
+  const editorRef = useRef<HTMLTextAreaElement | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [activeValue, setActiveValue] = useState(markdown)
+
+  useEffect(() => {
+    if (!isEditing) {
+      setActiveValue(markdown)
+    }
+  }, [isEditing, markdown])
+
+  useEffect(() => {
+    if (!isEditing || !editorRef.current) return
+    const element = editorRef.current
+    element.style.height = "0px"
+    element.style.height = `${Math.max(element.scrollHeight, 320)}px`
+  }, [isEditing, activeValue])
+
+  const commitDraft = () => {
+    onChange(activeValue)
+    onCommit()
+    setIsEditing(false)
+  }
+
+  if (isEditing) {
+    return (
+      <div className="rounded-[24px] border border-slate-950/10 bg-white px-5 py-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.38)] ring-2 ring-slate-950/5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-medium tracking-[0.16em] text-slate-500">编辑文章内容</p>
+            {saveState === "saving" ? (
+              <span className="text-[11px] text-slate-400">保存中...</span>
+            ) : saveState === "saved" ? (
+              <span className="text-[11px] text-emerald-600">已保存</span>
+            ) : saveState === "error" ? (
+              <span className="text-[11px] text-destructive">保存失败</span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-400">Ctrl/Cmd + Enter</span>
+            <Button
+              size="sm"
+              className="h-8 rounded-full bg-slate-950 px-3 text-[11px] text-white hover:bg-slate-800"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={commitDraft}
+            >
+              完成
+            </Button>
+          </div>
+        </div>
+        <Textarea
+          ref={editorRef}
+          autoFocus
+          value={activeValue}
+          onChange={(event) => setActiveValue(event.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.preventDefault()
+              commitDraft()
+            }
+            if (event.key === "Escape") {
+              event.preventDefault()
+              setActiveValue(markdown)
+              setIsEditing(false)
+            }
+          }}
+          className="min-h-[320px] resize-none rounded-[20px] border-0 bg-transparent px-0 py-0 font-serif text-[18px] leading-[2.05] tracking-[0.01em] text-slate-950 shadow-none focus-visible:ring-0"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className="group block w-full rounded-[24px] border border-transparent text-left transition hover:border-slate-200 hover:bg-white/70 hover:shadow-[0_14px_36px_-30px_rgba(15,23,42,0.35)]"
+      onClick={() => setIsEditing(true)}
+    >
+      <div className="pointer-events-none px-2 py-1">
+        <div className="mb-2 opacity-0 transition group-hover:opacity-100">
+          <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] tracking-[0.14em] text-slate-500">
+            点击编辑整篇
+          </span>
+        </div>
+        {renderMarkdown(markdown, assets)}
+      </div>
+    </button>
+  )
+}
+
 export function WriterWorkspace({
   initialConversationId,
   initialPlatform,
   initialMode,
+  initialLanguage,
 }: {
   initialConversationId: string | null
   initialPlatform?: string | null
   initialMode?: string | null
+  initialLanguage?: string | null
 }) {
   const router = useRouter()
   const { user, loading } = useAuth()
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
+  const previewContentRef = useRef<HTMLDivElement | null>(null)
   const currentTaskIdRef = useRef<string | null>(null)
 
   const [availabilityLoading, setAvailabilityLoading] = useState(true)
@@ -501,6 +690,7 @@ export function WriterWorkspace({
   const [mode, setMode] = useState<WriterMode>(() =>
     normalizeWriterMode(normalizeWriterPlatform(initialPlatform), initialMode),
   )
+  const [language, setLanguage] = useState<WriterLanguage>(() => normalizeWriterLanguage(initialLanguage))
   const [inputValue, setInputValue] = useState("")
   const [messages, setMessages] = useState<WriterMessage[]>([])
   const [draft, setDraft] = useState("")
@@ -516,6 +706,11 @@ export function WriterWorkspace({
   const [isLoading, setIsLoading] = useState(false)
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [imagesRequested, setImagesRequested] = useState(false)
+  const [conversationStatus, setConversationStatus] = useState<
+    "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
+  >("drafting")
 
   const replaceWriterUrl = (href: string) => {
     if (typeof window === "undefined") return
@@ -530,7 +725,8 @@ export function WriterWorkspace({
     const nextPlatform = normalizeWriterPlatform(initialPlatform)
     setPlatform(nextPlatform)
     setMode(normalizeWriterMode(nextPlatform, initialMode))
-  }, [initialMode, initialPlatform])
+    setLanguage(normalizeWriterLanguage(initialLanguage))
+  }, [initialLanguage, initialMode, initialPlatform])
 
   useEffect(() => {
     let cancelled = false
@@ -569,10 +765,10 @@ export function WriterWorkspace({
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const nextHref = `${conversationId ? `/dashboard/writer/${conversationId}` : "/dashboard/writer"}?${new URLSearchParams({ platform, mode }).toString()}`
+    const nextHref = `${conversationId ? `/dashboard/writer/${conversationId}` : "/dashboard/writer"}?${new URLSearchParams({ platform, mode, language }).toString()}`
     const currentHref = `${window.location.pathname}${window.location.search}`
     if (currentHref !== nextHref) replaceWriterUrl(nextHref)
-  }, [conversationId, mode, platform])
+  }, [conversationId, language, mode, platform])
 
   useEffect(() => {
     if (!conversationId) {
@@ -587,7 +783,10 @@ export function WriterWorkspace({
     if (meta) {
       setPlatform(meta.platform)
       setMode(normalizeWriterMode(meta.platform, meta.mode))
+      setLanguage(meta.language || DEFAULT_WRITER_LANGUAGE)
       if (meta.draft) setDraft(meta.draft)
+      setImagesRequested(Boolean(meta.imagesRequested))
+      setConversationStatus(meta.status || "drafting")
     }
 
     let cancelled = false
@@ -613,6 +812,13 @@ export function WriterWorkspace({
             authorLabel: WRITER_ASSISTANT_NAME,
           })
         })
+        if (data.conversation) {
+          setPlatform(normalizeWriterPlatform(data.conversation.platform))
+          setMode(normalizeWriterMode(normalizeWriterPlatform(data.conversation.platform), data.conversation.mode))
+          setLanguage(normalizeWriterLanguage(data.conversation.language))
+          setImagesRequested(Boolean(data.conversation.images_requested))
+          setConversationStatus(data.conversation.status || "drafting")
+        }
         setMessages(nextMessages)
         if (!meta?.draft) setDraft(inferDraft(nextMessages))
       } catch {
@@ -639,9 +845,17 @@ export function WriterWorkspace({
 
   useEffect(() => {
     if (conversationId) {
-      saveWriterSessionMeta(conversationId, { platform, mode, draft, updatedAt: Date.now() })
+      saveWriterSessionMeta(conversationId, {
+        platform,
+        mode,
+        language,
+        draft,
+        imagesRequested,
+        status: conversationStatus,
+        updatedAt: Date.now(),
+      })
     }
-  }, [conversationId, draft, mode, platform])
+  }, [conversationId, conversationStatus, draft, imagesRequested, language, mode, platform])
 
   useEffect(() => {
     const viewport = viewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
@@ -649,92 +863,41 @@ export function WriterWorkspace({
   }, [isLoading, messages])
 
   useEffect(() => {
+    const element = composerRef.current
+    if (!element) return
+    element.style.height = "0px"
+    element.style.height = `${Math.min(180, Math.max(56, element.scrollHeight))}px`
+  }, [inputValue])
+
+  useEffect(() => {
     if (draft.trim()) setPreviewOpen(true)
   }, [draft])
 
   useEffect(() => {
-    setAssetsError(null)
     if (!baseDraft.trim()) {
-      setAssets(buildPendingWriterAssets("", platform, mode))
+      setAssets([])
+      setAssetsLoading(false)
+      setImagesRequested(false)
+      return
+    }
+
+    const extractedAssets = extractWriterAssetsFromMarkdown(baseDraft, platform, mode)
+    if (extractedAssets.some((asset) => asset.url)) {
+      setAssets(extractedAssets)
       setAssetsLoading(false)
       return
     }
 
-    if (!hasWriterAssetPlaceholders(baseDraft)) {
-      setAssets(extractWriterAssetsFromMarkdown(baseDraft, platform, mode))
+    if (!imagesRequested) {
+      setAssets([])
       setAssetsLoading(false)
+      setAssetsError(null)
       return
     }
 
-    const pendingAssets = buildPendingWriterAssets(baseDraft, platform, mode)
-    setAssets(pendingAssets)
-
-    let cancelled = false
-
-    const loadAssets = async () => {
-      try {
-        setAssetsLoading(true)
-        const response = await fetch("/api/writer/assets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ markdown: baseDraft, platform, mode, conversationId }),
-        })
-        const data = await response.json().catch(() => null)
-        const nextAssets = Array.isArray(data?.data?.assets) ? (data.data.assets as WriterAsset[]) : []
-
-        if (!cancelled && nextAssets.length > 0) {
-          setAssets(nextAssets)
-
-          const resolvedMarkdown = resolveWriterAssetMarkdown(baseDraft, nextAssets, platform, mode)
-          if (resolvedMarkdown && resolvedMarkdown !== baseDraft) {
-            setDraft(resolvedMarkdown)
-            setMessages((current) => {
-              const next = [...current]
-              for (let index = next.length - 1; index >= 0; index -= 1) {
-                if (next[index]?.role === "assistant") {
-                  next[index] = {
-                    ...next[index],
-                    content: resolvedMarkdown,
-                    authorLabel: WRITER_ASSISTANT_NAME,
-                  }
-                  break
-                }
-              }
-              return next
-            })
-
-            if (conversationId) {
-              void fetch("/api/writer/messages", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ conversation_id: conversationId, content: resolvedMarkdown }),
-              }).catch(() => null)
-            }
-          }
-        }
-
-        if (!response.ok) {
-          throw new Error(data?.error || `HTTP ${response.status}`)
-        }
-
-        if (!cancelled && nextAssets.length === 0) {
-          throw new Error("图片生成结果为空")
-        }
-      } catch (error) {
-        if (cancelled) return
-        const message = error instanceof Error ? error.message : "图片生成失败"
-        setAssetsError(message)
-        setAssets(markWriterAssetsFailed(pendingAssets, message))
-      } finally {
-        if (!cancelled) setAssetsLoading(false)
-      }
-    }
-
-    void loadAssets()
-    return () => {
-      cancelled = true
-    }
-  }, [baseDraft, conversationId, mode, platform])
+    setAssets(buildPendingWriterAssets(baseDraft, platform, mode))
+    setAssetsLoading(false)
+  }, [baseDraft, imagesRequested, mode, platform])
 
   const patchAssistantMessage = (id: string, content: string) => {
     setMessages((current) =>
@@ -744,6 +907,23 @@ export function WriterWorkspace({
     )
   }
 
+  const replaceLatestAssistantMessage = (content: string) => {
+    setMessages((current) => {
+      const next = [...current]
+      for (let index = next.length - 1; index >= 0; index -= 1) {
+        if (next[index]?.role === "assistant") {
+          next[index] = {
+            ...next[index],
+            content,
+            authorLabel: WRITER_ASSISTANT_NAME,
+          }
+          break
+        }
+      }
+      return next
+    })
+  }
+
   const handleCreateConversation = () => {
     setConversationId(null)
     setMessages([])
@@ -751,9 +931,12 @@ export function WriterWorkspace({
     setInputValue("")
     setPreviewOpen(false)
     setAssetsError(null)
-    setAssets(buildPendingWriterAssets("", platform, mode))
+    setAssets([])
+    setImagesRequested(false)
+    setConversationStatus("drafting")
+    setDraftSaveState("idle")
     emitWriterRefresh()
-    router.push(`/dashboard/writer?platform=${platform}&mode=${mode}`)
+    router.push(`/dashboard/writer?platform=${platform}&mode=${mode}&language=${language}`)
   }
 
   const handleSend = async () => {
@@ -763,6 +946,10 @@ export function WriterWorkspace({
     const assistantId = `writer_assistant_${Date.now()}`
     setInputValue("")
     setIsLoading(true)
+    setImagesRequested(false)
+    setConversationStatus("drafting")
+    setAssets([])
+    setAssetsError(null)
     setMessages((current) => [
       ...current,
       { id: `writer_user_${Date.now()}`, conversation_id: conversationId || "", role: "user", content: query },
@@ -780,6 +967,7 @@ export function WriterWorkspace({
           conversation_id: conversationId,
           platform,
           mode,
+          language,
         }),
       })
 
@@ -828,14 +1016,24 @@ export function WriterWorkspace({
       if (finalDraft) {
         setDraft(finalDraft)
         setPreviewOpen(true)
+        setConversationStatus("text_ready")
       }
       if (nextConversationId) {
-        saveWriterSessionMeta(nextConversationId, { platform, mode, draft: finalDraft, updatedAt: Date.now() })
-        replaceWriterUrl(`/dashboard/writer/${nextConversationId}?platform=${platform}&mode=${mode}`)
+        saveWriterSessionMeta(nextConversationId, {
+          platform,
+          mode,
+          language,
+          draft: finalDraft,
+          imagesRequested: false,
+          status: "text_ready",
+          updatedAt: Date.now(),
+        })
+        replaceWriterUrl(`/dashboard/writer/${nextConversationId}?platform=${platform}&mode=${mode}&language=${language}`)
       }
-      emitWriterRefresh()
     } catch (error) {
+      setConversationStatus("failed")
       patchAssistantMessage(assistantId, `请求失败：${error instanceof Error ? error.message : "未知错误"}`)
+      emitWriterRefresh()
     } finally {
       currentTaskIdRef.current = null
       setIsLoading(false)
@@ -850,7 +1048,23 @@ export function WriterWorkspace({
   }
 
   const handleCopyText = async () => {
-    if (draft.trim()) await navigator.clipboard.writeText(stripMarkdown(draft))
+    if (!draft.trim()) return
+
+    const plainText = stripMarkdown(renderableDraft || draft)
+    const previewNode = previewContentRef.current
+
+    if (!previewNode || typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+      await navigator.clipboard.writeText(plainText)
+      return
+    }
+
+    const richHtml = buildClipboardHtmlFromPreview(previewNode)
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob([richHtml], { type: "text/html" }),
+        "text/plain": new Blob([plainText], { type: "text/plain" }),
+      }),
+    ])
   }
 
   const handleCopyMarkdown = async () => {
@@ -880,90 +1094,185 @@ export function WriterWorkspace({
     URL.revokeObjectURL(blobUrl)
   }
 
+  const handleDraftChange = (nextDraft: string) => {
+    setDraft(nextDraft)
+    setDraftSaveState("idle")
+    replaceLatestAssistantMessage(nextDraft)
+  }
+
+  const handleDraftBlur = () => {
+    if (!conversationId || !draft.trim()) return
+    setDraftSaveState("saving")
+    void fetch("/api/writer/messages", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation_id: conversationId, content: draft, status: imagesRequested ? "ready" : "text_ready", imagesRequested }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("save failed")
+        setDraftSaveState("saved")
+      })
+      .catch(() => {
+        setDraftSaveState("error")
+      })
+  }
+
+  const handleGenerateAssets = async () => {
+    if (!baseDraft.trim() || assetsLoading) return
+
+    const pendingAssets = buildPendingWriterAssets(baseDraft, platform, mode)
+    setPreviewOpen(true)
+    setImagesRequested(true)
+    setConversationStatus("image_generating")
+    setAssetsError(null)
+    setAssetsLoading(true)
+    setAssets(pendingAssets)
+
+    try {
+      const response = await fetch("/api/writer/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markdown: baseDraft, platform, mode, conversationId }),
+      })
+      const data = await response.json().catch(() => null)
+      const nextAssets = Array.isArray(data?.data?.assets) ? (data.data.assets as WriterAsset[]) : []
+
+      if (!response.ok) {
+        throw new Error(data?.error || `HTTP ${response.status}`)
+      }
+
+      if (nextAssets.length === 0) {
+        throw new Error("图片生成结果为空")
+      }
+
+      setAssets(nextAssets)
+      setConversationStatus("ready")
+
+      const resolvedMarkdown = resolveWriterAssetMarkdown(baseDraft, nextAssets, platform, mode)
+      if (resolvedMarkdown && resolvedMarkdown !== baseDraft) {
+        setDraft(resolvedMarkdown)
+        setMessages((current) => {
+          const next = [...current]
+          for (let index = next.length - 1; index >= 0; index -= 1) {
+            if (next[index]?.role === "assistant") {
+              next[index] = {
+                ...next[index],
+                content: resolvedMarkdown,
+                authorLabel: WRITER_ASSISTANT_NAME,
+              }
+              break
+            }
+          }
+          return next
+        })
+
+        if (conversationId) {
+          void fetch("/api/writer/messages", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ conversation_id: conversationId, content: resolvedMarkdown, status: "ready", imagesRequested: true }),
+          }).catch(() => null)
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "图片生成失败"
+      setConversationStatus("failed")
+      setAssetsError(message)
+      setAssets(markWriterAssetsFailed(pendingAssets, message))
+    } finally {
+      setAssetsLoading(false)
+    }
+  }
+
   const composerDisabled = loading || availabilityLoading || !availabilityReady
   const hasDraft = Boolean(draft.trim())
+  const hasGeneratedImages = assets.some((asset) => Boolean(asset.url))
   const currentModeLabel = writerModeOptions.find((option) => option.value === mode)?.label || "标准图文"
+  const currentLanguageLabel = WRITER_LANGUAGE_CONFIG[language].label
+  const workspaceStatus = loading
+    ? "正在校验登录状态..."
+    : availabilityLoading
+      ? "正在检查写作能力..."
+      : isConversationLoading
+        ? "正在恢复会话内容..."
+        : conversationStatus === "image_generating"
+          ? "图片生成中，生成完成后会自动合并到成品预览。"
+          : conversationStatus === "ready"
+            ? "图文稿已就绪，可继续微调并复制发布。"
+            : conversationStatus === "failed"
+              ? "本次生成失败，可修改要求后重新生成。"
+              : hasDraft
+                ? "文本草稿已生成，请确认文案后再生成配图。"
+                : "输入主题、受众、语气或结构要求后开始生成。"
   const previewMarkdown =
     mode === "thread" && threadSegments.length > 0
-      ? resolveWriterAssetMarkdown(
-          threadSegments.map((segment, index) => `### 第 ${index + 1} 段\n${segment}`).join("\n\n"),
-          assets,
-          platform,
-          mode,
-        )
-      : renderableDraft || "_文章生成后，这里会展示和目标平台更接近的图文排版预览。_"
+      ? imagesRequested || hasGeneratedImages
+        ? resolveWriterAssetMarkdown(
+            threadSegments.map((segment, index) => `### 第 ${index + 1} 段\n${segment}`).join("\n\n"),
+            assets,
+            platform,
+            mode,
+          )
+        : threadSegments.map((segment, index) => `### 第 ${index + 1} 段\n${segment}`).join("\n\n")
+      : imagesRequested || hasGeneratedImages
+        ? renderableDraft || baseDraft || "_文案确认后，可生成配图并查看图文合并预览。_"
+        : baseDraft || "_文章生成后，这里先展示文本预览；确认文案无误后再生成配图。_"
 
   return (
     <>
       <div className="flex h-[calc(100vh-65px)] flex-col bg-background lg:h-screen">
-        <header className="border-b border-border bg-card/80 px-4 py-3 backdrop-blur-sm lg:px-6">
-          <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-4">
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-medium">文章写作</Badge>
-                <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">统一入口</Badge>
-              </div>
-              <h1 className="font-sans text-lg font-bold text-foreground lg:text-xl">多平台图文写作工作台</h1>
-              <p className="mt-1 text-sm text-muted-foreground">预览区会按目标平台的视觉结构渲染成图文合一的成品，而不是单纯的 Markdown 文档。</p>
+        <header className="border-b border-border/60 bg-background/90 px-3 py-2 backdrop-blur-sm lg:px-5">
+          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+              <p className="truncate text-xs text-muted-foreground">{workspaceStatus}</p>
             </div>
-            <Button variant="outline" className="rounded-full" onClick={() => setPreviewOpen(true)} disabled={!hasDraft}>
-              <Eye className="mr-2 h-4 w-4" />
-              预览抽屉
-            </Button>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                {writerConfig.shortLabel}
+              </Badge>
+              <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                {currentModeLabel}
+              </Badge>
+              <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                {currentLanguageLabel}
+              </Badge>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8 rounded-full border-slate-300 bg-white text-slate-950 hover:bg-slate-100"
+                onClick={() => setPreviewOpen(true)}
+                disabled={!hasDraft}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
-          <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-3 px-4 py-3 lg:px-6 lg:py-4">
-            <section className="rounded-3xl border bg-card/90 px-4 py-3 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <MessageSquare className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">对话工作流</p>
-                    <p className="text-xs text-muted-foreground">
-                      {loading
-                        ? "正在校验登录状态..."
-                        : availabilityLoading
-                          ? "正在检查写作能力..."
-                          : isConversationLoading
-                            ? "正在恢复会话内容..."
-                            : hasDraft
-                              ? "草稿已生成，右侧会展示图文合一的平台化预览。"
-                              : "从下方输入需求开始写作。"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">{writerConfig.shortLabel}</Badge>
-                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">{currentModeLabel}</Badge>
-                </div>
-              </div>
-            </section>
-
-            <div className="min-h-0 flex-1 overflow-hidden rounded-[28px] border bg-card shadow-sm">
+          <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-2 px-3 py-2 lg:px-5 lg:py-3">
+            <div className="min-h-0 flex-1 overflow-hidden rounded-[26px] border bg-card shadow-sm">
               <ScrollArea className="h-full" ref={viewportRef}>
-                <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-5 lg:px-6">
+                <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 lg:px-5">
                   {messages.length === 0 && !isConversationLoading ? (
-                    <div className="space-y-4 rounded-[28px] border border-dashed bg-muted/30 p-6">
+                    <div className="space-y-3 rounded-[24px] border border-dashed bg-muted/20 p-4">
                       <div className="flex items-center gap-2 text-primary">
                         <Sparkles className="h-4 w-4" />
-                        <span className="text-sm font-semibold">推荐起稿方式</span>
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em]">Quick Start</span>
                       </div>
-                      <div className="grid gap-3 lg:grid-cols-3">
+                      <div className="grid gap-2.5 lg:grid-cols-3">
                         {[
-                          "围绕 AI 客服 Agent 写一篇适合公众号发布的专业长文，包含趋势、案例、落地建议和配图说明。",
-                          "围绕 AI 副业工具推荐写一篇适合小红书的图文笔记，标题要有收藏感，正文要有具体工具和行动建议。",
+                          "围绕 AI 客服 Agent 写一篇适合公众号发布的深度文章，包含趋势、案例、落地建议和配图说明。",
+                          "围绕 AI 副业工具推荐写一篇适合小红书的图文笔记，标题要有收藏感，正文给出具体工具和行动建议。",
                           "写一组适合 X / Facebook 发布的 AI 创业观察线程，包含 hook、核心观点和结尾 CTA。",
                         ].map((prompt) => (
                           <button
                             key={prompt}
                             type="button"
                             onClick={() => setInputValue(prompt)}
-                            className="rounded-2xl border bg-background px-4 py-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                            className="rounded-2xl border bg-background px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                           >
-                            <p className="text-xs leading-5 text-muted-foreground">{prompt}</p>
+                            <p className="text-[12px] leading-5 text-muted-foreground">{prompt}</p>
                           </button>
                         ))}
                       </div>
@@ -971,7 +1280,7 @@ export function WriterWorkspace({
                   ) : null}
 
                   {isConversationLoading ? (
-                    <div className="flex items-center gap-2 rounded-2xl border border-dashed bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 rounded-2xl border border-dashed bg-muted/20 px-3.5 py-2.5 text-xs text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       正在恢复当前会话...
                     </div>
@@ -981,13 +1290,20 @@ export function WriterWorkspace({
                     <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                       <div
                         className={cn(
-                          "max-w-[92%] overflow-hidden rounded-3xl px-4 py-3 text-sm shadow-sm lg:max-w-[82%]",
+                          "max-w-[94%] overflow-hidden rounded-[24px] px-3.5 py-3 shadow-sm lg:max-w-[84%]",
                           message.role === "user"
                             ? "rounded-br-md bg-primary text-primary-foreground"
                             : "rounded-bl-md border border-border/70 bg-background text-foreground",
                         )}
                       >
-                        <div className={cn(message.role === "assistant" ? "mb-2 flex items-center gap-2 text-[11px] font-medium text-muted-foreground" : "mb-2 text-[11px] font-medium opacity-80")}>
+                        <div
+                          className={cn(
+                            "mb-2 text-[10px] font-medium",
+                            message.role === "assistant"
+                              ? "flex items-center gap-1.5 text-muted-foreground"
+                              : "opacity-80",
+                          )}
+                        >
                           {message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
                           {message.authorLabel || "你"}
                         </div>
@@ -997,8 +1313,8 @@ export function WriterWorkspace({
                             : message.content,
                           assets,
                           message.role === "assistant"
-                            ? "prose-headings:mt-3 prose-p:my-2 prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground"
-                            : "prose-invert prose-p:my-2 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
+                            ? "prose prose-sm max-w-none prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px]"
+                            : "prose prose-sm max-w-none prose-invert prose-p:my-2 prose-p:text-[14px] prose-p:leading-6 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
                         )}
                       </div>
                     </div>
@@ -1006,7 +1322,7 @@ export function WriterWorkspace({
 
                   {isLoading ? (
                     <div className="flex justify-start">
-                      <div className="rounded-3xl rounded-bl-md border border-border/70 bg-background px-4 py-3 text-sm text-muted-foreground shadow-sm">
+                      <div className="rounded-[24px] rounded-bl-md border border-border/70 bg-background px-3.5 py-3 text-xs text-muted-foreground shadow-sm">
                         <span className="animate-pulse">正在生成图文草稿...</span>
                       </div>
                     </div>
@@ -1015,73 +1331,104 @@ export function WriterWorkspace({
               </ScrollArea>
             </div>
 
-            <section className="rounded-[28px] border bg-background/95 p-3 shadow-xl backdrop-blur">
-              <div className="space-y-3">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                  <select
-                    value={platform}
-                    onChange={(event) => {
-                      const nextPlatform = event.target.value as WriterPlatform
-                      setPlatform(nextPlatform)
-                      setMode(normalizeWriterMode(nextPlatform, mode))
-                    }}
-                    className="h-11 rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition-colors focus:border-primary"
-                    disabled={composerDisabled || isLoading}
+            <section className="rounded-[24px] border bg-background/96 p-2.5 shadow-lg backdrop-blur">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={platform}
+                  onChange={(event) => {
+                    const nextPlatform = event.target.value as WriterPlatform
+                    setPlatform(nextPlatform)
+                    setMode(normalizeWriterMode(nextPlatform, mode))
+                  }}
+                  className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                  disabled={composerDisabled || isLoading}
+                >
+                  {WRITER_PLATFORM_ORDER.map((item) => (
+                    <option key={item} value={item}>
+                      {WRITER_PLATFORM_CONFIG[item].shortLabel}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={mode}
+                  onChange={(event) => setMode(event.target.value as WriterMode)}
+                  className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                  disabled={composerDisabled || isLoading}
+                >
+                  {writerModeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={language}
+                  onChange={(event) => setLanguage(normalizeWriterLanguage(event.target.value))}
+                  className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                  disabled={composerDisabled || isLoading}
+                >
+                  {WRITER_LANGUAGE_ORDER.map((item) => (
+                    <option key={item} value={item}>
+                      {WRITER_LANGUAGE_CONFIG[item].label}
+                    </option>
+                  ))}
+                </select>
+                <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
+                  {workspaceStatus}
+                </Badge>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button size="sm" variant="ghost" className="h-8 rounded-full px-3 text-[11px]" onClick={handleCreateConversation}>
+                    新建
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                    onClick={() => setPreviewOpen(true)}
+                    disabled={!hasDraft}
                   >
-                    {WRITER_PLATFORM_ORDER.map((item) => (
-                      <option key={item} value={item}>{WRITER_PLATFORM_CONFIG[item].shortLabel}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={mode}
-                    onChange={(event) => setMode(event.target.value as WriterMode)}
-                    className="h-11 rounded-2xl border border-border bg-card px-4 text-sm text-foreground outline-none transition-colors focus:border-primary"
-                    disabled={composerDisabled || isLoading}
-                  >
-                    {writerModeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  <div className="flex items-center gap-2 lg:ml-auto">
-                    <Button variant="ghost" className="rounded-full" onClick={handleCreateConversation}>新建</Button>
-                    <Button variant="outline" className="rounded-full" onClick={() => setPreviewOpen(true)} disabled={!hasDraft}>
-                      <Eye className="mr-2 h-4 w-4" />
-                      打开预览
-                    </Button>
-                  </div>
+                    <Eye className="mr-1.5 h-3.5 w-3.5" />
+                    预览
+                  </Button>
                 </div>
+              </div>
 
-                <div className="rounded-[24px] border border-border/70 bg-card">
-                  <Textarea
-                    value={inputValue}
-                    onChange={(event) => setInputValue(event.target.value)}
-                    onKeyDown={(event) => {
-                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                        event.preventDefault()
-                        void handleSend()
-                      }
-                    }}
-                    placeholder={`告诉我你要写什么，我会按 ${writerConfig.shortLabel} 的发布方式起稿。可以补充受众、语气、篇幅、是否要配图和 CTA。`}
-                    className="min-h-28 resize-none border-0 bg-transparent px-4 py-4 text-sm shadow-none focus-visible:ring-0"
-                    disabled={composerDisabled}
-                  />
-                  <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      当前生成目标：{writerConfig.shortLabel} · {currentModeLabel}
-                      {composerDisabled ? " · 正在准备工作台能力" : " · 支持图文成品预览、配图生成和发布包复制"}
-                    </p>
-                    {isLoading ? (
-                      <Button variant="destructive" className="rounded-full" onClick={handleStop}>
-                        <Square className="mr-2 h-4 w-4 fill-current" />
-                        停止生成
-                      </Button>
-                    ) : (
-                      <Button className="rounded-full" onClick={() => void handleSend()} disabled={!inputValue.trim() || composerDisabled}>
-                        <Send className="mr-2 h-4 w-4" />
-                        发送需求
-                      </Button>
-                    )}
-                  </div>
+              <div className="mt-2 rounded-[22px] border border-border/70 bg-card">
+                <Textarea
+                  ref={composerRef}
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                      event.preventDefault()
+                      void handleSend()
+                    }
+                  }}
+                  placeholder={`告诉我你要写什么，我会按 ${writerConfig.shortLabel} 的发布方式起稿。可补充受众、语气、篇幅、配图和 CTA。`}
+                  className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
+                  disabled={composerDisabled}
+                />
+                <div className="flex items-center justify-between gap-3 border-t border-border/70 px-3.5 py-2.5">
+                  <p className="text-[11px] leading-5 text-muted-foreground">
+                    {writerConfig.shortLabel} / {currentModeLabel} / {currentLanguageLabel}
+                    {composerDisabled ? " / 正在准备能力" : " / 支持图文合一预览与配图生成"}
+                  </p>
+                  {isLoading ? (
+                    <Button size="sm" variant="destructive" className="h-8 rounded-full px-3 text-[11px]" onClick={handleStop}>
+                      <Square className="mr-1.5 h-3.5 w-3.5 fill-current" />
+                      停止
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-[11px]"
+                      onClick={() => void handleSend()}
+                      disabled={!inputValue.trim() || composerDisabled}
+                    >
+                      <Send className="mr-1.5 h-3.5 w-3.5" />
+                      发送
+                    </Button>
+                  )}
                 </div>
               </div>
             </section>
@@ -1089,68 +1436,118 @@ export function WriterWorkspace({
         </div>
       </div>
       <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
-        <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 sm:max-w-[880px]">
+        <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 sm:max-w-[920px]">
           <div className={cn("h-full bg-gradient-to-b", getPlatformPreviewPalette(platform))}>
-            <SheetHeader className="border-b bg-white/80 px-5 py-4 backdrop-blur-sm">
-              <div className="flex items-start justify-between gap-3 pr-8">
-                <div>
-                  <SheetTitle>{writerConfig.shortLabel} 成品预览</SheetTitle>
-                  <SheetDescription>图文已合并为单一预览视图，并尽量贴近目标平台的阅读和排版方式。</SheetDescription>
+            <SheetHeader className="border-b bg-white/84 px-4 py-3 backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-3 pr-8">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
+                    {writerConfig.shortLabel}
+                  </Badge>
+                  <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
+                    {estimateReadingTime(previewMarkdown)}
+                  </Badge>
                 </div>
-                <Button variant="outline" className="rounded-full border-slate-300 bg-white text-slate-950 hover:bg-slate-100" onClick={() => setPreviewOpen(false)}>
-                  <ChevronLeft className="mr-2 h-4 w-4" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                  onClick={() => setPreviewOpen(false)}
+                >
+                  <ChevronLeft className="mr-1.5 h-3.5 w-3.5" />
                   收起
                 </Button>
               </div>
+              <SheetTitle className="sr-only">{writerConfig.shortLabel} 预览</SheetTitle>
+              <SheetDescription className="sr-only">可直接编辑草稿并实时查看平台化图文预览。</SheetDescription>
             </SheetHeader>
-            <ScrollArea className="h-[calc(100vh-88px)]">
-              <div className="space-y-5 p-5">
+            <ScrollArea className="h-[calc(100vh-73px)]">
+              <div className="space-y-4 p-4">
                 <div
                   className={cn(
                     "space-y-4 rounded-[32px] border p-5 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.55)]",
                     getPlatformShellClass(platform),
                   )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 pb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">{writerConfig.shortLabel} 平台化成品预览</p>
-                      <p className="mt-1 text-xs text-slate-500">正文和图片已经合并在同一阅读流里，下面就是最终发布形态的近似预览。</p>
+                      <p className="text-sm font-semibold text-slate-950">成品预览与编辑</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {imagesRequested || hasGeneratedImages
+                          ? "图文已合并到同一条文章流；继续调整文案时不会重复生成图片。"
+                          : "当前先预览并确认文本，确认无误后再生成配图。"}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">{currentModeLabel}</Badge>
-                      <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">{estimateReadingTime(previewMarkdown)}</Badge>
+                      {hasDraft ? (
+                        <Button
+                          size="sm"
+                          variant={imagesRequested || hasGeneratedImages ? "outline" : "default"}
+                          className={cn(
+                            "h-8 rounded-full px-3 text-[11px]",
+                            imagesRequested || hasGeneratedImages
+                              ? "border-slate-300 bg-white text-slate-950 hover:bg-slate-100"
+                              : "border border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
+                          )}
+                          onClick={() => void handleGenerateAssets()}
+                          disabled={assetsLoading}
+                        >
+                          <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+                          {assetsLoading ? "生成配图中" : imagesRequested || hasGeneratedImages ? "重新生成配图" : "确认文案并生成配图"}
+                        </Button>
+                      ) : null}
+                      {hasDraft ? (
+                        <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
+                          {draftSaveState === "saving"
+                            ? "保存中"
+                            : draftSaveState === "saved"
+                              ? "已保存"
+                              : draftSaveState === "error"
+                                ? "保存失败"
+                                : "可编辑"}
+                        </Badge>
+                      ) : null}
                       <Button
+                        size="sm"
                         variant="default"
-                        className="rounded-full border border-slate-950 bg-slate-950 text-white shadow-sm hover:bg-slate-800"
+                        className="h-8 rounded-full border border-slate-950 bg-slate-950 px-3 text-[11px] text-white hover:bg-slate-800"
                         onClick={() => void handleCopyText()}
                         disabled={!hasDraft}
                       >
-                        <BookText className="mr-2 h-4 w-4" />
-                        复制纯文本
+                        <BookText className="mr-1.5 h-3.5 w-3.5" />
+                        复制富文本
                       </Button>
                       <Button
-                        variant="secondary"
-                        className="rounded-full border border-slate-400 bg-white text-slate-950 shadow-sm hover:bg-slate-100"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
                         onClick={() => void handleCopyMarkdown()}
                         disabled={!hasDraft}
                       >
-                        <Copy className="mr-2 h-4 w-4" />
+                        <Copy className="mr-1.5 h-3.5 w-3.5" />
                         复制 Markdown
                       </Button>
                     </div>
                   </div>
-
-                  <PlatformPreview
-                    platform={platform}
-                    mode={mode}
-                    markdown={previewMarkdown}
-                    assets={assets}
-                    copyHint={writerConfig.copyHint}
-                  />
+                  <div className="overflow-hidden rounded-[28px] bg-white/86 shadow-sm ring-1 ring-black/5 backdrop-blur-sm">
+                    <div ref={previewContentRef} className="p-6">
+                      <PlatformPreview
+                        platform={platform}
+                        mode={mode}
+                        markdown={previewMarkdown}
+                        assets={assets}
+                        copyHint={writerConfig.copyHint}
+                        editable={hasDraft}
+                        onEditChange={handleDraftChange}
+                        onEditCommit={handleDraftBlur}
+                        saveState={draftSaveState}
+                      />
+                    </div>
+                  </div>
                   <PreviewResourceStrip
-                    assets={assets}
-                    assetsLoading={assetsLoading}
-                    assetsError={assetsError}
+                    assets={imagesRequested || hasGeneratedImages ? assets : []}
+                    assetsLoading={imagesRequested && assetsLoading}
+                    assetsError={imagesRequested ? assetsError : null}
                     onDownload={handleDownloadAsset}
                     onCopyLink={handleCopyAssetLink}
                     onCopyMarkdown={handleCopyAssetMarkdown}

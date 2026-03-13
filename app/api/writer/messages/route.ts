@@ -40,7 +40,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "conversation_id and content are required" }, { status: 400 })
     }
 
-    const updated = await updateWriterMockLatestAssistantMessage(auth.user.id, conversationId, content)
+    const updated = await updateWriterMockLatestAssistantMessage(auth.user.id, conversationId, content, {
+      status: typeof body?.status === "string" ? body.status : "text_ready",
+      imagesRequested: typeof body?.imagesRequested === "boolean" ? body.imagesRequested : undefined,
+    })
     if (!updated) {
       return NextResponse.json({ error: "conversation_not_found" }, { status: 404 })
     }

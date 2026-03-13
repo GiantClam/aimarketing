@@ -6,7 +6,7 @@ export default async function WriterSessionPage({
   searchParams,
 }: {
   params: Promise<{ sessionId: string }>
-  searchParams: Promise<{ platform?: string; mode?: string }>
+  searchParams: Promise<{ platform?: string; mode?: string; language?: string }>
 }) {
   const resolvedParams = await params
   const resolvedSearchParams = await searchParams
@@ -17,6 +17,7 @@ export default async function WriterSessionPage({
         initialConversationId={resolvedParams.sessionId}
         initialPlatform={resolvedSearchParams.platform}
         initialMode={resolvedSearchParams.mode}
+        initialLanguage={resolvedSearchParams.language}
       />
     </DashboardLayout>
   )

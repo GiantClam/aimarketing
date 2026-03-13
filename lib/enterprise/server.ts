@@ -4,6 +4,7 @@ import { and, eq, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { enterprises, enterpriseJoinRequests, userFeaturePermissions, users } from "@/lib/db/schema"
 import { FEATURE_KEYS, type FeatureKey, buildPermissionMap, type PermissionMap } from "@/lib/enterprise/constants"
+import { normalizeDisplayText } from "@/lib/text/display-name"
 
 export type AuthUserPayload = {
   id: number
@@ -113,11 +114,11 @@ export async function getUserAuthPayload(userId: number): Promise<AuthUserPayloa
   return {
     id: row.id,
     email: row.email,
-    name: row.name,
+    name: normalizeDisplayText(row.name) || "",
     isDemo: Boolean(row.isDemo),
     enterpriseId: row.enterpriseId,
     enterpriseCode: row.enterpriseCode ?? null,
-    enterpriseName: row.enterpriseName ?? null,
+    enterpriseName: normalizeDisplayText(row.enterpriseName ?? null),
     enterpriseRole: row.enterpriseRole ?? null,
     enterpriseStatus: row.enterpriseStatus ?? null,
     permissions,
@@ -161,4 +162,5 @@ export async function listPendingRequests(adminUserId: number) {
     .innerJoin(users, eq(enterpriseJoinRequests.userId, users.id))
     .where(and(eq(enterpriseJoinRequests.enterpriseId, enterpriseId), eq(enterpriseJoinRequests.status, "pending")))
     .orderBy(desc(enterpriseJoinRequests.createdAt))
+    .then((rows) => rows.map((row) => ({ ...row, userName: normalizeDisplayText(row.userName) || "" })))
 }

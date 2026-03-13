@@ -186,11 +186,13 @@ export function resolveWriterAssetMarkdown(
   )
 
   if (!/!\[[^\]]*\]\((?!\s*\))/m.test(next)) {
-    const assetLines = assetPlan.map((assetId) => {
-      const asset = assets.find((item) => item.id === assetId)
-      if (!asset) return ""
-      return `![${asset.label}](${asset.url || `writer-asset://${asset.id}`})`
-    }).filter(Boolean)
+    const assetLines = assetPlan
+      .map((assetId) => {
+        const asset = assets.find((item) => item.id === assetId)
+        if (!asset) return ""
+        return `![${asset.label}](${asset.url || `writer-asset://${asset.id}`})`
+      })
+      .filter(Boolean)
 
     next = [...assetLines, "", next].filter(Boolean).join("\n")
   }

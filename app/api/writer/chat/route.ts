@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
-import { normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
+import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
 import { appendWriterMockConversation, createWriterMockStream } from "@/lib/writer/mock"
 import { generateWriterDraftWithSkills } from "@/lib/writer/skills"
 
@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
 
     const platform = normalizeWriterPlatform(body?.platform)
     const mode = normalizeWriterMode(platform, body?.mode)
+    const language = normalizeWriterLanguage(body?.language)
 
     const rateLimit = checkRateLimit({
       key: `writer:chat:${auth.user.id}:${getRequestIp(req)}:${platform}:${mode}`,
@@ -34,12 +35,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "query is required" }, { status: 400 })
     }
 
-    const answer = await generateWriterDraftWithSkills(userQuery, platform, mode)
+    const answer = await generateWriterDraftWithSkills(userQuery, platform, mode, language)
     const persisted = await appendWriterMockConversation({
       userId: auth.user.id,
       conversationId: typeof body?.conversation_id === "string" ? body.conversation_id : null,
       query: userQuery,
       answer,
+      platform,
+      mode,
+      language,
     })
 
     const taskId = `writer-${Date.now()}`

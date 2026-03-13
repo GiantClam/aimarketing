@@ -122,6 +122,11 @@ export const writerConversations = pgTable("writer_conversations", {
     .notNull()
     .references(() => users.id),
   title: varchar("title", { length: 255 }).notNull(),
+  platform: varchar("platform", { length: 32 }).default("wechat").notNull(),
+  mode: varchar("mode", { length: 32 }).default("article").notNull(),
+  language: varchar("language", { length: 32 }).default("auto").notNull(),
+  status: varchar("status", { length: 32 }).default("drafting").notNull(),
+  imagesRequested: boolean("images_requested").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

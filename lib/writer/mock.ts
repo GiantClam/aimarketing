@@ -2,16 +2,52 @@ import { and, asc, desc, eq, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { writerConversations, writerMessages } from "@/lib/db/schema"
-import { WRITER_PLATFORM_CONFIG, type WriterMode, type WriterPlatform } from "@/lib/writer/config"
+import {
+  DEFAULT_WRITER_LANGUAGE,
+  normalizeWriterLanguage,
+  normalizeWriterMode,
+  normalizeWriterPlatform,
+  type WriterLanguage,
+  type WriterMode,
+  type WriterPlatform,
+} from "@/lib/writer/config"
 
 const WRITER_TITLE_PREFIX = "[writer] "
 const DB_RETRY_DELAYS_MS = [250, 750]
 
+type WriterConversationStatus = "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
+
+type WriterConversationRow = {
+  id: number
+  userId: number
+  title: string
+  platform: string
+  mode: string
+  language: string
+  status: string
+  imagesRequested: boolean
+  createdAt: Date | null
+  updatedAt: Date | null
+}
+
+type WriterConversationMeta = {
+  platform: WriterPlatform
+  mode: WriterMode
+  language: WriterLanguage
+  status: WriterConversationStatus
+  imagesRequested: boolean
+}
+
 type WriterMockConversation = {
   id: string
   name: string
-  status: string
+  status: WriterConversationStatus
+  platform: WriterPlatform
+  mode: WriterMode
+  language: WriterLanguage
+  images_requested: boolean
   created_at: number
+  updated_at: number
 }
 
 type WriterMockMessage = {
@@ -75,34 +111,45 @@ async function ensureWriterTables() {
   if (!writerTablesReadyPromise) {
     writerTablesReadyPromise = withDbRetry("ensure-writer-tables", async () => {
       await db.execute(sql`
-          CREATE TABLE IF NOT EXISTS writer_conversations (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            title VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-          )
-        `)
+        CREATE TABLE IF NOT EXISTS writer_conversations (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title VARCHAR(255) NOT NULL,
+          platform VARCHAR(32) NOT NULL DEFAULT 'wechat',
+          mode VARCHAR(32) NOT NULL DEFAULT 'article',
+          language VARCHAR(32) NOT NULL DEFAULT 'auto',
+          status VARCHAR(32) NOT NULL DEFAULT 'drafting',
+          images_requested BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `)
+
+      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS platform VARCHAR(32) NOT NULL DEFAULT 'wechat'`)
+      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS mode VARCHAR(32) NOT NULL DEFAULT 'article'`)
+      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS language VARCHAR(32) NOT NULL DEFAULT 'auto'`)
+      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'drafting'`)
+      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS images_requested BOOLEAN NOT NULL DEFAULT FALSE`)
 
       await db.execute(sql`
-          CREATE INDEX IF NOT EXISTS writer_conversations_user_created_idx
-          ON writer_conversations (user_id, created_at DESC, id DESC)
-        `)
+        CREATE INDEX IF NOT EXISTS writer_conversations_user_created_idx
+        ON writer_conversations (user_id, created_at DESC, id DESC)
+      `)
 
       await db.execute(sql`
-          CREATE TABLE IF NOT EXISTS writer_messages (
-            id SERIAL PRIMARY KEY,
-            conversation_id INTEGER NOT NULL REFERENCES writer_conversations(id) ON DELETE CASCADE,
-            role VARCHAR(20) NOT NULL,
-            content TEXT NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW()
-          )
-        `)
+        CREATE TABLE IF NOT EXISTS writer_messages (
+          id SERIAL PRIMARY KEY,
+          conversation_id INTEGER NOT NULL REFERENCES writer_conversations(id) ON DELETE CASCADE,
+          role VARCHAR(20) NOT NULL,
+          content TEXT NOT NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `)
 
       await db.execute(sql`
-          CREATE INDEX IF NOT EXISTS writer_messages_conversation_created_idx
-          ON writer_messages (conversation_id, created_at ASC, id ASC)
-        `)
+        CREATE INDEX IF NOT EXISTS writer_messages_conversation_created_idx
+        ON writer_messages (conversation_id, created_at ASC, id ASC)
+      `)
     }).catch((error) => {
       writerTablesReadyPromise = null
       throw error
@@ -121,6 +168,31 @@ function buildConversationTitle(query: string) {
   return `${WRITER_TITLE_PREFIX}${normalized || "新建文章"}`
 }
 
+function normalizeConversationMeta(row: Pick<WriterConversationRow, "platform" | "mode" | "language" | "status" | "imagesRequested">): WriterConversationMeta {
+  return {
+    platform: normalizeWriterPlatform(row.platform),
+    mode: normalizeWriterMode(normalizeWriterPlatform(row.platform), row.mode),
+    language: normalizeWriterLanguage(row.language),
+    status: (row.status as WriterConversationStatus) || "drafting",
+    imagesRequested: Boolean(row.imagesRequested),
+  }
+}
+
+function mapConversation(row: WriterConversationRow): WriterMockConversation {
+  const meta = normalizeConversationMeta(row)
+  return {
+    id: String(row.id),
+    name: normalizeTitle(row.title),
+    status: meta.status,
+    platform: meta.platform,
+    mode: meta.mode,
+    language: meta.language,
+    images_requested: meta.imagesRequested,
+    created_at: row.createdAt ? Math.floor(row.createdAt.getTime() / 1000) : Math.floor(Date.now() / 1000),
+    updated_at: row.updatedAt ? Math.floor(row.updatedAt.getTime() / 1000) : Math.floor(Date.now() / 1000),
+  }
+}
+
 async function requireWriterConversation(userId: number, conversationId: string) {
   await ensureWriterTables()
 
@@ -135,7 +207,13 @@ async function requireWriterConversation(userId: number, conversationId: string)
         id: writerConversations.id,
         userId: writerConversations.userId,
         title: writerConversations.title,
+        platform: writerConversations.platform,
+        mode: writerConversations.mode,
+        language: writerConversations.language,
+        status: writerConversations.status,
+        imagesRequested: writerConversations.imagesRequested,
         createdAt: writerConversations.createdAt,
+        updatedAt: writerConversations.updatedAt,
       })
       .from(writerConversations)
       .where(and(eq(writerConversations.id, parsedConversationId), eq(writerConversations.userId, userId)))
@@ -147,84 +225,7 @@ async function requireWriterConversation(userId: number, conversationId: string)
     return null
   }
 
-  return row
-}
-
-function buildArticleDraft(query: string, platform: WriterPlatform) {
-  const config = WRITER_PLATFORM_CONFIG[platform]
-
-  return [
-    `# ${config.shortLabel} 选题草稿：${query.slice(0, 24) || "高转化图文"}`,
-    "",
-    "![封面图](writer-asset://cover)",
-    "",
-    "## 摘要",
-    `围绕“${query}”先给出结论，再拆解方法、案例与可执行动作，保证内容拿来就能继续编辑发布。`,
-    "",
-    "## 核心观点",
-    "![章节配图](writer-asset://section-1)",
-    `1. ${config.shortLabel} 更适合从鲜明观点切入，而不是先铺很长的背景。`,
-    "2. 正文要让读者尽快拿到方法、案例和下一步动作。",
-    "3. 配图要服务信息表达，而不是只做装饰。",
-    "",
-    "## 方法拆解",
-    "![章节配图](writer-asset://section-2)",
-    "先用一个强钩子定义问题，再给出 3 个可执行步骤，最后补充常见误区和行动建议。",
-    "",
-    "## 实操建议",
-    "可以把正文拆成“问题判断 / 方法框架 / 真实案例 / 发布建议”四段，方便后续继续压缩或扩写。",
-    "",
-    "## 图片说明",
-    `- 封面图：${config.shortLabel} 平台风格封面，主标题突出主题，比例 ${config.imageAspectRatio}。`,
-    "- 配图 1：用信息图解释核心框架。",
-    "- 配图 2：用案例卡片或对比图突出方法落地。",
-    "",
-    "## 发布建议",
-    `发布前检查语气是否符合 ${config.shortLabel} 用户语境，并将图片占位符替换为已下载素材。`,
-  ].join("\n")
-}
-
-function buildThreadDraft(query: string, platform: WriterPlatform) {
-  const config = WRITER_PLATFORM_CONFIG[platform]
-
-  return [
-    `# ${config.shortLabel} 线程草稿：${query.slice(0, 24) || "高转化主题"}`,
-    "",
-    "![封面图](writer-asset://cover)",
-    "",
-    "## 发布建议",
-    "- 开头一句必须是判断或反常识结论。",
-    "- 每一段只讲一个重点，便于逐条发布。",
-    "- 结尾补一个行动号召或提问，拉高互动。",
-    "",
-    "## 线程正文",
-    "### 01",
-    `大多数人写“${query}”时先堆信息，但真正有效的做法是先给出最强观点。`,
-    "",
-    "### 02",
-    "读者愿意继续看，不是因为你写得长，而是因为每一段都让他更接近一个明确答案。",
-    "",
-    "### 03",
-    "一个稳妥框架是：强钩子 -> 关键洞察 -> 例子 -> 方法 -> CTA。",
-    "",
-    "### 04",
-    "如果要放图片，优先使用解释观点的图，而不是与正文关系弱的装饰图。",
-    "",
-    "### 05",
-    "写完后删掉套话，把每一段压缩到能单独成立的程度，转发率通常会更高。",
-    "",
-    "### 06",
-    `如果你愿意，我还可以继续把这套 ${config.shortLabel} 线程拆成更适合发布的最终版本。`,
-    "",
-    "## 图片说明",
-    `- 封面图：${config.shortLabel} 线程封面，突出一个判断。`,
-    "- 配图 1：观点拆解图。",
-    "- 配图 2：案例对比图。",
-  ].join("\n")
-}
-
-export function buildWriterMockDraft(query: string, platform: WriterPlatform, mode: WriterMode) {
-  return mode === "thread" ? buildThreadDraft(query, platform) : buildArticleDraft(query, platform)
+  return row satisfies WriterConversationRow
 }
 
 export async function appendWriterMockConversation({
@@ -232,11 +233,17 @@ export async function appendWriterMockConversation({
   conversationId,
   query,
   answer,
+  platform,
+  mode,
+  language,
 }: {
   userId: number
   conversationId?: string | null
   query: string
   answer: string
+  platform: WriterPlatform
+  mode: WriterMode
+  language: WriterLanguage
 }) {
   await ensureWriterTables()
 
@@ -256,6 +263,11 @@ export async function appendWriterMockConversation({
         .values({
           userId,
           title: buildConversationTitle(query),
+          platform,
+          mode,
+          language,
+          status: "text_ready",
+          imagesRequested: false,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -264,17 +276,23 @@ export async function appendWriterMockConversation({
 
     targetConversationId = String(createdConversation[0].id)
   } else {
-    const existingConversationId = targetConversationId
+    const existingConversationId = Number.parseInt(targetConversationId, 10)
     await withDbRetry("touch-writer-conversation", () =>
       db
         .update(writerConversations)
-        .set({ updatedAt: new Date() })
-        .where(eq(writerConversations.id, Number.parseInt(existingConversationId, 10))),
+        .set({
+          platform,
+          mode,
+          language,
+          status: "text_ready",
+          imagesRequested: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(writerConversations.id, existingConversationId)),
     )
   }
 
-  const ensuredConversationId = targetConversationId ?? ""
-  const parsedConversationId = Number.parseInt(ensuredConversationId, 10)
+  const parsedConversationId = Number.parseInt(targetConversationId, 10)
   await withDbRetry("insert-writer-messages", () =>
     db.insert(writerMessages).values([
       {
@@ -292,7 +310,7 @@ export async function appendWriterMockConversation({
     ]),
   )
 
-  return { conversationId: ensuredConversationId }
+  return { conversationId: targetConversationId }
 }
 
 export async function listWriterMockConversations(userId: number, limit: number) {
@@ -303,7 +321,13 @@ export async function listWriterMockConversations(userId: number, limit: number)
       .select({
         id: writerConversations.id,
         title: writerConversations.title,
+        platform: writerConversations.platform,
+        mode: writerConversations.mode,
+        language: writerConversations.language,
+        status: writerConversations.status,
+        imagesRequested: writerConversations.imagesRequested,
         createdAt: writerConversations.createdAt,
+        updatedAt: writerConversations.updatedAt,
       })
       .from(writerConversations)
       .where(eq(writerConversations.userId, userId))
@@ -311,12 +335,7 @@ export async function listWriterMockConversations(userId: number, limit: number)
   )
 
   const filteredRows = rows.filter((row) => row.title.startsWith(WRITER_TITLE_PREFIX)).slice(0, limit)
-  const data: WriterMockConversation[] = filteredRows.map((row) => ({
-    id: String(row.id),
-    name: normalizeTitle(row.title),
-    status: "completed",
-    created_at: row.createdAt ? Math.floor(row.createdAt.getTime() / 1000) : Math.floor(Date.now() / 1000),
-  }))
+  const data = filteredRows.map((row) => mapConversation({ ...row, userId })) as WriterMockConversation[]
 
   return { data, has_more: rows.length > filteredRows.length, limit }
 }
@@ -326,7 +345,7 @@ export async function listWriterMockMessages(userId: number, conversationId: str
 
   const conversation = await requireWriterConversation(userId, conversationId)
   if (!conversation) {
-    return { data: [] as WriterMockMessage[], limit }
+    return { data: [] as WriterMockMessage[], limit, conversation: null }
   }
 
   const parsedConversationId = Number.parseInt(conversationId, 10)
@@ -344,27 +363,15 @@ export async function listWriterMockMessages(userId: number, conversationId: str
   )
 
   const pairs: WriterMockMessage[] = []
-  let currentUserMessage:
-    | {
-        id: number
-        query: string
-        createdAt: Date | null
-      }
-    | null = null
+  let currentUserMessage: { query: string; createdAt: Date | null } | null = null
 
   for (const row of rows) {
     if (row.role === "user") {
-      currentUserMessage = {
-        id: row.id,
-        query: row.content,
-        createdAt: row.createdAt ?? null,
-      }
+      currentUserMessage = { query: row.content, createdAt: row.createdAt ?? null }
       continue
     }
 
-    if (!currentUserMessage) {
-      continue
-    }
+    if (!currentUserMessage) continue
 
     pairs.push({
       id: String(row.id),
@@ -379,7 +386,12 @@ export async function listWriterMockMessages(userId: number, conversationId: str
     currentUserMessage = null
   }
 
-  return { data: pairs.reverse().slice(0, limit), limit, has_more: pairs.length > limit }
+  return {
+    data: pairs.reverse().slice(0, limit),
+    limit,
+    has_more: pairs.length > limit,
+    conversation: mapConversation(conversation),
+  }
 }
 
 export async function renameWriterMockConversation(userId: number, conversationId: string, name: string) {
@@ -403,7 +415,53 @@ export async function renameWriterMockConversation(userId: number, conversationI
   return true
 }
 
-export async function updateWriterMockLatestAssistantMessage(userId: number, conversationId: string, content: string) {
+export async function updateWriterConversationMeta(
+  userId: number,
+  conversationId: string,
+  meta: Partial<{
+    platform: WriterPlatform
+    mode: WriterMode
+    language: WriterLanguage
+    status: WriterConversationStatus
+    imagesRequested: boolean
+  }>,
+) {
+  await ensureWriterTables()
+
+  const conversation = await requireWriterConversation(userId, conversationId)
+  if (!conversation) {
+    return false
+  }
+
+  await withDbRetry("update-writer-conversation-meta", () =>
+    db
+      .update(writerConversations)
+      .set({
+        ...(meta.platform ? { platform: meta.platform } : {}),
+        ...(meta.mode ? { mode: meta.mode } : {}),
+        ...(meta.language ? { language: meta.language } : {}),
+        ...(typeof meta.status === "string" ? { status: meta.status } : {}),
+        ...(typeof meta.imagesRequested === "boolean" ? { imagesRequested: meta.imagesRequested } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(writerConversations.id, conversation.id)),
+  )
+
+  return true
+}
+
+export async function updateWriterMockLatestAssistantMessage(
+  userId: number,
+  conversationId: string,
+  content: string,
+  meta?: Partial<{
+    status: WriterConversationStatus
+    imagesRequested: boolean
+    language: WriterLanguage
+    platform: WriterPlatform
+    mode: WriterMode
+  }>,
+) {
   await ensureWriterTables()
 
   const conversation = await requireWriterConversation(userId, conversationId)
@@ -413,9 +471,7 @@ export async function updateWriterMockLatestAssistantMessage(userId: number, con
 
   const latestAssistantRows = await withDbRetry("select-writer-latest-assistant", () =>
     db
-      .select({
-        id: writerMessages.id,
-      })
+      .select({ id: writerMessages.id })
       .from(writerMessages)
       .where(and(eq(writerMessages.conversationId, conversation.id), eq(writerMessages.role, "assistant")))
       .orderBy(desc(writerMessages.id))
@@ -431,13 +487,7 @@ export async function updateWriterMockLatestAssistantMessage(userId: number, con
     db.update(writerMessages).set({ content }).where(eq(writerMessages.id, latestAssistant.id)),
   )
 
-  await withDbRetry("touch-writer-conversation-after-asset-resolve", () =>
-    db
-      .update(writerConversations)
-      .set({ updatedAt: new Date() })
-      .where(eq(writerConversations.id, conversation.id)),
-  )
-
+  await updateWriterConversationMeta(userId, conversationId, meta || { status: "text_ready" })
   return true
 }
 

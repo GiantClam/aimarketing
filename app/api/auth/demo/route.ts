@@ -35,11 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const email = "demo@example.com"
-    const existing = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1)
+    const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
 
     let userId = existing[0]?.id
     if (!userId) {
@@ -62,7 +58,7 @@ export async function POST(request: NextRequest) {
       await db
         .update(users)
         .set({
-          name: "浣撻獙鐢ㄦ埛",
+          name: "体验用户",
           password: hashPassword("demo123456"),
           enterpriseId: enterprise.id,
           enterpriseRole: "admin",

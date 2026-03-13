@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth/session"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import { getPermissionMap, isEnterpriseAdmin } from "@/lib/enterprise/server"
+import { normalizeDisplayText } from "@/lib/text/display-name"
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest) {
     const rows = await Promise.all(
       members.map(async (member) => ({
         ...member,
+        name: normalizeDisplayText(member.name) || "",
         permissions: await getPermissionMap(member.id),
       })),
     )

@@ -1,8 +1,8 @@
 from pathlib import Path
-import os
 from time import sleep, time
-from urllib.error import HTTPError
+import os
 import urllib.request
+from urllib.error import HTTPError
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -46,8 +46,13 @@ def wait_for_writer_workspace_ready(page, timeout_ms: int = 45000):
     while time() < deadline:
         selects = page.locator("select:visible")
         textarea = page.locator("textarea:visible")
-        if selects.count() >= 2 and textarea.count() >= 1:
-            if not selects.nth(0).is_disabled() and not selects.nth(1).is_disabled() and not textarea.first.is_disabled():
+        if selects.count() >= 3 and textarea.count() >= 1:
+            if (
+                not selects.nth(0).is_disabled()
+                and not selects.nth(1).is_disabled()
+                and not selects.nth(2).is_disabled()
+                and not textarea.first.is_disabled()
+            ):
                 return
         page.wait_for_timeout(500)
 
@@ -112,11 +117,10 @@ def assert_wechat_article_structure(preview_dialog):
     article_text = article_root.inner_text()
 
     expect(preview_dialog.locator("h1").count() == 1, "wechat preview should contain exactly one H1 title")
-    expect("引言" in article_text, "wechat preview missing 引言 section")
-    expect("结束语" in article_text, "wechat preview missing 结束语 section")
 
     banned_markers = [
         "标题备选",
+        "备选标题",
         "Title options",
         "Publishing notes",
         "Image notes",
@@ -126,6 +130,10 @@ def assert_wechat_article_structure(preview_dialog):
     ]
     for marker in banned_markers:
         expect(marker not in article_text, f"wechat preview should not contain meta section: {marker}")
+
+    expect(preview_dialog.locator("strong").count() >= 1, "wechat preview should preserve bold markdown")
+    expect(preview_dialog.locator("blockquote").count() >= 1, "wechat preview should preserve quote markdown")
+    expect(preview_dialog.locator("ul, ol").count() >= 1, "wechat preview should preserve list markdown")
 
 
 def assert_no_critical_console_errors(console_errors):
@@ -161,27 +169,34 @@ with sync_playwright() as p:
         save_debug(page, "01-writer-home")
 
         selects = page.locator("select:visible")
-        expect(selects.count() >= 2, "writer page should render platform and mode selects")
+        expect(selects.count() >= 3, "writer page should render platform, mode, and language selects")
         selects.nth(0).select_option("wechat")
         page.wait_for_timeout(400)
         selects.nth(1).select_option("article")
         page.wait_for_timeout(400)
+        selects.nth(2).select_option("zh")
+        page.wait_for_timeout(400)
         save_debug(page, "02-wechat-article-mode")
 
         input_box = page.locator("textarea:visible").first
-        input_box.fill("写一篇公众号文章，主题是 AI 创业团队如何避免内容空转。要求有完整标题、引言、正文和结束语，语言专业，给出实际建议。")
+        input_box.fill(
+            "写一篇公众号文章，主题是 AI 创业团队如何避免内容空转。请使用 Markdown 输出，包含一个主标题、至少两个二级标题、一个引用块、一个加粗重点和一个项目符号列表，语言专业，给出实际建议。"
+        )
 
         send_button = page.locator("button:visible").filter(has=page.locator("svg.lucide-send")).last
         expect(send_button.is_enabled(), "writer send button should be enabled after input")
         send_button.click()
 
         wait_for_url_contains(page, "/dashboard/writer/", timeout_ms=180000)
-        page.wait_for_timeout(12000)
+        page.wait_for_timeout(8000)
         page.wait_for_load_state("networkidle", timeout=90000)
         save_debug(page, "03-after-send")
 
         preview_dialog = page.locator('[role="dialog"]').first
-        preview_dialog.wait_for(state="visible", timeout=120000)
+        if not preview_dialog.is_visible():
+            page.get_by_role("button", name="预览").click()
+            preview_dialog.wait_for(state="visible", timeout=120000)
+        preview_dialog.get_by_role("button", name="确认文案并生成配图").click()
         wait_for_generated_writer_assets(page)
         expect(
             preview_dialog.locator('img[src^="http"], img[src^="https"]').count() >= 1,

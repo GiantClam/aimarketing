@@ -1,8 +1,10 @@
 "use client"
 
 import {
+  normalizeWriterLanguage,
   normalizeWriterMode,
   normalizeWriterPlatform,
+  type WriterLanguage,
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
@@ -10,7 +12,10 @@ import {
 export type WriterSessionMeta = {
   platform: WriterPlatform
   mode: WriterMode
+  language: WriterLanguage
   draft?: string
+  imagesRequested?: boolean
+  status?: "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
   updatedAt: number
 }
 
@@ -49,6 +54,7 @@ export function getWriterSessionMeta(conversationId: string | null) {
     ...meta,
     platform: normalizeWriterPlatform(meta.platform),
     mode: normalizeWriterMode(normalizeWriterPlatform(meta.platform), meta.mode),
+    language: normalizeWriterLanguage(meta.language),
   } satisfies WriterSessionMeta
 }
 
@@ -58,6 +64,7 @@ export function saveWriterSessionMeta(conversationId: string, meta: WriterSessio
     ...meta,
     platform: normalizeWriterPlatform(meta.platform),
     mode: normalizeWriterMode(normalizeWriterPlatform(meta.platform), meta.mode),
+    language: normalizeWriterLanguage(meta.language),
   }
   writeWriterSessionStore(store)
 }

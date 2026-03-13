@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 
 import { buildPermissionMap, type FeatureKey, type PermissionMap } from "@/lib/enterprise/constants"
 import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
+import { normalizeDisplayText } from "@/lib/text/display-name"
 
 interface User {
   id: number
@@ -57,13 +58,14 @@ function normalizeUser(raw: unknown): User | null {
 
   return {
     id: parsedId,
-    name: String(candidate.name || ""),
+    name: normalizeDisplayText(String(candidate.name || "")) || "",
     email: String(candidate.email || ""),
     isDemo: Boolean(candidate.isDemo),
     isAnonymous: Boolean(candidate.isAnonymous),
     enterpriseId: candidate.enterpriseId ? Number(candidate.enterpriseId) : null,
     enterpriseCode: typeof candidate.enterpriseCode === "string" ? candidate.enterpriseCode : null,
-    enterpriseName: typeof candidate.enterpriseName === "string" ? candidate.enterpriseName : null,
+    enterpriseName:
+      typeof candidate.enterpriseName === "string" ? normalizeDisplayText(candidate.enterpriseName) : null,
     enterpriseRole: typeof candidate.enterpriseRole === "string" ? candidate.enterpriseRole : null,
     enterpriseStatus: typeof candidate.enterpriseStatus === "string" ? candidate.enterpriseStatus : null,
     permissions: {

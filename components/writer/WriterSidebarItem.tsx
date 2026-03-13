@@ -30,6 +30,10 @@ type WriterConversation = {
   id: string
   name: string
   status: string
+  platform?: string
+  mode?: string
+  language?: string
+  images_requested?: boolean
   created_at: number
 }
 
@@ -177,9 +181,13 @@ export function WriterSidebarItem({
             conversations.map((conversation) => {
               const isActive = pathname === `/dashboard/writer/${conversation.id}`
               const meta = getWriterSessionMeta(conversation.id)
+              const platform = conversation.platform || meta?.platform || "wechat"
+              const mode = conversation.mode || meta?.mode || "article"
+              const language = conversation.language || meta?.language || "auto"
               const query = new URLSearchParams()
-              query.set("platform", meta?.platform || "wechat")
-              query.set("mode", meta?.mode || "article")
+              query.set("platform", platform)
+              query.set("mode", mode)
+              query.set("language", language)
               const href = `/dashboard/writer/${conversation.id}?${query.toString()}`
 
               return (
@@ -209,16 +217,15 @@ export function WriterSidebarItem({
                       </div>
                     ) : (
                       <>
-                        <div className="flex min-w-0 flex-1 items-center gap-2 md:max-w-[150px]">
+                        <div className="flex min-w-0 flex-1 items-center gap-2 md:max-w-[160px]">
                           <MessageSquare className="h-3 w-3 shrink-0 opacity-70" />
                           <div className="min-w-0">
-                            <div className="truncate">{conversation.name || "新文章"}</div>
-                            {meta && (
-                              <div className="truncate text-[10px] opacity-70">
-                                {WRITER_PLATFORM_CONFIG[meta.platform].shortLabel}
-                                {meta.mode === "thread" ? " · 线程" : ""}
-                              </div>
-                            )}
+                            <div className="truncate">{conversation.name || "新建文章"}</div>
+                            <div className="truncate text-[10px] opacity-70">
+                              {WRITER_PLATFORM_CONFIG[platform as keyof typeof WRITER_PLATFORM_CONFIG].shortLabel}
+                              {mode === "thread" ? " / 线程" : ""}
+                              {conversation.status === "ready" ? " / 已完成" : conversation.status === "image_generating" ? " / 配图中" : ""}
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">

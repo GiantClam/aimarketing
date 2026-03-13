@@ -1,4 +1,4 @@
-import { type WriterMode, type WriterPlatform } from "@/lib/writer/config"
+import { type WriterLanguage, type WriterMode, type WriterPlatform } from "@/lib/writer/config"
 import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 
 const OPENROUTER_API_BASE = (process.env.OPENROUTER_API_BASE || process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "")
@@ -41,54 +41,55 @@ const WRITER_PLATFORM_GUIDE: Record<WriterPlatform, WriterPlatformGuide> = {
   wechat: {
     label: "WeChat Official Account article writer",
     tone: "professional, analytical, trusted, story-driven",
-    format: "long-form article with title options, lead, structured sections, cases, insights, conclusion, image notes, and publishing notes",
-    length: "2500-4000 Chinese characters",
+    format: "publish-ready long-form article",
+    length: "1500-3500 words or equivalent localized length",
     image: "16:9 cover plus 2-5 inline editorial images",
     promptRules: [
-      "Follow the content-creation workflow from the reference writer project: research first, then outline mentally, then write the publish-ready final draft.",
-      "Use 5-7 main sections with meaningful H2 headings and optional H3 subsections where useful.",
-      "Each major section should include context, detailed analysis, at least one real case or practical example, and actionable takeaways.",
-      "Include industry trends, implementation guidance, and a future outlook section when relevant.",
+      "Follow the research-first writing workflow from the reference writer project.",
+      "Write as a polished article for direct publishing, not as a writing brief.",
+      "Use clear H2 sections when the topic benefits from structure, but do not force a fixed section template.",
+      "Allow the article to open directly with a strong first paragraph when that reads better than a labeled intro section.",
+      "Allow the ending to be a natural closing paragraph or a labeled conclusion only when appropriate.",
       "Keep facts grounded in the provided research. Do not invent precise data or source claims.",
     ],
   },
   xiaohongshu: {
     label: "Xiaohongshu image-post writer",
     tone: "conversational, catchy, friendly, save-worthy",
-    format: "mobile-first visual note with strong hook, short sections, practical tips, hashtags, image notes, and publishing notes",
-    length: "200-600 Chinese characters",
+    format: "mobile-first visual note",
+    length: "200-900 words or equivalent localized length",
     image: "3:4 cover plus 3-6 card-style images",
     promptRules: [
-      "Use a strong hook in the opening sentence and optimize for quick mobile reading.",
-      "Keep paragraphs short and punchy, with visual rhythm and lightweight emoji usage where helpful.",
-      "Output 3-6 practical takeaways that feel immediately useful and easy to save.",
-      "End with 5-10 relevant hashtags and a clear engagement CTA.",
+      "Lead with a hook and optimize for quick mobile reading.",
+      "Keep paragraphs short and punchy.",
+      "Use sectioning only where it improves readability; avoid heavy article framing.",
+      "End with a save/share/comment CTA only when it fits the platform style.",
       "Retain factual accuracy from the research material and avoid exaggerated claims.",
     ],
   },
   x: {
     label: "X writer",
     tone: "direct, sharp, opinion-driven, globally legible",
-    format: "single long post or thread-ready markdown with a strong hook, distilled takeaways, image notes, and publishing notes",
-    length: "single post: 600-1400 Chinese characters; thread: 6-12 segments",
+    format: "single post or thread-ready draft",
+    length: "single post: concise long post; thread: 5-12 segments",
     image: "16:9 social image set with 1-3 visual assets",
     promptRules: [
       "If the mode is thread, structure the body as a clean sequence of short segments that can be posted one-by-one.",
-      "Lead with a strong hook and keep every segment self-contained but connected to the main narrative.",
-      "Prioritize clarity, takeaways, and concise argumentation over ornamental writing.",
-      "Avoid filler, and keep CTA short and native to X posting style.",
+      "Lead with a strong hook and keep every segment self-contained but connected.",
+      "Prioritize clarity and takeaways over ornamental writing.",
+      "Avoid forced section headers unless the user explicitly asks for article style.",
     ],
   },
   facebook: {
     label: "Facebook writer",
     tone: "narrative, community-oriented, shareable, brand-safe",
-    format: "single long post or multi-part social post with storytelling, engagement prompts, image notes, and publishing notes",
-    length: "single post: 800-1800 Chinese characters; multi-part: 4-8 segments",
+    format: "single long post or multi-part social post",
+    length: "single post: medium to long; multi-part: 4-8 segments",
     image: "16:9 or 1.91:1 brand-friendly social visuals with 1-4 assets",
     promptRules: [
-      "Balance story, practical insight, and shareability for a community-style feed context.",
+      "Balance story, practical insight, and shareability.",
       "If the mode is multi-part, write segments that flow naturally when posted sequentially.",
-      "Use a warm, credible tone and end with a discussion prompt or community CTA.",
+      "Use section labels only when they help reading; do not force article conventions from other platforms.",
       "Keep examples concrete and easy to understand without insider context.",
     ],
   },
@@ -96,6 +97,71 @@ const WRITER_PLATFORM_GUIDE: Record<WriterPlatform, WriterPlatformGuide> = {
 
 function normalizeLineBreaks(value: string) {
   return value.replace(/\r\n/g, "\n").trim()
+}
+
+function detectRequestedLanguage(query: string, preferredLanguage: WriterLanguage = "auto") {
+  if (preferredLanguage !== "auto") {
+    const explicitMap: Record<Exclude<WriterLanguage, "auto">, { label: string; instruction: string }> = {
+      zh: { label: "Chinese", instruction: "Write the final output fully in Chinese." },
+      en: { label: "English", instruction: "Write the final output fully in English." },
+      ja: { label: "Japanese", instruction: "Write the final output fully in Japanese." },
+      ko: { label: "Korean", instruction: "Write the final output fully in Korean." },
+      fr: { label: "French", instruction: "Write the final output fully in French." },
+      de: { label: "German", instruction: "Write the final output fully in German." },
+      es: { label: "Spanish", instruction: "Write the final output fully in Spanish." },
+    }
+
+    return explicitMap[preferredLanguage]
+  }
+
+  const normalized = query.toLowerCase()
+
+  if (/\b(in|use|write|generate|output)\s+english\b/.test(normalized) || /英文|英语/.test(query)) {
+    return {
+      label: "English",
+      instruction: "Write the final output fully in English.",
+    }
+  }
+
+  if (/日文|日语|日本語|japanese/.test(query)) {
+    return {
+      label: "Japanese",
+      instruction: "Write the final output fully in Japanese.",
+    }
+  }
+
+  if (/韩文|韩语|한국어|korean/.test(query)) {
+    return {
+      label: "Korean",
+      instruction: "Write the final output fully in Korean.",
+    }
+  }
+
+  if (/法文|法语|fran[cç]ais|french/.test(normalized) || /法文|法语/.test(query)) {
+    return {
+      label: "French",
+      instruction: "Write the final output fully in French.",
+    }
+  }
+
+  if (/德文|德语|deutsch|german/.test(normalized) || /德文|德语/.test(query)) {
+    return {
+      label: "German",
+      instruction: "Write the final output fully in German.",
+    }
+  }
+
+  if (/西班牙文|西班牙语|español|spanish/.test(normalized) || /西班牙文|西班牙语/.test(query)) {
+    return {
+      label: "Spanish",
+      instruction: "Write the final output fully in Spanish.",
+    }
+  }
+
+  return {
+    label: "Chinese",
+    instruction: "Write the final output fully in Chinese.",
+  }
 }
 
 function splitMarkdownSections(markdown: string) {
@@ -123,17 +189,7 @@ function splitMarkdownSections(markdown: string) {
 }
 
 function stripWechatMetaSections(markdown: string) {
-  const blockedHeadings = [
-    "title options",
-    "publishing notes",
-    "image notes",
-    "配图说明",
-    "图片说明",
-    "发布说明",
-    "发布建议",
-    "标题备选",
-    "备选标题",
-  ]
+  const blockedHeadings = ["title options", "publishing notes", "image notes", "配图说明", "图片说明", "发布说明", "发布建议", "标题备选", "备选标题"]
 
   const sections = splitMarkdownSections(markdown).filter((section) => {
     const heading = (section.heading || "").toLowerCase()
@@ -146,102 +202,36 @@ function stripWechatMetaSections(markdown: string) {
     .join("\n\n")
 }
 
-function normalizeWechatTitle(markdown: string) {
+function normalizeWechatTitle(markdown: string, languageLabel: string) {
+  const fallbackTitle = languageLabel === "Chinese" ? "未命名文章" : "Untitled Article"
   const lines = markdown.split("\n")
   const titleIndex = lines.findIndex((line) => /^#\s+/.test(line))
 
   if (titleIndex >= 0) {
     const title = lines[titleIndex].replace(/^#\s+/, "").trim()
     const rest = lines.filter((_, index) => index !== titleIndex && !/^#\s+/.test(lines[index]))
-    return [`# ${title}`, ...rest].join("\n").trim()
+    return [`# ${title || fallbackTitle}`, ...rest].join("\n").trim()
   }
 
   const firstContentIndex = lines.findIndex((line) => line.trim())
   if (firstContentIndex < 0) {
-    return "# 未命名文章"
+    return `# ${fallbackTitle}`
   }
 
-  const title = lines[firstContentIndex].replace(/^#+\s*/, "").trim() || "未命名文章"
+  const title = lines[firstContentIndex].replace(/^#+\s*/, "").trim() || fallbackTitle
   const rest = lines.filter((_, index) => index !== firstContentIndex)
   return [`# ${title}`, ...rest].join("\n").trim()
 }
 
-function normalizeWechatIntro(markdown: string) {
-  const lines = markdown.split("\n")
-  const titleIndex = lines.findIndex((line) => /^#\s+/.test(line))
-  if (titleIndex < 0) {
-    return markdown
-  }
-
-  let cursor = titleIndex + 1
-  const introBuffer: string[] = []
-
-  while (cursor < lines.length) {
-    const line = lines[cursor]
-    if (!line.trim()) {
-      introBuffer.push(line)
-      cursor += 1
-      continue
-    }
-
-    if (/^!\[.*\]\(writer-asset:\/\/cover\)/.test(line)) {
-      introBuffer.push(line)
-      cursor += 1
-      continue
-    }
-
-    break
-  }
-
-  const introStart = cursor
-  while (cursor < lines.length) {
-    const line = lines[cursor]
-    if (/^##\s+/.test(line)) {
-      break
-    }
-    introBuffer.push(line)
-    cursor += 1
-  }
-
-  const introContent = introBuffer.join("\n").trim()
-  if (!introContent) {
-    return markdown
-  }
-
-  if (/^##\s+引言\b/m.test(markdown)) {
-    return markdown
-  }
-
-  const beforeIntro = lines.slice(0, introStart).join("\n").replace(/\n+$/, "")
-  const afterIntro = lines.slice(cursor).join("\n").replace(/^\n+/, "")
-  const introSection = `## 引言\n\n${introContent}`
-
-  return [beforeIntro, introSection, afterIntro].filter(Boolean).join("\n\n").trim()
-}
-
-function normalizeWechatEnding(markdown: string) {
-  if (/^##\s+结束语\b/m.test(markdown)) {
-    return markdown
-  }
-
-  return markdown.replace(
-    /^##\s*(总结|结语|写在最后|最后的话|结尾|结论)\s*$/m,
-    "## 结束语",
-  )
-}
-
-function postProcessWriterDraft(platform: WriterPlatform, mode: WriterMode, markdown: string) {
+function postProcessWriterDraft(platform: WriterPlatform, mode: WriterMode, markdown: string, languageLabel: string) {
   const normalized = normalizeLineBreaks(markdown)
 
   if (platform !== "wechat" || mode !== "article") {
     return normalized
   }
 
-  let next = normalizeWechatTitle(normalized)
+  let next = normalizeWechatTitle(normalized, languageLabel)
   next = stripWechatMetaSections(next)
-  next = normalizeWechatIntro(next)
-  next = normalizeWechatEnding(next)
-
   return next.replace(/\n{3,}/g, "\n\n").trim()
 }
 
@@ -283,9 +273,7 @@ async function readWithJina(url: string) {
   const headers: Record<string, string> = { Accept: "text/markdown" }
   headers.Authorization = `Bearer ${JINA_API_KEY}`
 
-  const response = await writerRequestText(`https://r.jina.ai/${url}`, {
-    headers,
-  }, { attempts: 2, timeoutMs: 90_000 })
+  const response = await writerRequestText(`https://r.jina.ai/${url}`, { headers }, { attempts: 2, timeoutMs: 90_000 })
 
   if (!response.ok) {
     throw new Error(`jina_http_${response.status}`)
@@ -302,9 +290,7 @@ async function buildResearchContext(query: string): Promise<WriterResearchResult
 
   const extracts: WriterResearchResult["extracts"] = []
   for (const item of items.slice(0, 2)) {
-    if (!item.link) {
-      continue
-    }
+    if (!item.link) continue
 
     try {
       const content = await readWithJina(item.link)
@@ -322,7 +308,7 @@ async function buildResearchContext(query: string): Promise<WriterResearchResult
   return { items, extracts }
 }
 
-function buildSystemPrompt(platform: WriterPlatform, mode: WriterMode) {
+function buildSystemPrompt(platform: WriterPlatform, mode: WriterMode, languageInstruction: string) {
   const guide = WRITER_PLATFORM_GUIDE[platform]
   const modeLabel = mode === "thread" ? "thread or multi-part post" : "single long-form article"
 
@@ -335,14 +321,15 @@ function buildSystemPrompt(platform: WriterPlatform, mode: WriterMode) {
     `Length target: ${guide.length}.`,
     `Image guidance: ${guide.image}.`,
     ...guide.promptRules,
-    "Write the final answer in Chinese and return a publish-ready Markdown draft.",
+    languageInstruction,
+    "Return a publish-ready Markdown draft.",
     "Absorb the research first, then write.",
     "Do not reveal chain-of-thought, hidden reasoning, or internal analysis.",
-    "Use writer-asset://cover, writer-asset://section-1, and writer-asset://section-2 as image placeholders inside the Markdown body.",
+    "Use writer-asset://cover, writer-asset://section-1, and writer-asset://section-2 as image placeholders inside the Markdown body when images are useful.",
   ].join("\n")
 }
 
-function buildUserPrompt(query: string, mode: WriterMode, research: WriterResearchResult) {
+function buildUserPrompt(query: string, platform: WriterPlatform, mode: WriterMode, research: WriterResearchResult, languageInstruction: string) {
   const references = research.items
     .slice(0, 5)
     .map((item, index) => `${index + 1}. ${item.title}\nURL: ${item.link}\nSummary: ${item.snippet}`)
@@ -352,27 +339,33 @@ function buildUserPrompt(query: string, mode: WriterMode, research: WriterResear
     .map((item, index) => `Source ${index + 1}: ${item.url}\n${item.content}`)
     .join("\n\n")
 
-  const outputGuide =
-    mode === "thread"
+  const platformStructureGuide =
+    platform === "wechat"
       ? [
-          "Return Markdown using this structure:",
-          "1. # Title",
-          "2. ## Title options",
-          "3. ## Publishing notes",
-          "4. ## Main body with sections like ### Segment 1 / ### Segment 2",
-          "5. Insert at least `![Cover](writer-asset://cover)` and two more asset placeholders in the body",
-          "6. End with ## Image notes and provide an English prompt for each image",
+          "Write as a complete article suitable for WeChat publishing.",
+          "You may use H2 headings where they improve readability.",
+          "Do not force labeled sections such as intro or conclusion unless the topic naturally benefits from them.",
+          "Insert `![Cover](writer-asset://cover)` near the opening and inline image placeholders where relevant.",
         ].join("\n")
-      : [
-          "Return Markdown using this structure:",
-          "1. # Title",
-          "2. ## Title options",
-          "3. ## Summary / lead",
-          "4. At least three level-2 sections",
-          "5. Insert the cover image placeholder right after the title using writer-asset://cover",
-          "6. Insert writer-asset://section-1 and writer-asset://section-2 in the body",
-          "7. End with ## Image notes and ## Publishing notes",
-        ].join("\n")
+      : platform === "xiaohongshu"
+        ? [
+            "Write as a mobile-first image note.",
+            "Use short paragraphs and punchy pacing.",
+            "Do not force traditional article sections unless explicitly requested.",
+            "Insert `![Cover](writer-asset://cover)` and inline image placeholders that map to visual cards.",
+          ].join("\n")
+        : mode === "thread"
+          ? [
+              "Write as a sequential multi-part post.",
+              "Use `### Segment 1`, `### Segment 2`, etc. so the UI can render thread cards.",
+              "Keep each segment publishable on its own.",
+              "Use only the image placeholders actually needed for this mode.",
+            ].join("\n")
+          : [
+              "Write as a single social post or article-style post for the selected platform.",
+              "Use headings only when helpful; do not force long-form article conventions.",
+              "Insert image placeholders only where they improve the post.",
+            ].join("\n")
 
   return [
     "User request:",
@@ -384,52 +377,15 @@ function buildUserPrompt(query: string, mode: WriterMode, research: WriterResear
     "Extracted source material:",
     extracts || "No extracted source text.",
     "",
-    outputGuide,
+    "Platform-specific writing guidance:",
+    platformStructureGuide,
     "",
     "Requirements:",
+    languageInstruction,
     "- Output only the final draft. Do not explain the process.",
-    "- The content must be in Chinese. Technical terms may stay in English when useful.",
     "- Use the source material for facts, trends, and cases. Do not invent specific data.",
     "- The result must be clean Markdown suitable for continued editing and publishing.",
-    "- Include concrete examples and actionable takeaways where the format allows.",
-  ].join("\n")
-}
-
-function buildWechatArticlePrompt(query: string, research: WriterResearchResult) {
-  const references = research.items
-    .slice(0, 5)
-    .map((item, index) => `${index + 1}. ${item.title}\nURL: ${item.link}\nSummary: ${item.snippet}`)
-    .join("\n\n")
-
-  const extracts = research.extracts
-    .map((item, index) => `Source ${index + 1}: ${item.url}\n${item.content}`)
-    .join("\n\n")
-
-  return [
-    "User request:",
-    query.trim(),
-    "",
-    "Search findings:",
-    references || "No search results.",
-    "",
-    "Extracted source material:",
-    extracts || "No extracted source text.",
-    "",
-    "Return Markdown using exactly this article structure:",
-    "1. # Title",
-    "2. ![Cover](writer-asset://cover)",
-    "3. ## 引言",
-    "4. 3-5 个正文二级标题，每个标题下是完整段落内容",
-    "5. 在正文中自然插入 ![配图 1](writer-asset://section-1) 和 ![配图 2](writer-asset://section-2)",
-    "6. ## 结束语",
-    "",
-    "Strict rules:",
-    "- Do not output '标题备选', 'Title options', 'Publishing notes', 'Image notes', '发布说明', or any explanatory section.",
-    "- Do not output more than one H1 title.",
-    "- Do not use placeholder labels such as '正文', '小节一', '说明', or '示例格式'.",
-    "- The final result must read like a finished WeChat article, not a writing brief.",
-    "- Keep the article fully in Chinese.",
-    "- Use the source material for facts and examples. Do not invent precise data.",
+    "- Keep the structure native to the selected platform and selected mode.",
   ].join("\n")
 }
 
@@ -499,6 +455,7 @@ async function generateTextWithOpenRouter(systemPrompt: string, userPrompt: stri
     },
     { attempts: 2, timeoutMs: 120_000 },
   )
+
   if (!response.ok) {
     const data = response.data as any
     throw new Error(data?.error?.message || `openrouter_text_http_${response.status}`)
@@ -519,18 +476,21 @@ export function getWriterSkillsProvider() {
   return "unavailable" as const
 }
 
-export async function generateWriterDraftWithSkills(query: string, platform: WriterPlatform, mode: WriterMode) {
+export async function generateWriterDraftWithSkills(
+  query: string,
+  platform: WriterPlatform,
+  mode: WriterMode,
+  preferredLanguage: WriterLanguage = "auto",
+) {
   if (!OPENROUTER_API_KEY) {
     throw new Error("openrouter_api_key_missing")
   }
 
+  const language = detectRequestedLanguage(query, preferredLanguage)
   const research = await buildResearchContext(query)
-  const systemPrompt = buildSystemPrompt(platform, mode)
-  const userPrompt =
-    platform === "wechat" && mode === "article"
-      ? buildWechatArticlePrompt(query, research)
-      : buildUserPrompt(query, mode, research)
-
+  const systemPrompt = buildSystemPrompt(platform, mode, language.instruction)
+  const userPrompt = buildUserPrompt(query, platform, mode, research, language.instruction)
   const answer = await generateTextWithOpenRouter(systemPrompt, userPrompt, WRITER_TEXT_MODEL)
-  return postProcessWriterDraft(platform, mode, answer)
+
+  return postProcessWriterDraft(platform, mode, answer, language.label)
 }
