@@ -37,6 +37,85 @@ type WriterPlatformGuide = {
   promptRules: string[]
 }
 
+function buildFixtureDraft(platform: WriterPlatform, mode: WriterMode, preferredLanguage: WriterLanguage) {
+  const language = preferredLanguage === "auto" ? "zh" : preferredLanguage
+
+  if (language !== "zh") {
+    return `# Writer Fixture Draft
+
+## Summary
+
+This is a deterministic fixture draft for automated regression.
+
+> Use this fixture only in E2E mode.
+
+- Platform: ${platform}
+- Mode: ${mode}
+- Language: ${language}
+
+![Cover](writer-asset://cover)
+`
+  }
+
+  if (platform === "x" && mode === "thread") {
+    return `### 第 1 段
+**先说结论：** AI 创业真正稀缺的不是模型，而是贴着业务流程落地的能力。
+
+### 第 2 段
+很多团队把时间花在追新模型上，却没有把用户旅程、数据回流和自动化闭环做扎实。
+
+### 第 3 段
+> 如果一个 Agent 不能稳定完成任务，它就只是一个会聊天的界面。
+
+### 第 4 段
+- 先选垂直场景
+- 再补自动化能力
+- 最后再优化模型效果
+
+![Cover](writer-asset://cover)
+
+### 第 5 段
+把工程能力、工作流和反馈回路放在第一位，增长效率会高很多。
+
+### 第 6 段
+如果你也在做 AI 产品，欢迎交流你最关心的落地问题。`
+  }
+
+  return `# AI 创业团队如何避免内容空转
+
+公众号内容真正稀缺的，不是“写得多”，而是“写了之后能形成增长资产”。
+
+## 先明确内容服务的业务目标
+
+很多团队一开始就追求选题数量，但没有先定义内容要服务哪一段业务链路：获客、教育、转化，还是客户成功。
+
+> 没有业务目标的内容生产，通常只会变成内部自我感动。
+
+## 建立稳定的内容复用机制
+
+把一次调研拆成多个可复用资产，例如文章、社媒摘录、销售跟进素材和知识库更新，才能让内容真正沉淀下来。
+
+**关键做法：** 每次发布后都要记录阅读、转发、询盘和转化反馈。
+
+## 用固定工作流降低内容波动
+
+- 先做研究和资料归纳
+- 再产出首稿并确认文案
+- 最后生成配图并统一预览
+
+![Cover](writer-asset://cover)
+
+## 让内容与团队协作闭环
+
+运营、销售和产品都应该能从同一篇文章里抽取可用信息，避免内容停留在单点产出。
+
+写到最后，真正有价值的内容，不是更花哨，而是更能帮助团队稳定复用、持续转化。`
+}
+
+function shouldUseWriterE2EFixtures() {
+  return process.env.WRITER_E2E_FIXTURES === "true"
+}
+
 const WRITER_PLATFORM_GUIDE: Record<WriterPlatform, WriterPlatformGuide> = {
   wechat: {
     label: "WeChat Official Account article writer",
@@ -482,6 +561,10 @@ export async function generateWriterDraftWithSkills(
   mode: WriterMode,
   preferredLanguage: WriterLanguage = "auto",
 ) {
+  if (shouldUseWriterE2EFixtures()) {
+    return buildFixtureDraft(platform, mode, preferredLanguage)
+  }
+
   if (!OPENROUTER_API_KEY) {
     throw new Error("openrouter_api_key_missing")
   }

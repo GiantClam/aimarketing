@@ -13,7 +13,6 @@ export const maxDuration = 300
 const GOOGLE_IMAGE_API_KEY =
   process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
 const WRITER_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
-const WRITER_E2E_FIXTURES = process.env.WRITER_E2E_FIXTURES === "true"
 
 function escapeSvgText(value: string) {
   return value
@@ -46,6 +45,10 @@ function createFixtureImageDataUrl(prompt: string, aspectRatio: string) {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
 }
 
+function shouldUseWriterE2EFixtures() {
+  return process.env.WRITER_E2E_FIXTURES === "true"
+}
+
 function extractInlineImageData(parts: Array<{ inlineData?: { mimeType?: string; data?: string } }> | undefined) {
   if (!Array.isArray(parts)) return ""
 
@@ -61,7 +64,7 @@ function extractInlineImageData(parts: Array<{ inlineData?: { mimeType?: string;
 }
 
 async function generateGeminiImage(prompt: string, aspectRatio: string) {
-  if (WRITER_E2E_FIXTURES) {
+  if (shouldUseWriterE2EFixtures()) {
     return createFixtureImageDataUrl(prompt, aspectRatio)
   }
 
