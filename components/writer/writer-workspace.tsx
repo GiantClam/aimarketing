@@ -656,10 +656,18 @@ function InlineMarkdownCanvas({
   }
 
   return (
-    <button
-      type="button"
-      className="group block w-full rounded-[24px] border border-transparent text-left transition hover:border-slate-200 hover:bg-white/70 hover:shadow-[0_14px_36px_-30px_rgba(15,23,42,0.35)]"
+    <div
+      role="button"
+      tabIndex={0}
+      className="group block w-full rounded-[24px] border border-transparent text-left transition hover:border-slate-200 hover:bg-white/70 hover:shadow-[0_14px_36px_-30px_rgba(15,23,42,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
       onClick={() => setIsEditing(true)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          setIsEditing(true)
+        }
+      }}
+      aria-label="点击编辑整篇文章"
     >
       <div className="pointer-events-none px-2 py-1">
         <div className="mb-2 opacity-0 transition group-hover:opacity-100">
@@ -669,7 +677,7 @@ function InlineMarkdownCanvas({
         </div>
         {renderMarkdown(markdown, assets)}
       </div>
-    </button>
+    </div>
   )
 }
 
