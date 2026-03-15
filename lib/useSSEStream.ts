@@ -81,8 +81,9 @@ export function useSSEStreamEx(path: string, options?: { base?: string; headers?
 
 export function useAgentSSE(base?: string) {
   const core = useSSEStream('/crewai-agent', base)
-  const start = useCallback((payload: { prompt?: string; img?: string; thread_id?: string; run_id?: string; goal?: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; use_crewai?: boolean }) => core.start(payload), [core.start])
-  return { ...core, start }
+  const { start: startCore, ...rest } = core
+  const start = useCallback((payload: { prompt?: string; img?: string; thread_id?: string; run_id?: string; goal?: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; use_crewai?: boolean }) => startCore(payload), [startCore])
+  return { ...rest, start }
 }
 
 export function useRunClipsSSE(base?: string) {
@@ -106,7 +107,8 @@ export function useRunClipsSSE(base?: string) {
     }
   }, [core.events])
 
-  const start = useCallback((run_id: string, storyboards: ClipSpec[]) => core.start({ run_id, storyboards }), [core.start])
+  const { start: startCore, ...rest } = core
+  const start = useCallback((run_id: string, storyboards: ClipSpec[]) => startCore({ run_id, storyboards }), [startCore])
 
-  return { ...core, start, results }
+  return { ...rest, start, results }
 }

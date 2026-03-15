@@ -5,7 +5,6 @@ import Link from "next/link"
 import { ArrowRight, PenSquare, Settings, Target, TrendingUp } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
-import { DashboardLayout } from "@/components/dashboard-layout"
 
 type AdvisorAvailability = {
   brandStrategy: boolean
@@ -97,8 +96,7 @@ export default function DashboardPage() {
   }, [advisorAvailability, hasFeature, writerEnabled])
 
   return (
-    <DashboardLayout>
-      <div className="h-full overflow-y-auto bg-muted/10 p-6 lg:p-8">
+    <div className="h-full overflow-y-auto bg-muted/10 p-6 lg:p-8">
         <div className="mx-auto max-w-6xl space-y-8">
           <section className="rounded-3xl border bg-card p-8 shadow-sm">
             <div className="max-w-3xl space-y-4">
@@ -144,6 +142,5 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-    </DashboardLayout>
   )
 }

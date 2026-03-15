@@ -142,6 +142,69 @@ export const writerMessages = pgTable("writer_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+export const enterpriseDifyBindings = pgTable(
+  "aimarketing_enterprise_dify_bindings",
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    baseUrl: text("base_url").notNull(),
+    apiKey: varchar("api_key", { length: 500 }),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseUnique: uniqueIndex("aimarketing_enterprise_dify_bindings_enterprise_idx").on(table.enterpriseId),
+  }),
+)
+
+export const enterpriseDifyDatasets = pgTable(
+  "aimarketing_enterprise_dify_datasets",
+  {
+    id: serial("id").primaryKey(),
+    bindingId: integer("binding_id")
+      .notNull()
+      .references(() => enterpriseDifyBindings.id),
+    datasetId: varchar("dataset_id", { length: 255 }).notNull(),
+    datasetName: varchar("dataset_name", { length: 255 }).notNull(),
+    scope: varchar("scope", { length: 32 }).default("brand").notNull(),
+    priority: integer("priority").default(100).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    bindingDatasetUnique: uniqueIndex("aimarketing_enterprise_dify_datasets_binding_dataset_idx").on(
+      table.bindingId,
+      table.datasetId,
+    ),
+  }),
+)
+
+export const enterpriseDifyAdvisorConfigs = pgTable(
+  "aimarketing_enterprise_dify_advisor_configs",
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    advisorType: varchar("advisor_type", { length: 32 }).notNull(),
+    baseUrl: text("base_url").notNull(),
+    apiKey: varchar("api_key", { length: 500 }),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseAdvisorUnique: uniqueIndex("aimarketing_enterprise_dify_advisors_enterprise_type_idx").on(
+      table.enterpriseId,
+      table.advisorType,
+    ),
+  }),
+)
+
 // Submitted URLs table for industry knowledge base
 export const submittedUrls = pgTable("submitted_urls", {
   id: serial("id").primaryKey(),

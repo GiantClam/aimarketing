@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/components/auth-provider"
 import { DifyChatArea } from "@/components/chat/DifyChatArea"
-import { DashboardLayout } from "@/components/dashboard-layout"
 
 function isAbortError(error: unknown) {
   return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
@@ -84,39 +83,33 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
       cancelled = true
       controller.abort()
     }
-  }, [advisorType, hasFeature, loading, router, user])
+  }, [advisorType, conversationId, hasFeature, loading, router, user])
 
   if (advisorType === "copywriting") {
     return (
-      <DashboardLayout>
-        <div className="flex h-[calc(100vh-65px)] w-full items-center justify-center text-sm text-muted-foreground lg:h-screen">
-          正在跳转到文章写作工作台...
-        </div>
-      </DashboardLayout>
+      <div className="flex h-[calc(100vh-65px)] w-full items-center justify-center text-sm text-muted-foreground lg:h-screen">
+        正在跳转到文章写作工作台...
+      </div>
     )
   }
 
   if (loading || !user || !difyUser) {
     return (
-      <DashboardLayout>
-        <div className="flex h-[calc(100vh-65px)] w-full items-center justify-center text-sm text-muted-foreground lg:h-screen">正在加载顾问会话...</div>
-      </DashboardLayout>
+      <div className="flex h-[calc(100vh-65px)] w-full items-center justify-center text-sm text-muted-foreground lg:h-screen">正在加载顾问会话...</div>
     )
   }
 
   return (
-    <DashboardLayout>
-      <div className="flex h-[calc(100vh-65px)] w-full flex-col bg-background lg:h-screen">
-        <header className="z-10 flex shrink-0 items-center justify-between border-b bg-background px-6 py-4 shadow-sm">
-          <div>
-            <h1 className="font-sans text-lg font-bold text-foreground">{title}</h1>
-            <p className="mt-1 text-xs font-manrope text-muted-foreground">在这里与专属 {title} 进行多轮会话，支持历史会话切换与上下文追踪。</p>
-          </div>
-        </header>
-        <main className="relative min-h-0 flex-1 bg-muted/10">
-          <DifyChatArea user={difyUser} advisorType={advisorType} initialConversationId={conversationId} key={`${advisorType}-${conversationId || "new"}`} />
-        </main>
-      </div>
-    </DashboardLayout>
+    <div className="flex h-[calc(100vh-65px)] w-full flex-col bg-background lg:h-screen">
+      <header className="z-10 flex shrink-0 items-center justify-between border-b bg-background px-6 py-4 shadow-sm">
+        <div>
+          <h1 className="font-sans text-lg font-bold text-foreground">{title}</h1>
+          <p className="mt-1 text-xs font-manrope text-muted-foreground">在这里与专属 {title} 进行多轮会话，支持历史会话切换与上下文追踪。</p>
+        </div>
+      </header>
+      <main className="relative min-h-0 flex-1 bg-muted/10">
+        <DifyChatArea user={difyUser} advisorType={advisorType} initialConversationId={conversationId} key={`${advisorType}-${conversationId || "new"}`} />
+      </main>
+    </div>
   )
 }

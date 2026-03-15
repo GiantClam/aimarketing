@@ -9,7 +9,7 @@ export type WriterAsset = {
   prompt: string
   url: string
   status: "ready" | "loading" | "failed"
-  provider: "nanobanana" | "loading" | "error"
+  provider: "aiberm" | "gemini" | "loading" | "error"
   error?: string
   storageKey?: string
   contentType?: string
@@ -215,7 +215,7 @@ export function extractWriterAssetsFromMarkdown(
     ...asset,
     url: urls[index] || "",
     status: urls[index] ? "ready" : "failed",
-    provider: urls[index] ? ("nanobanana" as const) : ("error" as const),
+    provider: urls[index] ? ("gemini" as const) : ("error" as const),
     error: urls[index] ? undefined : "writer_asset_missing",
   }))
 }

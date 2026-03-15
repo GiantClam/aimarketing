@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { listWriterMockMessages, updateWriterMockLatestAssistantMessage } from "@/lib/writer/mock"
+import { listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const conversationId = searchParams.get("conversation_id")
+  const cursor = searchParams.get("cursor")
   const limit = parseInt(searchParams.get("limit") || "50", 10)
 
   if (!conversationId) {
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
       return auth.response
     }
 
-    const data = await listWriterMockMessages(auth.user.id, conversationId, limit)
+    const data = await listWriterMessages(auth.user.id, conversationId, limit, cursor)
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -40,7 +41,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "conversation_id and content are required" }, { status: 400 })
     }
 
-    const updated = await updateWriterMockLatestAssistantMessage(auth.user.id, conversationId, content, {
+    const updated = await updateWriterLatestAssistantMessage(auth.user.id, conversationId, content, {
       status: typeof body?.status === "string" ? body.status : "text_ready",
       imagesRequested: typeof body?.imagesRequested === "boolean" ? body.imagesRequested : undefined,
     })

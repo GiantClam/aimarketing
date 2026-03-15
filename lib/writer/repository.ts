@@ -1,9 +1,8 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { writerConversations, writerMessages } from "@/lib/db/schema"
 import {
-  DEFAULT_WRITER_LANGUAGE,
   normalizeWriterLanguage,
   normalizeWriterMode,
   normalizeWriterPlatform,
@@ -11,11 +10,16 @@ import {
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
+import {
+  type WriterConversationPage,
+  type WriterConversationStatus,
+  type WriterConversationSummary,
+  type WriterHistoryEntry,
+  type WriterMessagePage,
+} from "@/lib/writer/types"
 
 const WRITER_TITLE_PREFIX = "[writer] "
 const DB_RETRY_DELAYS_MS = [250, 750]
-
-type WriterConversationStatus = "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
 
 type WriterConversationRow = {
   id: number
@@ -36,29 +40,6 @@ type WriterConversationMeta = {
   language: WriterLanguage
   status: WriterConversationStatus
   imagesRequested: boolean
-}
-
-type WriterMockConversation = {
-  id: string
-  name: string
-  status: WriterConversationStatus
-  platform: WriterPlatform
-  mode: WriterMode
-  language: WriterLanguage
-  images_requested: boolean
-  created_at: number
-  updated_at: number
-}
-
-type WriterMockMessage = {
-  id: string
-  conversation_id: string
-  query: string
-  answer: string
-  inputs: {
-    contents: string
-  }
-  created_at: number
 }
 
 let writerTablesReadyPromise: Promise<void> | null = null
@@ -84,6 +65,21 @@ function isRetryableDbError(error: unknown) {
     combined.includes("connect timeout") ||
     combined.includes("und_err_connect_timeout")
   )
+}
+
+function toEpochSeconds(value: Date | string | number | null | undefined, fallbackSeconds: number) {
+  if (value instanceof Date) {
+    return Math.floor(value.getTime() / 1000)
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      return Math.floor(parsed.getTime() / 1000)
+    }
+  }
+
+  return fallbackSeconds
 }
 
 async function withDbRetry<T>(label: string, operation: () => Promise<T>) {
@@ -178,7 +174,7 @@ function normalizeConversationMeta(row: Pick<WriterConversationRow, "platform" |
   }
 }
 
-function mapConversation(row: WriterConversationRow): WriterMockConversation {
+function mapConversation(row: WriterConversationRow): WriterConversationSummary {
   const meta = normalizeConversationMeta(row)
   return {
     id: String(row.id),
@@ -193,7 +189,7 @@ function mapConversation(row: WriterConversationRow): WriterMockConversation {
   }
 }
 
-async function requireWriterConversation(userId: number, conversationId: string) {
+export async function getWriterConversation(userId: number, conversationId: string) {
   await ensureWriterTables()
 
   const parsedConversationId = Number.parseInt(conversationId, 10)
@@ -228,7 +224,7 @@ async function requireWriterConversation(userId: number, conversationId: string)
   return row satisfies WriterConversationRow
 }
 
-export async function appendWriterMockConversation({
+export async function appendWriterConversation({
   userId,
   conversationId,
   query,
@@ -250,7 +246,7 @@ export async function appendWriterMockConversation({
   let targetConversationId = conversationId ?? null
 
   if (targetConversationId) {
-    const existingConversation = await requireWriterConversation(userId, targetConversationId)
+    const existingConversation = await getWriterConversation(userId, targetConversationId)
     if (!existingConversation) {
       targetConversationId = null
     }
@@ -310,13 +306,22 @@ export async function appendWriterMockConversation({
     ]),
   )
 
-  return { conversationId: targetConversationId }
+  const persistedConversation = await getWriterConversation(userId, targetConversationId)
+  if (!persistedConversation) {
+    throw new Error("writer_conversation_persist_failed")
+  }
+
+  return {
+    conversationId: targetConversationId,
+    conversation: mapConversation(persistedConversation),
+  }
 }
 
-export async function listWriterMockConversations(userId: number, limit: number) {
+export async function listWriterConversations(userId: number, limit: number): Promise<WriterConversationPage> {
   await ensureWriterTables()
 
-  const rows = await withDbRetry("list-writer-conversations", () =>
+  const safeLimit = Math.max(1, Math.min(limit, 100))
+  const limitedRows = await withDbRetry("list-writer-conversations", () =>
     db
       .select({
         id: writerConversations.id,
@@ -330,76 +335,107 @@ export async function listWriterMockConversations(userId: number, limit: number)
         updatedAt: writerConversations.updatedAt,
       })
       .from(writerConversations)
-      .where(eq(writerConversations.userId, userId))
-      .orderBy(desc(writerConversations.updatedAt), desc(writerConversations.id)),
+      .where(
+        and(
+          eq(writerConversations.userId, userId),
+          sql`${writerConversations.title} LIKE ${`${WRITER_TITLE_PREFIX}%`}`,
+        ),
+      )
+      .orderBy(desc(writerConversations.updatedAt), desc(writerConversations.id))
+      .limit(safeLimit + 1),
   )
 
-  const filteredRows = rows.filter((row) => row.title.startsWith(WRITER_TITLE_PREFIX)).slice(0, limit)
-  const data = filteredRows.map((row) => mapConversation({ ...row, userId })) as WriterMockConversation[]
+  const visibleRows = limitedRows.slice(0, safeLimit)
+  const data = visibleRows.map((row) => mapConversation({ ...row, userId }))
 
-  return { data, has_more: rows.length > filteredRows.length, limit }
+  return { data, has_more: limitedRows.length > safeLimit, limit: safeLimit }
 }
 
-export async function listWriterMockMessages(userId: number, conversationId: string, limit: number) {
+export async function listWriterMessages(
+  userId: number,
+  conversationId: string,
+  limit: number,
+  cursor?: string | null,
+): Promise<WriterMessagePage> {
   await ensureWriterTables()
 
-  const conversation = await requireWriterConversation(userId, conversationId)
+  const conversation = await getWriterConversation(userId, conversationId)
   if (!conversation) {
-    return { data: [] as WriterMockMessage[], limit, conversation: null }
+    return { data: [], limit, has_more: false, next_cursor: null, conversation: null }
   }
 
   const parsedConversationId = Number.parseInt(conversationId, 10)
+  const safeLimit = Math.max(1, Math.min(limit, 100))
+  const parsedCursor = cursor ? Number.parseInt(cursor, 10) : Number.NaN
+  const nextCursorFilter = Number.isFinite(parsedCursor) && parsedCursor > 0
   const rows = await withDbRetry("list-writer-messages", () =>
-    db
-      .select({
-        id: writerMessages.id,
-        role: writerMessages.role,
-        content: writerMessages.content,
-        createdAt: writerMessages.createdAt,
-      })
-      .from(writerMessages)
-      .where(eq(writerMessages.conversationId, parsedConversationId))
-      .orderBy(asc(writerMessages.createdAt), asc(writerMessages.id)),
+    db.execute(sql`
+      SELECT
+        assistant.id AS assistant_id,
+        assistant.content AS assistant_content,
+        assistant.created_at AS assistant_created_at,
+        prompt.id AS user_id,
+        prompt.content AS user_content,
+        prompt.created_at AS user_created_at
+      FROM writer_messages AS assistant
+      LEFT JOIN LATERAL (
+        SELECT user_message.id, user_message.content, user_message.created_at
+        FROM writer_messages AS user_message
+        WHERE user_message.conversation_id = assistant.conversation_id
+          AND user_message.role = 'user'
+          AND (
+            user_message.created_at < assistant.created_at
+            OR (user_message.created_at = assistant.created_at AND user_message.id < assistant.id)
+          )
+        ORDER BY user_message.created_at DESC, user_message.id DESC
+        LIMIT 1
+      ) AS prompt ON TRUE
+      WHERE assistant.conversation_id = ${parsedConversationId}
+        AND assistant.role = 'assistant'
+        ${nextCursorFilter ? sql`AND assistant.id < ${parsedCursor}` : sql``}
+      ORDER BY assistant.id DESC
+      LIMIT ${safeLimit + 1}
+    `),
   )
 
-  const pairs: WriterMockMessage[] = []
-  let currentUserMessage: { query: string; createdAt: Date | null } | null = null
+  const resultRows = rows.rows as Array<{
+    assistant_id: number
+    assistant_content: string
+    assistant_created_at: Date | null
+    user_id: number | null
+    user_content: string | null
+    user_created_at: Date | null
+  }>
 
-  for (const row of rows) {
-    if (row.role === "user") {
-      currentUserMessage = { query: row.content, createdAt: row.createdAt ?? null }
-      continue
-    }
+  const visibleRows = resultRows.slice(0, safeLimit).reverse()
+  const fallbackSeconds = Math.floor(Date.now() / 1000)
+  const data: WriterHistoryEntry[] = visibleRows.map((row) => ({
+    id: String(row.assistant_id),
+    conversation_id: conversationId,
+    query: row.user_content || "",
+    answer: row.assistant_content || "",
+    inputs: { contents: row.user_content || "" },
+    created_at: toEpochSeconds(row.user_created_at, toEpochSeconds(row.assistant_created_at, fallbackSeconds)),
+  }))
 
-    if (!currentUserMessage) continue
-
-    pairs.push({
-      id: String(row.id),
-      conversation_id: conversationId,
-      query: currentUserMessage.query,
-      answer: row.content,
-      inputs: { contents: currentUserMessage.query },
-      created_at: currentUserMessage.createdAt
-        ? Math.floor(currentUserMessage.createdAt.getTime() / 1000)
-        : Math.floor(Date.now() / 1000),
-    })
-    currentUserMessage = null
-  }
+  const hasMore = resultRows.length > safeLimit
+  const nextCursor = hasMore ? String(resultRows[safeLimit - 1]?.assistant_id ?? "") : null
 
   return {
-    data: pairs.reverse().slice(0, limit),
-    limit,
-    has_more: pairs.length > limit,
+    data,
+    limit: safeLimit,
+    has_more: hasMore,
+    next_cursor: nextCursor || null,
     conversation: mapConversation(conversation),
   }
 }
 
-export async function renameWriterMockConversation(userId: number, conversationId: string, name: string) {
+export async function renameWriterConversation(userId: number, conversationId: string, name: string) {
   await ensureWriterTables()
 
-  const conversation = await requireWriterConversation(userId, conversationId)
+  const conversation = await getWriterConversation(userId, conversationId)
   if (!conversation) {
-    return false
+    return null
   }
 
   await withDbRetry("rename-writer-conversation", () =>
@@ -412,7 +448,8 @@ export async function renameWriterMockConversation(userId: number, conversationI
       .where(eq(writerConversations.id, conversation.id)),
   )
 
-  return true
+  const updatedConversation = await getWriterConversation(userId, conversationId)
+  return updatedConversation ? mapConversation(updatedConversation) : null
 }
 
 export async function updateWriterConversationMeta(
@@ -428,7 +465,7 @@ export async function updateWriterConversationMeta(
 ) {
   await ensureWriterTables()
 
-  const conversation = await requireWriterConversation(userId, conversationId)
+  const conversation = await getWriterConversation(userId, conversationId)
   if (!conversation) {
     return false
   }
@@ -450,7 +487,7 @@ export async function updateWriterConversationMeta(
   return true
 }
 
-export async function updateWriterMockLatestAssistantMessage(
+export async function updateWriterLatestAssistantMessage(
   userId: number,
   conversationId: string,
   content: string,
@@ -464,7 +501,7 @@ export async function updateWriterMockLatestAssistantMessage(
 ) {
   await ensureWriterTables()
 
-  const conversation = await requireWriterConversation(userId, conversationId)
+  const conversation = await getWriterConversation(userId, conversationId)
   if (!conversation) {
     return false
   }
@@ -491,10 +528,10 @@ export async function updateWriterMockLatestAssistantMessage(
   return true
 }
 
-export async function deleteWriterMockConversation(userId: number, conversationId: string) {
+export async function deleteWriterConversation(userId: number, conversationId: string) {
   await ensureWriterTables()
 
-  const conversation = await requireWriterConversation(userId, conversationId)
+  const conversation = await getWriterConversation(userId, conversationId)
   if (!conversation) {
     return false
   }
@@ -506,50 +543,4 @@ export async function deleteWriterMockConversation(userId: number, conversationI
     db.delete(writerConversations).where(eq(writerConversations.id, conversation.id)),
   )
   return true
-}
-
-function buildSseEvent(payload: Record<string, unknown>) {
-  return `data: ${JSON.stringify(payload)}\n\n`
-}
-
-export function createWriterMockStream({
-  answer,
-  conversationId,
-  taskId,
-}: {
-  answer: string
-  conversationId: string
-  taskId: string
-}) {
-  const encoder = new TextEncoder()
-  const splitIndex = Math.max(1, Math.floor(answer.length * 0.55))
-  const chunks = [answer.slice(0, splitIndex), answer.slice(splitIndex)].filter(Boolean)
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(
-          encoder.encode(
-            buildSseEvent({
-              event: "message",
-              task_id: taskId,
-              conversation_id: conversationId,
-              answer: chunk,
-            }),
-          ),
-        )
-      }
-
-      controller.enqueue(
-        encoder.encode(
-          buildSseEvent({
-            event: "message_end",
-            task_id: taskId,
-            conversation_id: conversationId,
-          }),
-        ),
-      )
-      controller.close()
-    },
-  })
 }

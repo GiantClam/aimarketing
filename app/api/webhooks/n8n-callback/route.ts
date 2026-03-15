@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { storageKey, status, error, taskId, executionId } = body
+    const { storageKey, status, taskId, executionId } = body
 
     // 验证 webhook 签名（生产环境必需）
     const signature = request.headers.get("x-n8n-signature") || ""

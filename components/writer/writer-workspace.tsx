@@ -50,6 +50,7 @@ import {
   type WriterPlatform,
 } from "@/lib/writer/config"
 import { emitWriterRefresh, getWriterSessionMeta, saveWriterSessionMeta } from "@/lib/writer/session-store"
+import type { WriterConversationSummary, WriterHistoryEntry, WriterMessagePage } from "@/lib/writer/types"
 import { cn } from "@/lib/utils"
 
 type WriterMessage = {
@@ -126,11 +127,6 @@ const extractLead = (markdown: string) =>
     .find((block) => block && block !== extractTitle(markdown)) || "文章生成后，这里会展示完整的图文排版预览。"
 
 const estimateReadingTime = (markdown: string) => `${Math.max(3, Math.ceil(stripMarkdown(markdown).length / 320))} 分钟`
-const splitMarkdownBlocks = (markdown: string) =>
-  markdown
-    .split(/\r?\n\r?\n/)
-    .map((block) => block.trim())
-    .filter(Boolean)
 const composeThreadMarkdown = (segments: string[]) =>
   segments.map((segment, index) => `### 第 ${index + 1} 段\n${segment.trim()}`).join("\n\n")
 
@@ -273,7 +269,6 @@ function PlatformPreview({
   mode,
   markdown,
   assets,
-  copyHint,
   editable = false,
   onEditChange,
   onEditCommit,
@@ -283,13 +278,11 @@ function PlatformPreview({
   mode: WriterMode
   markdown: string
   assets: WriterAsset[]
-  copyHint: string
   editable?: boolean
   onEditChange?: (next: string) => void
   onEditCommit?: () => void
   saveState?: "idle" | "saving" | "saved" | "error"
 }) {
-  const title = extractTitle(markdown)
   const lead = extractLead(markdown)
   const threadPosts = mode === "thread" ? parseThread(markdown) : []
   const renderArticleBody = (value: string, className?: string) =>
@@ -510,6 +503,23 @@ function PreviewResourceStrip({
   )
 }
 
+const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[]): WriterMessage[] =>
+  entries.flatMap((message) => [
+    {
+      id: `user_${message.id}`,
+      conversation_id: message.conversation_id,
+      role: "user" as const,
+      content: message.query || message.inputs?.contents || "",
+    },
+    {
+      id: `assistant_${message.id}`,
+      conversation_id: message.conversation_id,
+      role: "assistant" as const,
+      content: sanitize(message.answer || ""),
+      authorLabel: WRITER_ASSISTANT_NAME,
+    },
+  ])
+
 const COPYABLE_STYLE_PROPS = [
   "color",
   "background-color",
@@ -698,9 +708,12 @@ export function WriterWorkspace({
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const previewContentRef = useRef<HTMLDivElement | null>(null)
   const currentTaskIdRef = useRef<string | null>(null)
+  const historyRestoreRef = useRef<{ height: number; top: number } | null>(null)
+  const shouldScrollToBottomRef = useRef(false)
 
   const [availabilityLoading, setAvailabilityLoading] = useState(true)
   const [availabilityReady, setAvailabilityReady] = useState(false)
+  const [knowledgeStatus, setKnowledgeStatus] = useState<{ enabled: boolean; datasetCount?: number; source?: string } | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
   const [platform, setPlatform] = useState<WriterPlatform>(() => normalizeWriterPlatform(initialPlatform))
   const [mode, setMode] = useState<WriterMode>(() =>
@@ -724,6 +737,9 @@ export function WriterWorkspace({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [imagesRequested, setImagesRequested] = useState(false)
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null)
+  const [hasMoreHistory, setHasMoreHistory] = useState(false)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [conversationStatus, setConversationStatus] = useState<
     "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
   >("drafting")
@@ -754,6 +770,7 @@ export function WriterWorkspace({
         const data = response.ok ? await response.json() : null
         if (!cancelled && data?.data?.enabled) {
           setAvailabilityReady(true)
+          setKnowledgeStatus(data?.data?.knowledge || null)
           return
         }
         if (!cancelled) router.replace(user ? "/dashboard" : "/login")
@@ -790,11 +807,15 @@ export function WriterWorkspace({
     if (!conversationId) {
       setMessages([])
       setDraft("")
+      setHistoryCursor(null)
+      setHasMoreHistory(false)
       setIsConversationLoading(false)
       return
     }
 
     setIsConversationLoading(true)
+    setHistoryCursor(null)
+    setHasMoreHistory(false)
     const meta = getWriterSessionMeta(conversationId)
     if (meta) {
       setPlatform(meta.platform)
@@ -807,36 +828,29 @@ export function WriterWorkspace({
 
     let cancelled = false
 
+    const applyConversationPayload = (data: WriterMessagePage, reset: boolean) => {
+      const nextMessages = mapHistoryEntriesToMessages(data.data || [])
+      if (data.conversation) {
+        setPlatform(normalizeWriterPlatform(data.conversation.platform))
+        setMode(normalizeWriterMode(normalizeWriterPlatform(data.conversation.platform), data.conversation.mode))
+        setLanguage(normalizeWriterLanguage(data.conversation.language))
+        setImagesRequested(Boolean(data.conversation.images_requested))
+        setConversationStatus(data.conversation.status || "drafting")
+      }
+      setHistoryCursor(data.next_cursor || null)
+      setHasMoreHistory(Boolean(data.has_more))
+      if (reset) shouldScrollToBottomRef.current = true
+      setMessages((current) => (reset ? nextMessages : [...nextMessages, ...current]))
+      if (reset && !meta?.draft) setDraft(inferDraft(nextMessages))
+    }
+
     const load = async () => {
       try {
-        const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=100`)
+        const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=20`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const data = await response.json()
-        const nextMessages: WriterMessage[] = []
-        ;(data.data || []).reverse().forEach((message: any) => {
-          nextMessages.push({
-            id: `user_${message.id}`,
-            conversation_id: message.conversation_id,
-            role: "user",
-            content: message.query || message.inputs?.contents || "",
-          })
-          nextMessages.push({
-            id: `assistant_${message.id}`,
-            conversation_id: message.conversation_id,
-            role: "assistant",
-            content: sanitize(message.answer || ""),
-            authorLabel: WRITER_ASSISTANT_NAME,
-          })
-        })
-        if (data.conversation) {
-          setPlatform(normalizeWriterPlatform(data.conversation.platform))
-          setMode(normalizeWriterMode(normalizeWriterPlatform(data.conversation.platform), data.conversation.mode))
-          setLanguage(normalizeWriterLanguage(data.conversation.language))
-          setImagesRequested(Boolean(data.conversation.images_requested))
-          setConversationStatus(data.conversation.status || "drafting")
-        }
-        setMessages(nextMessages)
-        if (!meta?.draft) setDraft(inferDraft(nextMessages))
+        const data = (await response.json()) as WriterMessagePage
+        if (cancelled) return
+        applyConversationPayload(data, true)
       } catch {
         if (cancelled) return
         setMessages([
@@ -859,6 +873,34 @@ export function WriterWorkspace({
     }
   }, [conversationId])
 
+  const loadOlderMessages = async () => {
+    if (!conversationId || !historyCursor || isHistoryLoading) return
+
+    const viewport = viewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
+    if (viewport) {
+      historyRestoreRef.current = {
+        height: viewport.scrollHeight,
+        top: viewport.scrollTop,
+      }
+    }
+
+    setIsHistoryLoading(true)
+    try {
+      const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=20&cursor=${historyCursor}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = (await response.json()) as WriterMessagePage
+      const nextMessages = mapHistoryEntriesToMessages(data.data || [])
+      setHistoryCursor(data.next_cursor || null)
+      setHasMoreHistory(Boolean(data.has_more))
+      setMessages((current) => [...nextMessages, ...current])
+    } catch (error) {
+      console.error("Failed to load older writer messages", error)
+      historyRestoreRef.current = null
+    } finally {
+      setIsHistoryLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (conversationId) {
       saveWriterSessionMeta(conversationId, {
@@ -875,7 +917,19 @@ export function WriterWorkspace({
 
   useEffect(() => {
     const viewport = viewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
-    if (viewport) viewport.scrollTop = viewport.scrollHeight
+    if (!viewport) return
+
+    if (historyRestoreRef.current) {
+      const { height, top } = historyRestoreRef.current
+      viewport.scrollTop = viewport.scrollHeight - height + top
+      historyRestoreRef.current = null
+      return
+    }
+
+    if (shouldScrollToBottomRef.current || isLoading) {
+      viewport.scrollTop = viewport.scrollHeight
+      shouldScrollToBottomRef.current = false
+    }
   }, [isLoading, messages])
 
   useEffect(() => {
@@ -884,10 +938,6 @@ export function WriterWorkspace({
     element.style.height = "0px"
     element.style.height = `${Math.min(180, Math.max(56, element.scrollHeight))}px`
   }, [inputValue])
-
-  useEffect(() => {
-    if (draft.trim()) setPreviewOpen(true)
-  }, [draft])
 
   useEffect(() => {
     if (!baseDraft.trim()) {
@@ -951,7 +1001,6 @@ export function WriterWorkspace({
     setImagesRequested(false)
     setConversationStatus("drafting")
     setDraftSaveState("idle")
-    emitWriterRefresh()
     router.push(`/dashboard/writer?platform=${platform}&mode=${mode}&language=${language}`)
   }
 
@@ -1001,6 +1050,13 @@ export function WriterWorkspace({
           nextConversationId = dataObj.conversation_id
           setConversationId(dataObj.conversation_id)
         }
+        if (dataObj?.event === "conversation_init" && dataObj?.conversation) {
+          const syncedConversation = dataObj.conversation as WriterConversationSummary
+          emitWriterRefresh({
+            action: "upsert",
+            conversation: syncedConversation,
+          })
+        }
         if (["message", "agent_message", "text_chunk"].includes(dataObj?.event)) {
           const chunk = extractText(dataObj.answer) || extractText(dataObj.data?.text)
           if (chunk) {
@@ -1049,7 +1105,6 @@ export function WriterWorkspace({
     } catch (error) {
       setConversationStatus("failed")
       patchAssistantMessage(assistantId, `请求失败：${error instanceof Error ? error.message : "未知错误"}`)
-      emitWriterRefresh()
     } finally {
       currentTaskIdRef.current = null
       setIsLoading(false)
@@ -1253,6 +1308,14 @@ export function WriterWorkspace({
               <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
                 {currentLanguageLabel}
               </Badge>
+              <Badge
+                variant={knowledgeStatus?.enabled ? "default" : "outline"}
+                className="rounded-full px-2.5 py-0.5 text-[10px]"
+              >
+                {knowledgeStatus?.enabled
+                  ? `企业知识 ${knowledgeStatus.datasetCount || 0}`
+                  : "未接入企业知识"}
+              </Badge>
               <Button
                 size="icon"
                 variant="outline"
@@ -1270,6 +1333,22 @@ export function WriterWorkspace({
             <div className="min-h-0 flex-1 overflow-hidden rounded-[26px] border bg-card shadow-sm">
               <ScrollArea className="h-full" ref={viewportRef}>
                 <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 lg:px-5">
+                  {hasMoreHistory ? (
+                    <div className="flex justify-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full"
+                        data-testid="writer-load-older-button"
+                        onClick={() => void loadOlderMessages()}
+                        disabled={isHistoryLoading}
+                      >
+                        {isHistoryLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                        {isHistoryLoading ? "加载更早消息中" : "加载更早消息"}
+                      </Button>
+                    </div>
+                  ) : null}
+
                   {messages.length === 0 && !isConversationLoading ? (
                     <div className="space-y-3 rounded-[24px] border border-dashed bg-muted/20 p-4">
                       <div className="flex items-center gap-2 text-primary">
@@ -1393,7 +1472,13 @@ export function WriterWorkspace({
                   {workspaceStatus}
                 </Badge>
                 <div className="ml-auto flex items-center gap-1.5">
-                  <Button size="sm" variant="ghost" className="h-8 rounded-full px-3 text-[11px]" onClick={handleCreateConversation}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 rounded-full px-3 text-[11px]"
+                    data-testid="writer-inline-new-session-trigger"
+                    onClick={handleCreateConversation}
+                  >
                     新建
                   </Button>
                   <Button
@@ -1438,6 +1523,7 @@ export function WriterWorkspace({
                     <Button
                       size="sm"
                       className="h-8 rounded-full px-3 text-[11px]"
+                      data-testid="writer-send-button"
                       onClick={() => void handleSend()}
                       disabled={!inputValue.trim() || composerDisabled}
                     >
@@ -1564,7 +1650,6 @@ export function WriterWorkspace({
                         mode={mode}
                         markdown={previewMarkdown}
                         assets={assets}
-                        copyHint={writerConfig.copyHint}
                         editable={hasDraft}
                         onEditChange={handleDraftChange}
                         onEditCommit={handleDraftBlur}

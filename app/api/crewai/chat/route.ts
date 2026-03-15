@@ -90,7 +90,9 @@ export async function POST(request: NextRequest) {
         cancel() {
           try {
             controller.abort()
-          } catch {}
+          } catch {
+            // Ignore abort failures during stream cancellation.
+          }
         },
       })
 

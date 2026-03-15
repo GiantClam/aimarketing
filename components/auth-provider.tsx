@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 
 import { buildPermissionMap, type FeatureKey, type PermissionMap } from "@/lib/enterprise/constants"
@@ -266,23 +266,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return Boolean(user.permissions?.[feature])
   }
 
-  const value = useMemo<AuthContextType>(
-    () => ({
-      user,
-      login,
-      register,
-      logout,
-      refreshProfile,
-      updateProfile,
-      loading,
-      devLogin,
-      anonymousLogin,
-      isDemoMode,
-      isEnterpriseAdmin,
-      hasFeature,
-    }),
-    [user, loading, isDemoMode, isEnterpriseAdmin],
-  )
+  const value: AuthContextType = {
+    user,
+    login,
+    register,
+    logout,
+    refreshProfile,
+    updateProfile,
+    loading,
+    devLogin,
+    anonymousLogin,
+    isDemoMode,
+    isEnterpriseAdmin,
+    hasFeature,
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

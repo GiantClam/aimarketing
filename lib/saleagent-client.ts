@@ -33,7 +33,12 @@ export async function streamSSE(url: string, body: any, onEvent: (e: EventItem) 
       for (const part of parts) {
         const line = part.split('data:').pop()?.trim()
         if (!line) continue
-        try { const evt = JSON.parse(line) as EventItem; onEvent(evt) } catch {}
+        try {
+          const evt = JSON.parse(line) as EventItem
+          onEvent(evt)
+        } catch {
+          // Ignore malformed SSE chunks from upstream.
+        }
       }
     }
   })()
@@ -67,7 +72,12 @@ export async function streamSSEEx(url: string, body: any, onEvent: (e: EventItem
         for (const part of parts) {
           const line = part.split('data:').pop()?.trim()
           if (!line) continue
-          try { const evt = JSON.parse(line) as EventItem; onEvent(evt) } catch {}
+          try {
+            const evt = JSON.parse(line) as EventItem
+            onEvent(evt)
+          } catch {
+            // Ignore malformed SSE chunks from upstream.
+          }
         }
       }
       opts?.onDone?.()

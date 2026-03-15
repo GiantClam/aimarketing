@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed } from "@/lib/writer/assets"
+import { generateImageWithAiberm, hasAibermApiKey } from "@/lib/writer/aiberm"
 import { normalizeWriterMode, normalizeWriterPlatform, WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
-import { updateWriterConversationMeta } from "@/lib/writer/mock"
+import { updateWriterConversationMeta } from "@/lib/writer/repository"
 import { writerRequestJson } from "@/lib/writer/network"
 import { isWriterR2Available, uploadWriterImageToR2 } from "@/lib/writer/r2"
 
@@ -12,7 +13,8 @@ export const maxDuration = 300
 
 const GOOGLE_IMAGE_API_KEY =
   process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
-const WRITER_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
+const WRITER_AIBERM_IMAGE_MODEL = process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3-pro-image-preview"
+const WRITER_GEMINI_IMAGE_MODEL = process.env.WRITER_GEMINI_IMAGE_MODEL || process.env.WRITER_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 
 function escapeSvgText(value: string) {
   return value
@@ -76,7 +78,7 @@ async function generateGeminiImage(prompt: string, aspectRatio: string) {
     error?: { message?: string }
     candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> } }>
   }>(
-    `https://generativelanguage.googleapis.com/v1beta/models/${WRITER_IMAGE_MODEL}:generateContent?key=${encodeURIComponent(
+    `https://generativelanguage.googleapis.com/v1beta/models/${WRITER_GEMINI_IMAGE_MODEL}:generateContent?key=${encodeURIComponent(
       GOOGLE_IMAGE_API_KEY,
     )}`,
     {
@@ -131,6 +133,63 @@ async function generateGeminiImage(prompt: string, aspectRatio: string) {
   return dataUrl
 }
 
+async function generateWriterImage(prompt: string, aspectRatio: string) {
+  if (shouldUseWriterE2EFixtures()) {
+    return {
+      dataUrl: createFixtureImageDataUrl(prompt, aspectRatio),
+      provider: "gemini" as const,
+      model: WRITER_GEMINI_IMAGE_MODEL,
+    }
+  }
+
+  if (hasAibermApiKey()) {
+    try {
+      return {
+        dataUrl: await generateImageWithAiberm(prompt, WRITER_AIBERM_IMAGE_MODEL, aspectRatio),
+        provider: "aiberm" as const,
+        model: WRITER_AIBERM_IMAGE_MODEL,
+      }
+    } catch (error) {
+      console.warn("writer.assets.aiberm_fallback", {
+        message: error instanceof Error ? error.message : "aiberm_image_failed",
+      })
+    }
+  }
+
+  return {
+    dataUrl: await generateGeminiImage(prompt, aspectRatio),
+    provider: "gemini" as const,
+    model: WRITER_GEMINI_IMAGE_MODEL,
+  }
+}
+
+function getPreferredWriterImageProvider() {
+  return hasAibermApiKey() ? ("aiberm" as const) : ("gemini" as const)
+}
+
+function getPreferredWriterImageModel() {
+  return getPreferredWriterImageProvider() === "aiberm" ? WRITER_AIBERM_IMAGE_MODEL : WRITER_GEMINI_IMAGE_MODEL
+}
+
+function getWriterImageModelForProvider(provider: "aiberm" | "gemini") {
+  return provider === "aiberm" ? WRITER_AIBERM_IMAGE_MODEL : WRITER_GEMINI_IMAGE_MODEL
+}
+
+function resolveWriterImageProvider(
+  assets: Array<{
+    status: "ready" | "failed"
+    url: string
+    provider: "aiberm" | "gemini" | "error"
+  }>,
+) {
+  const successfulAsset = assets.find(
+    (asset): asset is { status: "ready"; url: string; provider: "aiberm" | "gemini" } =>
+      asset.status === "ready" && Boolean(asset.url) && (asset.provider === "aiberm" || asset.provider === "gemini"),
+  )
+
+  return successfulAsset?.provider || getPreferredWriterImageProvider()
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireSessionUser(request, "copywriting_generation")
@@ -152,7 +211,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    if (!GOOGLE_IMAGE_API_KEY) {
+    if (!hasAibermApiKey() && !GOOGLE_IMAGE_API_KEY) {
       if (conversationId) {
         await updateWriterConversationMeta(auth.user.id, conversationId, {
           status: "failed",
@@ -162,15 +221,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           data: {
-            provider: "nanobanana",
-            model: WRITER_IMAGE_MODEL,
+            provider: getPreferredWriterImageProvider(),
+            model: getPreferredWriterImageModel(),
             assets: ensureWriterAssetOrder(
-              markWriterAssetsFailed(plannedAssets, "GOOGLE_AI_API_KEY is required for writer image generation"),
+              markWriterAssetsFailed(plannedAssets, "AIBERM_API_KEY or GOOGLE_AI_API_KEY is required for writer image generation"),
               platform,
               mode,
             ),
           },
-          error: "GOOGLE_AI_API_KEY is required for writer image generation",
+          error: "AIBERM_API_KEY or GOOGLE_AI_API_KEY is required for writer image generation",
         },
         { status: 503 },
       )
@@ -186,8 +245,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           data: {
-            provider: "nanobanana",
-            model: WRITER_IMAGE_MODEL,
+            provider: getPreferredWriterImageProvider(),
+            model: getPreferredWriterImageModel(),
             assets: ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, "writer_r2_config_missing"), platform, mode),
           },
           error: "writer_r2_config_missing",
@@ -199,7 +258,7 @@ export async function POST(request: NextRequest) {
     const assets = [] as Array<(typeof plannedAssets)[number] & {
       url: string
       status: "ready" | "failed"
-      provider: "nanobanana" | "error"
+      provider: "aiberm" | "gemini" | "error"
       storageKey?: string
       contentType?: string
       error?: string
@@ -207,12 +266,12 @@ export async function POST(request: NextRequest) {
 
     for (const asset of plannedAssets) {
       try {
-        const dataUrl = await generateGeminiImage(asset.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio)
+        const generated = await generateWriterImage(asset.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio)
         const uploaded = await uploadWriterImageToR2({
           userId: auth.user.id,
           conversationId,
           assetId: asset.id,
-          dataUrl,
+          dataUrl: generated.dataUrl,
         })
 
         assets.push({
@@ -221,7 +280,7 @@ export async function POST(request: NextRequest) {
           storageKey: uploaded.storageKey,
           contentType: uploaded.contentType,
           status: "ready",
-          provider: "nanobanana",
+          provider: generated.provider,
         })
       } catch (error: any) {
         console.warn("writer.assets.asset_failed", {
@@ -247,6 +306,7 @@ export async function POST(request: NextRequest) {
     }
 
     const successCount = assets.filter((asset) => asset.status === "ready" && asset.url).length
+    const resolvedProvider = resolveWriterImageProvider(assets)
     if (successCount === 0) {
       if (conversationId) {
         await updateWriterConversationMeta(auth.user.id, conversationId, {
@@ -257,8 +317,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           data: {
-            provider: "nanobanana",
-            model: WRITER_IMAGE_MODEL,
+            provider: resolvedProvider,
+            model: getWriterImageModelForProvider(resolvedProvider),
             assets: ensureWriterAssetOrder(assets, platform, mode),
           },
           error: "writer_assets_failed",
@@ -276,8 +336,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       data: {
-        provider: "nanobanana",
-        model: WRITER_IMAGE_MODEL,
+        provider: resolvedProvider,
+        model: getWriterImageModelForProvider(resolvedProvider),
         assets: ensureWriterAssetOrder(assets, platform, mode),
       },
     })

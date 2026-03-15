@@ -8,6 +8,7 @@ import {
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
+import type { WriterConversationSummary, WriterConversationStatus } from "@/lib/writer/types"
 
 export type WriterSessionMeta = {
   platform: WriterPlatform
@@ -15,9 +16,14 @@ export type WriterSessionMeta = {
   language: WriterLanguage
   draft?: string
   imagesRequested?: boolean
-  status?: "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
+  status?: WriterConversationStatus
   updatedAt: number
 }
+
+export type WriterRefreshDetail =
+  | { action: "upsert"; conversation: WriterConversationSummary }
+  | { action: "remove"; conversationId: string }
+  | undefined
 
 export const SESSION_STORAGE_KEY = "writer-session-store-v1"
 export const WRITER_REFRESH_EVENT = "writer-refresh"
@@ -75,7 +81,7 @@ export function deleteWriterSessionMeta(conversationId: string) {
   writeWriterSessionStore(store)
 }
 
-export function emitWriterRefresh(detail?: Record<string, unknown>) {
+export function emitWriterRefresh(detail?: WriterRefreshDetail) {
   if (!canUseStorage()) return
   window.dispatchEvent(new CustomEvent(WRITER_REFRESH_EVENT, { detail }))
 }

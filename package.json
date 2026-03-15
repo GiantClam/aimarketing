@@ -5,10 +5,15 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "lint": "eslint .",
+    "lint": "eslint app components lib --max-warnings=0",
+    "seed:enterprise:dify": "node scripts/seed-enterprise-dify-defaults.js",
     "start": "next start",
     "migrate:enterprise": "node scripts/run-enterprise-migration.js",
+    "migrate:enterprise:dify": "node scripts/run-enterprise-dify-migration.js",
     "migrate:writer": "node scripts/run-writer-migration.js",
+    "seed:writer:history": "node scripts/seed-writer-history.js",
+    "test:e2e:writer:real": "python scripts/run_writer_real_validation_with_server.py",
+    "test:e2e:writer:new-features": "python scripts/run_writer_new_features_with_server.py",
     "test:e2e:deployed": "python tests/deployed-e2e.py",
     "test:e2e:deployed:dify": "python tests/dify-deployed-check.py"
   },
@@ -79,6 +84,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/pg": "^8.18.0",
@@ -86,9 +92,13 @@
     "@types/react-dom": "^19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "drizzle-kit": "^0.31.9",
+    "eslint": "^10.0.3",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^17.4.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.57.0"
   }
 }

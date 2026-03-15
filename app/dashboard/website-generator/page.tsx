@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { Layout, Rocket, Send, Sparkles } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
-import { DashboardLayout } from "@/components/dashboard-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -95,6 +94,7 @@ export default function WebsiteGeneratorPage() {
               setLogs((prev) => [...prev, text])
             }
           } catch {
+            // Ignore malformed SSE payloads from the generator.
           }
         }
       }
@@ -108,8 +108,7 @@ export default function WebsiteGeneratorPage() {
   if (!user || !hasFeature("website_generation")) return null
 
   return (
-    <DashboardLayout>
-      <div className="flex h-full overflow-hidden bg-background">
+    <div className="flex h-full overflow-hidden bg-background">
         <div className="flex min-w-[400px] w-1/3 flex-col border-r border-border">
           <div className="border-b border-border bg-muted/50 p-4">
             <h2 className="flex items-center gap-2 text-lg font-bold"><Sparkles className="h-5 w-5 text-primary" />网站生成 Agent</h2>
@@ -157,6 +156,5 @@ export default function WebsiteGeneratorPage() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
   )
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { listWriterMockConversations } from "@/lib/writer/mock"
+import { listWriterConversations } from "@/lib/writer/repository"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
       return auth.response
     }
 
-    const data = await listWriterMockConversations(auth.user.id, limit)
+    const data = await listWriterConversations(auth.user.id, limit)
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { MessageSquare, Plus, Edit2, Trash2, Check, X, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +36,7 @@ export function AdvisorSidebarItem({
   const router = useRouter();
   const user = `${userEmail}_${advisorType}`;
 
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch(`/api/dify/conversations?user=${user}&limit=20&advisorType=${advisorType}`);
@@ -49,13 +49,13 @@ export function AdvisorSidebarItem({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [advisorType, user]);
 
   useEffect(() => {
     if (isOpen) {
       fetchConversations();
     }
-  }, [isOpen, user]);
+  }, [fetchConversations, isOpen]);
 
   useEffect(() => {
     const handleRefresh = (e: any) => {
@@ -65,7 +65,7 @@ export function AdvisorSidebarItem({
     };
     window.addEventListener("dify-refresh", handleRefresh);
     return () => window.removeEventListener("dify-refresh", handleRefresh);
-  }, [advisorType, isOpen]);
+  }, [advisorType, fetchConversations, isOpen]);
 
   useEffect(() => {
     if (pathname.includes(`/dashboard/advisor/${advisorType}`)) {

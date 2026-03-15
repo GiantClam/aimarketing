@@ -1,5 +1,3 @@
-import { NextRequest } from "next/server";
-
 export interface DifyConfig {
     baseUrl: string;
     apiKey: string;

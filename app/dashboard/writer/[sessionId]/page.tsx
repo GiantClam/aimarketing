@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard-layout"
 import { WriterWorkspace } from "@/components/writer/writer-workspace"
 
 export default async function WriterSessionPage({
@@ -12,13 +11,11 @@ export default async function WriterSessionPage({
   const resolvedSearchParams = await searchParams
 
   return (
-    <DashboardLayout>
-      <WriterWorkspace
-        initialConversationId={resolvedParams.sessionId}
-        initialPlatform={resolvedSearchParams.platform}
-        initialMode={resolvedSearchParams.mode}
-        initialLanguage={resolvedSearchParams.language}
-      />
-    </DashboardLayout>
+    <WriterWorkspace
+      initialConversationId={resolvedParams.sessionId}
+      initialPlatform={resolvedSearchParams.platform}
+      initialMode={resolvedSearchParams.mode}
+      initialLanguage={resolvedSearchParams.language}
+    />
   )
 }

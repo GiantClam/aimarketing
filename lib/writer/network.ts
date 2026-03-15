@@ -347,7 +347,7 @@ export async function writerRequestJson<T = any>(
   options: WriterRequestOptions = {},
 ) {
   const response = await writerRequest(url, init, { ...options, responseType: "json" })
-  let data: T | null = null
+  let data: T | null
 
   try {
     data = response.bodyText ? (JSON.parse(response.bodyText) as T) : null

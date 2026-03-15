@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Send, Sparkles, Loader2, CheckCircle2, RefreshCw, Upload, X } from "lucide-react"
+import { Send, Sparkles, Loader2, CheckCircle2, RefreshCw, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Sheet,
@@ -140,6 +140,36 @@ export function VideoChat() {
     setMessages((prev) => [...prev, message])
   }, [])
 
+  const startCrewStatusPolling = useCallback((runId: string) => {
+    if (pollingRef.current) return
+    const base = process.env.NEXT_PUBLIC_AGENT_URL || ""
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${base}/workflow/crew-status/${encodeURIComponent(runId)}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data && data.status === "completed" && data.result) {
+          clearInterval(pollingRef.current as NodeJS.Timeout)
+          pollingRef.current = null
+          setConversationState((prev) => ({ ...prev, status: "completed" }))
+          addMessage(
+            "assistant",
+            "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。",
+            undefined,
+            undefined,
+            undefined,
+            {
+              video_url: data.result,
+              run_id: runId,
+            }
+          )
+        }
+      } catch {
+        // Ignore polling errors and retry on the next interval tick.
+      }
+    }, 5000)
+  }, [addMessage])
+
   const handleEvent = useCallback((event: any) => {
     if (event.type === "message") {
       const options = event.payload?.options || []
@@ -258,35 +288,7 @@ export function VideoChat() {
       setLoading(false)
       addMessage("assistant", `错误：${event.delta || event.content || "未知错误"}`)
     }
-  }, [addMessage, conversationState.runId])
-
-  const startCrewStatusPolling = useCallback((runId: string) => {
-    if (pollingRef.current) return
-    const base = process.env.NEXT_PUBLIC_AGENT_URL || ""
-    pollingRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${base}/workflow/crew-status/${encodeURIComponent(runId)}`)
-        if (!res.ok) return
-        const data = await res.json()
-        if (data && data.status === "completed" && data.result) {
-          clearInterval(pollingRef.current as NodeJS.Timeout)
-          pollingRef.current = null
-          setConversationState((prev) => ({ ...prev, status: "completed" }))
-          addMessage(
-            "assistant",
-            "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。",
-            undefined,
-            undefined,
-            undefined,
-            {
-              video_url: data.result,
-              run_id: runId,
-            }
-          )
-        }
-      } catch {}
-    }, 5000)
-  }, [addMessage])
+  }, [addMessage, conversationState.runId, startCrewStatusPolling])
 
   const startConversation = useCallback(async () => {
     // 防止重复调用
@@ -337,7 +339,7 @@ export function VideoChat() {
 
           try {
             const event = JSON.parse(line)
-            try { console.log("[SSE/crewai-chat]", event) } catch {}
+            console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("解析事件失败:", e)
@@ -414,7 +416,7 @@ export function VideoChat() {
 
           try {
             const event = JSON.parse(line)
-            try { console.log("[SSE/crewai-chat]", event) } catch {}
+            console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("解析事件失败:", e)
@@ -426,7 +428,7 @@ export function VideoChat() {
       setLoading(false)
       addMessage("assistant", "抱歉，发生了错误。请重试。")
     }
-  }, [input, loading, conversationState])
+  }, [addMessage, conversationState, handleEvent, input, loading])
 
   const handleOptionClick = useCallback(
     async (option: string, messageId: string) => {
@@ -479,7 +481,7 @@ export function VideoChat() {
 
             try {
               const event = JSON.parse(line)
-              try { console.log("[SSE/crewai-chat]", event) } catch {}
+              console.log("[SSE/crewai-chat]", event)
               handleEvent(event)
             } catch (e) {
               console.error("解析事件失败:", e)
@@ -574,7 +576,7 @@ export function VideoChat() {
     setProductImageFile(file)
   }, [addMessage])
 
-  const submitProductImage = useCallback(async (messageId: string) => {
+  const submitProductImage = useCallback(async (_messageId: string) => {
     if (!productImageFile || !conversationState.runId || productUploading) return
     setProductUploading(true)
     try {
@@ -615,7 +617,7 @@ export function VideoChat() {
           if (!line) continue
           try {
             const event = JSON.parse(line)
-            try { console.log("[SSE/crewai-chat]", event) } catch {}
+            console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("解析事件失败:", e)
@@ -631,7 +633,7 @@ export function VideoChat() {
     }
   }, [productImageFile, conversationState.threadId, conversationState.runId, productUploading, addMessage, handleEvent])
 
-  const submitProductImageUrl = useCallback(async (messageId: string) => {
+  const submitProductImageUrl = useCallback(async (_messageId: string) => {
     const url = productImageUrl.trim()
     if (!url || !conversationState.runId) return
     addMessage("user", url)
@@ -663,7 +665,7 @@ export function VideoChat() {
           if (!line) continue
           try {
             const event = JSON.parse(line)
-            try { console.log("[SSE/crewai-chat]", event) } catch {}
+            console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("解析事件失败:", e)

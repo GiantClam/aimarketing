@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, Square, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,23 +153,6 @@ export function DifyChatArea({
 
     const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
 
-    useEffect(() => {
-        historyAbortRef.current?.abort();
-
-        setConversationId(initialConversationId);
-        if (initialConversationId) {
-            const controller = new AbortController();
-            historyAbortRef.current = controller;
-            fetchMessages(initialConversationId, controller.signal);
-        } else {
-            setMessages([]);
-        }
-
-        return () => {
-            historyAbortRef.current?.abort();
-        };
-    }, [initialConversationId]);
-
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -189,7 +172,7 @@ export function DifyChatArea({
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, [messages, isLoading]);
 
-    const fetchMessages = async (convId: string, signal?: AbortSignal) => {
+    const fetchMessages = useCallback(async (convId: string, signal?: AbortSignal) => {
         try {
             const res = await fetch(`/api/dify/messages?user=${user}&conversation_id=${convId}&limit=100&advisorType=${advisorType}`, { signal });
             if (!res.ok) {
@@ -231,7 +214,24 @@ export function DifyChatArea({
                 },
             ]);
         }
-    };
+    }, [advisorLabel, advisorType, user]);
+
+    useEffect(() => {
+        historyAbortRef.current?.abort();
+
+        setConversationId(initialConversationId);
+        if (initialConversationId) {
+            const controller = new AbortController();
+            historyAbortRef.current = controller;
+            fetchMessages(initialConversationId, controller.signal);
+        } else {
+            setMessages([]);
+        }
+
+        return () => {
+            historyAbortRef.current?.abort();
+        };
+    }, [fetchMessages, initialConversationId]);
 
     const handleSend = async () => {
         if (!inputVal.trim() || isLoading) return;
@@ -451,7 +451,7 @@ export function DifyChatArea({
                                         <ReactMarkdown
                                             remarkPlugins={[remarkGfm]}
                                             components={{
-                                                code({ node, className, children, ...props }) {
+                                                code({ className, children, ...props }) {
                                                     const match = /language-(\w+)/.exec(className || "");
                                                     const isInline = !match && !className;
                                                     if (isInline) {

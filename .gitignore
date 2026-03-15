@@ -5,6 +5,7 @@
 
 # next.js
 /.next/
+/.next-*/
 /out/
 
 # production
@@ -66,6 +67,7 @@ logs/
 .agent/
 .agents/
 .opencode/
+nextjs-nodejs/
 auth_cookies.txt
 stream-output.txt
 stream.log

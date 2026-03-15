@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
-import { appendWriterMockConversation, createWriterMockStream } from "@/lib/writer/mock"
+import { appendWriterConversation } from "@/lib/writer/repository"
 import { generateWriterDraftWithSkills } from "@/lib/writer/skills"
+import { createWriterSseStream } from "@/lib/writer/stream"
 
 export const runtime = "nodejs"
 
@@ -35,8 +36,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "query is required" }, { status: 400 })
     }
 
-    const answer = await generateWriterDraftWithSkills(userQuery, platform, mode, language)
-    const persisted = await appendWriterMockConversation({
+    const answer = await generateWriterDraftWithSkills(userQuery, platform, mode, language, {
+      enterpriseId: auth.user.enterpriseId,
+    })
+    const persisted = await appendWriterConversation({
       userId: auth.user.id,
       conversationId: typeof body?.conversation_id === "string" ? body.conversation_id : null,
       query: userQuery,
@@ -48,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     const taskId = `writer-${Date.now()}`
     if (body?.response_mode === "streaming") {
-      return new Response(createWriterMockStream({ answer, conversationId: persisted.conversationId, taskId }), {
+      return new Response(createWriterSseStream({ answer, conversation: persisted.conversation, taskId }), {
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
       event: "message",
       task_id: taskId,
       conversation_id: persisted.conversationId,
+      conversation: persisted.conversation,
       answer,
     })
   } catch (error: any) {

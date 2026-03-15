@@ -1,11 +1,10 @@
 ﻿"use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Building2, Check, Clock3, LogOut, Save, Shield, User, X } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
-import { DashboardLayout } from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -32,6 +31,37 @@ type Member = {
   permissions: PermissionMap
 }
 
+type EnterpriseDifyDataset = {
+  datasetId: string
+  datasetName: string
+  scope: "brand" | "product" | "case-study" | "compliance" | "campaign"
+  priority: number
+  enabled: boolean
+}
+
+type EnterpriseDifyRemoteDataset = {
+  id: string
+  name: string
+  description: string
+}
+
+type EnterpriseAdvisorType = "brand-strategy" | "growth"
+
+type AdvisorSettingsDraft = {
+  useDefault: boolean
+  baseUrl: string
+  apiKey: string
+  enabled: boolean
+}
+
+const KNOWLEDGE_SCOPE_OPTIONS = [
+  { value: "brand", label: "品牌资料" },
+  { value: "product", label: "产品资料" },
+  { value: "case-study", label: "案例资料" },
+  { value: "compliance", label: "合规资料" },
+  { value: "campaign", label: "活动资料" },
+] as const
+
 export default function SettingsPage() {
   const router = useRouter()
   const { user, isDemoMode, isEnterpriseAdmin, updateProfile, refreshProfile, logout } = useAuth()
@@ -44,6 +74,27 @@ export default function SettingsPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [loadingAdminData, setLoadingAdminData] = useState(false)
   const [permissionDrafts, setPermissionDrafts] = useState<Record<number, PermissionMap>>({})
+  const [difyBaseUrl, setDifyBaseUrl] = useState("")
+  const [difyApiKey, setDifyApiKey] = useState("")
+  const [difyEnabled, setDifyEnabled] = useState(false)
+  const [difyDatasets, setDifyDatasets] = useState<EnterpriseDifyDataset[]>([])
+  const [remoteDatasets, setRemoteDatasets] = useState<EnterpriseDifyRemoteDataset[]>([])
+  const [loadingDifyConfig, setLoadingDifyConfig] = useState(false)
+  const [loadingRemoteDatasets, setLoadingRemoteDatasets] = useState(false)
+  const [savingDifyConfig, setSavingDifyConfig] = useState(false)
+  const [difyMessage, setDifyMessage] = useState("")
+  const [advisorDefaults, setAdvisorDefaults] = useState<{
+    baseUrl: string | null
+    brandStrategy: { configured: boolean; baseUrl: string | null }
+    growth: { configured: boolean; baseUrl: string | null }
+  } | null>(null)
+  const [advisorDrafts, setAdvisorDrafts] = useState<Record<EnterpriseAdvisorType, AdvisorSettingsDraft>>({
+    "brand-strategy": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+    growth: { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+  })
+  const [loadingAdvisorConfig, setLoadingAdvisorConfig] = useState(false)
+  const [savingAdvisorType, setSavingAdvisorType] = useState<EnterpriseAdvisorType | null>(null)
+  const [advisorMessage, setAdvisorMessage] = useState("")
 
   useEffect(() => {
     setName(user?.name || "")
@@ -51,7 +102,7 @@ export default function SettingsPage() {
 
   const userId = Number(user?.id)
 
-  const loadAdminData = async () => {
+  const loadAdminData = useCallback(async () => {
     if (!isEnterpriseAdmin || !Number.isFinite(userId) || userId <= 0) return
 
     setLoadingAdminData(true)
@@ -80,11 +131,83 @@ export default function SettingsPage() {
     } finally {
       setLoadingAdminData(false)
     }
-  }
+  }, [isEnterpriseAdmin, userId])
+
+  const loadDifyConfig = useCallback(async () => {
+    if (!isEnterpriseAdmin || !Number.isFinite(userId) || userId <= 0) return
+
+    setLoadingDifyConfig(true)
+    try {
+      const response = await fetch("/api/enterprise/dify", { cache: "no-store" })
+      if (!response.ok) return
+      const json = await response.json()
+      const binding = json?.data?.binding
+      setDifyBaseUrl(typeof binding?.baseUrl === "string" ? binding.baseUrl : "")
+      setDifyApiKey(typeof binding?.apiKey === "string" ? binding.apiKey : "")
+      setDifyEnabled(Boolean(binding?.enabled))
+      setDifyDatasets(
+        Array.isArray(binding?.datasets)
+          ? binding.datasets.map((dataset: any) => ({
+              datasetId: String(dataset?.datasetId || ""),
+              datasetName: String(dataset?.datasetName || ""),
+              scope: dataset?.scope || "brand",
+              priority: Number(dataset?.priority || 100),
+              enabled: Boolean(dataset?.enabled),
+            }))
+          : [],
+      )
+    } finally {
+      setLoadingDifyConfig(false)
+    }
+  }, [isEnterpriseAdmin, userId])
+
+  const loadAdvisorConfig = useCallback(async () => {
+    if (!isEnterpriseAdmin || !Number.isFinite(userId) || userId <= 0) return
+
+    setLoadingAdvisorConfig(true)
+    try {
+      const response = await fetch("/api/enterprise/dify/advisors", { cache: "no-store" })
+      if (!response.ok) return
+
+      const json = await response.json()
+      const defaults = json?.data?.defaults
+      const overrides = Array.isArray(json?.data?.overrides) ? json.data.overrides : []
+      setAdvisorDefaults(defaults)
+
+      const nextDrafts: Record<EnterpriseAdvisorType, AdvisorSettingsDraft> = {
+        "brand-strategy": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+        growth: { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+      }
+
+      for (const override of overrides) {
+        if (override?.advisorType === "brand-strategy" || override?.advisorType === "growth") {
+          const advisorType = override.advisorType as EnterpriseAdvisorType
+          nextDrafts[advisorType] = {
+            useDefault: false,
+            baseUrl: String(override?.baseUrl || ""),
+            apiKey: String(override?.apiKey || ""),
+            enabled: Boolean(override?.enabled),
+          }
+        }
+      }
+
+      setAdvisorDrafts(nextDrafts)
+    } finally {
+      setLoadingAdvisorConfig(false)
+    }
+  }, [isEnterpriseAdmin, userId])
 
   useEffect(() => {
     void loadAdminData()
-  }, [isEnterpriseAdmin, userId])
+  }, [loadAdminData])
+
+  useEffect(() => {
+    void loadDifyConfig()
+  }, [loadDifyConfig])
+
+  useEffect(() => {
+    void loadAdvisorConfig()
+  }, [loadAdvisorConfig])
 
   const handleSaveProfile = async () => {
     const nextName = name.trim()
@@ -152,6 +275,157 @@ export default function SettingsPage() {
     }
   }
 
+  const fetchRemoteDifyDatasets = async () => {
+    setLoadingRemoteDatasets(true)
+    setDifyMessage("")
+    try {
+      const response = await fetch("/api/enterprise/dify/datasets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: difyBaseUrl, apiKey: difyApiKey }),
+      })
+
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(json?.error || "知识库拉取失败")
+      }
+
+      const datasets: EnterpriseDifyRemoteDataset[] = Array.isArray(json?.data?.datasets) ? json.data.datasets : []
+      setRemoteDatasets(datasets)
+      setDifyDatasets((current) => {
+        const next = [...current]
+        for (const dataset of datasets) {
+          if (!next.some((item) => item.datasetId === dataset.id)) {
+            next.push({
+              datasetId: dataset.id,
+              datasetName: dataset.name,
+              scope: "brand",
+              priority: 100,
+              enabled: false,
+            })
+          }
+        }
+        return next
+      })
+      setDifyMessage(`已拉取 ${datasets.length} 个 Dify 知识库。`)
+    } catch (error) {
+      setDifyMessage(error instanceof Error ? error.message : "知识库拉取失败")
+    } finally {
+      setLoadingRemoteDatasets(false)
+    }
+  }
+
+  const updateDifyDataset = (datasetId: string, patch: Partial<EnterpriseDifyDataset>) => {
+    setDifyDatasets((current) =>
+      current.map((dataset) => (dataset.datasetId === datasetId ? { ...dataset, ...patch } : dataset)),
+    )
+  }
+
+  const saveDifyConfig = async () => {
+    setSavingDifyConfig(true)
+    setDifyMessage("")
+    try {
+      const response = await fetch("/api/enterprise/dify", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: difyBaseUrl,
+          apiKey: difyApiKey,
+          enabled: difyEnabled,
+          datasets: difyDatasets.filter((dataset) => dataset.enabled),
+        }),
+      })
+
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(json?.error || "Dify 配置保存失败")
+      }
+
+      const binding = json?.data?.binding
+      setDifyBaseUrl(typeof binding?.baseUrl === "string" ? binding.baseUrl : difyBaseUrl)
+      setDifyApiKey(typeof binding?.apiKey === "string" ? binding.apiKey : difyApiKey)
+      setDifyEnabled(Boolean(binding?.enabled))
+      setDifyDatasets(
+        Array.isArray(binding?.datasets)
+          ? binding.datasets.map((dataset: any) => ({
+              datasetId: String(dataset?.datasetId || ""),
+              datasetName: String(dataset?.datasetName || ""),
+              scope: dataset?.scope || "brand",
+              priority: Number(dataset?.priority || 100),
+              enabled: Boolean(dataset?.enabled),
+            }))
+          : [],
+      )
+      setDifyMessage("Dify 企业知识配置已保存。")
+    } catch (error) {
+      setDifyMessage(error instanceof Error ? error.message : "Dify 配置保存失败")
+    } finally {
+      setSavingDifyConfig(false)
+    }
+  }
+
+  const updateAdvisorDraft = (advisorType: EnterpriseAdvisorType, patch: Partial<AdvisorSettingsDraft>) => {
+    setAdvisorDrafts((current) => ({
+      ...current,
+      [advisorType]: {
+        ...current[advisorType],
+        ...patch,
+      },
+    }))
+  }
+
+  const saveAdvisorConfig = async (advisorType: EnterpriseAdvisorType) => {
+    setSavingAdvisorType(advisorType)
+    setAdvisorMessage("")
+    try {
+      const draft = advisorDrafts[advisorType]
+      const response = await fetch("/api/enterprise/dify/advisors", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          advisorType,
+          useDefault: draft.useDefault,
+          baseUrl: draft.baseUrl,
+          apiKey: draft.apiKey,
+          enabled: draft.enabled,
+        }),
+      })
+
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(json?.error || "顾问配置保存失败")
+      }
+
+      const defaults = json?.data?.defaults
+      const overrides = Array.isArray(json?.data?.overrides) ? json.data.overrides : []
+      setAdvisorDefaults(defaults)
+
+      const nextDrafts: Record<EnterpriseAdvisorType, AdvisorSettingsDraft> = {
+        "brand-strategy": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+        growth: { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+      }
+
+      for (const override of overrides) {
+        if (override?.advisorType === "brand-strategy" || override?.advisorType === "growth") {
+          const advisorType = override.advisorType as EnterpriseAdvisorType
+          nextDrafts[advisorType] = {
+            useDefault: false,
+            baseUrl: String(override?.baseUrl || ""),
+            apiKey: String(override?.apiKey || ""),
+            enabled: Boolean(override?.enabled),
+          }
+        }
+      }
+
+      setAdvisorDrafts(nextDrafts)
+      setAdvisorMessage(`${advisorType === "brand-strategy" ? "品牌顾问" : "增长顾问"} 配置已保存。`)
+    } catch (error) {
+      setAdvisorMessage(error instanceof Error ? error.message : "顾问配置保存失败")
+    } finally {
+      setSavingAdvisorType(null)
+    }
+  }
+
   const statusText = useMemo(() => {
     if (!user?.enterpriseStatus) return "未知"
     if (user.enterpriseStatus === "pending") return "待审核"
@@ -164,11 +438,26 @@ export default function SettingsPage() {
     () => FEATURE_KEYS.filter((feature) => isFeatureRuntimeEnabled(feature)),
     [],
   )
+  const enabledDifyDatasetCount = useMemo(
+    () => difyDatasets.filter((dataset) => dataset.enabled).length,
+    [difyDatasets],
+  )
+  const advisorCards: Array<{ advisorType: EnterpriseAdvisorType; title: string; description: string }> = [
+    {
+      advisorType: "brand-strategy",
+      title: "品牌顾问",
+      description: "默认走环境变量中的品牌顾问 Dify 配置；如需企业专属顾问，可在这里覆盖。",
+    },
+    {
+      advisorType: "growth",
+      title: "增长顾问",
+      description: "默认走环境变量中的增长顾问 Dify 配置；如需企业专属顾问，可在这里覆盖。",
+    },
+  ]
 
   return (
-    <DashboardLayout>
-      <div className="h-full overflow-y-auto bg-muted/10 p-6 lg:p-8">
-        <div className="mx-auto max-w-5xl space-y-6">
+    <div className="h-full overflow-y-auto bg-muted/10 p-6 lg:p-8">
+      <div className="mx-auto max-w-5xl space-y-6">
           <div>
             <h1 className="font-sans text-2xl font-bold text-foreground">用户设置</h1>
             <p className="mt-1 text-sm font-manrope text-muted-foreground">管理账号资料、企业归属和成员权限。</p>
@@ -288,6 +577,221 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {isEnterpriseAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Building2 className="h-4 w-4" />Dify 企业知识库</CardTitle>
+                <CardDescription>配置企业级 Dify API 与知识库绑定。写作助手会根据当前企业自动加载这些知识，减少多轮追问。</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="dify-base-url">Dify API Base URL</Label>
+                    <Input
+                      id="dify-base-url"
+                      value={difyBaseUrl}
+                      onChange={(event) => setDifyBaseUrl(event.target.value)}
+                      placeholder="https://your-dify.example.com/v1"
+                    />
+                    <p className="text-xs text-muted-foreground">建议填写包含 <code>/v1</code> 的 API 基础地址；未填写时写作助手不会接入企业知识。</p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="dify-api-key">Dify API Key</Label>
+                    <Input
+                      id="dify-api-key"
+                      value={difyApiKey}
+                      onChange={(event) => setDifyApiKey(event.target.value)}
+                      placeholder="app-xxx / dataset-scope key"
+                    />
+                    <p className="text-xs text-muted-foreground">仅企业管理员可查看和修改。当前已启用 {enabledDifyDatasetCount} 个知识库。</p>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="rounded border-border"
+                    checked={difyEnabled}
+                    onChange={(event) => setDifyEnabled(event.target.checked)}
+                  />
+                  <span>启用企业知识增强写作</span>
+                </label>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={fetchRemoteDifyDatasets}
+                    disabled={loadingRemoteDatasets || !difyBaseUrl.trim() || !difyApiKey.trim()}
+                  >
+                    {loadingRemoteDatasets ? "拉取中..." : "测试并拉取知识库"}
+                  </Button>
+                  <Button onClick={saveDifyConfig} disabled={savingDifyConfig || !difyBaseUrl.trim()}>
+                    {savingDifyConfig ? "保存中..." : "保存 Dify 配置"}
+                  </Button>
+                  {loadingDifyConfig && <span className="text-sm text-muted-foreground">正在读取已保存配置...</span>}
+                  {difyMessage && <span className="text-sm text-muted-foreground">{difyMessage}</span>}
+                </div>
+
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">知识库绑定</p>
+                      <p className="text-xs text-muted-foreground">为写作助手选择企业级知识库，并指定用途。优先级越小越靠前。</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      已发现 {remoteDatasets.length} 个 / 已启用 {enabledDifyDatasetCount} 个
+                    </span>
+                  </div>
+
+                  {difyDatasets.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">先填写 Dify 配置并点击“测试并拉取知识库”。</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {difyDatasets.map((dataset) => {
+                        const remote = remoteDatasets.find((item) => item.id === dataset.datasetId)
+                        return (
+                          <div key={dataset.datasetId} className="rounded-lg border p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <label className="flex items-start gap-3 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 rounded border-border"
+                                  checked={dataset.enabled}
+                                  onChange={(event) => updateDifyDataset(dataset.datasetId, { enabled: event.target.checked })}
+                                />
+                                <span className="space-y-1">
+                                  <span className="block font-medium">{dataset.datasetName}</span>
+                                  <span className="block text-xs text-muted-foreground">{remote?.description || dataset.datasetId}</span>
+                                </span>
+                              </label>
+                              <div className="grid min-w-[220px] gap-3 sm:grid-cols-2">
+                                <label className="grid gap-1 text-xs text-muted-foreground">
+                                  <span>用途</span>
+                                  <select
+                                    className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+                                    value={dataset.scope}
+                                    onChange={(event) =>
+                                      updateDifyDataset(dataset.datasetId, {
+                                        scope: event.target.value as EnterpriseDifyDataset["scope"],
+                                      })
+                                    }
+                                  >
+                                    {KNOWLEDGE_SCOPE_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="grid gap-1 text-xs text-muted-foreground">
+                                  <span>优先级</span>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={999}
+                                    value={dataset.priority}
+                                    onChange={(event) =>
+                                      updateDifyDataset(dataset.datasetId, { priority: Number(event.target.value || 100) })
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {isEnterpriseAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Shield className="h-4 w-4" />专家顾问 Dify 配置</CardTitle>
+                <CardDescription>所有企业默认使用系统环境变量中的顾问配置；仅在需要企业定制时，才保存企业专属版本。</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">正在读取顾问配置...</p>}
+                {advisorMessage && <p className="text-sm text-muted-foreground">{advisorMessage}</p>}
+                <div className="grid gap-4">
+                  {advisorCards.map((card) => {
+                    const draft = advisorDrafts[card.advisorType]
+                    const defaultInfo = card.advisorType === "brand-strategy" ? advisorDefaults?.brandStrategy : advisorDefaults?.growth
+                    return (
+                      <div key={card.advisorType} className="space-y-4 rounded-lg border p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">{card.title}</p>
+                            <p className="text-xs text-muted-foreground">{card.description}</p>
+                          </div>
+                          <span className="rounded-full border px-3 py-1 text-xs text-muted-foreground">
+                            {draft.useDefault ? "当前：系统默认" : "当前：企业定制"}
+                          </span>
+                        </div>
+
+                        <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+                          <p>系统默认 Base URL：{defaultInfo?.baseUrl || advisorDefaults?.baseUrl || "未配置"}</p>
+                          <p>系统默认 Key：{defaultInfo?.configured ? "已配置" : "未配置"}</p>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="rounded border-border"
+                            checked={draft.useDefault}
+                            onChange={(event) => updateAdvisorDraft(card.advisorType, { useDefault: event.target.checked })}
+                          />
+                          <span>使用系统默认配置</span>
+                        </label>
+
+                        {!draft.useDefault && (
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="grid gap-2">
+                              <Label htmlFor={`${card.advisorType}-base-url`}>企业定制 Base URL</Label>
+                              <Input
+                                id={`${card.advisorType}-base-url`}
+                                value={draft.baseUrl}
+                                onChange={(event) => updateAdvisorDraft(card.advisorType, { baseUrl: event.target.value })}
+                                placeholder="https://your-dify.example.com/v1"
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label htmlFor={`${card.advisorType}-api-key`}>企业定制 API Key</Label>
+                              <Input
+                                id={`${card.advisorType}-api-key`}
+                                value={draft.apiKey}
+                                onChange={(event) => updateAdvisorDraft(card.advisorType, { apiKey: event.target.value })}
+                                placeholder="app-xxx"
+                              />
+                            </div>
+                            <label className="flex items-center gap-2 text-sm md:col-span-2">
+                              <input
+                                type="checkbox"
+                                className="rounded border-border"
+                                checked={draft.enabled}
+                                onChange={(event) => updateAdvisorDraft(card.advisorType, { enabled: event.target.checked })}
+                              />
+                              <span>启用企业定制顾问配置</span>
+                            </label>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-3">
+                          <Button onClick={() => saveAdvisorConfig(card.advisorType)} disabled={savingAdvisorType === card.advisorType}>
+                            {savingAdvisorType === card.advisorType ? "保存中..." : `保存${card.title}配置`}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive"><Shield className="h-4 w-4" />会话管理</CardTitle>
@@ -300,6 +804,5 @@ export default function SettingsPage() {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
   )
 }
