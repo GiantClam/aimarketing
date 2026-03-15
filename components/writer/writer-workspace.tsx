@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -1408,7 +1408,7 @@ export function WriterWorkspace({
                             : message.content,
                           assets,
                           message.role === "assistant"
-                            ? "prose prose-sm max-w-none prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px]"
+                            ? "prose prose-sm dark:prose-invert max-w-none prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px]"
                             : "prose prose-sm max-w-none prose-invert prose-p:my-2 prose-p:text-[14px] prose-p:leading-6 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
                         )}
                       </div>
