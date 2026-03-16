@@ -69,7 +69,7 @@ export type ImageAssistantMessage = {
   created_at: number
 }
 
-export type ImageAssistantLayerType = "background" | "text" | "shape" | "image"
+export type ImageAssistantLayerType = "background" | "text" | "shape" | "image" | "paint"
 export type ImageAssistantShapeType = "rect" | "circle" | "arrow" | "line"
 
 export type ImageAssistantLayerTransform = {

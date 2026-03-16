@@ -9,6 +9,7 @@ import {
   Circle,
   Crop,
   Download,
+  Eraser,
   Eye,
   EyeOff,
   ImageIcon,
@@ -17,11 +18,13 @@ import {
   MousePointer2,
   Pencil,
   Plus,
+  Redo2,
   RectangleHorizontal,
   Save,
   Sparkles,
   Trash2,
   Type,
+  Undo2,
   Unlock,
 } from "lucide-react"
 
@@ -49,13 +52,30 @@ type Availability = {
   provider: string
 }
 
-type CanvasTool = "select" | "mask"
+type CanvasTool = "select" | "mask" | "brush" | "eraser"
+type PaintTool = "brush" | "eraser"
 
 type MaskSelection = {
   x: number
   y: number
   width: number
   height: number
+}
+
+type PaintPreview = {
+  layerId: string
+  tool: PaintTool
+  points: Array<{ x: number; y: number }>
+  strokeWidth: number
+  color: string
+}
+
+function cloneCanvasDocument(document: ImageAssistantCanvasDocument) {
+  return JSON.parse(JSON.stringify(document)) as ImageAssistantCanvasDocument
+}
+
+function isSameCanvasDocument(a: ImageAssistantCanvasDocument, b: ImageAssistantCanvasDocument) {
+  return JSON.stringify(a) === JSON.stringify(b)
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -79,6 +99,16 @@ function normalizeMaskSelection(
     width: Math.max(0, right - left),
     height: Math.max(0, bottom - top),
   }
+}
+
+function loadImageElement(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error("image_load_failed"))
+    img.src = url
+  })
 }
 
 function createTextLayer(): ImageAssistantLayer {
@@ -124,6 +154,22 @@ function createImageLayer(asset: ImageAssistantAsset): ImageAssistantLayer {
     content: null,
     asset_id: asset.id,
     asset_url: asset.url,
+  }
+}
+
+function createPaintLayer(width: number, height: number): ImageAssistantLayer {
+  return {
+    id: `local-paint-${Date.now()}`,
+    layer_type: "paint",
+    name: "画笔层",
+    z_index: Date.now(),
+    visible: true,
+    locked: false,
+    transform: { x: 0, y: 0, width, height, rotation: 0 },
+    style: { opacity: 1, stroke: "#111827", strokeWidth: 18 },
+    content: null,
+    asset_id: null,
+    asset_url: null,
   }
 }
 
@@ -195,6 +241,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [mode, setMode] = useState<"chat" | "canvas">("chat")
   const [canvasTool, setCanvasTool] = useState<CanvasTool>("select")
   const [maskSelection, setMaskSelection] = useState<MaskSelection | null>(null)
+  const [paintPreview, setPaintPreview] = useState<PaintPreview | null>(null)
   const [prompt, setPrompt] = useState("")
   const [editingPrompt, setEditingPrompt] = useState("")
   const [sizePreset, setSizePreset] = useState<ImageAssistantSizePreset>("4:5")
@@ -202,13 +249,17 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [isBusy, setIsBusy] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [canvas, setCanvas] = useState<ImageAssistantCanvasDocument | null>(null)
+  const [undoStack, setUndoStack] = useState<ImageAssistantCanvasDocument[]>([])
+  const [redoStack, setRedoStack] = useState<ImageAssistantCanvasDocument[]>([])
   const [isSavingCanvas, setIsSavingCanvas] = useState(false)
   const [dirtyCanvas, setDirtyCanvas] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const stickerInputRef = useRef<HTMLInputElement | null>(null)
   const canvasViewportRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number; rectLeft: number; rectTop: number } | null>(null)
+  const dragSnapshotRef = useRef<ImageAssistantCanvasDocument | null>(null)
   const maskDragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const paintStrokeRef = useRef<PaintPreview | null>(null)
   const creatingSessionRef = useRef<Promise<string> | null>(null)
   const modeRef = useRef(mode)
   const canvasRef = useRef(canvas)
@@ -218,6 +269,38 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setSessions(json.data || [])
   }
 
+  const resetCanvasHistory = useCallback(() => {
+    setUndoStack([])
+    setRedoStack([])
+  }, [])
+
+  const applyCanvasChange = useCallback(
+    (
+      updater: (current: ImageAssistantCanvasDocument) => ImageAssistantCanvasDocument,
+      options?: { recordHistory?: boolean; markDirty?: boolean },
+    ) => {
+      const currentCanvas = canvasRef.current
+      if (!currentCanvas) return
+
+      const previousSnapshot = cloneCanvasDocument(currentCanvas)
+      const nextSnapshot = updater(cloneCanvasDocument(currentCanvas))
+      if (isSameCanvasDocument(previousSnapshot, nextSnapshot)) {
+        return
+      }
+
+      setCanvas(nextSnapshot)
+      if (options?.recordHistory !== false) {
+        setUndoStack((current) => [...current.slice(-39), previousSnapshot])
+        setRedoStack([])
+      }
+      if (options?.markDirty !== false) {
+        setDirtyCanvas(true)
+      }
+      setSelectedLayerId((current) => (current && nextSnapshot.layers.some((layer) => layer.id === current) ? current : null))
+    },
+    [],
+  )
+
   const refreshDetail = useCallback(async (targetSessionId: string, options?: { preserveCanvas?: boolean }) => {
     const json = await requestJson(`/api/image-assistant/sessions/${targetSessionId}`)
     const nextDetail = json.data as ImageAssistantSessionDetail
@@ -225,16 +308,20 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setDetail(nextDetail)
     setSelectedVersionId(nextDetail.session.current_version_id || nextDetail.versions[0]?.id || null)
     if (nextDetail.canvas_document) {
+      if (!shouldPreserveCanvas) {
+        resetCanvasHistory()
+      }
       setCanvas(nextDetail.canvas_document)
       setMode("canvas")
     } else if (!shouldPreserveCanvas) {
+      resetCanvasHistory()
       setCanvas(null)
       setMode(nextDetail.session.current_mode || "chat")
     } else {
       setMode("canvas")
     }
     return nextDetail
-  }, [])
+  }, [resetCanvasHistory])
 
   const syncSessionRoute = (targetSessionId: string) => {
     router.replace(`/dashboard/image-assistant/${targetSessionId}`)
@@ -259,10 +346,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     if (sessionId) {
       void refreshDetail(sessionId)
     } else {
+      resetCanvasHistory()
       setDetail(null)
       setCanvas(null)
     }
-  }, [refreshDetail, sessionId])
+  }, [refreshDetail, resetCanvasHistory, sessionId])
 
   useEffect(() => {
     const move = (event: MouseEvent) => {
@@ -288,6 +376,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setDirtyCanvas(true)
     }
     const up = () => {
+      if (dragSnapshotRef.current && canvasRef.current && !isSameCanvasDocument(dragSnapshotRef.current, canvasRef.current)) {
+        setUndoStack((current) => [...current.slice(-39), dragSnapshotRef.current!])
+        setRedoStack([])
+      }
+      dragSnapshotRef.current = null
       dragRef.current = null
     }
     window.addEventListener("mousemove", move)
@@ -434,10 +527,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
     if (localAsset) {
       const nextCanvas = createCanvasFromAsset(localAsset)
+      resetCanvasHistory()
       setCanvas(nextCanvas)
       setMode("canvas")
       setCanvasTool("select")
       setMaskSelection(null)
+      setPaintPreview(null)
       setSelectedLayerId(nextCanvas.layers[0]?.id || null)
       setDirtyCanvas(true)
     }
@@ -448,21 +543,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, candidateId }),
       })
-      const nextDetail = await refreshDetail(sessionId)
-      const nextVersion = nextDetail.versions.find((item) => item.id === version.id) || nextDetail.versions[0] || null
-      const nextCandidate = nextVersion?.candidates.find((candidate) => candidate.id === candidateId) || null
-      const syncedAsset =
-        (nextCandidate ? nextDetail.assets.find((item) => item.id === nextCandidate.asset_id) : null) || localAsset
-
-      if (syncedAsset) {
-        const nextCanvas = createCanvasFromAsset(syncedAsset)
-        setCanvas(nextCanvas)
-        setMode("canvas")
-        setCanvasTool("select")
-        setMaskSelection(null)
-        setSelectedLayerId(nextCanvas.layers[0]?.id || null)
-        setDirtyCanvas(true)
-      }
+      await refreshDetail(sessionId, { preserveCanvas: true })
     } catch (error) {
       console.error("image-assistant.open-canvas-failed", {
         sessionId,
@@ -547,6 +628,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       })
       setEditingPrompt("")
       setMaskSelection(null)
+      setPaintPreview(null)
       setCanvasTool("select")
       setMode("chat")
       await refreshDetail(sessionId)
@@ -569,8 +651,60 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     })
   }
 
+  const undoCanvasChange = useCallback(() => {
+    setUndoStack((current) => {
+      if (!current.length || !canvasRef.current) return current
+      const previous = current[current.length - 1]
+      setRedoStack((redoCurrent) => [...redoCurrent.slice(-39), cloneCanvasDocument(canvasRef.current!)])
+      setCanvas(previous)
+      setDirtyCanvas(true)
+      setSelectedLayerId((selected) => (selected && previous.layers.some((layer) => layer.id === selected) ? selected : null))
+      setPaintPreview(null)
+      return current.slice(0, -1)
+    })
+  }, [])
+
+  const redoCanvasChange = useCallback(() => {
+    setRedoStack((current) => {
+      if (!current.length || !canvasRef.current) return current
+      const next = current[current.length - 1]
+      setUndoStack((undoCurrent) => [...undoCurrent.slice(-39), cloneCanvasDocument(canvasRef.current!)])
+      setCanvas(next)
+      setDirtyCanvas(true)
+      setSelectedLayerId((selected) => (selected && next.layers.some((layer) => layer.id === selected) ? selected : null))
+      setPaintPreview(null)
+      return current.slice(0, -1)
+    })
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (modeRef.current !== "canvas") return
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) {
+        return
+      }
+      const modifier = event.metaKey || event.ctrlKey
+      if (!modifier) return
+
+      const key = event.key.toLowerCase()
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault()
+        undoCanvasChange()
+        return
+      }
+      if (key === "y" || (key === "z" && event.shiftKey)) {
+        event.preventDefault()
+        redoCanvasChange()
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [redoCanvasChange, undoCanvasChange])
+
   const addLayer = (layer: ImageAssistantLayer) => {
-    setCanvas((current) => {
+    applyCanvasChange((current) => {
       if (!current) return current
       const nextZIndex = current.layers.reduce((max, item) => Math.max(max, item.z_index), -1) + 1
       return {
@@ -579,12 +713,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       }
     })
     setSelectedLayerId(layer.id)
-    setDirtyCanvas(true)
   }
 
   const updateSelectedLayer = (patch: Partial<ImageAssistantLayer>) => {
     if (!selectedLayerId) return
-    setCanvas((current) =>
+    applyCanvasChange((current) =>
       current
         ? {
             ...current,
@@ -592,7 +725,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           }
         : current,
     )
-    setDirtyCanvas(true)
   }
 
   const updateSelectedTransform = (patch: Partial<ImageAssistantLayer["transform"]>) => {
@@ -601,7 +733,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }
 
   const updateLayerById = (layerId: string, updater: (layer: ImageAssistantLayer) => ImageAssistantLayer) => {
-    setCanvas((current) =>
+    applyCanvasChange((current) =>
       current
         ? {
             ...current,
@@ -609,7 +741,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           }
         : current,
     )
-    setDirtyCanvas(true)
   }
 
   const toggleLayerVisibility = (layerId: string) => {
@@ -621,7 +752,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }
 
   const deleteLayer = (layerId: string) => {
-    setCanvas((current) =>
+    applyCanvasChange((current) =>
       current
         ? {
             ...current,
@@ -633,11 +764,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         : current,
     )
     setSelectedLayerId((current) => (current === layerId ? null : current))
-    setDirtyCanvas(true)
   }
 
   const reorderLayer = (layerId: string, direction: "forward" | "backward") => {
-    setCanvas((current) => {
+    applyCanvasChange((current) => {
       if (!current) return current
       const ordered = [...current.layers].sort((a, b) => a.z_index - b.z_index)
       const index = ordered.findIndex((layer) => layer.id === layerId)
@@ -651,8 +781,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         layers: ordered.map((layer, orderedIndex) => ({ ...layer, z_index: orderedIndex })),
       }
     })
-    setDirtyCanvas(true)
   }
+
+  const ensurePaintLayer = useCallback(() => {
+    if (!canvas) return null
+    const existing = [...canvas.layers].sort((a, b) => b.z_index - a.z_index).find((layer) => layer.layer_type === "paint") || null
+    if (existing) return existing
+
+    return createPaintLayer(canvas.width, canvas.height)
+  }, [canvas])
 
   const getCanvasPoint = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -665,6 +802,106 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     },
     [canvas, scale],
   )
+
+  const startPaintStroke = (event: ReactMouseEvent<HTMLDivElement>, tool: PaintTool) => {
+    const point = getCanvasPoint(event)
+    const layer = ensurePaintLayer()
+    if (!point || !layer) return
+    event.preventDefault()
+    event.stopPropagation()
+    const preview = {
+      layerId: layer.id,
+      tool,
+      points: [point],
+      strokeWidth: layer.style?.strokeWidth || 18,
+      color: layer.style?.stroke || layer.style?.color || "#111827",
+    } satisfies PaintPreview
+    paintStrokeRef.current = preview
+    setPaintPreview(preview)
+    setSelectedLayerId(layer.id)
+    setMaskSelection(null)
+  }
+
+  const updatePaintStroke = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!paintStrokeRef.current) return
+    const point = getCanvasPoint(event)
+    if (!point) return
+    event.preventDefault()
+    event.stopPropagation()
+    const nextPreview = {
+      ...paintStrokeRef.current,
+      points: [...paintStrokeRef.current.points, point],
+    }
+    paintStrokeRef.current = nextPreview
+    setPaintPreview(nextPreview)
+  }
+
+  const finishPaintStroke = async () => {
+    const activeStroke = paintStrokeRef.current
+    paintStrokeRef.current = null
+    setPaintPreview(null)
+    if (!canvas || !activeStroke || activeStroke.points.length < 2) return
+
+    const currentCanvas = canvasRef.current || canvas
+    const targetLayer = currentCanvas.layers.find((layer) => layer.id === activeStroke.layerId) || null
+
+    const bitmap = document.createElement("canvas")
+    bitmap.width = canvas.width
+    bitmap.height = canvas.height
+    const ctx = bitmap.getContext("2d")
+    if (!ctx) return
+
+    if (targetLayer?.asset_url) {
+      try {
+        const image = await loadImageElement(targetLayer.asset_url)
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+      } catch (error) {
+        console.warn("image-assistant.paint-layer.load-failed", error)
+      }
+    }
+
+    ctx.save()
+    ctx.lineJoin = "round"
+    ctx.lineCap = "round"
+    ctx.lineWidth = activeStroke.strokeWidth
+    ctx.globalCompositeOperation = activeStroke.tool === "eraser" ? "destination-out" : "source-over"
+    ctx.strokeStyle = activeStroke.tool === "eraser" ? "rgba(0,0,0,1)" : activeStroke.color
+    ctx.beginPath()
+    ctx.moveTo(activeStroke.points[0].x, activeStroke.points[0].y)
+    for (const point of activeStroke.points.slice(1)) {
+      ctx.lineTo(point.x, point.y)
+    }
+    ctx.stroke()
+    ctx.restore()
+
+    const dataUrl = bitmap.toDataURL("image/png")
+    applyCanvasChange((current) => {
+      if (!current) return current
+      const fallbackLayer = {
+        ...createPaintLayer(current.width, current.height),
+        id: activeStroke.layerId,
+      }
+      const nextLayer = {
+        ...(current.layers.find((layer) => layer.id === activeStroke.layerId) || fallbackLayer),
+        asset_url: dataUrl,
+        transform: {
+          x: 0,
+          y: 0,
+          width: current.width,
+          height: current.height,
+          rotation: 0,
+        },
+      }
+      const hasExistingLayer = current.layers.some((layer) => layer.id === activeStroke.layerId)
+      return {
+        ...current,
+        layers: hasExistingLayer
+          ? current.layers.map((layer) => (layer.id === activeStroke.layerId ? nextLayer : layer))
+          : [...current.layers, { ...nextLayer, z_index: current.layers.reduce((max, item) => Math.max(max, item.z_index), -1) + 1 }].sort((a, b) => a.z_index - b.z_index),
+      }
+    })
+    setSelectedLayerId(activeStroke.layerId)
+  }
 
   const startMaskSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
     const point = getCanvasPoint(event)
@@ -720,6 +957,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
               onClick={() =>
                 void createSession("Untitled design")
                   .then((id) => {
+                    resetCanvasHistory()
                     setDetail(null)
                     setCanvas(null)
                     setSelectedVersionId(null)
@@ -829,6 +1067,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           <div className="flex items-center gap-2">
             {mode === "canvas" ? (
               <>
+                <Button variant="outline" size="icon" data-testid="image-canvas-undo-button" onClick={undoCanvasChange} disabled={!undoStack.length} title="撤销">
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" data-testid="image-canvas-redo-button" onClick={redoCanvasChange} disabled={!redoStack.length} title="重做">
+                  <Redo2 className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" data-testid="image-canvas-save-button" onClick={() => void saveCanvas()} disabled={isSavingCanvas}>{isSavingCanvas ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}保存</Button>
                 <Button variant="outline" data-testid="image-canvas-export-button" onClick={() => void exportCurrent("png")}><Download className="mr-1 h-4 w-4" />导出 PNG</Button>
               </>
@@ -932,7 +1176,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                     data-testid="image-select-tool"
                     size="icon"
                     variant={canvasTool === "select" ? "default" : "outline"}
-                    onClick={() => setCanvasTool("select")}
+                    onClick={() => {
+                      setCanvasTool("select")
+                      setPaintPreview(null)
+                    }}
                     title="选择图层"
                   >
                     <MousePointer2 className="h-4 w-4" />
@@ -941,10 +1188,37 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                     data-testid="image-mask-tool"
                     size="icon"
                     variant={canvasTool === "mask" ? "default" : "outline"}
-                    onClick={() => setCanvasTool((current) => (current === "mask" ? "select" : "mask"))}
+                    onClick={() => {
+                      setPaintPreview(null)
+                      setCanvasTool((current) => (current === "mask" ? "select" : "mask"))
+                    }}
                     title="局部选区"
                   >
                     <Crop className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    data-testid="image-brush-tool"
+                    size="icon"
+                    variant={canvasTool === "brush" ? "default" : "outline"}
+                    onClick={() => {
+                      setMaskSelection(null)
+                      setCanvasTool((current) => (current === "brush" ? "select" : "brush"))
+                    }}
+                    title="画笔"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    data-testid="image-eraser-tool"
+                    size="icon"
+                    variant={canvasTool === "eraser" ? "default" : "outline"}
+                    onClick={() => {
+                      setMaskSelection(null)
+                      setCanvasTool((current) => (current === "eraser" ? "select" : "eraser"))
+                    }}
+                    title="橡皮擦"
+                  >
+                    <Eraser className="h-4 w-4" />
                   </Button>
                   <Button data-testid="image-add-text-layer" size="icon" variant="outline" onClick={() => addLayer(createTextLayer())}><Type className="h-4 w-4" /></Button>
                   <Button data-testid="image-add-rect-layer" size="icon" variant="outline" onClick={() => addLayer(createShapeLayer("rect"))}><RectangleHorizontal className="h-4 w-4" /></Button>
@@ -969,11 +1243,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_-42px_rgba(15,23,42,0.35)]"
                       style={{ width: canvas.width * scale, height: canvas.height * scale }}
                     >
-                      {canvas.layers.sort((a, b) => a.z_index - b.z_index).map((layer) => {
+                      {[...canvas.layers].sort((a, b) => a.z_index - b.z_index).map((layer) => {
                         const left = layer.transform.x * scale
                         const top = layer.transform.y * scale
                         const width = layer.transform.width * scale
                         const height = layer.transform.height * scale
+                        const canDrag = !layer.locked && layer.layer_type !== "background" && layer.layer_type !== "paint"
                         const commonProps = {
                           key: layer.id,
                           className: cn("absolute overflow-hidden transition", selectedLayerId === layer.id && "ring-2 ring-sky-300"),
@@ -981,9 +1256,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           onMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => {
                             event.stopPropagation()
                             setSelectedLayerId(layer.id)
-                            if (layer.locked) return
+                            if (!canDrag) return
                             const rect = canvasViewportRef.current?.getBoundingClientRect()
                             if (!rect) return
+                            if (!dragRef.current && canvasRef.current) {
+                              dragSnapshotRef.current = cloneCanvasDocument(canvasRef.current)
+                            }
                             dragRef.current = {
                               id: layer.id,
                               offsetX: (event.clientX - rect.left) / scale - layer.transform.x,
@@ -994,7 +1272,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           },
                         }
                         if (!layer.visible) return null
-                        if (layer.layer_type === "background" || layer.layer_type === "image") {
+                        if (layer.layer_type === "background" || layer.layer_type === "image" || layer.layer_type === "paint") {
                           return <div {...commonProps}>{layer.asset_url ? <img src={layer.asset_url} alt="" className="h-full w-full object-cover" /> : null}</div>
                         }
                         if (layer.layer_type === "text") {
@@ -1035,6 +1313,34 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           </div>
                         </div>
                       ) : null}
+                      {canvasTool === "brush" || canvasTool === "eraser" ? (
+                        <div
+                          data-testid="image-paint-overlay"
+                          className="absolute inset-0 cursor-crosshair"
+                          onMouseDown={(event) => startPaintStroke(event, canvasTool)}
+                          onMouseMove={updatePaintStroke}
+                          onMouseUp={() => void finishPaintStroke()}
+                          onMouseLeave={() => void finishPaintStroke()}
+                        >
+                          {paintPreview ? (
+                            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${canvas.width} ${canvas.height}`} preserveAspectRatio="none">
+                              <polyline
+                                fill="none"
+                                points={paintPreview.points.map((point) => `${point.x},${point.y}`).join(" ")}
+                                stroke={paintPreview.tool === "eraser" ? "rgba(148,163,184,0.9)" : paintPreview.color}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={paintPreview.strokeWidth}
+                                strokeDasharray={paintPreview.tool === "eraser" ? "10 8" : undefined}
+                                opacity={paintPreview.tool === "eraser" ? 0.7 : 0.95}
+                              />
+                            </svg>
+                          ) : null}
+                          <div className="absolute left-3 top-3 rounded-full bg-slate-950/80 px-3 py-1 text-[11px] font-medium text-white">
+                            {canvasTool === "brush" ? "拖拽绘制画笔笔触" : "拖拽擦除画笔层内容"}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="rounded-3xl border border-dashed border-border bg-white/80 p-8 text-sm text-muted-foreground">先从候选图进入画布。</div>
@@ -1066,24 +1372,142 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                 <div className="rounded-2xl border border-border bg-white p-4">
                   <p className="text-sm font-medium">AI 继续编辑</p>
                   <Textarea data-testid="image-canvas-edit-prompt" value={editingPrompt} onChange={(event) => setEditingPrompt(event.target.value)} placeholder="例如：把右上角改成霓虹灯字样。" className="mt-3 min-h-24 rounded-2xl" />
+                  <div className="mt-3 rounded-2xl border border-dashed border-border bg-slate-50/80 p-3 text-xs text-muted-foreground">
+                    {maskSelection ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-foreground">已选择局部 AI 编辑区域</span>
+                          <Button size="sm" variant="ghost" onClick={() => setMaskSelection(null)}>
+                            清空
+                          </Button>
+                        </div>
+                        <p>
+                          X {Math.round(maskSelection.x)} / Y {Math.round(maskSelection.y)} / W {Math.round(maskSelection.width)} / H {Math.round(maskSelection.height)}
+                        </p>
+                        <p>这次编辑会优先约束在选区内，选区外尽量保持不变。</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="font-medium text-foreground">当前将对整张画布继续 AI 编辑</p>
+                        <p>如果只想改局部，先点击左侧裁切图标并在画布上拖拽框选区域。</p>
+                      </div>
+                    )}
+                  </div>
                   <Button data-testid="image-canvas-ai-edit-button" className="mt-3 w-full" disabled={isBusy || !editingPrompt.trim()} onClick={() => void continueAiEditFromCanvas()}>继续 AI 编辑</Button>
+                </div>
+                <div className="rounded-2xl border border-border bg-white p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">图层</p>
+                    <Badge variant="secondary">{layerStack.length}</Badge>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {layerStack.map((layer, index) => {
+                      const isSelected = selectedLayerId === layer.id
+                      const disableForward = index === 0
+                      const disableBackward = index === layerStack.length - 1
+                      return (
+                        <div
+                          key={layer.id}
+                          className={cn(
+                            "rounded-2xl border px-3 py-3 transition",
+                            isSelected ? "border-sky-300 bg-sky-50" : "border-border bg-white",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <button className="min-w-0 flex-1 text-left" onClick={() => setSelectedLayerId(layer.id)}>
+                              <p className="truncate text-sm font-medium">{layer.name}</p>
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                {layer.layer_type} · z {layer.z_index}
+                              </p>
+                            </button>
+                            <div className="flex items-center gap-1">
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => toggleLayerVisibility(layer.id)} title={layer.visible ? "隐藏图层" : "显示图层"}>
+                                {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => toggleLayerLock(layer.id)} title={layer.locked ? "解锁图层" : "锁定图层"}>
+                                {layer.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-center gap-1">
+                            <Button size="icon" variant="outline" className="h-8 w-8" disabled={disableForward} onClick={() => reorderLayer(layer.id, "forward")} title="上移图层">
+                              <ChevronUp className="h-4 w-4" />
+                            </Button>
+                            <Button size="icon" variant="outline" className="h-8 w-8" disabled={disableBackward} onClick={() => reorderLayer(layer.id, "backward")} title="下移图层">
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                            <Button size="icon" variant="outline" className="ml-auto h-8 w-8" disabled={layer.layer_type === "background"} onClick={() => deleteLayer(layer.id)} title="删除图层">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {!layerStack.length ? <p className="text-sm text-muted-foreground">当前还没有图层。</p> : null}
+                  </div>
                 </div>
                 {selectedLayer ? (
                   <div className="rounded-2xl border border-border bg-white p-4">
                     <p className="text-sm font-medium">图层属性</p>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <Input value={selectedLayer.name} onChange={(event) => updateSelectedLayer({ name: event.target.value })} />
-                      <Input type="number" value={selectedLayer.transform.x} onChange={(event) => updateSelectedTransform({ x: Number(event.target.value) })} />
-                      <Input type="number" value={selectedLayer.transform.y} onChange={(event) => updateSelectedTransform({ y: Number(event.target.value) })} />
-                      <Input type="number" value={selectedLayer.transform.width} onChange={(event) => updateSelectedTransform({ width: Number(event.target.value) })} />
-                      <Input type="number" value={selectedLayer.transform.height} onChange={(event) => updateSelectedTransform({ height: Number(event.target.value) })} />
-                      <Input type="number" value={selectedLayer.transform.rotation || 0} onChange={(event) => updateSelectedTransform({ rotation: Number(event.target.value) })} />
+                      {selectedLayer.layer_type !== "paint" ? <Input type="number" value={selectedLayer.transform.x} onChange={(event) => updateSelectedTransform({ x: Number(event.target.value) })} /> : <div className="rounded-xl border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">画笔层覆盖整张画布</div>}
+                      {selectedLayer.layer_type !== "paint" ? <Input type="number" value={selectedLayer.transform.y} onChange={(event) => updateSelectedTransform({ y: Number(event.target.value) })} /> : null}
+                      {selectedLayer.layer_type !== "paint" ? <Input type="number" value={selectedLayer.transform.width} onChange={(event) => updateSelectedTransform({ width: Number(event.target.value) })} /> : null}
+                      {selectedLayer.layer_type !== "paint" ? <Input type="number" value={selectedLayer.transform.height} onChange={(event) => updateSelectedTransform({ height: Number(event.target.value) })} /> : null}
+                      {selectedLayer.layer_type !== "paint" ? <Input type="number" value={selectedLayer.transform.rotation || 0} onChange={(event) => updateSelectedTransform({ rotation: Number(event.target.value) })} /> : null}
+                      <Input
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={selectedLayer.style?.opacity ?? 1}
+                        onChange={(event) =>
+                          updateSelectedLayer({
+                            style: {
+                              ...(selectedLayer.style || {}),
+                              opacity: Number(event.target.value),
+                            },
+                          })
+                        }
+                      />
+                      {selectedLayer.layer_type === "shape" || selectedLayer.layer_type === "paint" ? (
+                        <Input
+                          type="number"
+                          min="1"
+                          max="96"
+                          value={selectedLayer.style?.strokeWidth || 18}
+                          onChange={(event) =>
+                            updateSelectedLayer({
+                              style: {
+                                ...(selectedLayer.style || {}),
+                                strokeWidth: Number(event.target.value),
+                              },
+                            })
+                          }
+                        />
+                      ) : null}
                       {selectedLayer.layer_type === "text" ? <Textarea className="col-span-2" value={selectedLayer.content?.text || ""} onChange={(event) => updateSelectedLayer({ content: { ...(selectedLayer.content || {}), text: event.target.value } })} /> : null}
-                      {selectedLayer.layer_type !== "background" && selectedLayer.layer_type !== "image" ? <Input className="col-span-2" type="color" value={selectedLayer.style?.fill || selectedLayer.style?.color || "#111827"} onChange={(event) => updateSelectedLayer({ style: { ...(selectedLayer.style || {}), fill: event.target.value, color: event.target.value } })} /> : null}
+                      {selectedLayer.layer_type === "text" ? (
+                        <Input
+                          type="number"
+                          className="col-span-2"
+                          value={selectedLayer.style?.fontSize || 56}
+                          onChange={(event) =>
+                            updateSelectedLayer({
+                              style: {
+                                ...(selectedLayer.style || {}),
+                                fontSize: Number(event.target.value),
+                              },
+                            })
+                          }
+                        />
+                      ) : null}
+                      {selectedLayer.layer_type !== "background" && selectedLayer.layer_type !== "image" ? <Input className="col-span-2" type="color" value={selectedLayer.style?.fill || selectedLayer.style?.color || selectedLayer.style?.stroke || "#111827"} onChange={(event) => updateSelectedLayer({ style: { ...(selectedLayer.style || {}), fill: event.target.value, color: event.target.value, stroke: event.target.value } })} /> : null}
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-white p-4 text-sm text-muted-foreground">选中一个图层后，这里可以修改位置、大小、旋转、颜色和文本内容。</div>
+                  <div className="rounded-2xl border border-dashed border-border bg-white p-4 text-sm text-muted-foreground">选中一个图层后，这里可以修改位置、大小、旋转、颜色、线宽和文本内容。</div>
                 )}
               </div>
             )}

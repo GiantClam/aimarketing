@@ -134,9 +134,57 @@ def run_fixture_enabled(page):
     expect(first_candidate.count() == 1, "expected at least one image candidate")
     first_candidate.click()
     page.get_by_test_id("image-canvas-stage").wait_for(state="visible", timeout=90000)
+    page.get_by_test_id("image-canvas-save-button").wait_for(state="visible", timeout=90000)
     save_debug(page, "03-canvas")
 
+    page.get_by_test_id("image-brush-tool").click()
+    paint_overlay = page.get_by_test_id("image-paint-overlay")
+    paint_overlay.wait_for(state="visible", timeout=90000)
+    paint_box = paint_overlay.bounding_box()
+    expect(paint_box is not None, "paint overlay should expose a bounding box")
+    page.mouse.move(paint_box["x"] + paint_box["width"] * 0.22, paint_box["y"] + paint_box["height"] * 0.24)
+    page.mouse.down()
+    page.mouse.move(paint_box["x"] + paint_box["width"] * 0.42, paint_box["y"] + paint_box["height"] * 0.32, steps=8)
+    page.mouse.move(paint_box["x"] + paint_box["width"] * 0.56, paint_box["y"] + paint_box["height"] * 0.4, steps=8)
+    page.mouse.up()
+    undo_button = page.get_by_test_id("image-canvas-undo-button")
+    redo_button = page.get_by_test_id("image-canvas-redo-button")
+    undo_button.wait_for(state="visible", timeout=90000)
+    page.wait_for_function(
+        """() => {
+            const button = document.querySelector('[data-testid="image-canvas-undo-button"]')
+            return Boolean(button) && !button.hasAttribute("disabled")
+        }""",
+        timeout=90000,
+    )
+    expect(undo_button.is_enabled(), "undo button should become enabled after drawing")
+    undo_button.click()
+    page.wait_for_timeout(250)
+    page.wait_for_function(
+        """() => {
+            const button = document.querySelector('[data-testid="image-canvas-redo-button"]')
+            return Boolean(button) && !button.hasAttribute("disabled")
+        }""",
+        timeout=90000,
+    )
+    page.get_by_test_id("image-canvas-redo-button").click()
+    page.wait_for_timeout(400)
+    page.get_by_test_id("image-add-text-layer").wait_for(state="visible", timeout=90000)
     page.get_by_test_id("image-add-text-layer").click()
+    page.get_by_test_id("image-mask-tool").click()
+    overlay = page.get_by_test_id("image-mask-overlay")
+    overlay.wait_for(state="visible", timeout=90000)
+    box = overlay.bounding_box()
+    expect(box is not None, "mask overlay should expose a bounding box")
+    start_x = box["x"] + box["width"] * 0.18
+    start_y = box["y"] + box["height"] * 0.16
+    end_x = box["x"] + box["width"] * 0.58
+    end_y = box["y"] + box["height"] * 0.46
+    page.mouse.move(start_x, start_y)
+    page.mouse.down()
+    page.mouse.move(end_x, end_y, steps=8)
+    page.mouse.up()
+    page.get_by_test_id("image-mask-selection").wait_for(state="visible", timeout=90000)
     save_button = page.get_by_test_id("image-canvas-save-button")
     save_button.click()
     page.get_by_test_id("image-canvas-edit-prompt").wait_for(state="visible", timeout=90000)

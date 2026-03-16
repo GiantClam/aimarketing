@@ -1388,14 +1388,14 @@ export function WriterWorkspace({
                           "max-w-[94%] overflow-hidden rounded-[24px] px-3.5 py-3 shadow-sm lg:max-w-[84%]",
                           message.role === "user"
                             ? "rounded-br-md bg-primary text-primary-foreground"
-                            : "rounded-bl-md border border-border/70 bg-background text-foreground",
+                            : "rounded-bl-md border border-slate-200/90 bg-white text-slate-950 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.35)]",
                         )}
                       >
                         <div
                           className={cn(
                             "mb-2 text-[10px] font-medium",
                             message.role === "assistant"
-                              ? "flex items-center gap-1.5 text-muted-foreground"
+                              ? "flex items-center gap-1.5 text-slate-600"
                               : "opacity-80",
                           )}
                         >
@@ -1408,7 +1408,7 @@ export function WriterWorkspace({
                             : message.content,
                           assets,
                           message.role === "assistant"
-                            ? "prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-strong:text-foreground prose-a:text-primary prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px]"
+                            ? "prose prose-sm max-w-none prose-headings:text-slate-950 prose-p:text-slate-900 prose-li:text-slate-900 prose-strong:text-slate-950 prose-a:text-blue-700 prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px] prose-blockquote:text-slate-700"
                             : "prose prose-sm max-w-none prose-invert prose-p:my-2 prose-p:text-[14px] prose-p:leading-6 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
                         )}
                       </div>
@@ -1417,7 +1417,7 @@ export function WriterWorkspace({
 
                   {isLoading ? (
                     <div className="flex justify-start">
-                      <div className="rounded-[24px] rounded-bl-md border border-border/70 bg-background px-3.5 py-3 text-xs text-muted-foreground shadow-sm">
+                      <div className="rounded-[24px] rounded-bl-md border border-slate-200/90 bg-white px-3.5 py-3 text-xs text-slate-700 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.35)]">
                         <span className="animate-pulse">正在生成图文草稿...</span>
                       </div>
                     </div>

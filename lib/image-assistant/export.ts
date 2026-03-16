@@ -125,7 +125,7 @@ export async function renderImageAssistantLayersToCanvas(params: {
   const sortedLayers = [...params.layers].filter((layer) => layer.visible).sort((a, b) => a.z_index - b.z_index)
 
   for (const layer of sortedLayers) {
-    if (layer.layer_type === "background" || layer.layer_type === "image") {
+    if (layer.layer_type === "background" || layer.layer_type === "image" || layer.layer_type === "paint") {
       if (!layer.asset_url) continue
       const img = await loadImage(layer.asset_url)
       ctx.save()
