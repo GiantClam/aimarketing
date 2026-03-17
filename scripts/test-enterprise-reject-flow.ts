@@ -8,6 +8,14 @@ import { GET as requestsGet } from "@/app/api/enterprise/requests/route"
 import { POST as requestReviewPost } from "@/app/api/enterprise/requests/[requestId]/route"
 import { POST as permissionPost } from "@/app/api/enterprise/permissions/route"
 
+const TABLES = {
+  users: "AI_MARKETING_users",
+  userSessions: "AI_MARKETING_user_sessions",
+  userFeaturePermissions: "AI_MARKETING_user_feature_permissions",
+  enterpriseJoinRequests: "AI_MARKETING_enterprise_join_requests",
+  enterprises: "AI_MARKETING_enterprises",
+}
+
 function expect(condition: any, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
@@ -40,8 +48,15 @@ async function run() {
   const memberEmail = `qa_member_rej_${suffix}@example.com`
   const password = "Qa#12345678"
 
-  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
-  if (!dbUrl) throw new Error("DATABASE_URL is required")
+  const dbUrl =
+    process.env.AI_MARKETING_DB_POSTGRES_URL ||
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.AI_MARKETING_DB_POSTGRES_URL_NON_POOLING ||
+    process.env.DATABASE_URL_UNPOOLED ||
+    process.env.POSTGRES_URL_NON_POOLING
+  if (!dbUrl) throw new Error("AI_MARKETING_DB_POSTGRES_URL or fallback database URL is required")
   const pool = new Pool({ connectionString: dbUrl })
 
   let adminUserId: number | null = null
@@ -119,19 +134,19 @@ async function run() {
   } finally {
     try {
       if (memberUserId) {
-        await pool.query("DELETE FROM user_sessions WHERE user_id = $1", [memberUserId])
-        await pool.query("DELETE FROM user_feature_permissions WHERE user_id = $1", [memberUserId])
-        await pool.query("DELETE FROM enterprise_join_requests WHERE user_id = $1", [memberUserId])
-        await pool.query("DELETE FROM users WHERE id = $1", [memberUserId])
+        await pool.query(`DELETE FROM "${TABLES.userSessions}" WHERE user_id = $1`, [memberUserId])
+        await pool.query(`DELETE FROM "${TABLES.userFeaturePermissions}" WHERE user_id = $1`, [memberUserId])
+        await pool.query(`DELETE FROM "${TABLES.enterpriseJoinRequests}" WHERE user_id = $1`, [memberUserId])
+        await pool.query(`DELETE FROM "${TABLES.users}" WHERE id = $1`, [memberUserId])
       }
       if (adminUserId) {
-        await pool.query("DELETE FROM enterprise_join_requests WHERE reviewed_by = $1", [adminUserId])
-        await pool.query("DELETE FROM user_sessions WHERE user_id = $1", [adminUserId])
-        await pool.query("DELETE FROM user_feature_permissions WHERE user_id = $1", [adminUserId])
-        await pool.query("DELETE FROM users WHERE id = $1", [adminUserId])
+        await pool.query(`DELETE FROM "${TABLES.enterpriseJoinRequests}" WHERE reviewed_by = $1`, [adminUserId])
+        await pool.query(`DELETE FROM "${TABLES.userSessions}" WHERE user_id = $1`, [adminUserId])
+        await pool.query(`DELETE FROM "${TABLES.userFeaturePermissions}" WHERE user_id = $1`, [adminUserId])
+        await pool.query(`DELETE FROM "${TABLES.users}" WHERE id = $1`, [adminUserId])
       }
       if (enterpriseId) {
-        await pool.query("DELETE FROM enterprises WHERE id = $1", [enterpriseId])
+        await pool.query(`DELETE FROM "${TABLES.enterprises}" WHERE id = $1`, [enterpriseId])
       }
     } catch (cleanupError) {
       console.error("cleanup error:", cleanupError)

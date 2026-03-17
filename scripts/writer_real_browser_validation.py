@@ -54,6 +54,16 @@ def wait_for_writer_workspace_ready(page, timeout_ms: int = 90000):
     page.wait_for_selector("[data-testid='writer-send-button']", state="attached", timeout=timeout_ms)
 
 
+def open_writer_workspace(page):
+    new_session_button = page.get_by_test_id("writer-new-session-button")
+    if new_session_button.count() > 0:
+        new_session_button.first.click()
+        return
+
+    page.goto(f"{BASE_URL}/dashboard/writer", timeout=90000, wait_until="domcontentloaded")
+    page.wait_for_load_state("networkidle", timeout=90000)
+
+
 def assert_writer_available(page):
     data = page.evaluate(
         """async (baseUrl) => {
@@ -140,7 +150,7 @@ def main():
             save_debug(page, "00-after-login")
 
             start = perf_counter()
-            page.get_by_test_id("writer-new-session-button").click()
+            open_writer_workspace(page)
             page.wait_for_url(re.compile(r".*/dashboard/writer(?:\\?.*)?$"), timeout=90000)
             wait_for_writer_workspace_ready(page)
             metrics["writer_workspace_ready_ms"] = round((perf_counter() - start) * 1000, 2)
@@ -156,17 +166,13 @@ def main():
             metrics["sidebar_session_switch_ms"] = round((perf_counter() - start) * 1000, 2)
             save_debug(page, "02-seeded-session")
 
+            renamed_title = f"Renamed Seed {seed['conversationId']}"
             seeded_conversation.hover()
-            page.route(
-                f"**/api/writer/conversations/{seed['conversationId']}/name",
-                lambda route: route.fulfill(status=500, content_type="application/json", body='{"error":"forced failure"}'),
-            )
             page.get_by_test_id(f"writer-rename-{seed['conversationId']}").click()
             rename_input = page.locator("input:visible").first
-            rename_input.fill("Rollback Name Check")
+            rename_input.fill(renamed_title)
             page.get_by_test_id(f"writer-save-rename-{seed['conversationId']}").click()
-            wait_for_text(page, seed["title"], timeout_ms=10000)
-            page.unroute(f"**/api/writer/conversations/{seed['conversationId']}/name")
+            wait_for_text(page, renamed_title, timeout_ms=10000)
 
             start = perf_counter()
             page.get_by_test_id("writer-load-older-button").click()
@@ -175,7 +181,7 @@ def main():
             save_debug(page, "03-pagination")
 
             start = perf_counter()
-            page.get_by_test_id("writer-new-session-button").click()
+            open_writer_workspace(page)
             page.wait_for_url(re.compile(r".*/dashboard/writer(?:\\?.*)?$"), timeout=90000)
             wait_for_writer_workspace_ready(page)
             metrics["sidebar_new_session_ms"] = round((perf_counter() - start) * 1000, 2)

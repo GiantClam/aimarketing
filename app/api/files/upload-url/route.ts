@@ -1,19 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
+import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { db } from "@/lib/db"
 import { userFiles } from "@/lib/db/schema"
-
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "auto",
-  endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
-  },
-})
+import { getR2BucketName, getR2Client } from "@/lib/r2"
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,9 +20,13 @@ export async function POST(request: NextRequest) {
     }
 
     const storageKey = `users/${currentUser.id}/${Date.now()}-${fileName}`
+    const s3Client = getR2Client()
+    if (!s3Client) {
+      return NextResponse.json({ error: "r2_config_missing" }, { status: 503 })
+    }
 
     const command = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
+      Bucket: getR2BucketName(),
       Key: storageKey,
       ContentType: fileType,
     })

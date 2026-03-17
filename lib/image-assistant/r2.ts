@@ -1,50 +1,9 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { randomUUID } from "crypto"
 
-const R2_ENDPOINT =
-  process.env.R2_ENDPOINT ||
-  (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : "")
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || ""
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY || ""
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || ""
-const R2_PUBLIC_BASE = process.env.R2_PUBLIC_BASE || process.env.R2_PUBLIC_URL || ""
+import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
-let r2Client: S3Client | null = null
-
-function getAccountIdFromEndpoint() {
-  if (process.env.R2_ACCOUNT_ID) return process.env.R2_ACCOUNT_ID
-  if (!R2_ENDPOINT) return ""
-
-  try {
-    return new URL(R2_ENDPOINT).hostname.split(".")[0] || ""
-  } catch {
-    return ""
-  }
-}
-
-function getPublicBase() {
-  if (R2_PUBLIC_BASE) return R2_PUBLIC_BASE.replace(/\/$/, "")
-  const accountId = getAccountIdFromEndpoint()
-  return accountId ? `https://pub-${accountId}.r2.dev` : ""
-}
-
-function getClient() {
-  if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME) {
-    return null
-  }
-
-  if (!r2Client) {
-    r2Client = new S3Client({
-      region: process.env.AWS_REGION || "auto",
-      endpoint: R2_ENDPOINT,
-      credentials: {
-        accessKeyId: R2_ACCESS_KEY_ID,
-        secretAccessKey: R2_SECRET_ACCESS_KEY,
-      },
-    })
-  }
-
-  return r2Client
-}
+import { getR2BucketName, getR2Client, getR2PublicUrl, isR2Available } from "@/lib/r2"
 
 function extensionFromMimeType(mimeType: string) {
   if (mimeType === "image/jpeg") return "jpg"
@@ -53,8 +12,33 @@ function extensionFromMimeType(mimeType: string) {
   return "png"
 }
 
+function buildImageAssistantStorageKey(params: {
+  userId: number
+  sessionId?: string | null
+  assetType: string
+  mimeType: string
+  suggestedName?: string | null
+}) {
+  const ext = extensionFromMimeType(params.mimeType)
+  const safeName = (params.suggestedName || params.assetType || "asset").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40)
+  const sessionPart = params.sessionId || "draft"
+  return `image-assistant/${params.userId}/${sessionPart}/${params.assetType}/${Date.now()}-${randomUUID().slice(0, 8)}-${safeName}.${ext}`
+}
+
 export function isImageAssistantR2Available() {
-  return Boolean(getClient() && getPublicBase())
+  return isR2Available()
+}
+
+export function getImageAssistantPublicUrl(storageKey: string) {
+  try {
+    return getR2PublicUrl(storageKey)
+  } catch {
+    throw new Error("image_assistant_r2_config_missing")
+  }
+}
+
+export function isImageAssistantStorageKeyOwnedByUser(userId: number, storageKey: string) {
+  return storageKey.startsWith(`image-assistant/${userId}/`)
 }
 
 export function dataUrlToBuffer(dataUrl: string) {
@@ -69,6 +53,68 @@ export function dataUrlToBuffer(dataUrl: string) {
   }
 }
 
+export async function createImageAssistantUploadUrl(params: {
+  userId: number
+  sessionId?: string | null
+  assetType: string
+  mimeType: string
+  suggestedName?: string | null
+  expiresInSeconds?: number
+}) {
+  const client = getR2Client()
+  if (!client) {
+    throw new Error("image_assistant_r2_config_missing")
+  }
+
+  const storageKey = buildImageAssistantStorageKey(params)
+  const uploadUrl = await getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: getR2BucketName(),
+      Key: storageKey,
+      ContentType: params.mimeType,
+    }),
+    { expiresIn: Math.max(60, Math.min(params.expiresInSeconds || 900, 3600)) },
+  )
+
+  return {
+    uploadUrl,
+    storageKey,
+    publicUrl: getImageAssistantPublicUrl(storageKey),
+    headers: {
+      "Content-Type": params.mimeType,
+    },
+  }
+}
+
+export async function headImageAssistantObject(storageKey: string) {
+  const client = getR2Client()
+  if (!client) {
+    throw new Error("image_assistant_r2_config_missing")
+  }
+
+  try {
+    const result = await client.send(
+      new HeadObjectCommand({
+        Bucket: getR2BucketName(),
+        Key: storageKey,
+      }),
+    )
+
+    return {
+      contentType: result.ContentType || "application/octet-stream",
+      fileSize: Number(result.ContentLength || 0),
+      publicUrl: getImageAssistantPublicUrl(storageKey),
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (/not[\s_-]?found|no such key|unknownerror/i.test(message)) {
+      return null
+    }
+    throw error
+  }
+}
+
 export async function uploadImageAssistantBuffer(params: {
   userId: number
   sessionId?: string | null
@@ -77,20 +123,16 @@ export async function uploadImageAssistantBuffer(params: {
   buffer: Buffer
   suggestedName?: string | null
 }) {
-  const client = getClient()
-  const publicBase = getPublicBase()
-  if (!client || !publicBase) {
+  const client = getR2Client()
+  if (!client) {
     throw new Error("image_assistant_r2_config_missing")
   }
 
-  const ext = extensionFromMimeType(params.mimeType)
-  const safeName = (params.suggestedName || params.assetType || "asset").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40)
-  const sessionPart = params.sessionId || "draft"
-  const storageKey = `image-assistant/${params.userId}/${sessionPart}/${params.assetType}/${Date.now()}-${safeName}.${ext}`
+  const storageKey = buildImageAssistantStorageKey(params)
 
   await client.send(
     new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
+      Bucket: getR2BucketName(),
       Key: storageKey,
       Body: params.buffer,
       ContentType: params.mimeType,
@@ -100,7 +142,7 @@ export async function uploadImageAssistantBuffer(params: {
 
   return {
     storageKey,
-    publicUrl: `${publicBase}/${storageKey}`,
+    publicUrl: getImageAssistantPublicUrl(storageKey),
   }
 }
 

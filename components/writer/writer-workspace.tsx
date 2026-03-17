@@ -17,17 +17,23 @@ import {
   Send,
   Share2,
   Sparkles,
-  Square,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 import { useAuth } from "@/components/auth-provider"
+import { useI18n } from "@/components/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  findWriterPendingTask,
+  removePendingAssistantTask,
+  savePendingAssistantTask,
+} from "@/lib/assistant-task-store"
+import type { AppMessages } from "@/lib/i18n/messages"
 import {
   buildPendingWriterAssets,
   extractWriterAssetsFromMarkdown,
@@ -50,7 +56,7 @@ import {
   type WriterPlatform,
 } from "@/lib/writer/config"
 import { emitWriterRefresh, getWriterSessionMeta, saveWriterSessionMeta } from "@/lib/writer/session-store"
-import type { WriterConversationSummary, WriterHistoryEntry, WriterMessagePage } from "@/lib/writer/types"
+import type { WriterConversationSummary, WriterHistoryEntry, WriterMessagePage, WriterTurnDiagnostics } from "@/lib/writer/types"
 import { cn } from "@/lib/utils"
 
 type WriterMessage = {
@@ -61,38 +67,20 @@ type WriterMessage = {
   authorLabel?: string
 }
 
-const WRITER_ASSISTANT_NAME = "文章写作助手"
+type WriterCopy = AppMessages["writer"]
 
-const extractSSEBlocks = (buffer: string) => {
-  const parts = buffer.split(/\r?\n\r?\n/)
-  return { blocks: parts.slice(0, -1), rest: parts.at(-1) ?? "" }
+type KnowledgeScope = "general" | "brand" | "product" | "case-study" | "compliance" | "campaign"
+
+type KnowledgeStatus = {
+  enabled: boolean
+  datasetCount?: number
+  source?: string
+  profile?: {
+    configuredScopes?: KnowledgeScope[]
+    primaryScope?: KnowledgeScope | "mixed" | "unknown"
+    hasGeneralDataset?: boolean
+  } | null
 }
-
-const getSSEDataFromBlock = (block: string) => {
-  const raw = block
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trimStart())
-    .join("\n")
-    .trim()
-
-  if (!raw || raw === "[DONE]") return null
-
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
-}
-
-const extractText = (value: unknown): string =>
-  typeof value === "string"
-    ? value
-    : Array.isArray(value)
-      ? value.map(extractText).find((item) => item.length > 0) || ""
-      : value && typeof value === "object"
-        ? Object.values(value as Record<string, unknown>).map(extractText).find((item) => item.length > 0) || ""
-        : ""
 
 const sanitize = (raw: string) => raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
 const inferDraft = (messages: WriterMessage[]) =>
@@ -112,23 +100,26 @@ const stripMarkdown = (markdown: string) =>
     .replace(/\s+/g, " ")
     .trim()
 
-const extractTitle = (markdown: string) =>
+const extractTitle = (markdown: string, copy: WriterCopy) =>
   (markdown
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .find((line) => line && !line.startsWith("![")) || "未命名文章")
+    .find((line) => line && !line.startsWith("![")) || copy.untitledArticle)
     .replace(/^#+\s*/, "")
     .trim()
 
-const extractLead = (markdown: string) =>
+const extractLead = (markdown: string, copy: WriterCopy) =>
   markdown
     .split(/\r?\n\r?\n/)
     .map((block) => stripMarkdown(block))
-    .find((block) => block && block !== extractTitle(markdown)) || "文章生成后，这里会展示完整的图文排版预览。"
+    .find((block) => block && block !== extractTitle(markdown, copy)) || copy.emptyPreviewLead
 
-const estimateReadingTime = (markdown: string) => `${Math.max(3, Math.ceil(stripMarkdown(markdown).length / 320))} 分钟`
-const composeThreadMarkdown = (segments: string[]) =>
-  segments.map((segment, index) => `### 第 ${index + 1} 段\n${segment.trim()}`).join("\n\n")
+const estimateReadingTime = (markdown: string, copy: WriterCopy) =>
+  `${Math.max(3, Math.ceil(stripMarkdown(markdown).length / 320))} ${copy.readingTimeUnit}`
+const composeThreadMarkdown = (segments: string[], copy: WriterCopy) =>
+  segments
+    .map((segment, index) => `### ${copy.threadSectionPrefix}${index + 1}${copy.threadSectionSuffix}\n${segment.trim()}`)
+    .join("\n\n")
 
 const findWriterAsset = (src: string, assets: WriterAsset[]) => {
   const match = /^writer-asset:\/\/(.+)$/.exec(src.trim())
@@ -155,7 +146,7 @@ const getPlatformShellClass = (platform: WriterPlatform) => {
   return "border-emerald-100 bg-white/90 text-slate-950"
 }
 
-function renderMarkdown(content: string, assets: WriterAsset[], className?: string) {
+function renderMarkdown(content: string, assets: WriterAsset[], className?: string, copy?: WriterCopy) {
   return (
     <div
       className={cn(
@@ -186,7 +177,9 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
                     {writerAsset.url ? (
                       <img
                         src={writerAsset.url}
-                        alt={alt || "文章配图"}
+                        alt={alt || copy?.imageAlt || "Article image"}
+                        loading="lazy"
+                        decoding="async"
                         {...props}
                         className="max-h-[420px] w-full object-cover"
                       />
@@ -194,7 +187,9 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
                       <div className="flex w-full flex-col items-center justify-center gap-2 px-5 py-12 text-center text-slate-500">
                         {writerAsset.status === "failed" ? null : <Loader2 className="h-5 w-5 animate-spin" />}
                         <p className="text-sm font-medium text-slate-700">
-                          {writerAsset.status === "failed" ? "配图暂时不可用" : "配图生成中"}
+                          {writerAsset.status === "failed"
+                            ? copy?.imageUnavailable || "Image unavailable"
+                            : copy?.imageGenerating || "Generating image"}
                         </p>
                       </div>
                     )}
@@ -207,6 +202,8 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
               <img
                 src={src}
                 alt={alt || ""}
+                loading="lazy"
+                decoding="async"
                 {...props}
                 className="my-6 max-h-[420px] w-full rounded-[24px] border border-slate-200 bg-slate-50 object-cover shadow-sm"
               />
@@ -235,7 +232,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
   )
 }
 
-function SocialStatRow() {
+function SocialStatRow({ copy }: { copy: WriterCopy }) {
   return (
     <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
       <div className="flex items-center gap-4">
@@ -258,13 +255,14 @@ function SocialStatRow() {
       </div>
       <span className="inline-flex items-center gap-1.5">
         <Share2 className="h-3.5 w-3.5" />
-        分享
+        {copy.share}
       </span>
     </div>
   )
 }
 
 function PlatformPreview({
+  copy,
   platform,
   mode,
   markdown,
@@ -274,6 +272,7 @@ function PlatformPreview({
   onEditCommit,
   saveState,
 }: {
+  copy: WriterCopy
   platform: WriterPlatform
   mode: WriterMode
   markdown: string
@@ -283,13 +282,13 @@ function PlatformPreview({
   onEditCommit?: () => void
   saveState?: "idle" | "saving" | "saved" | "error"
 }) {
-  const lead = extractLead(markdown)
+  const lead = extractLead(markdown, copy)
   const threadPosts = mode === "thread" ? parseThread(markdown) : []
   const renderArticleBody = (value: string, className?: string) =>
     editable && onEditChange && onEditCommit ? (
-      <InlineMarkdownCanvas markdown={value} assets={assets} onChange={onEditChange} onCommit={onEditCommit} saveState={saveState} />
+      <InlineMarkdownCanvas copy={copy} markdown={value} assets={assets} onChange={onEditChange} onCommit={onEditCommit} saveState={saveState} />
     ) : (
-      renderMarkdown(value, assets, className)
+      renderMarkdown(value, assets, className, copy)
     )
 
   if (platform === "wechat") {
@@ -299,11 +298,11 @@ function PlatformPreview({
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
             <BookText className="h-6 w-6" />
           </div>
-          <p className="text-xs uppercase tracking-[0.28em] text-emerald-700">微信公众号文章预览</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-emerald-700">{copy.wechatPreview}</p>
           <div className="mt-4 flex items-center justify-center gap-3 text-xs text-slate-400">
             <span>AI Marketing Weekly</span>
             <span>·</span>
-            <span>{estimateReadingTime(markdown)}</span>
+            <span>{estimateReadingTime(markdown, copy)}</span>
           </div>
         </div>
         <div className="mx-auto mt-10 max-w-[640px]">
@@ -322,8 +321,8 @@ function PlatformPreview({
         <div className="overflow-hidden rounded-[30px] bg-white shadow-sm">
           <div className="border-b border-rose-100/80 px-5 py-5">
             <div className="mb-4 flex items-center justify-between">
-              <Badge className="rounded-full bg-rose-500 px-3 py-1 text-[11px] text-white hover:bg-rose-500">小红书图文</Badge>
-              <span className="text-[11px] text-slate-400">适合收藏的图文笔记</span>
+              <Badge className="rounded-full bg-rose-500 px-3 py-1 text-[11px] text-white hover:bg-rose-500">{copy.xiaohongshuPreview}</Badge>
+              <span className="text-[11px] text-slate-400">{copy.xiaohongshuBadge}</span>
             </div>
           </div>
           <div className="px-5 py-5">
@@ -332,7 +331,7 @@ function PlatformPreview({
               "prose-p:text-black prose-li:text-black prose-strong:text-rose-700 prose-h1:text-center prose-h2:border-0 prose-h2:pt-0 prose-blockquote:bg-rose-50 prose-blockquote:px-4 prose-blockquote:py-3 prose-blockquote:not-italic",
             )}
           </div>
-          <div className="border-t border-rose-100/80 px-5 py-3 text-xs text-slate-500">#AI营销 #内容创作 #效率工具</div>
+          <div className="border-t border-rose-100/80 px-5 py-3 text-xs text-slate-500">{copy.xiaohongshuFooterTags}</div>
         </div>
       </div>
     )
@@ -357,12 +356,13 @@ function PlatformPreview({
                 <div className="mt-4">
                   {editable && onEditChange && onEditCommit ? (
                     <InlineMarkdownCanvas
+                      copy={copy}
                       markdown={post}
                       assets={assets}
                       onChange={(next) => {
                         const nextPosts = [...posts]
                         nextPosts[index] = next
-                        onEditChange(composeThreadMarkdown(nextPosts))
+                        onEditChange(composeThreadMarkdown(nextPosts, copy))
                       }}
                       onCommit={onEditCommit}
                       saveState={saveState}
@@ -372,10 +372,11 @@ function PlatformPreview({
                       post,
                       assets,
                       "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h1:text-[1.8rem] prose-h2:border-0 prose-h2:pt-0",
+                      copy,
                     )
                   )}
                 </div>
-                <SocialStatRow />
+                <SocialStatRow copy={copy} />
               </div>
             </div>
           </div>
@@ -396,18 +397,19 @@ function PlatformPreview({
                 <p className="font-semibold text-black">AI Marketing Site</p>
                 <p className="text-xs text-slate-500">Follow</p>
                 <span className="text-slate-300">·</span>
-                <p className="text-xs text-slate-500">{mode === "thread" ? `Post ${index + 1}` : estimateReadingTime(post)}</p>
+                <p className="text-xs text-slate-500">{mode === "thread" ? `Post ${index + 1}` : estimateReadingTime(post, copy)}</p>
               </div>
-              <p className="mt-1 text-xs text-slate-500">{index === 0 ? lead : "多段帖文预览"}</p>
+              <p className="mt-1 text-xs text-slate-500">{index === 0 ? lead : copy.multiPostPreview}</p>
               <div className="mt-4">
                 {editable && onEditChange && onEditCommit ? (
                   <InlineMarkdownCanvas
+                    copy={copy}
                     markdown={post}
                     assets={assets}
                     onChange={(next) => {
                       const nextPosts = [...posts]
                       nextPosts[index] = next
-                      onEditChange(composeThreadMarkdown(nextPosts))
+                      onEditChange(composeThreadMarkdown(nextPosts, copy))
                     }}
                     onCommit={onEditCommit}
                     saveState={saveState}
@@ -417,10 +419,11 @@ function PlatformPreview({
                     post,
                     assets,
                     "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h1:text-[1.8rem] prose-h2:border-0 prose-h2:pt-0",
+                    copy,
                   )
                 )}
               </div>
-              <SocialStatRow />
+              <SocialStatRow copy={copy} />
             </div>
           </div>
         </div>
@@ -430,6 +433,7 @@ function PlatformPreview({
 }
 
 function PreviewResourceStrip({
+  copy,
   assets,
   assetsLoading,
   assetsError,
@@ -437,6 +441,7 @@ function PreviewResourceStrip({
   onCopyLink,
   onCopyMarkdown,
 }: {
+  copy: WriterCopy
   assets: WriterAsset[]
   assetsLoading: boolean
   assetsError: string | null
@@ -452,8 +457,8 @@ function PreviewResourceStrip({
     <div className="rounded-[24px] border border-slate-300 bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.28)] ring-1 ring-slate-950/6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-950">图片操作</p>
-          <p className="mt-1 text-xs leading-5 text-slate-700">正文中已经按文章样式展示图片，这里只保留发布时需要的下载与复制操作。</p>
+          <p className="text-sm font-semibold text-slate-950">{copy.imageActionsTitle}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-700">{copy.imageActionsDescription}</p>
         </div>
         <Badge
           variant={assetsLoading ? "outline" : "secondary"}
@@ -464,36 +469,37 @@ function PreviewResourceStrip({
               : "border-emerald-300 bg-emerald-50 text-emerald-900",
           )}
         >
-          {assetsLoading ? "图片生成中" : "Gemini 3.1 Flash Image Preview"}
+          {assetsLoading ? copy.imageGenerating : "Gemini 3.1 Flash Image Preview"}
         </Badge>
       </div>
       {assetsError ? (
         <div className="mt-3 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-medium leading-5 text-destructive">
-          图片生成失败：{assetsError}
+          {copy.imageGenerationFailedPrefix}
+          {assetsError}
         </div>
       ) : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {(visibleAssets.length > 0 ? visibleAssets : assets).map((asset) => (
           <div key={asset.id} className="rounded-2xl border border-slate-300 bg-slate-50 p-3 shadow-[0_12px_32px_-26px_rgba(15,23,42,0.35)]">
             {asset.url ? (
-              <img src={asset.url} alt="发布配图" className="h-24 w-full rounded-xl object-cover" />
+              <img src={asset.url} alt={copy.imageAlt} loading="lazy" decoding="async" className="h-24 w-full rounded-xl object-cover" />
             ) : (
               <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-3 text-center text-xs font-medium text-slate-700">
-                {asset.status === "failed" ? "配图暂不可用" : assetsLoading ? "生成中..." : "等待图片"}
+                {asset.status === "failed" ? copy.imageUnavailable : assetsLoading ? copy.generatingImages : copy.waitingImage}
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" className="rounded-full border-slate-950 bg-slate-950 text-white hover:bg-slate-800 hover:text-white" onClick={() => onDownload(asset)} disabled={!asset.url}>
                 <Download className="mr-1.5 h-3.5 w-3.5" />
-                下载
+                {copy.download}
               </Button>
               <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyLink(asset)} disabled={!asset.url}>
                 <Copy className="mr-1.5 h-3.5 w-3.5" />
-                图链
+                {copy.imageLink}
               </Button>
               <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyMarkdown(asset)} disabled={!asset.url}>
                 <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                Markdown
+                {copy.markdown}
               </Button>
             </div>
           </div>
@@ -503,7 +509,139 @@ function PreviewResourceStrip({
   )
 }
 
-const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[]): WriterMessage[] =>
+function getGroundingStrategyLabel(copy: WriterCopy, diagnostics: WriterTurnDiagnostics) {
+  if (diagnostics.retrievalStrategy === "rewrite_only") return copy.groundingStrategyRewrite
+  if (diagnostics.retrievalStrategy === "enterprise_grounded") return copy.groundingStrategyEnterprise
+  if (diagnostics.retrievalStrategy === "fresh_external") return copy.groundingStrategyFresh
+  return copy.groundingStrategyHybrid
+}
+
+function WriterGroundingSummary({
+  copy,
+  diagnostics,
+}: {
+  copy: WriterCopy
+  diagnostics: WriterTurnDiagnostics
+}) {
+  const hasEnterprise = diagnostics.enterpriseKnowledgeUsed && diagnostics.enterpriseSourceCount > 0
+  const hasWeb = diagnostics.webResearchUsed && diagnostics.webSourceCount > 0
+
+  return (
+    <div className="rounded-[22px] border border-slate-300 bg-white/92 p-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+          {copy.groundingSummary}
+        </Badge>
+        <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+          {getGroundingStrategyLabel(copy, diagnostics)}
+        </Badge>
+        <Badge variant={hasEnterprise ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
+          {copy.enterpriseSources} {hasEnterprise ? diagnostics.enterpriseSourceCount : 0}
+        </Badge>
+        <Badge variant={hasWeb ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
+          {copy.webSources} {hasWeb ? diagnostics.webSourceCount : 0}
+        </Badge>
+      </div>
+      {diagnostics.enterpriseDatasets.length > 0 ? (
+        <p className="mt-2 text-[11px] leading-5 text-slate-600">
+          {copy.datasetsLabel}: {diagnostics.enterpriseDatasets.join(" / ")}
+        </p>
+      ) : null}
+      {diagnostics.enterpriseTitles.length > 0 ? (
+        <p className="mt-1 text-[11px] leading-5 text-slate-500">
+          {copy.referencesLabel}: {diagnostics.enterpriseTitles.join(" / ")}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function getKnowledgeScopeLabel(copy: WriterCopy, scope: KnowledgeScope | "mixed" | "unknown") {
+  if (scope === "general") return copy.knowledgeScopeGeneral
+  if (scope === "brand") return copy.knowledgeScopeBrand
+  if (scope === "product") return copy.knowledgeScopeProduct
+  if (scope === "case-study") return copy.knowledgeScopeCaseStudy
+  if (scope === "compliance") return copy.knowledgeScopeCompliance
+  if (scope === "campaign") return copy.knowledgeScopeCampaign
+  if (scope === "mixed") return copy.knowledgeScopeMixed
+  return ""
+}
+
+function WriterInlineImageActionBar({
+  copy,
+  state,
+  error,
+  onPreview,
+  onGenerate,
+  onDismiss,
+}: {
+  copy: WriterCopy
+  state: "confirm" | "generating" | "ready" | "failed"
+  error?: string | null
+  onPreview: () => void
+  onGenerate: () => void
+  onDismiss?: () => void
+}) {
+  const description =
+    state === "confirm"
+      ? copy.finalPreviewWithoutImages
+      : state === "generating"
+        ? copy.imageGenerationMerging
+        : state === "ready"
+          ? copy.finalPreviewWithImages
+          : `${copy.imageGenerationFailedPrefix}${error || copy.imageGenerationFailed}`
+
+  return (
+    <div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50/90 p-3 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.45)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-[520px] text-[12px] leading-5 text-slate-700">{description}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+            onClick={onPreview}
+          >
+            <Eye className="mr-1.5 h-3.5 w-3.5" />
+            {copy.preview}
+          </Button>
+          {state === "confirm" ? (
+            <>
+              <Button size="sm" className="h-8 rounded-full px-3 text-[11px]" onClick={onGenerate}>
+                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+                {copy.generateImages}
+              </Button>
+              {onDismiss ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 rounded-full px-3 text-[11px] text-slate-600 hover:text-slate-950"
+                  onClick={onDismiss}
+                >
+                  {copy.done}
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          {state === "generating" ? (
+            <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              {copy.generatingImages}
+            </Button>
+          ) : null}
+          {state === "failed" ? (
+            <Button size="sm" className="h-8 rounded-full px-3 text-[11px]" onClick={onGenerate}>
+              <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+              {copy.regenerateImages}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[], assistantName: string): WriterMessage[] =>
   entries.flatMap((message) => [
     {
       id: `user_${message.id}`,
@@ -516,9 +654,12 @@ const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[]): WriterMessa
       conversation_id: message.conversation_id,
       role: "assistant" as const,
       content: sanitize(message.answer || ""),
-      authorLabel: WRITER_ASSISTANT_NAME,
+      authorLabel: assistantName,
     },
   ])
+
+const getLatestHistoryDiagnostics = (entries: WriterHistoryEntry[]) =>
+  [...entries].reverse().find((entry) => entry.diagnostics)?.diagnostics || null
 
 const COPYABLE_STYLE_PROPS = [
   "color",
@@ -581,12 +722,14 @@ function buildClipboardHtmlFromPreview(node: HTMLElement) {
 }
 
 function InlineMarkdownCanvas({
+  copy,
   markdown,
   assets,
   onChange,
   onCommit,
   saveState,
 }: {
+  copy: WriterCopy
   markdown: string
   assets: WriterAsset[]
   onChange: (next: string) => void
@@ -621,13 +764,13 @@ function InlineMarkdownCanvas({
       <div className="rounded-[24px] border border-slate-950/10 bg-white px-5 py-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.38)] ring-2 ring-slate-950/5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <p className="text-xs font-medium tracking-[0.16em] text-slate-500">编辑文章内容</p>
+            <p className="text-xs font-medium tracking-[0.16em] text-slate-500">{copy.editContent}</p>
             {saveState === "saving" ? (
-              <span className="text-[11px] text-slate-400">保存中...</span>
+              <span className="text-[11px] text-slate-400">{copy.saving}</span>
             ) : saveState === "saved" ? (
-              <span className="text-[11px] text-emerald-600">已保存</span>
+              <span className="text-[11px] text-emerald-600">{copy.saved}</span>
             ) : saveState === "error" ? (
-              <span className="text-[11px] text-destructive">保存失败</span>
+              <span className="text-[11px] text-destructive">{copy.saveFailed}</span>
             ) : null}
           </div>
           <div className="flex items-center gap-2">
@@ -638,7 +781,7 @@ function InlineMarkdownCanvas({
               onMouseDown={(event) => event.preventDefault()}
               onClick={commitDraft}
             >
-              完成
+              {copy.done}
             </Button>
           </div>
         </div>
@@ -677,15 +820,15 @@ function InlineMarkdownCanvas({
           setIsEditing(true)
         }
       }}
-      aria-label="点击编辑整篇文章"
+      aria-label={copy.clickToEditArticleAria}
     >
       <div className="pointer-events-none px-2 py-1">
         <div className="mb-2 opacity-0 transition group-hover:opacity-100">
           <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] tracking-[0.14em] text-slate-500">
-            点击编辑整篇
+            {copy.clickToEditArticle}
           </span>
         </div>
-        {renderMarkdown(markdown, assets)}
+        {renderMarkdown(markdown, assets, undefined, copy)}
       </div>
     </div>
   )
@@ -704,16 +847,17 @@ export function WriterWorkspace({
 }) {
   const router = useRouter()
   const { user, loading } = useAuth()
+  const { messages: i18n } = useI18n()
+  const writerCopy = i18n.writer
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const previewContentRef = useRef<HTMLDivElement | null>(null)
-  const currentTaskIdRef = useRef<string | null>(null)
   const historyRestoreRef = useRef<{ height: number; top: number } | null>(null)
   const shouldScrollToBottomRef = useRef(false)
 
   const [availabilityLoading, setAvailabilityLoading] = useState(true)
   const [availabilityReady, setAvailabilityReady] = useState(false)
-  const [knowledgeStatus, setKnowledgeStatus] = useState<{ enabled: boolean; datasetCount?: number; source?: string } | null>(null)
+  const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
   const [platform, setPlatform] = useState<WriterPlatform>(() => normalizeWriterPlatform(initialPlatform))
   const [mode, setMode] = useState<WriterMode>(() =>
@@ -735,11 +879,14 @@ export function WriterWorkspace({
   const [isLoading, setIsLoading] = useState(false)
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [latestDiagnostics, setLatestDiagnostics] = useState<WriterTurnDiagnostics | null>(null)
   const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [imagesRequested, setImagesRequested] = useState(false)
+  const [imageConfirmationDismissed, setImageConfirmationDismissed] = useState(false)
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0)
   const [conversationStatus, setConversationStatus] = useState<
     "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
   >("drafting")
@@ -792,9 +939,16 @@ export function WriterWorkspace({
 
   const writerConfig = WRITER_PLATFORM_CONFIG[platform]
   const writerModeOptions = useMemo(() => getWriterModeOptions(platform), [platform])
-  const baseDraft = useMemo(() => draft || inferDraft(messages), [draft, messages])
+  const baseDraft = useMemo(
+    () => draft || (conversationStatus === "drafting" ? "" : inferDraft(messages)),
+    [conversationStatus, draft, messages],
+  )
   const renderableDraft = useMemo(() => resolveWriterAssetMarkdown(baseDraft, assets, platform, mode), [assets, baseDraft, mode, platform])
   const threadSegments = useMemo(() => parseThread(renderableDraft || draft), [draft, renderableDraft])
+  const latestAssistantMessageId = useMemo(
+    () => [...messages].reverse().find((message) => message.role === "assistant")?.id || null,
+    [messages],
+  )
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -804,9 +958,21 @@ export function WriterWorkspace({
   }, [conversationId, language, mode, platform])
 
   useEffect(() => {
+    if (!baseDraft.trim()) {
+      setImageConfirmationDismissed(false)
+      return
+    }
+
+    if (conversationStatus === "text_ready" && !imagesRequested) {
+      setImageConfirmationDismissed(false)
+    }
+  }, [baseDraft, conversationStatus, conversationId, imagesRequested])
+
+  useEffect(() => {
     if (!conversationId) {
       setMessages([])
       setDraft("")
+      setLatestDiagnostics(null)
       setHistoryCursor(null)
       setHasMoreHistory(false)
       setIsConversationLoading(false)
@@ -824,18 +990,25 @@ export function WriterWorkspace({
       if (meta.draft) setDraft(meta.draft)
       setImagesRequested(Boolean(meta.imagesRequested))
       setConversationStatus(meta.status || "drafting")
+      setLatestDiagnostics(meta.diagnostics || null)
+    } else {
+      setLatestDiagnostics(null)
     }
 
     let cancelled = false
 
     const applyConversationPayload = (data: WriterMessagePage, reset: boolean) => {
-      const nextMessages = mapHistoryEntriesToMessages(data.data || [])
+      const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
+      const nextDiagnostics = getLatestHistoryDiagnostics(data.data || [])
       if (data.conversation) {
         setPlatform(normalizeWriterPlatform(data.conversation.platform))
         setMode(normalizeWriterMode(normalizeWriterPlatform(data.conversation.platform), data.conversation.mode))
         setLanguage(normalizeWriterLanguage(data.conversation.language))
         setImagesRequested(Boolean(data.conversation.images_requested))
         setConversationStatus(data.conversation.status || "drafting")
+      }
+      if (reset) {
+        setLatestDiagnostics(nextDiagnostics)
       }
       setHistoryCursor(data.next_cursor || null)
       setHasMoreHistory(Boolean(data.has_more))
@@ -858,8 +1031,8 @@ export function WriterWorkspace({
             id: `error_${Date.now()}`,
             conversation_id: conversationId,
             role: "assistant",
-            content: "会话历史加载失败，请稍后重试。",
-            authorLabel: WRITER_ASSISTANT_NAME,
+            content: writerCopy.conversationLoadFailed,
+            authorLabel: writerCopy.assistantName,
           },
         ])
       } finally {
@@ -871,7 +1044,7 @@ export function WriterWorkspace({
     return () => {
       cancelled = true
     }
-  }, [conversationId])
+  }, [conversationId, writerCopy.assistantName, writerCopy.conversationLoadFailed])
 
   const loadOlderMessages = async () => {
     if (!conversationId || !historyCursor || isHistoryLoading) return
@@ -889,7 +1062,7 @@ export function WriterWorkspace({
       const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=20&cursor=${historyCursor}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = (await response.json()) as WriterMessagePage
-      const nextMessages = mapHistoryEntriesToMessages(data.data || [])
+      const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
       setHistoryCursor(data.next_cursor || null)
       setHasMoreHistory(Boolean(data.has_more))
       setMessages((current) => [...nextMessages, ...current])
@@ -910,10 +1083,101 @@ export function WriterWorkspace({
         draft,
         imagesRequested,
         status: conversationStatus,
+        diagnostics: latestDiagnostics,
         updatedAt: Date.now(),
       })
     }
-  }, [conversationId, conversationStatus, draft, imagesRequested, language, mode, platform])
+  }, [conversationId, conversationStatus, draft, imagesRequested, language, latestDiagnostics, mode, platform])
+
+  useEffect(() => {
+    const pendingTask = findWriterPendingTask(conversationId)
+    if (!conversationId || !pendingTask) return
+
+    let cancelled = false
+    setIsLoading(true)
+
+    const refreshConversation = async () => {
+      const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=20`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = (await response.json()) as WriterMessagePage
+      if (cancelled) return
+
+      const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
+      const nextDiagnostics = getLatestHistoryDiagnostics(data.data || [])
+      setMessages(nextMessages)
+      setLatestDiagnostics(nextDiagnostics)
+      setHistoryCursor(data.next_cursor || null)
+      setHasMoreHistory(Boolean(data.has_more))
+      setDraft(inferDraft(nextMessages))
+      shouldScrollToBottomRef.current = true
+
+      if (data.conversation) {
+        const nextPlatform = normalizeWriterPlatform(data.conversation.platform)
+        const nextMode = normalizeWriterMode(nextPlatform, data.conversation.mode)
+        const nextLanguage = normalizeWriterLanguage(data.conversation.language)
+        setPlatform(nextPlatform)
+        setMode(nextMode)
+        setLanguage(nextLanguage)
+        setImagesRequested(Boolean(data.conversation.images_requested))
+        setConversationStatus(data.conversation.status || "drafting")
+        saveWriterSessionMeta(conversationId, {
+          platform: nextPlatform,
+          mode: nextMode,
+          language: nextLanguage,
+          draft: data.conversation.status === "drafting" ? "" : inferDraft(nextMessages),
+          imagesRequested: Boolean(data.conversation.images_requested),
+          status: data.conversation.status || "drafting",
+          diagnostics: nextDiagnostics,
+          updatedAt: Date.now(),
+        })
+        emitWriterRefresh({
+          action: "upsert",
+          conversation: data.conversation,
+        })
+      }
+    }
+
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const response = await fetch(`/api/tasks/${pendingTask.taskId}`)
+          const payload = (await response.json().catch(() => null)) as {
+            data?: { status?: string }
+          } | null
+          const status = payload?.data?.status
+
+          if (status === "success") {
+            await refreshConversation()
+            removePendingAssistantTask(pendingTask.taskId)
+            if (!cancelled) {
+              setPreviewOpen(true)
+              setIsLoading(false)
+            }
+            return
+          }
+
+          if (status === "failed") {
+            await refreshConversation().catch(() => null)
+            removePendingAssistantTask(pendingTask.taskId)
+            if (!cancelled) {
+              setConversationStatus("failed")
+              setIsLoading(false)
+            }
+            return
+          }
+        } catch (error) {
+          console.error("writer.pending-task.poll-failed", error)
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 1200))
+      }
+    }
+
+    void poll()
+    return () => {
+      cancelled = true
+    }
+  }, [conversationId, pendingTaskRefreshKey, writerCopy.assistantName])
 
   useEffect(() => {
     const viewport = viewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
@@ -968,7 +1232,7 @@ export function WriterWorkspace({
   const patchAssistantMessage = (id: string, content: string) => {
     setMessages((current) =>
       current.map((message) =>
-        message.id === id ? { ...message, content, authorLabel: WRITER_ASSISTANT_NAME } : message,
+        message.id === id ? { ...message, content, authorLabel: writerCopy.assistantName } : message,
       ),
     )
   }
@@ -981,7 +1245,7 @@ export function WriterWorkspace({
           next[index] = {
             ...next[index],
             content,
-            authorLabel: WRITER_ASSISTANT_NAME,
+            authorLabel: writerCopy.assistantName,
           }
           break
         }
@@ -999,6 +1263,7 @@ export function WriterWorkspace({
     setAssetsError(null)
     setAssets([])
     setImagesRequested(false)
+    setImageConfirmationDismissed(false)
     setConversationStatus("drafting")
     setDraftSaveState("idle")
     router.push(`/dashboard/writer?platform=${platform}&mode=${mode}&language=${language}`)
@@ -1012,13 +1277,21 @@ export function WriterWorkspace({
     setInputValue("")
     setIsLoading(true)
     setImagesRequested(false)
+    setImageConfirmationDismissed(false)
     setConversationStatus("drafting")
+    setLatestDiagnostics(null)
     setAssets([])
     setAssetsError(null)
     setMessages((current) => [
       ...current,
       { id: `writer_user_${Date.now()}`, conversation_id: conversationId || "", role: "user", content: query },
-      { id: assistantId, conversation_id: conversationId || "", role: "assistant", content: "", authorLabel: WRITER_ASSISTANT_NAME },
+      {
+        id: assistantId,
+        conversation_id: conversationId || "",
+        role: "assistant",
+        content: writerCopy.generatingDraft,
+        authorLabel: writerCopy.assistantName,
+      },
     ])
 
     try {
@@ -1028,94 +1301,62 @@ export function WriterWorkspace({
         body: JSON.stringify({
           query,
           inputs: { contents: query },
-          response_mode: "streaming",
           conversation_id: conversationId,
           platform,
           mode,
           language,
         }),
       })
+      const payload = (await response.json().catch(() => null)) as {
+        task_id?: string
+        conversation_id?: string
+        conversation?: WriterConversationSummary
+        error?: string
+      } | null
 
-      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder("utf-8")
-      let streamBuffer = ""
-      let accumulated = ""
-      let nextConversationId: string | null = null
-
-      const onEvent = (dataObj: any) => {
-        if (dataObj?.task_id) currentTaskIdRef.current = dataObj.task_id
-        if (dataObj?.conversation_id && !nextConversationId && !conversationId) {
-          nextConversationId = dataObj.conversation_id
-          setConversationId(dataObj.conversation_id)
-        }
-        if (dataObj?.event === "conversation_init" && dataObj?.conversation) {
-          const syncedConversation = dataObj.conversation as WriterConversationSummary
-          emitWriterRefresh({
-            action: "upsert",
-            conversation: syncedConversation,
-          })
-        }
-        if (["message", "agent_message", "text_chunk"].includes(dataObj?.event)) {
-          const chunk = extractText(dataObj.answer) || extractText(dataObj.data?.text)
-          if (chunk) {
-            accumulated += chunk
-            patchAssistantMessage(assistantId, sanitize(accumulated))
-          }
-        } else if (dataObj?.event === "workflow_finished" && !accumulated) {
-          const workflowText = extractText(dataObj?.data?.outputs)
-          if (workflowText) {
-            accumulated = workflowText
-            patchAssistantMessage(assistantId, sanitize(accumulated))
-          }
-        }
+      if (!response.ok || !payload?.task_id || !payload.conversation_id || !payload.conversation) {
+        throw new Error(payload?.error || `HTTP ${response.status}`)
       }
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        streamBuffer += decoder.decode(value, { stream: true })
-        const parsed = extractSSEBlocks(streamBuffer)
-        streamBuffer = parsed.rest
-        parsed.blocks.forEach((block) => {
-          const dataObj = getSSEDataFromBlock(block)
-          if (dataObj) onEvent(dataObj)
-        })
-      }
+      setConversationId(payload.conversation_id)
+      setConversationStatus(payload.conversation.status || "drafting")
+      saveWriterSessionMeta(payload.conversation_id, {
+        platform: payload.conversation.platform,
+        mode: payload.conversation.mode,
+        language: payload.conversation.language,
+        draft: "",
+        imagesRequested: false,
+        status: payload.conversation.status || "drafting",
+        diagnostics: null,
+        updatedAt: Date.now(),
+      })
+      savePendingAssistantTask({
+        taskId: payload.task_id,
+        scope: "writer",
+        conversationId: payload.conversation_id,
+        prompt: query,
+        createdAt: Date.now(),
+      })
+      setPendingTaskRefreshKey(Date.now())
+      emitWriterRefresh({
+        action: "upsert",
+        conversation: payload.conversation,
+      })
 
-      const finalDraft = sanitize(accumulated)
-      if (finalDraft) {
-        setDraft(finalDraft)
-        setPreviewOpen(true)
-        setConversationStatus("text_ready")
-      }
-      if (nextConversationId) {
-        saveWriterSessionMeta(nextConversationId, {
-          platform,
-          mode,
-          language,
-          draft: finalDraft,
-          imagesRequested: false,
-          status: "text_ready",
-          updatedAt: Date.now(),
-        })
-        replaceWriterUrl(`/dashboard/writer/${nextConversationId}?platform=${platform}&mode=${mode}&language=${language}`)
+      if (!conversationId) {
+        replaceWriterUrl(
+          `/dashboard/writer/${payload.conversation_id}?platform=${payload.conversation.platform}&mode=${payload.conversation.mode}&language=${payload.conversation.language}`,
+        )
       }
     } catch (error) {
       setConversationStatus("failed")
-      patchAssistantMessage(assistantId, `请求失败：${error instanceof Error ? error.message : "未知错误"}`)
+      patchAssistantMessage(
+        assistantId,
+        `${writerCopy.requestFailedPrefix}${error instanceof Error ? error.message : writerCopy.unknownError}`,
+      )
     } finally {
-      currentTaskIdRef.current = null
       setIsLoading(false)
     }
-  }
-
-  const handleStop = async () => {
-    if (!currentTaskIdRef.current) return
-    await fetch(`/api/writer/chat/${currentTaskIdRef.current}/stop`, { method: "POST" })
-    currentTaskIdRef.current = null
-    setIsLoading(false)
   }
 
   const handleCopyText = async () => {
@@ -1194,6 +1435,7 @@ export function WriterWorkspace({
     const pendingAssets = buildPendingWriterAssets(baseDraft, platform, mode)
     setPreviewOpen(true)
     setImagesRequested(true)
+    setImageConfirmationDismissed(true)
     setConversationStatus("image_generating")
     setAssetsError(null)
     setAssetsLoading(true)
@@ -1213,7 +1455,7 @@ export function WriterWorkspace({
       }
 
       if (nextAssets.length === 0) {
-        throw new Error("图片生成结果为空")
+        throw new Error(writerCopy.emptyImageResult)
       }
 
       setAssets(nextAssets)
@@ -1229,7 +1471,7 @@ export function WriterWorkspace({
               next[index] = {
                 ...next[index],
                 content: resolvedMarkdown,
-                authorLabel: WRITER_ASSISTANT_NAME,
+                authorLabel: writerCopy.assistantName,
               }
               break
             }
@@ -1246,7 +1488,7 @@ export function WriterWorkspace({
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "图片生成失败"
+      const message = error instanceof Error ? error.message : writerCopy.imageGenerationFailed
       setConversationStatus("failed")
       setAssetsError(message)
       setAssets(markWriterAssetsFailed(pendingAssets, message))
@@ -1258,36 +1500,57 @@ export function WriterWorkspace({
   const composerDisabled = loading || availabilityLoading || !availabilityReady
   const hasDraft = Boolean(draft.trim())
   const hasGeneratedImages = assets.some((asset) => Boolean(asset.url))
-  const currentModeLabel = writerModeOptions.find((option) => option.value === mode)?.label || "标准图文"
+  const currentModeLabel = writerModeOptions.find((option) => option.value === mode)?.label || "Standard"
   const currentLanguageLabel = WRITER_LANGUAGE_CONFIG[language].label
   const workspaceStatus = loading
-    ? "正在校验登录状态..."
+    ? "Checking sign-in..."
     : availabilityLoading
-      ? "正在检查写作能力..."
+      ? "Checking writer availability..."
       : isConversationLoading
-        ? "正在恢复会话内容..."
+        ? writerCopy.restoringConversation
         : conversationStatus === "image_generating"
-          ? "图片生成中，生成完成后会自动合并到成品预览。"
+          ? writerCopy.imageGenerationMerging
           : conversationStatus === "ready"
-            ? "图文稿已就绪，可继续微调并复制发布。"
+            ? "Draft ready to refine and publish."
             : conversationStatus === "failed"
-              ? "本次生成失败，可修改要求后重新生成。"
+              ? "Generation failed. Update the prompt and try again."
               : hasDraft
-                ? "文本草稿已生成，请确认文案后再生成配图。"
-                : "输入主题、受众、语气或结构要求后开始生成。"
+                ? "Copy draft ready. Confirm the text before generating images."
+                : "Describe the topic, audience, tone, or structure to start."
   const previewMarkdown =
     mode === "thread" && threadSegments.length > 0
       ? imagesRequested || hasGeneratedImages
         ? resolveWriterAssetMarkdown(
-            threadSegments.map((segment, index) => `### 第 ${index + 1} 段\n${segment}`).join("\n\n"),
+            threadSegments
+              .map(
+                (segment, index) =>
+                  `### ${writerCopy.threadSectionPrefix}${index + 1}${writerCopy.threadSectionSuffix}\n${segment}`,
+              )
+              .join("\n\n"),
             assets,
             platform,
             mode,
           )
-        : threadSegments.map((segment, index) => `### 第 ${index + 1} 段\n${segment}`).join("\n\n")
+        : threadSegments
+            .map(
+              (segment, index) =>
+                `### ${writerCopy.threadSectionPrefix}${index + 1}${writerCopy.threadSectionSuffix}\n${segment}`,
+            )
+            .join("\n\n")
       : imagesRequested || hasGeneratedImages
-        ? renderableDraft || baseDraft || "_文案确认后，可生成配图并查看图文合并预览。_"
-        : baseDraft || "_文章生成后，这里先展示文本预览；确认文案无误后再生成配图。_"
+        ? renderableDraft || baseDraft || writerCopy.imagePreviewReadyHint
+        : baseDraft || writerCopy.textPreviewHint
+  const canConfirmImages = hasDraft && conversationStatus === "text_ready" && !imagesRequested && !hasGeneratedImages
+  const inlineImageActionState =
+    assetsLoading || conversationStatus === "image_generating"
+      ? ("generating" as const)
+      : imagesRequested && (assetsError || conversationStatus === "failed")
+        ? ("failed" as const)
+        : imagesRequested && hasGeneratedImages
+          ? ("ready" as const)
+          : canConfirmImages && !imageConfirmationDismissed
+            ? ("confirm" as const)
+            : null
 
   return (
     <>
@@ -1313,9 +1576,19 @@ export function WriterWorkspace({
                 className="rounded-full px-2.5 py-0.5 text-[10px]"
               >
                 {knowledgeStatus?.enabled
-                  ? `企业知识 ${knowledgeStatus.datasetCount || 0}`
-                  : "未接入企业知识"}
+                  ? `${writerCopy.enterpriseKnowledge} ${knowledgeStatus.datasetCount || 0}`
+                  : writerCopy.noEnterpriseKnowledge}
               </Badge>
+              {knowledgeStatus?.enabled && knowledgeStatus.profile?.configuredScopes?.length ? (
+                <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {writerCopy.knowledgeProfile}{" "}
+                  {knowledgeStatus.profile.configuredScopes
+                    .slice(0, 2)
+                    .map((scope) => getKnowledgeScopeLabel(writerCopy, scope))
+                    .filter(Boolean)
+                    .join("/")}
+                </Badge>
+              ) : null}
               <Button
                 size="icon"
                 variant="outline"
@@ -1330,6 +1603,7 @@ export function WriterWorkspace({
         </header>
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
           <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-2 px-3 py-2 lg:px-5 lg:py-3">
+            {latestDiagnostics ? <WriterGroundingSummary copy={writerCopy} diagnostics={latestDiagnostics} /> : null}
             <div className="min-h-0 flex-1 overflow-hidden rounded-[26px] border bg-card shadow-sm">
               <ScrollArea className="h-full" ref={viewportRef}>
                 <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 lg:px-5">
@@ -1344,7 +1618,7 @@ export function WriterWorkspace({
                         disabled={isHistoryLoading}
                       >
                         {isHistoryLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                        {isHistoryLoading ? "加载更早消息中" : "加载更早消息"}
+                        {isHistoryLoading ? writerCopy.loadingOlderMessages : writerCopy.loadOlderMessages}
                       </Button>
                     </div>
                   ) : null}
@@ -1353,14 +1627,10 @@ export function WriterWorkspace({
                     <div className="space-y-3 rounded-[24px] border border-dashed bg-muted/20 p-4">
                       <div className="flex items-center gap-2 text-primary">
                         <Sparkles className="h-4 w-4" />
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em]">Quick Start</span>
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em]">{writerCopy.quickStart}</span>
                       </div>
                       <div className="grid gap-2.5 lg:grid-cols-3">
-                        {[
-                          "围绕 AI 客服 Agent 写一篇适合公众号发布的深度文章，包含趋势、案例、落地建议和配图说明。",
-                          "围绕 AI 副业工具推荐写一篇适合小红书的图文笔记，标题要有收藏感，正文给出具体工具和行动建议。",
-                          "写一组适合 X / Facebook 发布的 AI 创业观察线程，包含 hook、核心观点和结尾 CTA。",
-                        ].map((prompt) => (
+                        {writerCopy.quickStartPrompts.map((prompt) => (
                           <button
                             key={prompt}
                             type="button"
@@ -1377,7 +1647,7 @@ export function WriterWorkspace({
                   {isConversationLoading ? (
                     <div className="flex items-center gap-2 rounded-2xl border border-dashed bg-muted/20 px-3.5 py-2.5 text-xs text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      正在恢复当前会话...
+                      {writerCopy.restoringConversation}
                     </div>
                   ) : null}
 
@@ -1400,7 +1670,7 @@ export function WriterWorkspace({
                           )}
                         >
                           {message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
-                          {message.authorLabel || "你"}
+                          {message.authorLabel || writerCopy.you}
                         </div>
                         {renderMarkdown(
                           message.role === "assistant"
@@ -1410,7 +1680,20 @@ export function WriterWorkspace({
                           message.role === "assistant"
                             ? "prose prose-sm max-w-none prose-headings:text-slate-950 prose-p:text-slate-900 prose-li:text-slate-900 prose-strong:text-slate-950 prose-a:text-blue-700 prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px] prose-blockquote:text-slate-700"
                             : "prose prose-sm max-w-none prose-invert prose-p:my-2 prose-p:text-[14px] prose-p:leading-6 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
+                          writerCopy,
                         )}
+                        {message.role === "assistant" &&
+                        message.id === latestAssistantMessageId &&
+                        inlineImageActionState ? (
+                          <WriterInlineImageActionBar
+                            copy={writerCopy}
+                            state={inlineImageActionState}
+                            error={assetsError}
+                            onPreview={() => setPreviewOpen(true)}
+                            onGenerate={() => void handleGenerateAssets()}
+                            onDismiss={inlineImageActionState === "confirm" ? () => setImageConfirmationDismissed(true) : undefined}
+                          />
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -1418,7 +1701,7 @@ export function WriterWorkspace({
                   {isLoading ? (
                     <div className="flex justify-start">
                       <div className="rounded-[24px] rounded-bl-md border border-slate-200/90 bg-white px-3.5 py-3 text-xs text-slate-700 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.35)]">
-                        <span className="animate-pulse">正在生成图文草稿...</span>
+                        <span className="animate-pulse">{writerCopy.generatingDraft}</span>
                       </div>
                     </div>
                   ) : null}
@@ -1479,7 +1762,7 @@ export function WriterWorkspace({
                     data-testid="writer-inline-new-session-trigger"
                     onClick={handleCreateConversation}
                   >
-                    新建
+                    {writerCopy.newChat}
                   </Button>
                   <Button
                     size="sm"
@@ -1489,7 +1772,7 @@ export function WriterWorkspace({
                     disabled={!hasDraft}
                   >
                     <Eye className="mr-1.5 h-3.5 w-3.5" />
-                    预览
+                    {writerCopy.preview}
                   </Button>
                 </div>
               </div>
@@ -1505,19 +1788,19 @@ export function WriterWorkspace({
                       void handleSend()
                     }
                   }}
-                  placeholder={`告诉我你要写什么，我会按 ${writerConfig.shortLabel} 的发布方式起稿。可补充受众、语气、篇幅、配图和 CTA。`}
+                  placeholder={`${writerCopy.composerPlaceholderPrefix} ${writerConfig.shortLabel} ${writerCopy.composerPlaceholderSuffix}`}
                   className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
                   disabled={composerDisabled}
                 />
                 <div className="flex items-center justify-between gap-3 border-t border-border/70 px-3.5 py-2.5">
                   <p className="text-[11px] leading-5 text-muted-foreground">
                     {writerConfig.shortLabel} / {currentModeLabel} / {currentLanguageLabel}
-                    {composerDisabled ? " / 正在准备能力" : " / 支持图文合一预览与配图生成"}
+                    {composerDisabled ? ` / ${writerCopy.preparingCapabilities}` : ` / ${writerCopy.supportsPreviewAndImages}`}
                   </p>
                   {isLoading ? (
-                    <Button size="sm" variant="destructive" className="h-8 rounded-full px-3 text-[11px]" onClick={handleStop}>
-                      <Square className="mr-1.5 h-3.5 w-3.5 fill-current" />
-                      停止
+                    <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      {writerCopy.generatingDraft}
                     </Button>
                   ) : (
                     <Button
@@ -1528,7 +1811,7 @@ export function WriterWorkspace({
                       disabled={!inputValue.trim() || composerDisabled}
                     >
                       <Send className="mr-1.5 h-3.5 w-3.5" />
-                      发送
+                      {writerCopy.send}
                     </Button>
                   )}
                 </div>
@@ -1547,7 +1830,7 @@ export function WriterWorkspace({
                     {writerConfig.shortLabel}
                   </Badge>
                   <Badge variant="outline" className="rounded-full border-slate-400 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-900">
-                    {estimateReadingTime(previewMarkdown)}
+                    {estimateReadingTime(previewMarkdown, writerCopy)}
                   </Badge>
                 </div>
                 <Button
@@ -1557,11 +1840,11 @@ export function WriterWorkspace({
                   onClick={() => setPreviewOpen(false)}
                 >
                   <ChevronLeft className="mr-1.5 h-3.5 w-3.5" />
-                  收起
+                  {writerCopy.collapse}
                 </Button>
               </div>
-              <SheetTitle className="sr-only">{writerConfig.shortLabel} 预览</SheetTitle>
-              <SheetDescription className="sr-only">可直接编辑草稿并实时查看平台化图文预览。</SheetDescription>
+              <SheetTitle className="sr-only">{`${writerConfig.shortLabel} ${writerCopy.previewSheetTitle}`}</SheetTitle>
+              <SheetDescription className="sr-only">{writerCopy.previewSheetDescription}</SheetDescription>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-73px)]">
               <div className="space-y-4 p-4">
@@ -1573,11 +1856,11 @@ export function WriterWorkspace({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">成品预览与编辑</p>
+                      <p className="text-sm font-semibold text-slate-950">{writerCopy.finalPreviewTitle}</p>
                       <p className="mt-1 max-w-xl text-xs leading-5 text-slate-700">
                         {imagesRequested || hasGeneratedImages
-                          ? "图文已合并到同一条文章流；继续调整文案时不会重复生成图片。"
-                          : "当前先预览并确认文本，确认无误后再生成配图。"}
+                          ? writerCopy.finalPreviewWithImages
+                          : writerCopy.finalPreviewWithoutImages}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1595,7 +1878,11 @@ export function WriterWorkspace({
                           disabled={assetsLoading}
                         >
                           <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                          {assetsLoading ? "生成配图中" : imagesRequested || hasGeneratedImages ? "重新生成配图" : "确认文案并生成配图"}
+                          {assetsLoading
+                            ? writerCopy.generatingImages
+                            : imagesRequested || hasGeneratedImages
+                              ? writerCopy.regenerateImages
+                              : writerCopy.generateImages}
                         </Button>
                       ) : null}
                       {hasDraft ? (
@@ -1613,12 +1900,12 @@ export function WriterWorkspace({
                           )}
                         >
                           {draftSaveState === "saving"
-                            ? "保存中"
+                            ? writerCopy.saving
                             : draftSaveState === "saved"
-                              ? "已保存"
+                              ? writerCopy.saved
                               : draftSaveState === "error"
-                                ? "保存失败"
-                                : "可编辑"}
+                                ? writerCopy.saveFailed
+                                : writerCopy.editable}
                         </Badge>
                       ) : null}
                       <Button
@@ -1629,7 +1916,7 @@ export function WriterWorkspace({
                         disabled={!hasDraft}
                       >
                         <BookText className="mr-1.5 h-3.5 w-3.5" />
-                        复制富文本
+                        {writerCopy.copyRichText}
                       </Button>
                       <Button
                         size="sm"
@@ -1639,13 +1926,14 @@ export function WriterWorkspace({
                         disabled={!hasDraft}
                       >
                         <Copy className="mr-1.5 h-3.5 w-3.5" />
-                        复制 Markdown
+                        {writerCopy.copyMarkdown}
                       </Button>
                     </div>
                   </div>
                   <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_18px_50px_-32px_rgba(15,23,42,0.32)] ring-1 ring-slate-950/8">
                     <div ref={previewContentRef} className="p-6">
                       <PlatformPreview
+                        copy={writerCopy}
                         platform={platform}
                         mode={mode}
                         markdown={previewMarkdown}
@@ -1658,6 +1946,7 @@ export function WriterWorkspace({
                     </div>
                   </div>
                   <PreviewResourceStrip
+                    copy={writerCopy}
                     assets={imagesRequested || hasGeneratedImages ? assets : []}
                     assetsLoading={imagesRequested && assetsLoading}
                     assetsError={imagesRequested ? assetsError : null}

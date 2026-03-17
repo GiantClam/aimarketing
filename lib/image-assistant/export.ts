@@ -1,5 +1,21 @@
 import type { ImageAssistantLayer } from "@/lib/image-assistant/types"
 
+const IMAGE_ELEMENT_CACHE_LIMIT = 48
+const imageElementCache = new Map<string, Promise<HTMLImageElement>>()
+
+function touchImageElementCacheEntry(key: string, value: Promise<HTMLImageElement>) {
+  if (imageElementCache.has(key)) {
+    imageElementCache.delete(key)
+  }
+  imageElementCache.set(key, value)
+
+  while (imageElementCache.size > IMAGE_ELEMENT_CACHE_LIMIT) {
+    const oldestKey = imageElementCache.keys().next().value
+    if (!oldestKey) break
+    imageElementCache.delete(oldestKey)
+  }
+}
+
 function createCanvas(width: number, height: number) {
   const canvas = document.createElement("canvas")
   canvas.width = width
@@ -7,14 +23,36 @@ function createCanvas(width: number, height: number) {
   return canvas
 }
 
-function loadImage(url: string) {
+function resolveRenderableImageUrl(url: string) {
+  if (/^(data:|blob:|\/)/i.test(url)) {
+    return url
+  }
+  return `/api/image-assistant/assets/proxy?url=${encodeURIComponent(url)}`
+}
+
+function loadImageFromSource(url: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image()
-    img.crossOrigin = "anonymous"
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error("image_load_failed"))
     img.src = url
   })
+}
+
+export async function loadImageForCanvas(url: string) {
+  const resolvedUrl = resolveRenderableImageUrl(url)
+  const cached = imageElementCache.get(resolvedUrl)
+  if (cached) {
+    touchImageElementCacheEntry(resolvedUrl, cached)
+    return cached
+  }
+
+  const nextPromise = loadImageFromSource(resolvedUrl).catch((error) => {
+    imageElementCache.delete(resolvedUrl)
+    throw error
+  })
+  touchImageElementCacheEntry(resolvedUrl, nextPromise)
+  return nextPromise
 }
 
 function applyOpacity(ctx: CanvasRenderingContext2D, opacity: number | undefined) {
@@ -127,7 +165,7 @@ export async function renderImageAssistantLayersToCanvas(params: {
   for (const layer of sortedLayers) {
     if (layer.layer_type === "background" || layer.layer_type === "image" || layer.layer_type === "paint") {
       if (!layer.asset_url) continue
-      const img = await loadImage(layer.asset_url)
+      const img = await loadImageForCanvas(layer.asset_url)
       ctx.save()
       applyOpacity(ctx, layer.style?.opacity)
       ctx.translate(layer.transform.x, layer.transform.y)

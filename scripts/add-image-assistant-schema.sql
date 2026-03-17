@@ -1,7 +1,7 @@
-CREATE TABLE IF NOT EXISTS image_design_sessions (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_sessions" (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  enterprise_id INTEGER REFERENCES enterprises(id) ON DELETE SET NULL,
+  user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+  enterprise_id INTEGER REFERENCES "AI_MARKETING_enterprises"(id) ON DELETE SET NULL,
   title VARCHAR(255) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'active',
   current_mode VARCHAR(16) NOT NULL DEFAULT 'chat',
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS image_design_sessions (
   archived_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS image_design_messages (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_messages" (
   id SERIAL PRIMARY KEY,
-  session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
+  session_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_sessions"(id) ON DELETE CASCADE,
   role VARCHAR(20) NOT NULL,
   message_type VARCHAR(32) NOT NULL DEFAULT 'prompt',
   content TEXT NOT NULL,
@@ -26,10 +26,10 @@ CREATE TABLE IF NOT EXISTS image_design_messages (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS image_design_assets (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_assets" (
   id SERIAL PRIMARY KEY,
-  session_id INTEGER REFERENCES image_design_sessions(id) ON DELETE SET NULL,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_id INTEGER REFERENCES "AI_MARKETING_image_design_sessions"(id) ON DELETE SET NULL,
+  user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
   asset_type VARCHAR(32) NOT NULL,
   reference_role VARCHAR(32),
   storage_provider VARCHAR(32) NOT NULL DEFAULT 'r2',
@@ -46,9 +46,9 @@ CREATE TABLE IF NOT EXISTS image_design_assets (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS image_design_canvas_documents (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_canvas_documents" (
   id SERIAL PRIMARY KEY,
-  session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
+  session_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_sessions"(id) ON DELETE CASCADE,
   base_version_id INTEGER,
   width INTEGER NOT NULL DEFAULT 1080,
   height INTEGER NOT NULL DEFAULT 1080,
@@ -60,9 +60,9 @@ CREATE TABLE IF NOT EXISTS image_design_canvas_documents (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS image_design_versions (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_versions" (
   id SERIAL PRIMARY KEY,
-  session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
+  session_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_sessions"(id) ON DELETE CASCADE,
   parent_version_id INTEGER,
   source_message_id INTEGER,
   version_kind VARCHAR(32) NOT NULL,
@@ -79,19 +79,19 @@ CREATE TABLE IF NOT EXISTS image_design_versions (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS image_design_version_candidates (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_version_candidates" (
   id SERIAL PRIMARY KEY,
-  version_id INTEGER NOT NULL REFERENCES image_design_versions(id) ON DELETE CASCADE,
-  asset_id INTEGER NOT NULL REFERENCES image_design_assets(id) ON DELETE CASCADE,
+  version_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_versions"(id) ON DELETE CASCADE,
+  asset_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_assets"(id) ON DELETE CASCADE,
   candidate_index INTEGER NOT NULL,
   is_selected BOOLEAN NOT NULL DEFAULT FALSE,
   score INTEGER,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS image_design_canvas_layers (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_canvas_layers" (
   id SERIAL PRIMARY KEY,
-  canvas_document_id INTEGER NOT NULL REFERENCES image_design_canvas_documents(id) ON DELETE CASCADE,
+  canvas_document_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_canvas_documents"(id) ON DELETE CASCADE,
   layer_type VARCHAR(32) NOT NULL,
   name VARCHAR(255) NOT NULL,
   z_index INTEGER NOT NULL DEFAULT 0,
@@ -100,49 +100,49 @@ CREATE TABLE IF NOT EXISTS image_design_canvas_layers (
   transform JSONB NOT NULL,
   style JSONB,
   content JSONB,
-  asset_id INTEGER REFERENCES image_design_assets(id) ON DELETE SET NULL,
+  asset_id INTEGER REFERENCES "AI_MARKETING_image_design_assets"(id) ON DELETE SET NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS image_design_masks (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_masks" (
   id SERIAL PRIMARY KEY,
-  session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
-  canvas_document_id INTEGER REFERENCES image_design_canvas_documents(id) ON DELETE SET NULL,
-  version_id INTEGER REFERENCES image_design_versions(id) ON DELETE SET NULL,
+  session_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_sessions"(id) ON DELETE CASCADE,
+  canvas_document_id INTEGER REFERENCES "AI_MARKETING_image_design_canvas_documents"(id) ON DELETE SET NULL,
+  version_id INTEGER REFERENCES "AI_MARKETING_image_design_versions"(id) ON DELETE SET NULL,
   mask_type VARCHAR(32) NOT NULL,
   bounds JSONB NOT NULL,
   geometry JSONB,
-  mask_asset_id INTEGER REFERENCES image_design_assets(id) ON DELETE SET NULL,
+  mask_asset_id INTEGER REFERENCES "AI_MARKETING_image_design_assets"(id) ON DELETE SET NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS image_design_exports (
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_image_design_exports" (
   id SERIAL PRIMARY KEY,
-  session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
-  version_id INTEGER REFERENCES image_design_versions(id) ON DELETE SET NULL,
-  canvas_document_id INTEGER REFERENCES image_design_canvas_documents(id) ON DELETE SET NULL,
-  asset_id INTEGER NOT NULL REFERENCES image_design_assets(id) ON DELETE CASCADE,
+  session_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_sessions"(id) ON DELETE CASCADE,
+  version_id INTEGER REFERENCES "AI_MARKETING_image_design_versions"(id) ON DELETE SET NULL,
+  canvas_document_id INTEGER REFERENCES "AI_MARKETING_image_design_canvas_documents"(id) ON DELETE SET NULL,
+  asset_id INTEGER NOT NULL REFERENCES "AI_MARKETING_image_design_assets"(id) ON DELETE CASCADE,
   format VARCHAR(16) NOT NULL,
   size_preset VARCHAR(16) NOT NULL,
   transparent_background BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS image_design_version_candidate_unique_idx
-ON image_design_version_candidates (version_id, candidate_index);
+CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_image_design_version_candidate_unique_idx"
+ON "AI_MARKETING_image_design_version_candidates" (version_id, candidate_index);
 
-CREATE INDEX IF NOT EXISTS image_design_sessions_user_updated_idx
-ON image_design_sessions (user_id, updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_image_design_sessions_user_updated_idx"
+ON "AI_MARKETING_image_design_sessions" (user_id, updated_at DESC, id DESC);
 
-CREATE INDEX IF NOT EXISTS image_design_messages_session_created_idx
-ON image_design_messages (session_id, created_at ASC, id ASC);
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_image_design_messages_session_created_idx"
+ON "AI_MARKETING_image_design_messages" (session_id, created_at ASC, id ASC);
 
-CREATE INDEX IF NOT EXISTS image_design_assets_session_created_idx
-ON image_design_assets (session_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_image_design_assets_session_created_idx"
+ON "AI_MARKETING_image_design_assets" (session_id, created_at DESC, id DESC);
 
-CREATE INDEX IF NOT EXISTS image_design_versions_session_created_idx
-ON image_design_versions (session_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_image_design_versions_session_created_idx"
+ON "AI_MARKETING_image_design_versions" (session_id, created_at DESC, id DESC);
 
-CREATE INDEX IF NOT EXISTS image_design_canvas_layers_document_z_idx
-ON image_design_canvas_layers (canvas_document_id, z_index ASC, id ASC);
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_image_design_canvas_layers_document_z_idx"
+ON "AI_MARKETING_image_design_canvas_layers" (canvas_document_id, z_index ASC, id ASC);

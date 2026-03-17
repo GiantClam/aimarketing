@@ -3,6 +3,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { createImageAssistantAsset, logImageAssistantExport } from "@/lib/image-assistant/repository"
 
+const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
+  "image_assistant_session_not_found",
+  "image_assistant_version_not_found",
+  "image_assistant_asset_not_found",
+  "image_assistant_canvas_document_not_found",
+])
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireSessionUser(req, "image_design_generation")
@@ -52,6 +59,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ data: asset })
   } catch (error: any) {
+    if (IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS.has(error?.message)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
     return NextResponse.json({ error: error.message || "export_log_failed" }, { status: 500 })
   }
 }

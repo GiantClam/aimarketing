@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const data = await getAdvisorAvailability({
       userId: currentUser.id,
       userEmail: currentUser.email,
+      enterpriseId: currentUser.enterpriseId,
     })
 
     return NextResponse.json({ data })

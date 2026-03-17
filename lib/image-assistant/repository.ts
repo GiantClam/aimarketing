@@ -15,12 +15,14 @@ import type {
   ImageAssistantAssetType,
   ImageAssistantCanvasDocument,
   ImageAssistantCandidate,
+  ImageAssistantConversationPage,
   ImageAssistantConversationSummary,
   ImageAssistantLayer,
   ImageAssistantMessage,
   ImageAssistantMode,
   ImageAssistantReferenceRole,
   ImageAssistantSessionDetail,
+  ImageAssistantSessionDetailMeta,
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
   ImageAssistantVersionKind,
@@ -30,7 +32,29 @@ import type {
 const DB_RETRY_DELAYS_MS = [250, 750]
 const SESSION_PREFIX = "[image-assistant] "
 
-let ensureTablesPromise: Promise<void> | null = null
+type ImageAssistantListMessagesOptions = {
+  limit?: number
+}
+
+type ImageAssistantListVersionsOptions = {
+  limit?: number
+}
+
+type ImageAssistantListAssetsOptions = {
+  limit?: number
+  assetTypes?: ImageAssistantAssetType[]
+}
+
+type ImageAssistantSessionDetailOptions = {
+  includeMessages?: boolean
+  includeVersions?: boolean
+  includeAssets?: boolean
+  includeCanvas?: boolean
+  messageLimit?: number
+  versionLimit?: number
+  assetLimit?: number
+  assetTypes?: ImageAssistantAssetType[]
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -51,7 +75,13 @@ function isRetryableDbError(error: unknown) {
     combined.includes("error connecting to database") ||
     combined.includes("fetch failed") ||
     combined.includes("connect timeout") ||
-    combined.includes("und_err_connect_timeout")
+    combined.includes("connection timeout") ||
+    combined.includes("econnreset") ||
+    combined.includes("econnrefused") ||
+    combined.includes("und_err_connect_timeout") ||
+    combined.includes("connection terminated unexpectedly") ||
+    combined.includes("terminating connection") ||
+    combined.includes("quota")
   )
 }
 
@@ -89,168 +119,22 @@ function normalizeSessionTitle(title: string) {
   return title.startsWith(SESSION_PREFIX) ? title.slice(SESSION_PREFIX.length) : title
 }
 
+function normalizeListCoverUrl(url?: string | null) {
+  if (!url) return null
+  if (url.startsWith("data:") && url.length > 8_192) {
+    return null
+  }
+  return url
+}
+
 function toStoredSessionTitle(title: string) {
   const normalized = title.replace(/\s+/g, " ").trim().slice(0, 80)
   return `${SESSION_PREFIX}${normalized || "未命名设计"}`
 }
 
-async function ensureImageAssistantTables() {
-  if (!ensureTablesPromise) {
-    ensureTablesPromise = withDbRetry("ensure-image-assistant-tables", async () => {
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_sessions (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          enterprise_id INTEGER REFERENCES enterprises(id) ON DELETE SET NULL,
-          title VARCHAR(255) NOT NULL,
-          status VARCHAR(32) NOT NULL DEFAULT 'active',
-          current_mode VARCHAR(16) NOT NULL DEFAULT 'chat',
-          current_version_id INTEGER,
-          current_canvas_document_id INTEGER,
-          cover_asset_id INTEGER,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          archived_at TIMESTAMP
-        )
-      `)
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_messages (
-          id SERIAL PRIMARY KEY,
-          session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
-          role VARCHAR(20) NOT NULL,
-          message_type VARCHAR(32) NOT NULL DEFAULT 'prompt',
-          content TEXT NOT NULL,
-          task_type VARCHAR(32),
-          request_payload JSONB,
-          response_payload JSONB,
-          created_version_id INTEGER,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_assets (
-          id SERIAL PRIMARY KEY,
-          session_id INTEGER REFERENCES image_design_sessions(id) ON DELETE SET NULL,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          asset_type VARCHAR(32) NOT NULL,
-          reference_role VARCHAR(32),
-          storage_provider VARCHAR(32) NOT NULL DEFAULT 'r2',
-          storage_key TEXT NOT NULL UNIQUE,
-          public_url TEXT,
-          mime_type VARCHAR(100) NOT NULL,
-          file_size INTEGER NOT NULL DEFAULT 0,
-          width INTEGER,
-          height INTEGER,
-          sha256 VARCHAR(64),
-          status VARCHAR(20) NOT NULL DEFAULT 'pending',
-          meta JSONB,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_canvas_documents (
-          id SERIAL PRIMARY KEY,
-          session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
-          base_version_id INTEGER,
-          width INTEGER NOT NULL DEFAULT 1080,
-          height INTEGER NOT NULL DEFAULT 1080,
-          background_asset_id INTEGER,
-          revision INTEGER NOT NULL DEFAULT 1,
-          status VARCHAR(20) NOT NULL DEFAULT 'draft',
-          last_saved_at TIMESTAMP,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_versions (
-          id SERIAL PRIMARY KEY,
-          session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
-          parent_version_id INTEGER,
-          source_message_id INTEGER,
-          version_kind VARCHAR(32) NOT NULL,
-          branch_key VARCHAR(64),
-          provider VARCHAR(32),
-          model VARCHAR(128),
-          prompt_text TEXT,
-          snapshot_asset_id INTEGER,
-          mask_asset_id INTEGER,
-          selected_candidate_id INTEGER,
-          canvas_document_id INTEGER,
-          status VARCHAR(20) NOT NULL DEFAULT 'ready',
-          meta JSONB,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_version_candidates (
-          id SERIAL PRIMARY KEY,
-          version_id INTEGER NOT NULL REFERENCES image_design_versions(id) ON DELETE CASCADE,
-          asset_id INTEGER NOT NULL REFERENCES image_design_assets(id) ON DELETE CASCADE,
-          candidate_index INTEGER NOT NULL,
-          is_selected BOOLEAN NOT NULL DEFAULT FALSE,
-          score INTEGER,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_canvas_layers (
-          id SERIAL PRIMARY KEY,
-          canvas_document_id INTEGER NOT NULL REFERENCES image_design_canvas_documents(id) ON DELETE CASCADE,
-          layer_type VARCHAR(32) NOT NULL,
-          name VARCHAR(255) NOT NULL,
-          z_index INTEGER NOT NULL DEFAULT 0,
-          visible BOOLEAN NOT NULL DEFAULT TRUE,
-          locked BOOLEAN NOT NULL DEFAULT FALSE,
-          transform JSONB NOT NULL,
-          style JSONB,
-          content JSONB,
-          asset_id INTEGER REFERENCES image_design_assets(id) ON DELETE SET NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS image_design_exports (
-          id SERIAL PRIMARY KEY,
-          session_id INTEGER NOT NULL REFERENCES image_design_sessions(id) ON DELETE CASCADE,
-          version_id INTEGER,
-          canvas_document_id INTEGER,
-          asset_id INTEGER NOT NULL REFERENCES image_design_assets(id) ON DELETE CASCADE,
-          format VARCHAR(16) NOT NULL,
-          size_preset VARCHAR(16) NOT NULL,
-          transparent_background BOOLEAN NOT NULL DEFAULT FALSE,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-      await db.execute(sql`
-        CREATE UNIQUE INDEX IF NOT EXISTS image_design_version_candidate_unique_idx
-        ON image_design_version_candidates (version_id, candidate_index)
-      `)
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS image_design_sessions_user_updated_idx
-        ON image_design_sessions (user_id, updated_at DESC, id DESC)
-      `)
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS image_design_messages_session_created_idx
-        ON image_design_messages (session_id, created_at ASC, id ASC)
-      `)
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS image_design_versions_session_created_idx
-        ON image_design_versions (session_id, created_at DESC, id DESC)
-      `)
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS image_design_canvas_layers_document_z_idx
-        ON image_design_canvas_layers (canvas_document_id, z_index ASC, id ASC)
-      `)
-    }).catch((error) => {
-      ensureTablesPromise = null
-      throw error
-    })
-  }
-
-  await ensureTablesPromise
+function parseDatabaseId(value: string | null | undefined) {
+  const parsed = Number.parseInt(String(value || ""), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
 function mapSession(row: any, coverAssetUrl?: string | null): ImageAssistantConversationSummary {
@@ -293,8 +177,22 @@ function mapMessage(row: any): ImageAssistantMessage {
     task_type: row.taskType || null,
     content: row.content,
     created_version_id: row.createdVersionId ? String(row.createdVersionId) : null,
+    request_payload: (row.requestPayload as Record<string, unknown> | null | undefined) || null,
+    response_payload: (row.responsePayload as Record<string, unknown> | null | undefined) || null,
     created_at: toEpochSeconds(row.createdAt),
   }
+}
+
+async function getImageAssistantAssetByStorageKeyRecord(userId: number, storageKey: string) {
+  const [row] = await withDbRetry("get-image-asset-by-storage-key", () =>
+    db
+      .select()
+      .from(imageDesignAssets)
+      .where(and(eq(imageDesignAssets.userId, userId), eq(imageDesignAssets.storageKey, storageKey)))
+      .limit(1),
+  )
+
+  return row || null
 }
 
 function mapCandidate(row: any): ImageAssistantCandidate {
@@ -344,13 +242,33 @@ async function listVersionCandidates(versionIds: number[]) {
   )
 }
 
+async function countImageAssistantMessages(sessionId: string) {
+  const rows = await withDbRetry("count-image-messages", () =>
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(imageDesignMessages)
+      .where(eq(imageDesignMessages.sessionId, Number(sessionId))),
+  )
+
+  return Number(rows[0]?.count || 0)
+}
+
+async function countImageAssistantVersions(sessionId: string) {
+  const rows = await withDbRetry("count-image-versions", () =>
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(imageDesignVersions)
+      .where(eq(imageDesignVersions.sessionId, Number(sessionId))),
+  )
+
+  return Number(rows[0]?.count || 0)
+}
+
 export async function createImageAssistantSession(params: {
   userId: number
   enterpriseId?: number | null
   title?: string | null
 }) {
-  await ensureImageAssistantTables()
-
   const inserted = await withDbRetry("create-image-session", () =>
     db
       .insert(imageDesignSessions)
@@ -369,9 +287,15 @@ export async function createImageAssistantSession(params: {
   return mapSession(inserted[0])
 }
 
-export async function listImageAssistantSessions(userId: number, limit = 30) {
-  await ensureImageAssistantTables()
-
+export async function listImageAssistantSessions(
+  userId: number,
+  limit = 30,
+  cursor?: string | null,
+): Promise<ImageAssistantConversationPage> {
+  const safeLimit = Math.max(1, Math.min(limit, 50))
+  const parsedCursor = cursor ? /^(\d+):(\d+)$/u.exec(cursor.trim()) : null
+  const cursorTimestamp = parsedCursor ? new Date(Number(parsedCursor[1]) * 1000) : null
+  const cursorId = parsedCursor ? Number.parseInt(parsedCursor[2], 10) : Number.NaN
   const rows = await withDbRetry("list-image-sessions", () =>
     db
       .select({
@@ -387,18 +311,36 @@ export async function listImageAssistantSessions(userId: number, limit = 30) {
       })
       .from(imageDesignSessions)
       .leftJoin(imageDesignAssets, eq(imageDesignSessions.coverAssetId, imageDesignAssets.id))
-      .where(and(eq(imageDesignSessions.userId, userId), sql`${imageDesignSessions.title} LIKE ${`${SESSION_PREFIX}%`}`))
+      .where(
+        and(
+          eq(imageDesignSessions.userId, userId),
+          sql`${imageDesignSessions.title} LIKE ${`${SESSION_PREFIX}%`}`,
+          parsedCursor && cursorTimestamp && Number.isFinite(cursorId)
+            ? sql`(
+                ${imageDesignSessions.updatedAt} < ${cursorTimestamp}
+                OR (${imageDesignSessions.updatedAt} = ${cursorTimestamp} AND ${imageDesignSessions.id} < ${cursorId})
+              )`
+            : undefined,
+        ),
+      )
       .orderBy(desc(imageDesignSessions.updatedAt), desc(imageDesignSessions.id))
-      .limit(Math.max(1, Math.min(limit, 50))),
+      .limit(safeLimit + 1),
   )
 
-  return rows.map((row) => mapSession(row, row.coverAssetUrl))
+  const visibleRows = rows.slice(0, safeLimit)
+  const data = visibleRows.map((row) => mapSession(row, normalizeListCoverUrl(row.coverAssetUrl)))
+  const lastVisibleSession = data.at(-1)
+  const nextCursor =
+    rows.length > safeLimit && lastVisibleSession
+      ? `${lastVisibleSession.updated_at}:${lastVisibleSession.id}`
+      : null
+
+  return { data, has_more: rows.length > safeLimit, limit: safeLimit, next_cursor: nextCursor }
 }
 
 export async function getImageAssistantSession(userId: number, sessionId: string) {
-  await ensureImageAssistantTables()
-  const parsedId = Number.parseInt(sessionId, 10)
-  if (!Number.isFinite(parsedId) || parsedId <= 0) return null
+  const parsedId = parseDatabaseId(sessionId)
+  if (!parsedId) return null
 
   const rows = await withDbRetry("get-image-session", () =>
     db
@@ -427,6 +369,130 @@ export async function getImageAssistantSession(userId: number, sessionId: string
   return rows[0]
 }
 
+async function getImageAssistantVersionForSession(sessionId: string, versionId: string) {
+  const parsedSessionId = parseDatabaseId(sessionId)
+  const parsedVersionId = parseDatabaseId(versionId)
+  if (!parsedSessionId || !parsedVersionId) return null
+
+  const [row] = await withDbRetry("get-image-version-for-session", () =>
+    db
+      .select({
+        id: imageDesignVersions.id,
+        sessionId: imageDesignVersions.sessionId,
+        selectedCandidateId: imageDesignVersions.selectedCandidateId,
+      })
+      .from(imageDesignVersions)
+      .where(and(eq(imageDesignVersions.id, parsedVersionId), eq(imageDesignVersions.sessionId, parsedSessionId)))
+      .limit(1),
+  )
+
+  return row || null
+}
+
+async function getImageAssistantVersionCandidate(versionId: string, candidateId: string) {
+  const parsedVersionId = parseDatabaseId(versionId)
+  const parsedCandidateId = parseDatabaseId(candidateId)
+  if (!parsedVersionId || !parsedCandidateId) return null
+
+  const [row] = await withDbRetry("get-image-version-candidate", () =>
+    db
+      .select({
+        id: imageDesignVersionCandidates.id,
+        versionId: imageDesignVersionCandidates.versionId,
+        assetId: imageDesignVersionCandidates.assetId,
+      })
+      .from(imageDesignVersionCandidates)
+      .where(
+        and(
+          eq(imageDesignVersionCandidates.id, parsedCandidateId),
+          eq(imageDesignVersionCandidates.versionId, parsedVersionId),
+        ),
+      )
+      .limit(1),
+  )
+
+  return row || null
+}
+
+async function getImageAssistantCanvasDocumentForSession(sessionId: string, canvasDocumentId: string) {
+  const parsedSessionId = parseDatabaseId(sessionId)
+  const parsedCanvasDocumentId = parseDatabaseId(canvasDocumentId)
+  if (!parsedSessionId || !parsedCanvasDocumentId) return null
+
+  const [row] = await withDbRetry("get-image-canvas-document-for-session", () =>
+    db
+      .select({
+        id: imageDesignCanvasDocuments.id,
+        sessionId: imageDesignCanvasDocuments.sessionId,
+        baseVersionId: imageDesignCanvasDocuments.baseVersionId,
+        width: imageDesignCanvasDocuments.width,
+        height: imageDesignCanvasDocuments.height,
+        backgroundAssetId: imageDesignCanvasDocuments.backgroundAssetId,
+        revision: imageDesignCanvasDocuments.revision,
+        status: imageDesignCanvasDocuments.status,
+        updatedAt: imageDesignCanvasDocuments.updatedAt,
+      })
+      .from(imageDesignCanvasDocuments)
+      .where(
+        and(eq(imageDesignCanvasDocuments.id, parsedCanvasDocumentId), eq(imageDesignCanvasDocuments.sessionId, parsedSessionId)),
+      )
+      .limit(1),
+  )
+
+  return row || null
+}
+
+async function getImageAssistantAssetForSession(userId: number, sessionId: string, assetId: string) {
+  const parsedSessionId = parseDatabaseId(sessionId)
+  const parsedAssetId = parseDatabaseId(assetId)
+  if (!parsedSessionId || !parsedAssetId) return null
+
+  const [row] = await withDbRetry("get-image-asset-for-session", () =>
+    db
+      .select({
+        id: imageDesignAssets.id,
+        sessionId: imageDesignAssets.sessionId,
+        userId: imageDesignAssets.userId,
+      })
+      .from(imageDesignAssets)
+      .where(
+        and(
+          eq(imageDesignAssets.id, parsedAssetId),
+          eq(imageDesignAssets.userId, userId),
+          eq(imageDesignAssets.sessionId, parsedSessionId),
+        ),
+      )
+      .limit(1),
+  )
+
+  return row || null
+}
+
+async function listImageAssistantAssetsForSession(userId: number, sessionId: string, assetIds: string[]) {
+  const parsedSessionId = parseDatabaseId(sessionId)
+  const parsedAssetIds = Array.from(
+    new Set(assetIds.map((assetId) => parseDatabaseId(assetId)).filter((value): value is number => Boolean(value))),
+  )
+  if (!parsedSessionId || !parsedAssetIds.length) {
+    return new Set<number>()
+  }
+
+  const rows = await withDbRetry("list-image-assets-for-session", () =>
+    db
+      .select({ id: imageDesignAssets.id })
+      .from(imageDesignAssets)
+      .where(
+        and(
+          eq(imageDesignAssets.userId, userId),
+          eq(imageDesignAssets.sessionId, parsedSessionId),
+          inArray(imageDesignAssets.id, parsedAssetIds),
+        ),
+      ),
+  )
+
+  return new Set(rows.map((row) => row.id))
+}
+
 export async function updateImageAssistantSession(params: {
   userId: number
   sessionId: string
@@ -442,9 +508,33 @@ export async function updateImageAssistantSession(params: {
   const patch: Record<string, unknown> = { updatedAt: new Date() }
   if (typeof params.title === "string") patch.title = toStoredSessionTitle(params.title)
   if (params.currentMode) patch.currentMode = params.currentMode
-  if (params.currentVersionId !== undefined) patch.currentVersionId = params.currentVersionId ? Number(params.currentVersionId) : null
-  if (params.currentCanvasDocumentId !== undefined) patch.currentCanvasDocumentId = params.currentCanvasDocumentId ? Number(params.currentCanvasDocumentId) : null
-  if (params.coverAssetId !== undefined) patch.coverAssetId = params.coverAssetId ? Number(params.coverAssetId) : null
+  if (params.currentVersionId !== undefined) {
+    if (!params.currentVersionId) {
+      patch.currentVersionId = null
+    } else {
+      const version = await getImageAssistantVersionForSession(params.sessionId, params.currentVersionId)
+      if (!version) return null
+      patch.currentVersionId = version.id
+    }
+  }
+  if (params.currentCanvasDocumentId !== undefined) {
+    if (!params.currentCanvasDocumentId) {
+      patch.currentCanvasDocumentId = null
+    } else {
+      const canvasDocument = await getImageAssistantCanvasDocumentForSession(params.sessionId, params.currentCanvasDocumentId)
+      if (!canvasDocument) return null
+      patch.currentCanvasDocumentId = canvasDocument.id
+    }
+  }
+  if (params.coverAssetId !== undefined) {
+    if (!params.coverAssetId) {
+      patch.coverAssetId = null
+    } else {
+      const asset = await getImageAssistantAssetForSession(params.userId, params.sessionId, params.coverAssetId)
+      if (!asset) return null
+      patch.coverAssetId = asset.id
+    }
+  }
 
   await withDbRetry("update-image-session", () =>
     db.update(imageDesignSessions).set(patch as any).where(eq(imageDesignSessions.id, Number(params.sessionId))),
@@ -452,6 +542,19 @@ export async function updateImageAssistantSession(params: {
 
   const next = await getImageAssistantSession(params.userId, params.sessionId)
   return next ? mapSession(next, next.coverAssetUrl) : null
+}
+
+export async function deleteImageAssistantSession(userId: number, sessionId: string) {
+  const existing = await getImageAssistantSession(userId, sessionId)
+  if (!existing) {
+    return false
+  }
+
+  await withDbRetry("delete-image-session", () =>
+    db.delete(imageDesignSessions).where(eq(imageDesignSessions.id, Number(sessionId))),
+  )
+
+  return true
 }
 
 export async function createImageAssistantAsset(params: {
@@ -470,7 +573,12 @@ export async function createImageAssistantAsset(params: {
   status?: "pending" | "ready" | "failed"
   meta?: Record<string, unknown> | null
 }) {
-  await ensureImageAssistantTables()
+  if (params.sessionId) {
+    const session = await getImageAssistantSession(params.userId, params.sessionId)
+    if (!session) {
+      throw new Error("image_assistant_session_not_found")
+    }
+  }
 
   const inserted = await withDbRetry("create-image-asset", () =>
     db
@@ -499,17 +607,99 @@ export async function createImageAssistantAsset(params: {
   return mapAsset(inserted[0])
 }
 
-export async function listImageAssistantAssets(userId: number, sessionId: string) {
+export async function getImageAssistantAssetByStorageKey(userId: number, storageKey: string) {
+  const row = await getImageAssistantAssetByStorageKeyRecord(userId, storageKey)
+  return row ? mapAsset(row) : null
+}
+
+export async function updateImageAssistantAsset(params: {
+  userId: number
+  sessionId: string
+  assetId: string
+  meta?: Record<string, unknown> | null
+  status?: "pending" | "ready" | "failed"
+  storageProvider?: string
+  storageKey?: string
+  publicUrl?: string | null
+  mimeType?: string
+  fileSize?: number
+  width?: number | null
+  height?: number | null
+  sha256?: string | null
+}) {
+  const asset = await getImageAssistantAssetForSession(params.userId, params.sessionId, params.assetId)
+  if (!asset) {
+    return null
+  }
+
+  const patch: Record<string, unknown> = {
+    updatedAt: new Date(),
+  }
+  if (params.meta !== undefined) {
+    patch.meta = params.meta
+  }
+  if (params.status) {
+    patch.status = params.status
+  }
+  if (params.storageProvider !== undefined) {
+    patch.storageProvider = params.storageProvider
+  }
+  if (params.storageKey !== undefined) {
+    patch.storageKey = params.storageKey
+  }
+  if (params.publicUrl !== undefined) {
+    patch.publicUrl = params.publicUrl
+  }
+  if (params.mimeType !== undefined) {
+    patch.mimeType = params.mimeType
+  }
+  if (params.fileSize !== undefined) {
+    patch.fileSize = params.fileSize
+  }
+  if (params.width !== undefined) {
+    patch.width = params.width
+  }
+  if (params.height !== undefined) {
+    patch.height = params.height
+  }
+  if (params.sha256 !== undefined) {
+    patch.sha256 = params.sha256
+  }
+
+  await withDbRetry("update-image-asset", () =>
+    db.update(imageDesignAssets).set(patch as any).where(eq(imageDesignAssets.id, asset.id)),
+  )
+
+  const updated = await getImageAssistantAssetForSession(params.userId, params.sessionId, params.assetId)
+  return updated ? mapAsset(updated) : null
+}
+
+export async function listImageAssistantAssets(
+  userId: number,
+  sessionId: string,
+  options?: ImageAssistantListAssetsOptions,
+) {
   const existing = await getImageAssistantSession(userId, sessionId)
   if (!existing) return []
 
-  const rows = await withDbRetry("list-image-assets", () =>
-    db
+  const limit = options?.limit ? Math.max(1, Math.min(options.limit, 100)) : null
+  const assetTypes = options?.assetTypes?.length ? options.assetTypes : null
+  const filters = [eq(imageDesignAssets.userId, userId), eq(imageDesignAssets.sessionId, Number(sessionId))]
+  if (assetTypes?.length === 1) {
+    filters.push(eq(imageDesignAssets.assetType, assetTypes[0]))
+  } else if (assetTypes && assetTypes.length > 1) {
+    filters.push(inArray(imageDesignAssets.assetType, assetTypes))
+  }
+
+  const rows = await withDbRetry("list-image-assets", () => {
+    const query = db
       .select()
       .from(imageDesignAssets)
-      .where(and(eq(imageDesignAssets.userId, userId), eq(imageDesignAssets.sessionId, Number(sessionId))))
-      .orderBy(desc(imageDesignAssets.createdAt), desc(imageDesignAssets.id)),
-  )
+      .where(and(...filters))
+      .orderBy(desc(imageDesignAssets.createdAt), desc(imageDesignAssets.id))
+
+    return limit ? query.limit(limit) : query
+  })
 
   return rows.map(mapAsset)
 }
@@ -545,6 +735,7 @@ export async function createImageAssistantMessage(params: {
 }
 
 export async function createVersionWithCandidates(params: {
+  userId: number
   sessionId: string
   parentVersionId?: string | null
   sourceMessageId?: string | null
@@ -560,21 +751,59 @@ export async function createVersionWithCandidates(params: {
   selectedCandidateIndex?: number
   candidateAssetIds: string[]
 }) {
+  const session = await getImageAssistantSession(params.userId, params.sessionId)
+  if (!session) {
+    throw new Error("image_assistant_session_not_found")
+  }
+
+  const parentVersion =
+    params.parentVersionId != null ? await getImageAssistantVersionForSession(params.sessionId, params.parentVersionId) : null
+  if (params.parentVersionId && !parentVersion) {
+    throw new Error("image_assistant_version_not_found")
+  }
+
+  const snapshotAsset =
+    params.snapshotAssetId != null
+      ? await getImageAssistantAssetForSession(params.userId, params.sessionId, params.snapshotAssetId)
+      : null
+  if (params.snapshotAssetId && !snapshotAsset) {
+    throw new Error("image_assistant_asset_not_found")
+  }
+
+  const maskAsset =
+    params.maskAssetId != null ? await getImageAssistantAssetForSession(params.userId, params.sessionId, params.maskAssetId) : null
+  if (params.maskAssetId && !maskAsset) {
+    throw new Error("image_assistant_asset_not_found")
+  }
+
+  const canvasDocument =
+    params.canvasDocumentId != null
+      ? await getImageAssistantCanvasDocumentForSession(params.sessionId, params.canvasDocumentId)
+      : null
+  if (params.canvasDocumentId && !canvasDocument) {
+    throw new Error("image_assistant_canvas_document_not_found")
+  }
+
+  const persistedCandidateAssetIds = await listImageAssistantAssetsForSession(params.userId, params.sessionId, params.candidateAssetIds)
+  if (persistedCandidateAssetIds.size !== new Set(params.candidateAssetIds).size) {
+    throw new Error("image_assistant_asset_not_found")
+  }
+
   const insertedVersion = await withDbRetry("create-image-version", () =>
     db
       .insert(imageDesignVersions)
       .values({
         sessionId: Number(params.sessionId),
-        parentVersionId: params.parentVersionId ? Number(params.parentVersionId) : null,
+        parentVersionId: parentVersion?.id || null,
         sourceMessageId: params.sourceMessageId ? Number(params.sourceMessageId) : null,
         versionKind: params.versionKind,
         branchKey: params.parentVersionId || null,
         provider: params.provider || null,
         model: params.model || null,
         promptText: params.promptText || null,
-        snapshotAssetId: params.snapshotAssetId ? Number(params.snapshotAssetId) : null,
-        maskAssetId: params.maskAssetId ? Number(params.maskAssetId) : null,
-        canvasDocumentId: params.canvasDocumentId ? Number(params.canvasDocumentId) : null,
+        snapshotAssetId: snapshotAsset?.id || null,
+        maskAssetId: maskAsset?.id || null,
+        canvasDocumentId: canvasDocument?.id || null,
         status: params.status || "ready",
         meta: params.meta || null,
         createdAt: new Date(),
@@ -621,6 +850,12 @@ export async function setSelectedVersionCandidate(params: {
   const session = await getImageAssistantSession(params.userId, params.sessionId)
   if (!session) return null
 
+  const version = await getImageAssistantVersionForSession(params.sessionId, params.versionId)
+  if (!version) return null
+
+  const candidate = await getImageAssistantVersionCandidate(params.versionId, params.candidateId)
+  if (!candidate) return null
+
   await withDbRetry("clear-version-selected-candidate", () =>
     db
       .update(imageDesignVersionCandidates)
@@ -636,24 +871,16 @@ export async function setSelectedVersionCandidate(params: {
   await withDbRetry("set-version-selected-candidate-id", () =>
     db
       .update(imageDesignVersions)
-      .set({ selectedCandidateId: Number(params.candidateId) })
-      .where(eq(imageDesignVersions.id, Number(params.versionId))),
-  )
-
-  const candidate = await withDbRetry("get-candidate-asset-id", () =>
-    db
-      .select({ assetId: imageDesignVersionCandidates.assetId })
-      .from(imageDesignVersionCandidates)
-      .where(eq(imageDesignVersionCandidates.id, Number(params.candidateId)))
-      .limit(1),
+      .set({ selectedCandidateId: candidate.id })
+      .where(eq(imageDesignVersions.id, version.id)),
   )
 
   await withDbRetry("update-session-current-version-pointer", () =>
     db
       .update(imageDesignSessions)
       .set({
-        currentVersionId: Number(params.versionId),
-        coverAssetId: candidate[0]?.assetId || null,
+        currentVersionId: version.id,
+        coverAssetId: candidate.assetId || null,
         updatedAt: new Date(),
       })
       .where(eq(imageDesignSessions.id, Number(params.sessionId))),
@@ -662,32 +889,56 @@ export async function setSelectedVersionCandidate(params: {
   return true
 }
 
-export async function listImageAssistantMessages(userId: number, sessionId: string) {
+export async function listImageAssistantMessages(
+  userId: number,
+  sessionId: string,
+  options?: ImageAssistantListMessagesOptions,
+) {
   const existing = await getImageAssistantSession(userId, sessionId)
   if (!existing) return []
 
-  const rows = await withDbRetry("list-image-messages", () =>
-    db
+  const limit = options?.limit ? Math.max(1, Math.min(options.limit, 200)) : null
+  const rows = await withDbRetry("list-image-messages", () => {
+    const ascendingQuery = db
       .select()
       .from(imageDesignMessages)
       .where(eq(imageDesignMessages.sessionId, Number(sessionId)))
-      .orderBy(asc(imageDesignMessages.createdAt), asc(imageDesignMessages.id)),
-  )
+      .orderBy(asc(imageDesignMessages.createdAt), asc(imageDesignMessages.id))
 
-  return rows.map(mapMessage)
+    if (!limit) {
+      return ascendingQuery
+    }
+
+    return db
+      .select()
+      .from(imageDesignMessages)
+      .where(eq(imageDesignMessages.sessionId, Number(sessionId)))
+      .orderBy(desc(imageDesignMessages.createdAt), desc(imageDesignMessages.id))
+      .limit(limit)
+  })
+
+  const normalizedRows = limit ? [...rows].reverse() : rows
+  return normalizedRows.map(mapMessage)
 }
 
-export async function listImageAssistantVersions(userId: number, sessionId: string) {
+export async function listImageAssistantVersions(
+  userId: number,
+  sessionId: string,
+  options?: ImageAssistantListVersionsOptions,
+) {
   const existing = await getImageAssistantSession(userId, sessionId)
   if (!existing) return []
 
-  const rows = await withDbRetry("list-image-versions", () =>
-    db
+  const limit = options?.limit ? Math.max(1, Math.min(options.limit, 100)) : null
+  const rows = await withDbRetry("list-image-versions", () => {
+    const query = db
       .select()
       .from(imageDesignVersions)
       .where(eq(imageDesignVersions.sessionId, Number(sessionId)))
-      .orderBy(desc(imageDesignVersions.createdAt), desc(imageDesignVersions.id)),
-  )
+      .orderBy(desc(imageDesignVersions.createdAt), desc(imageDesignVersions.id))
+
+    return limit ? query.limit(limit) : query
+  })
 
   const candidates = await listVersionCandidates(rows.map((row) => row.id))
   const groupedCandidates = new Map<number, ImageAssistantCandidate[]>()
@@ -709,6 +960,7 @@ export async function listImageAssistantVersions(userId: number, sessionId: stri
         model: row.model || null,
         prompt_text: row.promptText || null,
         selected_candidate_id: row.selectedCandidateId ? String(row.selectedCandidateId) : null,
+        meta: (row.meta as Record<string, unknown> | null | undefined) || null,
         created_at: toEpochSeconds(row.createdAt),
         candidates: groupedCandidates.get(row.id) || [],
       }) satisfies ImageAssistantVersionSummary,
@@ -731,6 +983,30 @@ export async function saveImageAssistantCanvas(params: {
     throw new Error("image_assistant_session_not_found")
   }
 
+  const baseVersion =
+    params.baseVersionId != null ? await getImageAssistantVersionForSession(params.sessionId, params.baseVersionId) : null
+  if (params.baseVersionId && !baseVersion) {
+    throw new Error("image_assistant_version_not_found")
+  }
+
+  const backgroundAsset =
+    params.backgroundAssetId != null
+      ? await getImageAssistantAssetForSession(params.userId, params.sessionId, params.backgroundAssetId)
+      : null
+  if (params.backgroundAssetId && !backgroundAsset) {
+    throw new Error("image_assistant_asset_not_found")
+  }
+
+  const referencedLayerAssetIds = Array.from(
+    new Set(params.layers.map((layer) => layer.asset_id).filter((assetId): assetId is string => Boolean(assetId))),
+  )
+  if (referencedLayerAssetIds.length) {
+    const allowedLayerAssetIds = await listImageAssistantAssetsForSession(params.userId, params.sessionId, referencedLayerAssetIds)
+    if (allowedLayerAssetIds.size !== referencedLayerAssetIds.length) {
+      throw new Error("image_assistant_asset_not_found")
+    }
+  }
+
   let documentId = params.canvasDocumentId ? Number(params.canvasDocumentId) : null
   let nextRevision = 1
 
@@ -740,10 +1016,10 @@ export async function saveImageAssistantCanvas(params: {
         .insert(imageDesignCanvasDocuments)
         .values({
           sessionId: Number(params.sessionId),
-          baseVersionId: params.baseVersionId ? Number(params.baseVersionId) : null,
+          baseVersionId: baseVersion?.id || null,
           width: params.width,
           height: params.height,
-          backgroundAssetId: params.backgroundAssetId ? Number(params.backgroundAssetId) : null,
+          backgroundAssetId: backgroundAsset?.id || null,
           revision: 1,
           status: "saved",
           lastSavedAt: new Date(),
@@ -754,40 +1030,34 @@ export async function saveImageAssistantCanvas(params: {
     )
     documentId = created[0].id
   } else {
-    const existingDocumentId = documentId
-    const existingDocument = await withDbRetry("get-image-canvas-document", () =>
-      db
-        .select({ id: imageDesignCanvasDocuments.id, revision: imageDesignCanvasDocuments.revision })
-        .from(imageDesignCanvasDocuments)
-        .where(eq(imageDesignCanvasDocuments.id, existingDocumentId))
-        .limit(1),
-    )
-    if (!existingDocument[0]) {
+    const existingDocument = await getImageAssistantCanvasDocumentForSession(params.sessionId, String(documentId))
+    if (!existingDocument) {
       throw new Error("image_assistant_canvas_document_not_found")
     }
-    if (typeof params.revision === "number" && params.revision !== existingDocument[0].revision) {
+    if (typeof params.revision === "number" && params.revision !== existingDocument.revision) {
       throw new Error("image_assistant_canvas_revision_conflict")
     }
-    nextRevision = existingDocument[0].revision + 1
+    documentId = existingDocument.id
+    nextRevision = existingDocument.revision + 1
 
     await withDbRetry("update-image-canvas-document", () =>
       db
         .update(imageDesignCanvasDocuments)
         .set({
-          baseVersionId: params.baseVersionId ? Number(params.baseVersionId) : null,
+          baseVersionId: baseVersion?.id || null,
           width: params.width,
           height: params.height,
-          backgroundAssetId: params.backgroundAssetId ? Number(params.backgroundAssetId) : null,
+          backgroundAssetId: backgroundAsset?.id || null,
           revision: nextRevision,
           status: "saved",
           lastSavedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(imageDesignCanvasDocuments.id, existingDocumentId)),
+        .where(eq(imageDesignCanvasDocuments.id, documentId!)),
     )
 
     await withDbRetry("delete-existing-image-canvas-layers", () =>
-      db.delete(imageDesignCanvasLayers).where(eq(imageDesignCanvasLayers.canvasDocumentId, existingDocumentId)),
+      db.delete(imageDesignCanvasLayers).where(eq(imageDesignCanvasLayers.canvasDocumentId, documentId!)),
     )
   }
 
@@ -804,7 +1074,7 @@ export async function saveImageAssistantCanvas(params: {
           transform: layer.transform,
           style: layer.style || null,
           content: layer.content || null,
-          assetId: layer.asset_id ? Number(layer.asset_id) : null,
+          assetId: layer.asset_id ? parseDatabaseId(layer.asset_id) : null,
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
@@ -834,20 +1104,13 @@ export async function getImageAssistantCanvasDocument(userId: number, sessionId:
   if (!session) return null
 
   const targetId = canvasDocumentId
-    ? Number(canvasDocumentId)
+    ? parseDatabaseId(canvasDocumentId)
     : typeof session.currentCanvasDocumentId === "number"
       ? session.currentCanvasDocumentId
       : null
   if (targetId == null || !Number.isFinite(targetId) || targetId <= 0) return null
 
-  const [documentRow] = await withDbRetry("get-image-canvas-document-detail", () =>
-    db
-      .select()
-      .from(imageDesignCanvasDocuments)
-      .where(eq(imageDesignCanvasDocuments.id, targetId))
-      .limit(1),
-  )
-
+  const documentRow = await getImageAssistantCanvasDocumentForSession(sessionId, String(targetId))
   if (!documentRow) return null
 
   const layerRows = await withDbRetry("list-image-canvas-layers", () =>
@@ -861,7 +1124,16 @@ export async function getImageAssistantCanvasDocument(userId: number, sessionId:
   const assetIds = layerRows.map((row) => row.assetId).filter((value): value is number => Number.isFinite(value as number))
   const assetRows = assetIds.length
     ? await withDbRetry("list-image-canvas-layer-assets", () =>
-        db.select().from(imageDesignAssets).where(inArray(imageDesignAssets.id, assetIds)),
+        db
+          .select()
+          .from(imageDesignAssets)
+          .where(
+            and(
+              inArray(imageDesignAssets.id, assetIds),
+              eq(imageDesignAssets.userId, userId),
+              eq(imageDesignAssets.sessionId, Number(sessionId)),
+            ),
+          ),
       )
     : []
   const assetMap = new Map(assetRows.map((row) => [row.id, mapAsset(row)]))
@@ -880,17 +1152,53 @@ export async function getImageAssistantCanvasDocument(userId: number, sessionId:
   } satisfies ImageAssistantCanvasDocument
 }
 
-export async function getImageAssistantSessionDetail(userId: number, sessionId: string): Promise<ImageAssistantSessionDetail | null> {
+export async function getImageAssistantSessionDetail(
+  userId: number,
+  sessionId: string,
+  options?: ImageAssistantSessionDetailOptions,
+): Promise<ImageAssistantSessionDetail | null> {
   const session = await getImageAssistantSession(userId, sessionId)
   if (!session) return null
 
+  const config = {
+    includeMessages: options?.includeMessages ?? true,
+    includeVersions: options?.includeVersions ?? true,
+    includeAssets: options?.includeAssets ?? true,
+    includeCanvas: options?.includeCanvas ?? true,
+    messageLimit: options?.messageLimit,
+    versionLimit: options?.versionLimit,
+    assetLimit: options?.assetLimit,
+    assetTypes: options?.assetTypes,
+  }
+
   const [summary, messages, versions, assets, canvasDocument] = await Promise.all([
     Promise.resolve(mapSession(session, session.coverAssetUrl)),
-    listImageAssistantMessages(userId, sessionId),
-    listImageAssistantVersions(userId, sessionId),
-    listImageAssistantAssets(userId, sessionId),
-    getImageAssistantCanvasDocument(userId, sessionId),
+    config.includeMessages
+      ? listImageAssistantMessages(userId, sessionId, { limit: config.messageLimit })
+      : Promise.resolve([]),
+    config.includeVersions
+      ? listImageAssistantVersions(userId, sessionId, { limit: config.versionLimit })
+      : Promise.resolve([]),
+    config.includeAssets
+      ? listImageAssistantAssets(userId, sessionId, {
+          limit: config.assetLimit,
+          assetTypes: config.assetTypes,
+        })
+      : Promise.resolve([]),
+    config.includeCanvas ? getImageAssistantCanvasDocument(userId, sessionId) : Promise.resolve(null),
   ])
+
+  const [messageTotal, versionTotal] = await Promise.all([
+    config.includeMessages ? countImageAssistantMessages(sessionId) : Promise.resolve(0),
+    config.includeVersions ? countImageAssistantVersions(sessionId) : Promise.resolve(0),
+  ])
+
+  const meta: ImageAssistantSessionDetailMeta = {
+    messages_total: messageTotal,
+    messages_loaded: messages.length,
+    versions_total: versionTotal,
+    versions_loaded: versions.length,
+  }
 
   return {
     session: summary,
@@ -898,6 +1206,7 @@ export async function getImageAssistantSessionDetail(userId: number, sessionId: 
     versions,
     assets,
     canvas_document: canvasDocument,
+    meta,
   }
 }
 
@@ -913,6 +1222,25 @@ export async function logImageAssistantExport(params: {
 }) {
   const session = await getImageAssistantSession(params.userId, params.sessionId)
   if (!session) return null
+
+  const asset = await getImageAssistantAssetForSession(params.userId, params.sessionId, params.assetId)
+  if (!asset) {
+    throw new Error("image_assistant_asset_not_found")
+  }
+
+  if (params.versionId) {
+    const version = await getImageAssistantVersionForSession(params.sessionId, params.versionId)
+    if (!version) {
+      throw new Error("image_assistant_version_not_found")
+    }
+  }
+
+  if (params.canvasDocumentId) {
+    const canvasDocument = await getImageAssistantCanvasDocumentForSession(params.sessionId, params.canvasDocumentId)
+    if (!canvasDocument) {
+      throw new Error("image_assistant_canvas_document_not_found")
+    }
+  }
 
   await withDbRetry("log-image-export", () =>
     db.execute(sql`
@@ -930,7 +1258,7 @@ export async function logImageAssistantExport(params: {
         ${Number(params.sessionId)},
         ${params.versionId ? Number(params.versionId) : null},
         ${params.canvasDocumentId ? Number(params.canvasDocumentId) : null},
-        ${Number(params.assetId)},
+        ${asset.id},
         ${params.format},
         ${params.sizePreset},
         ${params.transparentBackground},

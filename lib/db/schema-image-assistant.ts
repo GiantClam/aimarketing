@@ -2,8 +2,10 @@ import { boolean, index, integer, jsonb, pgTable, serial, text, timestamp, uniqu
 
 import { enterprises, users } from "@/lib/db/schema"
 
+const withPrefix = (name: string) => `AI_MARKETING_${name}`
+
 export const imageDesignSessions = pgTable(
-  "image_design_sessions",
+  withPrefix("image_design_sessions"),
   {
     id: serial("id").primaryKey(),
     userId: integer("user_id")
@@ -21,12 +23,12 @@ export const imageDesignSessions = pgTable(
     archivedAt: timestamp("archived_at"),
   },
   (table) => ({
-    userUpdatedIdx: index("image_design_sessions_user_updated_idx").on(table.userId, table.updatedAt, table.id),
+    userUpdatedIdx: index(withPrefix("image_design_sessions_user_updated_idx")).on(table.userId, table.updatedAt, table.id),
   }),
 )
 
 export const imageDesignMessages = pgTable(
-  "image_design_messages",
+  withPrefix("image_design_messages"),
   {
     id: serial("id").primaryKey(),
     sessionId: integer("session_id")
@@ -42,12 +44,12 @@ export const imageDesignMessages = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    sessionCreatedIdx: index("image_design_messages_session_created_idx").on(table.sessionId, table.createdAt, table.id),
+    sessionCreatedIdx: index(withPrefix("image_design_messages_session_created_idx")).on(table.sessionId, table.createdAt, table.id),
   }),
 )
 
 export const imageDesignAssets = pgTable(
-  "image_design_assets",
+  withPrefix("image_design_assets"),
   {
     id: serial("id").primaryKey(),
     sessionId: integer("session_id").references(() => imageDesignSessions.id, { onDelete: "set null" }),
@@ -70,28 +72,38 @@ export const imageDesignAssets = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
-    sessionCreatedIdx: index("image_design_assets_session_created_idx").on(table.sessionId, table.createdAt, table.id),
+    sessionCreatedIdx: index(withPrefix("image_design_assets_session_created_idx")).on(table.sessionId, table.createdAt, table.id),
   }),
 )
 
-export const imageDesignCanvasDocuments = pgTable("image_design_canvas_documents", {
-  id: serial("id").primaryKey(),
-  sessionId: integer("session_id")
-    .notNull()
-    .references(() => imageDesignSessions.id, { onDelete: "cascade" }),
-  baseVersionId: integer("base_version_id"),
-  width: integer("width").default(1080).notNull(),
-  height: integer("height").default(1080).notNull(),
-  backgroundAssetId: integer("background_asset_id"),
-  revision: integer("revision").default(1).notNull(),
-  status: varchar("status", { length: 20 }).default("draft").notNull(),
-  lastSavedAt: timestamp("last_saved_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-})
+export const imageDesignCanvasDocuments = pgTable(
+  withPrefix("image_design_canvas_documents"),
+  {
+    id: serial("id").primaryKey(),
+    sessionId: integer("session_id")
+      .notNull()
+      .references(() => imageDesignSessions.id, { onDelete: "cascade" }),
+    baseVersionId: integer("base_version_id"),
+    width: integer("width").default(1080).notNull(),
+    height: integer("height").default(1080).notNull(),
+    backgroundAssetId: integer("background_asset_id"),
+    revision: integer("revision").default(1).notNull(),
+    status: varchar("status", { length: 20 }).default("draft").notNull(),
+    lastSavedAt: timestamp("last_saved_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    sessionUpdatedIdx: index(withPrefix("image_design_canvas_documents_session_updated_idx")).on(
+      table.sessionId,
+      table.updatedAt,
+      table.id,
+    ),
+  }),
+)
 
 export const imageDesignVersions = pgTable(
-  "image_design_versions",
+  withPrefix("image_design_versions"),
   {
     id: serial("id").primaryKey(),
     sessionId: integer("session_id")
@@ -113,12 +125,12 @@ export const imageDesignVersions = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    sessionCreatedIdx: index("image_design_versions_session_created_idx").on(table.sessionId, table.createdAt, table.id),
+    sessionCreatedIdx: index(withPrefix("image_design_versions_session_created_idx")).on(table.sessionId, table.createdAt, table.id),
   }),
 )
 
 export const imageDesignVersionCandidates = pgTable(
-  "image_design_version_candidates",
+  withPrefix("image_design_version_candidates"),
   {
     id: serial("id").primaryKey(),
     versionId: integer("version_id")
@@ -133,7 +145,7 @@ export const imageDesignVersionCandidates = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    versionCandidateUnique: uniqueIndex("image_design_version_candidate_unique_idx").on(
+    versionCandidateUnique: uniqueIndex(withPrefix("image_design_version_candidate_unique_idx")).on(
       table.versionId,
       table.candidateIndex,
     ),
@@ -141,7 +153,7 @@ export const imageDesignVersionCandidates = pgTable(
 )
 
 export const imageDesignCanvasLayers = pgTable(
-  "image_design_canvas_layers",
+  withPrefix("image_design_canvas_layers"),
   {
     id: serial("id").primaryKey(),
     canvasDocumentId: integer("canvas_document_id")
@@ -160,36 +172,48 @@ export const imageDesignCanvasLayers = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
-    documentZIdx: index("image_design_canvas_layers_document_z_idx").on(table.canvasDocumentId, table.zIndex, table.id),
+    documentZIdx: index(withPrefix("image_design_canvas_layers_document_z_idx")).on(table.canvasDocumentId, table.zIndex, table.id),
   }),
 )
 
-export const imageDesignMasks = pgTable("image_design_masks", {
-  id: serial("id").primaryKey(),
-  sessionId: integer("session_id")
-    .notNull()
-    .references(() => imageDesignSessions.id, { onDelete: "cascade" }),
-  canvasDocumentId: integer("canvas_document_id").references(() => imageDesignCanvasDocuments.id, { onDelete: "set null" }),
-  versionId: integer("version_id").references(() => imageDesignVersions.id, { onDelete: "set null" }),
-  maskType: varchar("mask_type", { length: 32 }).notNull(),
-  bounds: jsonb("bounds").notNull(),
-  geometry: jsonb("geometry"),
-  maskAssetId: integer("mask_asset_id").references(() => imageDesignAssets.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-})
+export const imageDesignMasks = pgTable(
+  withPrefix("image_design_masks"),
+  {
+    id: serial("id").primaryKey(),
+    sessionId: integer("session_id")
+      .notNull()
+      .references(() => imageDesignSessions.id, { onDelete: "cascade" }),
+    canvasDocumentId: integer("canvas_document_id").references(() => imageDesignCanvasDocuments.id, { onDelete: "set null" }),
+    versionId: integer("version_id").references(() => imageDesignVersions.id, { onDelete: "set null" }),
+    maskType: varchar("mask_type", { length: 32 }).notNull(),
+    bounds: jsonb("bounds").notNull(),
+    geometry: jsonb("geometry"),
+    maskAssetId: integer("mask_asset_id").references(() => imageDesignAssets.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    sessionCreatedIdx: index(withPrefix("image_design_masks_session_created_idx")).on(table.sessionId, table.createdAt, table.id),
+  }),
+)
 
-export const imageDesignExports = pgTable("image_design_exports", {
-  id: serial("id").primaryKey(),
-  sessionId: integer("session_id")
-    .notNull()
-    .references(() => imageDesignSessions.id, { onDelete: "cascade" }),
-  versionId: integer("version_id").references(() => imageDesignVersions.id, { onDelete: "set null" }),
-  canvasDocumentId: integer("canvas_document_id").references(() => imageDesignCanvasDocuments.id, { onDelete: "set null" }),
-  assetId: integer("asset_id")
-    .notNull()
-    .references(() => imageDesignAssets.id, { onDelete: "cascade" }),
-  format: varchar("format", { length: 16 }).notNull(),
-  sizePreset: varchar("size_preset", { length: 16 }).notNull(),
-  transparentBackground: boolean("transparent_background").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-})
+export const imageDesignExports = pgTable(
+  withPrefix("image_design_exports"),
+  {
+    id: serial("id").primaryKey(),
+    sessionId: integer("session_id")
+      .notNull()
+      .references(() => imageDesignSessions.id, { onDelete: "cascade" }),
+    versionId: integer("version_id").references(() => imageDesignVersions.id, { onDelete: "set null" }),
+    canvasDocumentId: integer("canvas_document_id").references(() => imageDesignCanvasDocuments.id, { onDelete: "set null" }),
+    assetId: integer("asset_id")
+      .notNull()
+      .references(() => imageDesignAssets.id, { onDelete: "cascade" }),
+    format: varchar("format", { length: 16 }).notNull(),
+    sizePreset: varchar("size_preset", { length: 16 }).notNull(),
+    transparentBackground: boolean("transparent_background").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    sessionCreatedIdx: index(withPrefix("image_design_exports_session_created_idx")).on(table.sessionId, table.createdAt, table.id),
+  }),
+)

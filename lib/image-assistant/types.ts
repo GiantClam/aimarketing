@@ -1,4 +1,12 @@
 export type ImageAssistantTaskType = "generate" | "edit" | "blend" | "style_transfer" | "mask_edit"
+export type ImageAssistantBriefField = "goal" | "subject" | "style" | "composition"
+export type ImageAssistantSkillId = "graphic-design-brief" | "canvas-design-execution"
+export type ImageAssistantToolName =
+  | "collect_brief"
+  | "analyze_references"
+  | "select_skill"
+  | "compose_generation_prompt"
+export type ImageAssistantTurnOutcome = "needs_clarification" | "generated"
 
 export type ImageAssistantSessionStatus = "active" | "archived" | "deleted"
 export type ImageAssistantMode = "chat" | "canvas"
@@ -7,7 +15,7 @@ export type ImageAssistantAssetType = "reference" | "generated" | "canvas_snapsh
 export type ImageAssistantReferenceRole = "subject" | "background" | "style" | "logo"
 
 export type ImageAssistantSizePreset = "1:1" | "4:5" | "3:4" | "16:9" | "9:16"
-export type ImageAssistantQualityMode = "high" | "low_cost"
+export type ImageAssistantResolution = "512" | "1K" | "2K" | "4K"
 
 export type ImageAssistantConversationSummary = {
   id: string
@@ -19,6 +27,48 @@ export type ImageAssistantConversationSummary = {
   current_canvas_document_id: string | null
   created_at: number
   updated_at: number
+}
+
+export type ImageAssistantConversationPage = {
+  data: ImageAssistantConversationSummary[]
+  has_more: boolean
+  limit: number
+  next_cursor: string | null
+}
+
+export type ImageAssistantBrief = {
+  goal: string
+  subject: string
+  style: string
+  composition: string
+  constraints: string
+}
+
+export type ImageAssistantSkillSelection = {
+  id: ImageAssistantSkillId
+  label: string
+  stage: "briefing" | "execution"
+}
+
+export type ImageAssistantToolTrace = {
+  name: ImageAssistantToolName
+  status: "completed" | "skipped"
+  summary: string
+}
+
+export type ImageAssistantOrchestrationState = {
+  brief: ImageAssistantBrief
+  missing_fields: ImageAssistantBriefField[]
+  turn_count: number
+  max_turns: number
+  ready_for_generation: boolean
+  planner_strategy?: "rule_shortcut" | "text_model" | "heuristic"
+  selected_skill: ImageAssistantSkillSelection
+  tool_traces: ImageAssistantToolTrace[]
+  reference_count: number
+  recommended_mode: "generate" | "edit"
+  follow_up_question: string | null
+  generated_prompt: string | null
 }
 
 export type ImageAssistantAsset = {
@@ -54,6 +104,7 @@ export type ImageAssistantVersionSummary = {
   model: string | null
   prompt_text: string | null
   selected_candidate_id: string | null
+  meta?: Record<string, unknown> | null
   created_at: number
   candidates: ImageAssistantCandidate[]
 }
@@ -66,6 +117,8 @@ export type ImageAssistantMessage = {
   task_type: ImageAssistantTaskType | null
   content: string
   created_version_id: string | null
+  request_payload?: Record<string, unknown> | null
+  response_payload?: Record<string, unknown> | null
   created_at: number
 }
 
@@ -124,18 +177,31 @@ export type ImageAssistantCanvasDocument = {
   layers: ImageAssistantLayer[]
 }
 
+export type ImageAssistantSessionDetailMeta = {
+  messages_total: number
+  messages_loaded: number
+  versions_total: number
+  versions_loaded: number
+}
+
 export type ImageAssistantSessionDetail = {
   session: ImageAssistantConversationSummary
   messages: ImageAssistantMessage[]
   versions: ImageAssistantVersionSummary[]
   assets: ImageAssistantAsset[]
   canvas_document: ImageAssistantCanvasDocument | null
+  meta: ImageAssistantSessionDetailMeta
 }
 
 export type ImageAssistantGenerateResult = {
   conversation: ImageAssistantConversationSummary
   message_id: string
-  version_id: string
+  version_id: string | null
+  version_meta?: Record<string, unknown> | null
   text_summary: string
   candidates: ImageAssistantCandidate[]
+  outcome: ImageAssistantTurnOutcome
+  follow_up_message_id?: string | null
+  orchestration?: ImageAssistantOrchestrationState | null
+  max_reference_attachments?: number
 }

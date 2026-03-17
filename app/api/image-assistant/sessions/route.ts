@@ -11,8 +11,9 @@ export async function GET(req: NextRequest) {
     }
 
     const limit = Number.parseInt(req.nextUrl.searchParams.get("limit") || "30", 10)
-    const data = await listImageAssistantSessions(auth.user.id, limit)
-    return NextResponse.json({ data })
+    const cursor = req.nextUrl.searchParams.get("cursor")
+    const data = await listImageAssistantSessions(auth.user.id, limit, cursor)
+    return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

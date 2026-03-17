@@ -34,7 +34,7 @@ type Member = {
 type EnterpriseDifyDataset = {
   datasetId: string
   datasetName: string
-  scope: "brand" | "product" | "case-study" | "compliance" | "campaign"
+  scope: "general" | "brand" | "product" | "case-study" | "compliance" | "campaign"
   priority: number
   enabled: boolean
 }
@@ -43,6 +43,12 @@ type EnterpriseDifyRemoteDataset = {
   id: string
   name: string
   description: string
+  suggestedScope?: EnterpriseDifyDataset["scope"]
+  coverageTags?: Array<
+    "company-facts" | "product-system" | "application-scenarios" | "technical-proof" | "delivery-service" | "brand-proof" | "faq"
+  >
+  documentCount?: number
+  sampleDocuments?: string[]
 }
 
 type EnterpriseAdvisorType = "brand-strategy" | "growth"
@@ -55,12 +61,23 @@ type AdvisorSettingsDraft = {
 }
 
 const KNOWLEDGE_SCOPE_OPTIONS = [
+  { value: "general", label: "综合资料" },
   { value: "brand", label: "品牌资料" },
   { value: "product", label: "产品资料" },
   { value: "case-study", label: "案例资料" },
   { value: "compliance", label: "合规资料" },
   { value: "campaign", label: "活动资料" },
 ] as const
+
+const KNOWLEDGE_COVERAGE_LABELS = {
+  "company-facts": "企业总览",
+  "product-system": "产品体系",
+  "application-scenarios": "场景映射",
+  "technical-proof": "技术与资质",
+  "delivery-service": "交付服务",
+  "brand-proof": "品牌与证据",
+  faq: "问答资料",
+} as const
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -150,7 +167,7 @@ export default function SettingsPage() {
           ? binding.datasets.map((dataset: any) => ({
               datasetId: String(dataset?.datasetId || ""),
               datasetName: String(dataset?.datasetName || ""),
-              scope: dataset?.scope || "brand",
+              scope: dataset?.scope || "general",
               priority: Number(dataset?.priority || 100),
               enabled: Boolean(dataset?.enabled),
             }))
@@ -299,7 +316,7 @@ export default function SettingsPage() {
             next.push({
               datasetId: dataset.id,
               datasetName: dataset.name,
-              scope: "brand",
+              scope: dataset.suggestedScope || "general",
               priority: 100,
               enabled: false,
             })
@@ -350,7 +367,7 @@ export default function SettingsPage() {
           ? binding.datasets.map((dataset: any) => ({
               datasetId: String(dataset?.datasetId || ""),
               datasetName: String(dataset?.datasetName || ""),
-              scope: dataset?.scope || "brand",
+              scope: dataset?.scope || "general",
               priority: Number(dataset?.priority || 100),
               enabled: Boolean(dataset?.enabled),
             }))
@@ -636,7 +653,9 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">知识库绑定</p>
-                      <p className="text-xs text-muted-foreground">为写作助手选择企业级知识库，并指定用途。优先级越小越靠前。</p>
+                      <p className="text-xs text-muted-foreground">
+                        为写作助手选择企业级知识库，并指定主要用途。系统会根据知识库文档自动给出覆盖模块建议，便于后续接入更多企业。
+                      </p>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       已发现 {remoteDatasets.length} 个 / 已启用 {enabledDifyDatasetCount} 个
@@ -662,6 +681,21 @@ export default function SettingsPage() {
                                 <span className="space-y-1">
                                   <span className="block font-medium">{dataset.datasetName}</span>
                                   <span className="block text-xs text-muted-foreground">{remote?.description || dataset.datasetId}</span>
+                                  {remote?.coverageTags && remote.coverageTags.length > 0 && (
+                                    <span className="block text-xs text-muted-foreground">
+                                      建议配置：{KNOWLEDGE_SCOPE_OPTIONS.find((option) => option.value === (remote.suggestedScope || "general"))?.label || "综合资料"}
+                                      {" · 覆盖 "}
+                                      {remote.coverageTags
+                                        .map((tag) => KNOWLEDGE_COVERAGE_LABELS[tag])
+                                        .filter(Boolean)
+                                        .join(" / ")}
+                                    </span>
+                                  )}
+                                  {remote?.sampleDocuments && remote.sampleDocuments.length > 0 && (
+                                    <span className="block text-xs text-muted-foreground">
+                                      样本文档：{remote.sampleDocuments.slice(0, 3).join(" / ")}
+                                    </span>
+                                  )}
                                 </span>
                               </label>
                               <div className="grid min-w-[220px] gap-3 sm:grid-cols-2">

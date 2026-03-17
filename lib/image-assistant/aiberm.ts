@@ -1,16 +1,58 @@
 import { writerRequestJson } from "@/lib/writer/network"
 
-import type { ImageAssistantQualityMode, ImageAssistantSizePreset } from "@/lib/image-assistant/types"
+import {
+  generateOrEditImagesWithGoogle,
+  getImageAssistantGoogleModel,
+  hasImageAssistantGoogleKey,
+  type ImageAssistantFileReference,
+} from "@/lib/image-assistant/google"
+import { isImageAssistantR2Available } from "@/lib/image-assistant/r2"
+import type { ImageAssistantResolution, ImageAssistantSizePreset } from "@/lib/image-assistant/types"
 
+type InlineReferenceImage = { kind: "inline"; mimeType: string; base64Data: string }
+type ReferenceImageInput = InlineReferenceImage | ImageAssistantFileReference
+
+const PRIMARY_IMAGE_ASSISTANT_AIBERM_MODEL =
+  process.env.IMAGE_ASSISTANT_AIBERM_MODEL || process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 const AIBERM_API_BASE = (
   process.env.AIBERM_IMAGE_API_BASE ||
   process.env.AIBERM_BASE_URL?.replace(/\/v1$/i, "") ||
   "https://aiberm.com"
 ).replace(/\/$/, "")
 const AIBERM_API_KEY = process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || ""
-const IMAGE_MODEL_HIGH = process.env.IMAGE_ASSISTANT_AIBERM_MODEL || "gemini-3-pro-image-preview"
-const IMAGE_MODEL_LOW = process.env.IMAGE_ASSISTANT_AIBERM_LOW_COST_MODEL || "gemini-3.1-flash-image-preview"
-const IMAGE_SIZE = process.env.IMAGE_ASSISTANT_IMAGE_SIZE || "2K"
+const DEFAULT_IMAGE_RESOLUTION: ImageAssistantResolution = "2K"
+
+function parseModelList(...values: Array<string | null | undefined>) {
+  const result: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of values) {
+    for (const item of String(value || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)) {
+      if (seen.has(item)) continue
+      seen.add(item)
+      result.push(item)
+    }
+  }
+
+  return result
+}
+
+const IMAGE_ASSISTANT_AIBERM_MODELS = parseModelList(
+  PRIMARY_IMAGE_ASSISTANT_AIBERM_MODEL,
+  process.env.IMAGE_ASSISTANT_AIBERM_FALLBACK_MODELS,
+  process.env.IMAGE_ASSISTANT_AIBERM_FALLBACK_MODEL,
+)
+
+function normalizeProviderErrorMessage(message: string) {
+  const normalized = message.trim()
+  if (/resource exhausted/i.test(normalized)) {
+    return "image_assistant_resource_exhausted"
+  }
+  return normalized || "image_assistant_request_failed"
+}
 
 function buildHeaders() {
   if (!AIBERM_API_KEY) {
@@ -85,8 +127,8 @@ export function hasImageAssistantAibermKey() {
   return Boolean(AIBERM_API_KEY)
 }
 
-export function getImageAssistantModel(qualityMode: ImageAssistantQualityMode) {
-  return qualityMode === "low_cost" ? IMAGE_MODEL_LOW : IMAGE_MODEL_HIGH
+export function getImageAssistantModel(_resolution: ImageAssistantResolution) {
+  return hasImageAssistantGoogleKey() ? getImageAssistantGoogleModel() : IMAGE_ASSISTANT_AIBERM_MODELS[0]
 }
 
 export function getImageAssistantAvailability() {
@@ -96,20 +138,32 @@ export function getImageAssistantAvailability() {
       reason: null,
       provider: "fixture",
       models: {
-        highQuality: IMAGE_MODEL_HIGH,
-        lowCost: IMAGE_MODEL_LOW,
+        highQuality: IMAGE_ASSISTANT_AIBERM_MODELS[0],
+        lowCost: IMAGE_ASSISTANT_AIBERM_MODELS[0],
       },
     }
   }
 
-  if (!hasImageAssistantAibermKey()) {
+  if (!isImageAssistantR2Available()) {
+    return {
+      enabled: false,
+      reason: "image_assistant_r2_config_missing",
+      provider: hasImageAssistantGoogleKey() ? "gemini" : "aiberm",
+      models: {
+        highQuality: getImageAssistantGoogleModel(),
+        lowCost: IMAGE_ASSISTANT_AIBERM_MODELS[0],
+      },
+    }
+  }
+
+  if (!hasImageAssistantAibermKey() && !hasImageAssistantGoogleKey()) {
     return {
       enabled: false,
       reason: "aiberm_api_key_missing",
-      provider: "aiberm",
+      provider: "gemini",
       models: {
-        highQuality: IMAGE_MODEL_HIGH,
-        lowCost: IMAGE_MODEL_LOW,
+        highQuality: getImageAssistantGoogleModel(),
+        lowCost: IMAGE_ASSISTANT_AIBERM_MODELS[0],
       },
     }
   }
@@ -117,26 +171,45 @@ export function getImageAssistantAvailability() {
   return {
     enabled: true,
     reason: null,
-    provider: "aiberm",
+    provider: hasImageAssistantGoogleKey() ? "gemini" : "aiberm",
     models: {
-      highQuality: IMAGE_MODEL_HIGH,
-      lowCost: IMAGE_MODEL_LOW,
+      highQuality: getImageAssistantGoogleModel(),
+      lowCost: IMAGE_ASSISTANT_AIBERM_MODELS[0],
     },
   }
 }
 
-async function requestImages(params: {
+function isFallbackEligibleAibermError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return (
+    message.includes("image_assistant_http_5") ||
+    message.includes("image_assistant_http_429") ||
+    message.includes("resource exhausted") ||
+    message.includes("fetch failed") ||
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("temporarily unavailable")
+  )
+}
+
+async function requestImagesWithModel(params: {
+  model: string
   prompt: string
   sizePreset?: ImageAssistantSizePreset | null
-  qualityMode: ImageAssistantQualityMode
-  referenceImages?: Array<{ mimeType: string; base64Data: string }>
+  resolution: ImageAssistantResolution
+  referenceImages?: InlineReferenceImage[]
+  signal?: AbortSignal
 }) {
-  const model = getImageAssistantModel(params.qualityMode)
   const response = await writerRequestJson(
-    `${AIBERM_API_BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    `${AIBERM_API_BASE}/v1beta/models/${encodeURIComponent(params.model)}:generateContent`,
     {
       method: "POST",
       headers: buildHeaders(),
+      signal: params.signal,
       body: JSON.stringify({
         contents: [
           {
@@ -155,7 +228,7 @@ async function requestImages(params: {
           responseModalities: ["TEXT", "IMAGE"],
           imageConfig: {
             aspectRatio: normalizeAspectRatio(params.sizePreset),
-            imageSize: IMAGE_SIZE,
+            imageSize: params.resolution || DEFAULT_IMAGE_RESOLUTION,
           },
         },
       }),
@@ -164,31 +237,74 @@ async function requestImages(params: {
   )
 
   if (!response.ok) {
-    throw new Error((response.data as any)?.error?.message || `image_assistant_http_${response.status}`)
+    throw new Error(
+      normalizeProviderErrorMessage((response.data as any)?.error?.message || `image_assistant_http_${response.status}`),
+    )
   }
 
   const urls = extractInlineImageDataUrls(response.data)
-  if (!urls.length) {
+
+  const textSummary =
+    typeof (response.data as any)?.candidates?.[0]?.content?.parts?.find?.((part: any) => typeof part?.text === "string")?.text ===
+    "string"
+      ? (response.data as any).candidates[0].content.parts.find((part: any) => typeof part?.text === "string").text
+      : ""
+
+  if (!urls.length && !textSummary) {
     throw new Error("image_assistant_images_missing")
   }
 
   return {
-    model,
+    model: params.model,
     images: urls,
-    textSummary:
-      typeof (response.data as any)?.candidates?.[0]?.content?.parts?.find?.((part: any) => typeof part?.text === "string")?.text ===
-      "string"
-        ? (response.data as any).candidates[0].content.parts.find((part: any) => typeof part?.text === "string").text
-        : "Image generation completed.",
+    textSummary: textSummary || "Image generation completed.",
   }
+}
+
+async function requestImages(params: {
+  prompt: string
+  sizePreset?: ImageAssistantSizePreset | null
+  resolution: ImageAssistantResolution
+  referenceImages?: InlineReferenceImage[]
+  signal?: AbortSignal
+}) {
+  let lastError: unknown = null
+
+  for (let modelIndex = 0; modelIndex < IMAGE_ASSISTANT_AIBERM_MODELS.length; modelIndex += 1) {
+    const model = IMAGE_ASSISTANT_AIBERM_MODELS[modelIndex]
+
+    try {
+      return await requestImagesWithModel({
+        ...params,
+        model,
+      })
+    } catch (error) {
+      lastError = error
+      if (params.signal?.aborted) {
+        throw error
+      }
+      if (modelIndex < IMAGE_ASSISTANT_AIBERM_MODELS.length - 1 && isFallbackEligibleAibermError(error)) {
+        console.warn("image-assistant.aiberm.generate.fallback", {
+          fromModel: model,
+          toModel: IMAGE_ASSISTANT_AIBERM_MODELS[modelIndex + 1],
+          message: error instanceof Error ? error.message : String(error),
+        })
+        continue
+      }
+      throw error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("image_assistant_request_failed")
 }
 
 export async function generateOrEditImages(params: {
   prompt: string
-  qualityMode: ImageAssistantQualityMode
+  resolution: ImageAssistantResolution
   sizePreset?: ImageAssistantSizePreset | null
-  referenceImages?: Array<{ mimeType: string; base64Data: string }>
+  referenceImages?: ReferenceImageInput[]
   candidateCount?: number
+  signal?: AbortSignal
 }) {
   const candidateCount = Math.max(1, Math.min(params.candidateCount || 1, 4))
   const aspectRatio = normalizeAspectRatio(params.sizePreset)
@@ -196,16 +312,38 @@ export async function generateOrEditImages(params: {
   if (shouldUseImageAssistantFixtures()) {
     return {
       provider: "fixture",
-      model: getImageAssistantModel(params.qualityMode),
+      model: getImageAssistantModel(params.resolution),
       textSummary: "Generated local fixture image results.",
       images: Array.from({ length: candidateCount }, (_, index) => buildFixtureDataUrl(params.prompt, aspectRatio, index)),
     }
   }
 
-  const result = await requestImages(params)
+  const shouldUseGoogle =
+    hasImageAssistantGoogleKey() &&
+    (!hasImageAssistantAibermKey() || (params.referenceImages || []).some((image) => image.kind === "file"))
+
+  const result = shouldUseGoogle
+    ? await generateOrEditImagesWithGoogle({
+        prompt: params.prompt,
+        resolution: params.resolution,
+        sizePreset: params.sizePreset,
+        referenceImages: (params.referenceImages || []).filter(
+          (image): image is ImageAssistantFileReference => image.kind === "file",
+        ),
+        signal: params.signal,
+      })
+    : await requestImages({
+        prompt: params.prompt,
+        resolution: params.resolution,
+        sizePreset: params.sizePreset,
+        referenceImages: (params.referenceImages || []).filter(
+          (image): image is InlineReferenceImage => image.kind === "inline",
+        ),
+        signal: params.signal,
+      })
   const expanded = Array.from({ length: candidateCount }, (_, index) => result.images[index % result.images.length])
   return {
-    provider: "aiberm",
+    provider: shouldUseGoogle ? "gemini" : "aiberm",
     model: result.model,
     textSummary: result.textSummary || "Image generation completed.",
     images: expanded,

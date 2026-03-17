@@ -13,7 +13,7 @@ export const maxDuration = 300
 
 const GOOGLE_IMAGE_API_KEY =
   process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
-const WRITER_AIBERM_IMAGE_MODEL = process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3-pro-image-preview"
+const WRITER_AIBERM_IMAGE_MODEL = process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 const WRITER_GEMINI_IMAGE_MODEL = process.env.WRITER_GEMINI_IMAGE_MODEL || process.env.WRITER_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 
 function escapeSvgText(value: string) {
@@ -289,9 +289,9 @@ export async function POST(request: NextRequest) {
           cause:
             error?.cause && typeof error.cause === "object"
               ? {
-                  message: "message" in error.cause ? error.cause.message : undefined,
-                  code: "code" in error.cause ? error.cause.code : undefined,
-                }
+                message: "message" in error.cause ? error.cause.message : undefined,
+                code: "code" in error.cause ? error.cause.code : undefined,
+              }
               : undefined,
         })
 

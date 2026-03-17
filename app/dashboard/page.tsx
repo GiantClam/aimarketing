@@ -1,123 +1,82 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import Link from "next/link"
 import { ArrowRight, ImageIcon, PenSquare, Settings, Target, TrendingUp } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
+import { useDashboardAvailability } from "@/components/dashboard-availability-provider"
+import { useI18n } from "@/components/locale-provider"
 
-type AdvisorAvailability = {
-  brandStrategy: boolean
-  growth: boolean
+type QuickLinkItem = {
+  href: string
+  label: string
+  description: string
+  icon: any
 }
 
 export default function DashboardPage() {
-  const { user, hasFeature } = useAuth()
-  const [advisorAvailability, setAdvisorAvailability] = useState<AdvisorAvailability>({
-    brandStrategy: false,
-    growth: false,
-  })
-  const [writerEnabled, setWriterEnabled] = useState(false)
-  const [imageAssistantEnabled, setImageAssistantEnabled] = useState(false)
-
-  useEffect(() => {
-    if (!user) return
-
-    let cancelled = false
-
-    const loadAvailability = async () => {
-      try {
-        const [advisorResponse, writerResponse, imageAssistantResponse] = await Promise.all([
-          fetch("/api/dify/advisors/availability"),
-          fetch("/api/writer/availability"),
-          fetch("/api/image-assistant/availability"),
-        ])
-
-        if (!advisorResponse.ok || !writerResponse.ok || !imageAssistantResponse.ok) return
-
-        const advisorJson = await advisorResponse.json()
-        const writerJson = await writerResponse.json()
-        const imageAssistantJson = await imageAssistantResponse.json()
-        if (cancelled) return
-
-        setAdvisorAvailability({
-          brandStrategy: Boolean(advisorJson?.data?.brandStrategy),
-          growth: Boolean(advisorJson?.data?.growth),
-        })
-        setWriterEnabled(Boolean(writerJson?.data?.enabled))
-        setImageAssistantEnabled(Boolean(imageAssistantJson?.data?.enabled))
-      } catch (error) {
-        if (cancelled) return
-        console.error("Failed to load dashboard availability:", error)
-      }
-    }
-
-    void loadAvailability()
-
-    return () => {
-      cancelled = true
-    }
-  }, [user])
+  const { hasFeature } = useAuth()
+  const { messages } = useI18n()
+  const { advisor, writer, imageAssistant } = useDashboardAvailability()
 
   const quickLinks = useMemo(() => {
-    const items = [
+    const items: QuickLinkItem[] = [
       {
         href: "/dashboard/settings",
-        label: "用户设置",
+        label: messages.dashboardPage.settings.label,
         icon: Settings,
-        description: "管理企业信息、成员权限和个人资料。",
+        description: messages.dashboardPage.settings.description,
       },
     ]
 
-    if (hasFeature("expert_advisor") && advisorAvailability.brandStrategy) {
+    if (hasFeature("expert_advisor") && advisor.brandStrategy) {
       items.push({
         href: "/dashboard/advisor/brand-strategy/new",
-        label: "品牌战略顾问",
+        label: messages.dashboardPage.brandAdvisor.label,
         icon: Target,
-        description: "梳理品牌定位、差异化价值和策略方向。",
+        description: messages.dashboardPage.brandAdvisor.description,
       })
     }
 
-    if (hasFeature("expert_advisor") && advisorAvailability.growth) {
+    if (hasFeature("expert_advisor") && advisor.growth) {
       items.push({
         href: "/dashboard/advisor/growth/new",
-        label: "增长顾问",
+        label: messages.dashboardPage.growthAdvisor.label,
         icon: TrendingUp,
-        description: "围绕渠道目标和业务指标制定增长动作。",
+        description: messages.dashboardPage.growthAdvisor.description,
       })
     }
 
-    if (hasFeature("copywriting_generation") && writerEnabled) {
+    if (hasFeature("copywriting_generation") && writer.enabled) {
       items.push({
         href: "/dashboard/writer",
-        label: "文章写作",
+        label: messages.dashboardPage.writer.label,
         icon: PenSquare,
-        description: "统一生成多平台图文内容，并支持 Markdown 微调与发布准备。",
+        description: messages.dashboardPage.writer.description,
       })
     }
 
-    if (hasFeature("image_design_generation") && imageAssistantEnabled) {
+    if (hasFeature("image_design_generation") && imageAssistant.enabled) {
       items.push({
         href: "/dashboard/image-assistant",
-        label: "图片设计助手",
+        label: messages.dashboardPage.imageAssistant.label,
         icon: ImageIcon,
-        description: "对话生图、参考图编辑与画布精修的一体化工作台。",
+        description: messages.dashboardPage.imageAssistant.description,
       })
     }
 
     return items
-  }, [advisorAvailability, hasFeature, imageAssistantEnabled, writerEnabled])
+  }, [advisor, hasFeature, imageAssistant.enabled, messages, writer.enabled])
 
   return (
     <div className="h-full overflow-y-auto bg-muted/10 p-6 lg:p-8">
       <div className="mx-auto max-w-6xl space-y-8">
         <section className="rounded-3xl border bg-card p-8 shadow-sm">
           <div className="max-w-3xl space-y-4">
-            <p className="text-sm font-medium uppercase tracking-[0.3em] text-primary">AI Marketing Workspace</p>
-            <h1 className="font-sans text-3xl font-bold text-foreground lg:text-4xl">企业级 AI 营销工作台</h1>
-            <p className="font-manrope leading-7 text-muted-foreground">
-              当前工作台按能力统一收口。专家顾问负责策略与增长咨询，文章写作负责多平台图文生产，图片设计助手负责对话生图与画布精修。
-            </p>
+            <p className="text-sm font-medium uppercase tracking-[0.3em] text-primary">{messages.dashboardPage.eyebrow}</p>
+            <h1 className="font-sans text-3xl font-bold text-foreground lg:text-4xl">{messages.dashboardPage.title}</h1>
+            <p className="font-manrope leading-7 text-muted-foreground">{messages.dashboardPage.description}</p>
           </div>
         </section>
 
@@ -147,10 +106,8 @@ export default function DashboardPage() {
 
         {quickLinks.length === 1 && (
           <section className="rounded-2xl border border-dashed bg-card/60 p-6">
-            <h2 className="font-sans text-lg font-semibold text-foreground">当前暂无可用营销能力</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              你的账号已经进入工作台，但当前企业尚未分配顾问、写作或图片设计权限。请联系企业管理员完成能力开通。
-            </p>
+            <h2 className="font-sans text-lg font-semibold text-foreground">{messages.dashboardPage.emptyTitle}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{messages.dashboardPage.emptyDescription}</p>
           </section>
         )}
       </div>

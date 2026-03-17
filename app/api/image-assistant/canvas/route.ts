@@ -6,6 +6,13 @@ import type { ImageAssistantLayer } from "@/lib/image-assistant/types"
 
 export const runtime = "nodejs"
 
+const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
+  "image_assistant_session_not_found",
+  "image_assistant_version_not_found",
+  "image_assistant_asset_not_found",
+  "image_assistant_canvas_document_not_found",
+])
+
 export async function PUT(req: NextRequest) {
   try {
     const auth = await requireSessionUser(req, "image_design_generation")
@@ -34,7 +41,11 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ data: saved })
   } catch (error: any) {
-    const status = error?.message === "image_assistant_canvas_revision_conflict" ? 409 : 500
+    const status = error?.message === "image_assistant_canvas_revision_conflict"
+      ? 409
+      : IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS.has(error?.message)
+        ? 404
+        : 500
     return NextResponse.json({ error: error.message || "canvas_save_failed" }, { status })
   }
 }

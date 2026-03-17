@@ -1,12 +1,10 @@
-# AI Marketing Platform
+﻿# AI Marketing Platform
 
-AI Marketing 是一个以 Next.js 为核心的企业级 AI 营销工作台，当前主能力包括：
+AI Marketing 鏄竴涓互 Next.js 涓烘牳蹇冪殑浼佷笟绾?AI 钀ラ攢宸ヤ綔鍙帮紝褰撳墠涓昏兘鍔涘寘鎷細
 
-- 多平台图文写作
-- 专家顾问对话
-- 视频生成前端工作台
-
-## 技术栈
+- 澶氬钩鍙板浘鏂囧啓浣?- 涓撳椤鹃棶瀵硅瘽
+- 瑙嗛鐢熸垚鍓嶇宸ヤ綔鍙?
+## 鎶€鏈爤
 
 - Frontend: Next.js 15, React 19, TypeScript, Tailwind CSS, shadcn/ui
 - Backend in this repo: Next.js Route Handlers / Node.js
@@ -14,34 +12,28 @@ AI Marketing 是一个以 Next.js 为核心的企业级 AI 营销工作台，当
 - Writer models: OpenRouter + Gemini image generation
 - Video agent: external service via `AGENT_URL`
 
-## 当前架构
+## 褰撳墠鏋舵瀯
 
-本仓库不再内置 `saleagent` Git submodule。
-
-视频生成能力仍然保留，但采用外部服务模式：
-
-- 前端和代理接口在本仓库中
-- 真正的视频 agent 服务单独部署
-- 本仓库通过 `AGENT_URL` 或 `NEXT_PUBLIC_AGENT_URL` 访问该服务
-
-## 快速开始
-
-### 1. 安装依赖
+鏈粨搴撲笉鍐嶅唴缃?`saleagent` Git submodule銆?
+瑙嗛鐢熸垚鑳藉姏浠嶇劧淇濈暀锛屼絾閲囩敤澶栭儴鏈嶅姟妯″紡锛?
+- 鍓嶇鍜屼唬鐞嗘帴鍙ｅ湪鏈粨搴撲腑
+- 鐪熸鐨勮棰?agent 鏈嶅姟鍗曠嫭閮ㄧ讲
+- 鏈粨搴撻€氳繃 `AGENT_URL` 鎴?`NEXT_PUBLIC_AGENT_URL` 璁块棶璇ユ湇鍔?
+## 蹇€熷紑濮?
+### 1. 瀹夎渚濊禆
 
 ```bash
 pnpm install
 ```
 
-### 2. 配置环境变量
+### 2. 閰嶇疆鐜鍙橀噺
 
-在项目根目录配置 `.env` 或 `.env.local`。
-
-关键变量：
-
+鍦ㄩ」鐩牴鐩綍閰嶇疆 `.env` 鎴?`.env.local`銆?
+鍏抽敭鍙橀噺锛?
 ```bash
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
-# 外部视频 agent 服务
+# 澶栭儴瑙嗛 agent 鏈嶅姟
 AGENT_URL=http://localhost:8000
 NEXT_PUBLIC_AGENT_URL=http://localhost:8000
 
@@ -53,42 +45,35 @@ GOOGLE_SEARCH_ENGINE_ID=...
 GOOGLE_AI_API_KEY=...
 ```
 
-### 3. 启动前端
+### 3. 鍚姩鍓嶇
 
 ```bash
 pnpm dev
 ```
 
-访问 `http://localhost:3000`。
+璁块棶 `http://localhost:3000`銆?
+## 鏈湴瑙嗛寮€鍙?
+濡傛灉浣犻渶瑕佹湰鍦拌皟璇曡棰戠敓鎴愬姛鑳斤紝璇峰崟鐙噯澶?video agent 鏈嶅姟锛岃€屼笉鏄緷璧栨湰浠撳簱瀛愭ā鍧椼€?
+鎺ㄨ崘鏂瑰紡锛?
+1. 鍗曠嫭鍏嬮殕骞惰繍琛?`saleagent` 浠撳簱
+2. 鍦ㄦ湰浠撳簱涓妸 `AGENT_URL` / `NEXT_PUBLIC_AGENT_URL` 鎸囧悜閭ｄ釜鏈嶅姟
 
-## 本地视频开发
-
-如果你需要本地调试视频生成功能，请单独准备 video agent 服务，而不是依赖本仓库子模块。
-
-推荐方式：
-
-1. 单独克隆并运行 `saleagent` 仓库
-2. 在本仓库中把 `AGENT_URL` / `NEXT_PUBLIC_AGENT_URL` 指向那个服务
-
-## 项目结构
+## 椤圭洰缁撴瀯
 
 ```text
 aimarketing/
-├─ app/
-│  ├─ api/
-│  │  ├─ crewai/         # 视频 agent 代理接口
-│  │  └─ writer/         # 写作工作台后端
-│  └─ dashboard/
-├─ components/
-├─ lib/
-│  ├─ saleagent-client.ts
-│  └─ writer/
-├─ scripts/
-└─ submodules/
-   └─ webgenagent/
+鈹溾攢 app/
+鈹? 鈹溾攢 api/
+鈹? 鈹? 鈹溾攢 crewai/         # 瑙嗛 agent 浠ｇ悊鎺ュ彛
+鈹? 鈹? 鈹斺攢 writer/         # 鍐欎綔宸ヤ綔鍙板悗绔?鈹? 鈹斺攢 dashboard/
+鈹溾攢 components/
+鈹溾攢 lib/
+鈹? 鈹溾攢 saleagent-client.ts
+鈹? 鈹斺攢 writer/
+鈹溾攢 scripts/
 ```
 
-## 文档
+## 鏂囨。
 
 - [INTEGRATION.md](/d:/github/aimarketing/INTEGRATION.md)
 - [VIDEO_GENERATION_WORKFLOW.md](/d:/github/aimarketing/VIDEO_GENERATION_WORKFLOW.md)

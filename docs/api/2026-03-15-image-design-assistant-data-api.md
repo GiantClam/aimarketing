@@ -677,7 +677,7 @@ MVP 策略：
     "reason": null,
     "provider": "aiberm",
     "models": {
-      "highQuality": "gemini-3-pro-image-preview",
+      "highQuality": "gemini-3.1-flash-image-preview",
       "lowCost": "gemini-3.1-flash-image-preview"
     }
   }

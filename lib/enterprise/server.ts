@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto"
-import { and, eq, desc } from "drizzle-orm"
+import { and, eq, desc, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { enterprises, enterpriseJoinRequests, userFeaturePermissions, users } from "@/lib/db/schema"
@@ -37,6 +37,106 @@ export function generateEnterpriseCode(name: string) {
 
   const rand = randomBytes(2).toString("hex")
   return `${normalized || "enterprise"}-${rand}`
+}
+
+let ensureEnterpriseAuthTablesPromise: Promise<void> | null = null
+
+export async function ensureEnterpriseAuthTables() {
+  if (!ensureEnterpriseAuthTablesPromise) {
+    ensureEnterpriseAuthTablesPromise = (async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AI_MARKETING_users" (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL UNIQUE,
+          name VARCHAR(255) NOT NULL,
+          password VARCHAR(255),
+          is_demo BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AI_MARKETING_enterprises" (
+          id SERIAL PRIMARY KEY,
+          enterprise_code VARCHAR(64) NOT NULL UNIQUE,
+          name VARCHAR(255) NOT NULL,
+          created_by INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+
+      await db.execute(sql`
+        ALTER TABLE "AI_MARKETING_users"
+        ADD COLUMN IF NOT EXISTS enterprise_id INTEGER REFERENCES "AI_MARKETING_enterprises"(id)
+      `)
+      await db.execute(sql`
+        ALTER TABLE "AI_MARKETING_users"
+        ADD COLUMN IF NOT EXISTS enterprise_role VARCHAR(20) DEFAULT 'member'
+      `)
+      await db.execute(sql`
+        ALTER TABLE "AI_MARKETING_users"
+        ADD COLUMN IF NOT EXISTS enterprise_status VARCHAR(20) DEFAULT 'active'
+      `)
+      await db.execute(sql`
+        ALTER TABLE "AI_MARKETING_users"
+        ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE
+      `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AI_MARKETING_enterprise_join_requests" (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id),
+          enterprise_id INTEGER NOT NULL REFERENCES "AI_MARKETING_enterprises"(id),
+          status VARCHAR(20) NOT NULL DEFAULT 'pending',
+          note TEXT,
+          reviewed_by INTEGER REFERENCES "AI_MARKETING_users"(id),
+          reviewed_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AI_MARKETING_user_feature_permissions" (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id),
+          feature_key VARCHAR(100) NOT NULL,
+          enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_user_feature_permissions_user_feature_idx"
+        ON "AI_MARKETING_user_feature_permissions"(user_id, feature_key)
+      `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AI_MARKETING_user_sessions" (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id),
+          token_hash VARCHAR(64) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          user_agent TEXT,
+          ip_address VARCHAR(64),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_user_sessions_token_hash_idx"
+        ON "AI_MARKETING_user_sessions"(token_hash)
+      `)
+    })().catch((error) => {
+      ensureEnterpriseAuthTablesPromise = null
+      throw error
+    })
+  }
+
+  await ensureEnterpriseAuthTablesPromise
 }
 
 export async function getPermissionMap(userId: number): Promise<PermissionMap> {

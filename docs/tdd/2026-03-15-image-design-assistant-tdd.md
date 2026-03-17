@@ -251,7 +251,7 @@ MVP 默认 provider：
 
 默认模型：
 
-- 高质量：`gemini-3-pro-image-preview`
+- 高质量：`gemini-3.1-flash-image-preview`
 - 低成本：`gemini-3.1-flash-image-preview`
 
 抽象必要性：

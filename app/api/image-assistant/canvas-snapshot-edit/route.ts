@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
-import { runImageAssistantJob } from "@/lib/image-assistant/service"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
 
+const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
+  "image_assistant_session_not_found",
+  "image_assistant_version_not_found",
+  "image_assistant_asset_not_found",
+  "image_assistant_canvas_document_not_found",
+])
+
 function buildSelectionPrompt(input: {
   prompt: string
+  annotationNotes?: string | null
+  hasMaskAsset?: boolean
   selectionBounds?: {
     x?: number
     y?: number
@@ -19,6 +28,8 @@ function buildSelectionPrompt(input: {
   canvasHeight?: number | null
 }) {
   const prompt = input.prompt.trim()
+  const annotationNotes = typeof input.annotationNotes === "string" ? input.annotationNotes.trim() : ""
+  const hasMaskAsset = Boolean(input.hasMaskAsset)
   const bounds = input.selectionBounds
   const canvasWidth = Number(input.canvasWidth || 0)
   const canvasHeight = Number(input.canvasHeight || 0)
@@ -34,7 +45,7 @@ function buildSelectionPrompt(input: {
     canvasWidth <= 0 ||
     canvasHeight <= 0
   ) {
-    return prompt
+    return [prompt, annotationNotes].filter(Boolean).join("\n\n")
   }
 
   const right = Math.min(canvasWidth, bounds.x + bounds.width)
@@ -46,12 +57,16 @@ function buildSelectionPrompt(input: {
 
   return [
     prompt,
+    annotationNotes ? `Canvas annotation notes:\n${annotationNotes}` : null,
+    hasMaskAsset ? "A binary mask reference is attached. Treat the white mask area as the primary editable region." : null,
     "",
     "Apply the edit primarily inside the selected rectangular region only.",
     "Keep everything outside the selected region as unchanged as possible.",
     `Selected region pixels: left=${Math.round(bounds.x)}, top=${Math.round(bounds.y)}, right=${Math.round(right)}, bottom=${Math.round(bottom)}.`,
     `Selected region percent of canvas: left=${leftPct}%, top=${topPct}%, width=${widthPct}%, height=${heightPct}%.`,
-  ].join("\n")
+  ]
+    .filter(Boolean)
+    .join("\n")
 }
 
 export async function POST(req: NextRequest) {
@@ -63,37 +78,99 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}))
     const prompt = typeof body?.prompt === "string" ? body.prompt : ""
-    if (!prompt.trim()) {
+    const brief = body?.brief && typeof body.brief === "object" ? body.brief : null
+    const hasBrief = Boolean(
+      brief &&
+        ["goal", "subject", "style", "composition", "constraints"].some(
+          (key) => typeof brief[key] === "string" && brief[key].trim(),
+        ),
+    )
+    if (!prompt.trim() && !hasBrief) {
       return NextResponse.json({ error: "prompt is required" }, { status: 400 })
     }
-    const finalPrompt = buildSelectionPrompt({
-      prompt,
+    const selectionPrompt = buildSelectionPrompt({
+      prompt: prompt || (typeof brief?.goal === "string" ? brief.goal : ""),
+      annotationNotes: typeof body?.annotationNotes === "string" ? body.annotationNotes : null,
+      hasMaskAsset: typeof body?.maskAssetId === "string" && body.maskAssetId.trim().length > 0,
       selectionBounds: body?.selectionBounds,
       canvasWidth: typeof body?.canvasWidth === "number" ? body.canvasWidth : Number(body?.canvasWidth || 0),
       canvasHeight: typeof body?.canvasHeight === "number" ? body.canvasHeight : Number(body?.canvasHeight || 0),
     })
 
-    const referenceAssetIds = [
+    const referenceAssetIds = Array.from(new Set([
       ...(Array.isArray(body?.referenceAssetIds) ? body.referenceAssetIds : []),
       ...(typeof body?.snapshotAssetId === "string" ? [body.snapshotAssetId] : []),
       ...(typeof body?.maskAssetId === "string" ? [body.maskAssetId] : []),
-    ]
+    ]))
+    const patchBounds =
+      body?.patchBounds &&
+      typeof body.patchBounds === "object" &&
+      typeof body.patchBounds.x === "number" &&
+      typeof body.patchBounds.y === "number" &&
+      typeof body.patchBounds.width === "number" &&
+      typeof body.patchBounds.height === "number"
+        ? {
+            x: body.patchBounds.x,
+            y: body.patchBounds.y,
+            width: body.patchBounds.width,
+            height: body.patchBounds.height,
+          }
+        : null
+    const versionMeta =
+      typeof body?.baseAssetId === "string" && body.baseAssetId.trim() && patchBounds
+        ? {
+            patch_edit: {
+              strategy: "browser_patch_composite",
+              baseAssetId: body.baseAssetId.trim(),
+              maskAssetId: typeof body?.maskAssetId === "string" ? body.maskAssetId : null,
+              patchBounds,
+            },
+          }
+        : null
 
-    const result = await runImageAssistantJob({
-      userId: auth.user.id,
-      enterpriseId: auth.user.enterpriseId,
-      requestIp: getRequestIp(req),
+    console.info("image-assistant.canvas-snapshot-edit.request", {
       sessionId: typeof body?.sessionId === "string" ? body.sessionId : null,
-      prompt: finalPrompt,
-      taskType: "mask_edit",
-      referenceAssetIds,
-      candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
-      sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
-      qualityMode: typeof body?.qualityMode === "string" ? body.qualityMode : null,
-      parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
+      baseAssetId: typeof body?.baseAssetId === "string" ? body.baseAssetId : null,
+      snapshotAssetId: typeof body?.snapshotAssetId === "string" ? body.snapshotAssetId : null,
+      hasMaskAsset: typeof body?.maskAssetId === "string" && body.maskAssetId.trim().length > 0,
+      selectionBounds: body?.selectionBounds || null,
+      patchBounds,
+      canvasWidth: typeof body?.canvasWidth === "number" ? body.canvasWidth : Number(body?.canvasWidth || 0),
+      canvasHeight: typeof body?.canvasHeight === "number" ? body.canvasHeight : Number(body?.canvasHeight || 0),
+      referenceAssetCount: referenceAssetIds.length,
     })
 
-    return NextResponse.json({ data: result })
+    const { sessionId } = await ensureImageAssistantSessionForTask({
+      userId: auth.user.id,
+      enterpriseId: auth.user.enterpriseId,
+      sessionId: typeof body?.sessionId === "string" ? body.sessionId : null,
+      title: prompt.trim() || (typeof brief?.goal === "string" ? brief.goal : "canvas edit"),
+    })
+    const task = await enqueueAssistantTask({
+      userId: auth.user.id,
+      workflowName: "image_turn_canvas_edit",
+      payload: {
+        kind: "image_turn",
+        userId: auth.user.id,
+        enterpriseId: auth.user.enterpriseId,
+        requestIp: getRequestIp(req),
+        sessionId,
+        prompt,
+        brief,
+        taskType: "mask_edit",
+        referenceAssetIds,
+        candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
+        sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
+        resolution: typeof body?.resolution === "string" ? body.resolution : null,
+        parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
+        extraInstructions: selectionPrompt && selectionPrompt !== prompt ? selectionPrompt : null,
+        snapshotAssetId: typeof body?.snapshotAssetId === "string" ? body.snapshotAssetId : null,
+        maskAssetId: typeof body?.maskAssetId === "string" ? body.maskAssetId : null,
+        versionMeta,
+      },
+    })
+
+    return NextResponse.json({ data: { accepted: true, task_id: String(task.id), session_id: sessionId } })
   } catch (error: any) {
     if (error?.message === "rate_limited") {
       return createRateLimitResponse("Too many image assistant requests", {
@@ -102,6 +179,12 @@ export async function POST(req: NextRequest) {
         remaining: 0,
         resetAt: Date.now() + (error.retryAfterSeconds || 60) * 1000,
       })
+    }
+    if (error?.message === "image_assistant_resource_exhausted") {
+      return NextResponse.json({ error: error.message }, { status: 429 })
+    }
+    if (IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS.has(error?.message)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     console.error("image-assistant.canvas-snapshot-edit.error", error)
     return NextResponse.json({ error: error.message || "canvas_snapshot_edit_failed" }, { status: 500 })

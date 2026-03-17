@@ -1,4 +1,5 @@
 import type { WriterConversationSummary } from "@/lib/writer/types"
+import type { WriterTurnDiagnostics } from "@/lib/writer/types"
 
 function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
@@ -8,10 +9,14 @@ export function createWriterSseStream({
   answer,
   conversation,
   taskId,
+  outcome,
+  diagnostics,
 }: {
   answer: string
   conversation: WriterConversationSummary
   taskId: string
+  outcome?: "needs_clarification" | "draft_ready"
+  diagnostics?: WriterTurnDiagnostics
 }) {
   const encoder = new TextEncoder()
   const splitIndex = Math.max(1, Math.floor(answer.length * 0.55))
@@ -50,6 +55,8 @@ export function createWriterSseStream({
             task_id: taskId,
             conversation_id: conversation.id,
             conversation,
+            outcome,
+            diagnostics,
           }),
         ),
       )

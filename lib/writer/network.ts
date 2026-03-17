@@ -64,6 +64,12 @@ type WriterRequestOptions = {
   responseType?: "json" | "text"
 }
 
+function createAbortError() {
+  const error = new Error("request_aborted")
+  error.name = "AbortError"
+  return error
+}
+
 function getProxyAgent() {
   if (!WRITER_PROXY_URL) {
     return undefined
@@ -200,6 +206,11 @@ async function requestWithNode(url: string, init: RequestInit, timeoutMs: number
   const transport = isHttps ? https : http
 
   return await new Promise<{ status: number; bodyText: string }>((resolve, reject) => {
+    if (init.signal?.aborted) {
+      reject(createAbortError())
+      return
+    }
+
     const request = transport.request(
       target,
       {
@@ -221,6 +232,12 @@ async function requestWithNode(url: string, init: RequestInit, timeoutMs: number
       },
     )
 
+    const handleAbort = () => {
+      request.destroy(createAbortError())
+    }
+
+    init.signal?.addEventListener("abort", handleAbort, { once: true })
+    request.on("close", () => init.signal?.removeEventListener("abort", handleAbort))
     request.on("error", reject)
     request.setTimeout(timeoutMs, () => {
       request.destroy(new Error("writer_request_timeout"))
@@ -248,6 +265,11 @@ async function requestWithNodeFetch(
   const body = await normalizeFetchBody(input, init)
 
   return await new Promise<Response>((resolve, reject) => {
+    if (init.signal?.aborted) {
+      reject(createAbortError())
+      return
+    }
+
     const request = transport.request(
       target,
       {
@@ -278,6 +300,12 @@ async function requestWithNodeFetch(
       },
     )
 
+    const handleAbort = () => {
+      request.destroy(createAbortError())
+    }
+
+    init.signal?.addEventListener("abort", handleAbort, { once: true })
+    request.on("close", () => init.signal?.removeEventListener("abort", handleAbort))
     request.on("error", reject)
     request.setTimeout(timeoutMs, () => {
       request.destroy(new Error("writer_request_timeout"))

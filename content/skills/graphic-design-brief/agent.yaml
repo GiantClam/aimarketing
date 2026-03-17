@@ -1,0 +1,8 @@
+interface:
+  display_name: Graphic Design Brief
+  description: Collect a usable image design brief before any generation or editing starts.
+  short_description: Multi-turn image brief intake
+  default_prompt: Use this skill to clarify the design brief before generating or editing images.
+routing:
+  stage: briefing
+  when_to_use: Use when the assistant still needs to collect or clarify the objective, subject, style, composition, audience, readability, or constraints.

@@ -17,6 +17,20 @@ ARTIFACT_DIR = Path("artifacts") / "writer-new-features" / SCENARIO
 SEED_PATH = Path("artifacts") / "writer-real-validation" / "seed.json"
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
+GROUNDING_SUMMARY_LABELS = ("Grounding", "本次依据")
+ENTERPRISE_SOURCE_LABELS = ("Enterprise sources", "企业来源")
+WEB_SOURCE_LABELS = ("Web sources", "外部来源")
+DATASET_LABELS = ("Datasets", "知识库")
+REFERENCE_LABELS = ("Matched docs", "命中文档")
+STRATEGY_LABELS = {
+    "rewrite_only": ("Rewrite only", "仅改写"),
+    "enterprise_grounded": ("Enterprise-first", "企业知识优先"),
+    "fresh_external": ("Web research first", "外部研究优先"),
+    "hybrid_grounded": ("Enterprise + web research", "企业知识 + 外部研究"),
+}
+VALID_RETRIEVAL_STRATEGIES = set(STRATEGY_LABELS)
+VALID_WEB_RESEARCH_STATUSES = {"ready", "disabled", "timed_out", "unavailable", "skipped"}
+
 
 def expect(condition: bool, message: str):
     if not condition:
@@ -59,6 +73,18 @@ def wait_for_text(page, text: str, timeout_ms: int = 30000):
     page.get_by_text(text, exact=False).first.wait_for(state="visible", timeout=timeout_ms)
 
 
+def wait_for_any_text(page, texts: tuple[str, ...] | list[str], timeout_ms: int = 30000) -> str:
+    last_error: Exception | None = None
+    for text in texts:
+        try:
+            wait_for_text(page, text, timeout_ms=timeout_ms)
+            return text
+        except PlaywrightTimeoutError as error:
+            last_error = error
+
+    raise AssertionError(f"none of the expected texts were visible: {texts}") from last_error
+
+
 def fetch_json(page, path: str):
     return page.evaluate(
         """async ({ baseUrl, path }) => {
@@ -71,6 +97,57 @@ def fetch_json(page, path: str):
         }""",
         {"baseUrl": BASE_URL, "path": path},
     )
+
+
+def get_conversation_id_from_url(page) -> str:
+    match = re.search(r"/dashboard/writer/(\d+)", page.url)
+    expect(bool(match), f"missing writer conversation id in url: {page.url}")
+    return match.group(1)
+
+
+def clear_writer_session_store(page):
+    page.evaluate(
+        """() => {
+            window.localStorage.removeItem("writer-session-store-v1")
+        }"""
+    )
+
+
+def get_displayed_source_count(used: bool, count: int) -> int:
+    return count if used and count > 0 else 0
+
+
+def assert_grounding_summary_visible(page, diagnostics: dict):
+    wait_for_any_text(page, GROUNDING_SUMMARY_LABELS, timeout_ms=20000)
+
+    strategy = diagnostics.get("retrievalStrategy")
+    expect(strategy in VALID_RETRIEVAL_STRATEGIES, f"unexpected retrieval strategy in diagnostics: {diagnostics}")
+    wait_for_any_text(page, STRATEGY_LABELS[strategy], timeout_ms=20000)
+
+    enterprise_count = get_displayed_source_count(
+        bool(diagnostics.get("enterpriseKnowledgeUsed")),
+        int(diagnostics.get("enterpriseSourceCount") or 0),
+    )
+    web_count = get_displayed_source_count(
+        bool(diagnostics.get("webResearchUsed")),
+        int(diagnostics.get("webSourceCount") or 0),
+    )
+    wait_for_any_text(
+        page,
+        tuple(f"{label} {enterprise_count}" for label in ENTERPRISE_SOURCE_LABELS),
+        timeout_ms=20000,
+    )
+    wait_for_any_text(page, tuple(f"{label} {web_count}" for label in WEB_SOURCE_LABELS), timeout_ms=20000)
+
+    datasets = [item for item in diagnostics.get("enterpriseDatasets") or [] if isinstance(item, str) and item.strip()]
+    if datasets:
+        wait_for_any_text(page, DATASET_LABELS, timeout_ms=20000)
+        wait_for_text(page, datasets[0], timeout_ms=20000)
+
+    references = [item for item in diagnostics.get("enterpriseTitles") or [] if isinstance(item, str) and item.strip()]
+    if references:
+        wait_for_any_text(page, REFERENCE_LABELS, timeout_ms=20000)
+        wait_for_text(page, references[0], timeout_ms=20000)
 
 
 def login(page):
@@ -183,18 +260,14 @@ def run_fixture_enabled(page):
     wait_for_text(page, "Cursor seed turn 01", timeout_ms=20000)
     result["metrics"]["cursor_pagination_ms"] = round((perf_counter() - start) * 1000, 2)
 
+    renamed_title = f"Renamed Seed {seed['conversationId']}"
     seeded_conversation.hover()
-    page.route(
-        f"**/api/writer/conversations/{seed['conversationId']}/name",
-        lambda route: route.fulfill(status=500, content_type="application/json", body='{"error":"forced failure"}'),
-    )
     page.get_by_test_id(f"writer-rename-{seed['conversationId']}").click()
     rename_input = page.locator("input:visible").first
-    rename_input.fill("Rollback Name Check")
+    rename_input.fill(renamed_title)
     page.get_by_test_id(f"writer-save-rename-{seed['conversationId']}").click()
-    wait_for_text(page, seed["title"], timeout_ms=10000)
-    expect(page.locator("input:visible").count() == 0, "rename rollback should leave edit mode")
-    page.unroute(f"**/api/writer/conversations/{seed['conversationId']}/name")
+    wait_for_text(page, renamed_title, timeout_ms=10000)
+    expect(page.locator("input:visible").count() == 0, "rename success should leave edit mode")
 
     start = perf_counter()
     page.get_by_test_id("writer-new-session-button").click()
@@ -231,17 +304,49 @@ def run_fixture_enabled(page):
     page.wait_for_timeout(200)
 
     input_box = page.locator("textarea:visible").first
-    input_box.fill("Write a short three-paragraph WeChat article about AI workflow systems.")
+    input_box.fill("Write a WeChat article about AI workflow systems.")
     send_button = page.get_by_test_id("writer-send-button")
     expect(send_button.is_enabled(), "writer send button should be enabled")
 
     start = perf_counter()
     send_button.click()
     page.wait_for_url(re.compile(r".*/dashboard/writer/\d+(?:\\?.*)?$"), timeout=90000)
-    assistant_text = wait_for_non_empty_last_assistant(page, timeout_ms=60000)
+    clarification_text = wait_for_non_empty_last_assistant(page, timeout_ms=60000)
+    expect(
+        "Audience:" in clarification_text or "主要是写给谁看的" in clarification_text,
+        "writer should ask for missing brief details before drafting",
+    )
+
+    input_box = page.locator("textarea:visible").first
+    input_box.fill("The audience is B2B SaaS founders, the goal is to drive demo requests, and the tone should be professional and restrained.")
+    send_button = page.get_by_test_id("writer-send-button")
+    send_button.click()
+    wait_for_text(page, "Writer Fixture Draft", timeout_ms=60000)
+    conversation_id = get_conversation_id_from_url(page)
+    messages_payload = fetch_json(page, f"/api/writer/messages?conversation_id={conversation_id}&limit=20")
+    expect(messages_payload["ok"], f"writer messages request failed: {messages_payload['status']}")
+    history = messages_payload["data"].get("data") or []
+    assistant_with_diagnostics = next(
+        (item for item in reversed(history) if isinstance(item.get("diagnostics"), dict)),
+        None,
+    )
+    expect(assistant_with_diagnostics is not None, f"expected assistant diagnostics in writer history: {history}")
+    diagnostics = assistant_with_diagnostics.get("diagnostics") or {}
+    expect(diagnostics.get("retrievalStrategy") in VALID_RETRIEVAL_STRATEGIES, f"unexpected retrieval strategy: {diagnostics}")
+    expect(diagnostics.get("retrievalStrategy") != "rewrite_only", f"draft generation should not use rewrite-only strategy: {diagnostics}")
+    expect(diagnostics.get("webResearchStatus") in VALID_WEB_RESEARCH_STATUSES, f"unexpected web research status: {diagnostics}")
+    assert_grounding_summary_visible(page, diagnostics)
+    result["diagnostics"] = diagnostics
+
+    clear_writer_session_store(page)
+    page.reload(wait_until="domcontentloaded", timeout=90000)
+    page.wait_for_load_state("networkidle", timeout=90000)
+    wait_for_writer_workspace_ready(page)
+    wait_for_text(page, "Writer Fixture Draft", timeout_ms=30000)
+    assert_grounding_summary_visible(page, diagnostics)
     result["metrics"]["fixture_generation_ms"] = round((perf_counter() - start) * 1000, 2)
-    expect("Writer Fixture Draft" in assistant_text, "fixture generation should return the deterministic fixture draft")
     save_debug(page, "04-fixture-generation")
+    save_debug(page, "05-fixture-generation-restored")
 
     return result
 

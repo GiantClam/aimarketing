@@ -1,0 +1,318 @@
+"use client"
+
+import { useCallback, useEffect, useState, type MouseEvent, type UIEvent } from "react"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
+import { Check, ChevronDown, ChevronRight, Edit2, ImageIcon, Loader2, Plus, Trash2, X } from "lucide-react"
+
+import { useI18n } from "@/components/locale-provider"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import type { ImageAssistantConversationSummary } from "@/lib/image-assistant/types"
+import { cn } from "@/lib/utils"
+
+function mergeSessions(current: ImageAssistantConversationSummary[], incoming: ImageAssistantConversationSummary[]) {
+  const seen = new Set<string>()
+  const merged: ImageAssistantConversationSummary[] = []
+
+  for (const session of [...current, ...incoming]) {
+    if (seen.has(session.id)) continue
+    seen.add(session.id)
+    merged.push(session)
+  }
+
+  return merged
+}
+
+export function ImageAssistantSidebarItem({
+  title,
+  icon: Icon,
+}: {
+  title: string
+  icon: typeof ImageIcon
+}) {
+  const { messages } = useI18n()
+  const pathname = usePathname()
+  const router = useRouter()
+  const [isOpen, setIsOpen] = useState(false)
+  const [sessions, setSessions] = useState<ImageAssistantConversationSummary[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  const [editingSessionName, setEditingSessionName] = useState("")
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<ImageAssistantConversationSummary | null>(null)
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
+
+  const isImageAssistantRoute = pathname.startsWith("/dashboard/image-assistant")
+  const isExpanded = isOpen
+  const activeSessionId = pathname.match(/^\/dashboard\/image-assistant\/([^/]+)$/)?.[1] || null
+
+  const fetchSessions = useCallback(async ({ append = false, cursor }: { append?: boolean; cursor?: string | null } = {}) => {
+    if (append) {
+      setIsLoadingMore(true)
+    } else {
+      setIsLoading(true)
+    }
+    try {
+      const params = new URLSearchParams({ limit: "20" })
+      if (cursor) {
+        params.set("cursor", cursor)
+      }
+
+      const response = await fetch(`/api/image-assistant/sessions?${params.toString()}`)
+      if (!response.ok) return
+      const data = await response.json()
+      const nextBatch = Array.isArray(data?.data) ? (data.data as ImageAssistantConversationSummary[]) : []
+      setSessions((current) => (append ? mergeSessions(current, nextBatch) : nextBatch))
+      setHasMore(Boolean(data?.has_more) && nextBatch.length > 0)
+      setNextCursor(typeof data?.next_cursor === "string" ? data.next_cursor : null)
+    } catch (error) {
+      console.error("Failed to load image assistant sessions", error)
+    } finally {
+      if (append) {
+        setIsLoadingMore(false)
+      } else {
+        setIsLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isImageAssistantRoute) {
+      setIsOpen(true)
+    }
+  }, [isImageAssistantRoute])
+
+  useEffect(() => {
+    if (isExpanded) {
+      void fetchSessions()
+    }
+  }, [fetchSessions, isExpanded])
+
+  useEffect(() => {
+    if (!isExpanded || !activeSessionId || isLoading || sessions.length === 0) return
+    if (sessions.some((session) => session.id === activeSessionId)) return
+    if (hasMore && nextCursor && !isLoadingMore) {
+      void fetchSessions({ append: true, cursor: nextCursor })
+      return
+    }
+    void fetchSessions()
+  }, [activeSessionId, fetchSessions, hasMore, isExpanded, isLoading, isLoadingMore, nextCursor, sessions])
+
+  const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget
+    if (isLoading || isLoadingMore || !hasMore || !nextCursor) return
+    if (target.scrollHeight - target.scrollTop - target.clientHeight > 48) return
+    void fetchSessions({ append: true, cursor: nextCursor })
+  }
+
+  const handleRenameStart = (session: ImageAssistantConversationSummary, event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (deletingSessionId) return
+    setEditingSessionId(session.id)
+    setEditingSessionName(session.name || "")
+  }
+
+  const handleRenameSave = async (sessionId: string, event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const nextName = editingSessionName.trim()
+    if (!nextName) return
+
+    setSessions((current) => current.map((session) => (session.id === sessionId ? { ...session, name: nextName } : session)))
+    try {
+      await fetch(`/api/image-assistant/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextName }),
+      })
+      setEditingSessionId(null)
+      setEditingSessionName("")
+      void fetchSessions()
+    } catch (error) {
+      console.error("Failed to rename image assistant session", error)
+    }
+  }
+
+  const handleRenameCancel = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setEditingSessionId(null)
+    setEditingSessionName("")
+  }
+
+  const handleDeleteRequest = (session: ImageAssistantConversationSummary, event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (deletingSessionId) return
+    setPendingDeleteSession(session)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteSession) return
+
+    const nextSessionId = pendingDeleteSession.id
+    const previousSessions = sessions
+    setDeletingSessionId(nextSessionId)
+    setSessions((current) => current.filter((session) => session.id !== nextSessionId))
+
+    try {
+      const response = await fetch(`/api/image-assistant/sessions/${nextSessionId}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      setPendingDeleteSession(null)
+      if (pathname === `/dashboard/image-assistant/${nextSessionId}`) {
+        router.push("/dashboard/image-assistant")
+      }
+    } catch (error) {
+      setSessions(previousSessions)
+      console.error("Failed to delete image assistant session", error)
+    } finally {
+      setDeletingSessionId(null)
+    }
+  }
+
+  return (
+    <>
+      <div className="mb-2">
+        <Button
+          variant="ghost"
+          className={cn("w-full justify-between font-manrope", isExpanded && "bg-sidebar-accent text-sidebar-accent-foreground")}
+          size="sm"
+          onClick={() => setIsOpen((current) => !current)}
+        >
+          <div className="flex items-center">
+            <Icon className="mr-2 h-4 w-4" />
+            {title}
+          </div>
+          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
+
+        {isExpanded ? (
+          <div className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-2">
+            <Link href="/dashboard/image-assistant">
+              <Button variant="ghost" className="h-8 w-full justify-start text-xs text-primary hover:text-primary/80">
+                <Plus className="mr-2 h-3 w-3" />
+                {messages.sidebar.newDesign}
+              </Button>
+            </Link>
+
+            {isLoading && sessions.length === 0 ? (
+              <div className="flex items-center px-3 py-2 text-xs text-muted-foreground">
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                {messages.sidebar.loading}
+              </div>
+            ) : sessions.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">{messages.sidebar.noDesignSessions}</div>
+            ) : (
+              <div
+                className="max-h-72 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                onScroll={handleListScroll}
+              >
+                {sessions.map((session) => {
+                  const isActive = pathname === `/dashboard/image-assistant/${session.id}`
+                  const isDeleting = deletingSessionId === session.id
+                  return (
+                    <Link key={session.id} href={`/dashboard/image-assistant/${session.id}`}>
+                      <div
+                        className={cn(
+                          "group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors",
+                          isActive
+                            ? "bg-primary/10 font-medium text-primary"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        {editingSessionId === session.id ? (
+                          <div className="flex w-full items-center gap-1" onClick={(event) => event.preventDefault()}>
+                            <Input
+                              value={editingSessionName}
+                              onChange={(event) => setEditingSessionName(event.target.value)}
+                              className="h-6 flex-1 border-primary/50 px-1 py-0 text-xs text-foreground"
+                              autoFocus
+                            />
+                            <button type="button" onClick={(event) => void handleRenameSave(session.id, event)} className="p-1 text-foreground hover:text-green-600">
+                              <Check className="h-3 w-3" />
+                            </button>
+                            <button type="button" onClick={handleRenameCancel} className="p-1 text-foreground hover:text-red-600">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex min-w-0 flex-1 items-center gap-2 md:max-w-[160px]">
+                              {session.cover_asset_url ? (
+                                <img src={session.cover_asset_url} alt="" className="h-6 w-6 shrink-0 rounded-md object-cover" />
+                              ) : (
+                                <ImageIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                              )}
+                              <div className="min-w-0">
+                                <div className="truncate">{session.name || messages.sidebar.newDesignFallback}</div>
+                                <div className="truncate text-[10px] opacity-70">
+                                  {session.current_mode === "canvas" ? messages.sidebar.hasCanvasDraft : messages.sidebar.conversationInProgress}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              <button type="button" onClick={(event) => handleRenameStart(session, event)} className="p-1 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50" disabled={isDeleting} aria-label={messages.shared.rename}>
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <button type="button" onClick={(event) => handleDeleteRequest(session, event)} className="p-1 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50" disabled={isDeleting} aria-label={messages.shared.delete}>
+                                {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </Link>
+                  )
+                })}
+                {isLoadingMore ? (
+                  <div className="flex items-center px-3 py-2 text-xs text-muted-foreground">
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    {messages.sidebar.loading}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      <Dialog
+        open={!!pendingDeleteSession}
+        onOpenChange={(open) => {
+          if (!open && !deletingSessionId) {
+            setPendingDeleteSession(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{messages.sidebar.deleteDesignTitle}</DialogTitle>
+            <DialogDescription>
+              {messages.sidebar.deleteConversationDescriptionPrefix}{" "}
+              {pendingDeleteSession?.name
+                ? messages.sidebar.deleteDesignDescriptionNamed.replace("{name}", pendingDeleteSession.name)
+                : messages.sidebar.deleteDesignDescriptionCurrent}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingDeleteSession(null)} disabled={!!deletingSessionId}>
+              {messages.shared.cancel}
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDeleteConfirm()} disabled={!!deletingSessionId}>
+              {deletingSessionId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {messages.shared.confirmDelete}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}

@@ -8,7 +8,7 @@ import {
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
-import type { WriterConversationSummary, WriterConversationStatus } from "@/lib/writer/types"
+import type { WriterConversationSummary, WriterConversationStatus, WriterTurnDiagnostics } from "@/lib/writer/types"
 
 export type WriterSessionMeta = {
   platform: WriterPlatform
@@ -17,6 +17,7 @@ export type WriterSessionMeta = {
   draft?: string
   imagesRequested?: boolean
   status?: WriterConversationStatus
+  diagnostics?: WriterTurnDiagnostics | null
   updatedAt: number
 }
 

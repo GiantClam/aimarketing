@@ -5,6 +5,7 @@ import { shouldUseImageAssistantFixtures } from "@/lib/image-assistant/aiberm"
 import { fileToBuffer, sha256Buffer } from "@/lib/image-assistant/assets"
 import { createImageAssistantAsset, getImageAssistantSession } from "@/lib/image-assistant/repository"
 import { isImageAssistantR2Available, uploadImageAssistantBuffer } from "@/lib/image-assistant/r2"
+import type { ImageAssistantAssetType } from "@/lib/image-assistant/types"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -15,6 +16,14 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024
 function parseReferenceRole(value: FormDataEntryValue | null) {
   const role = typeof value === "string" ? value : ""
   return role === "subject" || role === "background" || role === "style" || role === "logo" ? role : null
+}
+
+function parseAssetType(value: FormDataEntryValue | null): ImageAssistantAssetType {
+  const assetType = typeof value === "string" ? value.trim() : ""
+  if (assetType === "canvas_snapshot" || assetType === "mask") {
+    return assetType
+  }
+  return "reference"
 }
 
 export async function POST(req: NextRequest) {
@@ -46,11 +55,12 @@ export async function POST(req: NextRequest) {
 
     const buffer = await fileToBuffer(file)
     const referenceRole = parseReferenceRole(formData.get("referenceRole"))
+    const assetType = parseAssetType(formData.get("assetType"))
     const width = Number.parseInt(String(formData.get("width") || ""), 10)
     const height = Number.parseInt(String(formData.get("height") || ""), 10)
 
     let storageProvider = "inline"
-    let storageKey = `inline:reference:${auth.user.id}:${Date.now()}:${file.name}`
+    let storageKey = `inline:${assetType}:${auth.user.id}:${Date.now()}:${file.name}`
     let publicUrl: string | null = `data:${file.type};base64,${buffer.toString("base64")}`
 
     if (!shouldUseImageAssistantFixtures() && isImageAssistantR2Available()) {
@@ -58,7 +68,7 @@ export async function POST(req: NextRequest) {
         const uploaded = await uploadImageAssistantBuffer({
           userId: auth.user.id,
           sessionId,
-          assetType: "reference",
+          assetType,
           mimeType: file.type,
           buffer,
           suggestedName: file.name,
@@ -78,7 +88,7 @@ export async function POST(req: NextRequest) {
     const asset = await createImageAssistantAsset({
       userId: auth.user.id,
       sessionId,
-      assetType: "reference",
+      assetType,
       referenceRole,
       storageProvider,
       storageKey,

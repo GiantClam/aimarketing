@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Square, MessageSquare } from "lucide-react";
+import { Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,12 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./CodeBlock";
+import {
+    findAdvisorPendingTask,
+    removePendingAssistantTask,
+    savePendingAssistantTask,
+    updatePendingAssistantTask,
+} from "@/lib/assistant-task-store";
 
 interface Message {
     id: string;
@@ -26,96 +32,6 @@ const ADVISOR_LABEL_MAP: Record<string, string> = {
 
 function getAdvisorLabel(advisorType: string) {
     return ADVISOR_LABEL_MAP[advisorType] || "专家顾问";
-}
-
-function extractSSEBlocks(buffer: string) {
-    const blocks = buffer.split(/\r?\n\r?\n/);
-    const rest = blocks.pop() ?? "";
-    return { blocks, rest };
-}
-
-function getSSEDataFromBlock(block: string) {
-    const dataLines = block
-        .split(/\r?\n/)
-        .map((line) => line.trimEnd())
-        .filter((line) => line.startsWith("data:"));
-
-    if (dataLines.length === 0) {
-        return null;
-    }
-
-    const rawData = dataLines
-        .map((line) => line.slice(5).trimStart())
-        .join("\n")
-        .trim();
-
-    if (!rawData || rawData === "[DONE]") {
-        return null;
-    }
-
-    try {
-        return JSON.parse(rawData);
-    } catch {
-        return null;
-    }
-}
-
-function extractTextFromUnknown(value: unknown): string | null {
-    if (typeof value === "string") {
-        const text = value.trim();
-        return text ? text : null;
-    }
-
-    if (Array.isArray(value)) {
-        for (const item of value) {
-            const text = extractTextFromUnknown(item);
-            if (text) return text;
-        }
-    }
-
-    if (value && typeof value === "object") {
-        for (const item of Object.values(value as Record<string, unknown>)) {
-            const text = extractTextFromUnknown(item);
-            if (text) return text;
-        }
-    }
-
-    return null;
-}
-
-function extractWorkflowOutputText(dataObj: any): string | null {
-    const outputs = dataObj?.data?.outputs;
-    return (
-        extractTextFromUnknown(outputs?.answer) ||
-        extractTextFromUnknown(outputs?.output) ||
-        extractTextFromUnknown(outputs?.text) ||
-        extractTextFromUnknown(outputs)
-    );
-}
-
-function extractAgentName(dataObj: any, fallback: string) {
-    const candidates = [
-        dataObj?.agent_name,
-        dataObj?.metadata?.agent_name,
-        dataObj?.metadata?.agent?.name,
-        dataObj?.data?.agent_name,
-    ];
-
-    for (const candidate of candidates) {
-        if (typeof candidate === "string" && candidate.trim()) {
-            return candidate.trim();
-        }
-    }
-
-    const selector = dataObj?.from_variable_selector;
-    if (Array.isArray(selector) && selector.length > 0) {
-        const last = String(selector[selector.length - 1] ?? "").trim();
-        if (last) {
-            return last.replace(/_/g, " ");
-        }
-    }
-
-    return fallback;
 }
 
 function sanitizeAssistantContent(raw: string) {
@@ -146,8 +62,8 @@ export function DifyChatArea({
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputVal, setInputVal] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const currentTaskIdRef = useRef<string | null>(null);
     const historyAbortRef = useRef<AbortController | null>(null);
     const router = useRouter();
 
@@ -233,6 +149,79 @@ export function DifyChatArea({
         };
     }, [fetchMessages, initialConversationId]);
 
+    useEffect(() => {
+        const pendingTask = findAdvisorPendingTask({ advisorType, conversationId });
+        if (!pendingTask) return;
+
+        let cancelled = false;
+        setIsLoading(true);
+
+        const poll = async () => {
+            while (!cancelled) {
+                try {
+                    const response = await fetch(`/api/tasks/${pendingTask.taskId}`);
+                    const payload = await response.json().catch(() => null) as {
+                        data?: { status?: string; result?: { conversation_id?: string | null; error?: string } | null }
+                    } | null;
+                    const status = payload?.data?.status;
+                    const nextConversationId = typeof payload?.data?.result?.conversation_id === "string"
+                        ? payload.data.result.conversation_id
+                        : null;
+
+                    if (nextConversationId && pendingTask.conversationId !== nextConversationId) {
+                        updatePendingAssistantTask(pendingTask.taskId, { conversationId: nextConversationId });
+                        if (!conversationId) {
+                            setConversationId(nextConversationId);
+                            window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
+                            router.replace(`/dashboard/advisor/${advisorType}/${nextConversationId}`);
+                        }
+                    }
+
+                    if (status === "success") {
+                        const targetConversationId = nextConversationId || conversationId;
+                        if (targetConversationId) {
+                            await fetchMessages(targetConversationId);
+                            if (!cancelled) {
+                                setConversationId(targetConversationId);
+                                window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
+                            }
+                        }
+                        removePendingAssistantTask(pendingTask.taskId);
+                        if (!cancelled) setIsLoading(false);
+                        return;
+                    }
+
+                    if (status === "failed") {
+                        removePendingAssistantTask(pendingTask.taskId);
+                        if (!cancelled) {
+                            setIsLoading(false);
+                            setMessages((prev) => [
+                                ...prev,
+                                {
+                                    id: `advisor_error_${Date.now()}`,
+                                    conversation_id: conversationId || "",
+                                    role: "assistant",
+                                    content: `请求失败：${payload?.data?.result?.error || "未知错误"}`,
+                                    agentName: advisorLabel,
+                                },
+                            ]);
+                        }
+                        return;
+                    }
+                } catch (error) {
+                    console.error("advisor.pending-task.poll-failed", error);
+                }
+
+                await new Promise((resolve) => window.setTimeout(resolve, 1200));
+            }
+        };
+
+        void poll();
+        return () => {
+            cancelled = true;
+        };
+    }, [advisorLabel, advisorType, conversationId, fetchMessages, pendingTaskRefreshKey, router]);
+
     const handleSend = async () => {
         if (!inputVal.trim() || isLoading) return;
         const currentQuery = inputVal;
@@ -267,7 +256,7 @@ export function DifyChatArea({
             const payload: any = {
                 inputs: { contents: currentQuery },
                 query: currentQuery,
-                response_mode: "streaming",
+                response_mode: "async",
                 user,
                 advisorType,
             };
@@ -286,96 +275,28 @@ export function DifyChatArea({
                 const details = errorData?.details || errorData?.error || `HTTP ${res.status}`;
                 throw new Error(String(details));
             }
-
-            if (!res.body) {
-                throw new Error("未收到流式响应");
+            const payloadData = await res.json().catch(() => null) as {
+                task_id?: string;
+                conversation_id?: string | null;
+            } | null;
+            if (!payloadData?.task_id) {
+                throw new Error("未创建异步任务");
             }
 
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder("utf-8");
-            let currentAsstContent = "";
-            let currentAgentName = advisorLabel;
-            let newConvId = conversationId;
-            let pendingRouteConversationId: string | null = null;
-            let streamBuffer = "";
-            const getVisibleAssistantContent = () => sanitizeAssistantContent(currentAsstContent);
+            savePendingAssistantTask({
+                taskId: payloadData.task_id,
+                scope: "advisor",
+                advisorType,
+                conversationId: payloadData.conversation_id || conversationId,
+                prompt: currentQuery,
+                createdAt: Date.now(),
+            });
+            setPendingTaskRefreshKey(Date.now());
 
-            const handleStreamEvent = (dataObj: any) => {
-                if (dataObj.task_id) {
-                    currentTaskIdRef.current = dataObj.task_id;
-                }
-                if (dataObj.conversation_id && !newConvId) {
-                    newConvId = dataObj.conversation_id;
-                    setConversationId(newConvId);
-                    window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
-                    // Delay route change until stream is finished; otherwise component remount can drop streamed content.
-                    pendingRouteConversationId = newConvId;
-                }
-
-                const eventAgentName = extractAgentName(dataObj, advisorLabel);
-                if (eventAgentName) {
-                    currentAgentName = eventAgentName;
-                }
-
-                if (["message", "agent_message", "text_chunk"].includes(dataObj.event)) {
-                    const chunkText =
-                        extractTextFromUnknown(dataObj.answer) ||
-                        extractTextFromUnknown(dataObj.data?.text) ||
-                        "";
-                    if (chunkText) {
-                        currentAsstContent += chunkText;
-                        patchAssistant(getVisibleAssistantContent(), currentAgentName);
-                    }
-                    return;
-                }
-
-                if (dataObj.event === "workflow_finished" && !currentAsstContent) {
-                    const finalOutput = extractWorkflowOutputText(dataObj);
-                    if (finalOutput) {
-                        currentAsstContent = finalOutput;
-                        patchAssistant(getVisibleAssistantContent(), currentAgentName);
-                    }
-                    return;
-                }
-
-                if (dataObj.event === "error") {
-                    const errorPart = dataObj.message || dataObj.code || "未知错误";
-                    currentAsstContent = `${currentAsstContent}\n\n[Error: ${errorPart}]`.trim();
-                    patchAssistant(getVisibleAssistantContent(), currentAgentName);
-                }
-            };
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                streamBuffer += decoder.decode(value, { stream: true });
-                const parsed = extractSSEBlocks(streamBuffer);
-                streamBuffer = parsed.rest;
-
-                for (const block of parsed.blocks) {
-                    const dataObj = getSSEDataFromBlock(block);
-                    if (!dataObj) continue;
-                    handleStreamEvent(dataObj);
-                }
-            }
-
-            streamBuffer += decoder.decode();
-            if (streamBuffer.trim()) {
-                const parsed = extractSSEBlocks(`${streamBuffer}\n\n`);
-                for (const block of parsed.blocks) {
-                    const dataObj = getSSEDataFromBlock(block);
-                    if (!dataObj) continue;
-                    handleStreamEvent(dataObj);
-                }
-            }
-
-            if (!getVisibleAssistantContent()) {
-                patchAssistant("暂未获取到工作流输出，请稍后重试。", currentAgentName);
-            }
-
-            if (pendingRouteConversationId && !conversationId) {
-                router.replace(`/dashboard/advisor/${advisorType}/${pendingRouteConversationId}`);
+            if (payloadData.conversation_id && !conversationId) {
+                setConversationId(payloadData.conversation_id);
+                window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
+                router.replace(`/dashboard/advisor/${advisorType}/${payloadData.conversation_id}`);
             }
         } catch (e) {
             console.error("Message error", e);
@@ -383,7 +304,6 @@ export function DifyChatArea({
             patchAssistant(`请求失败：${errorText}`, advisorLabel);
         } finally {
             setIsLoading(false);
-            currentTaskIdRef.current = null;
         }
     };
 
@@ -391,20 +311,6 @@ export function DifyChatArea({
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             handleSend();
-        }
-    };
-
-    const handleStop = async () => {
-        if (!currentTaskIdRef.current) return;
-        try {
-            await fetch(`/api/dify/chat-messages/${currentTaskIdRef.current}/stop`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user, advisorType }),
-            });
-            setIsLoading(false);
-        } catch (e) {
-            console.error("Stop failed", e);
         }
     };
 
@@ -500,11 +406,11 @@ export function DifyChatArea({
                     {isLoading ? (
                         <Button
                             size="icon"
-                            variant="destructive"
+                            variant="outline"
                             className="absolute right-1 w-10 h-10 rounded-full"
-                            onClick={handleStop}
+                            disabled
                         >
-                            <Square className="w-4 h-4 fill-current" />
+                            <Loader2 className="w-4 h-4 animate-spin" />
                         </Button>
                     ) : (
                         <Button

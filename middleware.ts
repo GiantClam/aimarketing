@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server"
 
+import { detectLocaleFromAcceptLanguage, LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
+
 const PUBLIC_PATHS = new Set(["/login", "/register"])
 const SESSION_COOKIE_NAME = "aimarketing_session"
+const DEMO_SESSION_COOKIE_NAME = "aimarketing_demo_session"
 
 function applySecurityHeaders(response: NextResponse) {
   response.headers.set("X-Frame-Options", "DENY")
@@ -13,26 +16,41 @@ function applySecurityHeaders(response: NextResponse) {
   return response
 }
 
+function applyLocaleCookie(request: NextRequest, response: NextResponse) {
+  const existing = normalizeLocale(request.cookies.get(LOCALE_COOKIE_NAME)?.value)
+  const locale = existing || detectLocaleFromAcceptLanguage(request.headers.get("accept-language"))
+  if (!existing) {
+    response.cookies.set(LOCALE_COOKIE_NAME, locale, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+    })
+  }
+  return response
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  const demoSessionToken = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
+  const isAuthenticated = Boolean(sessionToken || demoSessionToken)
 
   if (pathname.startsWith("/dashboard")) {
-    if (!sessionToken) {
+    if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url)
       loginUrl.searchParams.set("next", pathname)
-      return applySecurityHeaders(NextResponse.redirect(loginUrl))
+      return applySecurityHeaders(applyLocaleCookie(request, NextResponse.redirect(loginUrl)))
     }
-    return applySecurityHeaders(NextResponse.next())
+    return applySecurityHeaders(applyLocaleCookie(request, NextResponse.next()))
   }
 
-  if (PUBLIC_PATHS.has(pathname) && sessionToken) {
-    return applySecurityHeaders(NextResponse.redirect(new URL("/dashboard", request.url)))
+  if (PUBLIC_PATHS.has(pathname) && isAuthenticated) {
+    return applySecurityHeaders(applyLocaleCookie(request, NextResponse.redirect(new URL("/dashboard", request.url))))
   }
 
-  return applySecurityHeaders(NextResponse.next())
+  return applySecurityHeaders(applyLocaleCookie(request, NextResponse.next()))
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/register"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 }

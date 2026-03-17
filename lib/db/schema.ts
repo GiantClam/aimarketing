@@ -1,7 +1,9 @@
-import { pgTable, serial, integer, varchar, text, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core"
+import { pgTable, serial, integer, varchar, text, timestamp, boolean, uniqueIndex, jsonb } from "drizzle-orm/pg-core"
+
+const withPrefix = (name: string) => `AI_MARKETING_${name}`
 
 // Enterprise table
-export const enterprises = pgTable("enterprises", {
+export const enterprises = pgTable(withPrefix("enterprises"), {
   id: serial("id").primaryKey(),
   enterpriseCode: varchar("enterprise_code", { length: 64 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -11,7 +13,7 @@ export const enterprises = pgTable("enterprises", {
 })
 
 // Users table
-export const users = pgTable("users", {
+export const users = pgTable(withPrefix("users"), {
   id: serial("id").primaryKey(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -25,7 +27,7 @@ export const users = pgTable("users", {
 })
 
 export const userSessions = pgTable(
-  "user_sessions",
+  withPrefix("user_sessions"),
   {
     id: serial("id").primaryKey(),
     userId: integer("user_id")
@@ -40,12 +42,12 @@ export const userSessions = pgTable(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => ({
-    tokenHashUnique: uniqueIndex("user_sessions_token_hash_idx").on(table.tokenHash),
+    tokenHashUnique: uniqueIndex(withPrefix("user_sessions_token_hash_idx")).on(table.tokenHash),
   }),
 )
 
 // Enterprise join requests
-export const enterpriseJoinRequests = pgTable("enterprise_join_requests", {
+export const enterpriseJoinRequests = pgTable(withPrefix("enterprise_join_requests"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
@@ -63,7 +65,7 @@ export const enterpriseJoinRequests = pgTable("enterprise_join_requests", {
 
 // User feature permissions
 export const userFeaturePermissions = pgTable(
-  "user_feature_permissions",
+  withPrefix("user_feature_permissions"),
   {
     id: serial("id").primaryKey(),
     userId: integer("user_id")
@@ -75,12 +77,12 @@ export const userFeaturePermissions = pgTable(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => ({
-    userFeatureKeyUnique: uniqueIndex("user_feature_permissions_user_feature_idx").on(table.userId, table.featureKey),
+    userFeatureKeyUnique: uniqueIndex(withPrefix("user_feature_permissions_user_feature_idx")).on(table.userId, table.featureKey),
   }),
 )
 
 // User files table for personal knowledge base
-export const userFiles = pgTable("user_files", {
+export const userFiles = pgTable(withPrefix("user_files"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
@@ -94,7 +96,7 @@ export const userFiles = pgTable("user_files", {
 })
 
 // Conversations table for chat history
-export const conversations = pgTable("conversations", {
+export const conversations = pgTable(withPrefix("conversations"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
@@ -104,7 +106,7 @@ export const conversations = pgTable("conversations", {
 })
 
 // Messages table for conversation history
-export const messages = pgTable("messages", {
+export const messages = pgTable(withPrefix("messages"), {
   id: serial("id").primaryKey(),
   conversationId: integer("conversation_id")
     .notNull()
@@ -116,7 +118,7 @@ export const messages = pgTable("messages", {
 })
 
 // Writer conversations table for article writing workspace
-export const writerConversations = pgTable("writer_conversations", {
+export const writerConversations = pgTable(withPrefix("writer_conversations"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
@@ -132,18 +134,19 @@ export const writerConversations = pgTable("writer_conversations", {
 })
 
 // Writer messages table for article writing workspace
-export const writerMessages = pgTable("writer_messages", {
+export const writerMessages = pgTable(withPrefix("writer_messages"), {
   id: serial("id").primaryKey(),
   conversationId: integer("conversation_id")
     .notNull()
     .references(() => writerConversations.id),
   role: varchar("role", { length: 20 }).notNull(),
   content: text("content").notNull(),
+  diagnostics: jsonb("diagnostics"),
   createdAt: timestamp("created_at").defaultNow(),
 })
 
 export const enterpriseDifyBindings = pgTable(
-  "aimarketing_enterprise_dify_bindings",
+  withPrefix("enterprise_dify_bindings"),
   {
     id: serial("id").primaryKey(),
     enterpriseId: integer("enterprise_id")
@@ -156,12 +159,12 @@ export const enterpriseDifyBindings = pgTable(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => ({
-    enterpriseUnique: uniqueIndex("aimarketing_enterprise_dify_bindings_enterprise_idx").on(table.enterpriseId),
+    enterpriseUnique: uniqueIndex(withPrefix("enterprise_dify_bindings_enterprise_idx")).on(table.enterpriseId),
   }),
 )
 
 export const enterpriseDifyDatasets = pgTable(
-  "aimarketing_enterprise_dify_datasets",
+  withPrefix("enterprise_dify_datasets"),
   {
     id: serial("id").primaryKey(),
     bindingId: integer("binding_id")
@@ -176,7 +179,7 @@ export const enterpriseDifyDatasets = pgTable(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => ({
-    bindingDatasetUnique: uniqueIndex("aimarketing_enterprise_dify_datasets_binding_dataset_idx").on(
+    bindingDatasetUnique: uniqueIndex(withPrefix("enterprise_dify_datasets_binding_dataset_idx")).on(
       table.bindingId,
       table.datasetId,
     ),
@@ -184,7 +187,7 @@ export const enterpriseDifyDatasets = pgTable(
 )
 
 export const enterpriseDifyAdvisorConfigs = pgTable(
-  "aimarketing_enterprise_dify_advisor_configs",
+  withPrefix("enterprise_dify_advisor_configs"),
   {
     id: serial("id").primaryKey(),
     enterpriseId: integer("enterprise_id")
@@ -198,7 +201,7 @@ export const enterpriseDifyAdvisorConfigs = pgTable(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => ({
-    enterpriseAdvisorUnique: uniqueIndex("aimarketing_enterprise_dify_advisors_enterprise_type_idx").on(
+    enterpriseAdvisorUnique: uniqueIndex(withPrefix("enterprise_dify_advisors_enterprise_type_idx")).on(
       table.enterpriseId,
       table.advisorType,
     ),
@@ -206,7 +209,7 @@ export const enterpriseDifyAdvisorConfigs = pgTable(
 )
 
 // Submitted URLs table for industry knowledge base
-export const submittedUrls = pgTable("submitted_urls", {
+export const submittedUrls = pgTable(withPrefix("submitted_urls"), {
   id: serial("id").primaryKey(),
   url: text("url").notNull(),
   title: varchar("title", { length: 255 }),
@@ -216,7 +219,7 @@ export const submittedUrls = pgTable("submitted_urls", {
 })
 
 // Templates table for content generation workflows
-export const templates = pgTable("templates", {
+export const templates = pgTable(withPrefix("templates"), {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
@@ -244,7 +247,7 @@ export const templates = pgTable("templates", {
 })
 
 // Industry knowledge bases table for Milvus collections
-export const industryKnowledgeBases = pgTable("industry_knowledge_bases", {
+export const industryKnowledgeBases = pgTable(withPrefix("industry_knowledge_bases"), {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
@@ -255,7 +258,7 @@ export const industryKnowledgeBases = pgTable("industry_knowledge_bases", {
 })
 
 // Personal knowledge bases table for user-specific Milvus collections
-export const personalKnowledgeBases = pgTable("personal_knowledge_bases", {
+export const personalKnowledgeBases = pgTable(withPrefix("personal_knowledge_bases"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
@@ -269,7 +272,7 @@ export const personalKnowledgeBases = pgTable("personal_knowledge_bases", {
 })
 
 // Template usage tracking
-export const templateUsage = pgTable("template_usage", {
+export const templateUsage = pgTable(withPrefix("template_usage"), {
   id: serial("id").primaryKey(),
   templateId: integer("template_id")
     .notNull()
@@ -286,7 +289,7 @@ export const templateUsage = pgTable("template_usage", {
 })
 
 // n8n 连接配置（支持用户自定义 n8n 实例/域名）
-export const n8nConnections = pgTable("n8n_connections", {
+export const n8nConnections = pgTable(withPrefix("n8n_connections"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
   name: varchar("name", { length: 255 }).notNull(),
@@ -299,7 +302,7 @@ export const n8nConnections = pgTable("n8n_connections", {
 })
 
 // 通用任务执行表（统一跟踪 n8n 执行与结果）
-export const tasks = pgTable("tasks", {
+export const tasks = pgTable(withPrefix("tasks"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
   connectionId: integer("connection_id").references(() => n8nConnections.id),
@@ -315,7 +318,7 @@ export const tasks = pgTable("tasks", {
 })
 
 // Dify 连接配置（支持不同域名/私有 Dify）
-export const difyConnections = pgTable("dify_connections", {
+export const difyConnections = pgTable(withPrefix("dify_connections"), {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
   name: varchar("name", { length: 255 }).notNull(),

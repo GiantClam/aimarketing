@@ -5,7 +5,7 @@ import { enterpriseDifyBindings, enterpriseDifyDatasets } from "@/lib/db/schema"
 import { writerRequestJson } from "@/lib/writer/network"
 import type { WriterMode, WriterPlatform } from "@/lib/writer/config"
 
-export type EnterpriseKnowledgeScope = "brand" | "product" | "case-study" | "compliance" | "campaign"
+export type EnterpriseKnowledgeScope = "general" | "brand" | "product" | "case-study" | "compliance" | "campaign"
 
 export type EnterpriseDifyDatasetInput = {
   datasetId: string
@@ -33,6 +33,7 @@ export type EnterpriseKnowledgeSnippet = {
   datasetId: string
   datasetName: string
   scope: EnterpriseKnowledgeScope
+  inferredScope?: EnterpriseKnowledgeScope
   score: number | null
   title: string
   content: string
@@ -44,14 +45,52 @@ export type EnterpriseKnowledgeContext = {
   snippets: EnterpriseKnowledgeSnippet[]
 }
 
+export type EnterpriseKnowledgeProfile = {
+  configuredScopes: EnterpriseKnowledgeScope[]
+  datasetScopeCounts: Partial<Record<EnterpriseKnowledgeScope, number>>
+  primaryScope: EnterpriseKnowledgeScope | "mixed" | "unknown"
+  hasGeneralDataset: boolean
+}
+
+export type EnterpriseKnowledgeCoverageTag =
+  | "company-facts"
+  | "product-system"
+  | "application-scenarios"
+  | "technical-proof"
+  | "delivery-service"
+  | "brand-proof"
+  | "faq"
+
+export type RemoteEnterpriseDifyDatasetRecord = {
+  id: string
+  name: string
+  description: string
+  suggestedScope: EnterpriseKnowledgeScope
+  coverageTags: EnterpriseKnowledgeCoverageTag[]
+  documentCount: number
+  sampleDocuments: string[]
+}
+
 const DEFAULT_RETRIEVAL_TOP_K = 3
 const DEFAULT_RETRIEVAL_SCORE_THRESHOLD = 0.35
+const DEFAULT_MAX_QUERY_VARIANTS = 2
 const WRITER_ENTERPRISE_KNOWLEDGE_CACHE_TTL_MS = Math.max(
   0,
   Number.parseInt(process.env.WRITER_ENTERPRISE_KNOWLEDGE_CACHE_TTL_MS || "300000", 10) || 300_000,
 )
+const WRITER_ENTERPRISE_KNOWLEDGE_STATUS_CACHE_TTL_MS = Math.max(
+  0,
+  Number.parseInt(process.env.WRITER_ENTERPRISE_KNOWLEDGE_STATUS_CACHE_TTL_MS || "60000", 10) || 60_000,
+)
 
 const enterpriseKnowledgeCache = new Map<string, { expiresAt: number; value: Promise<EnterpriseKnowledgeContext | null> }>()
+const enterpriseKnowledgeStatusCache = new Map<
+  string,
+  {
+    expiresAt: number
+    value: Promise<{ enabled: boolean; datasetCount: number; source?: "dify"; profile?: EnterpriseKnowledgeProfile }>
+  }
+>()
 
 const FIXTURE_DATASETS: Array<{ id: string; name: string; description: string }> = [
   { id: "fixture-brand", name: "品牌手册", description: "品牌定位、品牌语调、禁止表述" },
@@ -103,16 +142,151 @@ function normalizeSnippetContent(content: string) {
 }
 
 function normalizeScope(value: unknown): EnterpriseKnowledgeScope {
-  if (value === "product" || value === "case-study" || value === "compliance" || value === "campaign") {
+  if (
+    value === "general" ||
+    value === "product" ||
+    value === "case-study" ||
+    value === "compliance" ||
+    value === "campaign"
+  ) {
     return value
   }
   return "brand"
+}
+
+function normalizeCoverageTags(value: unknown): EnterpriseKnowledgeCoverageTag[] {
+  const values = Array.isArray(value) ? value : []
+  return [...new Set(values)]
+    .filter((item): item is EnterpriseKnowledgeCoverageTag =>
+      item === "company-facts" ||
+      item === "product-system" ||
+      item === "application-scenarios" ||
+      item === "technical-proof" ||
+      item === "delivery-service" ||
+      item === "brand-proof" ||
+      item === "faq",
+    )
 }
 
 function normalizePriority(value: unknown) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return 100
   return Math.min(Math.max(Math.round(parsed), 1), 999)
+}
+
+function buildEnterpriseKnowledgeProfile(
+  datasets: Array<Pick<EnterpriseDifyBindingRecord["datasets"][number], "scope" | "enabled">>,
+): EnterpriseKnowledgeProfile {
+  const enabledDatasets = datasets.filter((dataset) => dataset.enabled)
+  if (enabledDatasets.length === 0) {
+    return {
+      configuredScopes: [],
+      datasetScopeCounts: {},
+      primaryScope: "unknown",
+      hasGeneralDataset: false,
+    }
+  }
+
+  const datasetScopeCounts = enabledDatasets.reduce<Partial<Record<EnterpriseKnowledgeScope, number>>>((acc, dataset) => {
+    const scope = normalizeScope(dataset.scope)
+    acc[scope] = (acc[scope] || 0) + 1
+    return acc
+  }, {})
+
+  const configuredScopes = Object.keys(datasetScopeCounts)
+    .map((scope) => normalizeScope(scope))
+    .sort((left, right) => (datasetScopeCounts[right] || 0) - (datasetScopeCounts[left] || 0))
+
+  const primaryScope =
+    configuredScopes.length === 0
+      ? "unknown"
+      : configuredScopes.length === 1
+        ? configuredScopes[0]
+        : "mixed"
+
+  return {
+    configuredScopes,
+    datasetScopeCounts,
+    primaryScope,
+    hasGeneralDataset: Boolean(datasetScopeCounts.general),
+  }
+}
+
+function normalizeQueryVariants(query: string, queryVariants?: string[]) {
+  const variants = [query, ...(queryVariants || [])]
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+
+  return [...new Set(variants)].slice(0, DEFAULT_MAX_QUERY_VARIANTS)
+}
+
+function normalizePreferredScopes(scopes?: EnterpriseKnowledgeScope[]) {
+  return [...new Set((scopes || []).map((scope) => normalizeScope(scope)).filter(Boolean))]
+}
+
+function inferSnippetScope(
+  title: string,
+  content: string,
+  fallback: EnterpriseKnowledgeScope,
+): EnterpriseKnowledgeScope {
+  const haystack = `${title}\n${content}`.toLowerCase()
+
+  if (
+    /产品|机型|型号|解决方案|参数|规格|设备|工艺|product|solution|machine|model|spec/i.test(haystack)
+  ) {
+    return "product"
+  }
+  if (/案例|客户|场景|应用|roi|成效|客户价值|case|customer|scenario/i.test(haystack)) {
+    return "case-study"
+  }
+  if (/合规|禁用|风险|免责声明|compliance|regulation|legal/i.test(haystack)) {
+    return "compliance"
+  }
+  if (/campaign|活动|投放|营销战役|广告活动/i.test(haystack)) {
+    return "campaign"
+  }
+
+  return fallback
+}
+
+function filterActiveDatasetsByScope(
+  datasets: EnterpriseDifyBindingRecord["datasets"],
+  preferredScopes?: EnterpriseKnowledgeScope[],
+) {
+  const activeDatasets = datasets.filter((dataset) => dataset.enabled)
+  const normalizedScopes = normalizePreferredScopes(preferredScopes)
+  if (normalizedScopes.length === 0) {
+    return activeDatasets
+  }
+
+  const matched = activeDatasets.filter(
+    (dataset) => dataset.scope === "general" || normalizedScopes.includes(dataset.scope),
+  )
+  return matched.length > 0 ? matched : activeDatasets
+}
+
+function sortSnippetsByScore(snippets: EnterpriseKnowledgeSnippet[]) {
+  return [...snippets].sort((left, right) => {
+    const rightScore = typeof right.score === "number" ? right.score : -1
+    const leftScore = typeof left.score === "number" ? left.score : -1
+    return rightScore - leftScore
+  })
+}
+
+function getEnterpriseKnowledgeCacheKey(enterpriseId: number | null | undefined) {
+  return String(enterpriseId || 0)
+}
+
+function clearEnterpriseKnowledgeCaches(enterpriseId: number | null | undefined) {
+  const enterpriseKey = `${enterpriseId || 0}:`
+
+  for (const key of enterpriseKnowledgeCache.keys()) {
+    if (key.startsWith(enterpriseKey)) {
+      enterpriseKnowledgeCache.delete(key)
+    }
+  }
+
+  enterpriseKnowledgeStatusCache.delete(getEnterpriseKnowledgeCacheKey(enterpriseId))
 }
 
 export async function getEnterpriseDifyBinding(enterpriseId: number | null | undefined) {
@@ -156,16 +330,38 @@ export async function getEnterpriseDifyBinding(enterpriseId: number | null | und
 }
 
 export async function getEnterpriseDifyKnowledgeStatus(enterpriseId: number | null | undefined) {
-  const binding = await getEnterpriseDifyBinding(enterpriseId)
-  if (!binding || !binding.enabled) {
-    return { enabled: false, datasetCount: 0 }
+  const cacheKey = getEnterpriseKnowledgeCacheKey(enterpriseId)
+  const now = Date.now()
+  const cached = enterpriseKnowledgeStatusCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
+    return cached.value
   }
 
-  const datasetCount = binding.datasets.filter((dataset) => dataset.enabled).length
-  return {
-    enabled: datasetCount > 0,
-    datasetCount,
-    source: "dify" as const,
+  const nextValue = (async () => {
+    const binding = await getEnterpriseDifyBinding(enterpriseId)
+    if (!binding || !binding.enabled) {
+      return { enabled: false, datasetCount: 0 }
+    }
+
+    const datasetCount = binding.datasets.filter((dataset) => dataset.enabled).length
+    return {
+      enabled: datasetCount > 0,
+      datasetCount,
+      source: "dify" as const,
+      profile: buildEnterpriseKnowledgeProfile(binding.datasets),
+    }
+  })()
+
+  enterpriseKnowledgeStatusCache.set(cacheKey, {
+    expiresAt: now + WRITER_ENTERPRISE_KNOWLEDGE_STATUS_CACHE_TTL_MS,
+    value: nextValue,
+  })
+
+  try {
+    return await nextValue
+  } catch (error) {
+    enterpriseKnowledgeStatusCache.delete(cacheKey)
+    throw error
   }
 }
 
@@ -178,6 +374,8 @@ export async function upsertEnterpriseDifyBinding(
     datasets: EnterpriseDifyDatasetInput[]
   },
 ) {
+  clearEnterpriseKnowledgeCaches(enterpriseId)
+
   const baseUrl = normalizeDifyApiBase(input.baseUrl)
   if (!baseUrl) {
     throw new Error("base_url_required")
@@ -243,6 +441,7 @@ export async function upsertEnterpriseDifyBinding(
     )
   }
 
+  clearEnterpriseKnowledgeCaches(enterpriseId)
   return getEnterpriseDifyBinding(enterpriseId)
 }
 
@@ -264,9 +463,129 @@ function parseDatasetList(data: any) {
     .filter((item: { id: string; name: string }) => item.id && item.name)
 }
 
+function parseDatasetDocumentList(data: any) {
+  const rows = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.documents)
+      ? data.documents
+      : Array.isArray(data)
+        ? data
+        : []
+
+  return rows
+    .map((item: any) => String(item?.name || item?.title || "").trim())
+    .filter(Boolean)
+}
+
+function inferCoverageTagsFromDocuments(documentNames: string[]) {
+  const tags = new Set<EnterpriseKnowledgeCoverageTag>()
+
+  for (const name of documentNames) {
+    if (/(?:企业总览|核心事实|公司简介|企业简介|about|overview)/iu.test(name)) {
+      tags.add("company-facts")
+    }
+    if (/(?:产品体系|标签词典|产品矩阵|产品目录|机型家族|产品线|product|solution)/iu.test(name)) {
+      tags.add("product-system")
+    }
+    if (/(?:客户类型|应用映射|应用场景|行业场景|客户场景|scenario|customer)/iu.test(name)) {
+      tags.add("application-scenarios")
+    }
+    if (/(?:技术档案|制造能力|认证资质|研发资质|工厂布局|技术能力|机型技术|参数|规格|spec)/iu.test(name)) {
+      tags.add("technical-proof")
+    }
+    if (/(?:交付|实施|服务|质检|质控|售前|售后|support)/iu.test(name)) {
+      tags.add("delivery-service")
+    }
+    if (/(?:品牌表达|竞争优势|市场证据|品牌定位|brand|proof)/iu.test(name)) {
+      tags.add("brand-proof")
+    }
+    if (/(?:^|[_-])(?:qa|q&a)(?:[_-]|$)|问答|FAQ|常见问题/iu.test(name)) {
+      tags.add("faq")
+    }
+  }
+
+  return normalizeCoverageTags([...tags])
+}
+
+function inferSuggestedScopeFromCoverageTags(coverageTags: EnterpriseKnowledgeCoverageTag[]): EnterpriseKnowledgeScope {
+  const tags = new Set(coverageTags)
+  const hasBrand =
+    tags.has("company-facts") ||
+    tags.has("brand-proof")
+  const hasProduct =
+    tags.has("product-system") ||
+    tags.has("application-scenarios") ||
+    tags.has("technical-proof") ||
+    tags.has("delivery-service")
+
+  if (hasBrand && hasProduct) {
+    return "general"
+  }
+  if (hasProduct) {
+    return "product"
+  }
+  if (hasBrand) {
+    return "brand"
+  }
+  return "general"
+}
+
+async function inspectRemoteEnterpriseDifyDataset(
+  normalizedBaseUrl: string,
+  apiKey: string,
+  dataset: { id: string; name: string; description: string },
+): Promise<RemoteEnterpriseDifyDatasetRecord> {
+  try {
+    const response = await writerRequestJson(
+      `${normalizedBaseUrl}/datasets/${dataset.id}/documents?page=1&limit=20`,
+      {
+        headers: getDifyHeaders(apiKey),
+      },
+      { attempts: 2, timeoutMs: 60_000 },
+    )
+
+    if (!response.ok) {
+      return {
+        ...dataset,
+        suggestedScope: "general",
+        coverageTags: [],
+        documentCount: 0,
+        sampleDocuments: [],
+      }
+    }
+
+    const sampleDocuments = parseDatasetDocumentList(response.data)
+    const coverageTags = inferCoverageTagsFromDocuments(sampleDocuments)
+    return {
+      ...dataset,
+      suggestedScope: inferSuggestedScopeFromCoverageTags(coverageTags),
+      coverageTags,
+      documentCount:
+        typeof response.data?.total === "number"
+          ? response.data.total
+          : sampleDocuments.length,
+      sampleDocuments: sampleDocuments.slice(0, 5),
+    }
+  } catch {
+    return {
+      ...dataset,
+      suggestedScope: "general",
+      coverageTags: [],
+      documentCount: 0,
+      sampleDocuments: [],
+    }
+  }
+}
+
 export async function listRemoteEnterpriseDifyDatasets(baseUrl: string, apiKey: string) {
   if (shouldUseWriterE2EFixtures()) {
-    return FIXTURE_DATASETS
+    return FIXTURE_DATASETS.map((dataset) => ({
+      ...dataset,
+      suggestedScope: inferSuggestedScopeFromCoverageTags(inferCoverageTagsFromDocuments([dataset.name])),
+      coverageTags: inferCoverageTagsFromDocuments([dataset.name]),
+      documentCount: 1,
+      sampleDocuments: [dataset.name],
+    }))
   }
 
   const normalizedBaseUrl = normalizeDifyApiBase(baseUrl)
@@ -286,7 +605,12 @@ export async function listRemoteEnterpriseDifyDatasets(baseUrl: string, apiKey: 
     throw new Error(`dify_datasets_http_${response.status}`)
   }
 
-  return parseDatasetList(response.data)
+  const datasets = parseDatasetList(response.data)
+  return Promise.all(
+    datasets.map((dataset: { id: string; name: string; description: string }) =>
+      inspectRemoteEnterpriseDifyDataset(normalizedBaseUrl, apiKey, dataset),
+    ),
+  )
 }
 
 function parseRetrieveRecords(data: any) {
@@ -332,10 +656,18 @@ function parseRetrieveRecords(data: any) {
 export async function loadEnterpriseKnowledgeContext(params: {
   enterpriseId: number | null | undefined
   query: string
+  queryVariants?: string[]
+  preferredScopes?: EnterpriseKnowledgeScope[]
   platform: WriterPlatform
   mode: WriterMode
 }) {
-  const cacheKey = `${params.enterpriseId || 0}:${params.query.trim().toLowerCase()}`
+  const normalizedVariants = normalizeQueryVariants(params.query, params.queryVariants)
+  const normalizedScopes = normalizePreferredScopes(params.preferredScopes)
+  const cacheKey = [
+    params.enterpriseId || 0,
+    normalizedVariants.join("|").toLowerCase(),
+    normalizedScopes.join(","),
+  ].join(":")
   const now = Date.now()
   const cached = enterpriseKnowledgeCache.get(cacheKey)
   if (cached && cached.expiresAt > now) {
@@ -359,6 +691,8 @@ export async function loadEnterpriseKnowledgeContext(params: {
 async function loadEnterpriseKnowledgeContextFresh(params: {
   enterpriseId: number | null | undefined
   query: string
+  queryVariants?: string[]
+  preferredScopes?: EnterpriseKnowledgeScope[]
   platform: WriterPlatform
   mode: WriterMode
 }) {
@@ -367,8 +701,13 @@ async function loadEnterpriseKnowledgeContextFresh(params: {
     return null
   }
 
-  const activeDatasets = binding.datasets.filter((dataset) => dataset.enabled)
+  const activeDatasets = filterActiveDatasetsByScope(binding.datasets, params.preferredScopes)
   if (activeDatasets.length === 0) {
+    return null
+  }
+
+  const queryVariants = normalizeQueryVariants(params.query, params.queryVariants)
+  if (queryVariants.length === 0) {
     return null
   }
 
@@ -381,6 +720,7 @@ async function loadEnterpriseKnowledgeContextFresh(params: {
           datasetId: dataset.datasetId,
           datasetName: dataset.datasetName,
           scope: dataset.scope,
+          inferredScope: inferSnippetScope(fixture.title, fixture.content, dataset.scope),
           score: fixture.score,
           title: fixture.title,
           content: fixture.content,
@@ -410,35 +750,50 @@ async function loadEnterpriseKnowledgeContextFresh(params: {
 
   const retrievalResults = await Promise.all(
     activeDatasets.slice(0, 4).map(async (dataset) => {
-      const response = await writerRequestJson(
-        `${difyBaseUrl}/datasets/${encodeURIComponent(dataset.datasetId)}/retrieve`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            query: params.query,
-            retrieval_model: {
-              search_method: "semantic_search",
-              reranking_enable: true,
-              top_k: DEFAULT_RETRIEVAL_TOP_K,
-              score_threshold_enabled: true,
-              score_threshold: DEFAULT_RETRIEVAL_SCORE_THRESHOLD,
+      const responses = await Promise.all(
+        queryVariants.map((query) =>
+          writerRequestJson(
+            `${difyBaseUrl}/datasets/${encodeURIComponent(dataset.datasetId)}/retrieve`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                query,
+                retrieval_model: {
+                  search_method: "semantic_search",
+                  reranking_enable: true,
+                  top_k: DEFAULT_RETRIEVAL_TOP_K,
+                  score_threshold_enabled: true,
+                  score_threshold: DEFAULT_RETRIEVAL_SCORE_THRESHOLD,
+                },
+              }),
             },
-          }),
-        },
-        { attempts: 2, timeoutMs: 60_000 },
+            { attempts: 2, timeoutMs: 60_000 },
+          ),
+        ),
       )
 
-      if (!response.ok) {
-        return null
-      }
+      const records = sortSnippetsByScore(
+        responses
+          .filter((response) => response.ok)
+          .flatMap((response) =>
+            parseRetrieveRecords(response.data).map((record: { score: number | null; title: string; content: string }) => ({
+              datasetId: dataset.datasetId,
+              datasetName: dataset.datasetName,
+              scope: dataset.scope,
+              inferredScope: inferSnippetScope(record.title, record.content, dataset.scope),
+              score: record.score,
+              title: record.title,
+              content: record.content,
+            })),
+          ),
+      ).filter((record, index, all) => all.findIndex((item) => item.title === record.title && item.content === record.content) === index)
 
-      const records = parseRetrieveRecords(response.data).slice(0, 2)
       if (records.length === 0) {
         return null
       }
 
-      return { dataset, records }
+      return { dataset, records: records.slice(0, 3) }
     }),
   )
 
@@ -454,10 +809,11 @@ async function loadEnterpriseKnowledgeContextFresh(params: {
     })
 
     snippets.push(
-      ...item.records.map((record: { score: number | null; title: string; content: string }) => ({
+      ...item.records.map((record: EnterpriseKnowledgeSnippet) => ({
         datasetId: item.dataset.datasetId,
         datasetName: item.dataset.datasetName,
         scope: item.dataset.scope,
+        inferredScope: record.inferredScope,
         score: record.score,
         title: record.title,
         content: record.content,
@@ -472,6 +828,6 @@ async function loadEnterpriseKnowledgeContextFresh(params: {
   return {
     source: "dify",
     datasetsUsed,
-    snippets: snippets.slice(0, 6),
+    snippets: sortSnippetsByScore(snippets).slice(0, 6),
   } satisfies EnterpriseKnowledgeContext
 }
