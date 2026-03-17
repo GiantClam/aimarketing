@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { createPendingWriterConversation, enqueueAssistantTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
-import { appendWriterConversation } from "@/lib/writer/repository"
-import { generateWriterDraftWithSkills } from "@/lib/writer/skills"
-import { createWriterSseStream } from "@/lib/writer/stream"
+import { getWriterConversation, listWriterMessages } from "@/lib/writer/repository"
+import type { WriterConversationStatus } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
 
@@ -36,36 +36,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "query is required" }, { status: 400 })
     }
 
-    const answer = await generateWriterDraftWithSkills(userQuery, platform, mode, language, {
-      enterpriseId: auth.user.enterpriseId,
-    })
-    const persisted = await appendWriterConversation({
+    const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : null
+    const existingConversation = conversationId ? await getWriterConversation(auth.user.id, conversationId) : null
+    const history = conversationId ? (await listWriterMessages(auth.user.id, conversationId, 5)).data : []
+    const persisted = await createPendingWriterConversation({
       userId: auth.user.id,
-      conversationId: typeof body?.conversation_id === "string" ? body.conversation_id : null,
+      conversationId,
       query: userQuery,
-      answer,
       platform,
       mode,
       language,
     })
 
-    const taskId = `writer-${Date.now()}`
-    if (body?.response_mode === "streaming") {
-      return new Response(createWriterSseStream({ answer, conversation: persisted.conversation, taskId }), {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      })
-    }
+    const task = await enqueueAssistantTask({
+      userId: auth.user.id,
+      workflowName: "writer_turn",
+      payload: {
+        kind: "writer_turn",
+        enterpriseId: auth.user.enterpriseId,
+        conversationId: persisted.conversationId,
+        query: userQuery,
+        platform,
+        mode,
+        language,
+        history,
+        conversationStatus: existingConversation?.status as WriterConversationStatus | undefined,
+      },
+    })
 
     return NextResponse.json({
-      event: "message",
-      task_id: taskId,
+      accepted: true,
+      task_id: String(task.id),
       conversation_id: persisted.conversationId,
       conversation: persisted.conversation,
-      answer,
     })
   } catch (error: any) {
     console.error("writer.chat.error", error)

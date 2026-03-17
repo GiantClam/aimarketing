@@ -4,7 +4,11 @@ import { clearSessionCookie, deleteSessionFromRequest } from "@/lib/auth/session
 
 export async function POST(request: NextRequest) {
   try {
-    await deleteSessionFromRequest(request)
+    try {
+      await deleteSessionFromRequest(request)
+    } catch (error) {
+      console.warn("auth.logout.delete-session-failed", error)
+    }
     const response = NextResponse.json({ success: true })
     return clearSessionCookie(response)
   } catch (error: any) {

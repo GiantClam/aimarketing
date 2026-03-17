@@ -14,7 +14,6 @@ export default tseslint.config(
       "artifacts/**",
       "scripts/**",
       "tests/**",
-      "submodules/**",
       "coverage/**",
       "build/**",
       "dist/**",

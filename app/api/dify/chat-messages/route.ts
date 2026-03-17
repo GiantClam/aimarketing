@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { enqueueAssistantTask } from "@/lib/assistant-async"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
@@ -32,6 +33,32 @@ export async function POST(req: NextRequest) {
     if (!config) {
       logAuditEvent(req, "advisor.chat.config_missing", { userId: auth.user.id, advisorType: body?.advisorType })
       return NextResponse.json({ error: "No Dify connection configured" }, { status: 500 })
+    }
+
+    if (body?.response_mode === "async") {
+      const query = typeof body?.query === "string" ? body.query : typeof body?.inputs?.contents === "string" ? body.inputs.contents : ""
+      if (!query.trim()) {
+        return NextResponse.json({ error: "query is required" }, { status: 400 })
+      }
+
+      const task = await enqueueAssistantTask({
+        userId: auth.user.id,
+        workflowName: "advisor_turn",
+        payload: {
+          kind: "advisor_turn",
+          userId: auth.user.id,
+          userEmail: auth.user.email,
+          advisorType: body.advisorType,
+          query,
+          conversationId: typeof body?.conversation_id === "string" ? body.conversation_id : null,
+        },
+      })
+
+      return NextResponse.json({
+        accepted: true,
+        task_id: String(task.id),
+        conversation_id: typeof body?.conversation_id === "string" ? body.conversation_id : null,
+      })
     }
 
     const difyRes = await sendMessage(config, { ...body, user: difyUser })

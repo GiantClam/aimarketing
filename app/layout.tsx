@@ -1,8 +1,11 @@
 import type React from "react"
 import type { Metadata } from "next"
+import { cookies, headers } from "next/headers"
 import { Fira_Code, Fira_Sans, Manrope } from "next/font/google"
 
 import { AuthProvider } from "@/components/auth-provider"
+import { LocaleProvider } from "@/components/locale-provider"
+import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
 import "./globals.css"
 
 const firaSans = Fira_Sans({
@@ -24,22 +27,31 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   title: {
-    default: "AI Marketing | 企业级 AI 营销作战平台",
+    default: "AI Marketing | Enterprise AI Marketing Workspace",
     template: "%s | AI Marketing",
   },
   description:
-    "面向企业品牌与增长团队的 AI 营销作战平台，提供战略顾问、增长顾问、文章写作、网站生成和视频生成等能力，并支持企业权限与多会话协作。",
+    "Enterprise AI marketing workspace for expert advisors, writing, image design, website generation, and collaborative execution.",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const cookieStore = await cookies()
+  const headerStore = await headers()
+  const locale = resolveRequestLocale(
+    cookieStore.get(LOCALE_COOKIE_NAME)?.value,
+    headerStore.get("accept-language"),
+  )
+
   return (
-    <html lang="zh-CN" className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased dark`}>
+    <html lang={locale === "zh" ? "zh-CN" : "en"} className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased dark`}>
       <body suppressHydrationWarning>
-        <AuthProvider>{children}</AuthProvider>
+        <LocaleProvider initialLocale={locale}>
+          <AuthProvider>{children}</AuthProvider>
+        </LocaleProvider>
       </body>
     </html>
   )

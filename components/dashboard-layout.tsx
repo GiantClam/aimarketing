@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import type React from "react"
 import { useEffect, useMemo, useState } from "react"
@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Globe,
+  ImageIcon,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -20,7 +21,10 @@ import {
 } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
+import { DashboardAvailabilityProvider, useDashboardAvailability } from "@/components/dashboard-availability-provider"
 import { AdvisorSidebarItem } from "@/components/chat/AdvisorSidebarItem"
+import { ImageAssistantSidebarItem } from "@/components/image-assistant/ImageAssistantSidebarItem"
+import { useI18n } from "@/components/locale-provider"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -31,65 +35,26 @@ interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
-type AdvisorAvailability = {
-  brandStrategy: boolean
-  growth: boolean
-  copywriting: boolean
-  hasAny: boolean
-}
-
-function isAbortError(error: unknown) {
-  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
-}
-
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  return (
+    <DashboardAvailabilityProvider>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </DashboardAvailabilityProvider>
+  )
+}
+
+function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const router = useRouter()
+  const { messages } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const { user, isDemoMode, loading, logout, hasFeature } = useAuth()
-  const [advisorAvailability, setAdvisorAvailability] = useState<AdvisorAvailability>({ brandStrategy: false, growth: false, copywriting: false, hasAny: false })
+  const { advisor, writer, imageAssistant } = useDashboardAvailability()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login")
   }, [loading, router, user])
-
-  useEffect(() => {
-    let cancelled = false
-    const controller = new AbortController()
-
-    const loadAdvisorAvailability = async () => {
-      if (!user?.id) {
-        if (!cancelled) setAdvisorAvailability({ brandStrategy: false, growth: false, copywriting: false, hasAny: false })
-        return
-      }
-
-      try {
-        const res = await fetch("/api/dify/advisors/availability", { signal: controller.signal })
-        if (!res.ok) return
-        const data = await res.json()
-        if (!cancelled && data?.data) {
-          setAdvisorAvailability({
-            brandStrategy: Boolean(data.data.brandStrategy),
-            growth: Boolean(data.data.growth),
-            copywriting: Boolean(data.data.copywriting),
-            hasAny: Boolean(data.data.hasAny),
-          })
-        }
-      } catch (error) {
-        if (controller.signal.aborted || cancelled) return
-        if (isAbortError(error)) return
-        if (error instanceof TypeError && error.message.includes("Failed to fetch")) return
-        console.error("Failed to load advisor availability:", error)
-      }
-    }
-
-    void loadAdvisorAvailability()
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [user?.id])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -107,18 +72,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const hasWebsiteFeature = hasFeature("website_generation")
   const hasVideoFeature = hasFeature("video_generation")
   const hasCopywritingFeature = hasFeature("copywriting_generation")
+  const hasImageAssistantFeature = hasFeature("image_design_generation")
   const enterprisePending = user?.enterpriseStatus === "pending"
   const enterpriseRejected = user?.enterpriseStatus === "rejected"
 
   const showAdvisorSection = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
-    return hasAdvisorFeature && (advisorAvailability.brandStrategy || advisorAvailability.growth)
-  }, [advisorAvailability, enterprisePending, enterpriseRejected, hasAdvisorFeature])
+    return hasAdvisorFeature && (advisor.brandStrategy || advisor.growth)
+  }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature])
 
   const showWriterEntry = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
-    return hasCopywritingFeature
-  }, [enterprisePending, enterpriseRejected, hasCopywritingFeature])
+    return hasCopywritingFeature && writer.enabled
+  }, [enterprisePending, enterpriseRejected, hasCopywritingFeature, writer.enabled])
+
+  const showImageAssistantEntry = useMemo(() => {
+    if (enterprisePending || enterpriseRejected) return false
+    return hasImageAssistantFeature && imageAssistant.enabled
+  }, [enterprisePending, enterpriseRejected, hasImageAssistantFeature, imageAssistant.enabled])
 
   return (
     <div className="flex h-screen bg-background">
@@ -136,7 +107,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
                   <Sparkles className="h-5 w-5 text-sidebar-primary-foreground" />
                 </div>
-                {!sidebarCollapsed && <h1 className="font-sans text-lg font-bold text-sidebar-foreground">AI Marketing</h1>}
+                {!sidebarCollapsed && <h1 className="font-sans text-lg font-bold text-sidebar-foreground">{messages.shared.appName}</h1>}
               </div>
               <div className="flex items-center gap-1">
                 <Button
@@ -144,8 +115,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   size="sm"
                   className="hidden lg:inline-flex"
                   onClick={() => setSidebarCollapsed((current) => !current)}
-                  title={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
-                  aria-label={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+                  title={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
+                  aria-label={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
                 >
                   {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                 </Button>
@@ -156,7 +127,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
             {!sidebarCollapsed && user?.enterpriseName && (
               <p className="mt-2 text-xs text-sidebar-foreground/70">
-                {user.enterpriseName}（{user.enterpriseCode}）
+                {user.enterpriseName} ({user.enterpriseCode})
               </p>
             )}
           </div>
@@ -165,59 +136,72 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <ScrollArea className="h-full">
               <div className={sidebarCollapsed ? "space-y-3 p-3" : "space-y-4 p-4"}>
                 {(enterprisePending || enterpriseRejected) && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-700">{enterprisePending ? "你的企业加入申请正在审核中。" : "你的企业加入申请已被拒绝，请联系管理员。"}</div>
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-700">
+                    {enterprisePending ? messages.dashboardLayout.pendingEnterprise : messages.dashboardLayout.rejectedEnterprise}
+                  </div>
                 )}
 
                 {showAdvisorSection && (
                   <div>
                     {!sidebarCollapsed && (
-                      <h3 className="mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">专家 Agent</h3>
+                      <h3 className="mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+                        {messages.dashboardLayout.advisorSection}
+                      </h3>
                     )}
-                    {hasAdvisorFeature && advisorAvailability.brandStrategy && userEmail && (
+                    {hasAdvisorFeature && advisor.brandStrategy && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/brand-strategy/new">
-                          <Button variant="ghost" className="w-full justify-center" size="sm" title="品牌战略顾问">
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.brandAdvisor}>
                             <Target className="h-4 w-4" />
                           </Button>
                         </Link>
                       ) : (
-                        <AdvisorSidebarItem title="品牌战略顾问" advisorType="brand-strategy" userEmail={userEmail} icon={Target} />
+                        <AdvisorSidebarItem title={messages.dashboardLayout.brandAdvisor} advisorType="brand-strategy" userEmail={userEmail} icon={Target} />
                       )
                     )}
-                    {hasAdvisorFeature && advisorAvailability.growth && userEmail && (
+                    {hasAdvisorFeature && advisor.growth && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/growth/new">
-                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title="增长顾问">
+                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.growthAdvisor}>
                             <TrendingUp className="h-4 w-4" />
                           </Button>
                         </Link>
                       ) : (
-                        <AdvisorSidebarItem title="增长顾问" advisorType="growth" userEmail={userEmail} icon={TrendingUp} />
+                        <AdvisorSidebarItem title={messages.dashboardLayout.growthAdvisor} advisorType="growth" userEmail={userEmail} icon={TrendingUp} />
                       )
                     )}
                   </div>
                 )}
 
-                {showWriterEntry && (
+                {(showWriterEntry || showImageAssistantEntry) && (
                   <div>
                     {!sidebarCollapsed && (
-                      <h3 className="mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">文章写作</h3>
+                      <h3 className="mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+                        {messages.dashboardLayout.creativeSection}
+                      </h3>
                     )}
-                    {sidebarCollapsed ? (
-                      <Link href="/dashboard/writer">
-                        <Button
-                          variant="ghost"
-                          className="w-full justify-center"
-                          size="sm"
-                          title="多平台图文写作"
-                          aria-label="多平台图文写作"
-                        >
-                          <PenSquare className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                    ) : (
-                      <WriterSidebarItem title="多平台图文写作" icon={PenSquare} />
-                    )}
+                    {showWriterEntry ? (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/writer">
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.writer} aria-label={messages.dashboardLayout.writer}>
+                            <PenSquare className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <WriterSidebarItem title={messages.dashboardLayout.writer} icon={PenSquare} />
+                      )
+                    ) : null}
+                    {showImageAssistantEntry ? (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/image-assistant">
+                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.imageAssistant} aria-label={messages.dashboardLayout.imageAssistant}>
+                            <ImageIcon className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <ImageAssistantSidebarItem title={messages.dashboardLayout.imageAssistant} icon={ImageIcon} />
+                      )
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -227,24 +211,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className={sidebarCollapsed ? "space-y-2 border-t border-sidebar-border p-3" : "space-y-2 border-t border-sidebar-border p-4"}>
             {hasVideoFeature && !enterprisePending && !enterpriseRejected && (
               <Link href="/dashboard/video">
-                <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title="视频生成 Agent">
+                <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title={messages.dashboardLayout.videoAgent}>
                   <Video className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
-                  {!sidebarCollapsed && "视频生成 Agent"}
+                  {!sidebarCollapsed && messages.dashboardLayout.videoAgent}
                 </Button>
               </Link>
             )}
             {hasWebsiteFeature && !enterprisePending && !enterpriseRejected && (
               <Link href="/dashboard/website-generator">
-                <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title="网站生成 Agent">
+                <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title={messages.dashboardLayout.websiteAgent}>
                   <Globe className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
-                  {!sidebarCollapsed && "网站生成 Agent"}
+                  {!sidebarCollapsed && messages.dashboardLayout.websiteAgent}
                 </Button>
               </Link>
             )}
             <Link href="/dashboard/settings">
-              <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title="用户设置">
+              <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title={messages.shared.userSettings}>
                 <Settings className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
-                {!sidebarCollapsed && "用户设置"}
+                {!sidebarCollapsed && messages.shared.userSettings}
               </Button>
             </Link>
 
@@ -253,15 +237,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className={sidebarCollapsed ? "flex flex-col items-center gap-2 p-1" : "flex items-center gap-3 p-2"}>
               <Avatar className="h-8 w-8">
                 <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                <AvatarFallback className="bg-sidebar-primary text-xs text-sidebar-primary-foreground">{isDemoMode ? "体验" : "用户"}</AvatarFallback>
+                <AvatarFallback className="bg-sidebar-primary text-xs text-sidebar-primary-foreground">
+                  {isDemoMode ? messages.dashboardLayout.demoLabel : messages.shared.user}
+                </AvatarFallback>
               </Avatar>
               {!sidebarCollapsed && (
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-manrope text-sm font-medium text-sidebar-foreground">{isDemoMode ? "体验账号" : user?.name || "营销成员"}</p>
+                  <p className="truncate font-manrope text-sm font-medium text-sidebar-foreground">
+                    {isDemoMode ? messages.shared.demoAccount : user?.name || messages.shared.marketingMember}
+                  </p>
                   <p className="truncate font-manrope text-xs text-muted-foreground">{userEmail}</p>
                 </div>
               )}
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title="退出登录">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
@@ -272,10 +260,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-border bg-card/50 p-4 backdrop-blur-sm lg:hidden">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}><Menu className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}>
+              <Menu className="h-4 w-4" />
+            </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded bg-primary"><Sparkles className="h-4 w-4 text-primary-foreground" /></div>
-              <h1 className="font-sans text-lg font-bold text-foreground">AI Marketing</h1>
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-primary">
+                <Sparkles className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <h1 className="font-sans text-lg font-bold text-foreground">{messages.shared.appName}</h1>
             </div>
           </div>
         </header>

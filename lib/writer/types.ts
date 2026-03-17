@@ -1,6 +1,24 @@
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 
 export type WriterConversationStatus = "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
+export type WriterRetrievalStrategy =
+  | "rewrite_only"
+  | "enterprise_grounded"
+  | "fresh_external"
+  | "hybrid_grounded"
+
+export type WriterTurnDiagnostics = {
+  retrievalStrategy: WriterRetrievalStrategy
+  enterpriseKnowledgeEnabled: boolean
+  enterpriseKnowledgeUsed: boolean
+  enterpriseDatasetCount: number
+  enterpriseSourceCount: number
+  enterpriseDatasets: string[]
+  enterpriseTitles: string[]
+  webResearchUsed: boolean
+  webResearchStatus: "ready" | "disabled" | "timed_out" | "unavailable" | "skipped"
+  webSourceCount: number
+}
 
 export type WriterConversationSummary = {
   id: string
@@ -19,6 +37,7 @@ export type WriterHistoryEntry = {
   conversation_id: string
   query: string
   answer: string
+  diagnostics?: WriterTurnDiagnostics | null
   inputs: {
     contents: string
   }
@@ -29,6 +48,7 @@ export type WriterConversationPage = {
   data: WriterConversationSummary[]
   has_more: boolean
   limit: number
+  next_cursor: string | null
 }
 
 export type WriterMessagePage = {

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import type React from "react"
 import Link from "next/link"
@@ -7,6 +7,7 @@ import { useState } from "react"
 import { ArrowLeft, Building2, KeyRound, Lock, Mail, Sparkles, User } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
+import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,7 @@ import { Label } from "@/components/ui/label"
 export default function RegisterPage() {
   const router = useRouter()
   const { register, loading } = useAuth()
+  const { messages } = useI18n()
 
   const [error, setError] = useState("")
   const [enterpriseAction, setEnterpriseAction] = useState<"create" | "join">("create")
@@ -49,22 +51,22 @@ export default function RegisterPage() {
     const joinNote = String(formData.get("joinNote") || "").trim()
 
     if (!name || !email || !password) {
-      setError("请填写完整注册信息")
+      setError(messages.register.incompleteError)
       return
     }
 
     if (password !== confirmPassword) {
-      setError("两次输入的密码不一致")
+      setError(messages.register.passwordMismatch)
       return
     }
 
     if (enterpriseAction === "create" && !enterpriseName) {
-      setError("请输入企业名称")
+      setError(messages.register.enterpriseNameRequired)
       return
     }
 
     if (enterpriseAction === "join" && !enterpriseCode) {
-      setError("请输入企业 ID")
+      setError(messages.register.enterpriseCodeRequired)
       return
     }
 
@@ -86,7 +88,7 @@ export default function RegisterPage() {
 
       router.push("/dashboard")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "注册失败")
+      setError(err instanceof Error ? err.message : messages.register.failed)
     }
   }
 
@@ -95,7 +97,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         <Link href="/" className="mb-8 inline-flex items-center gap-2 font-manrope text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
-          返回首页
+          {messages.shared.backToHome}
         </Link>
 
         <Card className="border-border shadow-lg">
@@ -105,8 +107,8 @@ export default function RegisterPage() {
                 <Sparkles className="h-6 w-6 text-primary-foreground" />
               </div>
             </div>
-            <CardTitle className="font-sans text-2xl font-bold">创建账号</CardTitle>
-            <CardDescription className="font-manrope">新用户必须绑定企业。你可以创建企业，或申请加入已有企业。</CardDescription>
+            <CardTitle className="font-sans text-2xl font-bold">{messages.register.title}</CardTitle>
+            <CardDescription className="font-manrope">{messages.register.description}</CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-6">
@@ -118,79 +120,85 @@ export default function RegisterPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name" className="font-manrope">姓名</Label>
+                <Label htmlFor="name" className="font-manrope">{messages.register.name}</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="name" name="name" type="text" placeholder="请输入姓名" className="pl-10 font-manrope" required />
+                  <Input id="name" name="name" type="text" placeholder={messages.register.namePlaceholder} className="pl-10 font-manrope" required />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="font-manrope">邮箱地址</Label>
+                <Label htmlFor="email" className="font-manrope">{messages.register.email}</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="email" name="email" type="email" placeholder="请输入邮箱" className="pl-10 font-manrope" required />
+                  <Input id="email" name="email" type="email" placeholder={messages.register.emailPlaceholder} className="pl-10 font-manrope" required />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="font-manrope">密码</Label>
+                <Label htmlFor="password" className="font-manrope">{messages.register.password}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" name="password" type="password" placeholder="创建登录密码" className="pl-10 font-manrope" required />
+                  <Input id="password" name="password" type="password" placeholder={messages.register.passwordPlaceholder} className="pl-10 font-manrope" required />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="font-manrope">确认密码</Label>
+                <Label htmlFor="confirmPassword" className="font-manrope">{messages.register.confirmPassword}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="confirmPassword" name="confirmPassword" type="password" placeholder="再次输入密码" className="pl-10 font-manrope" required />
+                  <Input id="confirmPassword" name="confirmPassword" type="password" placeholder={messages.register.confirmPasswordPlaceholder} className="pl-10 font-manrope" required />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="font-manrope">企业绑定方式</Label>
+                <Label className="font-manrope">{messages.register.enterpriseAction}</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button type="button" variant={enterpriseAction === "create" ? "default" : "outline"} onClick={() => { setEnterpriseAction("create"); setEnterpriseLookup(null) }}>创建企业</Button>
-                  <Button type="button" variant={enterpriseAction === "join" ? "default" : "outline"} onClick={() => { setEnterpriseAction("join"); setEnterpriseLookup(null) }}>加入企业</Button>
+                  <Button type="button" variant={enterpriseAction === "create" ? "default" : "outline"} onClick={() => { setEnterpriseAction("create"); setEnterpriseLookup(null) }}>
+                    {messages.register.createEnterprise}
+                  </Button>
+                  <Button type="button" variant={enterpriseAction === "join" ? "default" : "outline"} onClick={() => { setEnterpriseAction("join"); setEnterpriseLookup(null) }}>
+                    {messages.register.joinEnterprise}
+                  </Button>
                 </div>
               </div>
 
               {enterpriseAction === "create" ? (
                 <div className="space-y-2">
-                  <Label htmlFor="enterpriseName" className="font-manrope">企业名称</Label>
+                  <Label htmlFor="enterpriseName" className="font-manrope">{messages.register.enterpriseName}</Label>
                   <div className="relative">
                     <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input id="enterpriseName" name="enterpriseName" type="text" placeholder="例如：上海星河科技有限公司" className="pl-10 font-manrope" required />
+                    <Input id="enterpriseName" name="enterpriseName" type="text" placeholder={messages.register.enterpriseNamePlaceholder} className="pl-10 font-manrope" required />
                   </div>
-                  <p className="text-xs font-manrope text-muted-foreground">创建企业的用户将默认成为企业管理员。</p>
+                  <p className="text-xs font-manrope text-muted-foreground">{messages.register.enterpriseNameHint}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    <Label htmlFor="enterpriseCode" className="font-manrope">企业 ID</Label>
+                    <Label htmlFor="enterpriseCode" className="font-manrope">{messages.register.enterpriseCode}</Label>
                     <div className="relative">
                       <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input id="enterpriseCode" name="enterpriseCode" type="text" placeholder="请输入企业 ID" className="pl-10 font-manrope" required />
+                      <Input id="enterpriseCode" name="enterpriseCode" type="text" placeholder={messages.register.enterpriseCodePlaceholder} className="pl-10 font-manrope" required />
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Button type="button" variant="outline" onClick={() => handleLookup((document.getElementById("enterpriseCode") as HTMLInputElement)?.value || "")}>验证企业</Button>
-                    {enterpriseLookup?.found && <span className="text-xs text-green-600">已找到企业：{enterpriseLookup.name}</span>}
-                    {enterpriseLookup && !enterpriseLookup.found && <span className="text-xs text-red-600">企业 ID 不存在</span>}
+                    <Button type="button" variant="outline" onClick={() => handleLookup((document.getElementById("enterpriseCode") as HTMLInputElement)?.value || "")}>
+                      {messages.register.verifyEnterprise}
+                    </Button>
+                    {enterpriseLookup?.found && <span className="text-xs text-green-600">{messages.register.foundEnterprisePrefix}{enterpriseLookup.name}</span>}
+                    {enterpriseLookup && !enterpriseLookup.found && <span className="text-xs text-red-600">{messages.register.enterpriseNotFound}</span>}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="joinNote" className="font-manrope">加入说明</Label>
-                    <Input id="joinNote" name="joinNote" placeholder="例如：市场部 / 内容运营" />
+                    <Label htmlFor="joinNote" className="font-manrope">{messages.register.joinNote}</Label>
+                    <Input id="joinNote" name="joinNote" placeholder={messages.register.joinNotePlaceholder} />
                   </div>
                 </div>
               )}
 
               <Button type="submit" className="w-full font-manrope" disabled={loading}>
-                {loading ? "提交中..." : enterpriseAction === "create" ? "创建账号并创建企业" : "提交加入申请"}
+                {loading ? messages.register.submitting : enterpriseAction === "create" ? messages.register.submitCreate : messages.register.submitJoin}
               </Button>
             </form>
           </CardContent>

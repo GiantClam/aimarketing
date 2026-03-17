@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useState, type MouseEvent, type UIEvent } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react"
 
+import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -28,10 +29,23 @@ import {
 } from "@/lib/writer/session-store"
 import type { WriterConversationSummary } from "@/lib/writer/types"
 
-const getConversationStatusLabel = (status: WriterConversationSummary["status"]) => {
-  if (status === "ready") return " / 已完成"
-  if (status === "image_generating") return " / 配图中"
+function getConversationStatusLabel(status: WriterConversationSummary["status"], readySuffix: string, generatingSuffix: string) {
+  if (status === "ready") return readySuffix
+  if (status === "image_generating") return generatingSuffix
   return ""
+}
+
+function mergeConversations(current: WriterConversationSummary[], incoming: WriterConversationSummary[]) {
+  const seen = new Set<string>()
+  const merged: WriterConversationSummary[] = []
+
+  for (const conversation of [...current, ...incoming]) {
+    if (seen.has(conversation.id)) continue
+    seen.add(conversation.id)
+    merged.push(conversation)
+  }
+
+  return merged
 }
 
 export function WriterSidebarItem({
@@ -41,36 +55,57 @@ export function WriterSidebarItem({
   title: string
   icon: any
 }) {
+  const { messages } = useI18n()
   const pathname = usePathname()
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [conversations, setConversations] = useState<WriterConversationSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [editingConvId, setEditingConvId] = useState<string | null>(null)
   const [editingConvName, setEditingConvName] = useState("")
   const [pendingDeleteConversation, setPendingDeleteConversation] = useState<WriterConversationSummary | null>(null)
   const [deletingConvId, setDeletingConvId] = useState<string | null>(null)
 
   const isWriterRoute = pathname.startsWith("/dashboard/writer")
-  const isExpanded = isOpen || isWriterRoute
+  const isExpanded = isOpen
+  const activeConversationId = pathname.match(/^\/dashboard\/writer\/([^/?]+)/)?.[1] || null
 
   const upsertConversation = (conversation: WriterConversationSummary) => {
-    setConversations((current) => [conversation, ...current.filter((item) => item.id !== conversation.id)].slice(0, 30))
+    setConversations((current) => [conversation, ...current.filter((item) => item.id !== conversation.id)])
   }
 
-  const fetchConversations = async () => {
-    setIsLoading(true)
+  const fetchConversations = useCallback(async ({ append = false, cursor }: { append?: boolean; cursor?: string | null } = {}) => {
+    if (append) {
+      setIsLoadingMore(true)
+    } else {
+      setIsLoading(true)
+    }
     try {
-      const response = await fetch("/api/writer/conversations?limit=30")
+      const params = new URLSearchParams({ limit: "30" })
+      if (cursor) {
+        params.set("cursor", cursor)
+      }
+
+      const response = await fetch(`/api/writer/conversations?${params.toString()}`)
       if (!response.ok) return
       const data = await response.json()
-      setConversations(data.data || [])
+      const nextBatch = Array.isArray(data?.data) ? (data.data as WriterConversationSummary[]) : []
+      setConversations((current) => (append ? mergeConversations(current, nextBatch) : nextBatch))
+      setHasMore(Boolean(data?.has_more) && nextBatch.length > 0)
+      setNextCursor(typeof data?.next_cursor === "string" ? data.next_cursor : null)
     } catch (error) {
       console.error("Failed to load writer conversations", error)
     } finally {
-      setIsLoading(false)
+      if (append) {
+        setIsLoadingMore(false)
+      } else {
+        setIsLoading(false)
+      }
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (isWriterRoute) {
@@ -82,7 +117,7 @@ export function WriterSidebarItem({
     if (isExpanded) {
       void fetchConversations()
     }
-  }, [isExpanded])
+  }, [fetchConversations, isExpanded])
 
   useEffect(() => {
     const handleRefresh = (event: Event) => {
@@ -105,7 +140,22 @@ export function WriterSidebarItem({
 
     window.addEventListener(WRITER_REFRESH_EVENT, handleRefresh)
     return () => window.removeEventListener(WRITER_REFRESH_EVENT, handleRefresh)
-  }, [isExpanded])
+  }, [fetchConversations, isExpanded])
+
+  useEffect(() => {
+    if (!isExpanded || !activeConversationId || isLoading || isLoadingMore) return
+    if (conversations.some((conversation) => conversation.id === activeConversationId)) return
+    if (hasMore && nextCursor) {
+      void fetchConversations({ append: true, cursor: nextCursor })
+    }
+  }, [activeConversationId, conversations, fetchConversations, hasMore, isExpanded, isLoading, isLoadingMore, nextCursor])
+
+  const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget
+    if (isLoading || isLoadingMore || !hasMore || !nextCursor) return
+    if (target.scrollHeight - target.scrollTop - target.clientHeight > 48) return
+    void fetchConversations({ append: true, cursor: nextCursor })
+  }
 
   const handleDeleteRequest = (conversation: WriterConversationSummary, event: MouseEvent) => {
     event.preventDefault()
@@ -219,110 +269,121 @@ export function WriterSidebarItem({
                 data-testid="writer-new-session-button"
               >
                 <Plus className="mr-2 h-3 w-3" />
-                新建会话
+                {messages.sidebar.newSession}
               </Button>
             </Link>
 
             {isLoading && conversations.length === 0 ? (
               <div className="flex items-center px-3 py-2 text-xs text-muted-foreground">
                 <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                加载中...
+                {messages.sidebar.loading}
               </div>
             ) : conversations.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">暂无会话</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">{messages.sidebar.noSessions}</div>
             ) : (
-              conversations.map((conversation) => {
-                const isActive = pathname === `/dashboard/writer/${conversation.id}`
-                const meta = getWriterSessionMeta(conversation.id)
-                const platform = conversation.platform || meta?.platform || "wechat"
-                const mode = conversation.mode || meta?.mode || "article"
-                const language = conversation.language || meta?.language || "auto"
-                const query = new URLSearchParams()
-                const isDeleting = deletingConvId === conversation.id
+              <div
+                className="max-h-72 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                onScroll={handleListScroll}
+              >
+                {conversations.map((conversation) => {
+                  const isActive = pathname === `/dashboard/writer/${conversation.id}`
+                  const meta = getWriterSessionMeta(conversation.id)
+                  const platform = conversation.platform || meta?.platform || "wechat"
+                  const mode = conversation.mode || meta?.mode || "article"
+                  const language = conversation.language || meta?.language || "auto"
+                  const query = new URLSearchParams()
+                  const isDeleting = deletingConvId === conversation.id
 
-                query.set("platform", platform)
-                query.set("mode", mode)
-                query.set("language", language)
+                  query.set("platform", platform)
+                  query.set("mode", mode)
+                  query.set("language", language)
 
-                return (
-                  <Link key={conversation.id} href={`/dashboard/writer/${conversation.id}?${query.toString()}`}>
-                    <div
-                      data-testid={`writer-conversation-${conversation.id}`}
-                      className={cn(
-                        "group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors",
-                        isActive
-                          ? "bg-primary/10 font-medium text-primary"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                      )}
-                    >
-                      {editingConvId === conversation.id ? (
-                        <div className="flex w-full items-center gap-1" onClick={(event) => event.preventDefault()}>
-                          <Input
-                            value={editingConvName}
-                            onChange={(event) => setEditingConvName(event.target.value)}
-                            className="h-6 flex-1 border-primary/50 px-1 py-0 text-xs text-foreground"
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            aria-label="保存会话名称"
-                            data-testid={`writer-save-rename-${conversation.id}`}
-                            onClick={(event) => void handleRenameSave(conversation.id, event)}
-                            className="p-1 text-foreground hover:text-green-600"
-                          >
-                            <Check className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="取消重命名会话"
-                            data-testid={`writer-cancel-rename-${conversation.id}`}
-                            onClick={handleRenameCancel}
-                            className="p-1 text-foreground hover:text-red-600"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex min-w-0 flex-1 items-center gap-2 md:max-w-[160px]">
-                            <MessageSquare className="h-3 w-3 shrink-0 opacity-70" />
-                            <div className="min-w-0">
-                              <div className="truncate">{conversation.name || "新建文章"}</div>
-                              <div className="truncate text-[10px] opacity-70">
-                                {WRITER_PLATFORM_CONFIG[platform as keyof typeof WRITER_PLATFORM_CONFIG].shortLabel}
-                                {mode === "thread" ? " / 线程" : ""}
-                                {getConversationStatusLabel(conversation.status)}
+                  return (
+                    <Link key={conversation.id} href={`/dashboard/writer/${conversation.id}?${query.toString()}`}>
+                      <div
+                        data-testid={`writer-conversation-${conversation.id}`}
+                        className={cn(
+                          "group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors",
+                          isActive
+                            ? "bg-primary/10 font-medium text-primary"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        {editingConvId === conversation.id ? (
+                          <div className="flex w-full items-center gap-1" onClick={(event) => event.preventDefault()}>
+                            <Input
+                              value={editingConvName}
+                              onChange={(event) => setEditingConvName(event.target.value)}
+                              className="h-6 flex-1 border-primary/50 px-1 py-0 text-xs text-foreground"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              aria-label={messages.sidebar.saveConversationName}
+                              data-testid={`writer-save-rename-${conversation.id}`}
+                              onClick={(event) => void handleRenameSave(conversation.id, event)}
+                              className="p-1 text-foreground hover:text-green-600"
+                            >
+                              <Check className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={messages.sidebar.cancelRenameConversation}
+                              data-testid={`writer-cancel-rename-${conversation.id}`}
+                              onClick={handleRenameCancel}
+                              className="p-1 text-foreground hover:text-red-600"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex min-w-0 flex-1 items-center gap-2 md:max-w-[160px]">
+                              <MessageSquare className="h-3 w-3 shrink-0 opacity-70" />
+                              <div className="min-w-0">
+                                <div className="truncate">{conversation.name || messages.sidebar.newArticle}</div>
+                                <div className="truncate text-[10px] opacity-70">
+                                  {WRITER_PLATFORM_CONFIG[platform as keyof typeof WRITER_PLATFORM_CONFIG].shortLabel}
+                                  {mode === "thread" ? messages.sidebar.threadSuffix : ""}
+                                  {getConversationStatusLabel(conversation.status, messages.sidebar.readySuffix, messages.sidebar.generatingImagesSuffix)}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                            <button
-                              type="button"
-                              aria-label="重命名会话"
-                              data-testid={`writer-rename-${conversation.id}`}
-                              onClick={(event) => handleRenameStart(conversation, event)}
-                              className="p-1 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={isDeleting}
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="删除会话"
-                              data-testid={`writer-delete-${conversation.id}`}
-                              onClick={(event) => handleDeleteRequest(conversation, event)}
-                              className="p-1 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={isDeleting}
-                            >
-                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </Link>
-                )
-              })
+                            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              <button
+                                type="button"
+                                aria-label={messages.shared.rename}
+                                data-testid={`writer-rename-${conversation.id}`}
+                                onClick={(event) => handleRenameStart(conversation, event)}
+                                className="p-1 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={isDeleting}
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={messages.shared.delete}
+                                data-testid={`writer-delete-${conversation.id}`}
+                                onClick={(event) => handleDeleteRequest(conversation, event)}
+                                className="p-1 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={isDeleting}
+                              >
+                                {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </Link>
+                  )
+                })}
+                {isLoadingMore ? (
+                  <div className="flex items-center px-3 py-2 text-xs text-muted-foreground">
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    {messages.sidebar.loading}
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
         )}
@@ -338,10 +399,12 @@ export function WriterSidebarItem({
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>确认删除会话</DialogTitle>
+            <DialogTitle>{messages.sidebar.deleteConversationTitle}</DialogTitle>
             <DialogDescription>
-              删除后无法恢复。
-              {pendingDeleteConversation?.name ? ` 你将删除“${pendingDeleteConversation.name}”。` : " 你将删除当前会话。"}
+              {messages.sidebar.deleteConversationDescriptionPrefix}{" "}
+              {pendingDeleteConversation?.name
+                ? messages.sidebar.deleteConversationDescriptionNamed.replace("{name}", pendingDeleteConversation.name)
+                : messages.sidebar.deleteConversationDescriptionCurrent}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -351,7 +414,7 @@ export function WriterSidebarItem({
               onClick={() => setPendingDeleteConversation(null)}
               disabled={!!deletingConvId}
             >
-              取消
+              {messages.shared.cancel}
             </Button>
             <Button
               variant="destructive"
@@ -360,7 +423,7 @@ export function WriterSidebarItem({
               disabled={!!deletingConvId}
             >
               {deletingConvId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              确认删除
+              {messages.shared.confirmDelete}
             </Button>
           </DialogFooter>
         </DialogContent>

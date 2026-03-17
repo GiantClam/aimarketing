@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import type React from "react"
 import Link from "next/link"
@@ -7,6 +7,7 @@ import { useState } from "react"
 import { ArrowLeft, Lock, Mail, Sparkles, Zap } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
+import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,7 @@ import { Separator } from "@/components/ui/separator"
 
 export default function LoginPage() {
   const { login, devLogin, loading } = useAuth()
+  const { messages } = useI18n()
   const router = useRouter()
   const [error, setError] = useState("")
 
@@ -39,7 +41,7 @@ export default function LoginPage() {
       await login(email, password)
       router.push(getNextPath())
     } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败")
+      setError(err instanceof Error ? err.message : messages.login.loginFailed)
     }
   }
 
@@ -49,7 +51,7 @@ export default function LoginPage() {
       await devLogin()
       router.push(getNextPath())
     } catch (err) {
-      setError(err instanceof Error ? err.message : "体验登录失败")
+      setError(err instanceof Error ? err.message : messages.login.demoLoginFailed)
     }
   }
 
@@ -58,7 +60,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <Link href="/" className="mb-8 inline-flex items-center gap-2 font-manrope text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
-          返回首页
+          {messages.shared.backToHome}
         </Link>
 
         <Card className="border-border shadow-lg">
@@ -68,10 +70,8 @@ export default function LoginPage() {
                 <Sparkles className="h-6 w-6 text-primary-foreground" />
               </div>
             </div>
-            <CardTitle className="font-sans text-2xl font-bold">欢迎回来</CardTitle>
-            <CardDescription className="font-manrope">
-              登录企业账号，继续使用专家 Agent 与企业协作能力。
-            </CardDescription>
+            <CardTitle className="font-sans text-2xl font-bold">{messages.login.title}</CardTitle>
+            <CardDescription className="font-manrope">{messages.login.description}</CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-6">
@@ -79,13 +79,11 @@ export default function LoginPage() {
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
                 <div className="mb-2 flex items-center gap-2 text-amber-800">
                   <Zap className="h-4 w-4" />
-                  <span className="text-sm font-medium font-manrope">体验模式</span>
+                  <span className="text-sm font-medium font-manrope">{messages.login.demoTitle}</span>
                 </div>
-                <p className="mb-3 text-xs font-manrope text-amber-700">
-                  仅本地开发环境或显式开启环境变量时开放体验账号。
-                </p>
+                <p className="mb-3 text-xs font-manrope text-amber-700">{messages.login.demoDescription}</p>
                 <Button onClick={handleDemoLogin} disabled={loading} variant="outline" className="w-full border-amber-300 bg-amber-100 font-manrope text-amber-900 hover:bg-amber-200">
-                  {loading ? "登录中..." : "一键体验登录"}
+                  {loading ? messages.login.loggingIn : messages.login.demoLogin}
                 </Button>
               </div>
             )}
@@ -98,35 +96,35 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="font-manrope">邮箱地址</Label>
+                <Label htmlFor="email" className="font-manrope">{messages.login.email}</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="email" name="email" type="email" placeholder="请输入邮箱" className="pl-10 font-manrope" required />
+                  <Input id="email" name="email" type="email" placeholder={messages.login.emailPlaceholder} className="pl-10 font-manrope" required />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="font-manrope">密码</Label>
+                <Label htmlFor="password" className="font-manrope">{messages.login.password}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" name="password" type="password" placeholder="请输入密码" className="pl-10 font-manrope" required />
+                  <Input id="password" name="password" type="password" placeholder={messages.login.passwordPlaceholder} className="pl-10 font-manrope" required />
                 </div>
               </div>
 
-              <Button type="submit" disabled={loading} className="w-full font-manrope">{loading ? "登录中..." : "登录"}</Button>
+              <Button type="submit" disabled={loading} className="w-full font-manrope">{loading ? messages.login.loggingIn : messages.login.submit}</Button>
             </form>
 
             <div className="relative">
               <Separator />
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="bg-card px-2 text-xs font-manrope text-muted-foreground">或</span>
+                <span className="bg-card px-2 text-xs font-manrope text-muted-foreground">{messages.login.or}</span>
               </div>
             </div>
 
             <div className="text-center">
               <span className="text-sm font-manrope text-muted-foreground">
-                还没有账号？{" "}
-                <Link href="/register" className="font-medium text-primary hover:text-primary/80">立即注册</Link>
+                {messages.login.noAccount}{" "}
+                <Link href="/register" className="font-medium text-primary hover:text-primary/80">{messages.login.registerNow}</Link>
               </span>
             </div>
           </CardContent>

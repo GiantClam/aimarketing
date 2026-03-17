@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
-import { applySessionCookie, createUserSession } from "@/lib/auth/session"
+import { applySessionCookie, createUserSession, withSessionDbRetry } from "@/lib/auth/session"
 import { getUserAuthPayload, verifyPassword } from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
@@ -29,11 +29,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "email and password are required" }, { status: 400 })
     }
 
-    const rows = await db
-      .select({ id: users.id, password: users.password })
-      .from(users)
-      .where(eq(users.email, String(email).trim().toLowerCase()))
-      .limit(1)
+    const rows = await withSessionDbRetry("auth.login.user-select", async () =>
+      db
+        .select({ id: users.id, password: users.password })
+        .from(users)
+        .where(eq(users.email, String(email).trim().toLowerCase()))
+        .limit(1),
+    )
 
     if (rows.length === 0) {
       logAuditEvent(request, "auth.login.invalid_user", { email: String(email).trim().toLowerCase() })
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
-    const payload = await getUserAuthPayload(user.id)
+    const payload = await withSessionDbRetry("auth.login.user-payload", async () => getUserAuthPayload(user.id))
     if (!payload) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }

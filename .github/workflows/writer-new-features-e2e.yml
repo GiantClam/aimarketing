@@ -1,0 +1,85 @@
+name: Writer New Features E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/writer-new-features-e2e.yml"
+      - "app/**"
+      - "components/**"
+      - "lib/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.json"
+      - "next.config.mjs"
+      - ".env.example"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/writer-new-features-e2e.yml"
+      - "app/**"
+      - "components/**"
+      - "lib/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.json"
+      - "next.config.mjs"
+      - ".env.example"
+
+jobs:
+  writer-new-features:
+    if: ${{ secrets.DATABASE_URL != '' || secrets.POSTGRES_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Run TypeScript check
+        run: pnpm exec tsc --noEmit
+
+      - name: Run writer new-features E2E
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+        run: pnpm test:e2e:writer:new-features
+
+      - name: Upload writer E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: writer-new-features-artifacts
+          path: artifacts/writer-new-features/**
+          if-no-files-found: warn

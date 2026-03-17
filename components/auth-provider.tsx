@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 
 import { buildPermissionMap, type FeatureKey, type PermissionMap } from "@/lib/enterprise/constants"
@@ -93,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const pathname = usePathname()
+  const hasBootstrappedRef = useRef(false)
 
   const isDemoMode = user?.isDemo === true || user?.isAnonymous === true
   const isEnterpriseAdmin = user?.enterpriseRole === "admin" && user?.enterpriseStatus === "active"
@@ -113,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { user: normalized } = await parseUserResponse(res)
+    hasBootstrappedRef.current = true
     applyUser(normalized)
   }
 
@@ -122,7 +124,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isPublicRoute = !pathname || pathname === "/" || pathname === "/login" || pathname === "/register"
 
     const bootstrap = async () => {
+      let completed = false
+
       if (isPublicRoute) {
+        setLoading(false)
+        return
+      }
+
+      if (hasBootstrappedRef.current) {
         setLoading(false)
         return
       }
@@ -137,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!active) return
         if (res.status === 401) {
           applyUser(null)
+          completed = true
           return
         }
 
@@ -144,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (active) {
           applyUser(normalized)
         }
+        completed = true
       } catch (error) {
         if (controller.signal.aborted) {
           return
@@ -151,12 +162,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (active) {
           if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
             applyUser(null)
+            completed = true
             return
           }
           console.error("Auth bootstrap failed:", error)
           applyUser(null)
         }
+        completed = true
       } finally {
+        if (completed) {
+          hasBootstrappedRef.current = true
+        }
         if (active) {
           setLoading(false)
         }
@@ -182,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       const { user: normalized } = await parseUserResponse(res)
+      hasBootstrappedRef.current = true
       applyUser(normalized)
     } finally {
       setLoading(false)
@@ -199,6 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       const { data, user: normalized } = await parseUserResponse(res)
+      hasBootstrappedRef.current = true
       applyUser(normalized)
       return { requiresApproval: Boolean(data.requiresApproval) }
     } finally {
@@ -225,6 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: "same-origin",
       })
     } finally {
+      hasBootstrappedRef.current = false
       applyUser(null)
     }
   }
@@ -238,6 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       const { user: normalized } = await parseUserResponse(res)
+      hasBootstrappedRef.current = true
       applyUser({ ...normalized, isAnonymous: false })
     } finally {
       setLoading(false)
@@ -253,6 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       const { user: normalized } = await parseUserResponse(res)
+      hasBootstrappedRef.current = true
       applyUser({ ...normalized, isAnonymous: true })
     } finally {
       setLoading(false)

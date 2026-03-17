@@ -4,10 +4,17 @@ const crypto = require("crypto")
 const fs = require("fs")
 const path = require("path")
 const { Pool } = require("pg")
+const { getMigrationPoolConfig } = require("./get-db-connection")
 
 const ROOT = process.cwd()
 const ARTIFACT_DIR = path.join(ROOT, "artifacts", "writer-real-validation")
 const WRITER_TITLE_PREFIX = "[writer] "
+const TABLES = {
+  users: "AI_MARKETING_users",
+  enterprises: "AI_MARKETING_enterprises",
+  writerConversations: "AI_MARKETING_writer_conversations",
+  writerMessages: "AI_MARKETING_writer_messages",
+}
 
 function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex")
@@ -15,9 +22,9 @@ function hashPassword(password) {
 
 async function ensureWriterTables(pool) {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS writer_conversations (
+    CREATE TABLE IF NOT EXISTS "${TABLES.writerConversations}" (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES "${TABLES.users}"(id) ON DELETE CASCADE,
       title VARCHAR(255) NOT NULL,
       platform VARCHAR(32) NOT NULL DEFAULT 'wechat',
       mode VARCHAR(32) NOT NULL DEFAULT 'article',
@@ -30,11 +37,12 @@ async function ensureWriterTables(pool) {
   `)
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS writer_messages (
+    CREATE TABLE IF NOT EXISTS "${TABLES.writerMessages}" (
       id SERIAL PRIMARY KEY,
-      conversation_id INTEGER NOT NULL REFERENCES writer_conversations(id) ON DELETE CASCADE,
+      conversation_id INTEGER NOT NULL REFERENCES "${TABLES.writerConversations}"(id) ON DELETE CASCADE,
       role VARCHAR(20) NOT NULL,
       content TEXT NOT NULL,
+      diagnostics JSONB,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `)
@@ -42,23 +50,23 @@ async function ensureWriterTables(pool) {
 
 async function ensureDemoUser(pool) {
   let enterprise = await pool.query(
-    `SELECT id FROM enterprises WHERE enterprise_code = 'experience-enterprise' LIMIT 1`,
+    `SELECT id FROM "${TABLES.enterprises}" WHERE enterprise_code = 'experience-enterprise' LIMIT 1`,
   )
 
   if (enterprise.rowCount === 0) {
     enterprise = await pool.query(
-      `INSERT INTO enterprises (enterprise_code, name, created_at, updated_at)
+      `INSERT INTO "${TABLES.enterprises}" (enterprise_code, name, created_at, updated_at)
        VALUES ('experience-enterprise', '体验企业', NOW(), NOW())
        RETURNING id`,
     )
   }
 
   const enterpriseId = enterprise.rows[0].id
-  let user = await pool.query(`SELECT id FROM users WHERE email = 'demo@example.com' LIMIT 1`)
+  let user = await pool.query(`SELECT id FROM "${TABLES.users}" WHERE email = 'demo@example.com' LIMIT 1`)
 
   if (user.rowCount === 0) {
     user = await pool.query(
-      `INSERT INTO users (
+      `INSERT INTO "${TABLES.users}" (
         name, email, password, enterprise_id, enterprise_role, enterprise_status, is_demo, created_at, updated_at
       ) VALUES ($1, $2, $3, $4, 'admin', 'active', TRUE, NOW(), NOW())
       RETURNING id`,
@@ -66,7 +74,7 @@ async function ensureDemoUser(pool) {
     )
   } else {
     await pool.query(
-      `UPDATE users
+      `UPDATE "${TABLES.users}"
        SET name = $1,
            password = $2,
            enterprise_id = $3,
@@ -83,27 +91,22 @@ async function ensureDemoUser(pool) {
 }
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL
-  if (!connectionString) {
-    throw new Error("DATABASE_URL or POSTGRES_URL is required")
-  }
-
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true })
 
-  const pool = new Pool({ connectionString })
+  const pool = new Pool(getMigrationPoolConfig())
   try {
     await ensureWriterTables(pool)
     const userId = await ensureDemoUser(pool)
 
     await pool.query(
-      `DELETE FROM writer_conversations
+      `DELETE FROM "${TABLES.writerConversations}"
        WHERE user_id = $1 AND title LIKE $2`,
       [userId, `${WRITER_TITLE_PREFIX}Cursor Validation Seed%`],
     )
 
     const title = `${WRITER_TITLE_PREFIX}Cursor Validation Seed ${Date.now()}`
     const insertedConversation = await pool.query(
-      `INSERT INTO writer_conversations (
+      `INSERT INTO "${TABLES.writerConversations}" (
         user_id, title, platform, mode, language, status, images_requested, created_at, updated_at
       ) VALUES ($1, $2, 'wechat', 'article', 'zh', 'ready', FALSE, NOW(), NOW())
       RETURNING id`,
@@ -119,20 +122,20 @@ async function main() {
       const turn = String(index).padStart(2, "0")
 
       await pool.query(
-        `INSERT INTO writer_messages (conversation_id, role, content, created_at)
+        `INSERT INTO "${TABLES.writerMessages}" (conversation_id, role, content, created_at)
          VALUES ($1, 'user', $2, $3), ($1, 'assistant', $4, $5)`,
         [
           conversationId,
           `Cursor seed turn ${turn} question: 请给出第 ${turn} 轮内容工作流建议。`,
           baseTime,
-          `Cursor seed turn ${turn} answer: 第 ${turn} 轮建议聚焦于工作流沉淀、团队协作和发布复盘。`,
+          `Cursor seed turn ${turn} answer: 第 ${turn} 轮建议聚焦于工作流梳理、团队协作和发布复盘。`,
           answerTime,
         ],
       )
     }
 
     await pool.query(
-      `UPDATE writer_conversations SET updated_at = NOW() WHERE id = $1`,
+      `UPDATE "${TABLES.writerConversations}" SET updated_at = NOW() WHERE id = $1`,
       [conversationId],
     )
 
@@ -142,11 +145,7 @@ async function main() {
       turns: 25,
     }
 
-    fs.writeFileSync(
-      path.join(ARTIFACT_DIR, "seed.json"),
-      `${JSON.stringify(payload, null, 2)}\n`,
-      "utf8",
-    )
+    fs.writeFileSync(path.join(ARTIFACT_DIR, "seed.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8")
     console.log(JSON.stringify(payload))
   } finally {
     await pool.end()

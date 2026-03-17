@@ -7,6 +7,7 @@ import { difyConnections, enterpriseDifyAdvisorConfigs, users } from "@/lib/db/s
 type DifyLookupOptions = {
   userId?: number | null
   userEmail?: string | null
+  enterpriseId?: number | null
 }
 
 type ResolvedUserContext = {
@@ -20,6 +21,7 @@ type DifyConfig = {
 }
 
 type AdvisorType = "brand-strategy" | "growth" | "copywriting"
+const DEMO_USER_EMAIL = "demo@example.com"
 
 function normalizeOptional(value?: string | null) {
   const trimmed = value?.trim()
@@ -30,6 +32,10 @@ function normalizeBaseUrl(baseUrl?: string | null) {
   const trimmed = normalizeOptional(baseUrl)
   if (!trimmed) return null
   return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed.replace(/\/+$/, "")}/v1`
+}
+
+function isStatelessDemoLookup(options?: DifyLookupOptions) {
+  return options?.userEmail?.trim().toLowerCase() === DEMO_USER_EMAIL
 }
 
 function getAdvisorEnvPrefix(advisorType: AdvisorType) {
@@ -88,43 +94,80 @@ async function resolveUserContext(options?: DifyLookupOptions): Promise<Resolved
   const normalizedUserId =
     typeof rawUserId === "number" && Number.isFinite(rawUserId) && rawUserId > 0 ? rawUserId : null
   const userEmail = options?.userEmail?.trim().toLowerCase()
+  const enterpriseId =
+    typeof options?.enterpriseId === "number" && Number.isFinite(options.enterpriseId) && options.enterpriseId > 0
+      ? options.enterpriseId
+      : null
 
   if (!userEmail && !normalizedUserId) {
-    return { userId: null, enterpriseId: null }
+    return { userId: null, enterpriseId }
   }
 
-  const rows = await db
-    .select({ id: users.id, enterpriseId: users.enterpriseId })
-    .from(users)
-    .where(userEmail ? eq(users.email, userEmail) : eq(users.id, normalizedUserId as number))
-    .limit(1)
-
-  if (rows.length > 0) {
+  if (normalizedUserId && enterpriseId) {
     return {
-      userId: rows[0].id,
-      enterpriseId: rows[0].enterpriseId ?? null,
+      userId: normalizedUserId,
+      enterpriseId,
     }
+  }
+
+  try {
+    const rows = await db
+      .select({ id: users.id, enterpriseId: users.enterpriseId })
+      .from(users)
+      .where(userEmail ? eq(users.email, userEmail) : eq(users.id, normalizedUserId as number))
+      .limit(1)
+
+    if (rows.length > 0) {
+      return {
+        userId: rows[0].id,
+        enterpriseId: rows[0].enterpriseId ?? null,
+      }
+    }
+  } catch (error) {
+    console.warn("dify.resolve_user_context.fallback", {
+      userId: normalizedUserId,
+      userEmail,
+      message: error instanceof Error ? error.message : String(error),
+    })
   }
 
   return {
     userId: normalizedUserId,
-    enterpriseId: null,
+    enterpriseId,
   }
 }
 
 export async function isWriterMockAvailable(options?: DifyLookupOptions) {
   const context = await resolveUserContext(options)
-  if (!context.userId || !isDemoLoginEnabled()) {
-    return false
+  return isWriterMockAvailableWithContext(context, options)
+}
+
+async function isWriterMockAvailableWithContext(context: ResolvedUserContext, options?: DifyLookupOptions) {
+  if (isStatelessDemoLookup(options) && isDemoLoginEnabled()) {
+    return true
   }
 
-  const rows = await db
-    .select({ isDemo: users.isDemo })
-    .from(users)
-    .where(eq(users.id, context.userId))
-    .limit(1)
+  const normalizedUserEmail = options?.userEmail?.trim().toLowerCase()
+  if (!context.userId || !isDemoLoginEnabled()) {
+    return normalizedUserEmail === DEMO_USER_EMAIL
+  }
 
-  return Boolean(rows[0]?.isDemo)
+  try {
+    const rows = await db
+      .select({ isDemo: users.isDemo })
+      .from(users)
+      .where(eq(users.id, context.userId))
+      .limit(1)
+
+    return Boolean(rows[0]?.isDemo)
+  } catch (error) {
+    console.warn("dify.writer_mock_available.fallback", {
+      userId: context.userId,
+      userEmail: normalizedUserEmail,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return normalizedUserEmail === DEMO_USER_EMAIL
+  }
 }
 
 export function extractUserEmailFromDifyUser(difyUser?: string | null, advisorType?: string | null) {
@@ -147,47 +190,62 @@ export function extractUserEmailFromDifyUser(difyUser?: string | null, advisorTy
 
 async function getLegacyDefaultDifyConfig(options?: DifyLookupOptions) {
   const context = await resolveUserContext(options)
+  return getLegacyDefaultDifyConfigWithContext(context, options)
+}
+
+async function getLegacyDefaultDifyConfigWithContext(context: ResolvedUserContext, options?: DifyLookupOptions) {
+  if (isStatelessDemoLookup(options)) {
+    return null
+  }
   const scopedByUser = hasUserContext(options)
 
   if (scopedByUser && !context.userId) {
     return null
   }
 
-  const defaultConns = await db
-    .select()
-    .from(difyConnections)
-    .where(
-      context.userId
-        ? and(eq(difyConnections.isDefault, true), eq(difyConnections.userId, context.userId))
-        : eq(difyConnections.isDefault, true),
-    )
-    .limit(1)
+  try {
+    const defaultConns = await db
+      .select()
+      .from(difyConnections)
+      .where(
+        context.userId
+          ? and(eq(difyConnections.isDefault, true), eq(difyConnections.userId, context.userId))
+          : eq(difyConnections.isDefault, true),
+      )
+      .limit(1)
 
-  if (defaultConns.length > 0) {
-    return {
-      baseUrl: defaultConns[0].baseUrl,
-      apiKey: defaultConns[0].apiKey || "",
+    if (defaultConns.length > 0) {
+      return {
+        baseUrl: defaultConns[0].baseUrl,
+        apiKey: defaultConns[0].apiKey || "",
+      }
     }
-  }
 
-  const anyConns = context.userId
-    ? await db
-        .select()
-        .from(difyConnections)
-        .where(eq(difyConnections.userId, context.userId))
-        .orderBy(desc(difyConnections.createdAt))
-        .limit(1)
-    : await db
-        .select()
-        .from(difyConnections)
-        .orderBy(desc(difyConnections.createdAt))
-        .limit(1)
+    const anyConns = context.userId
+      ? await db
+          .select()
+          .from(difyConnections)
+          .where(eq(difyConnections.userId, context.userId))
+          .orderBy(desc(difyConnections.createdAt))
+          .limit(1)
+      : await db
+          .select()
+          .from(difyConnections)
+          .orderBy(desc(difyConnections.createdAt))
+          .limit(1)
 
-  if (anyConns.length > 0) {
-    return {
-      baseUrl: anyConns[0].baseUrl,
-      apiKey: anyConns[0].apiKey || "",
+    if (anyConns.length > 0) {
+      return {
+        baseUrl: anyConns[0].baseUrl,
+        apiKey: anyConns[0].apiKey || "",
+      }
     }
+  } catch (error) {
+    console.warn("dify.legacy_default_config.fallback", {
+      userId: context.userId,
+      userEmail: options?.userEmail?.trim().toLowerCase() || null,
+      message: error instanceof Error ? error.message : String(error),
+    })
   }
 
   return null
@@ -195,35 +253,56 @@ async function getLegacyDefaultDifyConfig(options?: DifyLookupOptions) {
 
 async function getLegacyDifyConfigByName(name: string, options?: DifyLookupOptions, fallbackToDefault = true) {
   const context = await resolveUserContext(options)
+  return getLegacyDifyConfigByNameWithContext(name, context, options, fallbackToDefault)
+}
+
+async function getLegacyDifyConfigByNameWithContext(
+  name: string,
+  context: ResolvedUserContext,
+  options?: DifyLookupOptions,
+  fallbackToDefault = true,
+) {
+  if (isStatelessDemoLookup(options)) {
+    return fallbackToDefault ? getLegacyDefaultDifyConfigWithContext(context, options) : null
+  }
   const scopedByUser = hasUserContext(options)
 
   if (scopedByUser && !context.userId) {
-    return fallbackToDefault ? getLegacyDefaultDifyConfig(options) : null
+    return fallbackToDefault ? getLegacyDefaultDifyConfigWithContext(context, options) : null
   }
 
-  const conns = await db
-    .select()
-    .from(difyConnections)
-    .where(
-      context.userId
-        ? and(eq(difyConnections.name, name), eq(difyConnections.userId, context.userId))
-        : eq(difyConnections.name, name),
-    )
-    .orderBy(desc(difyConnections.createdAt))
-    .limit(1)
+  try {
+    const conns = await db
+      .select()
+      .from(difyConnections)
+      .where(
+        context.userId
+          ? and(eq(difyConnections.name, name), eq(difyConnections.userId, context.userId))
+          : eq(difyConnections.name, name),
+      )
+      .orderBy(desc(difyConnections.createdAt))
+      .limit(1)
 
-  if (conns.length > 0) {
-    return {
-      baseUrl: conns[0].baseUrl,
-      apiKey: conns[0].apiKey || "",
+    if (conns.length > 0) {
+      return {
+        baseUrl: conns[0].baseUrl,
+        apiKey: conns[0].apiKey || "",
+      }
     }
+  } catch (error) {
+    console.warn("dify.legacy_named_config.fallback", {
+      name,
+      userId: context.userId,
+      userEmail: options?.userEmail?.trim().toLowerCase() || null,
+      message: error instanceof Error ? error.message : String(error),
+    })
   }
 
   if (!fallbackToDefault) {
     return null
   }
 
-  return getLegacyDefaultDifyConfig(options)
+  return getLegacyDefaultDifyConfigWithContext(context, options)
 }
 
 export async function hasDifyConfigByName(name: string, options?: DifyLookupOptions) {
@@ -328,26 +407,19 @@ export async function upsertEnterpriseAdvisorOverride(
   return getEnterpriseAdvisorOverride(enterpriseId, advisorType)
 }
 
-async function getAdvisorContext(options?: DifyLookupOptions) {
-  const context = await resolveUserContext(options)
-  const systemDefaults = getSystemDefaultAdvisorSummary()
-
-  return {
-    userId: context.userId,
-    enterpriseId: context.enterpriseId,
-    systemDefaults,
-  }
-}
-
-async function getAdvisorConfig(advisorType: Exclude<AdvisorType, "copywriting">, options?: DifyLookupOptions) {
-  const context = await getAdvisorContext(options)
-  const enterpriseOverride = await getEnterpriseAdvisorOverride(context.enterpriseId, advisorType)
+async function getAdvisorConfig(
+  advisorType: Exclude<AdvisorType, "copywriting">,
+  options?: DifyLookupOptions,
+  context?: ResolvedUserContext,
+) {
+  const resolvedContext = context || (await resolveUserContext(options))
+  const enterpriseOverride = await getEnterpriseAdvisorOverride(resolvedContext.enterpriseId, advisorType)
   if (enterpriseOverride && enterpriseOverride.enabled && enterpriseOverride.baseUrl && enterpriseOverride.apiKey) {
     return {
       source: "enterprise" as const,
       baseUrl: enterpriseOverride.baseUrl,
       apiKey: enterpriseOverride.apiKey,
-      enterpriseId: context.enterpriseId,
+      enterpriseId: resolvedContext.enterpriseId,
     }
   }
 
@@ -357,18 +429,18 @@ async function getAdvisorConfig(advisorType: Exclude<AdvisorType, "copywriting">
       source: "default" as const,
       baseUrl: systemDefault.baseUrl,
       apiKey: systemDefault.apiKey,
-      enterpriseId: context.enterpriseId,
+      enterpriseId: resolvedContext.enterpriseId,
     }
   }
 
   const legacyName = advisorType === "brand-strategy" ? "品牌战略顾问" : "增长顾问"
-  const legacyConfig = await getLegacyDifyConfigByName(legacyName, options, false)
+  const legacyConfig = await getLegacyDifyConfigByNameWithContext(legacyName, context || resolvedContext, options, false)
   if (legacyConfig) {
     return {
       source: "legacy" as const,
       baseUrl: legacyConfig.baseUrl,
       apiKey: legacyConfig.apiKey,
-      enterpriseId: context.enterpriseId,
+      enterpriseId: resolvedContext.enterpriseId,
     }
   }
 
@@ -376,14 +448,15 @@ async function getAdvisorConfig(advisorType: Exclude<AdvisorType, "copywriting">
 }
 
 export async function getAdvisorAvailability(options?: DifyLookupOptions) {
-  const [brandConfig, growthConfig, hasCopywritingNamedConfig, defaultConfig, writerMockAvailable] = await Promise.all([
-    getAdvisorConfig("brand-strategy", options),
-    getAdvisorConfig("growth", options),
+  const context = await resolveUserContext(options)
+  const [brandConfig, growthConfig, copywritingNamedConfig, defaultConfig, writerMockAvailable] = await Promise.all([
+    getAdvisorConfig("brand-strategy", options, context),
+    getAdvisorConfig("growth", options, context),
     hasDifyConfigByName("文案写作专家", options),
-    getLegacyDefaultDifyConfig(options),
-    isWriterMockAvailable(options),
+    getLegacyDefaultDifyConfigWithContext(context, options),
+    isWriterMockAvailableWithContext(context, options),
   ])
-  const copywriting = hasCopywritingNamedConfig || Boolean(defaultConfig) || writerMockAvailable
+  const copywriting = copywritingNamedConfig || Boolean(defaultConfig) || writerMockAvailable
 
   return {
     brandStrategy: Boolean(brandConfig),
@@ -394,13 +467,14 @@ export async function getAdvisorAvailability(options?: DifyLookupOptions) {
 }
 
 export async function getDifyConfigByAdvisorType(advisorType?: string | null, options?: DifyLookupOptions) {
+  const context = await resolveUserContext(options)
   if (advisorType === "brand-strategy") {
-    const config = await getAdvisorConfig("brand-strategy", options)
+    const config = await getAdvisorConfig("brand-strategy", options, context)
     return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
   }
 
   if (advisorType === "growth") {
-    const config = await getAdvisorConfig("growth", options)
+    const config = await getAdvisorConfig("growth", options, context)
     return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
   }
 

@@ -1,0 +1,16 @@
+---
+Enterprise: VBUY (ID: 45, Code: vbuy)
+User: VBUY Admin (ID: 59)
+Email: vbuy.admin@example.com
+Password: e48bf7351f1edd4734cd7e480df168b32c5fec9f0b3295b77bf35a6a190ce902
+Role: admin
+Status: active
+---
+Enterprise: 灵创智能 (ID: 46, Code: 灵创智能)
+User: 灵创智能 Admin (ID: 60)
+Email: lingchuang.admin@example.com
+Password: 6f767ae8038e029d15a0b85ee6c70471487e3a11445e988516293a12e049dd38
+Role: admin
+Status: active
+---
+Total: 2 admin accounts found

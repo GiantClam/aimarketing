@@ -4,9 +4,16 @@ const path = require('path');
 require('./load-env');
 
 async function main() {
-    const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+    const url =
+        process.env.AI_MARKETING_DB_POSTGRES_URL ||
+        process.env.DATABASE_URL ||
+        process.env.POSTGRES_URL ||
+        process.env.POSTGRES_PRISMA_URL ||
+        process.env.AI_MARKETING_DB_POSTGRES_URL_NON_POOLING ||
+        process.env.DATABASE_URL_UNPOOLED ||
+        process.env.POSTGRES_URL_NON_POOLING;
     if (!url) {
-        console.error("No DATABASE_URL found in .env");
+        console.error("No AI_MARKETING_DB_POSTGRES_URL or fallback database URL found in .env");
         process.exit(1);
     }
     const difyApiKey = process.env.DIFY_API_KEY || "";

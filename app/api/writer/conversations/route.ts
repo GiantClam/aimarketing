@@ -6,6 +6,7 @@ import { listWriterConversations } from "@/lib/writer/repository"
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
   const limit = parseInt(searchParams.get("limit") || "20", 10)
+  const cursor = searchParams.get("cursor")
 
   try {
     const auth = await requireSessionUser(req, "copywriting_generation")
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
       return auth.response
     }
 
-    const data = await listWriterConversations(auth.user.id, limit)
+    const data = await listWriterConversations(auth.user.id, limit, cursor)
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -16,14 +16,14 @@ ACCOUNTS = [
     {
         "key": "vbuy",
         "email": os.environ.get("VBUY_ADMIN_EMAIL", "vbuy.admin@example.com"),
-        "password": os.environ.get("VBUY_ADMIN_PASSWORD", "VbuyAdmin#20260315"),
+        "password": os.environ.get("VBUY_ADMIN_PASSWORD", "aimarketing0317"),
         "enterprise_name": "VBUY",
         "dataset_id": "bc9f5ddd-1774-49e9-ba91-41af4673c253",
     },
     {
         "key": "lingchuang",
         "email": os.environ.get("LINGCHUANG_ADMIN_EMAIL", "lingchuang.admin@example.com"),
-        "password": os.environ.get("LINGCHUANG_ADMIN_PASSWORD", "LingChuang#20260315"),
+        "password": os.environ.get("LINGCHUANG_ADMIN_PASSWORD", "aimarketing0317"),
         "enterprise_name": "灵创智能",
         "dataset_id": "302cf95a-2473-4d57-be04-401d5cfda3d6",
     },

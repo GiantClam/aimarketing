@@ -16,10 +16,15 @@ import {
   type WriterConversationSummary,
   type WriterHistoryEntry,
   type WriterMessagePage,
+  type WriterTurnDiagnostics,
 } from "@/lib/writer/types"
 
 const WRITER_TITLE_PREFIX = "[writer] "
 const DB_RETRY_DELAYS_MS = [250, 750]
+const WRITER_CONVERSATIONS_TABLE = "AI_MARKETING_writer_conversations"
+const WRITER_MESSAGES_TABLE = "AI_MARKETING_writer_messages"
+const WRITER_CONVERSATIONS_UPDATED_INDEX = "AI_MARKETING_writer_conversations_user_updated_idx"
+const WRITER_MESSAGES_ROLE_ID_INDEX = "AI_MARKETING_writer_messages_conversation_role_id_desc_idx"
 
 type WriterConversationRow = {
   id: number
@@ -40,6 +45,19 @@ type WriterConversationMeta = {
   language: WriterLanguage
   status: WriterConversationStatus
   imagesRequested: boolean
+}
+
+type WriterSchemaStatus = {
+  conversationsTableExists: boolean
+  messagesTableExists: boolean
+  conversationsUpdatedIndexExists: boolean
+  messagesRoleIdIndexExists: boolean
+  hasPlatformColumn: boolean
+  hasModeColumn: boolean
+  hasLanguageColumn: boolean
+  hasStatusColumn: boolean
+  hasImagesRequestedColumn: boolean
+  hasDiagnosticsColumn: boolean
 }
 
 let writerTablesReadyPromise: Promise<void> | null = null
@@ -103,49 +121,158 @@ async function withDbRetry<T>(label: string, operation: () => Promise<T>) {
   throw new Error(`writer_db_retry_exhausted:${label}`)
 }
 
+async function readWriterSchemaStatus(): Promise<WriterSchemaStatus> {
+  const result = await db.execute(sql`
+    SELECT
+      to_regclass(${`"${WRITER_CONVERSATIONS_TABLE}"`}) IS NOT NULL AS conversations_table_exists,
+      to_regclass(${`"${WRITER_MESSAGES_TABLE}"`}) IS NOT NULL AS messages_table_exists,
+      to_regclass(${`"${WRITER_CONVERSATIONS_UPDATED_INDEX}"`}) IS NOT NULL AS conversations_updated_index_exists,
+      to_regclass(${`"${WRITER_MESSAGES_ROLE_ID_INDEX}"`}) IS NOT NULL AS messages_role_id_index_exists,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = ${WRITER_CONVERSATIONS_TABLE}
+          AND column_name = 'platform'
+      ) AS has_platform_column,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = ${WRITER_CONVERSATIONS_TABLE}
+          AND column_name = 'mode'
+      ) AS has_mode_column,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = ${WRITER_CONVERSATIONS_TABLE}
+          AND column_name = 'language'
+      ) AS has_language_column,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = ${WRITER_CONVERSATIONS_TABLE}
+          AND column_name = 'status'
+      ) AS has_status_column,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = ${WRITER_CONVERSATIONS_TABLE}
+          AND column_name = 'images_requested'
+      ) AS has_images_requested_column
+      ,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = ${WRITER_MESSAGES_TABLE}
+          AND column_name = 'diagnostics'
+      ) AS has_diagnostics_column
+  `)
+
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>
+
+  return {
+    conversationsTableExists: Boolean(row.conversations_table_exists),
+    messagesTableExists: Boolean(row.messages_table_exists),
+    conversationsUpdatedIndexExists: Boolean(row.conversations_updated_index_exists),
+    messagesRoleIdIndexExists: Boolean(row.messages_role_id_index_exists),
+    hasPlatformColumn: Boolean(row.has_platform_column),
+    hasModeColumn: Boolean(row.has_mode_column),
+    hasLanguageColumn: Boolean(row.has_language_column),
+    hasStatusColumn: Boolean(row.has_status_column),
+    hasImagesRequestedColumn: Boolean(row.has_images_requested_column),
+    hasDiagnosticsColumn: Boolean(row.has_diagnostics_column),
+  }
+}
+
+function isWriterSchemaReady(status: WriterSchemaStatus) {
+  return (
+    status.conversationsTableExists &&
+    status.messagesTableExists &&
+    status.conversationsUpdatedIndexExists &&
+    status.messagesRoleIdIndexExists &&
+    status.hasPlatformColumn &&
+    status.hasModeColumn &&
+    status.hasLanguageColumn &&
+    status.hasStatusColumn &&
+    status.hasImagesRequestedColumn &&
+    status.hasDiagnosticsColumn
+  )
+}
+
+async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
+  if (!status.conversationsTableExists) {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "AI_MARKETING_writer_conversations" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        platform VARCHAR(32) NOT NULL DEFAULT 'wechat',
+        mode VARCHAR(32) NOT NULL DEFAULT 'article',
+        language VARCHAR(32) NOT NULL DEFAULT 'auto',
+        status VARCHAR(32) NOT NULL DEFAULT 'drafting',
+        images_requested BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `)
+  } else {
+    if (!status.hasPlatformColumn) {
+      await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS platform VARCHAR(32) NOT NULL DEFAULT 'wechat'`)
+    }
+    if (!status.hasModeColumn) {
+      await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS mode VARCHAR(32) NOT NULL DEFAULT 'article'`)
+    }
+    if (!status.hasLanguageColumn) {
+      await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS language VARCHAR(32) NOT NULL DEFAULT 'auto'`)
+    }
+    if (!status.hasStatusColumn) {
+      await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'drafting'`)
+    }
+    if (!status.hasImagesRequestedColumn) {
+      await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS images_requested BOOLEAN NOT NULL DEFAULT FALSE`)
+    }
+  }
+
+  if (!status.conversationsUpdatedIndexExists) {
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_conversations_user_updated_idx"
+      ON "AI_MARKETING_writer_conversations" (user_id, updated_at DESC, id DESC)
+    `)
+  }
+
+  if (!status.messagesTableExists) {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "AI_MARKETING_writer_messages" (
+        id SERIAL PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES "AI_MARKETING_writer_conversations"(id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL,
+        content TEXT NOT NULL,
+        diagnostics JSONB,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `)
+  } else if (!status.hasDiagnosticsColumn) {
+    await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_messages" ADD COLUMN IF NOT EXISTS diagnostics JSONB`)
+  }
+
+  if (!status.messagesRoleIdIndexExists) {
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_messages_conversation_role_id_desc_idx"
+      ON "AI_MARKETING_writer_messages" (conversation_id, role, id DESC)
+    `)
+  }
+}
+
 async function ensureWriterTables() {
   if (!writerTablesReadyPromise) {
     writerTablesReadyPromise = withDbRetry("ensure-writer-tables", async () => {
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS writer_conversations (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          title VARCHAR(255) NOT NULL,
-          platform VARCHAR(32) NOT NULL DEFAULT 'wechat',
-          mode VARCHAR(32) NOT NULL DEFAULT 'article',
-          language VARCHAR(32) NOT NULL DEFAULT 'auto',
-          status VARCHAR(32) NOT NULL DEFAULT 'drafting',
-          images_requested BOOLEAN NOT NULL DEFAULT FALSE,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-
-      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS platform VARCHAR(32) NOT NULL DEFAULT 'wechat'`)
-      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS mode VARCHAR(32) NOT NULL DEFAULT 'article'`)
-      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS language VARCHAR(32) NOT NULL DEFAULT 'auto'`)
-      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'drafting'`)
-      await db.execute(sql`ALTER TABLE writer_conversations ADD COLUMN IF NOT EXISTS images_requested BOOLEAN NOT NULL DEFAULT FALSE`)
-
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS writer_conversations_user_created_idx
-        ON writer_conversations (user_id, created_at DESC, id DESC)
-      `)
-
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS writer_messages (
-          id SERIAL PRIMARY KEY,
-          conversation_id INTEGER NOT NULL REFERENCES writer_conversations(id) ON DELETE CASCADE,
-          role VARCHAR(20) NOT NULL,
-          content TEXT NOT NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-      `)
-
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS writer_messages_conversation_created_idx
-        ON writer_messages (conversation_id, created_at ASC, id ASC)
-      `)
+      const schemaStatus = await readWriterSchemaStatus()
+      if (!isWriterSchemaReady(schemaStatus)) {
+        await applyWriterSchemaChanges(schemaStatus)
+        const finalSchemaStatus = await readWriterSchemaStatus()
+        if (!isWriterSchemaReady(finalSchemaStatus)) {
+          throw new Error("writer_schema_not_ready")
+        }
+      }
     }).catch((error) => {
       writerTablesReadyPromise = null
       throw error
@@ -162,6 +289,10 @@ function normalizeTitle(title: string) {
 function buildConversationTitle(query: string) {
   const normalized = query.replace(/\s+/g, " ").trim().slice(0, 60)
   return `${WRITER_TITLE_PREFIX}${normalized || "新建文章"}`
+}
+
+function normalizeConversationName(name: string) {
+  return name.replace(/\s+/g, " ").trim().slice(0, 80) || "鏂板缓鏂囩珷"
 }
 
 function normalizeConversationMeta(row: Pick<WriterConversationRow, "platform" | "mode" | "language" | "status" | "imagesRequested">): WriterConversationMeta {
@@ -229,17 +360,23 @@ export async function appendWriterConversation({
   conversationId,
   query,
   answer,
+  diagnostics,
   platform,
   mode,
   language,
+  status = "text_ready",
+  imagesRequested = false,
 }: {
   userId: number
   conversationId?: string | null
   query: string
   answer: string
+  diagnostics?: WriterTurnDiagnostics | null
   platform: WriterPlatform
   mode: WriterMode
   language: WriterLanguage
+  status?: WriterConversationStatus
+  imagesRequested?: boolean
 }) {
   await ensureWriterTables()
 
@@ -262,8 +399,8 @@ export async function appendWriterConversation({
           platform,
           mode,
           language,
-          status: "text_ready",
-          imagesRequested: false,
+          status,
+          imagesRequested,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -280,8 +417,8 @@ export async function appendWriterConversation({
           platform,
           mode,
           language,
-          status: "text_ready",
-          imagesRequested: false,
+          status,
+          imagesRequested,
           updatedAt: new Date(),
         })
         .where(eq(writerConversations.id, existingConversationId)),
@@ -301,6 +438,7 @@ export async function appendWriterConversation({
         conversationId: parsedConversationId,
         role: "assistant",
         content: answer,
+        diagnostics: diagnostics || null,
         createdAt: new Date(),
       },
     ]),
@@ -317,10 +455,17 @@ export async function appendWriterConversation({
   }
 }
 
-export async function listWriterConversations(userId: number, limit: number): Promise<WriterConversationPage> {
+export async function listWriterConversations(
+  userId: number,
+  limit: number,
+  cursor?: string | null,
+): Promise<WriterConversationPage> {
   await ensureWriterTables()
 
   const safeLimit = Math.max(1, Math.min(limit, 100))
+  const parsedCursor = cursor ? /^(\d+):(\d+)$/u.exec(cursor.trim()) : null
+  const cursorTimestamp = parsedCursor ? new Date(Number(parsedCursor[1]) * 1000) : null
+  const cursorId = parsedCursor ? Number.parseInt(parsedCursor[2], 10) : Number.NaN
   const limitedRows = await withDbRetry("list-writer-conversations", () =>
     db
       .select({
@@ -339,6 +484,12 @@ export async function listWriterConversations(userId: number, limit: number): Pr
         and(
           eq(writerConversations.userId, userId),
           sql`${writerConversations.title} LIKE ${`${WRITER_TITLE_PREFIX}%`}`,
+          parsedCursor && cursorTimestamp && Number.isFinite(cursorId)
+            ? sql`(
+                ${writerConversations.updatedAt} < ${cursorTimestamp}
+                OR (${writerConversations.updatedAt} = ${cursorTimestamp} AND ${writerConversations.id} < ${cursorId})
+              )`
+            : undefined,
         ),
       )
       .orderBy(desc(writerConversations.updatedAt), desc(writerConversations.id))
@@ -347,8 +498,13 @@ export async function listWriterConversations(userId: number, limit: number): Pr
 
   const visibleRows = limitedRows.slice(0, safeLimit)
   const data = visibleRows.map((row) => mapConversation({ ...row, userId }))
+  const lastVisibleRow = visibleRows.at(-1)
+  const nextCursor =
+    limitedRows.length > safeLimit && lastVisibleRow?.updatedAt
+      ? `${Math.floor(lastVisibleRow.updatedAt.getTime() / 1000)}:${lastVisibleRow.id}`
+      : null
 
-  return { data, has_more: limitedRows.length > safeLimit, limit: safeLimit }
+  return { data, has_more: limitedRows.length > safeLimit, limit: safeLimit, next_cursor: nextCursor }
 }
 
 export async function listWriterMessages(
@@ -373,21 +529,19 @@ export async function listWriterMessages(
       SELECT
         assistant.id AS assistant_id,
         assistant.content AS assistant_content,
+        assistant.diagnostics AS assistant_diagnostics,
         assistant.created_at AS assistant_created_at,
         prompt.id AS user_id,
         prompt.content AS user_content,
         prompt.created_at AS user_created_at
-      FROM writer_messages AS assistant
+      FROM "AI_MARKETING_writer_messages" AS assistant
       LEFT JOIN LATERAL (
         SELECT user_message.id, user_message.content, user_message.created_at
-        FROM writer_messages AS user_message
+        FROM "AI_MARKETING_writer_messages" AS user_message
         WHERE user_message.conversation_id = assistant.conversation_id
           AND user_message.role = 'user'
-          AND (
-            user_message.created_at < assistant.created_at
-            OR (user_message.created_at = assistant.created_at AND user_message.id < assistant.id)
-          )
-        ORDER BY user_message.created_at DESC, user_message.id DESC
+          AND user_message.id < assistant.id
+        ORDER BY user_message.id DESC
         LIMIT 1
       ) AS prompt ON TRUE
       WHERE assistant.conversation_id = ${parsedConversationId}
@@ -401,6 +555,7 @@ export async function listWriterMessages(
   const resultRows = rows.rows as Array<{
     assistant_id: number
     assistant_content: string
+    assistant_diagnostics: WriterTurnDiagnostics | null
     assistant_created_at: Date | null
     user_id: number | null
     user_content: string | null
@@ -414,6 +569,7 @@ export async function listWriterMessages(
     conversation_id: conversationId,
     query: row.user_content || "",
     answer: row.assistant_content || "",
+    diagnostics: row.assistant_diagnostics || null,
     inputs: { contents: row.user_content || "" },
     created_at: toEpochSeconds(row.user_created_at, toEpochSeconds(row.assistant_created_at, fallbackSeconds)),
   }))
@@ -438,11 +594,13 @@ export async function renameWriterConversation(userId: number, conversationId: s
     return null
   }
 
+  const normalizedName = normalizeConversationName(name)
+
   await withDbRetry("rename-writer-conversation", () =>
     db
       .update(writerConversations)
       .set({
-        title: `${WRITER_TITLE_PREFIX}${name.trim() || "新建文章"}`,
+        title: `${WRITER_TITLE_PREFIX}${normalizedName}`,
         updatedAt: new Date(),
       })
       .where(eq(writerConversations.id, conversation.id)),
@@ -497,6 +655,7 @@ export async function updateWriterLatestAssistantMessage(
     language: WriterLanguage
     platform: WriterPlatform
     mode: WriterMode
+    diagnostics: WriterTurnDiagnostics | null
   }>,
 ) {
   await ensureWriterTables()
@@ -521,7 +680,13 @@ export async function updateWriterLatestAssistantMessage(
   }
 
   await withDbRetry("update-writer-assistant-content", () =>
-    db.update(writerMessages).set({ content }).where(eq(writerMessages.id, latestAssistant.id)),
+    db
+      .update(writerMessages)
+      .set({
+        content,
+        ...(meta && "diagnostics" in meta ? { diagnostics: meta.diagnostics || null } : {}),
+      })
+      .where(eq(writerMessages.id, latestAssistant.id)),
   )
 
   await updateWriterConversationMeta(userId, conversationId, meta || { status: "text_ready" })

@@ -289,9 +289,9 @@ export async function POST(request: NextRequest) {
           cause:
             error?.cause && typeof error.cause === "object"
               ? {
-                  message: "message" in error.cause ? error.cause.message : undefined,
-                  code: "code" in error.cause ? error.cause.code : undefined,
-                }
+                message: "message" in error.cause ? error.cause.message : undefined,
+                code: "code" in error.cause ? error.cause.code : undefined,
+              }
               : undefined,
         })
 

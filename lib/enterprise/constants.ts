@@ -3,6 +3,7 @@ export const FEATURE_KEYS = [
   "website_generation",
   "video_generation",
   "copywriting_generation",
+  "image_design_generation",
 ] as const
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number]
@@ -12,6 +13,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   website_generation: "网站生成",
   video_generation: "视频生成",
   copywriting_generation: "文案生成",
+  image_design_generation: "图片设计",
 }
 
 export type PermissionMap = Record<FeatureKey, boolean>
