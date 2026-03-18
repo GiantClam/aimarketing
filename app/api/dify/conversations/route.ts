@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { getConversations } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { listLeadHunterConversations } from "@/lib/lead-hunter/repository"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -14,6 +15,11 @@ export async function GET(req: NextRequest) {
     const auth = await requireAdvisorAccess(req, advisorType)
     if ("response" in auth) {
       return auth.response
+    }
+
+    if (advisorType === "lead-hunter") {
+      const data = await listLeadHunterConversations(auth.user.id, lastId, limit)
+      return NextResponse.json(data)
     }
 
     const difyUser = buildDifyUserIdentity(auth.user.email, advisorType)

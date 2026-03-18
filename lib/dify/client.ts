@@ -16,11 +16,21 @@ function getHeaders(config: DifyConfig) {
 /**
  * 1. 发送对话消息
  */
-export async function sendMessage(config: DifyConfig, payload: any) {
+export async function sendMessage(config: DifyConfig, payload: any, init?: RequestInit) {
     return fetch(`${config.baseUrl}/chat-messages`, {
         method: "POST",
         headers: getHeaders(config),
         body: JSON.stringify(payload),
+        ...init,
+    });
+}
+
+export async function runWorkflow(config: DifyConfig, payload: any, init?: RequestInit) {
+    return fetch(`${config.baseUrl}/workflows/run`, {
+        method: "POST",
+        headers: getHeaders(config),
+        body: JSON.stringify(payload),
+        ...init,
     });
 }
 

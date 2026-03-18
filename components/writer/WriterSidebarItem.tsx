@@ -35,6 +35,33 @@ function getConversationStatusLabel(status: WriterConversationSummary["status"],
   return ""
 }
 
+type WriterConversationCache = {
+  conversations: WriterConversationSummary[]
+  hasMore: boolean
+  nextCursor: string | null
+  updatedAt: number
+}
+
+const WRITER_CONVERSATION_CACHE_TTL_MS = 60_000
+
+function readWriterConversationListCache() {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem("writer-conversations-cache-v1")
+    if (!raw) return null
+    return JSON.parse(raw) as WriterConversationCache
+  } catch {
+    return null
+  }
+}
+
+function writeWriterConversationListCache(value: WriterConversationCache) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem("writer-conversations-cache-v1", JSON.stringify(value))
+  } catch {}
+}
+
 function mergeConversations(current: WriterConversationSummary[], incoming: WriterConversationSummary[]) {
   const seen = new Set<string>()
   const merged: WriterConversationSummary[] = []
@@ -73,14 +100,31 @@ export function WriterSidebarItem({
   const isExpanded = isOpen
   const activeConversationId = pathname.match(/^\/dashboard\/writer\/([^/?]+)/)?.[1] || null
 
+  useEffect(() => {
+    const cached = readWriterConversationListCache()
+    if (!cached) return
+    setConversations(cached.conversations)
+    setHasMore(cached.hasMore)
+    setNextCursor(cached.nextCursor)
+  }, [])
+
   const upsertConversation = (conversation: WriterConversationSummary) => {
-    setConversations((current) => [conversation, ...current.filter((item) => item.id !== conversation.id)])
+    setConversations((current) => {
+      const next = [conversation, ...current.filter((item) => item.id !== conversation.id)]
+      writeWriterConversationListCache({
+        conversations: next,
+        hasMore,
+        nextCursor,
+        updatedAt: Date.now(),
+      })
+      return next
+    })
   }
 
-  const fetchConversations = useCallback(async ({ append = false, cursor }: { append?: boolean; cursor?: string | null } = {}) => {
+  const fetchConversations = useCallback(async ({ append = false, cursor, background = false }: { append?: boolean; cursor?: string | null; background?: boolean } = {}) => {
     if (append) {
       setIsLoadingMore(true)
-    } else {
+    } else if (!background) {
       setIsLoading(true)
     }
     try {
@@ -93,15 +137,26 @@ export function WriterSidebarItem({
       if (!response.ok) return
       const data = await response.json()
       const nextBatch = Array.isArray(data?.data) ? (data.data as WriterConversationSummary[]) : []
-      setConversations((current) => (append ? mergeConversations(current, nextBatch) : nextBatch))
-      setHasMore(Boolean(data?.has_more) && nextBatch.length > 0)
-      setNextCursor(typeof data?.next_cursor === "string" ? data.next_cursor : null)
+      const nextHasMore = Boolean(data?.has_more) && nextBatch.length > 0
+      const resolvedNextCursor = typeof data?.next_cursor === "string" ? data.next_cursor : null
+      setConversations((current) => {
+        const nextConversations = append ? mergeConversations(current, nextBatch) : nextBatch
+        writeWriterConversationListCache({
+          conversations: nextConversations,
+          hasMore: nextHasMore,
+          nextCursor: resolvedNextCursor,
+          updatedAt: Date.now(),
+        })
+        return nextConversations
+      })
+      setHasMore(nextHasMore)
+      setNextCursor(resolvedNextCursor)
     } catch (error) {
       console.error("Failed to load writer conversations", error)
     } finally {
       if (append) {
         setIsLoadingMore(false)
-      } else {
+      } else if (!background) {
         setIsLoading(false)
       }
     }
@@ -115,7 +170,9 @@ export function WriterSidebarItem({
 
   useEffect(() => {
     if (isExpanded) {
-      void fetchConversations()
+      const cached = readWriterConversationListCache()
+      const isFresh = Boolean(cached && Date.now() - cached.updatedAt < WRITER_CONVERSATION_CACHE_TTL_MS)
+      void fetchConversations({ background: Boolean(isFresh && cached && cached.conversations.length > 0) })
     }
   }, [fetchConversations, isExpanded])
 
@@ -129,18 +186,27 @@ export function WriterSidebarItem({
       }
 
       if (detail?.action === "remove") {
-        setConversations((current) => current.filter((item) => item.id !== detail.conversationId))
+        setConversations((current) => {
+          const next = current.filter((item) => item.id !== detail.conversationId)
+          writeWriterConversationListCache({
+            conversations: next,
+            hasMore,
+            nextCursor,
+            updatedAt: Date.now(),
+          })
+          return next
+        })
         return
       }
 
       if (isExpanded) {
-        void fetchConversations()
+        void fetchConversations({ background: conversations.length > 0 })
       }
     }
 
     window.addEventListener(WRITER_REFRESH_EVENT, handleRefresh)
     return () => window.removeEventListener(WRITER_REFRESH_EVENT, handleRefresh)
-  }, [fetchConversations, isExpanded])
+  }, [conversations.length, fetchConversations, hasMore, isExpanded, nextCursor])
 
   useEffect(() => {
     if (!isExpanded || !activeConversationId || isLoading || isLoadingMore) return

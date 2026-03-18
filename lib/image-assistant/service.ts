@@ -94,7 +94,6 @@ async function ensureGeminiFileReferenceForAsset(params: {
 
   const uploaded = await uploadImageAssistantReferenceToGoogle({
     url: params.asset.url,
-    mimeType: params.asset.mime_type,
     displayName: `image-assistant-${params.asset.id}`,
     signal: params.signal,
   })
@@ -131,6 +130,19 @@ async function resolveReferenceImagesForModel(params: {
 }) {
   const assetsWithUrls = params.referencedAssets.filter((asset): asset is ImageAssistantAsset => Boolean(asset?.url))
   if (!assetsWithUrls.length) return []
+
+  if (shouldUseImageAssistantFixtures()) {
+    return Promise.all(
+      assetsWithUrls.map(async (asset) => {
+        const inline = await urlToInlineImage(asset.url!)
+        return {
+          kind: "inline" as const,
+          mimeType: inline.mimeType,
+          base64Data: inline.base64Data,
+        }
+      }),
+    )
+  }
 
   if (hasImageAssistantGoogleKey()) {
     try {
@@ -340,7 +352,7 @@ export async function runImageAssistantJob(params: {
   }
 
   const limitKey = `image-assistant:${params.userId}:${params.requestIp}:${params.taskType}`
-  const rateLimit = checkRateLimit({ key: limitKey, limit: 20, windowMs: 60_000 })
+  const rateLimit = await checkRateLimit({ key: limitKey, limit: 20, windowMs: 60_000 })
   if (!rateLimit.ok) {
     const error = new Error("rate_limited")
     ;(error as Error & { retryAfterSeconds?: number }).retryAfterSeconds = rateLimit.retryAfterSeconds
@@ -620,6 +632,9 @@ export async function runImageAssistantConversationTurn(params: {
     candidateCount: params.candidateCount || 1,
     sizePreset: normalizeSizePreset(params.sizePreset),
     resolution: normalizeResolution(params.resolution),
+    snapshotAssetId: params.snapshotAssetId || null,
+    maskAssetId: params.maskAssetId || null,
+    versionMeta: params.versionMeta || null,
     orchestration: plan.orchestration,
   }
 

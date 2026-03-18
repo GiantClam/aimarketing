@@ -339,7 +339,7 @@ export async function getEnterpriseDifyKnowledgeStatus(enterpriseId: number | nu
 
   const nextValue = (async () => {
     const binding = await getEnterpriseDifyBinding(enterpriseId)
-    if (!binding || !binding.enabled) {
+    if (!binding || !binding.enabled || !normalizeDifyApiBase(binding.baseUrl) || !binding.apiKey.trim()) {
       return { enabled: false, datasetCount: 0 }
     }
 
@@ -381,6 +381,7 @@ export async function upsertEnterpriseDifyBinding(
     throw new Error("base_url_required")
   }
 
+  const apiKey = input.apiKey.trim()
   const datasets = input.datasets
     .filter((dataset) => dataset.datasetId.trim() && dataset.datasetName.trim())
     .map((dataset) => ({
@@ -391,6 +392,13 @@ export async function upsertEnterpriseDifyBinding(
       enabled: Boolean(dataset.enabled),
     }))
 
+  if (input.enabled && !apiKey) {
+    throw new Error("api_key_required_when_enabled")
+  }
+  if (input.enabled && datasets.length === 0) {
+    throw new Error("datasets_required_when_enabled")
+  }
+
   const existing = await getEnterpriseDifyBinding(enterpriseId)
 
   let bindingId = existing?.id
@@ -399,7 +407,7 @@ export async function upsertEnterpriseDifyBinding(
       .update(enterpriseDifyBindings)
       .set({
         baseUrl,
-        apiKey: input.apiKey.trim(),
+        apiKey,
         enabled: Boolean(input.enabled),
         updatedAt: new Date(),
       })
@@ -410,7 +418,7 @@ export async function upsertEnterpriseDifyBinding(
       .values({
         enterpriseId,
         baseUrl,
-        apiKey: input.apiKey.trim(),
+        apiKey,
         enabled: Boolean(input.enabled),
         createdAt: new Date(),
         updatedAt: new Date(),

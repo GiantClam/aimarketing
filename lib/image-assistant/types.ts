@@ -95,6 +95,13 @@ export type ImageAssistantCandidate = {
   url: string | null
 }
 
+export type ImageAssistantMessagePage = {
+  data: ImageAssistantMessage[]
+  has_more: boolean
+  limit: number
+  next_cursor: string | null
+}
+
 export type ImageAssistantVersionSummary = {
   id: string
   parent_version_id: string | null
@@ -107,6 +114,13 @@ export type ImageAssistantVersionSummary = {
   meta?: Record<string, unknown> | null
   created_at: number
   candidates: ImageAssistantCandidate[]
+}
+
+export type ImageAssistantVersionPage = {
+  data: ImageAssistantVersionSummary[]
+  has_more: boolean
+  limit: number
+  next_cursor: string | null
 }
 
 export type ImageAssistantMessage = {
@@ -180,8 +194,12 @@ export type ImageAssistantCanvasDocument = {
 export type ImageAssistantSessionDetailMeta = {
   messages_total: number
   messages_loaded: number
+  messages_has_more: boolean
+  messages_next_cursor: string | null
   versions_total: number
   versions_loaded: number
+  versions_has_more: boolean
+  versions_next_cursor: string | null
 }
 
 export type ImageAssistantSessionDetail = {

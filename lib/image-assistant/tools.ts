@@ -4,6 +4,7 @@ import {
   getImageAssistantPromptCompositionRules,
   getImageAssistantRuntimeSystemPrompt,
 } from "@/lib/image-assistant/skill-documents"
+import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
 import { generateTextWithAiberm, hasAibermApiKey } from "@/lib/writer/aiberm"
 import { getImageAssistantSkillDefinition, IMAGE_ASSISTANT_MAX_BRIEF_TURNS, IMAGE_ASSISTANT_TEXT_MODEL, selectImageAssistantSkill } from "@/lib/image-assistant/skills"
 import type {
@@ -72,12 +73,68 @@ function getMissingBriefFields(brief: ImageAssistantBrief) {
   return REQUIRED_BRIEF_FIELDS.filter((field) => !normalizeText(brief[field]))
 }
 
+function getActionableBriefMissingFields(brief: ImageAssistantBrief) {
+  const missingFields: ImageAssistantBriefField[] = []
+
+  if (!normalizeText(brief.goal)) {
+    missingFields.push("goal")
+  }
+
+  if (!normalizeText(brief.subject)) {
+    missingFields.push("subject")
+  }
+
+  if (!normalizeText(brief.style) && !normalizeText(brief.composition)) {
+    missingFields.push("style")
+  }
+
+  return missingFields
+}
+
 function looksLikeChinese(text: string) {
   return /[\u4e00-\u9fff]/.test(text)
 }
 
 function truncate(value: string, max = 180) {
   return value.length > max ? `${value.slice(0, max - 1).trim()}…` : value
+}
+
+function isLowSignalBriefReply(value: string) {
+  return /^(ok|okay|yes|no|好的|好|行|可以|收到|明白了|嗯|恩|随便|都行)$/iu.test(value)
+}
+
+function splitBriefReplySegments(value: string) {
+  return value
+    .split(/\r?\n|[；;]+/)
+    .map((segment) => normalizeText(segment))
+    .filter(Boolean)
+}
+
+function inferBriefFromFollowUpAnswer(input: {
+  prompt: string
+  previousState: ImageAssistantOrchestrationState | null
+}) {
+  const prompt = normalizeText(input.prompt)
+  if (!prompt || !input.previousState?.missing_fields.length || isLowSignalBriefReply(prompt)) {
+    return { ...EMPTY_BRIEF }
+  }
+
+  const requestedFields = input.previousState.missing_fields
+  const segments = splitBriefReplySegments(prompt)
+  const extracted: Partial<ImageAssistantBrief> = {}
+
+  if (requestedFields.length === 1) {
+    extracted[requestedFields[0]] = truncate(prompt, 160)
+    return normalizeBrief(extracted)
+  }
+
+  if (requestedFields.length <= 2 && segments.length >= requestedFields.length) {
+    requestedFields.forEach((field, index) => {
+      extracted[field] = truncate(segments[index] || "", 160)
+    })
+  }
+
+  return normalizeBrief(extracted)
 }
 
 function dedupeStrings(values: string[]) {
@@ -120,25 +177,7 @@ function usesReferenceEditShortcutStable(input: {
   taskType: ImageAssistantTaskType
   referenceCount: number
 }) {
-  if ((input.taskType !== "edit" && input.taskType !== "mask_edit") || input.referenceCount <= 0) {
-    return false
-  }
-
-  const prompt = normalizeText(input.prompt)
-  if (!prompt) return false
-
-  const zhEditActionPattern =
-    /(?:\u5220\u9664|\u5220\u6389|\u53bb\u6389|\u53bb\u9664|\u79fb\u9664|\u64e6\u6389|\u62b9\u6389|\u6d88\u9664|\u62ff\u6389|\u4fee\u6389|\u4fee\u9664|\u6539\u6210|\u6539\u4e3a|\u53d8\u6210|\u53d8\u4e3a|\u6362\u6210|\u6362\u4e3a|\u66ff\u6362|\u4fdd\u7559|\u53ea\u4fee\u6539|\u5c40\u90e8\u4fee\u6539|\u5c40\u90e8\u7f16\u8f91|\u53bb\u773c\u955c|\u6458\u6389|\u53bb\u6c34\u5370|\u53bb\u7455\u75b5|\u78e8\u76ae|\u4fee\u56fe|\u7cbe\u4fee|\u6362\u989c\u8272|\u6539\u989c\u8272|\u6539\u8272|\u53d8\u7ea2|\u53d8\u84dd|\u53d8\u7eff|\u8c03\u6210|\u8c03\u4e3a)/u
-  const zhEditSentencePattern =
-    /(?:\u628a|\u5c06).{0,24}(?:\u6539\u6210|\u6539\u4e3a|\u6362\u6210|\u6362\u4e3a|\u53d8\u6210|\u53d8\u4e3a|\u66ff\u6362\u4e3a|\u5220\u9664|\u53bb\u6389|\u53bb\u9664|\u79fb\u9664|\u4fdd\u7559).{0,40}/u
-  const enEditActionPattern =
-    /\b(remove|delete|erase|retouch|edit out|clean up|replace|swap|change|fix|touch up|take off|keep|turn|make)\b/i
-
-  return (
-    zhEditActionPattern.test(prompt) ||
-    zhEditSentencePattern.test(prompt) ||
-    enEditActionPattern.test(prompt)
-  )
+  return looksLikeReferenceEditIntent(input) || _usesReferenceEditShortcut(input)
 }
 
 function applyReferenceEditDefaults(brief: ImageAssistantBrief, prompt: string) {
@@ -163,6 +202,10 @@ function shouldSkipTextPlanner(input: {
   taskType: ImageAssistantTaskType
   referenceCount: number
 }) {
+  if (input.taskType === "mask_edit" && input.referenceCount > 0) {
+    return true
+  }
+
   return usesReferenceEditShortcutStable(input)
 }
 
@@ -253,6 +296,10 @@ function inferBriefFromPrompt(input: {
     inferred.subject = looksLikeChinese(prompt)
       ? "请基于已上传图片中的主体和关键元素进行设计与编辑，并保留核心识别特征。"
       : "Use the uploaded references as the main subject and preserve the core identifiable elements."
+  }
+
+  if (!inferred.subject && input.taskType === "generate" && !hasStructuredBrief) {
+    inferred.subject = truncate(prompt, 140)
   }
 
   if (!inferred.composition) {
@@ -353,7 +400,7 @@ async function maybePlanWithTextModel(input: {
   }
 }
 
-function buildClarificationReply(input: {
+function _legacyBuildClarificationReply(input: {
   brief: ImageAssistantBrief
   missingFields: ImageAssistantBriefField[]
   turnCount: number
@@ -390,6 +437,37 @@ function buildClarificationReply(input: {
   return [intro, referenceLine, askLine].join(" ")
 }
 
+function buildClarificationReply(input: {
+  brief: ImageAssistantBrief
+  missingFields: ImageAssistantBriefField[]
+  turnCount: number
+  maxTurns: number
+  recommendedMode: "generate" | "edit"
+  referenceCount: number
+  userPrompt: string
+}) {
+  const isZh = looksLikeChinese(`${input.userPrompt} ${input.brief.goal} ${input.brief.subject} ${input.brief.style}`)
+  const questions = isZh ? FIELD_QUESTIONS_ZH : FIELD_QUESTIONS_EN
+  const filled = REQUIRED_BRIEF_FIELDS.filter((field) => normalizeText(input.brief[field])).length
+
+  const intro = isZh
+    ? `已收到当前设计信息，必填项已收集 ${filled}/${REQUIRED_BRIEF_FIELDS.length}。`
+    : `I have the current design brief progress: ${filled}/${REQUIRED_BRIEF_FIELDS.length} key items collected.`
+  const referenceLine =
+    input.referenceCount > 0
+      ? isZh
+        ? `当前已关联 ${input.referenceCount} 张参考图，我会按${input.recommendedMode === "edit" ? "改图" : "参考图生成"}来理解。`
+        : `${input.referenceCount} reference image(s) are attached, so I will treat this as an image-guided ${input.recommendedMode}.`
+      : isZh
+        ? "当前没有参考图，我会按文生图来理解。"
+        : "There are no reference images attached, so I will treat this as a text-to-image request."
+  const askLine = isZh
+    ? `为了继续，请补充：${input.missingFields.map((field) => questions[field]).join(" ")}`
+    : `To continue, please clarify: ${input.missingFields.map((field) => questions[field]).join(" ")}`
+
+  return [intro, referenceLine, askLine].join(" ")
+}
+
 async function buildGenerationPrompt(input: {
   brief: ImageAssistantBrief
   taskType: ImageAssistantTaskType
@@ -413,22 +491,24 @@ async function buildGenerationPrompt(input: {
     input.taskType === "generate"
       ? "Create a production-ready image based on this approved design brief."
       : "Edit the provided reference image(s) according to this approved design brief.",
-    `Design objective: ${input.brief.goal}`,
-    `Subject and must-have elements: ${input.brief.subject}`,
-    `Style and mood: ${input.brief.style}`,
-    `Composition and layout: ${input.brief.composition}`,
+    `Design objective: ${input.brief.goal || "Produce a strong result that matches the user's request."}`,
+    `Subject and must-have elements: ${input.brief.subject || "Use the user's prompt as the primary subject description."}`,
+    `Style and mood: ${input.brief.style || "Use a polished, production-ready visual direction inferred from the request."}`,
+    `Composition and layout: ${input.brief.composition || `Use a ${input.sizePreset} layout with clear focal hierarchy and safe whitespace.`}`,
     input.brief.constraints ? `Constraints and must-keep details: ${input.brief.constraints}` : null,
     input.referenceCount > 0
       ? `Reference handling: ${input.taskType === "generate" ? "use the uploaded images as guidance while preserving key identity cues." : "preserve the recognizable identity and only change what the brief requires."}`
       : "Reference handling: there are no image references; rely only on the written brief.",
     compositionRules.length ? `Execution rules: ${compositionRules.join(" ")}` : null,
     failureChecks.length ? `Failure checks: ${failureChecks.join(" ")}` : null,
-    `Output requirement: ${input.sizePreset} composition, ${input.resolution} resolution target, clean focal hierarchy, production-safe framing.`,
+    input.taskType === "mask_edit"
+      ? "Output requirement: return the fully edited image at the original dimensions while preserving framing and subject placement as closely as possible."
+      : `Output requirement: ${input.sizePreset} composition, ${input.resolution} resolution target, clean focal hierarchy, production-safe framing.`,
     input.extraInstructions ? input.extraInstructions : null,
   ]
 
   if (input.taskType === "mask_edit") {
-    lines.push("Editing requirement: keep untouched areas as stable as possible and focus the changes on the requested region.")
+    lines.push("Editing requirement: keep untouched areas as stable as possible, focus the changes on the requested region, and do not return a cropped patch.")
   }
 
   return lines.filter(Boolean).join("\n")
@@ -549,8 +629,12 @@ export async function planImageAssistantTurn(input: {
     sizePreset: input.sizePreset,
     referenceCount: input.referenceCount,
   })
-  const mergedBrief = mergeBrief(input.previousState?.brief, input.currentBrief, inferred)
-  const initialMissingFields = getMissingBriefFields(mergedBrief)
+  const contextual = inferBriefFromFollowUpAnswer({
+    prompt: input.prompt,
+    previousState: input.previousState,
+  })
+  const mergedBrief = mergeBrief(input.previousState?.brief, input.currentBrief, inferred, contextual)
+  const initialMissingFields = getActionableBriefMissingFields(mergedBrief)
   const turnCount = Math.min((input.previousState?.turn_count || 0) + 1, IMAGE_ASSISTANT_MAX_BRIEF_TURNS)
   const modelPlan = useEditShortcut
     ? null
@@ -568,24 +652,23 @@ export async function planImageAssistantTurn(input: {
   const brief = useEditShortcut
     ? applyReferenceEditDefaults(modelPlan?.brief || mergedBrief, input.prompt)
     : modelPlan?.brief || mergedBrief
-  const missingFields = getMissingBriefFields(brief)
-  const readyForGeneration =
-    missingFields.length === 0 && (useEditShortcut ? true : modelPlan ? modelPlan.readyForGeneration : true)
+  const missingFields = getActionableBriefMissingFields(brief)
   const selectedSkill = await resolveSelectedSkillMetadata(
-    selectImageAssistantSkill({ taskType: input.taskType, readyForGeneration }),
+    selectImageAssistantSkill({ taskType: input.taskType, readyForGeneration: missingFields.length === 0 }),
   )
   const generatedPrompt =
-    readyForGeneration
+    missingFields.length === 0
       ? (modelPlan?.generatedPrompt ||
           (await buildGenerationPrompt({
-            brief,
-            taskType: input.taskType,
-            sizePreset: input.sizePreset,
+             brief,
+             taskType: input.taskType,
+             sizePreset: input.sizePreset,
             resolution: input.resolution,
-            referenceCount: input.referenceCount,
-            extraInstructions: input.extraInstructions,
-          })))
+             referenceCount: input.referenceCount,
+             extraInstructions: input.extraInstructions,
+           })))
       : null
+  const readyForGeneration = Boolean(generatedPrompt) && missingFields.length === 0
 
   const replyToUser =
     modelPlan?.replyToUser ||

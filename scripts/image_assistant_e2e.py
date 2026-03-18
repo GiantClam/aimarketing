@@ -62,6 +62,12 @@ def fetch_json(page, path: str):
     )
 
 
+def fetch_session_detail(page, session_id: str):
+    payload = fetch_json(page, f"/api/image-assistant/sessions/{session_id}")
+    detail = (payload.get("data") or {}).get("data") if payload.get("ok") else None
+    return payload, detail
+
+
 def image_signature(page, src: str):
     return page.evaluate(
         """async (src) => {
@@ -107,29 +113,92 @@ def visible_test_id(page, test_id: str):
     return page.locator(f'[data-testid="{test_id}"]:visible').first
 
 
+def wait_for_pending_attachment_count(page, expected_count: int, timeout_ms: int = 30000):
+    page.wait_for_function(
+        """(expectedCount) =>
+            document.querySelectorAll('[data-testid^="image-pending-attachment-"]').length === expectedCount""",
+        arg=expected_count,
+        timeout=timeout_ms,
+    )
+
+
 def wait_for_versions(page, session_id: str, timeout_seconds: int = 90):
-    deadline = time() + timeout_seconds
-    last_payload = None
-    while time() < deadline:
-        payload = fetch_json(page, f"/api/image-assistant/sessions/{session_id}")
-        last_payload = payload
-        if payload["ok"] and (payload["data"].get("data") or {}).get("versions"):
-            return payload["data"]["data"]
-        sleep(1)
-    raise AssertionError(f"versions not ready for session {session_id}: {last_payload}")
+    return wait_for_session_detail(
+        page,
+        session_id,
+        lambda data: bool(data.get("versions") or []),
+        "versions",
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def wait_for_session_detail(page, session_id: str, predicate, description: str, timeout_seconds: int = 90):
     deadline = time() + timeout_seconds
     last_payload = None
     while time() < deadline:
-        payload = fetch_json(page, f"/api/image-assistant/sessions/{session_id}")
+        payload, data = fetch_session_detail(page, session_id)
         last_payload = payload
-        data = (payload.get("data") or {}).get("data") if payload.get("ok") else None
         if data and predicate(data):
             return data
         sleep(1)
     raise AssertionError(f"{description} not ready for session {session_id}: {last_payload}")
+
+
+def open_session_until_candidates_visible(page, session_id: str, attempts: int = 3, selector_timeout_ms: int = 15000):
+    last_payload = None
+    for attempt in range(attempts):
+        page.goto(f"{BASE_URL}/dashboard/image-assistant/{session_id}", timeout=90000, wait_until="domcontentloaded")
+        try:
+            page.locator("[data-testid^='image-open-canvas-']").first.wait_for(
+                state="visible",
+                timeout=selector_timeout_ms,
+            )
+            return
+        except PlaywrightTimeoutError:
+            last_payload, detail = fetch_session_detail(page, session_id)
+            if attempt == attempts - 1:
+                raise AssertionError(
+                    f"session page did not render image candidates for session {session_id}: {last_payload}"
+                ) from None
+            if not detail or not (detail.get("versions") or []):
+                wait_for_versions(page, session_id, timeout_seconds=30)
+            page.wait_for_timeout(1000)
+
+
+def get_latest_mask_edit_result(detail):
+    messages = detail.get("messages") or []
+    versions = detail.get("versions") or []
+    if not messages or not versions:
+        return None
+
+    version_map = {str(version.get("id") or ""): version for version in versions}
+    for user_index in range(len(messages) - 1, -1, -1):
+        user_message = messages[user_index]
+        if (
+            user_message.get("role") != "user"
+            or user_message.get("message_type") != "prompt"
+            or user_message.get("task_type") != "mask_edit"
+        ):
+            continue
+
+        assistant_messages = [
+            message
+            for index, message in enumerate(messages)
+            if index > user_index and message.get("role") == "assistant" and message.get("created_version_id")
+        ]
+        if not assistant_messages:
+            continue
+
+        assistant_message = assistant_messages[-1]
+        version = version_map.get(str(assistant_message.get("created_version_id") or ""))
+        if version:
+            return {
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "version": version,
+            }
+
+    return None
 
 
 def latest_message(messages, *, role: str, message_type: str | None = None):
@@ -224,71 +293,83 @@ def run_fixture_enabled(page):
     session_payload = session_response.json()
     session_id = str((session_payload.get("data") or {}).get("id"))
     expect(bool(session_id), f"session creation response did not include id: {session_payload}")
+    wait_for_pending_attachment_count(page, 0)
 
-    clarification_detail = wait_for_session_detail(
+    initial_detail = wait_for_session_detail(
         page,
         session_id,
-        lambda data: len(data.get("messages") or []) >= 2 and not (data.get("versions") or []),
-        "clarification turn",
+        lambda data: len(data.get("messages") or []) >= 2,
+        "initial image assistant turn",
     )
-    clarification_messages = clarification_detail.get("messages") or []
-    first_user_message = latest_message(clarification_messages, role="user", message_type="prompt")
-    first_assistant_message = latest_message(clarification_messages, role="assistant", message_type="note")
+    initial_messages = initial_detail.get("messages") or []
+    first_user_message = latest_message(initial_messages, role="user", message_type="prompt")
+    first_assistant_message = latest_message(initial_messages, role="assistant")
     first_request_payload = first_user_message.get("request_payload") or {}
     first_orchestration = first_request_payload.get("orchestration") or {}
     expect(len(first_request_payload.get("referenceAssetIds") or []) == 2, f"expected 2 reference asset ids: {first_request_payload}")
     expect(first_orchestration.get("reference_count") == 2, f"expected reference_count=2: {first_orchestration}")
-    expect(first_orchestration.get("ready_for_generation") is False, f"first turn should require clarification: {first_orchestration}")
-    expect(bool(first_orchestration.get("missing_fields")), f"first turn should list missing fields: {first_orchestration}")
     expect("launch visual" in str((first_orchestration.get("brief") or {}).get("goal") or "").lower(), f"goal not preserved: {first_orchestration}")
-    expect(first_assistant_message.get("message_type") == "note", f"assistant should ask a follow-up question: {first_assistant_message}")
-    expect(
-        page.locator("[data-testid^='image-pending-attachment-']").count() >= 2,
-        "reference attachments should remain after clarification",
-    )
-    result["clarification_missing_fields"] = first_orchestration.get("missing_fields") or []
-    result["metrics"]["clarification_ms"] = round((perf_counter() - start) * 1000, 2)
 
-    follow_up_prompt = "\n".join(
-        [
-            "Subject: Keep both skincare bottles from the uploaded references as the main subject.",
-            "Style: Premium summer editorial photography with polished ecommerce lighting.",
-            "Composition: Vertical 4:5 hero poster with a top title safe area, open space on the right, and a strong focal hierarchy.",
-            "Constraints: Preserve the teal packaging, water splash cues, and readable product labels.",
-        ]
-    )
-    prompt_input.fill(follow_up_prompt)
-    page.wait_for_function(
-        """() => {
-            const textarea = Array.from(document.querySelectorAll('[data-testid="image-prompt-input"]')).find((node) => node instanceof HTMLTextAreaElement && node.offsetParent !== null)
-            const button = Array.from(document.querySelectorAll('[data-testid="image-generate-button"]')).find((node) => node instanceof HTMLElement && node.offsetParent !== null)
-            return Boolean(textarea instanceof HTMLTextAreaElement && textarea.value.trim()) && Boolean(button) && !button.hasAttribute("disabled")
-        }""",
-        timeout=90000,
-    )
+    if first_assistant_message.get("message_type") == "note":
+        expect(first_orchestration.get("ready_for_generation") is False, f"first turn should require clarification: {first_orchestration}")
+        expect(bool(first_orchestration.get("missing_fields")), f"first turn should list missing fields: {first_orchestration}")
+        expect(page.locator("[data-testid^='image-pending-attachment-']").count() == 0, "composer attachments should clear after send")
+        result["initial_turn_outcome"] = "clarification"
+        result["clarification_missing_fields"] = first_orchestration.get("missing_fields") or []
+        result["metrics"]["clarification_ms"] = round((perf_counter() - start) * 1000, 2)
 
-    start = perf_counter()
-    visible_test_id(page, "image-generate-button").click()
-    generated_detail = wait_for_versions(page, session_id)
-    page.goto(f"{BASE_URL}/dashboard/image-assistant/{session_id}", timeout=90000, wait_until="domcontentloaded")
-    page.locator("[data-testid^='image-open-canvas-']").first.wait_for(state="visible", timeout=90000)
-    result["metrics"]["generate_ms"] = round((perf_counter() - start) * 1000, 2)
-    generated_messages = generated_detail.get("messages") or []
-    final_user_message = latest_message(generated_messages, role="user", message_type="prompt")
-    final_request_payload = final_user_message.get("request_payload") or {}
-    final_orchestration = final_request_payload.get("orchestration") or {}
-    final_brief = final_orchestration.get("brief") or {}
-    latest_version = (generated_detail.get("versions") or [])[0] or {}
-    latest_prompt_text = latest_version.get("prompt_text") or ""
-    expect(len(final_request_payload.get("referenceAssetIds") or []) == 2, f"expected 2 reference asset ids on final generate: {final_request_payload}")
-    expect(final_orchestration.get("reference_count") == 2, f"expected final reference_count=2: {final_orchestration}")
-    expect(final_orchestration.get("ready_for_generation") is True, f"final turn should be ready: {final_orchestration}")
-    expect(brief_token in str(final_brief.get("goal") or ""), f"goal from the first turn was not merged forward: {final_brief}")
-    expect("skincare bottles" in str(final_brief.get("subject") or "").lower(), f"subject from follow-up was not captured: {final_brief}")
-    expect("premium summer editorial" in latest_prompt_text.lower(), f"style was not injected into final prompt: {latest_prompt_text}")
-    expect("reference handling:" in latest_prompt_text.lower(), f"reference handling instructions missing: {latest_prompt_text}")
-    expect("uploaded images as guidance" in latest_prompt_text.lower(), f"generate prompt did not include reference guidance: {latest_prompt_text}")
-    expect(brief_token in latest_prompt_text, f"final prompt did not preserve the first-turn goal token: {latest_prompt_text}")
+        follow_up_prompt = "\n".join(
+            [
+                "Subject: Keep both skincare bottles from the uploaded references as the main subject.",
+                "Style: Premium summer editorial photography with polished ecommerce lighting.",
+                "Composition: Vertical 4:5 hero poster with a top title safe area, open space on the right, and a strong focal hierarchy.",
+                "Constraints: Preserve the teal packaging, water splash cues, and readable product labels.",
+            ]
+        )
+        prompt_input.fill(follow_up_prompt)
+        page.wait_for_function(
+            """() => {
+                const textarea = Array.from(document.querySelectorAll('[data-testid="image-prompt-input"]')).find((node) => node instanceof HTMLTextAreaElement && node.offsetParent !== null)
+                const button = Array.from(document.querySelectorAll('[data-testid="image-generate-button"]')).find((node) => node instanceof HTMLElement && node.offsetParent !== null)
+                return Boolean(textarea instanceof HTMLTextAreaElement && textarea.value.trim()) && Boolean(button) && !button.hasAttribute("disabled")
+            }""",
+            timeout=90000,
+        )
+
+        start = perf_counter()
+        visible_test_id(page, "image-generate-button").click()
+        generated_detail = wait_for_versions(page, session_id)
+        result["metrics"]["generate_ms"] = round((perf_counter() - start) * 1000, 2)
+        generated_messages = generated_detail.get("messages") or []
+        final_user_message = latest_message(generated_messages, role="user", message_type="prompt")
+        final_request_payload = final_user_message.get("request_payload") or {}
+        final_orchestration = final_request_payload.get("orchestration") or {}
+        final_brief = final_orchestration.get("brief") or {}
+        latest_version = (generated_detail.get("versions") or [])[0] or {}
+        latest_prompt_text = latest_version.get("prompt_text") or ""
+        expect(len(final_request_payload.get("referenceAssetIds") or []) == 2, f"expected 2 reference asset ids on final generate: {final_request_payload}")
+        expect(final_orchestration.get("reference_count") == 2, f"expected final reference_count=2: {final_orchestration}")
+        expect(final_orchestration.get("ready_for_generation") is True, f"final turn should be ready: {final_orchestration}")
+        expect(brief_token in str(final_brief.get("goal") or ""), f"goal from the first turn was not merged forward: {final_brief}")
+        expect("skincare bottles" in str(final_brief.get("subject") or "").lower(), f"subject from follow-up was not captured: {final_brief}")
+        expect("premium summer editorial" in latest_prompt_text.lower(), f"style was not injected into final prompt: {latest_prompt_text}")
+        expect("reference handling:" in latest_prompt_text.lower(), f"reference handling instructions missing: {latest_prompt_text}")
+        expect("uploaded images as guidance" in latest_prompt_text.lower(), f"generate prompt did not include reference guidance: {latest_prompt_text}")
+        expect(brief_token in latest_prompt_text, f"final prompt did not preserve the first-turn goal token: {latest_prompt_text}")
+    else:
+        expect(first_assistant_message.get("message_type") == "result_summary", f"unexpected initial assistant message: {first_assistant_message}")
+        expect(first_orchestration.get("ready_for_generation") is True, f"first turn should be ready: {first_orchestration}")
+        expect(not (first_orchestration.get("missing_fields") or []), f"first turn should not leave missing fields: {first_orchestration}")
+        generated_detail = wait_for_versions(page, session_id)
+        latest_version = (generated_detail.get("versions") or [])[0] or {}
+        latest_prompt_text = latest_version.get("prompt_text") or ""
+        expect("reference handling:" in latest_prompt_text.lower(), f"reference handling instructions missing: {latest_prompt_text}")
+        expect("uploaded images as guidance" in latest_prompt_text.lower(), f"generate prompt did not include reference guidance: {latest_prompt_text}")
+        expect(brief_token in latest_prompt_text, f"final prompt did not preserve the first-turn goal token: {latest_prompt_text}")
+        result["initial_turn_outcome"] = "generated"
+        result["metrics"]["generate_ms"] = round((perf_counter() - start) * 1000, 2)
+
+    open_session_until_candidates_visible(page, session_id)
     result["multi_reference_generate_verified"] = True
     save_debug(page, "02-generated")
 
@@ -358,26 +439,38 @@ def run_fixture_enabled(page):
     page.wait_for_function(
         """() => {
             const textarea = Array.from(document.querySelectorAll('[data-testid="image-prompt-input"]')).find((node) => node instanceof HTMLTextAreaElement && node.offsetParent !== null)
-            const button = Array.from(document.querySelectorAll('[data-testid="image-generate-button"]')).find((node) => node instanceof HTMLElement && node.offsetParent !== null)
+            const button = Array.from(document.querySelectorAll('[data-testid="image-edit-button"]')).find((node) => node instanceof HTMLElement && node.offsetParent !== null)
             return Boolean(textarea instanceof HTMLTextAreaElement && textarea.value.trim()) && Boolean(button) && !button.hasAttribute("disabled")
         }""",
         timeout=90000,
     )
     start = perf_counter()
     with page.expect_response(lambda response: response.url.endswith("/api/image-assistant/canvas-snapshot-edit") and response.request.method == "POST" and response.status == 200, timeout=90000) as canvas_edit_response_info:
-        visible_test_id(page, "image-generate-button").click()
+        visible_test_id(page, "image-edit-button").click()
     canvas_edit_response = canvas_edit_response_info.value
     canvas_edit_payload = canvas_edit_response.json()
-    expect(bool((canvas_edit_payload.get("data") or {}).get("message_id")), f"canvas snapshot edit response missing message: {canvas_edit_payload}")
-    roundtrip_detail = wait_for_versions(page, session_id)
-    page.goto(f"{BASE_URL}/dashboard/image-assistant/{session_id}", timeout=90000, wait_until="domcontentloaded")
-    page.locator("[data-testid^='image-open-canvas-']").first.wait_for(state="visible", timeout=90000)
+    canvas_edit_data = canvas_edit_payload.get("data") or {}
+    expect(canvas_edit_data.get("accepted") is True, f"canvas snapshot edit response was not accepted: {canvas_edit_payload}")
+    expect(bool(canvas_edit_data.get("task_id")), f"canvas snapshot edit response missing task id: {canvas_edit_payload}")
+    roundtrip_session_id = str(canvas_edit_data.get("session_id") or "")
+    expect(bool(roundtrip_session_id), f"canvas snapshot edit response missing session id: {canvas_edit_payload}")
+
+    roundtrip_detail = wait_for_session_detail(
+        page,
+        roundtrip_session_id,
+        lambda data: get_latest_mask_edit_result(data) is not None,
+        "roundtrip mask edit",
+    )
+    open_session_until_candidates_visible(page, roundtrip_session_id)
     result["metrics"]["roundtrip_edit_ms"] = round((perf_counter() - start) * 1000, 2)
+    result["roundtrip_session_id"] = roundtrip_session_id
+    roundtrip_result = get_latest_mask_edit_result(roundtrip_detail)
     roundtrip_messages = roundtrip_detail.get("messages") or []
-    roundtrip_user_message = latest_message(roundtrip_messages, role="user", message_type="prompt")
+    expect(roundtrip_result is not None, f"roundtrip should resolve to a mask_edit result: {roundtrip_messages}")
+    roundtrip_user_message = roundtrip_result["user_message"]
     roundtrip_request_payload = roundtrip_user_message.get("request_payload") or {}
     roundtrip_orchestration = roundtrip_request_payload.get("orchestration") or {}
-    roundtrip_version = (roundtrip_detail.get("versions") or [])[0] or {}
+    roundtrip_version = roundtrip_result["version"]
     roundtrip_prompt_text = roundtrip_version.get("prompt_text") or ""
     roundtrip_assets = roundtrip_detail.get("assets") or []
     expect(roundtrip_user_message.get("task_type") == "mask_edit", f"canvas roundtrip should use mask_edit: {roundtrip_user_message}")
@@ -421,6 +514,7 @@ def run_fixture_enabled(page):
     direct_edit_payload = direct_edit_response.json()
     direct_edit_session_id = str((direct_edit_payload.get("data") or {}).get("id"))
     expect(bool(direct_edit_session_id), f"direct edit session creation response did not include id: {direct_edit_payload}")
+    wait_for_pending_attachment_count(page, 0)
     direct_edit_detail = wait_for_versions(page, direct_edit_session_id)
     direct_edit_messages = direct_edit_detail.get("messages") or []
     direct_edit_user_message = latest_message(direct_edit_messages, role="user", message_type="prompt")
@@ -447,13 +541,64 @@ def run_fixture_enabled(page):
     result["direct_reference_edit_verified"] = True
     save_debug(page, "06-direct-edit")
 
+    page.goto(f"{BASE_URL}/dashboard/image-assistant", timeout=90000, wait_until="domcontentloaded")
+    visible_test_id(page, "image-prompt-input").wait_for(state="visible", timeout=90000)
+    page.get_by_test_id("image-reference-file-input").set_input_files(
+        [{"name": "portrait-upscale.png", "mimeType": "image/png", "buffer": PNG_BYTES}]
+    )
+    page.wait_for_function(
+        """() => document.querySelectorAll('[data-testid^="image-pending-attachment-"]').length >= 1""",
+        timeout=90000,
+    )
+    primary_upscale_prompt = f"请高清化这张图，保持人物和构图不变。{int(time())}"
+    prompt_input = visible_test_id(page, "image-prompt-input")
+    primary_upscale_prompt = f"提高到2k清晰度，保持人物和构图不变。{int(time())}"
+    prompt_input.fill(primary_upscale_prompt)
+    page.wait_for_function(
+        """() => {
+            const textarea = Array.from(document.querySelectorAll('[data-testid="image-prompt-input"]')).find((node) => node instanceof HTMLTextAreaElement && node.offsetParent !== null)
+            const button = Array.from(document.querySelectorAll('[data-testid="image-generate-button"]')).find((node) => node instanceof HTMLElement && node.offsetParent !== null)
+            return Boolean(textarea instanceof HTMLTextAreaElement && textarea.value.trim()) && Boolean(button) && !button.hasAttribute("disabled")
+        }""",
+        timeout=90000,
+    )
+    start = perf_counter()
+    with page.expect_response(lambda response: response.url.endswith("/api/image-assistant/edit") and response.request.method == "POST" and response.status == 200, timeout=90000) as primary_upscale_response_info:
+        visible_test_id(page, "image-generate-button").click()
+    primary_upscale_response = primary_upscale_response_info.value
+    primary_upscale_payload = primary_upscale_response.json()
+    primary_upscale_data = primary_upscale_payload.get("data") or {}
+    expect(primary_upscale_data.get("accepted") is True, f"primary upscale response was not accepted: {primary_upscale_payload}")
+    primary_upscale_session_id = str(primary_upscale_data.get("session_id") or "")
+    expect(bool(primary_upscale_session_id), f"primary upscale response missing session id: {primary_upscale_payload}")
+    wait_for_pending_attachment_count(page, 0)
+    primary_upscale_detail = wait_for_versions(page, primary_upscale_session_id)
+    primary_upscale_messages = primary_upscale_detail.get("messages") or []
+    primary_upscale_user_message = latest_message(primary_upscale_messages, role="user", message_type="prompt")
+    primary_upscale_request_payload = primary_upscale_user_message.get("request_payload") or {}
+    primary_upscale_orchestration = primary_upscale_request_payload.get("orchestration") or {}
+    primary_upscale_version = (primary_upscale_detail.get("versions") or [])[0] or {}
+    primary_upscale_prompt_text = primary_upscale_version.get("prompt_text") or ""
+    expect(primary_upscale_user_message.get("task_type") == "edit", f"primary send upscale should use edit mode: {primary_upscale_user_message}")
+    expect(len(primary_upscale_request_payload.get("referenceAssetIds") or []) == 1, f"primary send upscale should keep 1 reference: {primary_upscale_request_payload}")
+    expect(primary_upscale_orchestration.get("reference_count") == 1, f"primary send upscale should report reference_count=1: {primary_upscale_orchestration}")
+    expect(primary_upscale_orchestration.get("ready_for_generation") is True, f"primary send upscale should skip clarification: {primary_upscale_orchestration}")
+    expect(not (primary_upscale_orchestration.get("missing_fields") or []), f"primary send upscale should not leave missing fields: {primary_upscale_orchestration}")
+    expect(
+        "原有的真实质感" in primary_upscale_prompt_text or "original reference image's visual style" in primary_upscale_prompt_text.lower(),
+        f"primary send upscale should preserve source style automatically: {primary_upscale_prompt_text}",
+    )
+    result["metrics"]["primary_send_upscale_ms"] = round((perf_counter() - start) * 1000, 2)
+    result["primary_send_upscale_verified"] = True
+    save_debug(page, "07-primary-upscale")
+
     result["export_verified"] = True
     return result
 
 
 def run_provider_missing(page):
     result = {"scenario": SCENARIO}
-    availability = assert_availability(page, enabled=False, provider="aiberm", reason="aiberm_api_key_missing")
+    availability = assert_availability(page, enabled=False, provider="gemini", reason="aiberm_api_key_missing")
     result["availability"] = availability
 
     page.goto(f"{BASE_URL}/dashboard/image-assistant", timeout=90000, wait_until="domcontentloaded")

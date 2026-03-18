@@ -177,6 +177,9 @@ def main():
             {
                 "AIBERM_API_KEY": "",
                 "WRITER_AIBERM_API_KEY": "",
+                "GOOGLE_AI_API_KEY": "",
+                "GEMINI_API_KEY": "",
+                "GOOGLE_API_KEY": "",
                 "IMAGE_ASSISTANT_FIXTURES": "false",
                 "WRITER_USE_SYSTEM_PROXY": "false",
                 "WRITER_HTTP_PROXY": "",

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return auth.response
     }
 
-    const rateLimit = checkRateLimit({
+    const rateLimit = await checkRateLimit({
       key: `crewai:chat:${auth.user.id}:${getRequestIp(request)}`,
       limit: 20,
       windowMs: 60_000,

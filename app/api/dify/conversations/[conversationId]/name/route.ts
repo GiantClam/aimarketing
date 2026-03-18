@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { renameConversation } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { renameLeadHunterConversation } from "@/lib/lead-hunter/repository"
 
 export async function POST(
     req: NextRequest,
@@ -18,6 +19,18 @@ export async function POST(
 
     if (!body.name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 })
+    }
+
+    if (body?.advisorType === "lead-hunter") {
+      const data = await renameLeadHunterConversation(auth.user.id, resolved.conversationId, body.name)
+      if (!data) {
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+      }
+
+      return NextResponse.json({
+        id: String(data.id),
+        name: data.title,
+      })
     }
 
     const difyUser = buildDifyUserIdentity(auth.user.email, body.advisorType)

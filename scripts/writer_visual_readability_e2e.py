@@ -220,6 +220,25 @@ def assert_preview_visual_quality(preview_dialog):
         raise AssertionError(" | ".join(issues))
 
 
+def ensure_preview_dialog(page, timeout_ms: int = 120000):
+    preview_dialog = page.locator('[role="dialog"]').first
+    preview_button = page.get_by_role("button", name="预览")
+    deadline = time() + timeout_ms / 1000
+
+    while time() < deadline:
+        if preview_dialog.is_visible():
+            return preview_dialog
+        if preview_button.is_enabled():
+            preview_button.click()
+            preview_dialog.wait_for(state="visible", timeout=timeout_ms)
+            return preview_dialog
+        page.wait_for_timeout(300)
+
+    if preview_dialog.is_visible():
+        return preview_dialog
+    raise AssertionError("preview dialog did not become visible in time")
+
+
 wait_until_http_ready()
 
 
@@ -258,10 +277,7 @@ with sync_playwright() as p:
         page.wait_for_load_state("networkidle", timeout=90000)
         save_debug(page, "02-after-send")
 
-        preview_dialog = page.locator('[role="dialog"]').first
-        if not preview_dialog.is_visible():
-            page.get_by_role("button", name="预览").click()
-            preview_dialog.wait_for(state="visible", timeout=120000)
+        preview_dialog = ensure_preview_dialog(page)
 
         preview_dialog.get_by_role("button", name="确认文案并生成配图").click()
         wait_for_generated_writer_assets(page)

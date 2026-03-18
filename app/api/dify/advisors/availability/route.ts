@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const currentUser = await getSessionUser(req)
     if (!currentUser) {
       return NextResponse.json({
-        data: { brandStrategy: false, growth: false, copywriting: false, hasAny: false },
+        data: { brandStrategy: false, growth: false, leadHunter: false, copywriting: false, hasAny: false },
       })
     }
 

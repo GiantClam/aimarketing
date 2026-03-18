@@ -16,6 +16,10 @@ export async function POST(
       return auth.response
     }
 
+    if (body?.advisorType === "lead-hunter") {
+      return NextResponse.json({ error: "lead_hunter_stop_not_supported" }, { status: 409 })
+    }
+
     const difyUser = buildDifyUserIdentity(auth.user.email, body.advisorType)
     const config = await getDifyConfigByAdvisorType(body.advisorType, {
       userId: auth.user.id,

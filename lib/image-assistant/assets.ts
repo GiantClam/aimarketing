@@ -1,4 +1,7 @@
 import { createHash } from "crypto"
+import sharp from "sharp"
+
+import { writerFetch } from "@/lib/writer/network"
 
 function parseDataUrl(dataUrl: string) {
   const match = /^data:([^;,]+)(?:;[^,]*)?;base64,([\s\S]+)$/i.exec(dataUrl.trim())
@@ -158,23 +161,40 @@ export function getInlineImageMetadata(dataUrl: string) {
 }
 
 export async function urlToInlineImage(url: string) {
+  const normalized = await loadImageSourceForModel(url)
+  return {
+    mimeType: normalized.mimeType,
+    base64Data: normalized.buffer.toString("base64"),
+  }
+}
+
+export async function loadImageSourceForModel(url: string) {
   if (url.startsWith("data:")) {
-    const match = parseDataUrl(url)
-    return {
-      mimeType: match.mimeType,
-      base64Data: match.buffer.toString("base64"),
-    }
+    return normalizeImageForModel(parseDataUrl(url))
   }
 
-  const response = await fetch(url)
+  const response = await writerFetch(url)
   if (!response.ok) {
     throw new Error(`image_asset_fetch_failed:${response.status}`)
   }
 
   const mimeType = response.headers.get("content-type") || "image/png"
   const arrayBuffer = await response.arrayBuffer()
-  return {
+  return normalizeImageForModel({
     mimeType,
-    base64Data: Buffer.from(arrayBuffer).toString("base64"),
+    buffer: Buffer.from(arrayBuffer),
+  })
+}
+
+async function normalizeImageForModel(input: { mimeType: string; buffer: Buffer }) {
+  const mimeType = input.mimeType.toLowerCase()
+  if (mimeType !== "image/svg+xml") {
+    return input
+  }
+
+  const pngBuffer = await sharp(input.buffer, { density: 144 }).png().toBuffer()
+  return {
+    mimeType: "image/png",
+    buffer: pngBuffer,
   }
 }

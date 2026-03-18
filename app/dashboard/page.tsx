@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import Link from "next/link"
-import { ArrowRight, ImageIcon, PenSquare, Settings, Target, TrendingUp } from "lucide-react"
+import { ArrowRight, ImageIcon, PenSquare, Radar, Settings, Target, TrendingUp } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
 import { useDashboardAvailability } from "@/components/dashboard-availability-provider"
@@ -45,6 +45,15 @@ export default function DashboardPage() {
         label: messages.dashboardPage.growthAdvisor.label,
         icon: TrendingUp,
         description: messages.dashboardPage.growthAdvisor.description,
+      })
+    }
+
+    if (hasFeature("expert_advisor") && advisor.leadHunter) {
+      items.push({
+        href: "/dashboard/advisor/lead-hunter/new",
+        label: messages.dashboardPage.leadHunter.label,
+        icon: Radar,
+        description: messages.dashboardPage.leadHunter.description,
       })
     }
 

@@ -4,6 +4,8 @@ import { enqueueAssistantTask } from "@/lib/assistant-async"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { ensureLeadHunterConversation } from "@/lib/lead-hunter/repository"
+import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
@@ -15,7 +17,7 @@ export async function POST(req: NextRequest) {
       return auth.response
     }
 
-    const rateLimit = checkRateLimit({
+    const rateLimit = await checkRateLimit({
       key: `dify:chat:${auth.user.id}:${getRequestIp(req)}:${body.advisorType}`,
       limit: 30,
       windowMs: 60_000,
@@ -41,6 +43,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
       }
 
+      const conversation =
+        body?.advisorType === "lead-hunter"
+          ? await ensureLeadHunterConversation(
+              auth.user.id,
+              typeof body?.conversation_id === "string" ? body.conversation_id : null,
+              query,
+            )
+          : null
+
       const task = await enqueueAssistantTask({
         userId: auth.user.id,
         workflowName: "advisor_turn",
@@ -50,14 +61,63 @@ export async function POST(req: NextRequest) {
           userEmail: auth.user.email,
           advisorType: body.advisorType,
           query,
-          conversationId: typeof body?.conversation_id === "string" ? body.conversation_id : null,
+          conversationId:
+            body?.advisorType === "lead-hunter"
+              ? String(conversation?.id || "")
+              : typeof body?.conversation_id === "string"
+                ? body.conversation_id
+                : null,
         },
       })
 
       return NextResponse.json({
         accepted: true,
         task_id: String(task.id),
-        conversation_id: typeof body?.conversation_id === "string" ? body.conversation_id : null,
+        conversation_id:
+          body?.advisorType === "lead-hunter"
+            ? String(conversation?.id || "")
+            : typeof body?.conversation_id === "string"
+              ? body.conversation_id
+              : null,
+      })
+    }
+
+    if (body?.advisorType === "lead-hunter") {
+      const query = typeof body?.query === "string" ? body.query : typeof body?.inputs?.contents === "string" ? body.inputs.contents : ""
+      if (!query.trim()) {
+        return NextResponse.json({ error: "query is required" }, { status: 400 })
+      }
+
+      const chatRes = await sendMessage(
+        config,
+        buildLeadHunterChatPayload({
+          query,
+          responseMode: body?.response_mode === "streaming" ? "streaming" : "blocking",
+          user: difyUser,
+        }),
+      )
+
+      if (!chatRes.ok) {
+        const chatError = await chatRes.text().catch(() => "")
+        return NextResponse.json({ error: "Dify Chat Error", details: chatError }, { status: chatRes.status })
+      }
+
+      if (body?.response_mode === "streaming" && chatRes.body) {
+        return new Response(chatRes.body, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        })
+      }
+
+      const chatData = (await chatRes.json().catch(() => null)) as
+        | { answer?: unknown; data?: { answer?: unknown } | null }
+        | null
+
+      return NextResponse.json({
+        answer: formatLeadHunterChatOutput(chatData?.answer ?? chatData?.data?.answer ?? chatData),
       })
     }
 

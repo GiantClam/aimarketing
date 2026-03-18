@@ -9,6 +9,7 @@ import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { deleteImageAssistantSessionContentCache } from "@/lib/image-assistant/session-store"
 import type { ImageAssistantConversationSummary } from "@/lib/image-assistant/types"
 import { cn } from "@/lib/utils"
 
@@ -166,6 +167,7 @@ export function ImageAssistantSidebarItem({
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
+      deleteImageAssistantSessionContentCache(nextSessionId)
       setPendingDeleteSession(null)
       if (pathname === `/dashboard/image-assistant/${nextSessionId}`) {
         router.push("/dashboard/image-assistant")

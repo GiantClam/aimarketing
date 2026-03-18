@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { deleteConversation } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { deleteLeadHunterConversation } from "@/lib/lead-hunter/repository"
 
 export async function DELETE(
     req: NextRequest,
@@ -14,6 +15,14 @@ export async function DELETE(
     const auth = await requireAdvisorAccess(req, body?.advisorType)
     if ("response" in auth) {
       return auth.response
+    }
+
+    if (body?.advisorType === "lead-hunter") {
+      const deleted = await deleteLeadHunterConversation(auth.user.id, resolved.conversationId)
+      if (!deleted) {
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+      }
+      return NextResponse.json({ success: true })
     }
 
     const difyUser = buildDifyUserIdentity(auth.user.email, body.advisorType)

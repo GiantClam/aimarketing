@@ -13,6 +13,7 @@ function isAbortError(error: unknown) {
 function getAdvisorTitle(advisorType: string) {
   if (advisorType === "brand-strategy") return "品牌战略顾问"
   if (advisorType === "growth") return "增长顾问"
+  if (advisorType === "lead-hunter") return "海外猎客"
   if (advisorType === "copywriting") return "文案写作专家"
   return "专家顾问"
 }
@@ -63,6 +64,11 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
         }
 
         if (advisorType === "growth" && !available.growth) {
+          router.replace("/dashboard")
+          return
+        }
+
+        if (advisorType === "lead-hunter" && !available.leadHunter) {
           router.replace("/dashboard")
           return
         }

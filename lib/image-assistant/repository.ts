@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import {
@@ -19,6 +19,7 @@ import type {
   ImageAssistantConversationSummary,
   ImageAssistantLayer,
   ImageAssistantMessage,
+  ImageAssistantMessagePage,
   ImageAssistantMode,
   ImageAssistantReferenceRole,
   ImageAssistantSessionDetail,
@@ -26,18 +27,26 @@ import type {
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
   ImageAssistantVersionKind,
+  ImageAssistantVersionPage,
   ImageAssistantVersionSummary,
 } from "@/lib/image-assistant/types"
 
 const DB_RETRY_DELAYS_MS = [250, 750]
 const SESSION_PREFIX = "[image-assistant] "
 
+type CursorParts = {
+  timestamp: Date
+  id: number
+}
+
 type ImageAssistantListMessagesOptions = {
   limit?: number
+  cursor?: string | null
 }
 
 type ImageAssistantListVersionsOptions = {
   limit?: number
+  cursor?: string | null
 }
 
 type ImageAssistantListAssetsOptions = {
@@ -135,6 +144,27 @@ function toStoredSessionTitle(title: string) {
 function parseDatabaseId(value: string | null | undefined) {
   const parsed = Number.parseInt(String(value || ""), 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function parseCursor(value: string | null | undefined): CursorParts | null {
+  const match = /^(\d+):(\d+)$/u.exec(String(value || "").trim())
+  if (!match) return null
+
+  const timestampSeconds = Number.parseInt(match[1], 10)
+  const id = Number.parseInt(match[2], 10)
+  if (!Number.isFinite(timestampSeconds) || !Number.isFinite(id) || timestampSeconds <= 0 || id <= 0) {
+    return null
+  }
+
+  return {
+    timestamp: new Date(timestampSeconds * 1000),
+    id,
+  }
+}
+
+function buildCursor(createdAt: Date | string | number | null | undefined, id: number | null | undefined) {
+  if (!id || !Number.isFinite(id)) return null
+  return `${toEpochSeconds(createdAt)}:${id}`
 }
 
 function mapSession(row: any, coverAssetUrl?: string | null): ImageAssistantConversationSummary {
@@ -889,58 +919,95 @@ export async function setSelectedVersionCandidate(params: {
   return true
 }
 
+export async function listImageAssistantMessagesPage(
+  userId: number,
+  sessionId: string,
+  options?: ImageAssistantListMessagesOptions,
+): Promise<ImageAssistantMessagePage> {
+  const existing = await getImageAssistantSession(userId, sessionId)
+  if (!existing) {
+    return { data: [], has_more: false, limit: options?.limit || 0, next_cursor: null }
+  }
+
+  const limit = Math.max(1, Math.min(options?.limit || 20, 200))
+  const cursor = parseCursor(options?.cursor)
+  const rows = await withDbRetry("list-image-messages", () => {
+    const query = db
+      .select()
+      .from(imageDesignMessages)
+      .where(
+        and(
+          eq(imageDesignMessages.sessionId, Number(sessionId)),
+          cursor
+            ? or(
+                lt(imageDesignMessages.createdAt, cursor.timestamp),
+                and(eq(imageDesignMessages.createdAt, cursor.timestamp), lt(imageDesignMessages.id, cursor.id)),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(desc(imageDesignMessages.createdAt), desc(imageDesignMessages.id))
+      .limit(limit + 1)
+
+    return query
+  })
+
+  const visibleRows = rows.slice(0, limit)
+  const hasMore = rows.length > limit
+  const normalizedRows = [...visibleRows].reverse()
+  const data = normalizedRows.map(mapMessage)
+  const nextCursor = hasMore ? buildCursor(visibleRows.at(-1)?.createdAt, visibleRows.at(-1)?.id) : null
+
+  return {
+    data,
+    has_more: hasMore,
+    limit,
+    next_cursor: nextCursor,
+  }
+}
+
 export async function listImageAssistantMessages(
   userId: number,
   sessionId: string,
   options?: ImageAssistantListMessagesOptions,
 ) {
-  const existing = await getImageAssistantSession(userId, sessionId)
-  if (!existing) return []
-
-  const limit = options?.limit ? Math.max(1, Math.min(options.limit, 200)) : null
-  const rows = await withDbRetry("list-image-messages", () => {
-    const ascendingQuery = db
-      .select()
-      .from(imageDesignMessages)
-      .where(eq(imageDesignMessages.sessionId, Number(sessionId)))
-      .orderBy(asc(imageDesignMessages.createdAt), asc(imageDesignMessages.id))
-
-    if (!limit) {
-      return ascendingQuery
-    }
-
-    return db
-      .select()
-      .from(imageDesignMessages)
-      .where(eq(imageDesignMessages.sessionId, Number(sessionId)))
-      .orderBy(desc(imageDesignMessages.createdAt), desc(imageDesignMessages.id))
-      .limit(limit)
-  })
-
-  const normalizedRows = limit ? [...rows].reverse() : rows
-  return normalizedRows.map(mapMessage)
+  return (await listImageAssistantMessagesPage(userId, sessionId, options)).data
 }
 
-export async function listImageAssistantVersions(
+export async function listImageAssistantVersionsPage(
   userId: number,
   sessionId: string,
   options?: ImageAssistantListVersionsOptions,
-) {
+): Promise<ImageAssistantVersionPage> {
   const existing = await getImageAssistantSession(userId, sessionId)
-  if (!existing) return []
+  if (!existing) {
+    return { data: [], has_more: false, limit: options?.limit || 0, next_cursor: null }
+  }
 
-  const limit = options?.limit ? Math.max(1, Math.min(options.limit, 100)) : null
+  const limit = Math.max(1, Math.min(options?.limit || 20, 100))
+  const cursor = parseCursor(options?.cursor)
   const rows = await withDbRetry("list-image-versions", () => {
     const query = db
       .select()
       .from(imageDesignVersions)
-      .where(eq(imageDesignVersions.sessionId, Number(sessionId)))
+      .where(
+        and(
+          eq(imageDesignVersions.sessionId, Number(sessionId)),
+          cursor
+            ? or(
+                lt(imageDesignVersions.createdAt, cursor.timestamp),
+                and(eq(imageDesignVersions.createdAt, cursor.timestamp), lt(imageDesignVersions.id, cursor.id)),
+              )
+            : undefined,
+        ),
+      )
       .orderBy(desc(imageDesignVersions.createdAt), desc(imageDesignVersions.id))
 
-    return limit ? query.limit(limit) : query
+    return query.limit(limit + 1)
   })
 
-  const candidates = await listVersionCandidates(rows.map((row) => row.id))
+  const visibleRows = rows.slice(0, limit)
+  const candidates = await listVersionCandidates(visibleRows.map((row) => row.id))
   const groupedCandidates = new Map<number, ImageAssistantCandidate[]>()
   for (const row of candidates) {
     const mapped = mapCandidate(row)
@@ -949,7 +1016,7 @@ export async function listImageAssistantVersions(
     groupedCandidates.set(row.versionId, bucket)
   }
 
-  return rows.map(
+  const data = visibleRows.map(
     (row) =>
       ({
         id: String(row.id),
@@ -965,6 +1032,24 @@ export async function listImageAssistantVersions(
         candidates: groupedCandidates.get(row.id) || [],
       }) satisfies ImageAssistantVersionSummary,
   )
+
+  const hasMore = rows.length > limit
+  const nextCursor = hasMore ? buildCursor(visibleRows.at(-1)?.createdAt, visibleRows.at(-1)?.id) : null
+
+  return {
+    data,
+    has_more: hasMore,
+    limit,
+    next_cursor: nextCursor,
+  }
+}
+
+export async function listImageAssistantVersions(
+  userId: number,
+  sessionId: string,
+  options?: ImageAssistantListVersionsOptions,
+) {
+  return (await listImageAssistantVersionsPage(userId, sessionId, options)).data
 }
 
 export async function saveImageAssistantCanvas(params: {
@@ -1171,14 +1256,14 @@ export async function getImageAssistantSessionDetail(
     assetTypes: options?.assetTypes,
   }
 
-  const [summary, messages, versions, assets, canvasDocument] = await Promise.all([
+  const [summary, messagePage, versionPage, assets, canvasDocument] = await Promise.all([
     Promise.resolve(mapSession(session, session.coverAssetUrl)),
     config.includeMessages
-      ? listImageAssistantMessages(userId, sessionId, { limit: config.messageLimit })
-      : Promise.resolve([]),
+      ? listImageAssistantMessagesPage(userId, sessionId, { limit: config.messageLimit })
+      : Promise.resolve({ data: [], has_more: false, limit: config.messageLimit || 0, next_cursor: null }),
     config.includeVersions
-      ? listImageAssistantVersions(userId, sessionId, { limit: config.versionLimit })
-      : Promise.resolve([]),
+      ? listImageAssistantVersionsPage(userId, sessionId, { limit: config.versionLimit })
+      : Promise.resolve({ data: [], has_more: false, limit: config.versionLimit || 0, next_cursor: null }),
     config.includeAssets
       ? listImageAssistantAssets(userId, sessionId, {
           limit: config.assetLimit,
@@ -1195,15 +1280,19 @@ export async function getImageAssistantSessionDetail(
 
   const meta: ImageAssistantSessionDetailMeta = {
     messages_total: messageTotal,
-    messages_loaded: messages.length,
+    messages_loaded: messagePage.data.length,
+    messages_has_more: messagePage.has_more,
+    messages_next_cursor: messagePage.next_cursor,
     versions_total: versionTotal,
-    versions_loaded: versions.length,
+    versions_loaded: versionPage.data.length,
+    versions_has_more: versionPage.has_more,
+    versions_next_cursor: versionPage.next_cursor,
   }
 
   return {
     session: summary,
-    messages,
-    versions,
+    messages: messagePage.data,
+    versions: versionPage.data,
     assets,
     canvas_document: canvasDocument,
     meta,

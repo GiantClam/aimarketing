@@ -1,12 +1,14 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { usePathname } from "next/navigation"
 
 import { useAuth } from "@/components/auth-provider"
 
 type DashboardAdvisorAvailability = {
   brandStrategy: boolean
   growth: boolean
+  leadHunter: boolean
   copywriting: boolean
   hasAny: boolean
 }
@@ -31,6 +33,7 @@ const DEFAULT_AVAILABILITY: DashboardAvailabilityState = {
   advisor: {
     brandStrategy: false,
     growth: false,
+    leadHunter: false,
     copywriting: false,
     hasAny: false,
   },
@@ -50,6 +53,7 @@ const DashboardAvailabilityContext = createContext<DashboardAvailabilityState>(D
 
 export function DashboardAvailabilityProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth()
+  const pathname = usePathname()
   const [availability, setAvailability] = useState<DashboardAvailabilityState>(DEFAULT_AVAILABILITY)
 
   useEffect(() => {
@@ -90,6 +94,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
           advisor: {
             brandStrategy: Boolean(json?.data?.advisor?.brandStrategy),
             growth: Boolean(json?.data?.advisor?.growth),
+            leadHunter: Boolean(json?.data?.advisor?.leadHunter),
             copywriting: Boolean(json?.data?.advisor?.copywriting),
             hasAny: Boolean(json?.data?.advisor?.hasAny),
           },
@@ -117,7 +122,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
       cancelled = true
       controller.abort()
     }
-  }, [authLoading, user?.id])
+  }, [authLoading, pathname, user?.enterpriseId, user?.id])
 
   const value = useMemo(() => availability, [availability])
   return <DashboardAvailabilityContext.Provider value={value}>{children}</DashboardAvailabilityContext.Provider>

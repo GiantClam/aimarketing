@@ -1,6 +1,6 @@
 import { GoogleGenAI, createPartFromUri } from "@google/genai"
 
-import { writerFetch } from "@/lib/writer/network"
+import { loadImageSourceForModel } from "@/lib/image-assistant/assets"
 
 import type { ImageAssistantResolution, ImageAssistantSizePreset } from "@/lib/image-assistant/types"
 
@@ -157,21 +157,15 @@ async function waitForUploadedFileActive(fileName: string, abortSignal?: AbortSi
 
 export async function uploadImageAssistantReferenceToGoogle(params: {
   url: string
-  mimeType: string
   displayName: string
   signal?: AbortSignal
 }) {
   const ai = getGoogleClient()
-  const response = await writerFetch(params.url, { signal: params.signal })
-  if (!response.ok) {
-    throw new Error(`google_file_source_fetch_failed:${response.status}`)
-  }
-
-  const buffer = await response.arrayBuffer()
+  const source = await loadImageSourceForModel(params.url)
   const uploaded = await ai.files.upload({
-    file: new Blob([buffer], { type: params.mimeType }),
+    file: new Blob([source.buffer], { type: source.mimeType }),
     config: {
-      mimeType: params.mimeType,
+      mimeType: source.mimeType,
       displayName: params.displayName,
       abortSignal: params.signal,
     },
@@ -185,7 +179,7 @@ export async function uploadImageAssistantReferenceToGoogle(params: {
   return {
     name: String(file.name || ""),
     uri: String(file.uri),
-    mimeType: String(file.mimeType || params.mimeType),
+    mimeType: String(file.mimeType || source.mimeType),
     createTime: file.createTime || null,
     expirationTime: file.expirationTime || null,
   }

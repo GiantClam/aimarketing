@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { getMessages } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { listLeadHunterMessages } from "@/lib/lead-hunter/repository"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -19,6 +20,14 @@ export async function GET(req: NextRequest) {
     const auth = await requireAdvisorAccess(req, advisorType)
     if ("response" in auth) {
       return auth.response
+    }
+
+    if (advisorType === "lead-hunter") {
+      const data = await listLeadHunterMessages(auth.user.id, conversationId, firstId, limit)
+      if (!data) {
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+      }
+      return NextResponse.json(data)
     }
 
     const difyUser = buildDifyUserIdentity(auth.user.email, advisorType)

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return auth.response
     }
 
-    const rateLimit = checkRateLimit({
+    const rateLimit = await checkRateLimit({
       key: `webgen:${auth.user.id}:${getRequestIp(request)}`,
       limit: 10,
       windowMs: 60_000,

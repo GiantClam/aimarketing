@@ -51,7 +51,7 @@ type EnterpriseDifyRemoteDataset = {
   sampleDocuments?: string[]
 }
 
-type EnterpriseAdvisorType = "brand-strategy" | "growth"
+type EnterpriseAdvisorType = "brand-strategy" | "growth" | "lead-hunter"
 
 type AdvisorSettingsDraft = {
   useDefault: boolean
@@ -79,6 +79,15 @@ const KNOWLEDGE_COVERAGE_LABELS = {
   faq: "问答资料",
 } as const
 
+function formatEnterpriseDifyMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : ""
+  if (message === "base_url_required") return "请填写 Dify API Base URL。"
+  if (message === "api_key_required_when_enabled") return "启用企业知识检索前，请先填写 Dify API Key。"
+  if (message === "datasets_required_when_enabled") return "启用企业知识检索前，请至少启用一个知识库。"
+  if (message === "dify_config_incomplete") return "请先填写完整的 Dify API Base URL 和 API Key。"
+  return message || fallback
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const { user, isDemoMode, isEnterpriseAdmin, updateProfile, refreshProfile, logout } = useAuth()
@@ -104,10 +113,12 @@ export default function SettingsPage() {
     baseUrl: string | null
     brandStrategy: { configured: boolean; baseUrl: string | null }
     growth: { configured: boolean; baseUrl: string | null }
+    leadHunter: { configured: boolean; baseUrl: string | null }
   } | null>(null)
   const [advisorDrafts, setAdvisorDrafts] = useState<Record<EnterpriseAdvisorType, AdvisorSettingsDraft>>({
     "brand-strategy": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
     growth: { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+    "lead-hunter": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
   })
   const [loadingAdvisorConfig, setLoadingAdvisorConfig] = useState(false)
   const [savingAdvisorType, setSavingAdvisorType] = useState<EnterpriseAdvisorType | null>(null)
@@ -194,10 +205,15 @@ export default function SettingsPage() {
       const nextDrafts: Record<EnterpriseAdvisorType, AdvisorSettingsDraft> = {
         "brand-strategy": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
         growth: { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+        "lead-hunter": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
       }
 
       for (const override of overrides) {
-        if (override?.advisorType === "brand-strategy" || override?.advisorType === "growth") {
+        if (
+          override?.advisorType === "brand-strategy" ||
+          override?.advisorType === "growth" ||
+          override?.advisorType === "lead-hunter"
+        ) {
           const advisorType = override.advisorType as EnterpriseAdvisorType
           nextDrafts[advisorType] = {
             useDefault: false,
@@ -326,7 +342,7 @@ export default function SettingsPage() {
       })
       setDifyMessage(`已拉取 ${datasets.length} 个 Dify 知识库。`)
     } catch (error) {
-      setDifyMessage(error instanceof Error ? error.message : "知识库拉取失败")
+      setDifyMessage(formatEnterpriseDifyMessage(error, "知识库拉取失败"))
     } finally {
       setLoadingRemoteDatasets(false)
     }
@@ -339,6 +355,16 @@ export default function SettingsPage() {
   }
 
   const saveDifyConfig = async () => {
+    const enabledDatasets = difyDatasets.filter((dataset) => dataset.enabled)
+    if (difyEnabled && !difyApiKey.trim()) {
+      setDifyMessage("启用企业知识检索前，请先填写 Dify API Key。")
+      return
+    }
+    if (difyEnabled && enabledDatasets.length === 0) {
+      setDifyMessage("启用企业知识检索前，请至少启用一个知识库。")
+      return
+    }
+
     setSavingDifyConfig(true)
     setDifyMessage("")
     try {
@@ -349,7 +375,7 @@ export default function SettingsPage() {
           baseUrl: difyBaseUrl,
           apiKey: difyApiKey,
           enabled: difyEnabled,
-          datasets: difyDatasets.filter((dataset) => dataset.enabled),
+          datasets: enabledDatasets,
         }),
       })
 
@@ -375,7 +401,7 @@ export default function SettingsPage() {
       )
       setDifyMessage("Dify 企业知识配置已保存。")
     } catch (error) {
-      setDifyMessage(error instanceof Error ? error.message : "Dify 配置保存失败")
+      setDifyMessage(formatEnterpriseDifyMessage(error, "Dify 配置保存失败"))
     } finally {
       setSavingDifyConfig(false)
     }
@@ -420,10 +446,15 @@ export default function SettingsPage() {
       const nextDrafts: Record<EnterpriseAdvisorType, AdvisorSettingsDraft> = {
         "brand-strategy": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
         growth: { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
+        "lead-hunter": { useDefault: true, baseUrl: "", apiKey: "", enabled: true },
       }
 
       for (const override of overrides) {
-        if (override?.advisorType === "brand-strategy" || override?.advisorType === "growth") {
+        if (
+          override?.advisorType === "brand-strategy" ||
+          override?.advisorType === "growth" ||
+          override?.advisorType === "lead-hunter"
+        ) {
           const advisorType = override.advisorType as EnterpriseAdvisorType
           nextDrafts[advisorType] = {
             useDefault: false,
@@ -435,7 +466,9 @@ export default function SettingsPage() {
       }
 
       setAdvisorDrafts(nextDrafts)
-      setAdvisorMessage(`${advisorType === "brand-strategy" ? "品牌顾问" : "增长顾问"} 配置已保存。`)
+      setAdvisorMessage(
+        `${advisorType === "brand-strategy" ? "品牌顾问" : advisorType === "growth" ? "增长顾问" : "海外猎客"} 配置已保存。`,
+      )
     } catch (error) {
       setAdvisorMessage(error instanceof Error ? error.message : "顾问配置保存失败")
     } finally {
@@ -463,12 +496,17 @@ export default function SettingsPage() {
     {
       advisorType: "brand-strategy",
       title: "品牌顾问",
-      description: "默认走环境变量中的品牌顾问 Dify 配置；如需企业专属顾问，可在这里覆盖。",
+      description: "默认走系统品牌顾问 workflow；如需企业专属 workflow，可在这里覆盖。",
     },
     {
       advisorType: "growth",
       title: "增长顾问",
-      description: "默认走环境变量中的增长顾问 Dify 配置；如需企业专属顾问，可在这里覆盖。",
+      description: "默认走系统增长顾问 workflow；如需企业专属 workflow，可在这里覆盖。",
+    },
+    {
+      advisorType: "lead-hunter",
+      title: "海外猎客",
+      description: "仅在企业数据库里配置后才展示。会话交互与专家顾问一致，但每次只触发当前搜索条件对应的 Dify workflow。",
     },
   ]
 
@@ -550,7 +588,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Shield className="h-4 w-4" />成员功能权限</CardTitle>
-                <CardDescription>配置成员可访问的功能模块。</CardDescription>
+              <CardDescription>配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问与增长顾问；企业管理员始终可见。</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {members.map((member) => {
@@ -598,7 +636,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Building2 className="h-4 w-4" />Dify 企业知识库</CardTitle>
-                <CardDescription>配置企业级 Dify API 与知识库绑定。写作助手会根据当前企业自动加载这些知识，减少多轮追问。</CardDescription>
+                <CardDescription>配置企业统一的 Dify API 与知识库绑定。当前写作助手已接入，其他 agent 后续也可按检索用途复用这套企业知识。</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -610,7 +648,7 @@ export default function SettingsPage() {
                       onChange={(event) => setDifyBaseUrl(event.target.value)}
                       placeholder="https://your-dify.example.com/v1"
                     />
-                    <p className="text-xs text-muted-foreground">建议填写包含 <code>/v1</code> 的 API 基础地址；未填写时写作助手不会接入企业知识。</p>
+                    <p className="text-xs text-muted-foreground">建议填写包含 <code>/v1</code> 的 API 基础地址；未填写时企业知识检索不会启用。</p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="dify-api-key">Dify API Key</Label>
@@ -631,7 +669,7 @@ export default function SettingsPage() {
                     checked={difyEnabled}
                     onChange={(event) => setDifyEnabled(event.target.checked)}
                   />
-                  <span>启用企业知识增强写作</span>
+                  <span>启用企业统一知识检索</span>
                 </label>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -652,10 +690,11 @@ export default function SettingsPage() {
                 <div className="space-y-3 rounded-lg border p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium">知识库绑定</p>
+                      <p className="text-sm font-medium">知识库绑定与检索用途</p>
                       <p className="text-xs text-muted-foreground">
-                        为写作助手选择企业级知识库，并指定主要用途。系统会根据知识库文档自动给出覆盖模块建议，便于后续接入更多企业。
+                        为企业配置统一可复用的 Dify 知识库，并指定主要检索用途。系统会根据文档自动给出建议用途，便于后续按 agent、场景和工作流复用。
                       </p>
+                      <p className="text-xs text-muted-foreground">优先级数字越小越靠前；当前单次检索最多使用前 4 个符合用途的知识库。</p>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       已发现 {remoteDatasets.length} 个 / 已启用 {enabledDifyDatasetCount} 个
@@ -700,7 +739,7 @@ export default function SettingsPage() {
                               </label>
                               <div className="grid min-w-[220px] gap-3 sm:grid-cols-2">
                                 <label className="grid gap-1 text-xs text-muted-foreground">
-                                  <span>用途</span>
+                                  <span>检索用途</span>
                                   <select
                                     className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
                                     value={dataset.scope}
@@ -744,8 +783,8 @@ export default function SettingsPage() {
           {isEnterpriseAdmin && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Shield className="h-4 w-4" />专家顾问 Dify 配置</CardTitle>
-                <CardDescription>所有企业默认使用系统环境变量中的顾问配置；仅在需要企业定制时，才保存企业专属版本。</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Shield className="h-4 w-4" />专家顾问 Dify Workflow 配置</CardTitle>
+              <CardDescription>品牌顾问和增长顾问默认走系统通用 workflow，所有已激活企业管理员可直接使用；如企业配置了专属 workflow，会覆盖系统默认配置。</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">正在读取顾问配置...</p>}
@@ -753,7 +792,12 @@ export default function SettingsPage() {
                 <div className="grid gap-4">
                   {advisorCards.map((card) => {
                     const draft = advisorDrafts[card.advisorType]
-                    const defaultInfo = card.advisorType === "brand-strategy" ? advisorDefaults?.brandStrategy : advisorDefaults?.growth
+                    const defaultInfo =
+                      card.advisorType === "brand-strategy"
+                        ? advisorDefaults?.brandStrategy
+                        : card.advisorType === "growth"
+                          ? advisorDefaults?.growth
+                          : advisorDefaults?.leadHunter
                     return (
                       <div key={card.advisorType} className="space-y-4 rounded-lg border p-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -762,13 +806,22 @@ export default function SettingsPage() {
                             <p className="text-xs text-muted-foreground">{card.description}</p>
                           </div>
                           <span className="rounded-full border px-3 py-1 text-xs text-muted-foreground">
-                            {draft.useDefault ? "当前：系统默认" : "当前：企业定制"}
+                            {draft.useDefault ? (card.advisorType === "lead-hunter" ? "当前：未配置" : "当前：系统默认") : "当前：企业定制"}
                           </span>
                         </div>
 
                         <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
-                          <p>系统默认 Base URL：{defaultInfo?.baseUrl || advisorDefaults?.baseUrl || "未配置"}</p>
-                          <p>系统默认 Key：{defaultInfo?.configured ? "已配置" : "未配置"}</p>
+                          {card.advisorType === "lead-hunter" ? (
+                            <>
+                              <p>海外猎客没有系统默认配置。</p>
+                              <p>只有保存企业定制 Base URL 和 API Key 后，侧边栏和 Dashboard 才会显示该入口。</p>
+                            </>
+                          ) : (
+                            <>
+                              <p>系统默认 Base URL：{defaultInfo?.baseUrl || advisorDefaults?.baseUrl || "未配置"}</p>
+                              <p>系统默认 Key：{defaultInfo?.configured ? "已配置" : "未配置"}</p>
+                            </>
+                          )}
                         </div>
 
                         <label className="flex items-center gap-2 text-sm">
@@ -778,7 +831,7 @@ export default function SettingsPage() {
                             checked={draft.useDefault}
                             onChange={(event) => updateAdvisorDraft(card.advisorType, { useDefault: event.target.checked })}
                           />
-                          <span>使用系统默认配置</span>
+                          <span>{card.advisorType === "lead-hunter" ? "关闭海外猎客入口（删除企业配置）" : "使用系统默认配置"}</span>
                         </label>
 
                         {!draft.useDefault && (

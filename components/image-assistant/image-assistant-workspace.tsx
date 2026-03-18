@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Download,
   Eraser,
@@ -33,12 +34,30 @@ import {
 } from "@/lib/assistant-task-store"
 import type { AppMessages } from "@/lib/i18n/messages"
 import { exportImageAssistantDataUrl, loadImageForCanvas, renderImageAssistantLayersToCanvas } from "@/lib/image-assistant/export"
+import {
+  ensureWorkspaceQueryData,
+  fetchWorkspaceQueryData,
+  getImageAssistantDetailQueryKey,
+  getImageAssistantMessagesPage,
+  getImageAssistantMessagesQueryKey,
+  getImageAssistantSessionDetail,
+  getImageAssistantVersionsPage,
+  getImageAssistantVersionsQueryKey,
+  invalidateImageAssistantSessionQueries,
+} from "@/lib/query/workspace-cache"
+import {
+  getImageAssistantSessionContentCache,
+  isImageAssistantSessionContentCacheFresh,
+  saveImageAssistantSessionContentCache,
+} from "@/lib/image-assistant/session-store"
+import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
 import type {
   ImageAssistantAsset,
   ImageAssistantCanvasDocument,
   ImageAssistantConversationSummary,
   ImageAssistantLayer,
+  ImageAssistantMessage,
   ImageAssistantResolution,
   ImageAssistantSessionDetail,
   ImageAssistantSizePreset,
@@ -110,6 +129,19 @@ type PendingConversationTurn = {
   status: "running" | "cancelled"
 }
 
+function getStoredPendingTurn(sessionId: string | null): PendingConversationTurn | null {
+  const pendingTask = findImagePendingTask(sessionId)
+  if (!pendingTask) return null
+
+  return {
+    id: `pending-turn-${pendingTask.taskId}`,
+    kind: pendingTask.taskType === "edit" ? "edit" : "generate",
+    prompt: pendingTask.prompt || "",
+    attachments: [],
+    status: "running",
+  }
+}
+
 type MessageMetaPill = {
   label: string
   value: string
@@ -143,6 +175,57 @@ type CandidatePreviewImageProps = {
   loadPreview: () => Promise<string | null>
   onResolved?: (src: string) => void
   className?: string
+}
+
+type PersistedMessageAttachment = {
+  id: string
+  assetId: string
+  src: string | null
+  width: number | null
+  height: number | null
+  baseAssetId?: string | null
+  maskAssetId?: string | null
+  patchBounds?: CanvasSelectionBounds | null
+}
+
+function getRunKindLabel(kind: ImageAssistantRunKind, copy: { generateMode: string; editMode: string }) {
+  return kind === "edit" ? copy.editMode : copy.generateMode
+}
+
+function getMessageReferenceAssetIds(message: ImageAssistantMessage | null | undefined) {
+  const requestPayload =
+    message?.request_payload && typeof message.request_payload === "object"
+      ? (message.request_payload as Record<string, unknown>)
+      : null
+  return Array.isArray(requestPayload?.referenceAssetIds)
+    ? requestPayload.referenceAssetIds.filter((value): value is string => typeof value === "string")
+    : []
+}
+
+function getClarificationCarryoverReferenceAssetIds(messages: ImageAssistantMessage[]) {
+  let latestAssistant: ImageAssistantMessage | null = null
+  let latestUserPrompt: ImageAssistantMessage | null = null
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (!latestAssistant) {
+      if (message.role === "assistant") {
+        latestAssistant = message
+      }
+      continue
+    }
+
+    if (message.role === "user" && message.message_type === "prompt") {
+      latestUserPrompt = message
+      break
+    }
+  }
+
+  if (!latestAssistant || latestAssistant.message_type !== "note") {
+    return []
+  }
+
+  return getMessageReferenceAssetIds(latestUserPrompt)
 }
 
 const DEFAULT_IMAGE_RESOLUTION: ImageAssistantResolution = "2K"
@@ -192,8 +275,12 @@ function mergeSessionDetail(
     meta: {
       messages_total: sections.messages ? next.meta.messages_total : current?.meta.messages_total || 0,
       messages_loaded: sections.messages ? next.meta.messages_loaded : current?.meta.messages_loaded || 0,
+      messages_has_more: sections.messages ? next.meta.messages_has_more : current?.meta.messages_has_more || false,
+      messages_next_cursor: sections.messages ? next.meta.messages_next_cursor : current?.meta.messages_next_cursor || null,
       versions_total: sections.versions ? next.meta.versions_total : current?.meta.versions_total || 0,
       versions_loaded: sections.versions ? next.meta.versions_loaded : current?.meta.versions_loaded || 0,
+      versions_has_more: sections.versions ? next.meta.versions_has_more : current?.meta.versions_has_more || false,
+      versions_next_cursor: sections.versions ? next.meta.versions_next_cursor : current?.meta.versions_next_cursor || null,
     },
   }
 }
@@ -210,13 +297,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
-function getCanvasSelectionAspectRatio(bounds: CanvasSelectionBounds | null) {
-  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return null
-  return bounds.width / bounds.height
-}
-
-function getNearestSizePresetForCanvasBounds(bounds: CanvasSelectionBounds | null): ImageAssistantSizePreset {
-  const aspectRatio = getCanvasSelectionAspectRatio(bounds)
+function getNearestSizePresetForAspectRatio(aspectRatio: number | null): ImageAssistantSizePreset {
   if (!aspectRatio) return "1:1"
 
   const presets: Array<{ preset: ImageAssistantSizePreset; ratio: number }> = [
@@ -234,6 +315,14 @@ function getNearestSizePresetForCanvasBounds(bounds: CanvasSelectionBounds | nul
   }).preset
 }
 
+function getNearestSizePresetForDimensions(width: number | null | undefined, height: number | null | undefined): ImageAssistantSizePreset {
+  if (!width || !height || width <= 0 || height <= 0) {
+    return "1:1"
+  }
+
+  return getNearestSizePresetForAspectRatio(width / height)
+}
+
 function isPatchCompositeCompatible(params: {
   baseWidth: number
   baseHeight: number
@@ -241,22 +330,194 @@ function isPatchCompositeCompatible(params: {
   patchHeight: number
   patchBounds: CanvasSelectionBounds
 }) {
-  const patchAspectRatio = getCanvasSelectionAspectRatio(params.patchBounds)
-  const generatedAspectRatio =
-    params.patchWidth > 0 && params.patchHeight > 0 ? params.patchWidth / params.patchHeight : null
-  const baseAspectRatio = params.baseWidth > 0 && params.baseHeight > 0 ? params.baseWidth / params.baseHeight : null
-
-  if (!patchAspectRatio || !generatedAspectRatio || !baseAspectRatio) {
+  if (
+    params.baseWidth <= 0 ||
+    params.baseHeight <= 0 ||
+    params.patchWidth <= 0 ||
+    params.patchHeight <= 0 ||
+    params.patchBounds.width <= 0 ||
+    params.patchBounds.height <= 0
+  ) {
     return false
   }
 
-  const aspectDelta = Math.abs(generatedAspectRatio - patchAspectRatio) / patchAspectRatio
-  const looksLikeFullFrameResult =
-    Math.abs(params.patchWidth - params.baseWidth) <= Math.max(8, params.baseWidth * 0.12) &&
-    Math.abs(params.patchHeight - params.baseHeight) <= Math.max(8, params.baseHeight * 0.12)
-  const looksLikeBaseAspect = Math.abs(generatedAspectRatio - baseAspectRatio) / baseAspectRatio <= 0.08
+  return true
+}
 
-  return aspectDelta <= 0.12 && !looksLikeFullFrameResult && !looksLikeBaseAspect
+function isFullFramePatchResult(params: {
+  baseWidth: number
+  baseHeight: number
+  patchWidth: number
+  patchHeight: number
+}) {
+  const widthDelta = Math.abs(params.patchWidth - params.baseWidth)
+  const heightDelta = Math.abs(params.patchHeight - params.baseHeight)
+  if (
+    widthDelta <= Math.max(8, params.baseWidth * 0.12) &&
+    heightDelta <= Math.max(8, params.baseHeight * 0.12)
+  ) {
+    return true
+  }
+
+  const generatedAspectRatio = params.patchWidth / params.patchHeight
+  const baseAspectRatio = params.baseWidth / params.baseHeight
+  return Math.abs(generatedAspectRatio - baseAspectRatio) / baseAspectRatio <= 0.08
+}
+
+function getImageContainPlacement(params: {
+  sourceWidth: number
+  sourceHeight: number
+  targetWidth: number
+  targetHeight: number
+}) {
+  if (
+    params.sourceWidth <= 0 ||
+    params.sourceHeight <= 0 ||
+    params.targetWidth <= 0 ||
+    params.targetHeight <= 0
+  ) {
+    return null
+  }
+
+  const scale = Math.min(params.targetWidth / params.sourceWidth, params.targetHeight / params.sourceHeight)
+  const scaledWidth = params.sourceWidth * scale
+  const scaledHeight = params.sourceHeight * scale
+
+  return {
+    scale,
+    offsetX: (params.targetWidth - scaledWidth) / 2,
+    offsetY: (params.targetHeight - scaledHeight) / 2,
+  }
+}
+
+function drawImageContain(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number,
+) {
+  const placement = getImageContainPlacement({
+    sourceWidth,
+    sourceHeight,
+    targetWidth,
+    targetHeight,
+  })
+  if (!placement) {
+    return
+  }
+
+  ctx.drawImage(
+    image,
+    0,
+    0,
+    sourceWidth,
+    sourceHeight,
+    placement.offsetX,
+    placement.offsetY,
+    sourceWidth * placement.scale,
+    sourceHeight * placement.scale,
+  )
+}
+
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number,
+) {
+  if (sourceWidth <= 0 || sourceHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+    return
+  }
+
+  const sourceAspectRatio = sourceWidth / sourceHeight
+  const targetAspectRatio = targetWidth / targetHeight
+
+  if (Math.abs(sourceAspectRatio - targetAspectRatio) <= 0.001) {
+    ctx.drawImage(image, 0, 0, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight)
+    return
+  }
+
+  let sx = 0
+  let sy = 0
+  let sw = sourceWidth
+  let sh = sourceHeight
+
+  if (sourceAspectRatio > targetAspectRatio) {
+    sw = sourceHeight * targetAspectRatio
+    sx = (sourceWidth - sw) / 2
+  } else {
+    sh = sourceWidth / targetAspectRatio
+    sy = (sourceHeight - sh) / 2
+  }
+
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight)
+}
+
+function drawPatchResultToCanvas(params: {
+  patchCtx: CanvasRenderingContext2D
+  patchImage: HTMLImageElement
+  baseWidth: number
+  baseHeight: number
+  patchWidth: number
+  patchHeight: number
+  targetWidth: number
+  targetHeight: number
+  patchBounds: CanvasSelectionBounds
+}) {
+  const {
+    patchCtx,
+    patchImage,
+    baseWidth,
+    baseHeight,
+    patchWidth,
+    patchHeight,
+    targetWidth,
+    targetHeight,
+    patchBounds,
+  } = params
+
+  const shouldCropFromFullFrame =
+    patchWidth > patchBounds.width * 3 &&
+    patchHeight > patchBounds.height * 3 &&
+    isFullFramePatchResult({
+      baseWidth,
+      baseHeight,
+      patchWidth,
+      patchHeight,
+    })
+
+  if (shouldCropFromFullFrame) {
+    const placement = getImageContainPlacement({
+      sourceWidth: baseWidth,
+      sourceHeight: baseHeight,
+      targetWidth: patchWidth,
+      targetHeight: patchHeight,
+    })
+    if (!placement) {
+      return
+    }
+
+    const cropX = Math.max(0, Math.min(patchWidth, Math.round(placement.offsetX + patchBounds.x * placement.scale)))
+    const cropY = Math.max(0, Math.min(patchHeight, Math.round(placement.offsetY + patchBounds.y * placement.scale)))
+    const cropWidth = Math.max(1, Math.min(patchWidth - cropX, Math.round(patchBounds.width * placement.scale)))
+    const cropHeight = Math.max(1, Math.min(patchHeight - cropY, Math.round(patchBounds.height * placement.scale)))
+
+    patchCtx.drawImage(patchImage, cropX, cropY, cropWidth, cropHeight, 0, 0, targetWidth, targetHeight)
+    return
+  }
+
+  drawImageContain(
+    patchCtx,
+    patchImage,
+    patchWidth,
+    patchHeight,
+    targetWidth,
+    targetHeight,
+  )
 }
 
 function dataUrlToFile(dataUrl: string, filename: string) {
@@ -356,35 +617,6 @@ function unionCanvasSelectionBounds(
   }
 }
 
-function inflateCanvasSelectionBounds(
-  bounds: CanvasSelectionBounds | null,
-  padding: number,
-  canvasWidth: number,
-  canvasHeight: number,
-) {
-  if (!bounds) return null
-  return normalizeCanvasSelectionBounds(
-    {
-      x: bounds.x - padding,
-      y: bounds.y - padding,
-      width: bounds.width + padding * 2,
-      height: bounds.height + padding * 2,
-    },
-    canvasWidth,
-    canvasHeight,
-  )
-}
-
-function shiftCanvasSelectionBounds(bounds: CanvasSelectionBounds | null, offsetX: number, offsetY: number) {
-  if (!bounds) return null
-  return {
-    x: Math.max(0, bounds.x - offsetX),
-    y: Math.max(0, bounds.y - offsetY),
-    width: bounds.width,
-    height: bounds.height,
-  }
-}
-
 function isCanvasPatchEditMeta(value: unknown): value is CanvasPatchEditMeta {
   if (!value || typeof value !== "object") return false
   const candidate = value as Partial<CanvasPatchEditMeta>
@@ -420,6 +652,26 @@ function getCandidatePreviewCacheKey(params: {
     patchBounds.y,
     patchBounds.width,
     patchBounds.height,
+  ].join(":")
+}
+
+function getMessageAttachmentPreviewCacheKey(params: {
+  messageId: string
+  assetId: string
+  baseAssetId: string | null
+  maskAssetId: string | null
+  patchBounds: CanvasSelectionBounds | null
+}) {
+  const { messageId, assetId, baseAssetId, maskAssetId, patchBounds } = params
+  return [
+    messageId,
+    assetId,
+    baseAssetId || "none",
+    maskAssetId || "none",
+    patchBounds?.x ?? "na",
+    patchBounds?.y ?? "na",
+    patchBounds?.width ?? "na",
+    patchBounds?.height ?? "na",
   ].join(":")
 }
 
@@ -1093,6 +1345,7 @@ const PROMPT_PRESETS: PromptPreset[] = [
 
 export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId: string | null }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { messages: i18n } = useI18n()
   const imageCopy = i18n.imageAssistant
   const isEnglish = imageCopy.assistantName === "Image design assistant"
@@ -1169,14 +1422,18 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [, setIsSavingCanvas] = useState(false)
   const [dirtyCanvas, setDirtyCanvas] = useState(false)
   const [jobError, setJobError] = useState<string | null>(null)
-  const [pendingTurn, setPendingTurn] = useState<PendingConversationTurn | null>(null)
+  const [pendingTurn, setPendingTurn] = useState<PendingConversationTurn | null>(() =>
+    getStoredPendingTurn(initialSessionId),
+  )
   const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0)
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [zoomLevel, setZoomLevel] = useState<"fit" | number>("fit")
   const [isComposerDragActive, setIsComposerDragActive] = useState(false)
   const [candidatePreviewUrls, setCandidatePreviewUrls] = useState<Record<string, string>>({})
+  const [messageAttachmentPreviewUrls, setMessageAttachmentPreviewUrls] = useState<Record<string, string>>({})
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const messageViewportRef = useRef<HTMLDivElement | null>(null)
   const canvasViewportRef = useRef<HTMLDivElement | null>(null)
   const canvasStageRef = useRef<HTMLDivElement | null>(null)
   const paintStrokeRef = useRef<PaintPreview | null>(null)
@@ -1185,12 +1442,18 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const detailRequestIdRef = useRef(0)
   const modeRef = useRef(mode)
   const detailRef = useRef(detail)
+  const messageLimitRef = useRef(messageLimit)
+  const versionLimitRef = useRef(versionLimit)
   const isClosingEditorRef = useRef(false)
   const canvasRef = useRef(canvas)
   const attachmentPreviewUrlsRef = useRef<Set<string>>(new Set())
   const attachmentUploadPromisesRef = useRef<Map<string, Promise<{ assetId: string; maskAssetId: string | null }>>>(new Map())
   const composerDragDepthRef = useRef(0)
   const candidatePreviewComposeCacheRef = useRef<Map<string, Promise<string | null>>>(new Map())
+  const messageAttachmentPreviewComposeCacheRef = useRef<Map<string, Promise<string | null>>>(new Map())
+  const messageHistoryRestoreRef = useRef<{ height: number; top: number } | null>(null)
+  const shouldScrollMessagesToBottomRef = useRef(false)
+  const previousDisplayMessageCountRef = useRef(0)
   const canvasSnapshotCacheRef = useRef<{
     signature: string
     dataUrl: string
@@ -1246,8 +1509,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     ) => {
       const loadMode = options?.mode || "full"
       const sections = getSessionLoadSections(loadMode)
-      const effectiveMessageLimit = options?.messageLimit ?? messageLimit
-      const effectiveVersionLimit = options?.versionLimit ?? versionLimit
+      const effectiveMessageLimit = options?.messageLimit ?? messageLimitRef.current
+      const effectiveVersionLimit = options?.versionLimit ?? versionLimitRef.current
       if (options?.background) {
         setIsHydratingSession(true)
       } else if (loadMode !== "canvas") {
@@ -1256,15 +1519,21 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
       const requestId = ++detailRequestIdRef.current
       try {
-        const params = new URLSearchParams({ mode: loadMode })
-        if (sections.messages && loadMode !== "full") {
-          params.set("messageLimit", String(effectiveMessageLimit))
+        const queryOptions = {
+          queryKey: getImageAssistantDetailQueryKey(targetSessionId, {
+            mode: loadMode,
+            messageLimit: sections.messages && loadMode !== "full" ? effectiveMessageLimit : undefined,
+            versionLimit: sections.versions && loadMode !== "full" ? effectiveVersionLimit : undefined,
+          }),
+          queryFn: () => getImageAssistantSessionDetail(targetSessionId, {
+            mode: loadMode,
+            messageLimit: sections.messages && loadMode !== "full" ? effectiveMessageLimit : undefined,
+            versionLimit: sections.versions && loadMode !== "full" ? effectiveVersionLimit : undefined,
+          }),
         }
-        if (sections.versions && loadMode !== "full") {
-          params.set("versionLimit", String(effectiveVersionLimit))
-        }
-        const json = await requestJson(`/api/image-assistant/sessions/${targetSessionId}?${params.toString()}`)
-        const nextDetail = json.data as ImageAssistantSessionDetail
+        const nextDetail = options?.background
+          ? await fetchWorkspaceQueryData(queryClient, queryOptions)
+          : await ensureWorkspaceQueryData(queryClient, queryOptions)
         const shouldPreserveCanvas = Boolean(options?.preserveCanvas && canvasRef.current)
 
         if (requestId !== detailRequestIdRef.current) {
@@ -1312,7 +1581,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         }
       }
     },
-    [messageLimit, resetCanvasHistory, versionLimit],
+    [queryClient, resetCanvasHistory],
   )
 
   const syncSessionRoute = (targetSessionId: string) => {
@@ -1341,8 +1610,20 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   const composerAttachmentCount = pendingAttachments.length
   const hasCanvasEditAttachment = pendingAttachments.some((attachment) => attachment.source === "canvas")
-  const primaryRunKind: ImageAssistantRunKind = hasCanvasEditAttachment ? "edit" : "generate"
-  const composerModeLabel = primaryRunKind === "edit" ? extraCopy.editMode : extraCopy.generateMode
+  const shouldUseReferenceEditShortcut =
+    composerAttachmentCount > 0 &&
+    looksLikeReferenceEditIntent({
+      prompt,
+      taskType: "edit",
+      referenceCount: composerAttachmentCount,
+    })
+  const primaryRunKind: ImageAssistantRunKind =
+    hasCanvasEditAttachment || shouldUseReferenceEditShortcut ? "edit" : "generate"
+  const composerModeLabel = getRunKindLabel(primaryRunKind, extraCopy)
+  const clarificationCarryoverReferenceAssetIds = useMemo(
+    () => getClarificationCarryoverReferenceAssetIds(detail?.messages || []),
+    [detail?.messages],
+  )
   const versionById = useMemo(
     () => new Map((detail?.versions || []).map((version) => [version.id, version])),
     [detail?.versions],
@@ -1353,7 +1634,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     [detail?.versions, selectedVersionId],
   )
 
-  const hasMoreMessages = (detail?.meta.messages_loaded || 0) < (detail?.meta.messages_total || 0)
+  const hasMoreMessages = Boolean(detail?.meta.messages_has_more)
+  const hasMoreVersions = Boolean(detail?.meta.versions_has_more)
 
   const selectedLayer = useMemo(
     () => canvas?.layers.find((layer) => layer.id === selectedLayerId) || null,
@@ -1448,12 +1730,29 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         if (!patchCtx) {
           return null
         }
-        patchCtx.drawImage(patchImage, 0, 0, patchCanvas.width, patchCanvas.height)
+        drawPatchResultToCanvas({
+          patchCtx,
+          patchImage,
+          baseWidth,
+          baseHeight,
+          patchWidth,
+          patchHeight,
+          targetWidth: patchCanvas.width,
+          targetHeight: patchCanvas.height,
+          patchBounds: patchEdit.patchBounds,
+        })
 
         if (maskAsset?.url) {
           const maskImage = await loadImageForCanvas(maskAsset.url)
           patchCtx.globalCompositeOperation = "destination-in"
-          patchCtx.drawImage(maskImage, 0, 0, patchCanvas.width, patchCanvas.height)
+          drawImageCover(
+            patchCtx,
+            maskImage,
+            maskImage.naturalWidth || maskImage.width,
+            maskImage.naturalHeight || maskImage.height,
+            patchCanvas.width,
+            patchCanvas.height,
+          )
           patchCtx.globalCompositeOperation = "source-over"
         }
 
@@ -1475,6 +1774,180 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       return nextPreviewPromise
     },
     [detail?.assets, touchCandidatePreviewComposeCache],
+  )
+
+  const touchMessageAttachmentPreviewComposeCache = useCallback((cacheKey: string, value: Promise<string | null>) => {
+    const cache = messageAttachmentPreviewComposeCacheRef.current
+    if (cache.has(cacheKey)) {
+      cache.delete(cacheKey)
+    }
+    cache.set(cacheKey, value)
+
+    while (cache.size > IMAGE_ASSISTANT_CANDIDATE_PREVIEW_CACHE_LIMIT) {
+      const oldestKey = cache.keys().next().value
+      if (!oldestKey) break
+      cache.delete(oldestKey)
+    }
+  }, [])
+
+  const composeMessageAttachmentPreview = useCallback(
+    async (messageId: string, attachment: PersistedMessageAttachment) => {
+      if (!detail?.assets?.length || !attachment.baseAssetId || !attachment.patchBounds || !attachment.src) {
+        return attachment.src
+      }
+      const attachmentSrc = attachment.src
+      const patchBounds = attachment.patchBounds
+
+      const baseAsset = detail.assets.find((asset) => asset.id === attachment.baseAssetId) || null
+      const maskAsset =
+        attachment.maskAssetId ? detail.assets.find((asset) => asset.id === attachment.maskAssetId) || null : null
+      if (!baseAsset?.url) {
+        return attachment.src
+      }
+
+      const cacheKey = getMessageAttachmentPreviewCacheKey({
+        messageId,
+        assetId: attachment.assetId,
+        baseAssetId: attachment.baseAssetId,
+        maskAssetId: attachment.maskAssetId || null,
+        patchBounds: attachment.patchBounds,
+      })
+      const cachedPreview = messageAttachmentPreviewComposeCacheRef.current.get(cacheKey)
+      if (cachedPreview) {
+        touchMessageAttachmentPreviewComposeCache(cacheKey, cachedPreview)
+        return cachedPreview
+      }
+
+      const nextPreviewPromise = (async () => {
+        const baseImage = await loadImageForCanvas(baseAsset.url!)
+        const patchImage = await loadImageForCanvas(attachmentSrc)
+        const baseWidth = baseImage.naturalWidth || baseImage.width
+        const baseHeight = baseImage.naturalHeight || baseImage.height
+        const patchWidth = patchImage.naturalWidth || patchImage.width
+        const patchHeight = patchImage.naturalHeight || patchImage.height
+        if (
+          !isPatchCompositeCompatible({
+            baseWidth,
+            baseHeight,
+            patchWidth,
+            patchHeight,
+            patchBounds,
+          })
+        ) {
+          return attachment.src
+        }
+
+        const compositeCanvas = document.createElement("canvas")
+        compositeCanvas.width = baseWidth
+        compositeCanvas.height = baseHeight
+        const compositeCtx = compositeCanvas.getContext("2d")
+        if (!compositeCtx) {
+          return attachment.src
+        }
+
+        compositeCtx.drawImage(baseImage, 0, 0, compositeCanvas.width, compositeCanvas.height)
+
+        const patchCanvas = document.createElement("canvas")
+        patchCanvas.width = patchBounds.width
+        patchCanvas.height = patchBounds.height
+        const patchCtx = patchCanvas.getContext("2d")
+        if (!patchCtx) {
+          return attachmentSrc
+        }
+
+        drawPatchResultToCanvas({
+          patchCtx,
+          patchImage,
+          baseWidth,
+          baseHeight,
+          patchWidth,
+          patchHeight,
+          targetWidth: patchCanvas.width,
+          targetHeight: patchCanvas.height,
+          patchBounds,
+        })
+        if (maskAsset?.url) {
+          const maskImage = await loadImageForCanvas(maskAsset.url)
+          patchCtx.globalCompositeOperation = "destination-in"
+          drawImageCover(
+            patchCtx,
+            maskImage,
+            maskImage.naturalWidth || maskImage.width,
+            maskImage.naturalHeight || maskImage.height,
+            patchCanvas.width,
+            patchCanvas.height,
+          )
+          patchCtx.globalCompositeOperation = "source-over"
+        }
+
+        compositeCtx.drawImage(
+          patchCanvas,
+          patchBounds.x,
+          patchBounds.y,
+          patchBounds.width,
+          patchBounds.height,
+        )
+
+        return compositeCanvas.toDataURL("image/png")
+      })().catch((error) => {
+        messageAttachmentPreviewComposeCacheRef.current.delete(cacheKey)
+        throw error
+      })
+
+      touchMessageAttachmentPreviewComposeCache(cacheKey, nextPreviewPromise)
+      return nextPreviewPromise
+    },
+    [detail?.assets, touchMessageAttachmentPreviewComposeCache],
+  )
+
+  const getPersistedMessageAttachments = useCallback(
+    (message: ImageAssistantMessage): PersistedMessageAttachment[] => {
+      const requestPayload =
+        message.request_payload && typeof message.request_payload === "object"
+          ? (message.request_payload as Record<string, unknown>)
+          : null
+      if (!requestPayload || !detail?.assets?.length) {
+        return []
+      }
+
+      const referenceAssetIds = Array.isArray(requestPayload.referenceAssetIds)
+        ? requestPayload.referenceAssetIds.filter((value): value is string => typeof value === "string")
+        : []
+      if (!referenceAssetIds.length) {
+        return []
+      }
+
+      const patchEdit =
+        requestPayload.versionMeta &&
+        typeof requestPayload.versionMeta === "object" &&
+        (requestPayload.versionMeta as Record<string, unknown>).patch_edit &&
+        isCanvasPatchEditMeta((requestPayload.versionMeta as Record<string, unknown>).patch_edit)
+          ? ((requestPayload.versionMeta as Record<string, unknown>).patch_edit as CanvasPatchEditMeta)
+          : null
+      const snapshotAssetId = typeof requestPayload.snapshotAssetId === "string" ? requestPayload.snapshotAssetId : null
+      const maskAssetId = typeof requestPayload.maskAssetId === "string" ? requestPayload.maskAssetId : null
+
+      return referenceAssetIds
+        .map((assetId) => detail.assets.find((asset) => asset.id === assetId) || null)
+        .filter((asset): asset is ImageAssistantAsset => Boolean(asset && asset.url && asset.asset_type !== "mask"))
+        .map((asset) => {
+          const isMaskEditSnapshot = Boolean(
+            message.task_type === "mask_edit" && patchEdit && snapshotAssetId && asset.id === snapshotAssetId,
+          )
+
+          return {
+            id: `${message.id}:${asset.id}`,
+            assetId: asset.id,
+            src: asset.url,
+            width: isMaskEditSnapshot ? detail.assets.find((item) => item.id === patchEdit?.baseAssetId)?.width || asset.width : asset.width,
+            height: isMaskEditSnapshot ? detail.assets.find((item) => item.id === patchEdit?.baseAssetId)?.height || asset.height : asset.height,
+            baseAssetId: isMaskEditSnapshot ? patchEdit?.baseAssetId || null : null,
+            maskAssetId: isMaskEditSnapshot ? maskAssetId : null,
+            patchBounds: isMaskEditSnapshot ? patchEdit?.patchBounds || null : null,
+          } satisfies PersistedMessageAttachment
+        })
+    },
+    [detail?.assets],
   )
 
   const hasComposerInput = Boolean(prompt.trim() || pendingAttachments.length)
@@ -1513,6 +1986,29 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [detail?.messages, extraCopy.cancelledReply, extraCopy.waitingReply, pendingTurn, sessionId])
 
   useEffect(() => {
+    const viewport = messageViewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
+    if (!viewport) return
+
+    if (messageHistoryRestoreRef.current) {
+      const { height, top } = messageHistoryRestoreRef.current
+      viewport.scrollTop = viewport.scrollHeight - height + top
+      messageHistoryRestoreRef.current = null
+      previousDisplayMessageCountRef.current = displayMessages.length
+      return
+    }
+
+    if (
+      shouldScrollMessagesToBottomRef.current ||
+      displayMessages.length > previousDisplayMessageCountRef.current
+    ) {
+      viewport.scrollTop = viewport.scrollHeight
+      shouldScrollMessagesToBottomRef.current = false
+    }
+
+    previousDisplayMessageCountRef.current = displayMessages.length
+  }, [displayMessages.length, sessionId])
+
+  useEffect(() => {
     void requestJson("/api/image-assistant/availability").then((json) => setAvailability(json.data))
   }, [])
 
@@ -1523,8 +2019,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [canvas, detail, mode])
 
   useEffect(() => {
+    messageLimitRef.current = messageLimit
+    versionLimitRef.current = versionLimit
+  }, [messageLimit, versionLimit])
+
+  useEffect(() => {
     setCandidatePreviewUrls({})
     candidatePreviewComposeCacheRef.current.clear()
+    setMessageAttachmentPreviewUrls({})
+    messageAttachmentPreviewComposeCacheRef.current.clear()
   }, [sessionId])
 
   useEffect(() => {
@@ -1570,22 +2073,50 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [brushColor, selectedLayer])
 
   useEffect(() => {
+    if (!initialSessionId || initialSessionId === sessionId) return
+    setSessionId(initialSessionId)
+  }, [initialSessionId, sessionId])
+
+  useEffect(() => {
     if (sessionId) {
-      setMessageLimit(INITIAL_MESSAGE_LIMIT)
-      setVersionLimit(INITIAL_VERSION_LIMIT)
-      void refreshDetail(sessionId, {
-        mode: "content",
-        messageLimit: INITIAL_MESSAGE_LIMIT,
-        versionLimit: INITIAL_VERSION_LIMIT,
-      })
-        .catch((error) => {
+      const cachedDetail = getImageAssistantSessionContentCache(sessionId)
+      const nextMessageLimit = Math.max(INITIAL_MESSAGE_LIMIT, cachedDetail?.detail.meta.messages_loaded || 0)
+      const nextVersionLimit = Math.max(INITIAL_VERSION_LIMIT, cachedDetail?.detail.meta.versions_loaded || 0)
+      const shouldRefreshFromRoute = initialSessionId === sessionId
+
+      setMessageLimit(nextMessageLimit)
+      setVersionLimit(nextVersionLimit)
+      shouldScrollMessagesToBottomRef.current = true
+
+      if (cachedDetail) {
+        setDetail(cachedDetail.detail)
+        setSelectedVersionId(
+          cachedDetail.detail.session.current_version_id || cachedDetail.detail.versions[0]?.id || null,
+        )
+      } else {
+        setDetail(null)
+        setSelectedVersionId(null)
+        previousDisplayMessageCountRef.current = 0
+      }
+
+      if (!cachedDetail || !isImageAssistantSessionContentCacheFresh(cachedDetail) || shouldRefreshFromRoute) {
+        void refreshDetail(sessionId, {
+          mode: "content",
+          background: Boolean(cachedDetail),
+          messageLimit: nextMessageLimit,
+          versionLimit: nextVersionLimit,
+        }).catch((error) => {
           console.error("image-assistant.session-summary-load-failed", error)
         })
+      }
     } else {
       activeJobAbortRef.current?.abort()
       activeJobAbortRef.current = null
       setPendingTurn(null)
       detailRequestIdRef.current += 1
+      messageHistoryRestoreRef.current = null
+      shouldScrollMessagesToBottomRef.current = false
+      previousDisplayMessageCountRef.current = 0
       resetCanvasHistory()
       setDetail(null)
       canvasRef.current = null
@@ -1597,7 +2128,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setMessageLimit(INITIAL_MESSAGE_LIMIT)
       setVersionLimit(INITIAL_VERSION_LIMIT)
     }
-  }, [refreshDetail, resetCanvasHistory, sessionId])
+  }, [initialSessionId, refreshDetail, resetCanvasHistory, sessionId])
+
+  useEffect(() => {
+    if (!sessionId || !detail) return
+    saveImageAssistantSessionContentCache(sessionId, detail)
+  }, [detail, sessionId])
 
   useEffect(() => {
     const pendingTask = findImagePendingTask(sessionId)
@@ -1625,9 +2161,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           const status = payload?.data?.status
 
           if (status === "success") {
+            shouldScrollMessagesToBottomRef.current = true
+            await invalidateImageAssistantSessionQueries(queryClient, sessionId)
             await refreshDetail(sessionId, { mode: "content" }).catch((error) => {
               console.error("image-assistant.pending-task.refresh-failed", error)
             })
+            if (deferredRouteSessionIdRef.current === sessionId) {
+              syncSessionRoute(sessionId)
+              deferredRouteSessionIdRef.current = null
+            }
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
               setPendingTurn(null)
@@ -1637,6 +2179,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           }
 
           if (status === "failed") {
+            if (deferredRouteSessionIdRef.current === sessionId) {
+              syncSessionRoute(sessionId)
+              deferredRouteSessionIdRef.current = null
+            }
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
               setJobError(formatImageAssistantErrorMessage(payload?.data?.result?.error || "image_generation_failed", imageCopy))
@@ -1657,7 +2203,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return () => {
       cancelled = true
     }
-  }, [imageCopy, pendingTaskRefreshKey, refreshDetail, sessionId])
+  }, [imageCopy, pendingTaskRefreshKey, queryClient, refreshDetail, sessionId])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -1688,14 +2234,16 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
   }, [resolution, sessionId])
 
-  const createSession = async (title?: string, options?: { navigate?: boolean }) => {
+  const createSession = async (title?: string, options?: { navigate?: boolean; activate?: boolean }) => {
     const json = await requestJson("/api/image-assistant/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: title || prompt || imageCopy.createSessionFallback }),
     })
     const nextSession = json.data as ImageAssistantConversationSummary
-    setSessionId(nextSession.id)
+    if (options?.activate !== false) {
+      setSessionId(nextSession.id)
+    }
     if (options?.navigate !== false) {
       deferredRouteSessionIdRef.current = null
       syncSessionRoute(nextSession.id)
@@ -1705,7 +2253,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return nextSession.id
   }
 
-  const ensureSession = async (options?: { navigate?: boolean }) => {
+  const ensureSession = async (options?: { navigate?: boolean; activate?: boolean }) => {
     if (sessionId) return sessionId
     if (!creatingSessionRef.current) {
       creatingSessionRef.current = createSession(undefined, options).finally(() => {
@@ -1864,26 +2412,20 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const createCanvasPendingAttachment = useCallback(
     async (sourceCanvas: ImageAssistantCanvasDocument) => {
       const rawAnnotationMetadata = await deriveCanvasAnnotationMetadata(sourceCanvas)
-      const patchBounds = rawAnnotationMetadata?.selectionBounds
-        ? inflateCanvasSelectionBounds(rawAnnotationMetadata.selectionBounds, 18, sourceCanvas.width, sourceCanvas.height)
-        : null
       const annotationMetadata = rawAnnotationMetadata
         ? {
-            selectionBounds: shiftCanvasSelectionBounds(rawAnnotationMetadata.selectionBounds, patchBounds?.x || 0, patchBounds?.y || 0),
+            selectionBounds: rawAnnotationMetadata.selectionBounds,
             annotationNotes: rawAnnotationMetadata.annotationNotes,
-            patchBounds,
+            patchBounds: null,
             baseAssetId: rawAnnotationMetadata.baseAssetId,
           }
         : null
-      const snapshot = await getCanvasSnapshot(sourceCanvas, patchBounds)
-      const maskDataUrl = annotationMetadata ? await createCanvasMaskDataUrl(sourceCanvas, patchBounds) : null
+      const snapshot = await getCanvasSnapshot(sourceCanvas)
+      const maskDataUrl = annotationMetadata ? await createCanvasMaskDataUrl(sourceCanvas) : null
       const file = dataUrlToFile(snapshot.dataUrl, `image-design-edit-${Date.now()}.png`)
       const maskFile = maskDataUrl ? dataUrlToFile(maskDataUrl, `image-design-mask-${Date.now()}.png`) : null
-      const previewSnapshot = patchBounds ? await getCanvasSnapshot(sourceCanvas) : snapshot
-      const previewFile =
-        previewSnapshot.signature === snapshot.signature
-          ? file
-          : dataUrlToFile(previewSnapshot.dataUrl, `image-design-preview-${Date.now()}.png`)
+      const previewSnapshot = snapshot
+      const previewFile = file
       const previewUrl = URL.createObjectURL(previewFile)
       attachmentPreviewUrlsRef.current.add(previewUrl)
       return {
@@ -2019,6 +2561,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setIsBusy(true)
     setJobError(null)
     const optimisticTurnId = `pending-turn-${Date.now()}`
+    shouldScrollMessagesToBottomRef.current = true
     setPendingTurn({
       id: optimisticTurnId,
       kind,
@@ -2027,7 +2570,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       status: "running",
     })
     try {
-      const nextSessionId = await ensureSession({ navigate: false })
+      const nextSessionId = await ensureSession({ navigate: false, activate: false })
       if (abortController.signal.aborted) {
         throw new DOMException("Aborted", "AbortError")
       }
@@ -2037,7 +2580,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         )
         : []
       const uploadedAssetIds = uploadedAssets.map((item) => item.assetId)
-      const nextReferenceAssetIds = uploadedAssetIds.slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
+      const nextReferenceAssetIds = (
+        currentAttachments.length ? uploadedAssetIds : clarificationCarryoverReferenceAssetIds
+      ).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
       const canvasAttachmentIndex = currentAttachments.findIndex((attachment) => attachment.source === "canvas")
       const canvasAttachment = canvasAttachmentIndex >= 0 ? currentAttachments[canvasAttachmentIndex] : null
       const canvasSnapshotAssetId =
@@ -2053,7 +2598,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           (canvasAnnotationMetadata?.selectionBounds || canvasAnnotationMetadata?.annotationNotes),
         )
       const canvasPatchSizePreset = shouldUseCanvasSnapshotEdit
-        ? getNearestSizePresetForCanvasBounds(canvasAnnotationMetadata?.patchBounds || null)
+        ? getNearestSizePresetForDimensions(
+            canvasAttachment?.previewWidth || canvasAttachment?.width || null,
+            canvasAttachment?.previewHeight || canvasAttachment?.height || null,
+          )
         : sizePreset
       const response = await requestJson(
         shouldUseCanvasSnapshotEdit ? "/api/image-assistant/canvas-snapshot-edit" : `/api/image-assistant/${kind}`,
@@ -2064,15 +2612,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           body: JSON.stringify({
             sessionId: nextSessionId,
             prompt: prompt.trim(),
-            referenceAssetIds: shouldUseCanvasSnapshotEdit
-              ? nextReferenceAssetIds.filter((_, index) => index !== canvasAttachmentIndex)
-              : nextReferenceAssetIds,
+            referenceAssetIds: nextReferenceAssetIds,
             snapshotAssetId: shouldUseCanvasSnapshotEdit ? canvasSnapshotAssetId : null,
             maskAssetId: shouldUseCanvasSnapshotEdit ? canvasMaskAssetId : null,
-            baseAssetId: shouldUseCanvasSnapshotEdit ? canvasAnnotationMetadata?.baseAssetId || null : null,
+            baseAssetId: null,
             annotationNotes: shouldUseCanvasSnapshotEdit ? canvasAnnotationMetadata?.annotationNotes || null : null,
             selectionBounds: shouldUseCanvasSnapshotEdit ? canvasAnnotationMetadata?.selectionBounds || null : null,
-            patchBounds: shouldUseCanvasSnapshotEdit ? canvasAnnotationMetadata?.patchBounds || null : null,
+            patchBounds: null,
             canvasWidth: shouldUseCanvasSnapshotEdit ? canvasAttachment?.width || null : null,
             canvasHeight: shouldUseCanvasSnapshotEdit ? canvasAttachment?.height || null : null,
             candidateCount: 1,
@@ -2098,12 +2644,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         taskType: kind,
         createdAt: Date.now(),
       })
+      setSessionId(taskData.session_id)
       setPendingTaskRefreshKey(Date.now())
       setPrompt("")
-      if (deferredRouteSessionIdRef.current === nextSessionId) {
-        syncSessionRoute(nextSessionId)
-        deferredRouteSessionIdRef.current = null
-      }
+      setPendingAttachments([])
     } catch (error) {
       if (isAbortError(error)) {
         setPendingTurn((current) => (current?.id === optimisticTurnId ? { ...current, status: "cancelled" } : current))
@@ -2240,21 +2784,60 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }
 
   const loadMoreMessages = async () => {
-    if (!sessionId || isLoadingMoreMessages || !hasMoreMessages) return
+    if (!sessionId || isLoadingMoreMessages || (!hasMoreMessages && !hasMoreVersions)) return
+    const viewport = messageViewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
+    if (viewport) {
+      messageHistoryRestoreRef.current = {
+        height: viewport.scrollHeight,
+        top: viewport.scrollTop,
+      }
+    }
     setIsLoadingMoreMessages(true)
     try {
-      const nextLimit = messageLimit + MESSAGE_PAGE_SIZE
-      const nextVersionLimit = versionLimit + VERSION_PAGE_SIZE
-      setMessageLimit(nextLimit)
-      setVersionLimit(nextVersionLimit)
-      await refreshDetail(sessionId, {
-        mode: "content",
-        background: true,
-        messageLimit: nextLimit,
-        versionLimit: nextVersionLimit,
+      const [messagePage, versionPage] = await Promise.all([
+        hasMoreMessages && detail?.meta.messages_next_cursor
+          ? fetchWorkspaceQueryData(queryClient, {
+              queryKey: getImageAssistantMessagesQueryKey(sessionId, MESSAGE_PAGE_SIZE, detail.meta.messages_next_cursor),
+              queryFn: () => getImageAssistantMessagesPage(sessionId, MESSAGE_PAGE_SIZE, detail.meta.messages_next_cursor),
+            })
+          : Promise.resolve(null),
+        hasMoreVersions && detail?.meta.versions_next_cursor
+          ? fetchWorkspaceQueryData(queryClient, {
+              queryKey: getImageAssistantVersionsQueryKey(sessionId, VERSION_PAGE_SIZE, detail.meta.versions_next_cursor),
+              queryFn: () => getImageAssistantVersionsPage(sessionId, VERSION_PAGE_SIZE, detail.meta.versions_next_cursor),
+            })
+          : Promise.resolve(null),
+      ])
+
+      setDetail((current) => {
+        if (!current) return current
+        const nextMessages = messagePage ? [...messagePage.data, ...current.messages] : current.messages
+        const nextVersions = versionPage ? [...current.versions, ...versionPage.data] : current.versions
+        return {
+          ...current,
+          messages: nextMessages,
+          versions: nextVersions,
+          meta: {
+            ...current.meta,
+            messages_loaded: nextMessages.length,
+            messages_has_more: messagePage ? messagePage.has_more : current.meta.messages_has_more,
+            messages_next_cursor: messagePage ? messagePage.next_cursor : current.meta.messages_next_cursor,
+            versions_loaded: nextVersions.length,
+            versions_has_more: versionPage ? versionPage.has_more : current.meta.versions_has_more,
+            versions_next_cursor: versionPage ? versionPage.next_cursor : current.meta.versions_next_cursor,
+          },
+        }
       })
+
+      if (messagePage) {
+        setMessageLimit((current) => current + messagePage.data.length)
+      }
+      if (versionPage) {
+        setVersionLimit((current) => current + versionPage.data.length)
+      }
     } catch (error) {
       console.error("image-assistant.messages.load-more-failed", error)
+      messageHistoryRestoreRef.current = null
       const nextMessage = error instanceof Error ? error.message : ""
       setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
     } finally {
@@ -2897,7 +3480,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           <div className="mx-auto flex h-full w-full max-w-7xl px-3 py-3 lg:px-5">
             <div className="flex min-w-0 flex-1 flex-col gap-3">
               <div className="min-h-0 flex-1 overflow-hidden rounded-[26px] border bg-card shadow-sm">
-                <ScrollArea className="h-full">
+                <ScrollArea className="h-full" ref={messageViewportRef}>
                   <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 lg:px-5">
                     {displayMessages.length ? (
                       <>
@@ -2920,9 +3503,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           const optimisticAssistantMessageId = pendingTurn ? `${pendingTurn.id}:assistant` : null
                           const optimisticAttachments =
                             optimisticUserMessageId && message.id === optimisticUserMessageId ? pendingTurn?.attachments || [] : []
+                          const persistedAttachments =
+                            message.role === "user" && (!optimisticUserMessageId || message.id !== optimisticUserMessageId)
+                              ? getPersistedMessageAttachments(message)
+                              : []
                           const parsedContent = parseMessageBubbleContent(message.content)
                           const hasBubbleMeta = parsedContent.meta.length > 0
-                          const bubbleAttachmentCount = optimisticAttachments.length
+                          const bubbleAttachmentCount = optimisticAttachments.length || persistedAttachments.length
                           return (
                             <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                               <div
@@ -2945,7 +3532,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                   {formatMessageRoleLabel(message.role, imageCopy)}
                                   {optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
                                     <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px]">
-                                      {composerModeLabel}
+                                      {getRunKindLabel(pendingTurn.kind, extraCopy)}
                                     </Badge>
                                   ) : null}
                                 </div>
@@ -2974,7 +3561,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                 ) : (
                                   <p className="max-w-[32rem] whitespace-pre-wrap text-[14px] leading-6">{message.content}</p>
                                 )}
-                                {optimisticAttachments.length ? (
+                                {bubbleAttachmentCount ? (
                                   <div className="mt-3 space-y-2.5">
                                     <div className="flex items-center gap-2 text-[10px] font-medium opacity-80">
                                       <span>{extraCopy.pendingImagesLabel}</span>
@@ -2988,42 +3575,88 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                       </span>
                                     </div>
                                     <div className={cn("grid gap-2", getBubbleAttachmentGridClass(bubbleAttachmentCount))}>
-                                      {optimisticAttachments.map((attachment) => {
-                                        const previewWidth = attachment.previewWidth ?? attachment.width
-                                        const previewHeight = attachment.previewHeight ?? attachment.height
-                                        const aspectRatio =
-                                          previewWidth > 0 && previewHeight > 0
-                                            ? `${previewWidth} / ${previewHeight}`
-                                            : bubbleAttachmentCount <= 2
-                                              ? "4 / 5"
-                                              : "1 / 1"
+                                      {optimisticAttachments.length
+                                        ? optimisticAttachments.map((attachment) => {
+                                            const previewWidth = attachment.previewWidth ?? attachment.width
+                                            const previewHeight = attachment.previewHeight ?? attachment.height
+                                            const aspectRatio =
+                                              previewWidth > 0 && previewHeight > 0
+                                                ? `${previewWidth} / ${previewHeight}`
+                                                : bubbleAttachmentCount <= 2
+                                                  ? "4 / 5"
+                                                  : "1 / 1"
 
-                                        return (
-                                          <div
-                                            key={attachment.id}
-                                            className={cn(
-                                              "group overflow-hidden rounded-[20px] border shadow-[0_10px_30px_-18px_rgba(15,23,42,0.45)]",
-                                              message.role === "user"
-                                                ? "border-white/14 bg-white/8"
-                                                : "border-border/70 bg-background/70",
-                                            )}
-                                          >
-                                            <div
-                                              className={cn(
-                                                "relative overflow-hidden",
-                                                getBubbleAttachmentFigureClass(bubbleAttachmentCount),
-                                              )}
-                                              style={{ aspectRatio }}
-                                            >
-                                              <img
-                                                src={attachment.previewUrl}
-                                                alt=""
-                                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                                              />
-                                            </div>
-                                          </div>
-                                        )
-                                      })}
+                                            return (
+                                              <div
+                                                key={attachment.id}
+                                                className={cn(
+                                                  "group overflow-hidden rounded-[20px] border shadow-[0_10px_30px_-18px_rgba(15,23,42,0.45)]",
+                                                  message.role === "user"
+                                                    ? "border-white/14 bg-white/8"
+                                                    : "border-border/70 bg-background/70",
+                                                )}
+                                              >
+                                                <div
+                                                  className={cn(
+                                                    "relative overflow-hidden",
+                                                    getBubbleAttachmentFigureClass(bubbleAttachmentCount),
+                                                  )}
+                                                  style={{ aspectRatio }}
+                                                >
+                                                  <img
+                                                    src={attachment.previewUrl}
+                                                    alt=""
+                                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                                                  />
+                                                </div>
+                                              </div>
+                                            )
+                                          })
+                                        : persistedAttachments.map((attachment) => {
+                                            const previewWidth = attachment.width || 0
+                                            const previewHeight = attachment.height || 0
+                                            const aspectRatio =
+                                              previewWidth > 0 && previewHeight > 0
+                                                ? `${previewWidth} / ${previewHeight}`
+                                                : bubbleAttachmentCount <= 2
+                                                  ? "4 / 5"
+                                                  : "1 / 1"
+
+                                            return (
+                                              <div
+                                                key={attachment.id}
+                                                className={cn(
+                                                  "group overflow-hidden rounded-[20px] border shadow-[0_10px_30px_-18px_rgba(15,23,42,0.45)]",
+                                                  message.role === "user"
+                                                    ? "border-white/14 bg-white/8"
+                                                    : "border-border/70 bg-background/70",
+                                                )}
+                                              >
+                                                <div
+                                                  className={cn(
+                                                    "relative overflow-hidden",
+                                                    getBubbleAttachmentFigureClass(bubbleAttachmentCount),
+                                                  )}
+                                                  style={{ aspectRatio }}
+                                                >
+                                                  <CandidatePreviewImage
+                                                    candidateId={attachment.id}
+                                                    fallbackSrc={attachment.src}
+                                                    resolvedSrc={messageAttachmentPreviewUrls[attachment.id] || null}
+                                                    loadPreview={() => composeMessageAttachmentPreview(message.id, attachment)}
+                                                    onResolved={(nextSrc) =>
+                                                      nextSrc !== attachment.src
+                                                        ? setMessageAttachmentPreviewUrls((current) =>
+                                                            current[attachment.id] ? current : { ...current, [attachment.id]: nextSrc },
+                                                          )
+                                                        : undefined
+                                                    }
+                                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                                                  />
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
                                     </div>
                                   </div>
                                 ) : null}
@@ -3239,6 +3872,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       setPrompt(event.target.value)
                       if (jobError) setJobError(null)
                     }}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        event.preventDefault()
+                        if (canSubmit) {
+                          void runJob(primaryRunKind)
+                        }
+                      }
+                    }}
                     placeholder={extraCopy.additionalNotesPlaceholder}
                     className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
                     disabled={isBusy}
@@ -3259,6 +3900,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       {extraCopy.uploadLimit}
                     </p>
                     <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">Ctrl/Cmd + Enter</span>
                       {isBusy ? (
                         <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
                           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

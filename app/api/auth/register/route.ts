@@ -12,7 +12,7 @@ export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
-    const rateLimit = checkRateLimit({
+    const rateLimit = await checkRateLimit({
       key: `auth:register:${getRequestIp(request)}`,
       limit: 6,
       windowMs: 60_000,

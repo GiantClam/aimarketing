@@ -1,4 +1,7 @@
+import { sql } from "drizzle-orm"
 import { NextResponse, type NextRequest } from "next/server"
+
+import { db } from "@/lib/db"
 
 type RateLimitEntry = {
   count: number
@@ -17,7 +20,7 @@ type RateLimitResult =
 
 const GLOBAL_BUCKET_KEY = "__aimarketing_rate_limit_store__"
 
-function getStore() {
+function getFallbackStore() {
   const globalScope = globalThis as typeof globalThis & {
     [GLOBAL_BUCKET_KEY]?: Map<string, RateLimitEntry>
   }
@@ -29,6 +32,43 @@ function getStore() {
   return globalScope[GLOBAL_BUCKET_KEY]!
 }
 
+function evaluateRateLimit(count: number, resetAt: number, limit: number): RateLimitResult {
+  if (count > limit) {
+    return {
+      ok: false,
+      retryAfterSeconds: Math.max(Math.ceil((resetAt - Date.now()) / 1000), 1),
+      remaining: 0,
+      resetAt,
+    }
+  }
+
+  return {
+    ok: true,
+    remaining: Math.max(limit - count, 0),
+    resetAt,
+  }
+}
+
+function checkRateLimitFallback({ key, limit, windowMs }: RateLimitOptions): RateLimitResult {
+  const store = getFallbackStore()
+  const now = Date.now()
+  const entry = store.get(key)
+
+  if (!entry || entry.resetAt <= now) {
+    const resetAt = now + windowMs
+    store.set(key, {
+      count: 1,
+      resetAt,
+    })
+
+    return evaluateRateLimit(1, resetAt, limit)
+  }
+
+  entry.count += 1
+  store.set(key, entry)
+  return evaluateRateLimit(entry.count, entry.resetAt, limit)
+}
+
 export function getRequestIp(request: NextRequest) {
   const forwardedFor = request.headers.get("x-forwarded-for")
   if (forwardedFor) {
@@ -38,40 +78,38 @@ export function getRequestIp(request: NextRequest) {
   return request.headers.get("x-real-ip")?.trim() || "unknown"
 }
 
-export function checkRateLimit({ key, limit, windowMs }: RateLimitOptions): RateLimitResult {
-  const store = getStore()
-  const now = Date.now()
-  const entry = store.get(key)
+export async function checkRateLimit({ key, limit, windowMs }: RateLimitOptions): Promise<RateLimitResult> {
+  try {
+    const result = await db.execute(sql`
+      INSERT INTO "AI_MARKETING_rate_limit_buckets" ("bucket_key", "count", "reset_at", "created_at", "updated_at")
+      VALUES (${key}, 1, NOW() + (${Math.max(windowMs, 0)} / 1000.0) * interval '1 second', NOW(), NOW())
+      ON CONFLICT ("bucket_key")
+      DO UPDATE SET
+        "count" = CASE
+          WHEN "AI_MARKETING_rate_limit_buckets"."reset_at" <= NOW() THEN 1
+          ELSE "AI_MARKETING_rate_limit_buckets"."count" + 1
+        END,
+        "reset_at" = CASE
+          WHEN "AI_MARKETING_rate_limit_buckets"."reset_at" <= NOW()
+            THEN NOW() + (${Math.max(windowMs, 0)} / 1000.0) * interval '1 second'
+          ELSE "AI_MARKETING_rate_limit_buckets"."reset_at"
+        END,
+        "updated_at" = NOW()
+      RETURNING
+        "count",
+        FLOOR(EXTRACT(EPOCH FROM "reset_at") * 1000)::bigint AS "reset_at_ms"
+    `)
 
-  if (!entry || entry.resetAt <= now) {
-    store.set(key, {
-      count: 1,
-      resetAt: now + windowMs,
+    const row = (result.rows[0] ?? {}) as { count?: number | string; reset_at_ms?: number | string }
+    const count = Number(row.count || 0)
+    const resetAt = Number(row.reset_at_ms || Date.now() + windowMs)
+    return evaluateRateLimit(count, resetAt, limit)
+  } catch (error) {
+    console.warn("rate_limit.db_fallback", {
+      key,
+      message: error instanceof Error ? error.message : String(error),
     })
-
-    return {
-      ok: true,
-      remaining: Math.max(limit - 1, 0),
-      resetAt: now + windowMs,
-    }
-  }
-
-  if (entry.count >= limit) {
-    return {
-      ok: false,
-      retryAfterSeconds: Math.max(Math.ceil((entry.resetAt - now) / 1000), 1),
-      remaining: 0,
-      resetAt: entry.resetAt,
-    }
-  }
-
-  entry.count += 1
-  store.set(key, entry)
-
-  return {
-    ok: true,
-    remaining: Math.max(limit - entry.count, 0),
-    resetAt: entry.resetAt,
+    return checkRateLimitFallback({ key, limit, windowMs })
   }
 }
 

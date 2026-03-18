@@ -145,6 +145,37 @@ export const writerMessages = pgTable(withPrefix("writer_messages"), {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
+export const leadHunterConversations = pgTable(withPrefix("lead_hunter_conversations"), {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  title: varchar("title", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+export const rateLimitBuckets = pgTable(withPrefix("rate_limit_buckets"), {
+  bucketKey: varchar("bucket_key", { length: 255 }).primaryKey(),
+  count: integer("count").default(0).notNull(),
+  resetAt: timestamp("reset_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+export const leadHunterMessages = pgTable(
+  withPrefix("lead_hunter_messages"),
+  {
+    id: serial("id").primaryKey(),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => leadHunterConversations.id),
+    query: text("query").notNull(),
+    answer: text("answer").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+)
+
 export const enterpriseDifyBindings = pgTable(
   withPrefix("enterprise_dify_bindings"),
   {
@@ -312,6 +343,10 @@ export const tasks = pgTable(withPrefix("tasks"), {
   payload: text("payload"),
   result: text("result"),
   status: varchar("status", { length: 30 }).default("pending"), // pending, running, approved, rejected, success, failed
+  workerId: varchar("worker_id", { length: 80 }),
+  attempts: integer("attempts").default(0).notNull(),
+  startedAt: timestamp("started_at"),
+  leaseExpiresAt: timestamp("lease_expires_at"),
   relatedStorageKey: text("related_storage_key"), // 可用于文件处理等
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

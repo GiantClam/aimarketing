@@ -68,7 +68,14 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const advisorType = body?.advisorType === "growth" ? "growth" : body?.advisorType === "brand-strategy" ? "brand-strategy" : null
+    const advisorType =
+      body?.advisorType === "growth"
+        ? "growth"
+        : body?.advisorType === "brand-strategy"
+          ? "brand-strategy"
+          : body?.advisorType === "lead-hunter"
+            ? "lead-hunter"
+            : null
     if (!advisorType) {
       return NextResponse.json({ error: "advisor_type_required" }, { status: 400 })
     }

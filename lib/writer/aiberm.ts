@@ -30,6 +30,11 @@ export function hasAibermApiKey() {
   return Boolean(AIBERM_API_KEY)
 }
 
+type AibermTextGenerationOptions = {
+  temperature?: number
+  maxTokens?: number
+}
+
 export function extractTextFromOpenAICompatibleResponse(data: any) {
   const choice = Array.isArray(data?.choices) ? data.choices[0] : null
   const message = choice?.message || {}
@@ -65,7 +70,12 @@ export function extractTextFromOpenAICompatibleResponse(data: any) {
   throw new Error("openai_compatible_text_empty")
 }
 
-export async function generateTextWithAiberm(systemPrompt: string, userPrompt: string, model: string) {
+export async function generateTextWithAiberm(
+  systemPrompt: string,
+  userPrompt: string,
+  model: string,
+  options: AibermTextGenerationOptions = {},
+) {
   const response = await writerRequestJson(
     `${AIBERM_API_BASE}/chat/completions`,
     {
@@ -77,8 +87,8 @@ export async function generateTextWithAiberm(systemPrompt: string, userPrompt: s
           { role: "system", content: systemPrompt } satisfies OpenAICompatibleMessage,
           { role: "user", content: userPrompt } satisfies OpenAICompatibleMessage,
         ],
-        temperature: 0.7,
-        max_tokens: 4096,
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.maxTokens ?? 4096,
       }),
     },
     { attempts: 2, timeoutMs: 90_000 },

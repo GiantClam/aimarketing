@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   BookText,
   Bookmark,
@@ -35,6 +36,13 @@ import {
 } from "@/lib/assistant-task-store"
 import type { AppMessages } from "@/lib/i18n/messages"
 import {
+  ensureWorkspaceQueryData,
+  fetchWorkspaceQueryData,
+  getWriterMessagesPage,
+  getWriterMessagesQueryKey,
+  invalidateWriterConversationQueries,
+} from "@/lib/query/workspace-cache"
+import {
   buildPendingWriterAssets,
   extractWriterAssetsFromMarkdown,
   markWriterAssetsFailed,
@@ -55,8 +63,21 @@ import {
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
-import { emitWriterRefresh, getWriterSessionMeta, saveWriterSessionMeta } from "@/lib/writer/session-store"
-import type { WriterConversationSummary, WriterHistoryEntry, WriterMessagePage, WriterTurnDiagnostics } from "@/lib/writer/types"
+import {
+  emitWriterRefresh,
+  getWriterConversationCache,
+  getWriterSessionMeta,
+  isWriterConversationCacheFresh,
+  saveWriterConversationCache,
+  saveWriterSessionMeta,
+} from "@/lib/writer/session-store"
+import type {
+  WriterConversationStatus,
+  WriterConversationSummary,
+  WriterHistoryEntry,
+  WriterMessagePage,
+  WriterTurnDiagnostics,
+} from "@/lib/writer/types"
 import { cn } from "@/lib/utils"
 
 type WriterMessage = {
@@ -68,6 +89,29 @@ type WriterMessage = {
 }
 
 type WriterCopy = AppMessages["writer"]
+
+type WriterVersionAssetState = {
+  assets: WriterAsset[]
+  loading: boolean
+  error: string | null
+}
+
+type WriterPreviewContext = {
+  messageId: string | null
+  sourceMarkdown: string
+  previewMarkdown: string
+  assets: WriterAsset[]
+  assetsLoading: boolean
+  assetsError: string | null
+  hasDraft: boolean
+  hasGeneratedImages: boolean
+  imagesRequested: boolean
+  isLatest: boolean
+}
+
+const WRITER_INITIAL_TURN_LIMIT = 8
+const WRITER_HISTORY_PAGE_SIZE = 10
+const EMPTY_VERSION_ASSET_STATE: WriterVersionAssetState = { assets: [], loading: false, error: null }
 
 type KnowledgeScope = "general" | "brand" | "product" | "case-study" | "compliance" | "campaign"
 
@@ -85,10 +129,15 @@ type KnowledgeStatus = {
 const sanitize = (raw: string) => raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
 const inferDraft = (messages: WriterMessage[]) =>
   [...messages].reverse().find((message) => message.role === "assistant" && message.content.trim())?.content || ""
+const inferFinalDraft = (messages: WriterMessage[], status: WriterConversationStatus) =>
+  status === "drafting" ? "" : inferDraft(messages)
+const THREAD_SEGMENT_LABEL_RE =
+  /^(?:(?:segment|part|thread|post)\s*\d+|第\s*\d+\s*(?:段|条|帖|部分))(?:\s*[:：-])?(?:\r?\n+|$)/i
+const stripThreadSegmentLabel = (segment: string) => segment.replace(THREAD_SEGMENT_LABEL_RE, "").trim()
 const parseThread = (markdown: string) =>
   markdown
     .split(/^###\s+/gm)
-    .map((part) => part.trim())
+    .map((part) => stripThreadSegmentLabel(part.trim()))
     .filter(Boolean)
 
 const stripMarkdown = (markdown: string) =>
@@ -99,6 +148,45 @@ const stripMarkdown = (markdown: string) =>
     .replace(/\n{2,}/g, "\n")
     .replace(/\s+/g, " ")
     .trim()
+
+const isPreviewableWriterDraft = (content: string, copy: WriterCopy) => {
+  const sanitized = sanitize(content)
+  if (!sanitized) return false
+  if (sanitized === copy.generatingDraft || sanitized === copy.conversationLoadFailed) return false
+  if (sanitized.startsWith(copy.requestFailedPrefix)) return false
+  if (/^#{1,3}\s+/m.test(sanitized)) return true
+  return stripMarkdown(sanitized).length >= 280 && sanitized.split(/\n{2,}/).length >= 3
+}
+
+const buildPreviewMarkdown = ({
+  markdown,
+  assets,
+  mode,
+  platform,
+  copy,
+}: {
+  markdown: string
+  assets: WriterAsset[]
+  mode: WriterMode
+  platform: WriterPlatform
+  copy: WriterCopy
+}) => {
+  const normalizedMarkdown = markdown.trim()
+  if (!normalizedMarkdown) return copy.textPreviewHint
+
+  const threadSegments = mode === "thread" ? parseThread(normalizedMarkdown) : []
+  if (mode === "thread" && threadSegments.length > 0) {
+    const threadMarkdown = threadSegments
+      .map(
+        (segment, index) =>
+          `### ${copy.threadSectionPrefix}${index + 1}${copy.threadSectionSuffix}\n${segment}`,
+      )
+      .join("\n\n")
+    return assets.length > 0 ? resolveWriterAssetMarkdown(threadMarkdown, assets, platform, mode) : threadMarkdown
+  }
+
+  return assets.length > 0 ? resolveWriterAssetMarkdown(normalizedMarkdown, assets, platform, mode) : normalizedMarkdown
+}
 
 const extractTitle = (markdown: string, copy: WriterCopy) =>
   (markdown
@@ -509,53 +597,6 @@ function PreviewResourceStrip({
   )
 }
 
-function getGroundingStrategyLabel(copy: WriterCopy, diagnostics: WriterTurnDiagnostics) {
-  if (diagnostics.retrievalStrategy === "rewrite_only") return copy.groundingStrategyRewrite
-  if (diagnostics.retrievalStrategy === "enterprise_grounded") return copy.groundingStrategyEnterprise
-  if (diagnostics.retrievalStrategy === "fresh_external") return copy.groundingStrategyFresh
-  return copy.groundingStrategyHybrid
-}
-
-function WriterGroundingSummary({
-  copy,
-  diagnostics,
-}: {
-  copy: WriterCopy
-  diagnostics: WriterTurnDiagnostics
-}) {
-  const hasEnterprise = diagnostics.enterpriseKnowledgeUsed && diagnostics.enterpriseSourceCount > 0
-  const hasWeb = diagnostics.webResearchUsed && diagnostics.webSourceCount > 0
-
-  return (
-    <div className="rounded-[22px] border border-slate-300 bg-white/92 p-3 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-          {copy.groundingSummary}
-        </Badge>
-        <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-          {getGroundingStrategyLabel(copy, diagnostics)}
-        </Badge>
-        <Badge variant={hasEnterprise ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
-          {copy.enterpriseSources} {hasEnterprise ? diagnostics.enterpriseSourceCount : 0}
-        </Badge>
-        <Badge variant={hasWeb ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
-          {copy.webSources} {hasWeb ? diagnostics.webSourceCount : 0}
-        </Badge>
-      </div>
-      {diagnostics.enterpriseDatasets.length > 0 ? (
-        <p className="mt-2 text-[11px] leading-5 text-slate-600">
-          {copy.datasetsLabel}: {diagnostics.enterpriseDatasets.join(" / ")}
-        </p>
-      ) : null}
-      {diagnostics.enterpriseTitles.length > 0 ? (
-        <p className="mt-1 text-[11px] leading-5 text-slate-500">
-          {copy.referencesLabel}: {diagnostics.enterpriseTitles.join(" / ")}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
 function getKnowledgeScopeLabel(copy: WriterCopy, scope: KnowledgeScope | "mixed" | "unknown") {
   if (scope === "general") return copy.knowledgeScopeGeneral
   if (scope === "brand") return copy.knowledgeScopeBrand
@@ -567,78 +608,11 @@ function getKnowledgeScopeLabel(copy: WriterCopy, scope: KnowledgeScope | "mixed
   return ""
 }
 
-function WriterInlineImageActionBar({
-  copy,
-  state,
-  error,
-  onPreview,
-  onGenerate,
-  onDismiss,
-}: {
-  copy: WriterCopy
-  state: "confirm" | "generating" | "ready" | "failed"
-  error?: string | null
-  onPreview: () => void
-  onGenerate: () => void
-  onDismiss?: () => void
-}) {
-  const description =
-    state === "confirm"
-      ? copy.finalPreviewWithoutImages
-      : state === "generating"
-        ? copy.imageGenerationMerging
-        : state === "ready"
-          ? copy.finalPreviewWithImages
-          : `${copy.imageGenerationFailedPrefix}${error || copy.imageGenerationFailed}`
-
-  return (
-    <div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50/90 p-3 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.45)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-[520px] text-[12px] leading-5 text-slate-700">{description}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
-            onClick={onPreview}
-          >
-            <Eye className="mr-1.5 h-3.5 w-3.5" />
-            {copy.preview}
-          </Button>
-          {state === "confirm" ? (
-            <>
-              <Button size="sm" className="h-8 rounded-full px-3 text-[11px]" onClick={onGenerate}>
-                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                {copy.generateImages}
-              </Button>
-              {onDismiss ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 rounded-full px-3 text-[11px] text-slate-600 hover:text-slate-950"
-                  onClick={onDismiss}
-                >
-                  {copy.done}
-                </Button>
-              ) : null}
-            </>
-          ) : null}
-          {state === "generating" ? (
-            <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              {copy.generatingImages}
-            </Button>
-          ) : null}
-          {state === "failed" ? (
-            <Button size="sm" className="h-8 rounded-full px-3 text-[11px]" onClick={onGenerate}>
-              <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-              {copy.regenerateImages}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  )
+function getGroundingStrategyLabel(copy: WriterCopy, strategy: WriterTurnDiagnostics["retrievalStrategy"]) {
+  if (strategy === "rewrite_only") return copy.groundingStrategyRewrite
+  if (strategy === "enterprise_grounded") return copy.groundingStrategyEnterprise
+  if (strategy === "fresh_external") return copy.groundingStrategyFresh
+  return copy.groundingStrategyHybrid
 }
 
 const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[], assistantName: string): WriterMessage[] =>
@@ -846,6 +820,7 @@ export function WriterWorkspace({
   initialLanguage?: string | null
 }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { user, loading } = useAuth()
   const { messages: i18n } = useI18n()
   const writerCopy = i18n.writer
@@ -854,6 +829,7 @@ export function WriterWorkspace({
   const previewContentRef = useRef<HTMLDivElement | null>(null)
   const historyRestoreRef = useRef<{ height: number; top: number } | null>(null)
   const shouldScrollToBottomRef = useRef(false)
+  const historyEntriesRef = useRef<WriterHistoryEntry[]>([])
 
   const [availabilityLoading, setAvailabilityLoading] = useState(true)
   const [availabilityReady, setAvailabilityReady] = useState(false)
@@ -879,10 +855,12 @@ export function WriterWorkspace({
   const [isLoading, setIsLoading] = useState(false)
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewMessageId, setPreviewMessageId] = useState<string | null>(null)
+  const [versionAssetState, setVersionAssetState] = useState<Record<string, WriterVersionAssetState>>({})
+  const [pendingRichCopyMessageId, setPendingRichCopyMessageId] = useState<string | null>(null)
   const [latestDiagnostics, setLatestDiagnostics] = useState<WriterTurnDiagnostics | null>(null)
   const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [imagesRequested, setImagesRequested] = useState(false)
-  const [imageConfirmationDismissed, setImageConfirmationDismissed] = useState(false)
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
@@ -899,6 +877,12 @@ export function WriterWorkspace({
   useEffect(() => {
     setConversationId(initialConversationId)
   }, [initialConversationId])
+
+  useEffect(() => {
+    setPreviewMessageId(null)
+    setVersionAssetState({})
+    setPendingRichCopyMessageId(null)
+  }, [conversationId])
 
   useEffect(() => {
     const nextPlatform = normalizeWriterPlatform(initialPlatform)
@@ -943,12 +927,82 @@ export function WriterWorkspace({
     () => draft || (conversationStatus === "drafting" ? "" : inferDraft(messages)),
     [conversationStatus, draft, messages],
   )
-  const renderableDraft = useMemo(() => resolveWriterAssetMarkdown(baseDraft, assets, platform, mode), [assets, baseDraft, mode, platform])
-  const threadSegments = useMemo(() => parseThread(renderableDraft || draft), [draft, renderableDraft])
   const latestAssistantMessageId = useMemo(
     () => [...messages].reverse().find((message) => message.role === "assistant")?.id || null,
     [messages],
   )
+  const activePreviewMessage = useMemo(() => {
+    if (previewMessageId) {
+      const selectedMessage = messages.find(
+        (message) => message.id === previewMessageId && message.role === "assistant",
+      )
+      if (selectedMessage) return selectedMessage
+    }
+    return [...messages].reverse().find((message) => message.role === "assistant") || null
+  }, [messages, previewMessageId])
+
+  const buildPreviewContextForMessage = (message: WriterMessage | null): WriterPreviewContext => {
+    const isLatest = Boolean(message?.id && message.id === latestAssistantMessageId)
+    const sourceMarkdown = message
+      ? isLatest
+        ? (baseDraft.trim() || sanitize(message.content))
+        : sanitize(message.content)
+      : baseDraft
+    const scopedAssetState = message && !isLatest ? (versionAssetState[message.id] ?? EMPTY_VERSION_ASSET_STATE) : null
+    const extractedAssets =
+      message && !isLatest ? extractWriterAssetsFromMarkdown(sourceMarkdown, platform, mode) : []
+    const renderableExtractedAssets = extractedAssets.some((asset) => Boolean(asset.url)) ? extractedAssets : []
+    const scopedAssets = isLatest
+      ? assets
+      : scopedAssetState && scopedAssetState.assets.length > 0
+        ? scopedAssetState.assets
+        : renderableExtractedAssets
+    const markdownAssets = isLatest
+      ? scopedAssets
+      : scopedAssets.some((asset) => Boolean(asset.url))
+        ? scopedAssets
+        : []
+    const hasGeneratedImages = scopedAssets.some((asset) => Boolean(asset.url))
+    const imagesWereRequested = isLatest
+      ? imagesRequested
+      : Boolean(scopedAssetState && (scopedAssetState.assets.length > 0 || scopedAssetState.loading || scopedAssetState.error))
+
+    return {
+      messageId: message?.id || null,
+      sourceMarkdown,
+      previewMarkdown: buildPreviewMarkdown({
+        markdown: sourceMarkdown,
+        assets: markdownAssets,
+        mode,
+        platform,
+        copy: writerCopy,
+      }),
+      assets: scopedAssets,
+      assetsLoading: isLatest ? assetsLoading : scopedAssetState?.loading ?? false,
+      assetsError: isLatest ? assetsError : scopedAssetState?.error ?? null,
+      hasDraft: Boolean(sourceMarkdown.trim()),
+      hasGeneratedImages,
+      imagesRequested: imagesWereRequested,
+      isLatest,
+    }
+  }
+
+  const activePreview = buildPreviewContextForMessage(activePreviewMessage)
+  const groundingBadges = useMemo(() => {
+    if (!latestDiagnostics) return []
+
+    const items = [`${writerCopy.groundingSummary}: ${getGroundingStrategyLabel(writerCopy, latestDiagnostics.retrievalStrategy)}`]
+
+    if (latestDiagnostics.enterpriseKnowledgeEnabled) {
+      items.push(`${writerCopy.enterpriseSources} ${latestDiagnostics.enterpriseSourceCount}`)
+    }
+
+    if (latestDiagnostics.webResearchUsed || latestDiagnostics.webResearchStatus === "ready") {
+      items.push(`${writerCopy.webSources} ${latestDiagnostics.webSourceCount}`)
+    }
+
+    return items
+  }, [latestDiagnostics, writerCopy])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -959,17 +1013,13 @@ export function WriterWorkspace({
 
   useEffect(() => {
     if (!baseDraft.trim()) {
-      setImageConfirmationDismissed(false)
       return
     }
-
-    if (conversationStatus === "text_ready" && !imagesRequested) {
-      setImageConfirmationDismissed(false)
-    }
-  }, [baseDraft, conversationStatus, conversationId, imagesRequested])
+  }, [baseDraft])
 
   useEffect(() => {
     if (!conversationId) {
+      historyEntriesRef.current = []
       setMessages([])
       setDraft("")
       setLatestDiagnostics(null)
@@ -983,21 +1033,61 @@ export function WriterWorkspace({
     setHistoryCursor(null)
     setHasMoreHistory(false)
     const meta = getWriterSessionMeta(conversationId)
+    const cachedConversation = getWriterConversationCache(conversationId)
+    if (!cachedConversation) {
+      historyEntriesRef.current = []
+      setMessages([])
+    }
     if (meta) {
       setPlatform(meta.platform)
       setMode(normalizeWriterMode(meta.platform, meta.mode))
       setLanguage(meta.language || DEFAULT_WRITER_LANGUAGE)
-      if (meta.draft) setDraft(meta.draft)
+      const nextStatus = meta.status || "drafting"
+      setDraft(nextStatus === "drafting" ? "" : meta.draft || "")
       setImagesRequested(Boolean(meta.imagesRequested))
-      setConversationStatus(meta.status || "drafting")
+      setConversationStatus(nextStatus)
       setLatestDiagnostics(meta.diagnostics || null)
     } else {
       setLatestDiagnostics(null)
     }
 
+    const applyCachedConversation = () => {
+      if (!cachedConversation) return false
+
+      historyEntriesRef.current = cachedConversation.entries
+      const cachedMessages = mapHistoryEntriesToMessages(cachedConversation.entries, writerCopy.assistantName)
+      setMessages(cachedMessages)
+      setHistoryCursor(cachedConversation.historyCursor || null)
+      setHasMoreHistory(Boolean(cachedConversation.hasMoreHistory))
+      setLatestDiagnostics(getLatestHistoryDiagnostics(cachedConversation.entries))
+
+      if (cachedConversation.conversation) {
+        const nextPlatform = normalizeWriterPlatform(cachedConversation.conversation.platform)
+        const nextMode = normalizeWriterMode(nextPlatform, cachedConversation.conversation.mode)
+        const nextLanguage = normalizeWriterLanguage(cachedConversation.conversation.language)
+        const nextStatus = cachedConversation.conversation.status || "drafting"
+        setPlatform(nextPlatform)
+        setMode(nextMode)
+        setLanguage(nextLanguage)
+        setImagesRequested(Boolean(cachedConversation.conversation.images_requested))
+        setConversationStatus(nextStatus)
+        if (!meta?.draft) {
+          setDraft(inferFinalDraft(cachedMessages, nextStatus))
+        }
+      } else if (!meta?.draft) {
+        setDraft(inferFinalDraft(cachedMessages, meta?.status || "drafting"))
+      }
+
+      shouldScrollToBottomRef.current = true
+      setIsConversationLoading(false)
+      return true
+    }
+
     let cancelled = false
 
     const applyConversationPayload = (data: WriterMessagePage, reset: boolean) => {
+      const nextEntries = reset ? data.data || [] : [...(data.data || []), ...historyEntriesRef.current]
+      historyEntriesRef.current = nextEntries
       const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
       const nextDiagnostics = getLatestHistoryDiagnostics(data.data || [])
       if (data.conversation) {
@@ -1014,14 +1104,26 @@ export function WriterWorkspace({
       setHasMoreHistory(Boolean(data.has_more))
       if (reset) shouldScrollToBottomRef.current = true
       setMessages((current) => (reset ? nextMessages : [...nextMessages, ...current]))
-      if (reset && !meta?.draft) setDraft(inferDraft(nextMessages))
+      if (reset && !meta?.draft) {
+        setDraft(inferFinalDraft(nextMessages, data.conversation?.status || "drafting"))
+      }
+      saveWriterConversationCache(conversationId, {
+        entries: nextEntries,
+        conversation: data.conversation,
+        historyCursor: data.next_cursor || null,
+        hasMoreHistory: Boolean(data.has_more),
+        loadedTurnCount: nextEntries.length,
+        updatedAt: Date.now(),
+      })
     }
 
     const load = async () => {
       try {
-        const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=20`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const data = (await response.json()) as WriterMessagePage
+        const turnLimit = Math.max(WRITER_INITIAL_TURN_LIMIT, cachedConversation?.loadedTurnCount || 0)
+        const data = await ensureWorkspaceQueryData(queryClient, {
+          queryKey: getWriterMessagesQueryKey(conversationId, turnLimit),
+          queryFn: () => getWriterMessagesPage(conversationId, turnLimit),
+        })
         if (cancelled) return
         applyConversationPayload(data, true)
       } catch {
@@ -1040,11 +1142,14 @@ export function WriterWorkspace({
       }
     }
 
-    void load()
+    const hasCache = applyCachedConversation()
+    if (!hasCache || !cachedConversation || !isWriterConversationCacheFresh(cachedConversation)) {
+      void load()
+    }
     return () => {
       cancelled = true
     }
-  }, [conversationId, writerCopy.assistantName, writerCopy.conversationLoadFailed])
+  }, [conversationId, queryClient, writerCopy.assistantName, writerCopy.conversationLoadFailed])
 
   const loadOlderMessages = async () => {
     if (!conversationId || !historyCursor || isHistoryLoading) return
@@ -1059,13 +1164,23 @@ export function WriterWorkspace({
 
     setIsHistoryLoading(true)
     try {
-      const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=20&cursor=${historyCursor}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = (await response.json()) as WriterMessagePage
+      const data = await fetchWorkspaceQueryData(queryClient, {
+        queryKey: getWriterMessagesQueryKey(conversationId, WRITER_HISTORY_PAGE_SIZE, historyCursor),
+        queryFn: () => getWriterMessagesPage(conversationId, WRITER_HISTORY_PAGE_SIZE, historyCursor),
+      })
       const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
+      historyEntriesRef.current = [...(data.data || []), ...historyEntriesRef.current]
       setHistoryCursor(data.next_cursor || null)
       setHasMoreHistory(Boolean(data.has_more))
       setMessages((current) => [...nextMessages, ...current])
+      saveWriterConversationCache(conversationId, {
+        entries: historyEntriesRef.current,
+        conversation: data.conversation,
+        historyCursor: data.next_cursor || null,
+        hasMoreHistory: Boolean(data.has_more),
+        loadedTurnCount: historyEntriesRef.current.length,
+        updatedAt: Date.now(),
+      })
     } catch (error) {
       console.error("Failed to load older writer messages", error)
       historyRestoreRef.current = null
@@ -1097,36 +1212,43 @@ export function WriterWorkspace({
     setIsLoading(true)
 
     const refreshConversation = async () => {
-      const response = await fetch(`/api/writer/messages?conversation_id=${conversationId}&limit=20`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = (await response.json()) as WriterMessagePage
-      if (cancelled) return
+      const cachedConversation = getWriterConversationCache(conversationId)
+      const turnLimit = Math.max(WRITER_INITIAL_TURN_LIMIT, cachedConversation?.loadedTurnCount || 0)
+      await invalidateWriterConversationQueries(queryClient, conversationId)
+      const data = await fetchWorkspaceQueryData(queryClient, {
+        queryKey: getWriterMessagesQueryKey(conversationId, turnLimit),
+        queryFn: () => getWriterMessagesPage(conversationId, turnLimit),
+      })
+      if (cancelled) return "drafting" as const
 
       const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
       const nextDiagnostics = getLatestHistoryDiagnostics(data.data || [])
+      historyEntriesRef.current = data.data || []
       setMessages(nextMessages)
       setLatestDiagnostics(nextDiagnostics)
       setHistoryCursor(data.next_cursor || null)
       setHasMoreHistory(Boolean(data.has_more))
-      setDraft(inferDraft(nextMessages))
       shouldScrollToBottomRef.current = true
 
       if (data.conversation) {
         const nextPlatform = normalizeWriterPlatform(data.conversation.platform)
         const nextMode = normalizeWriterMode(nextPlatform, data.conversation.mode)
         const nextLanguage = normalizeWriterLanguage(data.conversation.language)
+        const nextStatus = data.conversation.status || "drafting"
+        const nextDraft = inferFinalDraft(nextMessages, nextStatus)
+        setDraft(nextDraft)
         setPlatform(nextPlatform)
         setMode(nextMode)
         setLanguage(nextLanguage)
         setImagesRequested(Boolean(data.conversation.images_requested))
-        setConversationStatus(data.conversation.status || "drafting")
+        setConversationStatus(nextStatus)
         saveWriterSessionMeta(conversationId, {
           platform: nextPlatform,
           mode: nextMode,
           language: nextLanguage,
-          draft: data.conversation.status === "drafting" ? "" : inferDraft(nextMessages),
+          draft: nextDraft,
           imagesRequested: Boolean(data.conversation.images_requested),
-          status: data.conversation.status || "drafting",
+          status: nextStatus,
           diagnostics: nextDiagnostics,
           updatedAt: Date.now(),
         })
@@ -1135,6 +1257,16 @@ export function WriterWorkspace({
           conversation: data.conversation,
         })
       }
+      saveWriterConversationCache(conversationId, {
+        entries: historyEntriesRef.current,
+        conversation: data.conversation,
+        historyCursor: data.next_cursor || null,
+        hasMoreHistory: Boolean(data.has_more),
+        loadedTurnCount: historyEntriesRef.current.length,
+        updatedAt: Date.now(),
+      })
+
+      return data.conversation?.status || "drafting"
     }
 
     const poll = async () => {
@@ -1147,10 +1279,13 @@ export function WriterWorkspace({
           const status = payload?.data?.status
 
           if (status === "success") {
-            await refreshConversation()
+            const conversationStatusAfterRefresh = await refreshConversation()
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
-              setPreviewOpen(true)
+              if (conversationStatusAfterRefresh !== "drafting") {
+                setPreviewMessageId(null)
+                setPreviewOpen(true)
+              }
               setIsLoading(false)
             }
             return
@@ -1177,7 +1312,7 @@ export function WriterWorkspace({
     return () => {
       cancelled = true
     }
-  }, [conversationId, pendingTaskRefreshKey, writerCopy.assistantName])
+  }, [conversationId, pendingTaskRefreshKey, queryClient, writerCopy.assistantName])
 
   useEffect(() => {
     const viewport = viewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
@@ -1254,6 +1389,21 @@ export function WriterWorkspace({
     })
   }
 
+  const openPreviewForMessage = (messageId: string | null) => {
+    setPreviewMessageId(messageId)
+    setPreviewOpen(true)
+  }
+
+  const openLatestPreview = () => {
+    openPreviewForMessage(latestAssistantMessageId)
+  }
+
+  const requestRichTextCopyForMessage = (messageId: string | null) => {
+    setPreviewMessageId(messageId)
+    setPreviewOpen(true)
+    setPendingRichCopyMessageId(messageId)
+  }
+
   const handleCreateConversation = () => {
     setConversationId(null)
     setMessages([])
@@ -1263,7 +1413,9 @@ export function WriterWorkspace({
     setAssetsError(null)
     setAssets([])
     setImagesRequested(false)
-    setImageConfirmationDismissed(false)
+    setPreviewMessageId(null)
+    setVersionAssetState({})
+    setPendingRichCopyMessageId(null)
     setConversationStatus("drafting")
     setDraftSaveState("idle")
     router.push(`/dashboard/writer?platform=${platform}&mode=${mode}&language=${language}`)
@@ -1274,14 +1426,16 @@ export function WriterWorkspace({
 
     const query = inputValue.trim()
     const assistantId = `writer_assistant_${Date.now()}`
+    let taskAccepted = false
     setInputValue("")
     setIsLoading(true)
     setImagesRequested(false)
-    setImageConfirmationDismissed(false)
     setConversationStatus("drafting")
     setLatestDiagnostics(null)
     setAssets([])
     setAssetsError(null)
+    setPreviewMessageId(null)
+    setPendingRichCopyMessageId(null)
     setMessages((current) => [
       ...current,
       { id: `writer_user_${Date.now()}`, conversation_id: conversationId || "", role: "user", content: query },
@@ -1337,6 +1491,7 @@ export function WriterWorkspace({
         prompt: query,
         createdAt: Date.now(),
       })
+      taskAccepted = true
       setPendingTaskRefreshKey(Date.now())
       emitWriterRefresh({
         action: "upsert",
@@ -1355,14 +1510,16 @@ export function WriterWorkspace({
         `${writerCopy.requestFailedPrefix}${error instanceof Error ? error.message : writerCopy.unknownError}`,
       )
     } finally {
-      setIsLoading(false)
+      if (!taskAccepted) {
+        setIsLoading(false)
+      }
     }
   }
 
-  const handleCopyText = async () => {
-    if (!draft.trim()) return
+  const writePreviewContentToClipboard = async (markdown: string) => {
+    if (!markdown.trim()) return
 
-    const plainText = stripMarkdown(renderableDraft || draft)
+    const plainText = stripMarkdown(markdown)
     const previewNode = previewContentRef.current
 
     if (!previewNode || typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
@@ -1379,8 +1536,12 @@ export function WriterWorkspace({
     ])
   }
 
-  const handleCopyMarkdown = async () => {
-    if (draft.trim()) await navigator.clipboard.writeText(renderableDraft || draft)
+  const handleCopyText = async () => {
+    await writePreviewContentToClipboard(activePreview.previewMarkdown)
+  }
+
+  const handleCopyMarkdown = async (markdown = activePreview.previewMarkdown) => {
+    if (markdown.trim()) await navigator.clipboard.writeText(markdown)
   }
 
   const handleCopyAssetLink = async (asset: WriterAsset) => {
@@ -1422,6 +1583,7 @@ export function WriterWorkspace({
     })
       .then((response) => {
         if (!response.ok) throw new Error("save failed")
+        void invalidateWriterConversationQueries(queryClient, conversationId)
         setDraftSaveState("saved")
       })
       .catch(() => {
@@ -1429,23 +1591,40 @@ export function WriterWorkspace({
       })
   }
 
-  const handleGenerateAssets = async () => {
-    if (!baseDraft.trim() || assetsLoading) return
+  const handleGenerateAssets = async (target: WriterPreviewContext = activePreview) => {
+    if (!target.hasDraft || target.assetsLoading || !target.messageId) return
 
-    const pendingAssets = buildPendingWriterAssets(baseDraft, platform, mode)
+    const pendingAssets = buildPendingWriterAssets(target.sourceMarkdown, platform, mode)
+    setPreviewMessageId(target.messageId)
     setPreviewOpen(true)
-    setImagesRequested(true)
-    setImageConfirmationDismissed(true)
-    setConversationStatus("image_generating")
-    setAssetsError(null)
-    setAssetsLoading(true)
-    setAssets(pendingAssets)
+
+    if (target.isLatest) {
+      setImagesRequested(true)
+      setConversationStatus("image_generating")
+      setAssetsError(null)
+      setAssetsLoading(true)
+      setAssets(pendingAssets)
+    } else {
+      setVersionAssetState((current) => ({
+        ...current,
+        [target.messageId!]: {
+          assets: pendingAssets,
+          loading: true,
+          error: null,
+        },
+      }))
+    }
 
     try {
       const response = await fetch("/api/writer/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markdown: baseDraft, platform, mode, conversationId }),
+        body: JSON.stringify({
+          markdown: target.sourceMarkdown,
+          platform,
+          mode,
+          conversationId: target.isLatest ? conversationId : null,
+        }),
       })
       const data = await response.json().catch(() => null)
       const nextAssets = Array.isArray(data?.data?.assets) ? (data.data.assets as WriterAsset[]) : []
@@ -1458,11 +1637,22 @@ export function WriterWorkspace({
         throw new Error(writerCopy.emptyImageResult)
       }
 
-      setAssets(nextAssets)
-      setConversationStatus("ready")
+      if (target.isLatest) {
+        setAssets(nextAssets)
+        setConversationStatus("ready")
+      } else {
+        setVersionAssetState((current) => ({
+          ...current,
+          [target.messageId!]: {
+            assets: nextAssets,
+            loading: false,
+            error: null,
+          },
+        }))
+      }
 
-      const resolvedMarkdown = resolveWriterAssetMarkdown(baseDraft, nextAssets, platform, mode)
-      if (resolvedMarkdown && resolvedMarkdown !== baseDraft) {
+      const resolvedMarkdown = resolveWriterAssetMarkdown(target.sourceMarkdown, nextAssets, platform, mode)
+      if (target.isLatest && resolvedMarkdown && resolvedMarkdown !== target.sourceMarkdown) {
         setDraft(resolvedMarkdown)
         setMessages((current) => {
           const next = [...current]
@@ -1484,22 +1674,64 @@ export function WriterWorkspace({
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ conversation_id: conversationId, content: resolvedMarkdown, status: "ready", imagesRequested: true }),
-          }).catch(() => null)
+          })
+            .then(() => invalidateWriterConversationQueries(queryClient, conversationId))
+            .catch(() => null)
         }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : writerCopy.imageGenerationFailed
-      setConversationStatus("failed")
-      setAssetsError(message)
-      setAssets(markWriterAssetsFailed(pendingAssets, message))
+      if (target.isLatest) {
+        setConversationStatus("failed")
+        setAssetsError(message)
+        setAssets(markWriterAssetsFailed(pendingAssets, message))
+      } else {
+        setVersionAssetState((current) => ({
+          ...current,
+          [target.messageId!]: {
+            assets: markWriterAssetsFailed(pendingAssets, message),
+            loading: false,
+            error: message,
+          },
+        }))
+      }
     } finally {
-      setAssetsLoading(false)
+      if (target.isLatest) {
+        setAssetsLoading(false)
+      } else {
+        setVersionAssetState((current) => ({
+          ...current,
+          [target.messageId!]: {
+            assets: current[target.messageId!]?.assets ?? pendingAssets,
+            loading: false,
+            error: current[target.messageId!]?.error ?? null,
+          },
+        }))
+      }
     }
   }
 
+  useEffect(() => {
+    if (!previewOpen || !pendingRichCopyMessageId || activePreview.messageId !== pendingRichCopyMessageId) return
+
+    let cancelled = false
+    const frame = window.requestAnimationFrame(() => {
+      if (cancelled) return
+      void writePreviewContentToClipboard(activePreview.previewMarkdown).finally(() => {
+        if (!cancelled) {
+          setPendingRichCopyMessageId((current) => (current === pendingRichCopyMessageId ? null : current))
+        }
+      })
+    })
+
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frame)
+    }
+  }, [activePreview.messageId, activePreview.previewMarkdown, pendingRichCopyMessageId, previewOpen])
+
   const composerDisabled = loading || availabilityLoading || !availabilityReady
-  const hasDraft = Boolean(draft.trim())
-  const hasGeneratedImages = assets.some((asset) => Boolean(asset.url))
+  const hasDraft = Boolean(baseDraft.trim())
   const currentModeLabel = writerModeOptions.find((option) => option.value === mode)?.label || "Standard"
   const currentLanguageLabel = WRITER_LANGUAGE_CONFIG[language].label
   const workspaceStatus = loading
@@ -1517,41 +1749,6 @@ export function WriterWorkspace({
               : hasDraft
                 ? "Copy draft ready. Confirm the text before generating images."
                 : "Describe the topic, audience, tone, or structure to start."
-  const previewMarkdown =
-    mode === "thread" && threadSegments.length > 0
-      ? imagesRequested || hasGeneratedImages
-        ? resolveWriterAssetMarkdown(
-            threadSegments
-              .map(
-                (segment, index) =>
-                  `### ${writerCopy.threadSectionPrefix}${index + 1}${writerCopy.threadSectionSuffix}\n${segment}`,
-              )
-              .join("\n\n"),
-            assets,
-            platform,
-            mode,
-          )
-        : threadSegments
-            .map(
-              (segment, index) =>
-                `### ${writerCopy.threadSectionPrefix}${index + 1}${writerCopy.threadSectionSuffix}\n${segment}`,
-            )
-            .join("\n\n")
-      : imagesRequested || hasGeneratedImages
-        ? renderableDraft || baseDraft || writerCopy.imagePreviewReadyHint
-        : baseDraft || writerCopy.textPreviewHint
-  const canConfirmImages = hasDraft && conversationStatus === "text_ready" && !imagesRequested && !hasGeneratedImages
-  const inlineImageActionState =
-    assetsLoading || conversationStatus === "image_generating"
-      ? ("generating" as const)
-      : imagesRequested && (assetsError || conversationStatus === "failed")
-        ? ("failed" as const)
-        : imagesRequested && hasGeneratedImages
-          ? ("ready" as const)
-          : canConfirmImages && !imageConfirmationDismissed
-            ? ("confirm" as const)
-            : null
-
   return (
     <>
       <div className="flex h-[calc(100vh-65px)] flex-col bg-background lg:h-screen">
@@ -1589,11 +1786,16 @@ export function WriterWorkspace({
                     .join("/")}
                 </Badge>
               ) : null}
+              {groundingBadges.map((item) => (
+                <Badge key={item} variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {item}
+                </Badge>
+              ))}
               <Button
                 size="icon"
                 variant="outline"
                 className="h-8 w-8 rounded-full border-slate-300 bg-white text-slate-950 hover:bg-slate-100"
-                onClick={() => setPreviewOpen(true)}
+                onClick={openLatestPreview}
                 disabled={!hasDraft}
               >
                 <Eye className="h-4 w-4" />
@@ -1603,7 +1805,6 @@ export function WriterWorkspace({
         </header>
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
           <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-2 px-3 py-2 lg:px-5 lg:py-3">
-            {latestDiagnostics ? <WriterGroundingSummary copy={writerCopy} diagnostics={latestDiagnostics} /> : null}
             <div className="min-h-0 flex-1 overflow-hidden rounded-[26px] border bg-card shadow-sm">
               <ScrollArea className="h-full" ref={viewportRef}>
                 <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 lg:px-5">
@@ -1651,52 +1852,95 @@ export function WriterWorkspace({
                     </div>
                   ) : null}
 
-                  {messages.map((message) => (
-                    <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                      <div
-                        className={cn(
-                          "max-w-[94%] overflow-hidden rounded-[24px] px-3.5 py-3 shadow-sm lg:max-w-[84%]",
-                          message.role === "user"
-                            ? "rounded-br-md bg-primary text-primary-foreground"
-                            : "rounded-bl-md border border-slate-200/90 bg-white text-slate-950 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.35)]",
-                        )}
-                      >
+                  {messages.map((message) => {
+                    const messagePreview =
+                      message.role === "assistant" ? buildPreviewContextForMessage(message) : null
+                    const messageIsPreviewable =
+                      message.role === "assistant" && isPreviewableWriterDraft(message.content, writerCopy)
+
+                    return (
+                      <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                         <div
                           className={cn(
-                            "mb-2 text-[10px] font-medium",
-                            message.role === "assistant"
-                              ? "flex items-center gap-1.5 text-slate-600"
-                              : "opacity-80",
+                            "max-w-[94%] overflow-hidden rounded-[24px] px-3.5 py-3 shadow-sm lg:max-w-[84%]",
+                            message.role === "user"
+                              ? "rounded-br-md bg-primary text-primary-foreground"
+                              : "rounded-bl-md border border-slate-200/90 bg-white text-slate-950 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.35)]",
                           )}
                         >
-                          {message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
-                          {message.authorLabel || writerCopy.you}
+                          <div
+                            className={cn(
+                              "mb-2 text-[10px] font-medium",
+                              message.role === "assistant"
+                                ? "flex items-center gap-1.5 text-slate-600"
+                                : "opacity-80",
+                            )}
+                          >
+                            {message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
+                            {message.authorLabel || writerCopy.you}
+                          </div>
+                          {renderMarkdown(
+                            messagePreview?.previewMarkdown || message.content,
+                            messagePreview?.assets || [],
+                            message.role === "assistant"
+                              ? "prose prose-sm max-w-none prose-headings:text-slate-950 prose-p:text-slate-900 prose-li:text-slate-900 prose-strong:text-slate-950 prose-a:text-blue-700 prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px] prose-blockquote:text-slate-700"
+                              : "prose prose-sm max-w-none prose-invert prose-p:my-2 prose-p:text-[14px] prose-p:leading-6 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
+                            writerCopy,
+                          )}
+                          {messageIsPreviewable && messagePreview ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                                onClick={() => openPreviewForMessage(message.id)}
+                              >
+                                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                                {writerCopy.preview}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={messagePreview.imagesRequested || messagePreview.hasGeneratedImages ? "outline" : "default"}
+                                className={cn(
+                                  "h-8 rounded-full px-3 text-[11px]",
+                                  messagePreview.imagesRequested || messagePreview.hasGeneratedImages
+                                    ? "border-slate-300 bg-white text-slate-950 hover:bg-slate-100"
+                                    : "",
+                                )}
+                                onClick={() => void handleGenerateAssets(messagePreview)}
+                                disabled={messagePreview.assetsLoading}
+                              >
+                                {messagePreview.assetsLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="mr-1.5 h-3.5 w-3.5" />}
+                                {messagePreview.assetsLoading
+                                  ? writerCopy.generatingImages
+                                  : messagePreview.imagesRequested || messagePreview.hasGeneratedImages
+                                    ? writerCopy.regenerateImages
+                                    : writerCopy.generateImages}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                                onClick={() => requestRichTextCopyForMessage(message.id)}
+                              >
+                                <BookText className="mr-1.5 h-3.5 w-3.5" />
+                                {writerCopy.copyRichText}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                                onClick={() => void handleCopyMarkdown(messagePreview.previewMarkdown)}
+                              >
+                                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                {writerCopy.copyMarkdown}
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
-                        {renderMarkdown(
-                          message.role === "assistant"
-                            ? resolveWriterAssetMarkdown(message.content, assets, platform, mode)
-                            : message.content,
-                          assets,
-                          message.role === "assistant"
-                            ? "prose prose-sm max-w-none prose-headings:text-slate-950 prose-p:text-slate-900 prose-li:text-slate-900 prose-strong:text-slate-950 prose-a:text-blue-700 prose-h1:text-[1.9rem] prose-h2:mt-8 prose-h2:pt-5 prose-h2:text-[1.25rem] prose-p:my-3 prose-p:text-[15px] prose-p:leading-7 prose-li:text-[15px] prose-blockquote:text-slate-700"
-                            : "prose prose-sm max-w-none prose-invert prose-p:my-2 prose-p:text-[14px] prose-p:leading-6 prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground",
-                          writerCopy,
-                        )}
-                        {message.role === "assistant" &&
-                        message.id === latestAssistantMessageId &&
-                        inlineImageActionState ? (
-                          <WriterInlineImageActionBar
-                            copy={writerCopy}
-                            state={inlineImageActionState}
-                            error={assetsError}
-                            onPreview={() => setPreviewOpen(true)}
-                            onGenerate={() => void handleGenerateAssets()}
-                            onDismiss={inlineImageActionState === "confirm" ? () => setImageConfirmationDismissed(true) : undefined}
-                          />
-                        ) : null}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
 
                   {isLoading ? (
                     <div className="flex justify-start">
@@ -1768,7 +2012,7 @@ export function WriterWorkspace({
                     size="sm"
                     variant="outline"
                     className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
-                    onClick={() => setPreviewOpen(true)}
+                    onClick={openLatestPreview}
                     disabled={!hasDraft}
                   >
                     <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -1820,7 +2064,13 @@ export function WriterWorkspace({
           </div>
         </div>
       </div>
-      <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
+      <Sheet
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open)
+          if (!open) setPendingRichCopyMessageId(null)
+        }}
+      >
         <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 sm:max-w-[920px]">
           <div className={cn("h-full bg-gradient-to-b", getPlatformPreviewPalette(platform))}>
             <SheetHeader className="border-b border-slate-300 bg-white/96 px-4 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm">
@@ -1830,7 +2080,7 @@ export function WriterWorkspace({
                     {writerConfig.shortLabel}
                   </Badge>
                   <Badge variant="outline" className="rounded-full border-slate-400 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-900">
-                    {estimateReadingTime(previewMarkdown, writerCopy)}
+                    {estimateReadingTime(activePreview.previewMarkdown, writerCopy)}
                   </Badge>
                 </div>
                 <Button
@@ -1858,34 +2108,34 @@ export function WriterWorkspace({
                     <div>
                       <p className="text-sm font-semibold text-slate-950">{writerCopy.finalPreviewTitle}</p>
                       <p className="mt-1 max-w-xl text-xs leading-5 text-slate-700">
-                        {imagesRequested || hasGeneratedImages
+                        {activePreview.imagesRequested || activePreview.hasGeneratedImages
                           ? writerCopy.finalPreviewWithImages
                           : writerCopy.finalPreviewWithoutImages}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {hasDraft ? (
+                      {activePreview.hasDraft ? (
                         <Button
                           size="sm"
-                          variant={imagesRequested || hasGeneratedImages ? "outline" : "default"}
+                          variant={activePreview.imagesRequested || activePreview.hasGeneratedImages ? "outline" : "default"}
                           className={cn(
                             "h-8 rounded-full border px-3 text-[11px] font-medium shadow-sm",
-                            imagesRequested || hasGeneratedImages
+                            activePreview.imagesRequested || activePreview.hasGeneratedImages
                               ? "border-slate-500 bg-white text-slate-950 hover:bg-slate-100"
                               : "border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
                           )}
-                          onClick={() => void handleGenerateAssets()}
-                          disabled={assetsLoading}
+                          onClick={() => void handleGenerateAssets(activePreview)}
+                          disabled={activePreview.assetsLoading}
                         >
                           <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                          {assetsLoading
+                          {activePreview.assetsLoading
                             ? writerCopy.generatingImages
-                            : imagesRequested || hasGeneratedImages
+                            : activePreview.imagesRequested || activePreview.hasGeneratedImages
                               ? writerCopy.regenerateImages
                               : writerCopy.generateImages}
                         </Button>
                       ) : null}
-                      {hasDraft ? (
+                      {activePreview.isLatest && activePreview.hasDraft ? (
                         <Badge
                           variant="outline"
                           className={cn(
@@ -1913,7 +2163,7 @@ export function WriterWorkspace({
                         variant="default"
                         className="h-8 rounded-full border border-slate-950 bg-slate-950 px-3 text-[11px] font-medium text-white shadow-sm hover:bg-slate-800"
                         onClick={() => void handleCopyText()}
-                        disabled={!hasDraft}
+                        disabled={!activePreview.hasDraft}
                       >
                         <BookText className="mr-1.5 h-3.5 w-3.5" />
                         {writerCopy.copyRichText}
@@ -1923,7 +2173,7 @@ export function WriterWorkspace({
                         variant="outline"
                         className="h-8 rounded-full border-slate-400 bg-white px-3 text-[11px] font-medium text-slate-950 hover:bg-slate-100"
                         onClick={() => void handleCopyMarkdown()}
-                        disabled={!hasDraft}
+                        disabled={!activePreview.hasDraft}
                       >
                         <Copy className="mr-1.5 h-3.5 w-3.5" />
                         {writerCopy.copyMarkdown}
@@ -1936,9 +2186,9 @@ export function WriterWorkspace({
                         copy={writerCopy}
                         platform={platform}
                         mode={mode}
-                        markdown={previewMarkdown}
-                        assets={assets}
-                        editable={hasDraft}
+                        markdown={activePreview.previewMarkdown}
+                        assets={activePreview.assets}
+                        editable={activePreview.isLatest && activePreview.hasDraft}
                         onEditChange={handleDraftChange}
                         onEditCommit={handleDraftBlur}
                         saveState={draftSaveState}
@@ -1947,9 +2197,9 @@ export function WriterWorkspace({
                   </div>
                   <PreviewResourceStrip
                     copy={writerCopy}
-                    assets={imagesRequested || hasGeneratedImages ? assets : []}
-                    assetsLoading={imagesRequested && assetsLoading}
-                    assetsError={imagesRequested ? assetsError : null}
+                    assets={activePreview.imagesRequested || activePreview.hasGeneratedImages ? activePreview.assets : []}
+                    assetsLoading={activePreview.imagesRequested && activePreview.assetsLoading}
+                    assetsError={activePreview.imagesRequested ? activePreview.assetsError : null}
                     onDownload={handleDownloadAsset}
                     onCopyLink={handleCopyAssetLink}
                     onCopyMarkdown={handleCopyAssetMarkdown}

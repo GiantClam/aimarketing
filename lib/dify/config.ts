@@ -20,7 +20,7 @@ type DifyConfig = {
   apiKey: string
 }
 
-type AdvisorType = "brand-strategy" | "growth" | "copywriting"
+type AdvisorType = "brand-strategy" | "growth" | "copywriting" | "lead-hunter"
 const DEMO_USER_EMAIL = "demo@example.com"
 
 function normalizeOptional(value?: string | null) {
@@ -41,10 +41,15 @@ function isStatelessDemoLookup(options?: DifyLookupOptions) {
 function getAdvisorEnvPrefix(advisorType: AdvisorType) {
   if (advisorType === "brand-strategy") return "BRAND"
   if (advisorType === "growth") return "GROWTH"
+  if (advisorType === "lead-hunter") return "LEAD_HUNTER"
   return "COPYWRITING"
 }
 
 function getSystemDefaultAdvisorConfig(advisorType: AdvisorType): DifyConfig | null {
+  if (advisorType === "lead-hunter") {
+    return null
+  }
+
   const prefix = getAdvisorEnvPrefix(advisorType)
   const baseUrl =
     normalizeBaseUrl(process.env[`DIFY_DEFAULT_${prefix}_BASE_URL`]) || normalizeBaseUrl(process.env.DIFY_DEFAULT_BASE_URL)
@@ -73,6 +78,10 @@ export function getSystemDefaultAdvisorSummary() {
     growth: {
       configured: Boolean(growth),
       baseUrl: growth?.baseUrl || null,
+    },
+    leadHunter: {
+      configured: false,
+      baseUrl: null,
     },
   }
 }
@@ -411,6 +420,7 @@ async function getAdvisorConfig(
   advisorType: Exclude<AdvisorType, "copywriting">,
   options?: DifyLookupOptions,
   context?: ResolvedUserContext,
+  config?: { includeSystemDefault?: boolean },
 ) {
   const resolvedContext = context || (await resolveUserContext(options))
   const enterpriseOverride = await getEnterpriseAdvisorOverride(resolvedContext.enterpriseId, advisorType)
@@ -421,6 +431,14 @@ async function getAdvisorConfig(
       apiKey: enterpriseOverride.apiKey,
       enterpriseId: resolvedContext.enterpriseId,
     }
+  }
+
+  if (advisorType === "lead-hunter") {
+    return null
+  }
+
+  if (config?.includeSystemDefault === false) {
+    return null
   }
 
   const systemDefault = getSystemDefaultAdvisorConfig(advisorType)
@@ -449,20 +467,23 @@ async function getAdvisorConfig(
 
 export async function getAdvisorAvailability(options?: DifyLookupOptions) {
   const context = await resolveUserContext(options)
-  const [brandConfig, growthConfig, copywritingNamedConfig, defaultConfig, writerMockAvailable] = await Promise.all([
-    getAdvisorConfig("brand-strategy", options, context),
-    getAdvisorConfig("growth", options, context),
-    hasDifyConfigByName("文案写作专家", options),
-    getLegacyDefaultDifyConfigWithContext(context, options),
-    isWriterMockAvailableWithContext(context, options),
-  ])
+  const [brandConfig, growthConfig, leadHunterConfig, copywritingNamedConfig, defaultConfig, writerMockAvailable] =
+    await Promise.all([
+      getAdvisorConfig("brand-strategy", options, context),
+      getAdvisorConfig("growth", options, context),
+      getAdvisorConfig("lead-hunter", options, context, { includeSystemDefault: false }),
+      hasDifyConfigByName("文案写作专家", options),
+      getLegacyDefaultDifyConfigWithContext(context, options),
+      isWriterMockAvailableWithContext(context, options),
+    ])
   const copywriting = copywritingNamedConfig || Boolean(defaultConfig) || writerMockAvailable
 
   return {
     brandStrategy: Boolean(brandConfig),
     growth: Boolean(growthConfig),
+    leadHunter: Boolean(leadHunterConfig),
     copywriting,
-    hasAny: Boolean(brandConfig) || Boolean(growthConfig) || copywriting,
+    hasAny: Boolean(brandConfig) || Boolean(growthConfig) || Boolean(leadHunterConfig) || copywriting,
   }
 }
 
@@ -475,6 +496,11 @@ export async function getDifyConfigByAdvisorType(advisorType?: string | null, op
 
   if (advisorType === "growth") {
     const config = await getAdvisorConfig("growth", options, context)
+    return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
+  }
+
+  if (advisorType === "lead-hunter") {
+    const config = await getAdvisorConfig("lead-hunter", options, context)
     return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
   }
 

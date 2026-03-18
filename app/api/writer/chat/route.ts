@@ -8,6 +8,7 @@ import { getWriterConversation, listWriterMessages } from "@/lib/writer/reposito
 import type { WriterConversationStatus } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
+const WRITER_CHAT_HISTORY_LIMIT = 12
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
     const mode = normalizeWriterMode(platform, body?.mode)
     const language = normalizeWriterLanguage(body?.language)
 
-    const rateLimit = checkRateLimit({
+    const rateLimit = await checkRateLimit({
       key: `writer:chat:${auth.user.id}:${getRequestIp(req)}:${platform}:${mode}`,
       limit: 24,
       windowMs: 60_000,
@@ -38,7 +39,9 @@ export async function POST(req: NextRequest) {
 
     const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : null
     const existingConversation = conversationId ? await getWriterConversation(auth.user.id, conversationId) : null
-    const history = conversationId ? (await listWriterMessages(auth.user.id, conversationId, 5)).data : []
+    const history = conversationId
+      ? (await listWriterMessages(auth.user.id, conversationId, WRITER_CHAT_HISTORY_LIMIT)).data
+      : []
     const persisted = await createPendingWriterConversation({
       userId: auth.user.id,
       conversationId,

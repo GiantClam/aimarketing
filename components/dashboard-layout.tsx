@@ -12,6 +12,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PenSquare,
+  Radar,
   Settings,
   Sparkles,
   Target,
@@ -78,7 +79,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   const showAdvisorSection = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
-    return hasAdvisorFeature && (advisor.brandStrategy || advisor.growth)
+    return hasAdvisorFeature && (advisor.brandStrategy || advisor.growth || advisor.leadHunter)
   }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature])
 
   const showWriterEntry = useMemo(() => {
@@ -168,6 +169,17 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         </Link>
                       ) : (
                         <AdvisorSidebarItem title={messages.dashboardLayout.growthAdvisor} advisorType="growth" userEmail={userEmail} icon={TrendingUp} />
+                      )
+                    )}
+                    {hasAdvisorFeature && advisor.leadHunter && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/lead-hunter/new">
+                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.leadHunter}>
+                            <Radar className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.leadHunter} advisorType="lead-hunter" userEmail={userEmail} icon={Radar} />
                       )
                     )}
                   </div>

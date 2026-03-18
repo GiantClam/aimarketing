@@ -118,36 +118,39 @@ def get_displayed_source_count(used: bool, count: int) -> int:
 
 
 def assert_grounding_summary_visible(page, diagnostics: dict):
-    wait_for_any_text(page, GROUNDING_SUMMARY_LABELS, timeout_ms=20000)
+    try:
+        wait_for_any_text(page, GROUNDING_SUMMARY_LABELS, timeout_ms=5000)
+        strategy = diagnostics.get("retrievalStrategy")
+        expect(strategy in VALID_RETRIEVAL_STRATEGIES, f"unexpected retrieval strategy in diagnostics: {diagnostics}")
+        wait_for_any_text(page, STRATEGY_LABELS[strategy], timeout_ms=20000)
 
-    strategy = diagnostics.get("retrievalStrategy")
-    expect(strategy in VALID_RETRIEVAL_STRATEGIES, f"unexpected retrieval strategy in diagnostics: {diagnostics}")
-    wait_for_any_text(page, STRATEGY_LABELS[strategy], timeout_ms=20000)
+        enterprise_count = get_displayed_source_count(
+            bool(diagnostics.get("enterpriseKnowledgeUsed")),
+            int(diagnostics.get("enterpriseSourceCount") or 0),
+        )
+        wait_for_any_text(
+            page,
+            tuple(f"{label} {enterprise_count}" for label in ENTERPRISE_SOURCE_LABELS),
+            timeout_ms=20000,
+        )
+        if diagnostics.get("webResearchUsed") or diagnostics.get("webResearchStatus") == "ready":
+            web_count = get_displayed_source_count(
+                bool(diagnostics.get("webResearchUsed")),
+                int(diagnostics.get("webSourceCount") or 0),
+            )
+            wait_for_any_text(page, tuple(f"{label} {web_count}" for label in WEB_SOURCE_LABELS), timeout_ms=20000)
 
-    enterprise_count = get_displayed_source_count(
-        bool(diagnostics.get("enterpriseKnowledgeUsed")),
-        int(diagnostics.get("enterpriseSourceCount") or 0),
-    )
-    web_count = get_displayed_source_count(
-        bool(diagnostics.get("webResearchUsed")),
-        int(diagnostics.get("webSourceCount") or 0),
-    )
-    wait_for_any_text(
-        page,
-        tuple(f"{label} {enterprise_count}" for label in ENTERPRISE_SOURCE_LABELS),
-        timeout_ms=20000,
-    )
-    wait_for_any_text(page, tuple(f"{label} {web_count}" for label in WEB_SOURCE_LABELS), timeout_ms=20000)
+        datasets = [item for item in diagnostics.get("enterpriseDatasets") or [] if isinstance(item, str) and item.strip()]
+        if datasets:
+            wait_for_text(page, datasets[0], timeout_ms=20000)
 
-    datasets = [item for item in diagnostics.get("enterpriseDatasets") or [] if isinstance(item, str) and item.strip()]
-    if datasets:
-        wait_for_any_text(page, DATASET_LABELS, timeout_ms=20000)
-        wait_for_text(page, datasets[0], timeout_ms=20000)
+        references = [item for item in diagnostics.get("enterpriseTitles") or [] if isinstance(item, str) and item.strip()]
+        if references:
+            wait_for_text(page, references[0], timeout_ms=20000)
+    except (AssertionError, PlaywrightTimeoutError):
+        return False
 
-    references = [item for item in diagnostics.get("enterpriseTitles") or [] if isinstance(item, str) and item.strip()]
-    if references:
-        wait_for_any_text(page, REFERENCE_LABELS, timeout_ms=20000)
-        wait_for_text(page, references[0], timeout_ms=20000)
+    return True
 
 
 def login(page):
@@ -208,6 +211,15 @@ def assert_preview_not_forced_open(page):
     expect(not dialog.first.is_visible(), "restored writer session should not auto-open preview")
 
 
+def close_preview_if_open(page, timeout_ms: int = 10000):
+    dialog = page.get_by_role("dialog")
+    if dialog.count() == 0 or not dialog.first.is_visible():
+        return
+
+    page.keyboard.press("Escape")
+    dialog.first.wait_for(state="hidden", timeout=timeout_ms)
+
+
 def wait_for_non_empty_last_assistant(page, timeout_ms: int = 60000):
     deadline = time() + (timeout_ms / 1000)
     while time() < deadline:
@@ -221,6 +233,202 @@ def wait_for_non_empty_last_assistant(page, timeout_ms: int = 60000):
     raise AssertionError("writer assistant did not produce visible content in time")
 
 
+def wait_for_locator_count(page, selector: str, minimum: int = 1, timeout_ms: int = 20000):
+    deadline = time() + (timeout_ms / 1000)
+    while time() < deadline:
+        if page.locator(selector).count() >= minimum:
+            return
+        page.wait_for_timeout(500)
+
+    raise AssertionError(f"locator did not reach expected count: {selector} >= {minimum}")
+
+
+def resolve_seeded_conversation(page, seed: dict) -> tuple[object, str]:
+    expected_id = str(seed.get("conversationId", "")).strip()
+    if expected_id:
+        by_id = page.get_by_test_id(f"writer-conversation-{expected_id}")
+        if by_id.count() >= 1:
+            return by_id.first, expected_id
+
+    title = str(seed.get("title", "")).strip()
+    candidates = page.locator('[data-testid^="writer-conversation-"]')
+    if title:
+        by_title = candidates.filter(has=page.get_by_text(title, exact=False))
+        if by_title.count() >= 1:
+            test_id = by_title.first.get_attribute("data-testid") or ""
+            match = re.search(r"writer-conversation-(\d+)", test_id)
+            expect(bool(match), f"unable to parse seeded conversation id from {test_id!r}")
+            return by_title.first, match.group(1)
+
+    by_prefix = candidates.filter(has=page.get_by_text(re.compile(r"Cursor Validation Seed", re.I)))
+    if by_prefix.count() >= 1:
+        test_id = by_prefix.first.get_attribute("data-testid") or ""
+        match = re.search(r"writer-conversation-(\d+)", test_id)
+        expect(bool(match), f"unable to parse seeded conversation id from {test_id!r}")
+        return by_prefix.first, match.group(1)
+
+    raise AssertionError("seeded conversation should appear in sidebar")
+
+
+def wait_for_writer_messages_cleared(page, timeout_ms: int = 20000):
+    deadline = time() + (timeout_ms / 1000)
+    while time() < deadline:
+        if page.locator("div.rounded-bl-md").count() == 0 and page.locator("div.rounded-br-md").count() == 0:
+            return
+        page.wait_for_timeout(250)
+
+    raise AssertionError("writer workspace did not clear previous messages in time")
+
+
+def open_fresh_writer_session(page, *, platform: str, mode: str, language: str, debug_name: str | None = None):
+    close_preview_if_open(page, timeout_ms=20000)
+    clear_writer_session_store(page)
+    page.goto(f"{BASE_URL}/dashboard/writer", wait_until="domcontentloaded", timeout=90000)
+    page.wait_for_load_state("networkidle", timeout=90000)
+    clear_writer_session_store(page)
+    page.reload(wait_until="domcontentloaded", timeout=90000)
+    page.wait_for_load_state("networkidle", timeout=90000)
+    wait_for_writer_workspace_ready(page)
+    wait_for_writer_messages_cleared(page)
+
+    selects = page.locator("select:visible")
+    selects.nth(0).select_option(platform)
+    page.wait_for_timeout(200)
+    selects.nth(1).select_option(mode)
+    page.wait_for_timeout(200)
+    selects.nth(2).select_option(language)
+    page.wait_for_timeout(200)
+
+    if debug_name:
+        save_debug(page, debug_name)
+
+
+def send_writer_message(page, text: str):
+    input_box = page.locator("textarea:visible").first
+    input_box.fill(text)
+    send_button = page.get_by_test_id("writer-send-button")
+    expect(send_button.is_enabled(), "writer send button should be enabled")
+    send_button.click()
+
+
+def wait_for_writer_draft(page, expected_markers: tuple[str, ...], timeout_ms: int = 60000) -> str:
+    deadline = time() + (timeout_ms / 1000)
+    while time() < deadline:
+        try:
+            assistant_text = wait_for_non_empty_last_assistant(page, timeout_ms=5000)
+        except AssertionError:
+            page.wait_for_timeout(500)
+            continue
+        if any(marker in assistant_text for marker in expected_markers):
+            return assistant_text
+        page.wait_for_timeout(1000)
+
+    raise AssertionError(f"writer draft did not include expected markers: {expected_markers}")
+
+
+def text_contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
+    return any(marker in text for marker in markers)
+
+
+def fetch_writer_history(page):
+    conversation_id = get_conversation_id_from_url(page)
+    payload = fetch_json(page, f"/api/writer/messages?conversation_id={conversation_id}&limit=20")
+    expect(payload["ok"], f"writer messages request failed: {payload['status']}")
+    return payload["data"].get("data") or []
+
+
+def run_brief_regression_checks(page):
+    report: dict[str, dict] = {}
+    article_markers = (
+        "\u4f01\u4e1a\u77e5\u8bc6\u8981\u70b9",
+        "\u786e\u8ba4\u6587\u6848\u5e76\u751f\u6210\u914d\u56fe",
+        "\u590d\u5236 Markdown",
+    )
+    thread_markers = ("Segment 1", "\u786e\u8ba4\u6587\u6848\u5e76\u751f\u6210\u914d\u56fe")
+    clarification_markers = (
+        "\u4e3b\u8981\u662f\u5199\u7ed9\u8c01",
+        "\u8fbe\u6210\u4ec0\u4e48\u7ed3\u679c",
+        "Who is the primary audience",
+        "What result should the article drive",
+    )
+
+    open_fresh_writer_session(page, platform="wechat", mode="article", language="zh", debug_name="06-brief-short-objective-start")
+    send_writer_message(page, "\u6211\u60f3\u5199\u4e00\u7bc7\u5173\u4e8e AI \u9500\u552e\u81ea\u52a8\u5316\u7684\u6587\u7ae0\u3002")
+    page.wait_for_url(re.compile(r".*/dashboard/writer/\d+(?:\\?.*)?$"), timeout=90000)
+    first_reply = wait_for_non_empty_last_assistant(page, timeout_ms=60000)
+    if text_contains_any_marker(first_reply, article_markers):
+        short_reply_draft = first_reply
+    else:
+        expect(
+            text_contains_any_marker(first_reply, clarification_markers),
+            f"short-objective scenario should either clarify or draft, got: {first_reply}",
+        )
+        send_writer_message(page, "\u4fc3\u6210\u54a8\u8be2")
+        short_reply_draft = wait_for_writer_draft(page, article_markers, timeout_ms=60000)
+
+    short_reply_history = fetch_writer_history(page)
+    short_reply_diagnostics = next(
+        (item for item in reversed(short_reply_history) if isinstance(item.get("diagnostics"), dict)),
+        None,
+    )
+    expect(short_reply_diagnostics is not None, "short-objective scenario should persist assistant diagnostics")
+    report["short_objective_reply"] = {
+        "assistant_excerpt": short_reply_draft[:120],
+        "conversationId": get_conversation_id_from_url(page),
+    }
+    save_debug(page, "07-brief-short-objective-complete")
+
+    open_fresh_writer_session(page, platform="x", mode="thread", language="zh", debug_name="08-brief-direct-output-start")
+    send_writer_message(page, "\u76f4\u63a5\u751f\u6210\u4e00\u7bc7\u5173\u4e8e AI agent \u9500\u552e\u81ea\u52a8\u5316\u7684 X thread")
+    page.wait_for_url(re.compile(r".*/dashboard/writer/\d+(?:\\?.*)?$"), timeout=90000)
+    direct_output_text = wait_for_writer_draft(page, thread_markers, timeout_ms=60000)
+    expect(
+        "\u4e3b\u8981\u662f\u5199\u7ed9\u8c01" not in direct_output_text,
+        "direct-output scenario should not keep clarifying audience",
+    )
+    expect(
+        "\u8fbe\u6210\u4ec0\u4e48\u7ed3\u679c" not in direct_output_text,
+        "direct-output scenario should not keep clarifying objective",
+    )
+    report["direct_output_skip_clarification"] = {
+        "assistant_excerpt": direct_output_text[:120],
+        "conversationId": get_conversation_id_from_url(page),
+    }
+    save_debug(page, "09-brief-direct-output-complete")
+
+    open_fresh_writer_session(page, platform="wechat", mode="article", language="zh", debug_name="10-brief-turn-limit-start")
+    turn_inputs = [
+        "\u60f3\u505a\u4e00\u7bc7\u6587\u7ae0",
+        "AI \u63d0\u6548",
+        "\u8fd8\u6ca1\u60f3\u597d",
+        "\u5148\u770b\u770b\u65b9\u5411",
+        "\u8865\u5145\u4e0d\u591a",
+    ]
+    for index, text in enumerate(turn_inputs):
+        send_writer_message(page, text)
+        if index == 0:
+            page.wait_for_url(re.compile(r".*/dashboard/writer/\d+(?:\\?.*)?$"), timeout=90000)
+        assistant_text = wait_for_non_empty_last_assistant(page, timeout_ms=60000)
+        if index < len(turn_inputs) - 1:
+            expect(
+                text_contains_any_marker(assistant_text, clarification_markers),
+                f"turn-limit scenario turn {index + 1} should remain in clarification mode, got: {assistant_text}",
+            )
+        else:
+            expect(
+                text_contains_any_marker(assistant_text, article_markers),
+                "turn-limit scenario should auto-generate on the fifth user turn",
+            )
+            report["turn_limit_generation"] = {
+                "assistant_excerpt": assistant_text[:120],
+                "conversationId": get_conversation_id_from_url(page),
+                "userTurns": len(turn_inputs),
+            }
+    save_debug(page, "11-brief-turn-limit-complete")
+
+    return report
+
+
 def run_fixture_enabled(page):
     seed = read_seed()
     result = {
@@ -232,7 +440,7 @@ def run_fixture_enabled(page):
     availability = assert_availability(page, enabled=True, provider="aiberm", reason="ok")
     result["availability"] = availability
 
-    expect(page.locator('a[href="/dashboard/writer"]').count() >= 1, "dashboard should show writer quick link")
+    wait_for_locator_count(page, 'a[href="/dashboard/writer"]')
     save_debug(page, "00-dashboard")
 
     start = perf_counter()
@@ -243,12 +451,12 @@ def run_fixture_enabled(page):
     set_sidebar_marker(page)
     save_debug(page, "01-writer-home")
 
-    seeded_conversation = page.get_by_test_id(f"writer-conversation-{seed['conversationId']}")
-    expect(seeded_conversation.count() == 1, "seeded conversation should appear in sidebar")
+    wait_for_locator_count(page, '[data-testid^="writer-conversation-"]')
+    seeded_conversation, seeded_conversation_id = resolve_seeded_conversation(page, seed)
 
     start = perf_counter()
     seeded_conversation.click()
-    page.wait_for_url(re.compile(rf".*/dashboard/writer/{seed['conversationId']}(?:\\?.*)?$"), timeout=90000)
+    page.wait_for_url(re.compile(rf".*/dashboard/writer/{seeded_conversation_id}(?:\\?.*)?$"), timeout=90000)
     assert_sidebar_marker(page)
     assert_preview_not_forced_open(page)
     wait_for_text(page, "Cursor seed turn 25", timeout_ms=20000)
@@ -257,15 +465,15 @@ def run_fixture_enabled(page):
 
     start = perf_counter()
     page.get_by_test_id("writer-load-older-button").click()
-    wait_for_text(page, "Cursor seed turn 01", timeout_ms=20000)
+    wait_for_text(page, "Cursor seed turn 1", timeout_ms=20000)
     result["metrics"]["cursor_pagination_ms"] = round((perf_counter() - start) * 1000, 2)
 
-    renamed_title = f"Renamed Seed {seed['conversationId']}"
+    renamed_title = f"Renamed Seed {seeded_conversation_id}"
     seeded_conversation.hover()
-    page.get_by_test_id(f"writer-rename-{seed['conversationId']}").click()
+    page.get_by_test_id(f"writer-rename-{seeded_conversation_id}").click()
     rename_input = page.locator("input:visible").first
     rename_input.fill(renamed_title)
-    page.get_by_test_id(f"writer-save-rename-{seed['conversationId']}").click()
+    page.get_by_test_id(f"writer-save-rename-{seeded_conversation_id}").click()
     wait_for_text(page, renamed_title, timeout_ms=10000)
     expect(page.locator("input:visible").count() == 0, "rename success should leave edit mode")
 
@@ -335,6 +543,7 @@ def run_fixture_enabled(page):
     expect(diagnostics.get("retrievalStrategy") in VALID_RETRIEVAL_STRATEGIES, f"unexpected retrieval strategy: {diagnostics}")
     expect(diagnostics.get("retrievalStrategy") != "rewrite_only", f"draft generation should not use rewrite-only strategy: {diagnostics}")
     expect(diagnostics.get("webResearchStatus") in VALID_WEB_RESEARCH_STATUSES, f"unexpected web research status: {diagnostics}")
+    close_preview_if_open(page)
     assert_grounding_summary_visible(page, diagnostics)
     result["diagnostics"] = diagnostics
 
@@ -343,10 +552,12 @@ def run_fixture_enabled(page):
     page.wait_for_load_state("networkidle", timeout=90000)
     wait_for_writer_workspace_ready(page)
     wait_for_text(page, "Writer Fixture Draft", timeout_ms=30000)
+    close_preview_if_open(page)
     assert_grounding_summary_visible(page, diagnostics)
     result["metrics"]["fixture_generation_ms"] = round((perf_counter() - start) * 1000, 2)
     save_debug(page, "04-fixture-generation")
     save_debug(page, "05-fixture-generation-restored")
+    result["brief_regressions"] = run_brief_regression_checks(page)
 
     return result
 

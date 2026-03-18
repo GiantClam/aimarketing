@@ -5,6 +5,7 @@ import { Fira_Code, Fira_Sans, Manrope } from "next/font/google"
 
 import { AuthProvider } from "@/components/auth-provider"
 import { LocaleProvider } from "@/components/locale-provider"
+import { QueryProvider } from "@/components/query-provider"
 import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
 import "./globals.css"
 
@@ -50,7 +51,9 @@ export default async function RootLayout({
     <html lang={locale === "zh" ? "zh-CN" : "en"} className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased dark`}>
       <body suppressHydrationWarning>
         <LocaleProvider initialLocale={locale}>
-          <AuthProvider>{children}</AuthProvider>
+          <QueryProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </QueryProvider>
         </LocaleProvider>
       </body>
     </html>

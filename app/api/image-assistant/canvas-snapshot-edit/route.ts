@@ -102,39 +102,12 @@ export async function POST(req: NextRequest) {
       ...(typeof body?.snapshotAssetId === "string" ? [body.snapshotAssetId] : []),
       ...(typeof body?.maskAssetId === "string" ? [body.maskAssetId] : []),
     ]))
-    const patchBounds =
-      body?.patchBounds &&
-      typeof body.patchBounds === "object" &&
-      typeof body.patchBounds.x === "number" &&
-      typeof body.patchBounds.y === "number" &&
-      typeof body.patchBounds.width === "number" &&
-      typeof body.patchBounds.height === "number"
-        ? {
-            x: body.patchBounds.x,
-            y: body.patchBounds.y,
-            width: body.patchBounds.width,
-            height: body.patchBounds.height,
-          }
-        : null
-    const versionMeta =
-      typeof body?.baseAssetId === "string" && body.baseAssetId.trim() && patchBounds
-        ? {
-            patch_edit: {
-              strategy: "browser_patch_composite",
-              baseAssetId: body.baseAssetId.trim(),
-              maskAssetId: typeof body?.maskAssetId === "string" ? body.maskAssetId : null,
-              patchBounds,
-            },
-          }
-        : null
 
     console.info("image-assistant.canvas-snapshot-edit.request", {
       sessionId: typeof body?.sessionId === "string" ? body.sessionId : null,
-      baseAssetId: typeof body?.baseAssetId === "string" ? body.baseAssetId : null,
       snapshotAssetId: typeof body?.snapshotAssetId === "string" ? body.snapshotAssetId : null,
       hasMaskAsset: typeof body?.maskAssetId === "string" && body.maskAssetId.trim().length > 0,
       selectionBounds: body?.selectionBounds || null,
-      patchBounds,
       canvasWidth: typeof body?.canvasWidth === "number" ? body.canvasWidth : Number(body?.canvasWidth || 0),
       canvasHeight: typeof body?.canvasHeight === "number" ? body.canvasHeight : Number(body?.canvasHeight || 0),
       referenceAssetCount: referenceAssetIds.length,
@@ -166,7 +139,7 @@ export async function POST(req: NextRequest) {
         extraInstructions: selectionPrompt && selectionPrompt !== prompt ? selectionPrompt : null,
         snapshotAssetId: typeof body?.snapshotAssetId === "string" ? body.snapshotAssetId : null,
         maskAssetId: typeof body?.maskAssetId === "string" ? body.maskAssetId : null,
-        versionMeta,
+        versionMeta: null,
       },
     })
 

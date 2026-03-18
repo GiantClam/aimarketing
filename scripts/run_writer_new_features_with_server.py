@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -13,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = ROOT / "artifacts" / "writer-new-features"
 NEXT_CLI = ROOT / "node_modules" / ".bin" / "next.CMD"
 TSCONFIG_PATH = ROOT / "tsconfig.json"
-VALIDATION_DIST_DIR = ".next-writer-new-features"
+VALIDATION_DIST_DIR = os.environ.get("NEXT_DIST_DIR", ".next-writer-new-features")
+SKIP_BUILD = os.environ.get("WRITER_NEW_FEATURES_SKIP_BUILD", "").strip().lower() == "true"
 
 
 def shell_command(*args: str) -> list[str]:
@@ -119,9 +121,25 @@ def run_case(shared_env: dict[str, str], scenario: str, server_env: dict[str, st
             stop_process_tree(proc)
 
 
+def build_validation_bundle(shared_env: dict[str, str], validation_dist_path: Path, attempts: int = 3):
+    last_return_code = 1
+
+    for attempt in range(1, attempts + 1):
+        shutil.rmtree(validation_dist_path, ignore_errors=True)
+        build = subprocess.run([str(NEXT_CLI), "build"], cwd=str(ROOT), check=False, env=shared_env)
+        if build.returncode == 0:
+            return
+        last_return_code = build.returncode
+        if attempt < attempts:
+            time.sleep(2)
+
+    raise subprocess.CalledProcessError(last_return_code, [str(NEXT_CLI), "build"])
+
+
 def main():
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     original_tsconfig = TSCONFIG_PATH.read_text(encoding="utf-8")
+    validation_dist_path = ROOT / VALIDATION_DIST_DIR
     shared_env = {
         **os.environ,
         "HOME": str(ROOT),
@@ -131,7 +149,8 @@ def main():
     }
 
     try:
-        subprocess.run([str(NEXT_CLI), "build"], cwd=str(ROOT), check=True, env=shared_env)
+        if not SKIP_BUILD:
+            build_validation_bundle(shared_env, validation_dist_path)
 
         results = {}
 
