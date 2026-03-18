@@ -1,30 +1,50 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq } from "drizzle-orm"
 
 import { getSessionUser } from "@/lib/auth/session"
-import { db } from "@/lib/db"
-import { users } from "@/lib/db/schema"
 import {
   getEnterpriseDifyBinding,
   type EnterpriseDifyDatasetInput,
   upsertEnterpriseDifyBinding,
 } from "@/lib/dify/enterprise-knowledge"
-import { isEnterpriseAdmin } from "@/lib/enterprise/server"
 
-async function getAdminEnterpriseId(userId: number) {
-  const allowed = await isEnterpriseAdmin(userId)
-  if (!allowed) {
-    return null
+function getEnterpriseIdFromSession(currentUser: Awaited<ReturnType<typeof getSessionUser>>) {
+  const enterpriseId = currentUser?.enterpriseId
+  return typeof enterpriseId === "number" && Number.isFinite(enterpriseId) && enterpriseId > 0 ? enterpriseId : null
+}
+
+function isActiveEnterpriseMember(currentUser: Awaited<ReturnType<typeof getSessionUser>>) {
+  return Boolean(getEnterpriseIdFromSession(currentUser) && currentUser?.enterpriseStatus === "active")
+}
+
+function isActiveEnterpriseAdmin(currentUser: Awaited<ReturnType<typeof getSessionUser>>) {
+  return Boolean(
+    getEnterpriseIdFromSession(currentUser) &&
+      currentUser?.enterpriseRole === "admin" &&
+      currentUser?.enterpriseStatus === "active",
+  )
+}
+
+function maskApiKey(apiKey: string) {
+  const trimmed = apiKey.trim()
+  if (!trimmed) return ""
+  if (trimmed.length <= 8) {
+    return `${trimmed.slice(0, 2)}****${trimmed.slice(-2)}`
   }
+  return `${trimmed.slice(0, 4)}****${trimmed.slice(-4)}`
+}
 
-  const rows = await db
-    .select({ enterpriseId: users.enterpriseId })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1)
+function serializeBinding(binding: Awaited<ReturnType<typeof getEnterpriseDifyBinding>>) {
+  if (!binding) return null
 
-  const enterpriseId = rows[0]?.enterpriseId
-  return typeof enterpriseId === "number" && enterpriseId > 0 ? enterpriseId : null
+  return {
+    id: binding.id,
+    enterpriseId: binding.enterpriseId,
+    baseUrl: binding.baseUrl,
+    enabled: binding.enabled,
+    hasApiKey: Boolean(binding.apiKey.trim()),
+    apiKeyMasked: maskApiKey(binding.apiKey),
+    datasets: binding.datasets,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -34,15 +54,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 })
     }
 
-    const enterpriseId = await getAdminEnterpriseId(currentUser.id)
-    if (!enterpriseId) {
+    if (!isActiveEnterpriseMember(currentUser)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 })
     }
 
+    const enterpriseId = getEnterpriseIdFromSession(currentUser)
+    if (!enterpriseId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 })
+    }
     const binding = await getEnterpriseDifyBinding(enterpriseId)
     return NextResponse.json({
       data: {
-        binding,
+        binding: serializeBinding(binding),
       },
     })
   } catch (error: any) {
@@ -57,16 +80,20 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 })
     }
 
-    const enterpriseId = await getAdminEnterpriseId(currentUser.id)
-    if (!enterpriseId) {
+    if (!isActiveEnterpriseAdmin(currentUser)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 })
     }
 
+    const enterpriseId = getEnterpriseIdFromSession(currentUser)
+    if (!enterpriseId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 })
+    }
+    const existing = await getEnterpriseDifyBinding(enterpriseId)
     const body = await request.json()
-    const baseUrl = typeof body?.baseUrl === "string" ? body.baseUrl : ""
-    const apiKey = typeof body?.apiKey === "string" ? body.apiKey : ""
-    const enabled = Boolean(body?.enabled)
-    const datasets = Array.isArray(body?.datasets) ? body.datasets : []
+    const baseUrl = typeof body?.baseUrl === "string" ? body.baseUrl : existing?.baseUrl || ""
+    const apiKey = typeof body?.apiKey === "string" ? body.apiKey : existing?.apiKey || ""
+    const enabled = typeof body?.enabled === "boolean" ? body.enabled : Boolean(existing?.enabled)
+    const datasets = Array.isArray(body?.datasets) ? body.datasets : existing?.datasets || []
 
     const normalizedDatasets: EnterpriseDifyDatasetInput[] = datasets.map((dataset: any) => ({
       datasetId: String(dataset?.datasetId || ""),
@@ -85,7 +112,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       data: {
-        binding,
+        binding: serializeBinding(binding),
       },
     })
   } catch (error: any) {

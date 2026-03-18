@@ -11,6 +11,8 @@ import {
 } from "@/lib/dify/config"
 import { isEnterpriseAdmin } from "@/lib/enterprise/server"
 
+type EnterpriseAdvisorType = "brand-strategy" | "growth" | "lead-hunter"
+
 async function getAdminEnterpriseId(userId: number) {
   const allowed = await isEnterpriseAdmin(userId)
   if (!allowed) {
@@ -25,6 +27,34 @@ async function getAdminEnterpriseId(userId: number) {
 
   const enterpriseId = rows[0]?.enterpriseId
   return typeof enterpriseId === "number" && enterpriseId > 0 ? enterpriseId : null
+}
+
+function maskApiKey(apiKey: string) {
+  const trimmed = apiKey.trim()
+  if (!trimmed) return ""
+  if (trimmed.length <= 8) {
+    return `${trimmed.slice(0, 2)}****${trimmed.slice(-2)}`
+  }
+  return `${trimmed.slice(0, 4)}****${trimmed.slice(-4)}`
+}
+
+function serializeOverride(override: {
+  id: number
+  enterpriseId: number
+  advisorType: string
+  baseUrl: string
+  apiKey: string
+  enabled: boolean
+}) {
+  return {
+    id: override.id,
+    enterpriseId: override.enterpriseId,
+    advisorType: override.advisorType as EnterpriseAdvisorType,
+    baseUrl: override.baseUrl,
+    enabled: override.enabled,
+    hasApiKey: Boolean(override.apiKey.trim()),
+    apiKeyMasked: maskApiKey(override.apiKey),
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -47,7 +77,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: {
         defaults,
-        overrides,
+        overrides: overrides.map(serializeOverride),
       },
     })
   } catch (error: any) {
@@ -95,7 +125,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       data: {
         defaults,
-        overrides,
+        overrides: overrides.map(serializeOverride),
       },
     })
   } catch (error: any) {
