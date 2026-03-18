@@ -18,6 +18,7 @@
     "migrate:data": "node scripts/migrate-legacy-data-to-ai-marketing.js",
     "seed:writer:history": "node scripts/seed-writer-history.js",
     "seed:loadtest:lead-hunter": "node scripts/provision_lead_hunter_load_test_user.js",
+    "test:openrouter:smoke": "node scripts/openrouter_smoke_test.js",
     "test:e2e:writer:real": "python scripts/run_writer_real_validation_with_server.py",
     "test:e2e:writer:new-features": "python scripts/run_writer_new_features_with_server.py",
     "test:image-assistant:patch-composite": "python scripts/validate_image_patch_composite_math.py",

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import type { ImageAssistantAssetType } from "@/lib/image-assistant/types"
 import {
   deleteImageAssistantSession,
   getImageAssistantSessionDetail,
@@ -39,8 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
             includeCanvas: false,
             messageLimit: parsePositiveInt(req.nextUrl.searchParams.get("messageLimit")) ?? 16,
             versionLimit: parsePositiveInt(req.nextUrl.searchParams.get("versionLimit")) ?? 8,
-            assetLimit: parsePositiveInt(req.nextUrl.searchParams.get("assetLimit")) ?? 5,
-            assetTypes: ["reference"] as ImageAssistantAssetType[],
+            assetLimit: parsePositiveInt(req.nextUrl.searchParams.get("assetLimit")) ?? 24,
           }
         : mode === "content"
           ? {
@@ -48,6 +46,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
               includeVersions: true,
               includeAssets: true,
               includeCanvas: false,
+              messageLimit: parsePositiveInt(req.nextUrl.searchParams.get("messageLimit")) ?? 12,
+              versionLimit: parsePositiveInt(req.nextUrl.searchParams.get("versionLimit")) ?? 6,
+              assetLimit: parsePositiveInt(req.nextUrl.searchParams.get("assetLimit")) ?? 24,
             }
           : mode === "canvas"
             ? {

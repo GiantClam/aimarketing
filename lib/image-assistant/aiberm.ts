@@ -1,4 +1,10 @@
 import { writerRequestJson } from "@/lib/writer/network"
+import {
+  generateImagesWithOpenRouter,
+  getOpenRouterImageModel,
+  hasOpenRouterApiKey,
+  type OpenRouterInlineReferenceImage,
+} from "@/lib/writer/aiberm"
 
 import {
   generateOrEditImagesWithGoogle,
@@ -6,6 +12,7 @@ import {
   hasImageAssistantGoogleKey,
   type ImageAssistantFileReference,
 } from "@/lib/image-assistant/google"
+import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
 import { isImageAssistantR2Available } from "@/lib/image-assistant/r2"
 import type { ImageAssistantResolution, ImageAssistantSizePreset } from "@/lib/image-assistant/types"
 
@@ -128,10 +135,24 @@ export function hasImageAssistantAibermKey() {
 }
 
 export function getImageAssistantModel(_resolution: ImageAssistantResolution) {
-  return hasImageAssistantGoogleKey() ? getImageAssistantGoogleModel() : IMAGE_ASSISTANT_AIBERM_MODELS[0]
+  if (hasImageAssistantGoogleKey()) {
+    return getImageAssistantGoogleModel()
+  }
+  if (hasImageAssistantAibermKey()) {
+    return IMAGE_ASSISTANT_AIBERM_MODELS[0]
+  }
+  return getOpenRouterImageModel()
 }
 
 export function getImageAssistantAvailability() {
+  const preferredProvider = hasImageAssistantGoogleKey()
+    ? "gemini"
+    : hasImageAssistantAibermKey()
+      ? "aiberm"
+      : hasOpenRouterApiKey()
+        ? "openrouter"
+        : "unavailable"
+
   if (shouldUseImageAssistantFixtures()) {
     return {
       enabled: true,
@@ -148,22 +169,22 @@ export function getImageAssistantAvailability() {
     return {
       enabled: false,
       reason: "image_assistant_r2_config_missing",
-      provider: hasImageAssistantGoogleKey() ? "gemini" : "aiberm",
+      provider: preferredProvider,
       models: {
-        highQuality: getImageAssistantGoogleModel(),
-        lowCost: IMAGE_ASSISTANT_AIBERM_MODELS[0],
+        highQuality: getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
+        lowCost: hasImageAssistantAibermKey() ? IMAGE_ASSISTANT_AIBERM_MODELS[0] : getOpenRouterImageModel(),
       },
     }
   }
 
-  if (!hasImageAssistantAibermKey() && !hasImageAssistantGoogleKey()) {
+  if (!hasImageAssistantAibermKey() && !hasImageAssistantGoogleKey() && !hasOpenRouterApiKey()) {
     return {
       enabled: false,
-      reason: "aiberm_api_key_missing",
-      provider: "gemini",
+      reason: "image_generation_provider_missing",
+      provider: "unavailable",
       models: {
-        highQuality: getImageAssistantGoogleModel(),
-        lowCost: IMAGE_ASSISTANT_AIBERM_MODELS[0],
+        highQuality: getOpenRouterImageModel(),
+        lowCost: getOpenRouterImageModel(),
       },
     }
   }
@@ -171,10 +192,10 @@ export function getImageAssistantAvailability() {
   return {
     enabled: true,
     reason: null,
-    provider: hasImageAssistantGoogleKey() ? "gemini" : "aiberm",
+    provider: preferredProvider,
     models: {
-      highQuality: getImageAssistantGoogleModel(),
-      lowCost: IMAGE_ASSISTANT_AIBERM_MODELS[0],
+      highQuality: getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
+      lowCost: hasImageAssistantAibermKey() ? IMAGE_ASSISTANT_AIBERM_MODELS[0] : getOpenRouterImageModel(),
     },
   }
 }
@@ -233,7 +254,7 @@ async function requestImagesWithModel(params: {
         },
       }),
     },
-    { attempts: 2, timeoutMs: 120_000 },
+    { attempts: 1, timeoutMs: 120_000 },
   )
 
   if (!response.ok) {
@@ -268,34 +289,31 @@ async function requestImages(params: {
   referenceImages?: InlineReferenceImage[]
   signal?: AbortSignal
 }) {
-  let lastError: unknown = null
+  const model = IMAGE_ASSISTANT_AIBERM_MODELS[0]
+  return requestImagesWithModel({
+    ...params,
+    model,
+  })
+}
 
-  for (let modelIndex = 0; modelIndex < IMAGE_ASSISTANT_AIBERM_MODELS.length; modelIndex += 1) {
-    const model = IMAGE_ASSISTANT_AIBERM_MODELS[modelIndex]
+function getProviderExecutionPlan(params: { referenceImages?: ReferenceImageInput[] }) {
+  const hasFileReferences = (params.referenceImages || []).some((image) => image.kind === "file")
+  const plan: ImageGenerationProvider[] = []
 
-    try {
-      return await requestImagesWithModel({
-        ...params,
-        model,
-      })
-    } catch (error) {
-      lastError = error
-      if (params.signal?.aborted) {
-        throw error
-      }
-      if (modelIndex < IMAGE_ASSISTANT_AIBERM_MODELS.length - 1 && isFallbackEligibleAibermError(error)) {
-        console.warn("image-assistant.aiberm.generate.fallback", {
-          fromModel: model,
-          toModel: IMAGE_ASSISTANT_AIBERM_MODELS[modelIndex + 1],
-          message: error instanceof Error ? error.message : String(error),
-        })
-        continue
-      }
-      throw error
-    }
+  if (hasImageAssistantGoogleKey() && (hasFileReferences || !hasImageAssistantAibermKey())) {
+    plan.push("gemini")
+  }
+  if (hasImageAssistantAibermKey()) {
+    plan.push("aiberm")
+  }
+  if (hasOpenRouterApiKey()) {
+    plan.push("openrouter")
+  }
+  if (hasImageAssistantGoogleKey() && !plan.includes("gemini")) {
+    plan.push("gemini")
   }
 
-  throw lastError instanceof Error ? lastError : new Error("image_assistant_request_failed")
+  return plan
 }
 
 export async function generateOrEditImages(params: {
@@ -318,32 +336,58 @@ export async function generateOrEditImages(params: {
     }
   }
 
-  const shouldUseGoogle =
-    hasImageAssistantGoogleKey() &&
-    (!hasImageAssistantAibermKey() || (params.referenceImages || []).some((image) => image.kind === "file"))
+  const fileReferenceImages = (params.referenceImages || []).filter(
+    (image): image is ImageAssistantFileReference => image.kind === "file",
+  )
+  const inlineReferenceImages = (params.referenceImages || []).filter(
+    (image): image is InlineReferenceImage => image.kind === "inline",
+  )
+  const providerPlan = getProviderExecutionPlan({ referenceImages: params.referenceImages })
+  const { provider: resolvedProvider, result } = await executeImageProviderPlan({
+    providerPlan,
+    signal: params.signal,
+    handlers: {
+      gemini: () =>
+        generateOrEditImagesWithGoogle({
+          prompt: params.prompt,
+          resolution: params.resolution,
+          sizePreset: params.sizePreset,
+          referenceImages: fileReferenceImages,
+          signal: params.signal,
+        }),
+      aiberm: () =>
+        requestImages({
+          prompt: params.prompt,
+          resolution: params.resolution,
+          sizePreset: params.sizePreset,
+          referenceImages: inlineReferenceImages,
+          signal: params.signal,
+        }),
+      openrouter: async () => {
+        const openRouterResult = await generateImagesWithOpenRouter(
+          params.prompt,
+          getOpenRouterImageModel(),
+          aspectRatio,
+          inlineReferenceImages as OpenRouterInlineReferenceImage[],
+        )
+        return {
+          model: getOpenRouterImageModel(),
+          images: openRouterResult.images,
+          textSummary: openRouterResult.textSummary,
+        }
+      },
+    },
+    onProviderFailure: ({ provider, nextProvider, error }) => {
+      console.warn(`image-assistant.${provider}.generate.failed`, {
+        nextProvider,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    },
+  })
 
-  const result = shouldUseGoogle
-    ? await generateOrEditImagesWithGoogle({
-        prompt: params.prompt,
-        resolution: params.resolution,
-        sizePreset: params.sizePreset,
-        referenceImages: (params.referenceImages || []).filter(
-          (image): image is ImageAssistantFileReference => image.kind === "file",
-        ),
-        signal: params.signal,
-      })
-    : await requestImages({
-        prompt: params.prompt,
-        resolution: params.resolution,
-        sizePreset: params.sizePreset,
-        referenceImages: (params.referenceImages || []).filter(
-          (image): image is InlineReferenceImage => image.kind === "inline",
-        ),
-        signal: params.signal,
-      })
   const expanded = Array.from({ length: candidateCount }, (_, index) => result.images[index % result.images.length])
   return {
-    provider: shouldUseGoogle ? "gemini" : "aiberm",
+    provider: resolvedProvider,
     model: result.model,
     textSummary: result.textSummary || "Image generation completed.",
     images: expanded,

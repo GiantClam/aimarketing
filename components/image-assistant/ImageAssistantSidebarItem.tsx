@@ -1,16 +1,31 @@
 "use client"
 
-import { useCallback, useEffect, useState, type MouseEvent, type UIEvent } from "react"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { Check, ChevronDown, ChevronRight, Edit2, ImageIcon, Loader2, Plus, Trash2, X } from "lucide-react"
 
 import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { deleteImageAssistantSessionContentCache } from "@/lib/image-assistant/session-store"
+import {
+  deleteImageAssistantSessionContentCache,
+  getImageAssistantSessionContentCache,
+  IMAGE_ASSISTANT_SESSION_CACHE_TTL_MS,
+  isImageAssistantSessionContentCacheFresh,
+  saveImageAssistantSessionContentCache,
+} from "@/lib/image-assistant/session-store"
 import type { ImageAssistantConversationSummary } from "@/lib/image-assistant/types"
+import {
+  fetchWorkspaceQueryData,
+  getImageAssistantDetailQueryKey,
+  getImageAssistantSessionDetail,
+} from "@/lib/query/workspace-cache"
+import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
+import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
+import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import { cn } from "@/lib/utils"
 
 function mergeSessions(current: ImageAssistantConversationSummary[], incoming: ImageAssistantConversationSummary[]) {
@@ -26,6 +41,10 @@ function mergeSessions(current: ImageAssistantConversationSummary[], incoming: I
   return merged
 }
 
+const IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS = 60_000
+const IMAGE_ASSISTANT_SESSION_PREFETCH_LIMIT = 3
+const IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY = "image-assistant-conversations-cache-v2"
+
 export function ImageAssistantSidebarItem({
   title,
   icon: Icon,
@@ -36,12 +55,8 @@ export function ImageAssistantSidebarItem({
   const { messages } = useI18n()
   const pathname = usePathname()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [isOpen, setIsOpen] = useState(false)
-  const [sessions, setSessions] = useState<ImageAssistantConversationSummary[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editingSessionName, setEditingSessionName] = useState("")
   const [pendingDeleteSession, setPendingDeleteSession] = useState<ImageAssistantConversationSummary | null>(null)
@@ -49,66 +64,82 @@ export function ImageAssistantSidebarItem({
 
   const isImageAssistantRoute = pathname.startsWith("/dashboard/image-assistant")
   const isExpanded = isOpen
-  const activeSessionId = pathname.match(/^\/dashboard\/image-assistant\/([^/]+)$/)?.[1] || null
+  const activeSessionId = normalizeRouteEntityId(pathname.match(/^\/dashboard\/image-assistant\/([^/]+)$/)?.[1] || null)
 
-  const fetchSessions = useCallback(async ({ append = false, cursor }: { append?: boolean; cursor?: string | null } = {}) => {
-    if (append) {
-      setIsLoadingMore(true)
-    } else {
-      setIsLoading(true)
-    }
-    try {
+  const {
+    items: sessions,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    nextCursor,
+    fetchItems: fetchSessions,
+    updateList,
+    createSnapshot,
+    restoreSnapshot,
+    handleListScroll,
+  } = useCachedSidebarList<ImageAssistantConversationSummary>({
+    cacheKey: IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY,
+    legacyKeys: [{ area: "local", key: "image-assistant-conversations-cache-v1" }],
+    ttlMs: IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS,
+    isExpanded,
+    activeItemId: activeSessionId,
+    fetchPage: async ({ cursor }) => {
       const params = new URLSearchParams({ limit: "20" })
       if (cursor) {
         params.set("cursor", cursor)
       }
 
       const response = await fetch(`/api/image-assistant/sessions?${params.toString()}`)
-      if (!response.ok) return
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
       const data = await response.json()
       const nextBatch = Array.isArray(data?.data) ? (data.data as ImageAssistantConversationSummary[]) : []
-      setSessions((current) => (append ? mergeSessions(current, nextBatch) : nextBatch))
-      setHasMore(Boolean(data?.has_more) && nextBatch.length > 0)
-      setNextCursor(typeof data?.next_cursor === "string" ? data.next_cursor : null)
-    } catch (error) {
-      console.error("Failed to load image assistant sessions", error)
-    } finally {
-      if (append) {
-        setIsLoadingMore(false)
-      } else {
-        setIsLoading(false)
+      return {
+        items: nextBatch,
+        hasMore: Boolean(data?.has_more) && nextBatch.length > 0,
+        nextCursor: typeof data?.next_cursor === "string" ? data.next_cursor : null,
       }
-    }
-  }, [])
+    },
+    mergeItems: mergeSessions,
+    getItemId: (session) => session.id,
+  })
 
+  const prefetchSessionDetail = useCallback(async (targetSessionId: string) => {
+    const cached = getImageAssistantSessionContentCache(targetSessionId)
+    if (cached && isImageAssistantSessionContentCacheFresh(cached, IMAGE_ASSISTANT_SESSION_CACHE_TTL_MS)) {
+      return
+    }
+
+    const detail = await fetchWorkspaceQueryData(queryClient, {
+      queryKey: getImageAssistantDetailQueryKey(targetSessionId, {
+        mode: "content",
+        messageLimit: 12,
+        versionLimit: 6,
+      }),
+      queryFn: () =>
+        getImageAssistantSessionDetail(targetSessionId, {
+          mode: "content",
+          messageLimit: 12,
+          versionLimit: 6,
+        }),
+    })
+
+    saveImageAssistantSessionContentCache(targetSessionId, detail)
+  }, [queryClient])
   useEffect(() => {
     if (isImageAssistantRoute) {
       setIsOpen(true)
     }
   }, [isImageAssistantRoute])
 
-  useEffect(() => {
-    if (isExpanded) {
-      void fetchSessions()
-    }
-  }, [fetchSessions, isExpanded])
-
-  useEffect(() => {
-    if (!isExpanded || !activeSessionId || isLoading || sessions.length === 0) return
-    if (sessions.some((session) => session.id === activeSessionId)) return
-    if (hasMore && nextCursor && !isLoadingMore) {
-      void fetchSessions({ append: true, cursor: nextCursor })
-      return
-    }
-    void fetchSessions()
-  }, [activeSessionId, fetchSessions, hasMore, isExpanded, isLoading, isLoadingMore, nextCursor, sessions])
-
-  const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
-    const target = event.currentTarget
-    if (isLoading || isLoadingMore || !hasMore || !nextCursor) return
-    if (target.scrollHeight - target.scrollTop - target.clientHeight > 48) return
-    void fetchSessions({ append: true, cursor: nextCursor })
-  }
+  const { prefetchItem: warmSessionDetail } = useSidebarDetailPrefetch({
+    items: sessions,
+    activeItemId: activeSessionId,
+    prefetchLimit: IMAGE_ASSISTANT_SESSION_PREFETCH_LIMIT,
+    getItemId: (session: ImageAssistantConversationSummary) => session.id,
+    prefetchItem: prefetchSessionDetail,
+  })
 
   const handleRenameStart = (session: ImageAssistantConversationSummary, event: MouseEvent) => {
     event.preventDefault()
@@ -124,7 +155,7 @@ export function ImageAssistantSidebarItem({
     const nextName = editingSessionName.trim()
     if (!nextName) return
 
-    setSessions((current) => current.map((session) => (session.id === sessionId ? { ...session, name: nextName } : session)))
+    updateList((current) => current.map((session) => (session.id === sessionId ? { ...session, name: nextName } : session)))
     try {
       await fetch(`/api/image-assistant/sessions/${sessionId}`, {
         method: "PATCH",
@@ -133,7 +164,7 @@ export function ImageAssistantSidebarItem({
       })
       setEditingSessionId(null)
       setEditingSessionName("")
-      void fetchSessions()
+      void fetchSessions().catch(() => {})
     } catch (error) {
       console.error("Failed to rename image assistant session", error)
     }
@@ -157,9 +188,9 @@ export function ImageAssistantSidebarItem({
     if (!pendingDeleteSession) return
 
     const nextSessionId = pendingDeleteSession.id
-    const previousSessions = sessions
+    const previousSnapshot = createSnapshot()
     setDeletingSessionId(nextSessionId)
-    setSessions((current) => current.filter((session) => session.id !== nextSessionId))
+    updateList((current) => current.filter((session) => session.id !== nextSessionId))
 
     try {
       const response = await fetch(`/api/image-assistant/sessions/${nextSessionId}`, {
@@ -173,7 +204,7 @@ export function ImageAssistantSidebarItem({
         router.push("/dashboard/image-assistant")
       }
     } catch (error) {
-      setSessions(previousSessions)
+      restoreSnapshot(previousSnapshot)
       console.error("Failed to delete image assistant session", error)
     } finally {
       setDeletingSessionId(null)
@@ -221,7 +252,7 @@ export function ImageAssistantSidebarItem({
                   const isActive = pathname === `/dashboard/image-assistant/${session.id}`
                   const isDeleting = deletingSessionId === session.id
                   return (
-                    <Link key={session.id} href={`/dashboard/image-assistant/${session.id}`}>
+                    <Link key={session.id} href={`/dashboard/image-assistant/${session.id}`} onMouseEnter={() => void warmSessionDetail(session.id)}>
                       <div
                         className={cn(
                           "group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors",
@@ -249,7 +280,13 @@ export function ImageAssistantSidebarItem({
                           <>
                             <div className="flex min-w-0 flex-1 items-center gap-2 md:max-w-[160px]">
                               {session.cover_asset_url ? (
-                                <img src={session.cover_asset_url} alt="" className="h-6 w-6 shrink-0 rounded-md object-cover" />
+                                <img
+                                  src={session.cover_asset_url}
+                                  alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="h-6 w-6 shrink-0 rounded-md object-cover"
+                                />
                               ) : (
                                 <ImageIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
                               )}

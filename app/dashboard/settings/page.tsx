@@ -39,18 +39,6 @@ type EnterpriseDifyDataset = {
   enabled: boolean
 }
 
-type EnterpriseDifyRemoteDataset = {
-  id: string
-  name: string
-  description: string
-  suggestedScope?: EnterpriseDifyDataset["scope"]
-  coverageTags?: Array<
-    "company-facts" | "product-system" | "application-scenarios" | "technical-proof" | "delivery-service" | "brand-proof" | "faq"
-  >
-  documentCount?: number
-  sampleDocuments?: string[]
-}
-
 type EnterpriseAdvisorType = "brand-strategy" | "growth" | "lead-hunter"
 
 type AdvisorSettingsDraft = {
@@ -68,16 +56,6 @@ const KNOWLEDGE_SCOPE_OPTIONS = [
   { value: "compliance", label: "合规资料" },
   { value: "campaign", label: "活动资料" },
 ] as const
-
-const KNOWLEDGE_COVERAGE_LABELS = {
-  "company-facts": "企业总览",
-  "product-system": "产品体系",
-  "application-scenarios": "场景映射",
-  "technical-proof": "技术与资质",
-  "delivery-service": "交付服务",
-  "brand-proof": "品牌与证据",
-  faq: "问答资料",
-} as const
 
 function formatEnterpriseDifyMessage(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : ""
@@ -104,9 +82,7 @@ export default function SettingsPage() {
   const [difyApiKey, setDifyApiKey] = useState("")
   const [difyEnabled, setDifyEnabled] = useState(false)
   const [difyDatasets, setDifyDatasets] = useState<EnterpriseDifyDataset[]>([])
-  const [remoteDatasets, setRemoteDatasets] = useState<EnterpriseDifyRemoteDataset[]>([])
   const [loadingDifyConfig, setLoadingDifyConfig] = useState(false)
-  const [loadingRemoteDatasets, setLoadingRemoteDatasets] = useState(false)
   const [savingDifyConfig, setSavingDifyConfig] = useState(false)
   const [difyMessage, setDifyMessage] = useState("")
   const [advisorDefaults, setAdvisorDefaults] = useState<{
@@ -306,52 +282,6 @@ export default function SettingsPage() {
     if (targetUserId === userId) {
       await refreshProfile()
     }
-  }
-
-  const fetchRemoteDifyDatasets = async () => {
-    setLoadingRemoteDatasets(true)
-    setDifyMessage("")
-    try {
-      const response = await fetch("/api/enterprise/dify/datasets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseUrl: difyBaseUrl, apiKey: difyApiKey }),
-      })
-
-      const json = await response.json().catch(() => null)
-      if (!response.ok) {
-        throw new Error(json?.error || "知识库拉取失败")
-      }
-
-      const datasets: EnterpriseDifyRemoteDataset[] = Array.isArray(json?.data?.datasets) ? json.data.datasets : []
-      setRemoteDatasets(datasets)
-      setDifyDatasets((current) => {
-        const next = [...current]
-        for (const dataset of datasets) {
-          if (!next.some((item) => item.datasetId === dataset.id)) {
-            next.push({
-              datasetId: dataset.id,
-              datasetName: dataset.name,
-              scope: dataset.suggestedScope || "general",
-              priority: 100,
-              enabled: false,
-            })
-          }
-        }
-        return next
-      })
-      setDifyMessage(`已拉取 ${datasets.length} 个 Dify 知识库。`)
-    } catch (error) {
-      setDifyMessage(formatEnterpriseDifyMessage(error, "知识库拉取失败"))
-    } finally {
-      setLoadingRemoteDatasets(false)
-    }
-  }
-
-  const updateDifyDataset = (datasetId: string, patch: Partial<EnterpriseDifyDataset>) => {
-    setDifyDatasets((current) =>
-      current.map((dataset) => (dataset.datasetId === datasetId ? { ...dataset, ...patch } : dataset)),
-    )
   }
 
   const saveDifyConfig = async () => {
@@ -673,13 +603,6 @@ export default function SettingsPage() {
                 </label>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={fetchRemoteDifyDatasets}
-                    disabled={loadingRemoteDatasets || !difyBaseUrl.trim() || !difyApiKey.trim()}
-                  >
-                    {loadingRemoteDatasets ? "拉取中..." : "测试并拉取知识库"}
-                  </Button>
                   <Button onClick={saveDifyConfig} disabled={savingDifyConfig || !difyBaseUrl.trim()}>
                     {savingDifyConfig ? "保存中..." : "保存 Dify 配置"}
                   </Button>
@@ -692,87 +615,49 @@ export default function SettingsPage() {
                     <div>
                       <p className="text-sm font-medium">知识库绑定与检索用途</p>
                       <p className="text-xs text-muted-foreground">
-                        为企业配置统一可复用的 Dify 知识库，并指定主要检索用途。系统会根据文档自动给出建议用途，便于后续按 agent、场景和工作流复用。
+                        企业知识库绑定仅支持数据库配置。设置页只展示当前已保存的 dataset 绑定，不提供远端拉取和页面内编辑，避免共享 Dify 时误拉到其他企业知识库。
                       </p>
                       <p className="text-xs text-muted-foreground">优先级数字越小越靠前；当前单次检索最多使用前 4 个符合用途的知识库。</p>
                     </div>
                     <span className="text-xs text-muted-foreground">
-                      已发现 {remoteDatasets.length} 个 / 已启用 {enabledDifyDatasetCount} 个
+                      数据库已配置 {difyDatasets.length} 个 / 已启用 {enabledDifyDatasetCount} 个
                     </span>
                   </div>
 
                   {difyDatasets.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">先填写 Dify 配置并点击“测试并拉取知识库”。</p>
+                    <p className="text-sm text-muted-foreground">当前没有已保存的 dataset 绑定。请直接在数据库中维护 `enterprise_dify_datasets`。</p>
                   ) : (
                     <div className="space-y-3">
-                      {difyDatasets.map((dataset) => {
-                        const remote = remoteDatasets.find((item) => item.id === dataset.datasetId)
-                        return (
-                          <div key={dataset.datasetId} className="rounded-lg border p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <label className="flex items-start gap-3 text-sm">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 rounded border-border"
-                                  checked={dataset.enabled}
-                                  onChange={(event) => updateDifyDataset(dataset.datasetId, { enabled: event.target.checked })}
-                                />
-                                <span className="space-y-1">
-                                  <span className="block font-medium">{dataset.datasetName}</span>
-                                  <span className="block text-xs text-muted-foreground">{remote?.description || dataset.datasetId}</span>
-                                  {remote?.coverageTags && remote.coverageTags.length > 0 && (
-                                    <span className="block text-xs text-muted-foreground">
-                                      建议配置：{KNOWLEDGE_SCOPE_OPTIONS.find((option) => option.value === (remote.suggestedScope || "general"))?.label || "综合资料"}
-                                      {" · 覆盖 "}
-                                      {remote.coverageTags
-                                        .map((tag) => KNOWLEDGE_COVERAGE_LABELS[tag])
-                                        .filter(Boolean)
-                                        .join(" / ")}
-                                    </span>
-                                  )}
-                                  {remote?.sampleDocuments && remote.sampleDocuments.length > 0 && (
-                                    <span className="block text-xs text-muted-foreground">
-                                      样本文档：{remote.sampleDocuments.slice(0, 3).join(" / ")}
-                                    </span>
-                                  )}
+                      {difyDatasets.map((dataset) => (
+                        <div key={dataset.datasetId} className="rounded-lg border p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1 text-sm">
+                              <p className="font-medium">{dataset.datasetName}</p>
+                              <p className="text-xs text-muted-foreground">{dataset.datasetId}</p>
+                            </div>
+                            <div className="grid min-w-[220px] gap-3 sm:grid-cols-3">
+                              <div className="grid gap-1 text-xs text-muted-foreground">
+                                <span>状态</span>
+                                <span className="rounded-md border bg-muted px-3 py-2 text-sm text-foreground">
+                                  {dataset.enabled ? "已启用" : "已停用"}
                                 </span>
-                              </label>
-                              <div className="grid min-w-[220px] gap-3 sm:grid-cols-2">
-                                <label className="grid gap-1 text-xs text-muted-foreground">
-                                  <span>检索用途</span>
-                                  <select
-                                    className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
-                                    value={dataset.scope}
-                                    onChange={(event) =>
-                                      updateDifyDataset(dataset.datasetId, {
-                                        scope: event.target.value as EnterpriseDifyDataset["scope"],
-                                      })
-                                    }
-                                  >
-                                    {KNOWLEDGE_SCOPE_OPTIONS.map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <label className="grid gap-1 text-xs text-muted-foreground">
-                                  <span>优先级</span>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    max={999}
-                                    value={dataset.priority}
-                                    onChange={(event) =>
-                                      updateDifyDataset(dataset.datasetId, { priority: Number(event.target.value || 100) })
-                                    }
-                                  />
-                                </label>
+                              </div>
+                              <div className="grid gap-1 text-xs text-muted-foreground">
+                                <span>检索用途</span>
+                                <span className="rounded-md border bg-muted px-3 py-2 text-sm text-foreground">
+                                  {KNOWLEDGE_SCOPE_OPTIONS.find((option) => option.value === dataset.scope)?.label || dataset.scope}
+                                </span>
+                              </div>
+                              <div className="grid gap-1 text-xs text-muted-foreground">
+                                <span>优先级</span>
+                                <span className="rounded-md border bg-muted px-3 py-2 text-sm text-foreground">
+                                  {dataset.priority}
+                                </span>
                               </div>
                             </div>
                           </div>
-                        )
-                      })}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

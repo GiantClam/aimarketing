@@ -16,8 +16,15 @@ import {
     getAdvisorMessagesPage,
     getAdvisorMessagesQueryKey,
     invalidateAdvisorConversationQueries,
-    type AdvisorMessagePage,
 } from "@/lib/query/workspace-cache";
+import {
+    ADVISOR_SESSION_CACHE_TTL_MS,
+    getAdvisorConversationCache,
+    isAdvisorConversationCacheFresh,
+    mapAdvisorMessagePageToChatMessages,
+    saveAdvisorConversationCache,
+    type AdvisorChatMessage,
+} from "@/lib/advisor/session-store";
 import {
     findAdvisorPendingTask,
     removePendingAssistantTask,
@@ -25,13 +32,7 @@ import {
     updatePendingAssistantTask,
 } from "@/lib/assistant-task-store";
 
-interface Message {
-    id: string;
-    conversation_id: string;
-    role: "user" | "assistant";
-    content: string;
-    agentName?: string;
-}
+type Message = AdvisorChatMessage;
 
 const ADVISOR_LABEL_MAP: Record<string, string> = {
     "brand-strategy": "品牌战略顾问",
@@ -47,19 +48,26 @@ function getAdvisorLabel(advisorType: string) {
     return ADVISOR_LABEL_MAP[advisorType] || "专家顾问";
 }
 
-function sanitizeAssistantContent(raw: string) {
-    let text = raw || "";
-    while (true) {
-        const start = text.indexOf("<think>");
-        if (start < 0) break;
-        const end = text.indexOf("</think>", start + "<think>".length);
-        if (end < 0) {
-            text = text.slice(0, start);
-            break;
-        }
-        text = `${text.slice(0, start)}${text.slice(end + "</think>".length)}`;
-    }
-    return text.trim();
+function normalizeMessageContent(content: string) {
+    return content.trim();
+}
+
+function getMessageSignature(message: Message) {
+    return [
+        message.role,
+        normalizeMessageContent(message.content),
+        message.agentName || "",
+    ].join("|");
+}
+
+function areMessageListsEquivalent(left: Message[], right: Message[]) {
+    if (left.length !== right.length) return false;
+    return left.every((message, index) => getMessageSignature(message) === getMessageSignature(right[index]));
+}
+
+function isMessageListPrefix(prefix: Message[], full: Message[]) {
+    if (prefix.length > full.length) return false;
+    return prefix.every((message, index) => getMessageSignature(message) === getMessageSignature(full[index]));
 }
 
 export function DifyChatArea({
@@ -90,6 +98,11 @@ export function DifyChatArea({
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const historyRestoreRef = useRef<{ height: number; top: number } | null>(null);
+    const messagesRef = useRef<Message[]>([]);
+
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -113,32 +126,31 @@ export function DifyChatArea({
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, [messages, isLoading]);
 
-    const mapPageToMessages = useCallback((page: AdvisorMessagePage) => {
-        const apiMessages: Message[] = [];
-        const source = Array.isArray(page.data) ? page.data : [];
-        [...source].reverse().forEach((msg) => {
-            apiMessages.push({
-                id: `user_${msg.id}`,
-                conversation_id: msg.conversation_id,
-                role: "user",
-                content: msg.query || msg.inputs?.contents || msg.inputs?.sys_query || ""
-            });
-            apiMessages.push({
-                id: `asst_${msg.id}`,
-                conversation_id: msg.conversation_id,
-                role: "assistant",
-                content: sanitizeAssistantContent(msg.answer || ""),
-                agentName: advisorLabel,
-            });
+    const persistConversationCache = useCallback((
+        convId: string,
+        nextMessages: Message[],
+        nextCursor: string | null,
+        nextHasMoreHistory: boolean,
+        loadedMessageCount?: number,
+    ) => {
+        saveAdvisorConversationCache(advisorType, convId, {
+            messages: nextMessages,
+            historyCursor: nextCursor,
+            hasMoreHistory: nextHasMoreHistory,
+            loadedMessageCount: loadedMessageCount ?? Math.ceil(nextMessages.length / 2),
+            updatedAt: Date.now(),
         });
-        return apiMessages;
-    }, [advisorLabel]);
+    }, [advisorType]);
 
-    const fetchMessages = useCallback(async (convId: string, options?: { firstId?: string | null; append?: boolean }) => {
+    const fetchMessages = useCallback(async (
+        convId: string,
+        options?: { firstId?: string | null; append?: boolean; keepCurrentOnError?: boolean; forceRefresh?: boolean; background?: boolean },
+    ) => {
         try {
             const limit = options?.append ? ADVISOR_HISTORY_PAGE_SIZE : ADVISOR_INITIAL_MESSAGE_LIMIT;
             const queryKey = getAdvisorMessagesQueryKey(advisorType, convId, limit, options?.firstId);
-            const data = options?.append
+            const shouldForceRefresh = Boolean(options?.append || options?.forceRefresh);
+            const data = shouldForceRefresh
                 ? await fetchWorkspaceQueryData(queryClient, {
                     queryKey,
                     queryFn: () => getAdvisorMessagesPage(user, advisorType, convId, limit, options?.firstId),
@@ -149,14 +161,37 @@ export function DifyChatArea({
                 });
 
             const rawMessages = Array.isArray(data.data) ? data.data : [];
-            const nextCursor = Boolean(data?.has_more) && rawMessages.length > 0 ? rawMessages.at(-1)?.id ?? null : null;
+            const nextCursor = Boolean(data?.has_more) && rawMessages.length > 0 ? rawMessages[0]?.id ?? null : null;
             setHistoryCursor(nextCursor);
             setHasMoreHistory(Boolean(data?.has_more) && Boolean(nextCursor));
-            const nextMessages = mapPageToMessages(data);
-            setMessages((current) => options?.append ? [...nextMessages, ...current] : nextMessages);
+            const serverMessages = mapAdvisorMessagePageToChatMessages(data, advisorLabel);
+            setMessages((current) => {
+                let resolvedMessages = options?.append ? [...serverMessages, ...current] : serverMessages;
+
+                if (!options?.append && options?.background) {
+                    if (areMessageListsEquivalent(current, serverMessages)) {
+                        resolvedMessages = current;
+                    } else if (isMessageListPrefix(serverMessages, current)) {
+                        // Keep the optimistic tail until the backend catches up.
+                        resolvedMessages = current;
+                    }
+                }
+
+                persistConversationCache(
+                    convId,
+                    resolvedMessages,
+                    nextCursor,
+                    Boolean(data?.has_more) && Boolean(nextCursor),
+                    options?.append ? Math.ceil(resolvedMessages.length / 2) : rawMessages.length,
+                );
+                return resolvedMessages;
+            });
         } catch (e) {
             if (e instanceof TypeError && e.message.includes("Failed to fetch")) return;
             console.error("Failed to fetch messages", e);
+            if (options?.append || options?.keepCurrentOnError) {
+                return;
+            }
             const errorText = e instanceof Error ? e.message : "未知错误";
             setMessages([
                 {
@@ -168,7 +203,7 @@ export function DifyChatArea({
                 },
             ]);
         }
-    }, [advisorType, mapPageToMessages, queryClient, user]);
+    }, [advisorLabel, advisorType, persistConversationCache, queryClient, user]);
 
     useEffect(() => {
         historyAbortRef.current?.abort();
@@ -177,9 +212,22 @@ export function DifyChatArea({
         setHistoryCursor(null);
         setHasMoreHistory(false);
         if (initialConversationId) {
-            setIsConversationLoading(true);
-            void fetchMessages(initialConversationId)
-                .finally(() => setIsConversationLoading(false));
+            const cachedConversation = getAdvisorConversationCache(advisorType, initialConversationId);
+            if (cachedConversation) {
+                setMessages(cachedConversation.messages);
+                setHistoryCursor(cachedConversation.historyCursor);
+                setHasMoreHistory(Boolean(cachedConversation.hasMoreHistory));
+                setIsConversationLoading(false);
+            } else {
+                setMessages([]);
+                setIsConversationLoading(true);
+            }
+
+            void fetchMessages(initialConversationId, {
+                keepCurrentOnError: Boolean(cachedConversation),
+                forceRefresh: Boolean(cachedConversation),
+                background: Boolean(cachedConversation),
+            }).finally(() => setIsConversationLoading(false));
         } else {
             setMessages([]);
             setIsConversationLoading(false);
@@ -202,9 +250,18 @@ export function DifyChatArea({
                 try {
                     const response = await fetch(`/api/tasks/${pendingTask.taskId}`);
                     const payload = await response.json().catch(() => null) as {
-                        data?: { status?: string; result?: { conversation_id?: string | null; error?: string } | null }
+                        data?: {
+                            status?: string;
+                            result?: {
+                                conversation_id?: string | null;
+                                answer?: string;
+                                agent_name?: string;
+                                error?: string;
+                            } | null
+                        }
                     } | null;
                     const status = payload?.data?.status;
+                    const taskResult = payload?.data?.result || null;
                     const nextConversationId = typeof payload?.data?.result?.conversation_id === "string"
                         ? payload.data.result.conversation_id
                         : null;
@@ -212,6 +269,11 @@ export function DifyChatArea({
                     if (nextConversationId && pendingTask.conversationId !== nextConversationId) {
                         updatePendingAssistantTask(pendingTask.taskId, { conversationId: nextConversationId });
                         if (!conversationId) {
+                            const optimisticMessages = messagesRef.current.map((message) => ({
+                                ...message,
+                                conversation_id: nextConversationId,
+                            }));
+                            persistConversationCache(nextConversationId, optimisticMessages, historyCursor, hasMoreHistory);
                             setConversationId(nextConversationId);
                             window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
                             router.replace(`/dashboard/advisor/${advisorType}/${nextConversationId}`);
@@ -221,15 +283,56 @@ export function DifyChatArea({
                     if (status === "success") {
                         const targetConversationId = nextConversationId || conversationId;
                         if (targetConversationId) {
-                            await invalidateAdvisorConversationQueries(queryClient, advisorType, targetConversationId);
-                            await fetchMessages(targetConversationId);
+                            setMessages((prev) => {
+                                const next = [...prev];
+                                let patchedAssistant = false;
+
+                                for (let index = next.length - 1; index >= 0; index -= 1) {
+                                    if (next[index]?.role === "assistant" && !normalizeMessageContent(next[index]?.content || "")) {
+                                        next[index] = {
+                                            ...next[index],
+                                            conversation_id: targetConversationId,
+                                            content: typeof taskResult?.answer === "string" ? taskResult.answer : next[index].content,
+                                            agentName: typeof taskResult?.agent_name === "string" ? taskResult.agent_name : (next[index].agentName || advisorLabel),
+                                        };
+                                        patchedAssistant = true;
+                                        break;
+                                    }
+                                }
+
+                                const normalizedNext = next.map((message) => ({
+                                    ...message,
+                                    conversation_id: message.conversation_id || targetConversationId,
+                                }));
+
+                                if (targetConversationId) {
+                                    persistConversationCache(targetConversationId, normalizedNext, historyCursor, hasMoreHistory);
+                                }
+
+                                if (!patchedAssistant) {
+                                    return normalizedNext;
+                                }
+
+                                return normalizedNext;
+                            });
+
+                            void invalidateAdvisorConversationQueries(queryClient, advisorType, targetConversationId)
+                                .then(() => fetchMessages(targetConversationId, {
+                                    forceRefresh: true,
+                                    keepCurrentOnError: true,
+                                    background: true,
+                                }))
+                                .catch((error) => {
+                                    console.error("advisor.messages.reconcile-failed", error);
+                                });
                             if (!cancelled) {
                                 setConversationId(targetConversationId);
                                 window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
+                                setIsLoading(false);
                             }
                         }
                         removePendingAssistantTask(pendingTask.taskId);
-                        if (!cancelled) setIsLoading(false);
+                        if (!targetConversationId && !cancelled) setIsLoading(false);
                         return;
                     }
 
@@ -309,11 +412,17 @@ export function DifyChatArea({
         const userMessageId = `temp_usr_${Date.now()}`;
         const asstMessageId = `temp_asst_${Date.now()}`;
 
-        setMessages((prev) => [
-            ...prev,
-            { id: userMessageId, conversation_id: conversationId || "", role: "user", content: currentQuery },
-            { id: asstMessageId, conversation_id: conversationId || "", role: "assistant", content: "", agentName: advisorLabel }
-        ]);
+        setMessages((prev) => {
+            const nextMessages: Message[] = [
+                ...prev,
+                { id: userMessageId, conversation_id: conversationId || "", role: "user", content: currentQuery },
+                { id: asstMessageId, conversation_id: conversationId || "", role: "assistant", content: "", agentName: advisorLabel },
+            ];
+            if (conversationId) {
+                persistConversationCache(conversationId, nextMessages, historyCursor, hasMoreHistory);
+            }
+            return nextMessages;
+        });
 
         const patchAssistant = (content: string, agentName?: string) => {
             setMessages((prev) => {
@@ -326,11 +435,18 @@ export function DifyChatArea({
                         agentName: agentName || newArr[idx].agentName || advisorLabel,
                     };
                 }
+                if (conversationId) {
+                    persistConversationCache(conversationId, newArr, historyCursor, hasMoreHistory);
+                }
                 return newArr;
             });
         };
 
         try {
+            await queryClient.cancelQueries({
+                queryKey: ["advisor", advisorType, "messages"],
+            });
+
             const payload: any = {
                 inputs: { contents: currentQuery },
                 query: currentQuery,
@@ -373,6 +489,16 @@ export function DifyChatArea({
             setPendingTaskRefreshKey(Date.now());
 
             if (payloadData.conversation_id && !conversationId) {
+                persistConversationCache(
+                    payloadData.conversation_id,
+                    [
+                        { id: userMessageId, conversation_id: payloadData.conversation_id, role: "user", content: currentQuery },
+                        { id: asstMessageId, conversation_id: payloadData.conversation_id, role: "assistant", content: "", agentName: advisorLabel },
+                    ] satisfies Message[],
+                    null,
+                    false,
+                    1,
+                );
                 setConversationId(payloadData.conversation_id);
                 window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
                 router.replace(`/dashboard/advisor/${advisorType}/${payloadData.conversation_id}`);

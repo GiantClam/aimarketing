@@ -1,6 +1,10 @@
 "use client"
 
 import {
+  readStorageJson,
+  writeStorageRecordStore,
+} from "@/lib/browser-storage"
+import {
   normalizeWriterLanguage,
   normalizeWriterMode,
   normalizeWriterPlatform,
@@ -44,9 +48,12 @@ export type WriterRefreshDetail =
   | { action: "remove"; conversationId: string }
   | undefined
 
-export const SESSION_STORAGE_KEY = "writer-session-store-v1"
+const LEGACY_LOCAL_STORAGE_KEY = "writer-session-store-v1"
+export const SESSION_STORAGE_KEY = "writer-session-store-v2"
 export const WRITER_REFRESH_EVENT = "writer-refresh"
 export const WRITER_SESSION_CACHE_TTL_MS = 30_000
+const WRITER_SESSION_STORE_MAX_ENTRIES = 24
+const WRITER_CONVERSATION_CACHE_MAX_TURNS = 8
 
 function canUseStorage() {
   return typeof window !== "undefined"
@@ -54,19 +61,31 @@ function canUseStorage() {
 
 export function readWriterSessionStore() {
   if (!canUseStorage()) return {} as Record<string, WriterSessionStoreEntry>
+  return readStorageJson<Record<string, WriterSessionStoreEntry>>("session", SESSION_STORAGE_KEY) || {}
+}
 
-  try {
-    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
-    if (!raw) return {}
-    return JSON.parse(raw) as Record<string, WriterSessionStoreEntry>
-  } catch {
-    return {}
+function trimWriterConversationCache(cache: WriterConversationCache): WriterConversationCache {
+  const retainedEntries = cache.entries.slice(-WRITER_CONVERSATION_CACHE_MAX_TURNS)
+  const trimmed = retainedEntries.length < cache.entries.length
+  const nextHasMoreHistory = Boolean(cache.hasMoreHistory || trimmed)
+  const nextCursor = nextHasMoreHistory ? retainedEntries[0]?.id || null : null
+
+  return {
+    ...cache,
+    entries: retainedEntries,
+    historyCursor: nextCursor,
+    hasMoreHistory: nextHasMoreHistory,
+    loadedTurnCount: retainedEntries.length,
   }
 }
 
 export function writeWriterSessionStore(store: Record<string, WriterSessionStoreEntry>) {
   if (!canUseStorage()) return
-  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(store))
+  void writeStorageRecordStore("session", SESSION_STORAGE_KEY, store, {
+    maxEntries: WRITER_SESSION_STORE_MAX_ENTRIES,
+    getUpdatedAt: (value) => value.updatedAt || 0,
+    legacyKeys: [{ area: "local", key: LEGACY_LOCAL_STORAGE_KEY }],
+  })
 }
 
 function normalizeConversationSummary(
@@ -116,22 +135,22 @@ export function getWriterConversationCache(conversationId: string | null) {
   const cache = store[conversationId]?.cache
   if (!cache) return null
 
-  return {
+  return trimWriterConversationCache({
     ...cache,
     conversation: normalizeConversationSummary(cache.conversation),
     loadedTurnCount: Math.max(cache.loadedTurnCount || 0, cache.entries.length),
-  } satisfies WriterConversationCache
+  } satisfies WriterConversationCache)
 }
 
 export function saveWriterConversationCache(conversationId: string, cache: WriterConversationCache) {
   const store = readWriterSessionStore()
   store[conversationId] = {
     ...(store[conversationId] || {}),
-    cache: {
+    cache: trimWriterConversationCache({
       ...cache,
       conversation: normalizeConversationSummary(cache.conversation),
       loadedTurnCount: Math.max(cache.loadedTurnCount || 0, cache.entries.length),
-    },
+    }),
   } as WriterSessionStoreEntry
   writeWriterSessionStore(store)
 }

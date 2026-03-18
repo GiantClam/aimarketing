@@ -6,10 +6,6 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { DifyChatArea } from "@/components/chat/DifyChatArea"
 
-function isAbortError(error: unknown) {
-  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
-}
-
 function getAdvisorTitle(advisorType: string) {
   if (advisorType === "brand-strategy") return "品牌战略顾问"
   if (advisorType === "growth") return "增长顾问"
@@ -39,7 +35,6 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
     }
 
     let cancelled = false
-    const controller = new AbortController()
 
     const checkAvailability = async () => {
       if (loading || !user) return
@@ -51,7 +46,7 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
       }
 
       try {
-        const res = await fetch("/api/dify/advisors/availability", { signal: controller.signal })
+        const res = await fetch("/api/dify/advisors/availability")
         if (!res.ok) return
 
         const data = await res.json()
@@ -77,8 +72,7 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
           router.replace("/dashboard")
         }
       } catch (error) {
-        if (controller.signal.aborted || cancelled) return
-        if (isAbortError(error)) return
+        if (cancelled) return
         if (error instanceof TypeError && error.message.includes("Failed to fetch")) return
         console.error("Failed to check advisor availability:", error)
       }
@@ -87,7 +81,6 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
     void checkAvailability()
     return () => {
       cancelled = true
-      controller.abort()
     }
   }, [advisorType, conversationId, hasFeature, loading, router, user])
 

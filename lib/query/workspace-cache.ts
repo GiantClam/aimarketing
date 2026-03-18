@@ -153,20 +153,14 @@ export async function ensureWorkspaceQueryData<T>(queryClient: QueryClient, opti
   queryKey: QueryKey
   queryFn: () => Promise<T>
 }) {
-  return queryClient.ensureQueryData({
-    ...options,
-    meta: { persist: true },
-  })
+  return queryClient.ensureQueryData(options)
 }
 
 export async function fetchWorkspaceQueryData<T>(queryClient: QueryClient, options: {
   queryKey: QueryKey
   queryFn: () => Promise<T>
 }) {
-  return queryClient.fetchQuery({
-    ...options,
-    meta: { persist: true },
-  })
+  return queryClient.fetchQuery(options)
 }
 
 export function invalidateWriterConversationQueries(queryClient: QueryClient, conversationId: string | null) {

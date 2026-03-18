@@ -9,7 +9,7 @@ export type WriterAsset = {
   prompt: string
   url: string
   status: "ready" | "loading" | "failed"
-  provider: "aiberm" | "gemini" | "loading" | "error"
+  provider: "aiberm" | "gemini" | "openrouter" | "loading" | "error"
   error?: string
   storageKey?: string
   contentType?: string

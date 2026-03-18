@@ -1,7 +1,6 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import { usePathname } from "next/navigation"
 
 import { useAuth } from "@/components/auth-provider"
 
@@ -53,11 +52,9 @@ const DashboardAvailabilityContext = createContext<DashboardAvailabilityState>(D
 
 export function DashboardAvailabilityProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth()
-  const pathname = usePathname()
   const [availability, setAvailability] = useState<DashboardAvailabilityState>(DEFAULT_AVAILABILITY)
 
   useEffect(() => {
-    const controller = new AbortController()
     let cancelled = false
 
     const load = async () => {
@@ -80,7 +77,6 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
         const response = await fetch("/api/dashboard/availability", {
           credentials: "same-origin",
           cache: "no-store",
-          signal: controller.signal,
         })
         if (!response.ok) {
           throw new Error(`http_${response.status}`)
@@ -110,7 +106,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
           },
         })
       } catch (error) {
-        if (controller.signal.aborted || cancelled) return
+        if (cancelled) return
         console.error("dashboard.availability.load-failed", error)
         setAvailability({ ...DEFAULT_AVAILABILITY, loading: false })
       }
@@ -120,9 +116,8 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
 
     return () => {
       cancelled = true
-      controller.abort()
     }
-  }, [authLoading, pathname, user?.enterpriseId, user?.id])
+  }, [authLoading, user?.enterpriseId, user?.id])
 
   const value = useMemo(() => availability, [availability])
   return <DashboardAvailabilityContext.Provider value={value}>{children}</DashboardAvailabilityContext.Provider>

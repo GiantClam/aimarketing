@@ -1,6 +1,11 @@
 import { checkRateLimit } from "@/lib/server/rate-limit"
 import { getInlineImageMetadata, urlToInlineImage } from "@/lib/image-assistant/assets"
-import { generateOrEditImages, getImageAssistantAvailability, shouldUseImageAssistantFixtures } from "@/lib/image-assistant/aiberm"
+import {
+  generateOrEditImages,
+  getImageAssistantAvailability,
+  hasImageAssistantAibermKey,
+  shouldUseImageAssistantFixtures,
+} from "@/lib/image-assistant/aiberm"
 import { hasImageAssistantGoogleKey, uploadImageAssistantReferenceToGoogle } from "@/lib/image-assistant/google"
 import {
   createImageAssistantAsset,
@@ -30,6 +35,7 @@ import type {
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
 } from "@/lib/image-assistant/types"
+import { hasOpenRouterApiKey } from "@/lib/writer/aiberm"
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
@@ -144,9 +150,23 @@ async function resolveReferenceImagesForModel(params: {
     )
   }
 
+  const shouldPrepareInlineReferences = hasImageAssistantAibermKey() || hasOpenRouterApiKey()
+  const inlineReferencePromise = shouldPrepareInlineReferences
+    ? Promise.all(
+        assetsWithUrls.map(async (asset) => {
+          const inline = await urlToInlineImage(asset.url!)
+          return {
+            kind: "inline" as const,
+            mimeType: inline.mimeType,
+            base64Data: inline.base64Data,
+          }
+        }),
+      )
+    : Promise.resolve([])
+
   if (hasImageAssistantGoogleKey()) {
     try {
-      return await Promise.all(
+      const fileReferences = await Promise.all(
         assetsWithUrls.map((asset) =>
           ensureGeminiFileReferenceForAsset({
             userId: params.userId,
@@ -156,6 +176,8 @@ async function resolveReferenceImagesForModel(params: {
           }),
         ),
       )
+      const inlineReferences = await inlineReferencePromise
+      return [...fileReferences, ...inlineReferences]
     } catch (error) {
       console.warn("image-assistant.references.google-file-fallback", {
         sessionId: params.sessionId,
@@ -164,16 +186,7 @@ async function resolveReferenceImagesForModel(params: {
     }
   }
 
-  return Promise.all(
-    assetsWithUrls.map(async (asset) => {
-      const inline = await urlToInlineImage(asset.url!)
-      return {
-        kind: "inline" as const,
-        mimeType: inline.mimeType,
-        base64Data: inline.base64Data,
-      }
-    }),
-  )
+  return inlineReferencePromise
 }
 
 async function ensureImageAssistantSession(params: {

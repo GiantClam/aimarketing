@@ -5,7 +5,7 @@ import {
   getImageAssistantRuntimeSystemPrompt,
 } from "@/lib/image-assistant/skill-documents"
 import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
-import { generateTextWithAiberm, hasAibermApiKey } from "@/lib/writer/aiberm"
+import { generateTextWithWriterModel, hasWriterTextProvider } from "@/lib/writer/aiberm"
 import { getImageAssistantSkillDefinition, IMAGE_ASSISTANT_MAX_BRIEF_TURNS, IMAGE_ASSISTANT_TEXT_MODEL, selectImageAssistantSkill } from "@/lib/image-assistant/skills"
 import type {
   ImageAssistantBrief,
@@ -346,7 +346,7 @@ async function maybePlanWithTextModel(input: {
   resolution: string
   referenceCount: number
 }) {
-  if (!hasAibermApiKey()) return null
+  if (!hasWriterTextProvider()) return null
 
   const skill = getImageAssistantSkillDefinition("graphic-design-brief")
   const runtimeSystemPrompt = await getImageAssistantRuntimeSystemPrompt("graphic-design-brief", skill.system_prompt)
@@ -376,7 +376,7 @@ async function maybePlanWithTextModel(input: {
   })
 
   try {
-    const raw = await generateTextWithAiberm(systemPrompt, userPrompt, IMAGE_ASSISTANT_TEXT_MODEL)
+    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, IMAGE_ASSISTANT_TEXT_MODEL)
     const parsed = extractJsonObject(raw)
     if (!parsed || typeof parsed !== "object") return null
 

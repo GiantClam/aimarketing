@@ -127,6 +127,17 @@ type KnowledgeStatus = {
 }
 
 const sanitize = (raw: string) => raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+const normalizeWriterMessageContent = (content: string) => content.trim()
+const getWriterMessageSignature = (message: WriterMessage) =>
+  [message.role, normalizeWriterMessageContent(message.content), message.authorLabel || ""].join("|")
+const areWriterMessageListsEquivalent = (left: WriterMessage[], right: WriterMessage[]) => {
+  if (left.length !== right.length) return false
+  return left.every((message, index) => getWriterMessageSignature(message) === getWriterMessageSignature(right[index]))
+}
+const isWriterMessageListPrefix = (prefix: WriterMessage[], full: WriterMessage[]) => {
+  if (prefix.length > full.length) return false
+  return prefix.every((message, index) => getWriterMessageSignature(message) === getWriterMessageSignature(full[index]))
+}
 const inferDraft = (messages: WriterMessage[]) =>
   [...messages].reverse().find((message) => message.role === "assistant" && message.content.trim())?.content || ""
 const inferFinalDraft = (messages: WriterMessage[], status: WriterConversationStatus) =>
@@ -830,6 +841,7 @@ export function WriterWorkspace({
   const historyRestoreRef = useRef<{ height: number; top: number } | null>(null)
   const shouldScrollToBottomRef = useRef(false)
   const historyEntriesRef = useRef<WriterHistoryEntry[]>([])
+  const messagesRef = useRef<WriterMessage[]>([])
 
   const [availabilityLoading, setAvailabilityLoading] = useState(true)
   const [availabilityReady, setAvailabilityReady] = useState(false)
@@ -1005,6 +1017,10 @@ export function WriterWorkspace({
   }, [latestDiagnostics, writerCopy])
 
   useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const nextHref = `${conversationId ? `/dashboard/writer/${conversationId}` : "/dashboard/writer"}?${new URLSearchParams({ platform, mode, language }).toString()}`
     const currentHref = `${window.location.pathname}${window.location.search}`
@@ -1085,7 +1101,11 @@ export function WriterWorkspace({
 
     let cancelled = false
 
-    const applyConversationPayload = (data: WriterMessagePage, reset: boolean) => {
+    const applyConversationPayload = (
+      data: WriterMessagePage,
+      options: { reset: boolean; background?: boolean },
+    ) => {
+      const reset = options.reset
       const nextEntries = reset ? data.data || [] : [...(data.data || []), ...historyEntriesRef.current]
       historyEntriesRef.current = nextEntries
       const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
@@ -1102,10 +1122,32 @@ export function WriterWorkspace({
       }
       setHistoryCursor(data.next_cursor || null)
       setHasMoreHistory(Boolean(data.has_more))
-      if (reset) shouldScrollToBottomRef.current = true
-      setMessages((current) => (reset ? nextMessages : [...nextMessages, ...current]))
+      if (reset && !options.background) shouldScrollToBottomRef.current = true
+      setMessages((current) => {
+        if (!reset) {
+          return [...nextMessages, ...current]
+        }
+
+        if (options.background) {
+          if (areWriterMessageListsEquivalent(current, nextMessages)) {
+            return current
+          }
+          if (isWriterMessageListPrefix(nextMessages, current)) {
+            return current
+          }
+        }
+
+        return nextMessages
+      })
       if (reset && !meta?.draft) {
-        setDraft(inferFinalDraft(nextMessages, data.conversation?.status || "drafting"))
+        const currentMessages = messagesRef.current
+        const resolvedMessages =
+          options.background &&
+          (areWriterMessageListsEquivalent(currentMessages, nextMessages) ||
+            isWriterMessageListPrefix(nextMessages, currentMessages))
+            ? currentMessages
+            : nextMessages
+        setDraft(inferFinalDraft(resolvedMessages, data.conversation?.status || "drafting"))
       }
       saveWriterConversationCache(conversationId, {
         entries: nextEntries,
@@ -1117,15 +1159,18 @@ export function WriterWorkspace({
       })
     }
 
-    const load = async () => {
+    const load = async (options?: { background?: boolean; forceRefresh?: boolean }) => {
       try {
         const turnLimit = Math.max(WRITER_INITIAL_TURN_LIMIT, cachedConversation?.loadedTurnCount || 0)
-        const data = await ensureWorkspaceQueryData(queryClient, {
+        const queryOptions = {
           queryKey: getWriterMessagesQueryKey(conversationId, turnLimit),
           queryFn: () => getWriterMessagesPage(conversationId, turnLimit),
-        })
+        }
+        const data = options?.background || options?.forceRefresh
+          ? await fetchWorkspaceQueryData(queryClient, queryOptions)
+          : await ensureWorkspaceQueryData(queryClient, queryOptions)
         if (cancelled) return
-        applyConversationPayload(data, true)
+        applyConversationPayload(data, { reset: true, background: options?.background })
       } catch {
         if (cancelled) return
         setMessages([
@@ -1143,7 +1188,12 @@ export function WriterWorkspace({
     }
 
     const hasCache = applyCachedConversation()
-    if (!hasCache || !cachedConversation || !isWriterConversationCacheFresh(cachedConversation)) {
+    if (hasCache && cachedConversation) {
+      void load({
+        background: true,
+        forceRefresh: true,
+      })
+    } else if (!cachedConversation || !isWriterConversationCacheFresh(cachedConversation)) {
       void load()
     }
     return () => {

@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState, type MouseEvent, type UIEvent } from "react"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Check, ChevronDown, ChevronRight, Edit2, Loader2, MessageSquare, Plus, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -9,6 +10,22 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 
 import { useI18n } from "@/components/locale-provider"
+import {
+  ADVISOR_SESSION_CACHE_TTL_MS,
+  buildAdvisorConversationCache,
+  deleteAdvisorConversationCache,
+  getAdvisorConversationCache,
+  isAdvisorConversationCacheFresh,
+  saveAdvisorConversationCache,
+} from "@/lib/advisor/session-store"
+import {
+  fetchWorkspaceQueryData,
+  getAdvisorMessagesPage,
+  getAdvisorMessagesQueryKey,
+} from "@/lib/query/workspace-cache"
+import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
+import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
+import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import { cn } from "@/lib/utils"
 
 interface Conversation {
@@ -18,36 +35,9 @@ interface Conversation {
   created_at: number
 }
 
-type AdvisorConversationCache = {
-  conversations: Conversation[]
-  hasMore: boolean
-  nextLastId: string | null
-  updatedAt: number
-}
-
 const ADVISOR_CONVERSATION_CACHE_TTL_MS = 60_000
-
-function getAdvisorConversationCacheKey(advisorType: string) {
-  return `advisor-conversations-cache-v1:${advisorType}`
-}
-
-function readAdvisorConversationCache(advisorType: string): AdvisorConversationCache | null {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = window.localStorage.getItem(getAdvisorConversationCacheKey(advisorType))
-    if (!raw) return null
-    return JSON.parse(raw) as AdvisorConversationCache
-  } catch {
-    return null
-  }
-}
-
-function writeAdvisorConversationCache(advisorType: string, value: AdvisorConversationCache) {
-  if (typeof window === "undefined") return
-  try {
-    window.localStorage.setItem(getAdvisorConversationCacheKey(advisorType), JSON.stringify(value))
-  } catch {}
-}
+const ADVISOR_SESSION_PREFETCH_LIMIT = 3
+const ADVISOR_CONVERSATION_LIST_CACHE_KEY = "advisor-conversations-cache-v2"
 
 function mergeConversations(current: Conversation[], incoming: Conversation[]) {
   const seen = new Set<string>()
@@ -75,11 +65,6 @@ export function AdvisorSidebarItem({
 }) {
   const { messages } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [nextLastId, setNextLastId] = useState<string | null>(null)
   const [editingConvId, setEditingConvId] = useState<string | null>(null)
   const [editingConvName, setEditingConvName] = useState("")
   const [pendingDeleteConversation, setPendingDeleteConversation] = useState<Conversation | null>(null)
@@ -87,76 +72,83 @@ export function AdvisorSidebarItem({
 
   const pathname = usePathname()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const user = `${userEmail}_${advisorType}`
-  const activeConversationId = pathname.match(new RegExp(`^/dashboard/advisor/${advisorType}/([^/]+)$`))?.[1] || null
+  const routeConversationId = pathname.match(new RegExp(`^/dashboard/advisor/${advisorType}/([^/]+)$`))?.[1] || null
+  const activeConversationId = normalizeRouteEntityId(routeConversationId)
 
-  useEffect(() => {
-    const cached = readAdvisorConversationCache(advisorType)
-    if (!cached) return
-    setConversations(cached.conversations)
-    setHasMore(cached.hasMore)
-    setNextLastId(cached.nextLastId)
-  }, [advisorType])
-
-  const fetchConversations = useCallback(async ({ append = false, lastId, background = false }: { append?: boolean; lastId?: string | null; background?: boolean } = {}) => {
-    if (append) {
-      setIsLoadingMore(true)
-    } else if (!background) {
-      setIsLoading(true)
-    }
-    try {
+  const {
+    items: conversations,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    nextCursor: nextLastId,
+    fetchItems: fetchConversations,
+    updateList,
+    createSnapshot,
+    restoreSnapshot,
+    handleListScroll,
+  } = useCachedSidebarList<Conversation>({
+    cacheKey: `${ADVISOR_CONVERSATION_LIST_CACHE_KEY}:${advisorType}`,
+    legacyKeys: [{ area: "local", key: `advisor-conversations-cache-v1:${advisorType}` }],
+    ttlMs: ADVISOR_CONVERSATION_CACHE_TTL_MS,
+    isExpanded: isOpen,
+    activeItemId: activeConversationId,
+    fetchPage: async ({ cursor }) => {
       const params = new URLSearchParams({
         user,
         limit: "20",
         advisorType,
       })
-      if (lastId) {
-        params.set("last_id", lastId)
+      if (cursor) {
+        params.set("last_id", cursor)
       }
 
       const res = await fetch(`/api/dify/conversations?${params.toString()}`)
-      if (res.ok) {
-        const data = await res.json()
-        const nextBatch = Array.isArray(data?.data) ? (data.data as Conversation[]) : []
-        const nextHasMore = Boolean(data?.has_more) && nextBatch.length > 0
-        const nextCursor = nextHasMore ? nextBatch.at(-1)?.id ?? null : null
-        setConversations((current) => {
-          const nextConversations = append ? mergeConversations(current, nextBatch) : nextBatch
-          writeAdvisorConversationCache(advisorType, {
-            conversations: nextConversations,
-            hasMore: nextHasMore,
-            nextLastId: nextCursor,
-            updatedAt: Date.now(),
-          })
-          return nextConversations
-        })
-        setHasMore(nextHasMore)
-        setNextLastId(nextCursor)
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
       }
-    } catch (error) {
-      console.error("Failed to load conversations", error)
-    } finally {
-      if (append) {
-        setIsLoadingMore(false)
-      } else if (!background) {
-        setIsLoading(false)
+      const data = await res.json()
+      const nextBatch = Array.isArray(data?.data) ? (data.data as Conversation[]) : []
+      const nextHasMore = Boolean(data?.has_more) && nextBatch.length > 0
+      const nextCursor = nextHasMore ? nextBatch.at(-1)?.id ?? null : null
+      return {
+        items: nextBatch,
+        hasMore: nextHasMore,
+        nextCursor,
       }
-    }
-  }, [advisorType, user])
+    },
+    mergeItems: mergeConversations,
+    getItemId: (conversation) => conversation.id,
+  })
 
-  useEffect(() => {
-    if (isOpen) {
-      const cached = readAdvisorConversationCache(advisorType)
-      const isFresh = Boolean(cached && Date.now() - cached.updatedAt < ADVISOR_CONVERSATION_CACHE_TTL_MS)
-      void fetchConversations({ background: Boolean(isFresh && cached && cached.conversations.length > 0) })
+  const prefetchConversation = useCallback(async (conversationId: string) => {
+    const cached = getAdvisorConversationCache(advisorType, conversationId)
+    if (cached && isAdvisorConversationCacheFresh(cached, ADVISOR_SESSION_CACHE_TTL_MS)) {
+      return
     }
-  }, [fetchConversations, isOpen])
+
+    const page = await fetchWorkspaceQueryData(queryClient, {
+      queryKey: getAdvisorMessagesQueryKey(advisorType, conversationId, 20),
+      queryFn: () => getAdvisorMessagesPage(user, advisorType, conversationId, 20),
+    })
+
+    saveAdvisorConversationCache(advisorType, conversationId, buildAdvisorConversationCache(page, title))
+  }, [advisorType, queryClient, title, user])
+
+  const { prefetchItem: warmConversation } = useSidebarDetailPrefetch({
+    items: conversations,
+    activeItemId: activeConversationId,
+    prefetchLimit: ADVISOR_SESSION_PREFETCH_LIMIT,
+    getItemId: (conversation: Conversation) => conversation.id,
+    prefetchItem: prefetchConversation,
+  })
 
   useEffect(() => {
     const handleRefresh = (event: Event) => {
       const detail = (event as CustomEvent<{ advisorType?: string }>).detail
       if (detail?.advisorType === advisorType && isOpen) {
-        void fetchConversations({ background: conversations.length > 0 })
+        void fetchConversations({ background: conversations.length > 0 }).catch(() => {})
       }
     }
     window.addEventListener("dify-refresh", handleRefresh)
@@ -169,22 +161,7 @@ export function AdvisorSidebarItem({
     }
   }, [pathname, advisorType])
 
-  useEffect(() => {
-    if (!isOpen || !activeConversationId || isLoading || isLoadingMore) return
-    if (conversations.some((conversation) => conversation.id === activeConversationId)) return
-    if (hasMore && nextLastId) {
-      void fetchConversations({ append: true, lastId: nextLastId })
-    }
-  }, [activeConversationId, conversations, fetchConversations, hasMore, isLoading, isLoadingMore, isOpen, nextLastId])
-
-  const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
-    const target = event.currentTarget
-    if (isLoading || isLoadingMore || !hasMore || !nextLastId) return
-    if (target.scrollHeight - target.scrollTop - target.clientHeight > 48) return
-    void fetchConversations({ append: true, lastId: nextLastId })
-  }
-
-  const handleDeleteRequest = async (conversation: Conversation, event: MouseEvent) => {
+  const handleDeleteRequest = (conversation: Conversation, event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     if (deletingConvId) return
@@ -195,9 +172,9 @@ export function AdvisorSidebarItem({
     if (!pendingDeleteConversation) return
 
     const convId = pendingDeleteConversation.id
-    const previousConversations = conversations
+    const previousSnapshot = createSnapshot()
     setDeletingConvId(convId)
-    setConversations((current) => current.filter((conversation) => conversation.id !== convId))
+    updateList((current) => current.filter((conversation) => conversation.id !== convId))
 
     try {
       const response = await fetch(`/api/dify/conversations/${convId}`, {
@@ -207,13 +184,14 @@ export function AdvisorSidebarItem({
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
+      deleteAdvisorConversationCache(advisorType, convId)
       setPendingDeleteConversation(null)
-      void fetchConversations({ background: previousConversations.length > 1 })
+      void fetchConversations({ background: previousSnapshot.items.length > 1 }).catch(() => {})
       if (pathname.includes(convId)) {
         router.push(`/dashboard/advisor/${advisorType}/new`)
       }
     } catch (error) {
-      setConversations(previousConversations)
+      restoreSnapshot(previousSnapshot)
       console.error(error)
     } finally {
       setDeletingConvId(null)
@@ -238,7 +216,7 @@ export function AdvisorSidebarItem({
         body: JSON.stringify({ user, name: editingConvName, advisorType }),
       })
       setEditingConvId(null)
-      void fetchConversations()
+      void fetchConversations().catch(() => {})
     } catch (error) {
       console.error(error)
     }
@@ -291,7 +269,7 @@ export function AdvisorSidebarItem({
                   const isActive = pathname === `/dashboard/advisor/${advisorType}/${conv.id}`
                   const isDeleting = deletingConvId === conv.id
                   return (
-                    <Link key={conv.id} href={`/dashboard/advisor/${advisorType}/${conv.id}`}>
+                    <Link key={conv.id} href={`/dashboard/advisor/${advisorType}/${conv.id}`} onMouseEnter={() => void warmConversation(conv.id)}>
                       <div
                         className={cn(
                           "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors",

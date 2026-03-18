@@ -50,7 +50,6 @@ import {
   isImageAssistantSessionContentCacheFresh,
   saveImageAssistantSessionContentCache,
 } from "@/lib/image-assistant/session-store"
-import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
 import type {
   ImageAssistantAsset,
@@ -705,7 +704,7 @@ function CandidatePreviewImage(props: CandidatePreviewImageProps) {
   }, [candidateId, fallbackSrc, loadPreview, onResolved, resolvedSrc])
 
   if (!src) return null
-  return <img src={src} alt="" className={className} />
+  return <img src={src} alt="" loading="lazy" decoding="async" className={className} />
 }
 
 function replaceFileExtension(filename: string, nextExtension: string) {
@@ -1464,6 +1463,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const restoredResolutionSessionRef = useRef<string | null>(null)
   const activeJobAbortRef = useRef<AbortController | null>(null)
   const deferredRouteSessionIdRef = useRef<string | null>(null)
+  const previousPendingTurnIdRef = useRef<string | null>(pendingTurn?.id || null)
+  const previousPendingTurnAttachmentsRef = useRef<PendingAttachment[]>(pendingTurn?.attachments || [])
 
   const resetCanvasHistory = useCallback(() => {
     setUndoStack([])
@@ -1610,15 +1611,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   const composerAttachmentCount = pendingAttachments.length
   const hasCanvasEditAttachment = pendingAttachments.some((attachment) => attachment.source === "canvas")
-  const shouldUseReferenceEditShortcut =
-    composerAttachmentCount > 0 &&
-    looksLikeReferenceEditIntent({
-      prompt,
-      taskType: "edit",
-      referenceCount: composerAttachmentCount,
-    })
-  const primaryRunKind: ImageAssistantRunKind =
-    hasCanvasEditAttachment || shouldUseReferenceEditShortcut ? "edit" : "generate"
+  const primaryRunKind: ImageAssistantRunKind = hasCanvasEditAttachment ? "edit" : "generate"
   const composerModeLabel = getRunKindLabel(primaryRunKind, extraCopy)
   const clarificationCarryoverReferenceAssetIds = useMemo(
     () => getClarificationCarryoverReferenceAssetIds(detail?.messages || []),
@@ -2334,6 +2327,41 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     if (fileInputRef.current) fileInputRef.current.value = ""
   }, [])
 
+  const detachPendingAttachments = useCallback(() => {
+    setPendingAttachments([])
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }, [])
+
+  const restorePendingAttachments = useCallback((attachments: PendingAttachment[]) => {
+    setPendingAttachments(attachments)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }, [])
+
+  const releasePendingAttachmentPreviews = useCallback((attachments: PendingAttachment[]) => {
+    attachments.forEach((attachment) => {
+      URL.revokeObjectURL(attachment.previewUrl)
+      attachmentPreviewUrlsRef.current.delete(attachment.previewUrl)
+      attachmentUploadPromisesRef.current.delete(attachment.id)
+    })
+  }, [])
+
+  useEffect(() => {
+    const previousPendingTurnId = previousPendingTurnIdRef.current
+    const nextPendingTurnId = pendingTurn?.id || null
+    if (previousPendingTurnId && previousPendingTurnId !== nextPendingTurnId) {
+      const activeAttachmentIds = new Set(pendingAttachments.map((attachment) => attachment.id))
+      const releasableAttachments = previousPendingTurnAttachmentsRef.current.filter(
+        (attachment) => !activeAttachmentIds.has(attachment.id),
+      )
+      if (releasableAttachments.length) {
+        releasePendingAttachmentPreviews(releasableAttachments)
+      }
+    }
+
+    previousPendingTurnIdRef.current = nextPendingTurnId
+    previousPendingTurnAttachmentsRef.current = pendingTurn?.attachments || []
+  }, [pendingAttachments, pendingTurn?.attachments, pendingTurn?.id, releasePendingAttachmentPreviews])
+
   const replaceCanvasAttachment = useCallback((attachment: PendingAttachment) => {
     setPendingAttachments((current) => {
       current
@@ -2569,6 +2597,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       attachments: currentAttachments,
       status: "running",
     })
+    detachPendingAttachments()
     try {
       const nextSessionId = await ensureSession({ navigate: false, activate: false })
       if (abortController.signal.aborted) {
@@ -2647,13 +2676,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setSessionId(taskData.session_id)
       setPendingTaskRefreshKey(Date.now())
       setPrompt("")
-      setPendingAttachments([])
     } catch (error) {
       if (isAbortError(error)) {
+        restorePendingAttachments(currentAttachments)
         setPendingTurn((current) => (current?.id === optimisticTurnId ? { ...current, status: "cancelled" } : current))
         return
       }
       const nextMessage = error instanceof Error ? error.message : ""
+      restorePendingAttachments(currentAttachments)
       setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
       setPendingTurn(null)
     } finally {
@@ -3300,12 +3330,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     isClosingEditorRef.current = true
     void (async () => {
       try {
+        const hadPendingPaintStroke = Boolean(paintStrokeRef.current)
         if (paintStrokeRef.current) {
           await finishPaintStroke()
         }
 
         const latestCanvas = canvasRef.current
-        if (latestCanvas) {
+        if (latestCanvas && (dirtyCanvas || hadPendingPaintStroke)) {
           await attachCanvasToComposer(latestCanvas)
         }
       } catch (error) {
@@ -3606,6 +3637,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                   <img
                                                     src={attachment.previewUrl}
                                                     alt=""
+                                                    loading="lazy"
+                                                    decoding="async"
                                                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                                                   />
                                                 </div>

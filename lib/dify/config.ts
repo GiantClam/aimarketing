@@ -22,6 +22,7 @@ type DifyConfig = {
 
 type AdvisorType = "brand-strategy" | "growth" | "copywriting" | "lead-hunter"
 const DEMO_USER_EMAIL = "demo@example.com"
+const DIFY_DB_RETRY_DELAYS_MS = [250, 750]
 
 function normalizeOptional(value?: string | null) {
   const trimmed = value?.trim()
@@ -32,6 +33,55 @@ function normalizeBaseUrl(baseUrl?: string | null) {
   const trimmed = normalizeOptional(baseUrl)
   if (!trimmed) return null
   return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed.replace(/\/+$/, "")}/v1`
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function isRetryableDifyDbError(error: unknown) {
+  const message = getErrorMessage(error)
+  const causeMessage =
+    error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
+  const combined = `${message} ${causeMessage}`.toLowerCase()
+
+  return (
+    combined.includes("error connecting to database") ||
+    combined.includes("fetch failed") ||
+    combined.includes("connect timeout") ||
+    combined.includes("econnreset") ||
+    combined.includes("und_err_connect_timeout") ||
+    combined.includes("connection terminated unexpectedly") ||
+    combined.includes("terminating connection") ||
+    combined.includes("too many clients") ||
+    combined.includes("timeout exceeded")
+  )
+}
+
+async function withDifyDbRetry<T>(label: string, operation: () => Promise<T>) {
+  for (let attempt = 0; attempt <= DIFY_DB_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (!isRetryableDifyDbError(error) || attempt === DIFY_DB_RETRY_DELAYS_MS.length) {
+        throw error
+      }
+
+      console.warn("dify.db.retry", {
+        label,
+        attempt: attempt + 1,
+        message: getErrorMessage(error),
+      })
+      await sleep(DIFY_DB_RETRY_DELAYS_MS[attempt])
+    }
+  }
+
+  throw new Error(`dify_db_retry_exhausted:${label}`)
 }
 
 function isStatelessDemoLookup(options?: DifyLookupOptions) {
@@ -120,11 +170,13 @@ async function resolveUserContext(options?: DifyLookupOptions): Promise<Resolved
   }
 
   try {
-    const rows = await db
-      .select({ id: users.id, enterpriseId: users.enterpriseId })
-      .from(users)
-      .where(userEmail ? eq(users.email, userEmail) : eq(users.id, normalizedUserId as number))
-      .limit(1)
+    const rows = await withDifyDbRetry("resolve-user-context", async () =>
+      db
+        .select({ id: users.id, enterpriseId: users.enterpriseId })
+        .from(users)
+        .where(userEmail ? eq(users.email, userEmail) : eq(users.id, normalizedUserId as number))
+        .limit(1),
+    )
 
     if (rows.length > 0) {
       return {
@@ -161,12 +213,15 @@ async function isWriterMockAvailableWithContext(context: ResolvedUserContext, op
     return normalizedUserEmail === DEMO_USER_EMAIL
   }
 
+  const userId = context.userId
   try {
-    const rows = await db
-      .select({ isDemo: users.isDemo })
-      .from(users)
-      .where(eq(users.id, context.userId))
-      .limit(1)
+    const rows = await withDifyDbRetry("writer-mock-available", async () =>
+      db
+        .select({ isDemo: users.isDemo })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1),
+    )
 
     return Boolean(rows[0]?.isDemo)
   } catch (error) {
@@ -213,15 +268,18 @@ async function getLegacyDefaultDifyConfigWithContext(context: ResolvedUserContex
   }
 
   try {
-    const defaultConns = await db
-      .select()
-      .from(difyConnections)
-      .where(
-        context.userId
-          ? and(eq(difyConnections.isDefault, true), eq(difyConnections.userId, context.userId))
-          : eq(difyConnections.isDefault, true),
-      )
-      .limit(1)
+    const userId = context.userId
+    const defaultConns = await withDifyDbRetry("legacy-default-config.select-default", async () =>
+      db
+        .select()
+        .from(difyConnections)
+        .where(
+          userId
+            ? and(eq(difyConnections.isDefault, true), eq(difyConnections.userId, userId))
+            : eq(difyConnections.isDefault, true),
+        )
+        .limit(1),
+    )
 
     if (defaultConns.length > 0) {
       return {
@@ -230,18 +288,22 @@ async function getLegacyDefaultDifyConfigWithContext(context: ResolvedUserContex
       }
     }
 
-    const anyConns = context.userId
-      ? await db
-          .select()
-          .from(difyConnections)
-          .where(eq(difyConnections.userId, context.userId))
-          .orderBy(desc(difyConnections.createdAt))
-          .limit(1)
-      : await db
-          .select()
-          .from(difyConnections)
-          .orderBy(desc(difyConnections.createdAt))
-          .limit(1)
+    const anyConns = userId
+      ? await withDifyDbRetry("legacy-default-config.select-any-user", async () =>
+          db
+            .select()
+            .from(difyConnections)
+            .where(eq(difyConnections.userId, userId))
+            .orderBy(desc(difyConnections.createdAt))
+            .limit(1),
+        )
+      : await withDifyDbRetry("legacy-default-config.select-any-global", async () =>
+          db
+            .select()
+            .from(difyConnections)
+            .orderBy(desc(difyConnections.createdAt))
+            .limit(1),
+        )
 
     if (anyConns.length > 0) {
       return {
@@ -281,16 +343,19 @@ async function getLegacyDifyConfigByNameWithContext(
   }
 
   try {
-    const conns = await db
-      .select()
-      .from(difyConnections)
-      .where(
-        context.userId
-          ? and(eq(difyConnections.name, name), eq(difyConnections.userId, context.userId))
-          : eq(difyConnections.name, name),
-      )
-      .orderBy(desc(difyConnections.createdAt))
-      .limit(1)
+    const userId = context.userId
+    const conns = await withDifyDbRetry("legacy-named-config.select", async () =>
+      db
+        .select()
+        .from(difyConnections)
+        .where(
+          userId
+            ? and(eq(difyConnections.name, name), eq(difyConnections.userId, userId))
+            : eq(difyConnections.name, name),
+        )
+        .orderBy(desc(difyConnections.createdAt))
+        .limit(1),
+    )
 
     if (conns.length > 0) {
       return {
@@ -327,11 +392,13 @@ export async function getEnterpriseAdvisorOverride(
     return null
   }
 
-  const rows = await db
-    .select()
-    .from(enterpriseDifyAdvisorConfigs)
-    .where(and(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId), eq(enterpriseDifyAdvisorConfigs.advisorType, advisorType)))
-    .limit(1)
+  const rows = await withDifyDbRetry("enterprise-advisor-override.select", async () =>
+    db
+      .select()
+      .from(enterpriseDifyAdvisorConfigs)
+      .where(and(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId), eq(enterpriseDifyAdvisorConfigs.advisorType, advisorType)))
+      .limit(1),
+  )
 
   const row = rows[0]
   if (!row) return null
@@ -351,11 +418,13 @@ export async function listEnterpriseAdvisorOverrides(enterpriseId: number | null
     return []
   }
 
-  const rows = await db
-    .select()
-    .from(enterpriseDifyAdvisorConfigs)
-    .where(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId))
-    .orderBy(desc(enterpriseDifyAdvisorConfigs.updatedAt), desc(enterpriseDifyAdvisorConfigs.id))
+  const rows = await withDifyDbRetry("enterprise-advisor-override.list", async () =>
+    db
+      .select()
+      .from(enterpriseDifyAdvisorConfigs)
+      .where(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId))
+      .orderBy(desc(enterpriseDifyAdvisorConfigs.updatedAt), desc(enterpriseDifyAdvisorConfigs.id)),
+  )
 
   return rows.map((row) => ({
     id: row.id,
@@ -378,9 +447,11 @@ export async function upsertEnterpriseAdvisorOverride(
   },
 ) {
   if (input.useDefault) {
-    await db
-      .delete(enterpriseDifyAdvisorConfigs)
-      .where(and(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId), eq(enterpriseDifyAdvisorConfigs.advisorType, advisorType)))
+    await withDifyDbRetry("enterprise-advisor-override.delete", async () =>
+      db
+        .delete(enterpriseDifyAdvisorConfigs)
+        .where(and(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId), eq(enterpriseDifyAdvisorConfigs.advisorType, advisorType))),
+    )
     return null
   }
 
@@ -392,25 +463,29 @@ export async function upsertEnterpriseAdvisorOverride(
 
   const existing = await getEnterpriseAdvisorOverride(enterpriseId, advisorType)
   if (existing?.id) {
-    await db
-      .update(enterpriseDifyAdvisorConfigs)
-      .set({
+    await withDifyDbRetry("enterprise-advisor-override.update", async () =>
+      db
+        .update(enterpriseDifyAdvisorConfigs)
+        .set({
+          baseUrl,
+          apiKey,
+          enabled: Boolean(input.enabled),
+          updatedAt: new Date(),
+        })
+        .where(eq(enterpriseDifyAdvisorConfigs.id, existing.id)),
+    )
+  } else {
+    await withDifyDbRetry("enterprise-advisor-override.insert", async () =>
+      db.insert(enterpriseDifyAdvisorConfigs).values({
+        enterpriseId,
+        advisorType,
         baseUrl,
         apiKey,
         enabled: Boolean(input.enabled),
+        createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .where(eq(enterpriseDifyAdvisorConfigs.id, existing.id))
-  } else {
-    await db.insert(enterpriseDifyAdvisorConfigs).values({
-      enterpriseId,
-      advisorType,
-      baseUrl,
-      apiKey,
-      enabled: Boolean(input.enabled),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
+      }),
+    )
   }
 
   return getEnterpriseAdvisorOverride(enterpriseId, advisorType)
@@ -423,7 +498,16 @@ async function getAdvisorConfig(
   config?: { includeSystemDefault?: boolean },
 ) {
   const resolvedContext = context || (await resolveUserContext(options))
-  const enterpriseOverride = await getEnterpriseAdvisorOverride(resolvedContext.enterpriseId, advisorType)
+  let enterpriseOverride = null
+  try {
+    enterpriseOverride = await getEnterpriseAdvisorOverride(resolvedContext.enterpriseId, advisorType)
+  } catch (error) {
+    console.warn("dify.enterprise_advisor_override.fallback", {
+      enterpriseId: resolvedContext.enterpriseId,
+      advisorType,
+      message: getErrorMessage(error),
+    })
+  }
   if (enterpriseOverride && enterpriseOverride.enabled && enterpriseOverride.baseUrl && enterpriseOverride.apiKey) {
     return {
       source: "enterprise" as const,

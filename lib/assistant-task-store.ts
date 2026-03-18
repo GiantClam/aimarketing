@@ -1,5 +1,10 @@
 "use client"
 
+import {
+  readStorageJson,
+  writeStorageRecordStore,
+} from "@/lib/browser-storage"
+
 export type PendingAssistantTask = {
   taskId: string
   scope: "writer" | "image" | "advisor"
@@ -11,7 +16,9 @@ export type PendingAssistantTask = {
   createdAt: number
 }
 
-const STORAGE_KEY = "assistant-async-task-store-v1"
+const LEGACY_STORAGE_KEY = "assistant-async-task-store-v1"
+const STORAGE_KEY = "assistant-async-task-store-v2"
+const MAX_PENDING_TASKS = 32
 
 function canUseStorage() {
   return typeof window !== "undefined"
@@ -19,19 +26,15 @@ function canUseStorage() {
 
 function readStore() {
   if (!canUseStorage()) return {} as Record<string, PendingAssistantTask>
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    return JSON.parse(raw) as Record<string, PendingAssistantTask>
-  } catch {
-    return {}
-  }
+  return readStorageJson<Record<string, PendingAssistantTask>>("session", STORAGE_KEY) || {}
 }
 
 function writeStore(store: Record<string, PendingAssistantTask>) {
   if (!canUseStorage()) return
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
+  void writeStorageRecordStore("session", STORAGE_KEY, store, {
+    maxEntries: MAX_PENDING_TASKS,
+    legacyKeys: [{ area: "local", key: LEGACY_STORAGE_KEY }],
+  })
 }
 
 export function savePendingAssistantTask(task: PendingAssistantTask) {

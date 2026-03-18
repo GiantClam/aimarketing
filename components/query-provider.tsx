@@ -9,11 +9,11 @@ import {
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client"
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister"
 
-const QUERY_CACHE_KEY = "aimarketing-query-cache-v1"
+const QUERY_CACHE_KEY = "aimarketing-query-cache-v2"
 const QUERY_CACHE_MAX_AGE_MS = 30 * 60 * 1000
 
 function shouldPersistQuery(query: Query) {
-  return query.meta?.persist === true
+  return query.meta?.persist === true && query.state.status === "success"
 }
 
 function createQueryClient() {

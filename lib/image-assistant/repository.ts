@@ -150,21 +150,26 @@ function parseCursor(value: string | null | undefined): CursorParts | null {
   const match = /^(\d+):(\d+)$/u.exec(String(value || "").trim())
   if (!match) return null
 
-  const timestampSeconds = Number.parseInt(match[1], 10)
+  const rawTimestamp = Number.parseInt(match[1], 10)
   const id = Number.parseInt(match[2], 10)
-  if (!Number.isFinite(timestampSeconds) || !Number.isFinite(id) || timestampSeconds <= 0 || id <= 0) {
+  if (!Number.isFinite(rawTimestamp) || !Number.isFinite(id) || rawTimestamp <= 0 || id <= 0) {
     return null
   }
 
+  const timestampMs = rawTimestamp >= 1_000_000_000_000 ? rawTimestamp : rawTimestamp * 1000
+
   return {
-    timestamp: new Date(timestampSeconds * 1000),
+    timestamp: new Date(timestampMs),
     id,
   }
 }
 
 function buildCursor(createdAt: Date | string | number | null | undefined, id: number | null | undefined) {
   if (!id || !Number.isFinite(id)) return null
-  return `${toEpochSeconds(createdAt)}:${id}`
+  const date = createdAt instanceof Date ? createdAt : createdAt ? new Date(createdAt) : null
+  const timestampMs = date && Number.isFinite(date.getTime()) ? date.getTime() : null
+  if (!timestampMs) return null
+  return `${timestampMs}:${id}`
 }
 
 function mapSession(row: any, coverAssetUrl?: string | null): ImageAssistantConversationSummary {
@@ -359,10 +364,10 @@ export async function listImageAssistantSessions(
 
   const visibleRows = rows.slice(0, safeLimit)
   const data = visibleRows.map((row) => mapSession(row, normalizeListCoverUrl(row.coverAssetUrl)))
-  const lastVisibleSession = data.at(-1)
+  const lastVisibleRow = visibleRows.at(-1)
   const nextCursor =
-    rows.length > safeLimit && lastVisibleSession
-      ? `${lastVisibleSession.updated_at}:${lastVisibleSession.id}`
+    rows.length > safeLimit && lastVisibleRow
+      ? buildCursor(lastVisibleRow.updatedAt, lastVisibleRow.id)
       : null
 
   return { data, has_more: rows.length > safeLimit, limit: safeLimit, next_cursor: nextCursor }

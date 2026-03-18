@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
+import { listImageAssistantAssets } from "@/lib/image-assistant/repository"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
@@ -13,6 +14,29 @@ const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
   "image_assistant_asset_not_found",
   "image_assistant_canvas_document_not_found",
 ])
+
+async function hasActualEditContext(input: {
+  userId: number
+  sessionId: string
+  referenceAssetIds: string[]
+  snapshotAssetId: string | null
+  maskAssetId: string | null
+}) {
+  if (input.snapshotAssetId || input.maskAssetId) {
+    return true
+  }
+
+  if (!input.referenceAssetIds.length) {
+    return false
+  }
+
+  const editAssets = await listImageAssistantAssets(input.userId, input.sessionId, {
+    assetTypes: ["canvas_snapshot", "mask"],
+    limit: 100,
+  })
+  const editAssetIds = new Set(editAssets.map((asset) => asset.id))
+  return input.referenceAssetIds.some((assetId) => editAssetIds.has(assetId))
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,9 +64,31 @@ export async function POST(req: NextRequest) {
       sessionId: typeof body?.sessionId === "string" ? body.sessionId : null,
       title: prompt.trim() || (typeof brief?.goal === "string" ? brief.goal : "image edit"),
     })
+    const referenceAssetIds = Array.isArray(body?.referenceAssetIds)
+      ? (body.referenceAssetIds as unknown[]).filter((value: unknown): value is string => typeof value === "string")
+      : []
+    const snapshotAssetId = typeof body?.snapshotAssetId === "string" ? body.snapshotAssetId : null
+    const maskAssetId = typeof body?.maskAssetId === "string" ? body.maskAssetId : null
+    const shouldKeepEditMode = await hasActualEditContext({
+      userId: auth.user.id,
+      sessionId,
+      referenceAssetIds,
+      snapshotAssetId,
+      maskAssetId,
+    })
+    const workflowName = shouldKeepEditMode ? "image_turn_edit" : "image_turn_generate"
+    const taskType = shouldKeepEditMode ? "edit" : "generate"
+
+    if (!shouldKeepEditMode) {
+      console.info("image-assistant.edit.normalized_to_generate", {
+        sessionId,
+        referenceAssetCount: referenceAssetIds.length,
+      })
+    }
+
     const task = await enqueueAssistantTask({
       userId: auth.user.id,
-      workflowName: "image_turn_edit",
+      workflowName,
       payload: {
         kind: "image_turn",
         userId: auth.user.id,
@@ -51,8 +97,8 @@ export async function POST(req: NextRequest) {
         sessionId,
         prompt,
         brief,
-        taskType: "edit",
-        referenceAssetIds: Array.isArray(body?.referenceAssetIds) ? body.referenceAssetIds : [],
+        taskType,
+        referenceAssetIds,
         candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
         sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
         resolution: typeof body?.resolution === "string" ? body.resolution : null,

@@ -4,7 +4,12 @@ import {
   type EnterpriseKnowledgeScope,
 } from "@/lib/dify/enterprise-knowledge"
 import { z } from "zod"
-import { generateTextWithAiberm, hasAibermApiKey } from "@/lib/writer/aiberm"
+import {
+  generateTextWithWriterModel,
+  hasAibermApiKey,
+  hasOpenRouterApiKey,
+  hasWriterTextProvider,
+} from "@/lib/writer/aiberm"
 import { type WriterLanguage, type WriterMode, type WriterPlatform } from "@/lib/writer/config"
 import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
@@ -1041,13 +1046,13 @@ async function extractWriterBriefWithModel(params: {
     return extractWriterBriefWithFixture(params)
   }
 
-  if (!hasAibermApiKey()) {
+  if (!hasWriterTextProvider()) {
     return null
   }
 
   try {
     const { systemPrompt, userPrompt } = buildWriterBriefExtractionPrompt(params)
-    const raw = await generateTextWithAiberm(systemPrompt, userPrompt, WRITER_TEXT_MODEL, {
+    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL, {
       temperature: 0,
       maxTokens: 900,
     })
@@ -2246,23 +2251,25 @@ async function buildUserPrompt(
 }
 
 export function isWriterSkillsAvailable() {
-  return hasAibermApiKey() && isWriterR2Available() && (hasWriterResearchConfig() || !WRITER_REQUIRE_WEB_RESEARCH)
+  return hasWriterTextProvider() && isWriterR2Available() && (hasWriterResearchConfig() || !WRITER_REQUIRE_WEB_RESEARCH)
 }
 
 export type WriterSkillsAvailability = {
   enabled: boolean
-  provider: "aiberm" | "unavailable"
-  reason: "ok" | "aiberm_api_key_missing" | "research_config_missing" | "writer_r2_config_missing"
+  provider: "aiberm" | "openrouter" | "unavailable"
+  reason: "ok" | "llm_api_key_missing" | "research_config_missing" | "writer_r2_config_missing"
   requiresWebResearch: boolean
   webResearchEnabled: boolean
 }
 
 export function getWriterSkillsAvailability(): WriterSkillsAvailability {
-  if (!hasAibermApiKey()) {
+  const preferredProvider = hasAibermApiKey() ? "aiberm" : hasOpenRouterApiKey() ? "openrouter" : "unavailable"
+
+  if (!hasWriterTextProvider()) {
     return {
       enabled: false,
       provider: "unavailable",
-      reason: "aiberm_api_key_missing",
+      reason: "llm_api_key_missing",
       requiresWebResearch: WRITER_REQUIRE_WEB_RESEARCH,
       webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,
     }
@@ -2271,7 +2278,7 @@ export function getWriterSkillsAvailability(): WriterSkillsAvailability {
   if (WRITER_REQUIRE_WEB_RESEARCH && !hasWriterResearchConfig()) {
     return {
       enabled: false,
-      provider: "aiberm",
+      provider: preferredProvider,
       reason: "research_config_missing",
       requiresWebResearch: true,
       webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,
@@ -2281,7 +2288,7 @@ export function getWriterSkillsAvailability(): WriterSkillsAvailability {
   if (!isWriterR2Available()) {
     return {
       enabled: false,
-      provider: "aiberm",
+      provider: preferredProvider,
       reason: "writer_r2_config_missing",
       requiresWebResearch: WRITER_REQUIRE_WEB_RESEARCH,
       webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,
@@ -2290,7 +2297,7 @@ export function getWriterSkillsAvailability(): WriterSkillsAvailability {
 
   return {
     enabled: true,
-    provider: "aiberm",
+    provider: preferredProvider,
     reason: "ok",
     requiresWebResearch: WRITER_REQUIRE_WEB_RESEARCH,
     webResearchEnabled: WRITER_ENABLE_WEB_RESEARCH,
@@ -2353,7 +2360,7 @@ export async function generateWriterDraftWithSkills(
     buildSystemPrompt(platform, mode, language.instruction, research, enterpriseKnowledge),
     buildUserPrompt(query, platform, mode, research, language.instruction, enterpriseKnowledge),
   ])
-  const answer = await generateTextWithAiberm(systemPrompt, userPrompt, WRITER_TEXT_MODEL)
+  const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL)
 
   return {
     answer: postProcessWriterDraft(platform, mode, answer, language.label),

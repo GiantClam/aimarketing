@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState, type MouseEvent, type UIEvent } from "react"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -19,12 +20,25 @@ import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  ensureWorkspaceQueryData,
+  getWriterMessagesPage,
+  getWriterMessagesQueryKey,
+} from "@/lib/query/workspace-cache"
+import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
+import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
+import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import { cn } from "@/lib/utils"
 import { WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
 import {
   deleteWriterSessionMeta,
+  getWriterConversationCache,
   getWriterSessionMeta,
+  isWriterConversationCacheFresh,
+  saveWriterConversationCache,
+  saveWriterSessionMeta,
   type WriterRefreshDetail,
+  WRITER_SESSION_CACHE_TTL_MS,
   WRITER_REFRESH_EVENT,
 } from "@/lib/writer/session-store"
 import type { WriterConversationSummary } from "@/lib/writer/types"
@@ -35,32 +49,10 @@ function getConversationStatusLabel(status: WriterConversationSummary["status"],
   return ""
 }
 
-type WriterConversationCache = {
-  conversations: WriterConversationSummary[]
-  hasMore: boolean
-  nextCursor: string | null
-  updatedAt: number
-}
-
 const WRITER_CONVERSATION_CACHE_TTL_MS = 60_000
-
-function readWriterConversationListCache() {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = window.localStorage.getItem("writer-conversations-cache-v1")
-    if (!raw) return null
-    return JSON.parse(raw) as WriterConversationCache
-  } catch {
-    return null
-  }
-}
-
-function writeWriterConversationListCache(value: WriterConversationCache) {
-  if (typeof window === "undefined") return
-  try {
-    window.localStorage.setItem("writer-conversations-cache-v1", JSON.stringify(value))
-  } catch {}
-}
+const WRITER_SESSION_PREFETCH_LIMIT = 3
+const WRITER_PREFETCH_TURN_LIMIT = 8
+const WRITER_CONVERSATION_LIST_CACHE_KEY = "writer-conversations-cache-v2"
 
 function mergeConversations(current: WriterConversationSummary[], incoming: WriterConversationSummary[]) {
   const seen = new Set<string>()
@@ -85,12 +77,8 @@ export function WriterSidebarItem({
   const { messages } = useI18n()
   const pathname = usePathname()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [isOpen, setIsOpen] = useState(false)
-  const [conversations, setConversations] = useState<WriterConversationSummary[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [editingConvId, setEditingConvId] = useState<string | null>(null)
   const [editingConvName, setEditingConvName] = useState("")
   const [pendingDeleteConversation, setPendingDeleteConversation] = useState<WriterConversationSummary | null>(null)
@@ -98,69 +86,83 @@ export function WriterSidebarItem({
 
   const isWriterRoute = pathname.startsWith("/dashboard/writer")
   const isExpanded = isOpen
-  const activeConversationId = pathname.match(/^\/dashboard\/writer\/([^/?]+)/)?.[1] || null
+  const activeConversationId = normalizeRouteEntityId(pathname.match(/^\/dashboard\/writer\/([^/?]+)/)?.[1] || null)
 
-  useEffect(() => {
-    const cached = readWriterConversationListCache()
-    if (!cached) return
-    setConversations(cached.conversations)
-    setHasMore(cached.hasMore)
-    setNextCursor(cached.nextCursor)
-  }, [])
-
-  const upsertConversation = (conversation: WriterConversationSummary) => {
-    setConversations((current) => {
-      const next = [conversation, ...current.filter((item) => item.id !== conversation.id)]
-      writeWriterConversationListCache({
-        conversations: next,
-        hasMore,
-        nextCursor,
-        updatedAt: Date.now(),
-      })
-      return next
-    })
-  }
-
-  const fetchConversations = useCallback(async ({ append = false, cursor, background = false }: { append?: boolean; cursor?: string | null; background?: boolean } = {}) => {
-    if (append) {
-      setIsLoadingMore(true)
-    } else if (!background) {
-      setIsLoading(true)
-    }
-    try {
+  const {
+    items: conversations,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    nextCursor,
+    fetchItems: fetchConversations,
+    updateList,
+    createSnapshot,
+    restoreSnapshot,
+    handleListScroll,
+  } = useCachedSidebarList<WriterConversationSummary>({
+    cacheKey: WRITER_CONVERSATION_LIST_CACHE_KEY,
+    legacyKeys: [{ area: "local", key: "writer-conversations-cache-v1" }],
+    ttlMs: WRITER_CONVERSATION_CACHE_TTL_MS,
+    isExpanded,
+    activeItemId: activeConversationId,
+    fetchPage: async ({ cursor }) => {
       const params = new URLSearchParams({ limit: "30" })
       if (cursor) {
         params.set("cursor", cursor)
       }
 
       const response = await fetch(`/api/writer/conversations?${params.toString()}`)
-      if (!response.ok) return
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
       const data = await response.json()
       const nextBatch = Array.isArray(data?.data) ? (data.data as WriterConversationSummary[]) : []
-      const nextHasMore = Boolean(data?.has_more) && nextBatch.length > 0
-      const resolvedNextCursor = typeof data?.next_cursor === "string" ? data.next_cursor : null
-      setConversations((current) => {
-        const nextConversations = append ? mergeConversations(current, nextBatch) : nextBatch
-        writeWriterConversationListCache({
-          conversations: nextConversations,
-          hasMore: nextHasMore,
-          nextCursor: resolvedNextCursor,
-          updatedAt: Date.now(),
-        })
-        return nextConversations
-      })
-      setHasMore(nextHasMore)
-      setNextCursor(resolvedNextCursor)
-    } catch (error) {
-      console.error("Failed to load writer conversations", error)
-    } finally {
-      if (append) {
-        setIsLoadingMore(false)
-      } else if (!background) {
-        setIsLoading(false)
+      return {
+        items: nextBatch,
+        hasMore: Boolean(data?.has_more) && nextBatch.length > 0,
+        nextCursor: typeof data?.next_cursor === "string" ? data.next_cursor : null,
       }
+    },
+    mergeItems: mergeConversations,
+    getItemId: (conversation) => conversation.id,
+  })
+
+  const prefetchConversation = useCallback(async (conversationId: string) => {
+    const cached = getWriterConversationCache(conversationId)
+    if (cached && isWriterConversationCacheFresh(cached, WRITER_SESSION_CACHE_TTL_MS)) {
+      return
     }
-  }, [])
+
+    const data = await ensureWorkspaceQueryData(queryClient, {
+      queryKey: getWriterMessagesQueryKey(conversationId, WRITER_PREFETCH_TURN_LIMIT),
+      queryFn: () => getWriterMessagesPage(conversationId, WRITER_PREFETCH_TURN_LIMIT),
+    })
+
+    saveWriterConversationCache(conversationId, {
+      entries: data.data || [],
+      conversation: data.conversation,
+      historyCursor: data.next_cursor || null,
+      hasMoreHistory: Boolean(data.has_more),
+      loadedTurnCount: (data.data || []).length,
+      updatedAt: Date.now(),
+    })
+
+    if (data.conversation) {
+      saveWriterSessionMeta(conversationId, {
+        platform: data.conversation.platform,
+        mode: data.conversation.mode,
+        language: data.conversation.language,
+        draft: "",
+        imagesRequested: Boolean(data.conversation.images_requested),
+        status: data.conversation.status,
+        updatedAt: Date.now(),
+      })
+    }
+  }, [queryClient])
+
+  const upsertConversation = (conversation: WriterConversationSummary) => {
+    updateList((current) => [conversation, ...current.filter((item) => item.id !== conversation.id)])
+  }
 
   useEffect(() => {
     if (isWriterRoute) {
@@ -168,13 +170,13 @@ export function WriterSidebarItem({
     }
   }, [isWriterRoute])
 
-  useEffect(() => {
-    if (isExpanded) {
-      const cached = readWriterConversationListCache()
-      const isFresh = Boolean(cached && Date.now() - cached.updatedAt < WRITER_CONVERSATION_CACHE_TTL_MS)
-      void fetchConversations({ background: Boolean(isFresh && cached && cached.conversations.length > 0) })
-    }
-  }, [fetchConversations, isExpanded])
+  const { prefetchItem: warmConversation } = useSidebarDetailPrefetch({
+    items: conversations,
+    activeItemId: activeConversationId,
+    prefetchLimit: WRITER_SESSION_PREFETCH_LIMIT,
+    getItemId: (conversation: WriterConversationSummary) => conversation.id,
+    prefetchItem: prefetchConversation,
+  })
 
   useEffect(() => {
     const handleRefresh = (event: Event) => {
@@ -186,42 +188,18 @@ export function WriterSidebarItem({
       }
 
       if (detail?.action === "remove") {
-        setConversations((current) => {
-          const next = current.filter((item) => item.id !== detail.conversationId)
-          writeWriterConversationListCache({
-            conversations: next,
-            hasMore,
-            nextCursor,
-            updatedAt: Date.now(),
-          })
-          return next
-        })
+        updateList((current) => current.filter((item) => item.id !== detail.conversationId))
         return
       }
 
       if (isExpanded) {
-        void fetchConversations({ background: conversations.length > 0 })
+        void fetchConversations({ background: conversations.length > 0 }).catch(() => {})
       }
     }
 
     window.addEventListener(WRITER_REFRESH_EVENT, handleRefresh)
     return () => window.removeEventListener(WRITER_REFRESH_EVENT, handleRefresh)
-  }, [conversations.length, fetchConversations, hasMore, isExpanded, nextCursor])
-
-  useEffect(() => {
-    if (!isExpanded || !activeConversationId || isLoading || isLoadingMore) return
-    if (conversations.some((conversation) => conversation.id === activeConversationId)) return
-    if (hasMore && nextCursor) {
-      void fetchConversations({ append: true, cursor: nextCursor })
-    }
-  }, [activeConversationId, conversations, fetchConversations, hasMore, isExpanded, isLoading, isLoadingMore, nextCursor])
-
-  const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
-    const target = event.currentTarget
-    if (isLoading || isLoadingMore || !hasMore || !nextCursor) return
-    if (target.scrollHeight - target.scrollTop - target.clientHeight > 48) return
-    void fetchConversations({ append: true, cursor: nextCursor })
-  }
+  }, [conversations.length, fetchConversations, isExpanded, updateList])
 
   const handleDeleteRequest = (conversation: WriterConversationSummary, event: MouseEvent) => {
     event.preventDefault()
@@ -234,10 +212,10 @@ export function WriterSidebarItem({
     if (!pendingDeleteConversation) return
 
     const convId = pendingDeleteConversation.id
-    const previousConversations = conversations
+    const previousSnapshot = createSnapshot()
 
     setDeletingConvId(convId)
-    setConversations((current) => current.filter((item) => item.id !== convId))
+    updateList((current) => current.filter((item) => item.id !== convId))
 
     try {
       const response = await fetch(`/api/writer/conversations/${convId}`, { method: "DELETE" })
@@ -250,7 +228,7 @@ export function WriterSidebarItem({
         router.push("/dashboard/writer")
       }
     } catch (error) {
-      setConversations(previousConversations)
+      restoreSnapshot(previousSnapshot)
       console.error("Failed to delete writer conversation", error)
     } finally {
       setDeletingConvId(null)
@@ -272,11 +250,11 @@ export function WriterSidebarItem({
     if (!editingConvName.trim()) return
 
     const nextName = editingConvName.trim()
-    const previousConversations = conversations
+    const previousSnapshot = createSnapshot()
     const existing = conversations.find((item) => item.id === convId)
     if (!existing) return
 
-    setConversations((current) => {
+    updateList((current) => {
       const target = current.find((item) => item.id === convId)
       if (!target) return current
       return [{ ...target, name: nextName, updated_at: Math.floor(Date.now() / 1000) }, ...current.filter((item) => item.id !== convId)]
@@ -296,7 +274,7 @@ export function WriterSidebarItem({
       setEditingConvId(null)
       setEditingConvName("")
     } catch (error) {
-      setConversations(previousConversations)
+      restoreSnapshot(previousSnapshot)
       setEditingConvId(null)
       setEditingConvName("")
       console.error("Failed to rename writer conversation", error)
@@ -365,7 +343,11 @@ export function WriterSidebarItem({
                   query.set("language", language)
 
                   return (
-                    <Link key={conversation.id} href={`/dashboard/writer/${conversation.id}?${query.toString()}`}>
+                    <Link
+                      key={conversation.id}
+                      href={`/dashboard/writer/${conversation.id}?${query.toString()}`}
+                      onMouseEnter={() => void warmConversation(conversation.id)}
+                    >
                       <div
                         data-testid={`writer-conversation-${conversation.id}`}
                         className={cn(

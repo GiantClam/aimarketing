@@ -9,10 +9,36 @@ const AIBERM_IMAGE_API_BASE = (
 const AIBERM_API_KEY = process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || ""
 const AIBERM_IMAGE_SYSTEM_INSTRUCTION = process.env.AIBERM_IMAGE_SYSTEM_INSTRUCTION || "You are a helpful assistant."
 const AIBERM_IMAGE_SIZE = process.env.AIBERM_IMAGE_SIZE || "2K"
+const OPENROUTER_API_BASE = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "")
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ""
+const OPENROUTER_TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-3-flash-preview"
+const OPENROUTER_IMAGE_MODEL = process.env.OPENROUTER_IMAGE_MODEL || "google/gemini-3.1-flash-image-preview"
+const OPENROUTER_APP_URL =
+  process.env.OPENROUTER_APP_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "")
+const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || "AI Marketing"
 
 type OpenAICompatibleMessage = {
   role: "system" | "user" | "assistant"
   content: string
+}
+
+type OpenRouterMessageContentPart =
+  | {
+      type: "text"
+      text: string
+    }
+  | {
+      type: "image_url"
+      image_url: {
+        url: string
+      }
+    }
+
+export type OpenRouterInlineReferenceImage = {
+  mimeType: string
+  base64Data: string
 }
 
 function buildAibermHeaders() {
@@ -28,6 +54,22 @@ function buildAibermHeaders() {
 
 export function hasAibermApiKey() {
   return Boolean(AIBERM_API_KEY)
+}
+
+export function hasOpenRouterApiKey() {
+  return Boolean(OPENROUTER_API_KEY)
+}
+
+export function hasWriterTextProvider() {
+  return hasAibermApiKey() || hasOpenRouterApiKey()
+}
+
+export function getOpenRouterTextModel() {
+  return OPENROUTER_TEXT_MODEL
+}
+
+export function getOpenRouterImageModel() {
+  return OPENROUTER_IMAGE_MODEL
 }
 
 type AibermTextGenerationOptions = {
@@ -70,6 +112,30 @@ export function extractTextFromOpenAICompatibleResponse(data: any) {
   throw new Error("openai_compatible_text_empty")
 }
 
+function buildOpenRouterHeaders() {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error("openrouter_api_key_missing")
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json",
+  }
+
+  if (OPENROUTER_APP_URL) {
+    headers["HTTP-Referer"] = OPENROUTER_APP_URL
+  }
+  if (OPENROUTER_APP_NAME) {
+    headers["X-Title"] = OPENROUTER_APP_NAME
+  }
+
+  return headers
+}
+
+function isAbortLikeError(error: unknown) {
+  return error instanceof Error && (error.name === "AbortError" || error.message === "request_aborted")
+}
+
 export async function generateTextWithAiberm(
   systemPrompt: string,
   userPrompt: string,
@@ -102,6 +168,75 @@ export async function generateTextWithAiberm(
   return extractTextFromOpenAICompatibleResponse(response.data)
 }
 
+export async function generateTextWithOpenRouter(
+  systemPrompt: string,
+  userPrompt: string,
+  model = OPENROUTER_TEXT_MODEL,
+  options: AibermTextGenerationOptions = {},
+) {
+  const response = await writerRequestJson(
+    `${OPENROUTER_API_BASE}/chat/completions`,
+    {
+      method: "POST",
+      headers: buildOpenRouterHeaders(),
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt } satisfies OpenAICompatibleMessage,
+          { role: "user", content: userPrompt } satisfies OpenAICompatibleMessage,
+        ],
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.maxTokens ?? 4096,
+      }),
+    },
+    { attempts: 2, timeoutMs: 90_000 },
+  )
+
+  if (!response.ok) {
+    const data = response.data as any
+    throw new Error(data?.error?.message || `openrouter_text_http_${response.status}`)
+  }
+
+  return extractTextFromOpenAICompatibleResponse(response.data)
+}
+
+export async function generateTextWithWriterModel(
+  systemPrompt: string,
+  userPrompt: string,
+  model: string,
+  options: AibermTextGenerationOptions = {},
+) {
+  let lastError: unknown = null
+
+  if (hasAibermApiKey()) {
+    try {
+      return await generateTextWithAiberm(systemPrompt, userPrompt, model, options)
+    } catch (error) {
+      if (isAbortLikeError(error)) {
+        throw error
+      }
+      lastError = error
+      console.warn("writer.text.aiberm_fallback", {
+        message: error instanceof Error ? error.message : String(error),
+        fallbackProvider: hasOpenRouterApiKey() ? "openrouter" : null,
+      })
+    }
+  }
+
+  if (hasOpenRouterApiKey()) {
+    try {
+      return await generateTextWithOpenRouter(systemPrompt, userPrompt, OPENROUTER_TEXT_MODEL, options)
+    } catch (error) {
+      if (isAbortLikeError(error)) {
+        throw error
+      }
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("writer_text_provider_missing")
+}
+
 function normalizeAspectRatio(aspectRatio: string) {
   const supportedAspectRatios = new Set(["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"])
   return supportedAspectRatios.has(aspectRatio) ? aspectRatio : "16:9"
@@ -118,6 +253,28 @@ function extractInlineImageDataUrl(data: any) {
   }
 
   throw new Error("aiberm_image_missing")
+}
+
+function extractOpenRouterImageDataUrls(data: any) {
+  const choice = Array.isArray(data?.choices) ? data.choices[0] : null
+  const images = Array.isArray(choice?.message?.images) ? choice.message.images : []
+  const urls = images
+    .map((image: any) => {
+      if (typeof image?.image_url?.url === "string" && image.image_url.url.trim()) {
+        return image.image_url.url.trim()
+      }
+      if (typeof image?.imageUrl?.url === "string" && image.imageUrl.url.trim()) {
+        return image.imageUrl.url.trim()
+      }
+      return ""
+    })
+    .filter(Boolean)
+
+  if (!urls.length) {
+    throw new Error("openrouter_image_missing")
+  }
+
+  return urls
 }
 
 export async function generateImageWithAiberm(prompt: string, model: string, aspectRatio: string) {
@@ -147,7 +304,7 @@ export async function generateImageWithAiberm(prompt: string, model: string, asp
         },
       }),
     },
-    { attempts: 2, timeoutMs: 120_000 },
+    { attempts: 1, timeoutMs: 120_000 },
   )
 
   if (!response.ok) {
@@ -156,4 +313,73 @@ export async function generateImageWithAiberm(prompt: string, model: string, asp
   }
 
   return extractInlineImageDataUrl(response.data)
+}
+
+export async function generateImagesWithOpenRouter(
+  prompt: string,
+  model = OPENROUTER_IMAGE_MODEL,
+  aspectRatio = "16:9",
+  referenceImages: OpenRouterInlineReferenceImage[] = [],
+) {
+  const content: OpenRouterMessageContentPart[] = [
+    {
+      type: "text",
+      text: prompt,
+    },
+    ...referenceImages.map((image) => ({
+      type: "image_url" as const,
+      image_url: {
+        url: `data:${image.mimeType};base64,${image.base64Data}`,
+      },
+    })),
+  ]
+
+  const response = await writerRequestJson(
+    `${OPENROUTER_API_BASE}/chat/completions`,
+    {
+      method: "POST",
+      headers: buildOpenRouterHeaders(),
+      body: JSON.stringify({
+        model,
+        modalities: ["image", "text"],
+        messages: [
+          {
+            role: "user",
+            content,
+          },
+        ],
+        image_config: {
+          aspect_ratio: normalizeAspectRatio(aspectRatio),
+        },
+      }),
+    },
+    { attempts: 2, timeoutMs: 180_000 },
+  )
+
+  if (!response.ok) {
+    const data = response.data as any
+    throw new Error(data?.error?.message || `openrouter_image_http_${response.status}`)
+  }
+
+  let textSummary = ""
+  try {
+    textSummary = extractTextFromOpenAICompatibleResponse(response.data)
+  } catch {
+    textSummary = ""
+  }
+
+  return {
+    images: extractOpenRouterImageDataUrls(response.data),
+    textSummary: textSummary || "Image generation completed.",
+  }
+}
+
+export async function generateImageWithOpenRouter(
+  prompt: string,
+  model = OPENROUTER_IMAGE_MODEL,
+  aspectRatio = "16:9",
+  referenceImages: OpenRouterInlineReferenceImage[] = [],
+) {
+  const result = await generateImagesWithOpenRouter(prompt, model, aspectRatio, referenceImages)
+  return result.images[0]
 }

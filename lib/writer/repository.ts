@@ -100,6 +100,31 @@ function toEpochSeconds(value: Date | string | number | null | undefined, fallba
   return fallbackSeconds
 }
 
+function parseTimestampCursor(rawValue: string | null | undefined) {
+  const match = /^(\d+):(\d+)$/u.exec(String(rawValue || "").trim())
+  if (!match) return null
+
+  const rawTimestamp = Number.parseInt(match[1], 10)
+  const id = Number.parseInt(match[2], 10)
+  if (!Number.isFinite(rawTimestamp) || !Number.isFinite(id) || rawTimestamp <= 0 || id <= 0) {
+    return null
+  }
+
+  const timestampMs = rawTimestamp >= 1_000_000_000_000 ? rawTimestamp : rawTimestamp * 1000
+  return {
+    timestamp: new Date(timestampMs),
+    id,
+  }
+}
+
+function buildTimestampCursor(value: Date | string | number | null | undefined, id: number | null | undefined) {
+  if (!id || !Number.isFinite(id)) return null
+  const date = value instanceof Date ? value : value ? new Date(value) : null
+  const timestampMs = date && Number.isFinite(date.getTime()) ? date.getTime() : null
+  if (!timestampMs) return null
+  return `${timestampMs}:${id}`
+}
+
 async function withDbRetry<T>(label: string, operation: () => Promise<T>) {
   for (let attempt = 0; attempt <= DB_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
@@ -463,9 +488,7 @@ export async function listWriterConversations(
   await ensureWriterTables()
 
   const safeLimit = Math.max(1, Math.min(limit, 100))
-  const parsedCursor = cursor ? /^(\d+):(\d+)$/u.exec(cursor.trim()) : null
-  const cursorTimestamp = parsedCursor ? new Date(Number(parsedCursor[1]) * 1000) : null
-  const cursorId = parsedCursor ? Number.parseInt(parsedCursor[2], 10) : Number.NaN
+  const parsedCursor = parseTimestampCursor(cursor)
   const limitedRows = await withDbRetry("list-writer-conversations", () =>
     db
       .select({
@@ -484,10 +507,10 @@ export async function listWriterConversations(
         and(
           eq(writerConversations.userId, userId),
           sql`${writerConversations.title} LIKE ${`${WRITER_TITLE_PREFIX}%`}`,
-          parsedCursor && cursorTimestamp && Number.isFinite(cursorId)
+          parsedCursor
             ? sql`(
-                ${writerConversations.updatedAt} < ${cursorTimestamp}
-                OR (${writerConversations.updatedAt} = ${cursorTimestamp} AND ${writerConversations.id} < ${cursorId})
+                ${writerConversations.updatedAt} < ${parsedCursor.timestamp}
+                OR (${writerConversations.updatedAt} = ${parsedCursor.timestamp} AND ${writerConversations.id} < ${parsedCursor.id})
               )`
             : undefined,
         ),
@@ -501,7 +524,7 @@ export async function listWriterConversations(
   const lastVisibleRow = visibleRows.at(-1)
   const nextCursor =
     limitedRows.length > safeLimit && lastVisibleRow?.updatedAt
-      ? `${Math.floor(lastVisibleRow.updatedAt.getTime() / 1000)}:${lastVisibleRow.id}`
+      ? buildTimestampCursor(lastVisibleRow.updatedAt, lastVisibleRow.id)
       : null
 
   return { data, has_more: limitedRows.length > safeLimit, limit: safeLimit, next_cursor: nextCursor }
