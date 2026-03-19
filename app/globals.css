@@ -7,94 +7,78 @@
 :root {
   /* Radix ScrollArea overflow fix */
   --radix-scroll-area-viewport-overflow: scroll;
-  
-  /* Minimal & Direct Flat Design: Pink & Cyan Theme */
-  --background: #FDF2F8;
-  /* Pink 50 */
-  --foreground: #831843;
-  /* Pink 900 */
+
+  /* AIPartnerTool-aligned flat light system */
+  --background: #f5f5f5;
+  --foreground: #1a1a1a;
   --card: #ffffff;
-  --card-foreground: #831843;
+  --card-foreground: #1a1a1a;
   --popover: #ffffff;
-  --popover-foreground: #831843;
-  --primary: #EC4899;
-  /* Pink 500 */
-  --primary-foreground: #ffffff;
-  --secondary: #F472B6;
-  /* Pink 400 */
+  --popover-foreground: #1a1a1a;
+  --primary: #f2f361;
+  --primary-foreground: #1a1a1a;
+  --secondary: #5aa100;
   --secondary-foreground: #ffffff;
-  --muted: #FCE7F3;
-  /* Pink 100 */
-  --muted-foreground: #BE185D;
-  /* Pink 700 */
-  --accent: #06B6D4;
-  /* Cyan 500 */
-  --accent-foreground: #ffffff;
-  --destructive: #E11D48;
-  /* Rose 600 */
+  --muted: #e8e8e8;
+  --muted-foreground: #6b6b6b;
+  --accent: #1a1a1a;
+  --accent-foreground: #f2f361;
+  --destructive: #d4183d;
   --destructive-foreground: #ffffff;
-  --border: #FBCFE8;
-  /* Pink 200 */
-  --input: #FBCFE8;
-  --ring: #EC4899;
-  --chart-1: #EC4899;
-  --chart-2: #06B6D4;
-  --chart-3: #F472B6;
-  --chart-4: #22d3ee;
-  --chart-5: #BE185D;
-  --radius: 0.5rem;
-  --sidebar: #FDF2F8;
-  --sidebar-foreground: #831843;
-  --sidebar-primary: #EC4899;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #06B6D4;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #FBCFE8;
-  --sidebar-ring: #06B6D4;
+  --border: rgba(26, 26, 26, 0.1);
+  --input: rgba(26, 26, 26, 0.1);
+  --input-background: #ffffff;
+  --ring: #f2f361;
+  --chart-1: #f2f361;
+  --chart-2: #5aa100;
+  --chart-3: #1a1a1a;
+  --chart-4: #e8e8e8;
+  --chart-5: #6b6b6b;
+  --radius: 1.25rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #f2f361;
+  --sidebar-primary-foreground: #1a1a1a;
+  --sidebar-accent: #f5f5f5;
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: rgba(26, 26, 26, 0.1);
+  --sidebar-ring: #f2f361;
 }
 
 .dark {
-  /* Dark mode mappings for Pink & Cyan Flat Design */
-  --background: #0f172a;
-  /* Slate 900 */
-  --foreground: #FDF2F8;
-  /* Pink 50 */
-  --card: #1e293b;
-  /* Slate 800 */
-  --card-foreground: #FDF2F8;
-  --popover: #1e293b;
-  --popover-foreground: #FDF2F8;
-  --primary: #EC4899;
-  /* Pink 500 */
-  --primary-foreground: #ffffff;
-  --secondary: #F472B6;
-  /* Pink 400 */
-  --secondary-foreground: #ffffff;
-  --muted: #334155;
-  /* Slate 700 */
-  --muted-foreground: #94a3b8;
-  /* Slate 400 */
-  --accent: #06B6D4;
-  /* Cyan 500 */
-  --accent-foreground: #ffffff;
-  --destructive: #E11D48;
-  --destructive-foreground: #ffffff;
-  --border: #334155;
-  --input: #334155;
-  --ring: #EC4899;
-  --chart-1: #EC4899;
-  --chart-2: #06B6D4;
-  --chart-3: #F472B6;
-  --chart-4: #22d3ee;
-  --chart-5: #BE185D;
-  --sidebar: #0f172a;
-  --sidebar-foreground: #FDF2F8;
-  --sidebar-primary: #EC4899;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #06B6D4;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #334155;
-  --sidebar-ring: #06B6D4;
+  --background: #141414;
+  --foreground: #f5f5f5;
+  --card: #1a1a1a;
+  --card-foreground: #f5f5f5;
+  --popover: #1a1a1a;
+  --popover-foreground: #f5f5f5;
+  --primary: #f2f361;
+  --primary-foreground: #1a1a1a;
+  --secondary: #7bc11d;
+  --secondary-foreground: #0d1400;
+  --muted: #262626;
+  --muted-foreground: #b5b5b5;
+  --accent: #f5f5f5;
+  --accent-foreground: #1a1a1a;
+  --destructive: #ff557a;
+  --destructive-foreground: #140408;
+  --border: rgba(245, 245, 245, 0.12);
+  --input: #2d2d2d;
+  --input-background: #1f1f1f;
+  --ring: #f2f361;
+  --chart-1: #f2f361;
+  --chart-2: #7bc11d;
+  --chart-3: #f5f5f5;
+  --chart-4: #525252;
+  --chart-5: #d3d3d3;
+  --sidebar: #161616;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #f2f361;
+  --sidebar-primary-foreground: #1a1a1a;
+  --sidebar-accent: #1f1f1f;
+  --sidebar-accent-foreground: #f5f5f5;
+  --sidebar-border: rgba(245, 245, 245, 0.1);
+  --sidebar-ring: #f2f361;
 }
 
 @theme inline {
@@ -142,7 +126,17 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background-color: var(--background);
+    background-image: none;
+    color-scheme: light;
+    font-family: var(--font-fira-sans), sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 82%, white 18%);
+    color: var(--primary-foreground);
   }
 }
 

@@ -4,12 +4,11 @@ import type React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ArrowLeft, Lock, Mail, Sparkles, Zap } from "lucide-react"
+import { ArrowLeft, Lock, Mail } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
 import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -56,79 +55,105 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
-        <Link href="/" className="mb-8 inline-flex items-center gap-2 font-manrope text-muted-foreground hover:text-foreground">
+    <div className="min-h-screen bg-background px-4 py-10">
+      <div className="mx-auto w-full max-w-5xl">
+        <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           {messages.shared.backToHome}
         </Link>
 
-        <Card className="border-border shadow-lg">
-          <CardHeader className="text-center">
-            <div className="mb-4 flex justify-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-                <Sparkles className="h-6 w-6 text-primary-foreground" />
+        <div className="grid gap-8 lg:grid-cols-[0.95fr_0.85fr]">
+          <section className="rounded-[32px] border-2 border-border bg-card p-8 lg:p-10">
+            <div className="inline-flex rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground">
+              login
+            </div>
+            <h1 className="mt-6 text-5xl font-semibold leading-tight text-foreground">
+              {messages.login.title}
+            </h1>
+            <p className="mt-4 max-w-xl text-lg leading-8 text-muted-foreground">
+              {messages.login.description}
+            </p>
+
+            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-[22px] border-2 border-border bg-background p-4">
+                <div className="text-sm font-medium text-foreground">workspace</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">进入统一 AI 工作台，继续顾问、内容和设计任务。</p>
+              </div>
+              <div className="rounded-[22px] border-2 border-border bg-background p-4">
+                <div className="text-sm font-medium text-foreground">sessions</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">保留历史会话与线程状态，不需要从头开始。</p>
+              </div>
+              <div className="rounded-[22px] border-2 border-border bg-background p-4">
+                <div className="text-sm font-medium text-foreground">governance</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">企业权限、知识资源与顾问配置集中管理。</p>
               </div>
             </div>
-            <CardTitle className="font-sans text-2xl font-bold">{messages.login.title}</CardTitle>
-            <CardDescription className="font-manrope">{messages.login.description}</CardDescription>
-          </CardHeader>
+          </section>
 
-          <CardContent className="space-y-6">
-            {allowDemoLogin && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <div className="mb-2 flex items-center gap-2 text-amber-800">
-                  <Zap className="h-4 w-4" />
-                  <span className="text-sm font-medium font-manrope">{messages.login.demoTitle}</span>
-                </div>
-                <p className="mb-3 text-xs font-manrope text-amber-700">{messages.login.demoDescription}</p>
-                <Button onClick={handleDemoLogin} disabled={loading} variant="outline" className="w-full border-amber-300 bg-amber-100 font-manrope text-amber-900 hover:bg-amber-200">
+          <section className="rounded-[32px] border-2 border-border bg-card p-8">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-[20px] bg-accent">
+                <span className="text-xl font-bold lowercase text-primary">ai</span>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">stb.</div>
+                <div className="-mt-1 text-base font-semibold text-foreground">{messages.shared.appName}</div>
+              </div>
+            </div>
+
+            {allowDemoLogin ? (
+              <div className="mb-6 rounded-[24px] border-2 border-border bg-background p-4">
+                <div className="text-sm font-medium text-foreground">{messages.login.demoTitle}</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{messages.login.demoDescription}</p>
+                <Button onClick={handleDemoLogin} disabled={loading} variant="outline" className="mt-4 w-full rounded-full border-2 border-border bg-card">
                   {loading ? messages.login.loggingIn : messages.login.demoLogin}
                 </Button>
               </div>
-            )}
+            ) : null}
 
-            {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="text-sm font-manrope text-red-600">{error}</p>
+            {error ? (
+              <div className="mb-6 rounded-[20px] border-2 border-destructive bg-red-50 p-3">
+                <p className="text-sm text-red-600">{error}</p>
               </div>
-            )}
+            ) : null}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="font-manrope">{messages.login.email}</Label>
+                <Label htmlFor="email">{messages.login.email}</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="email" name="email" type="email" placeholder={messages.login.emailPlaceholder} className="pl-10 font-manrope" required />
+                  <Mail className="absolute left-4 top-4 h-4 w-4 text-muted-foreground" />
+                  <Input id="email" name="email" type="email" placeholder={messages.login.emailPlaceholder} className="h-14 rounded-[20px] border-2 border-border bg-background pl-11" required />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="font-manrope">{messages.login.password}</Label>
+                <Label htmlFor="password">{messages.login.password}</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" name="password" type="password" placeholder={messages.login.passwordPlaceholder} className="pl-10 font-manrope" required />
+                  <Lock className="absolute left-4 top-4 h-4 w-4 text-muted-foreground" />
+                  <Input id="password" name="password" type="password" placeholder={messages.login.passwordPlaceholder} className="h-14 rounded-[20px] border-2 border-border bg-background pl-11" required />
                 </div>
               </div>
 
-              <Button type="submit" disabled={loading} className="w-full font-manrope">{loading ? messages.login.loggingIn : messages.login.submit}</Button>
+              <Button type="submit" disabled={loading} className="h-14 w-full rounded-full text-base">
+                {loading ? messages.login.loggingIn : messages.login.submit}
+              </Button>
             </form>
 
-            <div className="relative">
+            <div className="my-6 relative">
               <Separator />
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="bg-card px-2 text-xs font-manrope text-muted-foreground">{messages.login.or}</span>
+                <span className="bg-card px-3 text-xs uppercase tracking-[0.22em] text-muted-foreground">{messages.login.or}</span>
               </div>
             </div>
 
-            <div className="text-center">
-              <span className="text-sm font-manrope text-muted-foreground">
-                {messages.login.noAccount}{" "}
-                <Link href="/register" className="font-medium text-primary hover:text-primary/80">{messages.login.registerNow}</Link>
-              </span>
+            <div className="text-sm text-muted-foreground">
+              {messages.login.noAccount}{" "}
+              <Link href="/register" className="font-medium text-foreground underline underline-offset-4">
+                {messages.login.registerNow}
+              </Link>
             </div>
-          </CardContent>
-        </Card>
+          </section>
+        </div>
       </div>
     </div>
   )

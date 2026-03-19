@@ -7,9 +7,11 @@ import { Layout, Rocket, Send, Sparkles } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
+import { WorkspaceMessageFrame, WorkspaceSectionCard } from "@/components/workspace/workspace-message-primitives"
 
 type ChatMessage = {
   role: "assistant" | "user"
@@ -45,6 +47,18 @@ export default function WebsiteGeneratorPage() {
     doc.write(currentHtml)
     doc.close()
   }, [currentHtml])
+
+  const workspaceStatus = isGenerating
+    ? status || "正在生成页面结构与内容..."
+    : logs.length > 0
+      ? "已生成最新页面，可继续补充需求迭代。"
+      : "描述企业、产品和风格后即可开始生成。"
+
+  const starterPrompts = [
+    "为跨境电商品牌生成一个高转化落地页，强调产品优势、用户评价和限时优惠。",
+    "生成一个企业官网首页，突出品牌定位、核心服务、案例展示和联系入口。",
+    "为 AI SaaS 产品生成营销站点，风格要专业、现代，并突出试用转化。",
+  ]
 
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return
@@ -108,53 +122,146 @@ export default function WebsiteGeneratorPage() {
   if (!user || !hasFeature("website_generation")) return null
 
   return (
-    <div className="flex h-full overflow-hidden bg-background">
-        <div className="flex min-w-[400px] w-1/3 flex-col border-r border-border">
-          <div className="border-b border-border bg-muted/50 p-4">
-            <h2 className="flex items-center gap-2 text-lg font-bold"><Sparkles className="h-5 w-5 text-primary" />网站生成 Agent</h2>
-            <p className="text-xs text-muted-foreground">流式生成，实时预览页面结果</p>
-          </div>
+    <div className="flex h-full overflow-hidden bg-muted/30">
+      <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3 px-3 py-3 lg:px-5 lg:py-4">
+        <WorkspaceHero
+          eyebrow="Website Generator"
+          title="网站生成 Agent"
+          description="用对话逐步定义企业站点，再在右侧实时查看生成中的页面结果。"
+          status={workspaceStatus}
+          badges={[
+            <Badge key="mode" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+              Streaming
+            </Badge>,
+            <Badge key="preview" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+              Live preview
+            </Badge>,
+            <Badge key="status" variant={isGenerating ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
+              {isGenerating ? "Generating" : "Ready"}
+            </Badge>,
+          ]}
+          stats={[
+            { label: "Messages", value: String(messages.length) },
+            { label: "Logs", value: String(logs.length) },
+            { label: "Preview", value: currentHtml ? "Live" : "Empty" },
+            { label: "Deploy", value: "Reserved" },
+          ]}
+          actions={
+            <Button size="sm" variant="outline" className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100" disabled>
+              <Rocket className="mr-1.5 h-3.5 w-3.5" />
+              部署入口预留
+            </Button>
+          }
+        />
 
-          <ScrollArea className="flex-1 p-4">
-            {messages.map((message, index) => (
-              <div key={`${message.role}-${index}`} className={`mb-4 flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                <Card className={`max-w-[85%] ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-card"}`}>
-                  <CardContent className="whitespace-pre-wrap p-3 text-sm font-manrope">{message.content}</CardContent>
-                </Card>
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[440px_minmax(0,1fr)]">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-[30px] border-2 border-border bg-card">
+            <div className="border-b-2 border-border px-5 py-4">
+              <div className="flex items-center gap-2 text-primary">
+                <Sparkles className="h-4 w-4" />
+                <span className="text-xs font-semibold uppercase tracking-[0.18em]">Prompt lane</span>
               </div>
-            ))}
-            {logs.length > 0 && (
-              <div className="mt-6 space-y-2 border-l-2 border-primary/20 py-2 pl-4">
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">执行日志</h3>
-                {logs.map((log, index) => <div key={`${log}-${index}`} className="text-xs font-manrope leading-relaxed text-muted-foreground">{log}</div>)}
-                {isGenerating && <div className="text-xs text-primary">{status || "生成中..."}</div>}
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </ScrollArea>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                从企业、产品、目标客户、页面结构和视觉风格开始描述，系统会按节点流式生成。
+              </p>
+            </div>
 
-          <div className="border-t border-border bg-card p-4">
-            <div className="flex gap-2">
-              <Input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && handleSend()} placeholder="描述你想要的网站需求..." className="flex-1 font-manrope" disabled={isGenerating} />
-              <Button onClick={handleSend} disabled={isGenerating || !input.trim()}><Send className="h-4 w-4" /></Button>
+            <ScrollArea className="flex-1">
+              <div className="space-y-0">
+                {messages.length === 1 ? (
+                  <div className="p-4">
+                    <WorkspacePromptGrid
+                      eyebrow="Quick start"
+                      prompts={starterPrompts}
+                      onSelect={(prompt) => setInput(prompt)}
+                    />
+                  </div>
+                ) : null}
+
+                {messages.map((message, index) => (
+                  <WorkspaceMessageFrame
+                    key={`${message.role}-${index}`}
+                    role={message.role}
+                    label={message.role === "user" ? "You" : "Website Agent"}
+                    icon={message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
+                    bodyClassName="text-sm leading-7 whitespace-pre-wrap"
+                  >
+                    {message.content}
+                  </WorkspaceMessageFrame>
+                ))}
+
+                {logs.length > 0 && (
+                  <div className="p-4 pt-0">
+                    <WorkspaceSectionCard
+                      title="执行日志"
+                      description="生成器会按节点流式返回状态，用于追踪页面结构、内容和预览同步。"
+                    >
+                      <div className="space-y-2">
+                        {logs.map((log, index) => (
+                          <div key={`${log}-${index}`} className="text-xs leading-6 text-muted-foreground">
+                            {log}
+                          </div>
+                        ))}
+                        {isGenerating ? <div className="text-xs font-medium text-primary">{status || "生成中..."}</div> : null}
+                      </div>
+                    </WorkspaceSectionCard>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea>
+
+            <div className="border-t-2 border-border bg-muted/20 p-3">
+              <WorkspaceComposerPanel
+                className="border-none bg-transparent p-0"
+                footer={
+                  <>
+                    <p className="text-[11px] leading-5 text-muted-foreground">
+                      支持连续迭代页面结构、文案方向、版块排序与风格要求
+                    </p>
+                    <Button onClick={handleSend} disabled={isGenerating || !input.trim()} size="sm" className="h-8 rounded-full px-3 text-[11px]">
+                      <Send className="mr-1.5 h-3.5 w-3.5" />
+                      发送
+                    </Button>
+                  </>
+                }
+              >
+                <Input
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && handleSend()}
+                  placeholder="描述你想要的网站需求..."
+                  className="h-14 border-0 bg-transparent px-3.5 shadow-none focus-visible:ring-0"
+                  disabled={isGenerating}
+                />
+              </WorkspaceComposerPanel>
             </div>
           </div>
-        </div>
 
-        <div className="flex flex-1 flex-col bg-muted/30">
-          <div className="flex items-center justify-between border-b border-border bg-background p-3 px-4">
-            <div className="flex items-center gap-4">
-              <Badge variant="outline" className="flex items-center gap-1"><Layout className="h-3 w-3" />网站预览</Badge>
-              <div className="flex gap-1"><div className="h-2 w-2 rounded-full bg-red-400" /><div className="h-2 w-2 rounded-full bg-yellow-400" /><div className="h-2 w-2 rounded-full bg-green-400" /></div>
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-[30px] border-2 border-border bg-card">
+            <div className="flex items-center justify-between border-b-2 border-border px-5 py-3.5">
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px]">
+                  <Layout className="h-3 w-3" />
+                  网站预览
+                </Badge>
+                <span className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] text-muted-foreground">
+                  Preview shell
+                </span>
+              </div>
+              <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
+                Live iframe
+              </Badge>
             </div>
-            <Button size="sm" className="gap-2" disabled><Rocket className="h-4 w-4" />部署入口预留</Button>
-          </div>
-          <div className="flex-1 overflow-hidden p-8">
-            <div className="h-full w-full overflow-hidden rounded-xl border border-border bg-white shadow-2xl ring-8 ring-black/5">
-              <iframe ref={iframeRef} className="h-full w-full" title="Website Preview" sandbox="allow-scripts allow-forms" />
+
+            <div className="min-h-0 flex-1 p-4 lg:p-6">
+              <div className="h-full w-full overflow-hidden rounded-[26px] border-2 border-border bg-white">
+                <iframe ref={iframeRef} className="h-full w-full" title="Website Preview" sandbox="allow-scripts allow-forms" />
+              </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
   )
 }

@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Send, Sparkles, Loader2, CheckCircle2, RefreshCw, Upload } from "lucide-react"
+import { Send, Loader2, CheckCircle2, RefreshCw, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Sheet,
@@ -18,6 +17,15 @@ import {
 } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceComposerPanel, WorkspacePromptChips } from "@/components/workspace/workspace-primitives"
+import {
+  WorkspaceActionRow,
+  WorkspaceLoadingMessage,
+  WorkspaceMessageFrame,
+  WorkspaceResultCard,
+  WorkspaceSectionCard,
+} from "@/components/workspace/workspace-message-primitives"
 
 type StoryboardScene = {
   scene_idx: number
@@ -99,6 +107,7 @@ export function VideoChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null)
   const [conversationState, setConversationState] = useState<ConversationState>({
     status: "idle",
   })
@@ -139,6 +148,160 @@ export function VideoChat() {
     }
     setMessages((prev) => [...prev, message])
   }, [])
+
+  const checkVideoAgentAvailability = useCallback(async () => {
+    try {
+      const response = await fetch("/api/crewai/chat", {
+        method: "GET",
+        cache: "no-store",
+      })
+      const payload = await response.json().catch(() => ({}))
+      const enabled = Boolean(payload?.enabled)
+      setAgentAvailable(enabled)
+      return {
+        enabled,
+        reason: typeof payload?.reason === "string" ? payload.reason : null,
+      }
+    } catch (error) {
+      setAgentAvailable(false)
+      return {
+        enabled: false,
+        reason: error instanceof Error ? error.message : "availability_fetch_failed",
+      }
+    }
+  }, [])
+
+  const initializeConversation = useCallback(async () => {
+    if (conversationState.runId || loading) {
+      return
+    }
+
+    const threadId = `t_${Date.now()}`
+    const runId = `r_${Date.now()}`
+
+    setConversationState({
+      runId,
+      threadId,
+      status: "collecting",
+    })
+    setLoading(true)
+
+    try {
+      const res = await fetch("/api/crewai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          thread_id: threadId,
+          run_id: runId,
+        }),
+      })
+
+      if (!res.ok || !res.body) {
+        throw new Error("request_failed")
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder("utf-8")
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split("\n\n")
+        buffer = parts.pop() || ""
+
+        for (const part of parts) {
+          const line = part.split("data:").pop()?.trim()
+          if (!line) continue
+
+          try {
+            const event = JSON.parse(line)
+            console.log("[SSE/crewai-chat:init]", event)
+            if (event.type === "message" || event.type === "question") {
+              addMessage(
+                "assistant",
+                event.delta || event.content || "",
+                event.payload?.options || [],
+                undefined,
+                undefined,
+                undefined,
+                event.payload?.question_type,
+              )
+              setLoading(false)
+            } else if (event.type === "info") {
+              addMessage("system", event.delta || "")
+            } else if (event.type === "collected") {
+              setConversationState((prev) => ({
+                ...prev,
+                collectedInfo: event.payload,
+              }))
+            } else if (event.type === "generating") {
+              setConversationState((prev) => ({ ...prev, status: "generating" }))
+              addMessage("system", "信息收集完成，开始生成视频...")
+            } else if (event.type === "error") {
+              setConversationState((prev) => ({ ...prev, status: "error" }))
+              setLoading(false)
+              addMessage("assistant", `错误：${event.delta || event.content || "未知错误"}`)
+            }
+          } catch (parseError) {
+            console.error("解析初始化事件失败:", parseError)
+          }
+        }
+      }
+    } catch {
+      setConversationState((prev) => ({ ...prev, status: "error" }))
+      setAgentAvailable(false)
+      setLoading(false)
+      addMessage("assistant", "当前视频 Agent 暂时不可用，请稍后重试或联系管理员检查服务配置。")
+    }
+  }, [conversationState.runId, loading, addMessage])
+
+  useEffect(() => {
+    if (hasInitialized.current) return
+    if (messages.length !== 0 || conversationState.status !== "idle") return
+
+    hasInitialized.current = true
+    const welcomeMessage: Message = {
+      id: `msg_${Date.now()}`,
+      role: "assistant",
+      content: "欢迎！我是您的视频制作助手。我将通过几个问题帮您收集视频制作所需的信息。让我们开始吧！",
+      timestamp: Date.now(),
+    }
+    setMessages([welcomeMessage])
+
+    let cancelled = false
+    void (async () => {
+      const availability = await checkVideoAgentAvailability()
+      if (cancelled) return
+
+      if (!availability.enabled) {
+        setConversationState((prev) => ({ ...prev, status: "error" }))
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}_${Math.random()}`,
+            role: "assistant",
+            content: "当前视频 Agent 暂时不可用，请稍后重试或联系管理员检查服务配置。",
+            timestamp: Date.now(),
+          },
+        ])
+        return
+      }
+
+      setTimeout(() => {
+        if (!cancelled) {
+          void initializeConversation()
+        }
+      }, 500)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [messages.length, conversationState.status, checkVideoAgentAvailability, initializeConversation])
 
   const startCrewStatusPolling = useCallback((runId: string) => {
     if (pollingRef.current) return
@@ -741,24 +904,60 @@ export function VideoChat() {
     setUploadedImageUrl(null)
   }, [])
 
+  const workspaceStatus =
+    agentAvailable === false
+      ? "Video agent unavailable. Service configuration needs attention."
+      : conversationState.status === "collecting"
+      ? "Collecting production inputs."
+      : conversationState.status === "generating"
+        ? "Generating storyboard, clips, and final composition."
+        : conversationState.status === "completed"
+          ? "Video pipeline completed."
+        : conversationState.status === "error"
+            ? "Flow interrupted. Update the brief and retry."
+            : "Describe the video goal to begin."
+
+  const starterPrompts = [
+    "做一个 30 秒品牌介绍视频，风格要专业、简洁、有产品质感。",
+    "围绕新品功能演示生成短视频脚本，突出 3 个核心卖点和结尾 CTA。",
+    "做一个适合社媒投放的竖版广告视频，目标是提高点击和试用转化。",
+  ]
+
+  const handleDownloadVideo = useCallback((videoUrl: string, runId?: string) => {
+    const link = document.createElement("a")
+    link.href = videoUrl
+    link.download = `video_${runId || "final"}.mp4`
+    link.click()
+  }, [])
+
+  const handleShareVideo = useCallback((videoUrl: string) => {
+    navigator.clipboard.writeText(videoUrl)
+    addMessage("system", "视频链接已复制到剪贴板")
+  }, [addMessage])
+
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* 头部 */}
-      <div className="border-b border-border px-6 py-4 bg-card">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground font-sans">视频制作助手</h2>
-            <p className="text-sm text-muted-foreground font-manrope">
-              {conversationState.status === "idle" && "准备开始"}
-              {conversationState.status === "collecting" && "正在收集信息..."}
-              {conversationState.status === "generating" && "正在生成视频..."}
-              {conversationState.status === "completed" && "已完成"}
-            </p>
-          </div>
-        </div>
+      <div className="border-b border-border/60 bg-background/96 px-3 py-3 backdrop-blur-sm lg:px-5 lg:py-4">
+        <WorkspaceHero
+          eyebrow="Video Generator"
+          title="视频生成 Agent"
+          description="通过多轮对话整理创意要求，再串联故事板、片段生成和最终合成流程。"
+          status={workspaceStatus}
+          badges={[
+            <Badge key="flow" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+              Multi-agent
+            </Badge>,
+            <Badge key="state" variant={loading ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
+              {loading ? "Running" : "Ready"}
+            </Badge>,
+          ]}
+          stats={[
+            { label: "Messages", value: String(messages.length) },
+            { label: "State", value: conversationState.status },
+            { label: "Storyboard", value: messages.some((message) => message.storyboard?.scenes?.length) ? "Ready" : "Pending" },
+            { label: "Final video", value: messages.some((message) => message.finalVideo?.video_url) ? "Ready" : "Pending" },
+          ]}
+        />
       </div>
 
       {/* 对话区域 */}
@@ -775,221 +974,108 @@ export function VideoChat() {
             display: none; /* Chrome, Safari and Opera */
           }
         `}</style>
-        <div className="max-w-4xl mx-auto space-y-4">
+        <div className="mx-auto max-w-4xl space-y-0">
           {messages.map((message) => (
             <div
               key={message.id}
-              className={cn(
-                "flex gap-3",
-                message.role === "user" ? "justify-end" : "justify-start"
-              )}
+              className="flex flex-col gap-2"
             >
-              {message.role !== "user" && (
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                    {message.role === "assistant" ? "AI" : "系统"}
-                  </AvatarFallback>
-                </Avatar>
-              )}
-
-              <div
-                className={cn(
-                  "flex flex-col gap-2 max-w-[80%]",
-                  message.role === "user" ? "items-end" : "items-start"
-                )}
+              <WorkspaceMessageFrame
+                role={message.role}
+                label={message.role === "assistant" ? "AI" : message.role === "system" ? "系统" : "你"}
+                icon={message.role === "assistant" ? <Send className="h-3.5 w-3.5 text-primary" /> : undefined}
+                bodyClassName="space-y-4"
               >
-                <Card
-                  className={cn(
-                    "px-4 py-3",
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : message.role === "system"
-                      ? "bg-muted"
-                      : "bg-card border"
-                  )}
-                >
-                  <CardContent className="p-0">
-                    {/* 最终视频展示 - 优先显示 */}
-                    {message.finalVideo && message.finalVideo.video_url && (
-                      <div className="mt-4 space-y-4">
-                        <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 border-green-500/20">
-                          <CardContent className="p-6">
-                            <div className="flex items-center gap-3 mb-4">
-                              <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-                                <CheckCircle2 className="w-6 h-6 text-white" />
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="text-lg font-bold">最终视频合成完成</h3>
-                                  <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                                    完成
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-6">
-                              {message.content || "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。"}
-                            </p>
-                            <div className="aspect-video bg-black rounded-lg overflow-hidden relative group mb-4">
-                              <video
-                                src={message.finalVideo.video_url}
-                                controls
-                                className="w-full h-full object-contain"
-                                preload="metadata"
-                                playsInline
-                              >
-                                您的浏览器不支持视频播放。
-                              </video>
-                            </div>
-                            <div className="flex gap-3">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => {
-                                  const link = document.createElement("a")
-                                  link.href = message.finalVideo?.video_url || ""
-                                  link.download = `video_${message.finalVideo?.run_id || "final"}.mp4`
-                                  link.click()
-                                }}
-                              >
-                                <Upload className="w-4 h-4 mr-2" />
-                                下载视频
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(message.finalVideo?.video_url || "")
-                                  addMessage("system", "视频链接已复制到剪贴板")
-                                }}
-                              >
-                                <Send className="w-4 h-4 mr-2" />
-                                分享链接
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    )}
-                    
-                    {message.content && !message.finalVideo && (
-                      <p
-                        className={cn(
-                          "text-sm whitespace-pre-wrap mb-3",
-                          message.role === "user" ? "text-primary-foreground" : "text-foreground"
-                        )}
+                {message.finalVideo && message.finalVideo.video_url ? (
+                  <WorkspaceResultCard
+                    tone="success"
+                    icon={<CheckCircle2 className="h-5 w-5" />}
+                    title="最终视频合成完成"
+                    badge={<Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">完成</Badge>}
+                    description={message.content || "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。"}
+                    actions={
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => handleDownloadVideo(message.finalVideo?.video_url || "", message.finalVideo?.run_id)}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          下载视频
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => handleShareVideo(message.finalVideo?.video_url || "")}
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          分享链接
+                        </Button>
+                      </>
+                    }
+                  >
+                    <div className="aspect-video overflow-hidden rounded-[20px] bg-black">
+                      <video
+                        src={message.finalVideo.video_url}
+                        controls
+                        className="h-full w-full object-contain"
+                        preload="metadata"
+                        playsInline
                       >
-                        {message.content}
-                      </p>
+                        您的浏览器不支持视频播放。
+                      </video>
+                    </div>
+                  </WorkspaceResultCard>
+                ) : message.content ? (
+                  <p
+                    className={cn(
+                      "text-sm whitespace-pre-wrap",
+                      message.role === "user" ? "text-primary-foreground" : "text-foreground"
                     )}
-                    
-                    {/* 智能体输出展示 */}
-                    {message.agentOutputs && message.agentOutputs.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <div className="text-xs font-semibold text-muted-foreground mb-2">智能体执行过程</div>
-                        <div className="bg-muted/50 rounded-lg p-3 space-y-2 max-h-[300px] overflow-y-auto">
-                          {message.agentOutputs.map((output, idx) => (
-                            <div key={idx} className="text-xs space-y-1">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">
-                                  {output.agent}
-                                </Badge>
-                                <span className="text-muted-foreground">{output.type}</span>
-                                {output.progress && (
-                                  <span className="text-muted-foreground">
-                                    ({output.progress.current}/{output.progress.total})
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-foreground ml-2">{output.delta}</div>
-                              {output.progress && (
-                                <div className="w-full bg-background rounded-full h-1.5 mt-1">
-                                  <div
-                                    className="bg-primary h-1.5 rounded-full transition-all"
-                                    style={{ width: `${(output.progress.current / output.progress.total) * 100}%` }}
-                                  />
-                                </div>
-                              )}
+                  >
+                    {message.content}
+                  </p>
+                ) : null}
+
+                {message.agentOutputs && message.agentOutputs.length > 0 && (
+                  <WorkspaceSectionCard title="智能体执行过程">
+                    <div className="max-h-[300px] space-y-2 overflow-y-auto">
+                      {message.agentOutputs.map((output, idx) => (
+                        <div key={idx} className="space-y-1 text-xs">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {output.agent}
+                            </Badge>
+                            <span className="text-muted-foreground">{output.type}</span>
+                            {output.progress ? (
+                              <span className="text-muted-foreground">
+                                ({output.progress.current}/{output.progress.total})
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="ml-2 text-foreground">{output.delta}</div>
+                          {output.progress ? (
+                            <div className="mt-1 h-1.5 w-full rounded-full bg-background">
+                              <div
+                                className="h-1.5 rounded-full bg-primary transition-all"
+                                style={{ width: `${(output.progress.current / output.progress.total) * 100}%` }}
+                              />
                             </div>
-                          ))}
+                          ) : null}
                         </div>
-                      </div>
-                    )}
-                    
-                    {/* 最终视频展示 */}
-                    {message.finalVideo && message.finalVideo.video_url && (
-                      <div className="mt-4 space-y-4">
-                        <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 border-green-500/20">
-                          <CardContent className="p-6">
-                            <div className="flex items-center gap-3 mb-4">
-                              <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-                                <CheckCircle2 className="w-6 h-6 text-white" />
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="text-lg font-bold">最终视频合成完成</h3>
-                                  <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                                    完成
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-6">
-                              {message.content || "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。"}
-                            </p>
-                            <div className="aspect-video bg-black rounded-lg overflow-hidden relative group mb-4">
-                              <video
-                                src={message.finalVideo?.video_url || ""}
-                                controls
-                                className="w-full h-full object-contain"
-                                preload="metadata"
-                                playsInline
-                              >
-                                您的浏览器不支持视频播放。
-                              </video>
-                            </div>
-                            <div className="flex gap-3">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => {
-                                  const link = document.createElement("a")
-                                  link.href = message.finalVideo?.video_url || ""
-                                  link.download = `video_${message.finalVideo?.run_id || "final"}.mp4`
-                                  link.click()
-                                }}
-                              >
-                                <Upload className="w-4 h-4 mr-2" />
-                                下载视频
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(message.finalVideo?.video_url || "")
-                                  addMessage("system", "视频链接已复制到剪贴板")
-                                }}
-                              >
-                                <Send className="w-4 h-4 mr-2" />
-                                分享链接
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    )}
-                    
+                      ))}
+                    </div>
+                  </WorkspaceSectionCard>
+                )}
+
                     {/* 视频片段展示 */}
-                    {message.videoClips && message.videoClips.clips && message.videoClips.clips.length > 0 && (
-                      <div className="mt-4 space-y-4">
-                        <div className="text-sm font-semibold">生成的视频片段</div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {message.videoClips && message.videoClips.clips && message.videoClips.clips.length > 0 && (
+                      <WorkspaceSectionCard title="生成的视频片段">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           {message.videoClips.clips.map((clip) => (
-                            <Card key={clip.task_idx} className="overflow-hidden">
+                            <Card key={clip.task_idx} className="overflow-hidden rounded-[22px] border-2 border-border shadow-none">
                               <div className="aspect-video bg-muted relative">
                                 {clip.status === "succeeded" && clip.video_url ? (
                                   <video
@@ -1082,7 +1168,7 @@ export function VideoChat() {
                           ))}
                         </div>
                         {message.videoClips.requiresConfirmation && (
-                          <div className="flex gap-2 mt-4">
+                          <WorkspaceActionRow className="mt-4 border-0 pt-0">
                             <Button
                               size="sm"
                               variant="default"
@@ -1149,17 +1235,17 @@ export function VideoChat() {
                             >
                               需要修改
                             </Button>
-                          </div>
+                          </WorkspaceActionRow>
                         )}
-                      </div>
-                    )}
-                    
+                      </WorkspaceSectionCard>
+                )}
+
                     {/* 故事板展示 */}
-                    {message.storyboard && message.storyboard.scenes && message.storyboard.scenes.length > 0 && (
-                      <div className="mt-4 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {message.storyboard && message.storyboard.scenes && message.storyboard.scenes.length > 0 && (
+                      <WorkspaceSectionCard title="故事板">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                           {message.storyboard.scenes.map((scene) => (
-                            <Card key={scene.scene_idx} className="overflow-hidden relative group">
+                            <Card key={scene.scene_idx} className="relative overflow-hidden rounded-[22px] border-2 border-border shadow-none group">
                               <div className="aspect-video bg-muted relative">
                                 {scene.image_url ? (
                                   <img
@@ -1231,7 +1317,7 @@ export function VideoChat() {
                           ))}
                         </div>
                         {message.storyboard?.requiresConfirmation && (
-                          <div className="flex gap-2 mt-4">
+                          <WorkspaceActionRow className="mt-4 border-0 pt-0">
                             <Button
                               size="sm"
                               variant="default"
@@ -1297,82 +1383,66 @@ export function VideoChat() {
                             >
                               重新生成
                             </Button>
-                          </div>
+                          </WorkspaceActionRow>
                         )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      </WorkspaceSectionCard>
+                )}
+              </WorkspaceMessageFrame>
 
                 {/* 选项按钮 */}
-                {message.options && message.options.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {message.options.map((option, idx) => (
-                      <Button
-                        key={idx}
-                        variant={message.selectedOption === option ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handleOptionClick(option, message.id)}
-                        disabled={loading || !!message.selectedOption}
-                        className="text-xs font-manrope"
-                      >
-                        {option}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-
-                {message.questionType === "product_image" && (
-                  <div className="mt-3 space-y-2">
-                    <div className="text-xs text-muted-foreground">您可以上传图片文件或粘贴图片URL</div>
-                    <div className="flex items-center gap-2">
-                      <Input ref={productFileInputRef} id={`product-image-${message.id}`} type="file" accept="image/*" onChange={handleProductImageSelect} className="hidden" />
-                      <Button variant="outline" type="button" onClick={() => productFileInputRef.current?.click()}>
-                        <Upload className="w-4 h-4 mr-2" /> 选择文件
-                      </Button>
-                      <Button onClick={() => submitProductImage(message.id)} disabled={productUploading || !productImageFile}>
-                        {productUploading ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 上传中...</>) : "上传并回答"}
-                      </Button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input placeholder="https://..." value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)} />
-                      <Button variant="outline" onClick={() => submitProductImageUrl(message.id)} disabled={!productImageUrl.trim()}>使用URL回答</Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 时间戳 */}
-                <span className="text-xs text-muted-foreground">
-                  {new Date(message.timestamp).toLocaleTimeString()}
-                </span>
-              </div>
-
-              {message.role === "user" && (
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                    您
-                  </AvatarFallback>
-                </Avatar>
+              {message.options && message.options.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {message.options.map((option, idx) => (
+                    <Button
+                      key={idx}
+                      variant={message.selectedOption === option ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleOptionClick(option, message.id)}
+                      disabled={loading || !!message.selectedOption}
+                      className="text-xs"
+                    >
+                      {option}
+                    </Button>
+                  ))}
+                </div>
               )}
+
+              {message.questionType === "product_image" && (
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs text-muted-foreground">您可以上传图片文件或粘贴图片URL</div>
+                  <div className="flex items-center gap-2">
+                    <Input ref={productFileInputRef} id={`product-image-${message.id}`} type="file" accept="image/*" onChange={handleProductImageSelect} className="hidden" />
+                    <Button variant="outline" type="button" onClick={() => productFileInputRef.current?.click()}>
+                      <Upload className="w-4 h-4 mr-2" /> 选择文件
+                    </Button>
+                    <Button onClick={() => submitProductImage(message.id)} disabled={productUploading || !productImageFile}>
+                      {productUploading ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 上传中...</>) : "上传并回答"}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input placeholder="https://..." value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)} />
+                    <Button variant="outline" onClick={() => submitProductImageUrl(message.id)} disabled={!productImageUrl.trim()}>使用URL回答</Button>
+                  </div>
+                </div>
+              )}
+
+              <span className="text-xs text-muted-foreground">
+                {new Date(message.timestamp).toLocaleTimeString()}
+              </span>
             </div>
           ))}
 
           {loading && (
-            <div className="flex gap-3 justify-start">
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  AI
-                </AvatarFallback>
-              </Avatar>
-              <Card className="px-4 py-3 bg-card border">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">正在思考...</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <WorkspaceMessageFrame role="assistant" label="AI" icon={<Send className="h-3.5 w-3.5 text-primary" />}>
+              <WorkspaceLoadingMessage
+                label={
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    正在思考...
+                  </span>
+                }
+              />
+            </WorkspaceMessageFrame>
           )}
 
           <div ref={messagesEndRef} />
@@ -1380,9 +1450,39 @@ export function VideoChat() {
       </div>
 
       {/* 输入区域 */}
-      <div className="border-t border-border px-6 py-4 bg-card">
+      <div className="border-t-2 border-border bg-muted/20 px-6 py-4">
         <div className="max-w-4xl mx-auto">
-          <div className="flex gap-2">
+          <WorkspaceComposerPanel
+            className="border-2 border-border bg-card p-2.5"
+            toolbar={
+              <WorkspacePromptChips
+                prompts={starterPrompts}
+                onSelect={(prompt) => setInput(prompt)}
+              />
+            }
+            bodyClassName="px-0"
+            footer={
+              <>
+                <p className="text-[11px] leading-5 text-muted-foreground">
+                  支持继续回答问题、补充镜头要求或直接调整脚本方向。Enter 发送，Shift + Enter 换行。
+                </p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
+                    {conversationState.status}
+                  </Badge>
+                  <Button
+                    onClick={handleSend}
+                    disabled={loading || !input.trim() || conversationState.status === "generating" || conversationState.status === "completed"}
+                    size="sm"
+                    className="h-9 rounded-full px-4 text-[11px]"
+                  >
+                    <Send className="mr-1.5 h-4 w-4" />
+                    发送
+                  </Button>
+                </div>
+              </>
+            }
+          >
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -1393,18 +1493,10 @@ export function VideoChat() {
                 }
               }}
               placeholder="输入您的回答或选择上面的选项..."
-              className="min-h-[60px] resize-none font-manrope"
+              className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 shadow-none focus-visible:ring-0"
               disabled={loading || conversationState.status === "generating" || conversationState.status === "completed"}
             />
-            <Button
-              onClick={handleSend}
-              disabled={loading || !input.trim() || conversationState.status === "generating" || conversationState.status === "completed"}
-              size="icon"
-              className="h-[60px] w-[60px]"
-            >
-              <Send className="w-5 h-5" />
-            </Button>
-          </div>
+          </WorkspaceComposerPanel>
           {conversationState.status === "completed" && (
             <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
               <CheckCircle2 className="w-4 h-4 text-green-600" />

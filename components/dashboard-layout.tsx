@@ -14,7 +14,6 @@ import {
   PenSquare,
   Radar,
   Settings,
-  Sparkles,
   Target,
   TrendingUp,
   Video,
@@ -93,11 +92,11 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   }, [enterprisePending, enterpriseRejected, hasImageAssistantFeature, imageAssistant.enabled])
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-transparent">
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 border-r border-sidebar-border bg-sidebar transform transition-all duration-200 ease-in-out lg:static ${
+        className={`fixed inset-y-0 left-0 z-50 border-r border-sidebar-border bg-sidebar shadow-none transform transition-all duration-200 ease-in-out lg:static ${
           sidebarCollapsed ? "w-20" : "w-80"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
@@ -105,16 +104,21 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
           <div className="border-b border-sidebar-border p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
-                  <Sparkles className="h-5 w-5 text-sidebar-primary-foreground" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-[20px] bg-accent">
+                  <span className="text-base font-bold lowercase text-primary">ai</span>
                 </div>
-                {!sidebarCollapsed && <h1 className="font-sans text-lg font-bold text-sidebar-foreground">{messages.shared.appName}</h1>}
+                {!sidebarCollapsed && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">workspace</div>
+                    <h1 className="text-lg font-semibold text-sidebar-foreground">{messages.shared.appName}</h1>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hidden lg:inline-flex"
+                  className="hidden rounded-full border border-transparent lg:inline-flex"
                   onClick={() => setSidebarCollapsed((current) => !current)}
                   title={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
                   aria-label={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
@@ -127,7 +131,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
               </div>
             </div>
             {!sidebarCollapsed && user?.enterpriseName && (
-              <p className="mt-2 text-xs text-sidebar-foreground/70">
+              <p className="mt-3 rounded-full bg-muted px-3 py-1.5 text-[11px] font-medium tracking-[0.08em] text-sidebar-foreground/80">
                 {user.enterpriseName} ({user.enterpriseCode})
               </p>
             )}
@@ -137,7 +141,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
             <ScrollArea className="h-full">
               <div className={sidebarCollapsed ? "space-y-3 p-3" : "space-y-4 p-4"}>
                 {(enterprisePending || enterpriseRejected) && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-700">
+                  <div className="rounded-[20px] border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-700">
                     {enterprisePending ? messages.dashboardLayout.pendingEnterprise : messages.dashboardLayout.rejectedEnterprise}
                   </div>
                 )}
@@ -145,7 +149,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 {showAdvisorSection && (
                   <div>
                     {!sidebarCollapsed && (
-                      <h3 className="mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+                      <h3 className="mb-2 font-sans text-[11px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/65">
                         {messages.dashboardLayout.advisorSection}
                       </h3>
                     )}
@@ -188,7 +192,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 {(showWriterEntry || showImageAssistantEntry) && (
                   <div>
                     {!sidebarCollapsed && (
-                      <h3 className="mb-2 font-sans text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+                      <h3 className="mb-2 font-sans text-[11px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/65">
                         {messages.dashboardLayout.creativeSection}
                       </h3>
                     )}
@@ -220,10 +224,19 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
             </ScrollArea>
           </div>
 
-          <div className={sidebarCollapsed ? "space-y-2 border-t border-sidebar-border p-3" : "space-y-2 border-t border-sidebar-border p-4"}>
+          <div className={sidebarCollapsed ? "space-y-2 border-t border-sidebar-border/80 p-3" : "space-y-2 border-t border-sidebar-border/80 p-4"}>
             {hasVideoFeature && !enterprisePending && !enterpriseRejected && (
               <Link href="/dashboard/video">
-                <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title={messages.dashboardLayout.videoAgent}>
+                <Button
+                  variant="ghost"
+                  className={
+                    sidebarCollapsed
+                      ? "w-full justify-center rounded-2xl border border-sidebar-border/60 bg-white/40"
+                      : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                  }
+                  size="sm"
+                  title={messages.dashboardLayout.videoAgent}
+                >
                   <Video className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
                   {!sidebarCollapsed && messages.dashboardLayout.videoAgent}
                 </Button>
@@ -231,14 +244,32 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
             )}
             {hasWebsiteFeature && !enterprisePending && !enterpriseRejected && (
               <Link href="/dashboard/website-generator">
-                <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title={messages.dashboardLayout.websiteAgent}>
+                <Button
+                  variant="ghost"
+                  className={
+                    sidebarCollapsed
+                      ? "w-full justify-center rounded-2xl border border-sidebar-border/60 bg-white/40"
+                      : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                  }
+                  size="sm"
+                  title={messages.dashboardLayout.websiteAgent}
+                >
                   <Globe className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
                   {!sidebarCollapsed && messages.dashboardLayout.websiteAgent}
                 </Button>
               </Link>
             )}
             <Link href="/dashboard/settings">
-              <Button variant="ghost" className={sidebarCollapsed ? "w-full justify-center" : "w-full justify-start font-manrope"} size="sm" title={messages.shared.userSettings}>
+              <Button
+                variant="ghost"
+                className={
+                  sidebarCollapsed
+                    ? "w-full justify-center rounded-2xl border border-sidebar-border/60 bg-white/40"
+                    : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                }
+                size="sm"
+                title={messages.shared.userSettings}
+              >
                 <Settings className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
                 {!sidebarCollapsed && messages.shared.userSettings}
               </Button>
@@ -246,22 +277,22 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
             <Separator className="my-2" />
 
-            <div className={sidebarCollapsed ? "flex flex-col items-center gap-2 p-1" : "flex items-center gap-3 p-2"}>
+            <div className={sidebarCollapsed ? "flex flex-col items-center gap-2 rounded-[20px] border-2 border-sidebar-border bg-card p-2" : "flex items-center gap-3 rounded-[20px] border-2 border-sidebar-border bg-card p-3"}>
               <Avatar className="h-8 w-8">
                 <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                <AvatarFallback className="bg-sidebar-primary text-xs text-sidebar-primary-foreground">
+                <AvatarFallback className="bg-accent text-xs text-primary">
                   {isDemoMode ? messages.dashboardLayout.demoLabel : messages.shared.user}
                 </AvatarFallback>
               </Avatar>
               {!sidebarCollapsed && (
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-manrope text-sm font-medium text-sidebar-foreground">
+                  <p className="truncate text-sm font-medium text-sidebar-foreground">
                     {isDemoMode ? messages.shared.demoAccount : user?.name || messages.shared.marketingMember}
                   </p>
-                  <p className="truncate font-manrope text-xs text-muted-foreground">{userEmail}</p>
+                  <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
                 </div>
               )}
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
+              <Button variant="ghost" size="sm" className="rounded-full border border-transparent text-muted-foreground hover:bg-muted hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
@@ -269,22 +300,22 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b border-border bg-card/50 p-4 backdrop-blur-sm lg:hidden">
+      <main className="flex min-w-0 flex-1 flex-col bg-transparent">
+        <header className="border-b border-border bg-card p-4 lg:hidden">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}>
               <Menu className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded bg-primary">
-                <Sparkles className="h-4 w-4 text-primary-foreground" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-[14px] bg-accent">
+                <span className="text-xs font-bold lowercase text-primary">ai</span>
               </div>
-              <h1 className="font-sans text-lg font-bold text-foreground">{messages.shared.appName}</h1>
+              <h1 className="text-lg font-semibold text-foreground">{messages.shared.appName}</h1>
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden">{children}</div>
+        <div className="flex-1 overflow-hidden bg-transparent">{children}</div>
       </main>
     </div>
   )

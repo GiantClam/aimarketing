@@ -23,10 +23,17 @@ import {
 import { useI18n } from "@/components/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
+import {
+  WorkspaceLoadingMessage,
+  WorkspaceMessageFrame,
+  WorkspaceSectionCard,
+} from "@/components/workspace/workspace-message-primitives"
 import {
   findImagePendingTask,
   removePendingAssistantTask,
@@ -189,6 +196,51 @@ type PersistedMessageAttachment = {
 
 function getRunKindLabel(kind: ImageAssistantRunKind, copy: { generateMode: string; editMode: string }) {
   return kind === "edit" ? copy.editMode : copy.generateMode
+}
+
+function getCanvasToolLabel(
+  tool: CanvasTool,
+  copy: {
+    selectTool: string
+    brushTool: string
+    eraserTool: string
+  },
+) {
+  if (tool === "brush") return copy.brushTool
+  if (tool === "eraser") return copy.eraserTool
+  return copy.selectTool
+}
+
+function getVersionKindLabel(
+  kind: ImageAssistantVersionSummary["version_kind"] | null | undefined,
+  copy: {
+    versionKindGenerate: string
+    versionKindEdit: string
+    versionKindCanvas: string
+    versionKindRestore: string
+  },
+) {
+  if (kind === "ai_edit") return copy.versionKindEdit
+  if (kind === "canvas_save") return copy.versionKindCanvas
+  if (kind === "restore") return copy.versionKindRestore
+  return copy.versionKindGenerate
+}
+
+function getLayerTypeLabel(
+  layerType: ImageAssistantLayer["layer_type"] | null | undefined,
+  copy: {
+    layerTypeBackground: string
+    layerTypeText: string
+    layerTypeShape: string
+    layerTypeImage: string
+    layerTypePaint: string
+  },
+) {
+  if (layerType === "text") return copy.layerTypeText
+  if (layerType === "shape") return copy.layerTypeShape
+  if (layerType === "image") return copy.layerTypeImage
+  if (layerType === "paint") return copy.layerTypePaint
+  return copy.layerTypeBackground
 }
 
 function getMessageReferenceAssetIds(message: ImageAssistantMessage | null | undefined) {
@@ -1345,7 +1397,7 @@ const PROMPT_PRESETS: PromptPreset[] = [
 export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId: string | null }) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { messages: i18n } = useI18n()
+  const { locale, messages: i18n } = useI18n()
   const imageCopy = i18n.imageAssistant
   const isEnglish = imageCopy.assistantName === "Image design assistant"
   const extraCopy = useMemo(
@@ -1585,9 +1637,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     [queryClient, resetCanvasHistory],
   )
 
-  const syncSessionRoute = (targetSessionId: string) => {
+  const syncSessionRoute = useCallback((targetSessionId: string) => {
     router.replace(`/dashboard/image-assistant/${targetSessionId}`)
-  }
+  }, [router])
 
   const fitScale = useMemo(() => {
     if (!canvas) return 1
@@ -1626,6 +1678,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     () => detail?.versions.find((item) => item.id === selectedVersionId) || detail?.versions[0] || null,
     [detail?.versions, selectedVersionId],
   )
+  const currentVersionIndex = useMemo(
+    () => (currentVersion ? detail?.versions.findIndex((item) => item.id === currentVersion.id) ?? -1 : -1),
+    [currentVersion, detail?.versions],
+  )
 
   const hasMoreMessages = Boolean(detail?.meta.messages_has_more)
   const hasMoreVersions = Boolean(detail?.meta.versions_has_more)
@@ -1634,6 +1690,28 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     () => canvas?.layers.find((layer) => layer.id === selectedLayerId) || null,
     [canvas?.layers, selectedLayerId],
   )
+  const selectedLayerTypeLabel = useMemo(
+    () => getLayerTypeLabel(selectedLayer?.layer_type, imageCopy),
+    [imageCopy, selectedLayer?.layer_type],
+  )
+  const activeToolLabel = useMemo(() => getCanvasToolLabel(canvasTool, imageCopy), [canvasTool, imageCopy])
+  const currentVersionKindLabel = useMemo(
+    () => getVersionKindLabel(currentVersion?.version_kind, imageCopy),
+    [currentVersion?.version_kind, imageCopy],
+  )
+  const editorUpdatedAtLabel = useMemo(() => {
+    const timestamp = canvas?.updated_at || currentVersion?.created_at || null
+    if (!timestamp) return "—"
+    return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(timestamp * 1000))
+  }, [canvas?.updated_at, currentVersion?.created_at, locale])
+  const selectedLayerSummary = selectedLayer
+    ? `${selectedLayer.name} · ${selectedLayerTypeLabel}`
+    : imageCopy.noLayerSelected
 
   const touchCandidatePreviewComposeCache = useCallback((cacheKey: string, value: Promise<string | null>) => {
     const cache = candidatePreviewComposeCacheRef.current
@@ -2196,7 +2274,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return () => {
       cancelled = true
     }
-  }, [imageCopy, pendingTaskRefreshKey, queryClient, refreshDetail, sessionId])
+  }, [imageCopy, pendingTaskRefreshKey, queryClient, refreshDetail, sessionId, syncSessionRoute])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -3491,32 +3569,66 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     )
   }
 
+  const workspaceStatus = isUploading
+    ? imageCopy.statusUploading
+    : isBusy
+      ? imageCopy.statusGenerating
+      : dirtyCanvas
+        ? imageCopy.statusDirty
+        : detail?.messages?.length
+          ? imageCopy.statusCanRefine
+          : imageCopy.statusIdle
+
   return (
     <>
       <div className="flex h-full min-h-0 flex-col">
-        <header className="border-b border-border bg-background/95 px-3 py-2.5 backdrop-blur-sm lg:px-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <p className="mt-3 text-xl font-semibold text-foreground">{detail?.session.name || imageCopy.assistantName}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-[11px]" onClick={handleCreateSession}>
-                {imageCopy.newDesign}
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
-          <div className="mx-auto flex h-full w-full max-w-7xl px-3 py-3 lg:px-5">
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <div className="min-h-0 flex-1 overflow-hidden rounded-[26px] border bg-card shadow-sm">
-                <ScrollArea className="h-full" ref={messageViewportRef}>
-                  <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 lg:px-5">
+        <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
+          <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3 px-3 py-3 lg:px-5 lg:py-4">
+            <WorkspaceHero
+              eyebrow={i18n.dashboardPage.imageAssistant.label}
+              title={detail?.session.name || imageCopy.assistantName}
+              description={imageCopy.workspaceDescription}
+              status={workspaceStatus}
+              badges={[
+                <Badge key="provider" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {availability.provider}
+                </Badge>,
+                <Badge key="mode" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {composerModeLabel}
+                </Badge>,
+                <Badge key="size" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {sizePreset}
+                </Badge>,
+                <Badge key="resolution" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {resolution}
+                </Badge>,
+                <Badge key="attachments" variant={composerAttachmentCount ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {composerAttachmentCount
+                    ? imageCopy.imagesAttached.replace("{count}", String(composerAttachmentCount))
+                    : imageCopy.noImageAttached}
+                </Badge>,
+              ]}
+              stats={[
+                { label: "Messages", value: String(displayMessages.length) },
+                { label: "Versions", value: String(detail?.versions?.length || 0) },
+                { label: "References", value: String(composerAttachmentCount) },
+                { label: "Provider", value: availability.provider },
+              ]}
+              actions={
+                <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-[11px]" onClick={handleCreateSession}>
+                  {imageCopy.newDesign}
+                </Button>
+              }
+            />
+            <div className="flex min-h-0 flex-1 px-0">
+              <div className="flex min-w-0 flex-1 flex-col gap-3">
+                <div className="min-h-0 flex-1 overflow-hidden rounded-[30px] border-2 border-border bg-card">
+                  <ScrollArea className="h-full" ref={messageViewportRef}>
+                    <div className="space-y-0">
                     {displayMessages.length ? (
                       <>
                         {hasMoreMessages ? (
-                          <div className="flex justify-center pb-1">
+                          <div className="flex justify-center px-4 py-4">
                             <Button
                               variant="outline"
                               size="sm"
@@ -3542,45 +3654,35 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           const hasBubbleMeta = parsedContent.meta.length > 0
                           const bubbleAttachmentCount = optimisticAttachments.length || persistedAttachments.length
                           return (
-                            <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                              <div
-                                className={cn(
-                                  "w-fit max-w-[92%] overflow-hidden rounded-[24px] px-3.5 py-3 shadow-sm transition-all lg:max-w-[78%]",
-                                  message.role === "user"
-                                    ? "rounded-br-md bg-primary text-primary-foreground"
-                                    : "rounded-bl-md border border-border bg-card text-foreground shadow-sm",
-                                  message.role === "user" && bubbleAttachmentCount === 1 ? "max-w-[min(92%,27rem)]" : null,
-                                  message.role === "user" && bubbleAttachmentCount > 1 ? "max-w-[min(92%,32rem)]" : null,
-                                )}
-                              >
-                                <div
-                                  className={cn(
-                                    "mb-2 flex items-center gap-1.5 text-[10px] font-medium",
-                                    message.role === "user" ? "opacity-80" : "text-muted-foreground",
-                                  )}
-                                >
-                                  {message.role !== "user" ? <Sparkles className="h-3.5 w-3.5" /> : null}
-                                  {formatMessageRoleLabel(message.role, imageCopy)}
-                                  {optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
-                                    <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px]">
-                                      {getRunKindLabel(pendingTurn.kind, extraCopy)}
-                                    </Badge>
-                                  ) : null}
-                                </div>
+                            <WorkspaceMessageFrame
+                              key={message.id}
+                              role={message.role === "user" ? "user" : "assistant"}
+                              label={formatMessageRoleLabel(message.role, imageCopy)}
+                              icon={message.role !== "user" ? <Sparkles className="h-3.5 w-3.5" /> : null}
+                              action={
+                                optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
+                                  <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px]">
+                                    {getRunKindLabel(pendingTurn.kind, extraCopy)}
+                                  </Badge>
+                                ) : null
+                              }
+                              bodyClassName="space-y-3"
+                            >
+                                <div className={cn("rounded-[24px] border-2 p-4", message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}>
                                 {hasBubbleMeta ? (
                                   <div className="flex flex-col gap-2.5">
                                     {parsedContent.body ? (
-                                      <p className="max-w-[30rem] whitespace-pre-wrap text-[14px] leading-6">{parsedContent.body}</p>
+                                      <p className="whitespace-pre-wrap text-[14px] leading-6">{parsedContent.body}</p>
                                     ) : null}
                                     <div className="flex flex-wrap gap-1.5">
                                       {parsedContent.meta.map((item) => (
                                         <span
                                           key={`${message.id}:${item.label}`}
                                           className={cn(
-                                            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium backdrop-blur-sm",
+                                            "inline-flex items-center gap-1 rounded-full border-2 px-2.5 py-1 text-[10px] font-medium",
                                             message.role === "user"
-                                              ? "bg-white/14 text-primary-foreground/92 ring-1 ring-white/12"
-                                              : "bg-muted/70 text-muted-foreground ring-1 ring-border/70",
+                                              ? "border-white/20 bg-primary text-primary-foreground"
+                                              : "border-border bg-card text-muted-foreground",
                                           )}
                                         >
                                           <span className="opacity-70">{item.label}</span>
@@ -3590,7 +3692,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                     </div>
                                   </div>
                                 ) : (
-                                  <p className="max-w-[32rem] whitespace-pre-wrap text-[14px] leading-6">{message.content}</p>
+                                  <p className="whitespace-pre-wrap text-[14px] leading-6">{message.content}</p>
                                 )}
                                 {bubbleAttachmentCount ? (
                                   <div className="mt-3 space-y-2.5">
@@ -3598,8 +3700,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                       <span>{extraCopy.pendingImagesLabel}</span>
                                       <span
                                         className={cn(
-                                          "rounded-full px-2 py-0.5 text-[9px]",
-                                          message.role === "user" ? "bg-white/14 ring-1 ring-white/14" : "bg-muted/70 ring-1 ring-border/60",
+                                          "rounded-full border-2 px-2 py-0.5 text-[9px]",
+                                          message.role === "user" ? "border-white/20 bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground",
                                         )}
                                       >
                                         {bubbleAttachmentCount}
@@ -3621,10 +3723,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                               <div
                                                 key={attachment.id}
                                                 className={cn(
-                                                  "group overflow-hidden rounded-[20px] border shadow-[0_10px_30px_-18px_rgba(15,23,42,0.45)]",
+                                                  "group overflow-hidden rounded-[20px] border-2",
                                                   message.role === "user"
-                                                    ? "border-white/14 bg-white/8"
-                                                    : "border-border/70 bg-background/70",
+                                                    ? "border-white/20 bg-primary"
+                                                    : "border-border bg-card",
                                                 )}
                                               >
                                                 <div
@@ -3659,10 +3761,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                               <div
                                                 key={attachment.id}
                                                 className={cn(
-                                                  "group overflow-hidden rounded-[20px] border shadow-[0_10px_30px_-18px_rgba(15,23,42,0.45)]",
+                                                  "group overflow-hidden rounded-[20px] border-2",
                                                   message.role === "user"
-                                                    ? "border-white/14 bg-white/8"
-                                                    : "border-border/70 bg-background/70",
+                                                    ? "border-white/20 bg-primary"
+                                                    : "border-border bg-card",
                                                 )}
                                               >
                                                 <div
@@ -3694,12 +3796,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                   </div>
                                 ) : null}
                                 {optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
-                                  <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-muted/30 px-3 py-2">
-                                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      {extraCopy.waitingReply}
-                                    </div>
-                                  </div>
+                                  <WorkspaceLoadingMessage
+                                    className="rounded-[20px] border-2 border-border bg-card px-3 py-3"
+                                    label={
+                                      <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        {extraCopy.waitingReply}
+                                      </>
+                                    }
+                                  />
                                 ) : null}
                                 {message.role === "assistant" && message.created_version_id
                                   ? (() => {
@@ -3707,220 +3812,129 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                     if (!messageVersion?.candidates.length) return null
 
                                     return (
-                                      <div className={cn("mt-3 grid gap-3", messageVersion.candidates.length > 1 ? "sm:grid-cols-2" : "max-w-md")}>
-                                        {messageVersion.candidates.map((candidate) => (
-                                          <button
-                                            key={candidate.id}
-                                            type="button"
-                                            data-testid={`image-open-canvas-${candidate.id}`}
-                                            onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
-                                            className="overflow-hidden rounded-[20px] border border-border/70 bg-background text-left shadow-sm transition hover:border-primary/40 hover:shadow-md"
-                                          >
-                                            <div className="aspect-[4/5] bg-muted/30">
-                                              <CandidatePreviewImage
-                                                candidateId={candidate.id}
-                                                fallbackSrc={candidate.url}
-                                                resolvedSrc={candidatePreviewUrls[candidate.id] || null}
-                                                loadPreview={() => composeCandidatePreview(messageVersion, candidate.id)}
-                                                onResolved={(nextSrc) =>
-                                                  nextSrc !== candidate.url
-                                                    ? setCandidatePreviewUrls((current) =>
-                                                        current[candidate.id] ? current : { ...current, [candidate.id]: nextSrc },
-                                                      )
-                                                    : undefined
-                                                }
-                                                className="h-full w-full object-cover"
-                                              />
-                                            </div>
-                                            <div className="px-3 py-2 text-[11px] text-muted-foreground">{imageCopy.clickToRefine}</div>
-                                          </button>
-                                        ))}
-                                      </div>
+                                      <WorkspaceSectionCard title="候选结果" description={imageCopy.clickToRefine}>
+                                        <div className={cn("grid gap-3", messageVersion.candidates.length > 1 ? "sm:grid-cols-2" : "max-w-md")}>
+                                          {messageVersion.candidates.map((candidate) => (
+                                            <button
+                                              key={candidate.id}
+                                              type="button"
+                                              data-testid={`image-open-canvas-${candidate.id}`}
+                                              onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
+                                              className="overflow-hidden rounded-[20px] border-2 border-border bg-card text-left transition hover:border-primary"
+                                            >
+                                              <div className="aspect-[4/5] bg-muted/30">
+                                                <CandidatePreviewImage
+                                                  candidateId={candidate.id}
+                                                  fallbackSrc={candidate.url}
+                                                  resolvedSrc={candidatePreviewUrls[candidate.id] || null}
+                                                  loadPreview={() => composeCandidatePreview(messageVersion, candidate.id)}
+                                                  onResolved={(nextSrc) =>
+                                                    nextSrc !== candidate.url
+                                                      ? setCandidatePreviewUrls((current) =>
+                                                          current[candidate.id] ? current : { ...current, [candidate.id]: nextSrc },
+                                                        )
+                                                      : undefined
+                                                  }
+                                                  className="h-full w-full object-cover"
+                                                />
+                                              </div>
+                                              <div className="px-3 py-2 text-[11px] text-muted-foreground">{imageCopy.clickToRefine}</div>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </WorkspaceSectionCard>
                                     )
                                   })()
                                   : null}
-                              </div>
-                            </div>
+                                </div>
+                            </WorkspaceMessageFrame>
                           )
                         })}
                       </>
                     ) : (
-                      <div className="space-y-3 rounded-[24px] border border-dashed bg-muted/20 p-4">
-                        <div className="flex items-center gap-2 text-primary">
-                          <Sparkles className="h-4 w-4" />
-                          <span className="text-xs font-semibold uppercase tracking-[0.18em]">{imageCopy.quickStart}</span>
-                        </div>
-                        <div className="grid gap-2.5 lg:grid-cols-3">
-                          {imageCopy.starterPrompts.map((item) => (
-                            <button
-                              key={item}
-                              type="button"
-                              onClick={() => setPrompt(item)}
-                              className="rounded-2xl border bg-background px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-                            >
-                              <p className="text-[12px] leading-5 text-muted-foreground">{item}</p>
-                            </button>
-                          ))}
-                        </div>
+                      <div className="px-4 py-4">
+                        <WorkspacePromptGrid
+                          eyebrow={imageCopy.quickStart}
+                          prompts={imageCopy.starterPrompts}
+                          onSelect={(item) => setPrompt(item)}
+                          gridClassName="lg:grid-cols-3"
+                        />
                       </div>
                     )}
 
                     {isBusy && !pendingTurn ? (
-                      <div className="flex justify-start">
-                        <div className="rounded-[24px] rounded-bl-md border border-border bg-card px-3.5 py-3 text-xs text-muted-foreground shadow-sm">
-                          <span className="animate-pulse">{imageCopy.generatingCandidates}</span>
-                        </div>
-                      </div>
+                      <WorkspaceMessageFrame role="assistant" label={imageCopy.assistantName} icon={<Sparkles className="h-3.5 w-3.5" />}>
+                        <WorkspaceLoadingMessage label={<span className="animate-pulse">{imageCopy.generatingCandidates}</span>} />
+                      </WorkspaceMessageFrame>
                     ) : null}
-                  </div>
-                </ScrollArea>
-              </div>
-              <section
+                    </div>
+                  </ScrollArea>
+                </div>
+              <WorkspaceComposerPanel
                 data-testid="image-composer-dropzone"
                 className={cn(
-                  "relative rounded-[24px] border bg-background/96 p-2.5 shadow-lg backdrop-blur transition-colors",
-                  isComposerDragActive && "border-primary bg-primary/5",
+                  "relative rounded-[28px] border-2 border-border bg-card p-2.5 transition-colors",
+                  isComposerDragActive && "border-primary bg-primary/10",
                 )}
-                onDragEnter={handleComposerDragEnter}
-                onDragOver={handleComposerDragOver}
-                onDragLeave={handleComposerDragLeave}
-                onDrop={handleComposerDrop}
-              >
-                {isComposerDragActive ? (
-                  <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[20px] border border-dashed border-primary/60 bg-background/92 px-4 text-center shadow-sm">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">{extraCopy.dragDropActiveHint}</p>
-                      <p className="text-xs text-muted-foreground">{extraCopy.dragDropHint}</p>
-                    </div>
-                  </div>
-                ) : null}
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={sizePreset}
-                    onChange={(event) => setSizePreset(event.target.value as ImageAssistantSizePreset)}
-                    className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                    disabled={isBusy || isUploading}
-                  >
-                    <option value="1:1">1:1</option>
-                    <option value="4:5">4:5</option>
-                    <option value="3:4">3:4</option>
-                    <option value="16:9">16:9</option>
-                    <option value="9:16">9:16</option>
-                  </select>
-                  <select
-                    value={resolution}
-                    onChange={(event) => setResolution(event.target.value as ImageAssistantResolution)}
-                    className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                    disabled={isBusy || isUploading}
-                  >
-                    <option value="512">512 (0.5K)</option>
-                    <option value="1K">1K</option>
-                    <option value="2K">2K</option>
-                    <option value="4K">4K</option>
-                  </select>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-9 rounded-full"
-                    data-testid="image-reference-upload-button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                  >
-                    {isUploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="mr-1.5 h-3.5 w-3.5" />}
-                    {imageCopy.addImage}
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    data-testid="image-reference-file-input"
-                    className="hidden"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    multiple
-                    onChange={(event) => void uploadFiles(event.target.files)}
-                  />
-                  <div className="ml-auto flex flex-wrap gap-2">
-                    {(promptPresets.length ? promptPresets : PROMPT_PRESETS).map((item) => (
-                      <button
-                        key={item.label}
-                        type="button"
-                        onClick={() => setPrompt(item.prompt)}
-                        className="rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {pendingAttachments.length ? (
-                  <div className="mt-2 max-h-48 overflow-y-auto rounded-[20px] border border-border/70 bg-muted/30 px-3 py-2.5">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-[11px] font-medium text-muted-foreground">
-                        {pendingAttachments.length}/{IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {pendingAttachments.map((attachment) => (
-                        <div
-                          key={attachment.id}
-                          className="group flex items-center gap-2 rounded-2xl border border-border bg-background px-2 py-2 shadow-sm"
-                          data-testid={`image-pending-attachment-${attachment.id}`}
-                        >
-                          <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted">
-                            <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
-                          </div>
-                          <div className="max-w-[120px]">
-                            <p className="truncate text-[11px] font-medium text-foreground">{formatPendingAttachmentLabel(attachment, imageCopy)}</p>
-                            <p className="truncate text-[10px] text-muted-foreground">
-                              {attachment.uploading ? imageCopy.preparingAttachment : attachment.file.name}
-                            </p>
-                            <p className="truncate text-[10px] text-muted-foreground">
-                              {formatBytes(attachment.uploadFileSize)}
-                              {attachment.transportOptimized && attachment.uploadFileSize < attachment.originalFileSize
-                                ? ` / ${extraCopy.optimizedBadge} ${formatBytes(attachment.originalFileSize)} -> ${formatBytes(attachment.uploadFileSize)}`
-                                : ""}
-                            </p>
-                          </div>
-                          <Button
-                            size="icon"
-                            type="button"
-                            variant="ghost"
-                            className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
-                            onClick={() => removePendingAttachment(attachment.id)}
-                            aria-label={imageCopy.removePendingImage}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="mt-2 rounded-[22px] border border-border/70 bg-card">
-                  <Textarea
-                    data-testid="image-prompt-input"
-                    value={prompt}
-                    onChange={(event) => {
-                      setPrompt(event.target.value)
-                      if (jobError) setJobError(null)
-                    }}
-                    onKeyDown={(event) => {
-                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                        event.preventDefault()
-                        if (canSubmit) {
-                          void runJob(primaryRunKind)
-                        }
-                      }
-                    }}
-                    placeholder={extraCopy.additionalNotesPlaceholder}
-                    className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
-                    disabled={isBusy}
-                  />
-                  {jobError ? (
-                    <div className="px-3.5 pb-1 text-[12px] text-destructive">{jobError}</div>
-                  ) : null}
-                  <div className="flex items-center justify-between gap-3 border-t border-border/70 px-3.5 py-2.5">
+                toolbarClassName="items-center"
+                toolbar={
+                  <>
+                    <select
+                      value={sizePreset}
+                      onChange={(event) => setSizePreset(event.target.value as ImageAssistantSizePreset)}
+                      className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                      disabled={isBusy || isUploading}
+                    >
+                      <option value="1:1">1:1</option>
+                      <option value="4:5">4:5</option>
+                      <option value="3:4">3:4</option>
+                      <option value="16:9">16:9</option>
+                      <option value="9:16">9:16</option>
+                    </select>
+                    <select
+                      value={resolution}
+                      onChange={(event) => setResolution(event.target.value as ImageAssistantResolution)}
+                      className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                      disabled={isBusy || isUploading}
+                    >
+                      <option value="512">512 (0.5K)</option>
+                      <option value="1K">1K</option>
+                      <option value="2K">2K</option>
+                      <option value="4K">4K</option>
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 rounded-full"
+                      data-testid="image-reference-upload-button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="mr-1.5 h-3.5 w-3.5" />}
+                      {imageCopy.addImage}
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      data-testid="image-reference-file-input"
+                      className="hidden"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      multiple
+                      onChange={(event) => void uploadFiles(event.target.files)}
+                    />
+                    <WorkspacePromptChips
+                      prompts={(promptPresets.length ? promptPresets : PROMPT_PRESETS).map((item) => item.label)}
+                      onSelect={(label) => {
+                        const matchedPreset = (promptPresets.length ? promptPresets : PROMPT_PRESETS).find((item) => item.label === label)
+                        if (matchedPreset) setPrompt(matchedPreset.prompt)
+                      }}
+                      className="ml-auto"
+                    />
+                  </>
+                }
+                bodyClassName="px-0"
+                footer={
+                  <>
                     <p className="text-[11px] leading-5 text-muted-foreground">
                       {composerAttachmentCount
                         ? imageCopy.imagesAttached.replace("{count}", String(composerAttachmentCount))
@@ -3961,9 +3975,92 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                         {imageCopy.send}
                       </Button>
                     </div>
+                  </>
+                }
+                onDragEnter={handleComposerDragEnter}
+                onDragOver={handleComposerDragOver}
+                onDragLeave={handleComposerDragLeave}
+                onDrop={handleComposerDrop}
+              >
+                {isComposerDragActive ? (
+                  <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[20px] border-2 border-dashed border-primary bg-background px-4 text-center">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">{extraCopy.dragDropActiveHint}</p>
+                      <p className="text-xs text-muted-foreground">{extraCopy.dragDropHint}</p>
+                    </div>
                   </div>
+                ) : null}
+                {pendingAttachments.length ? (
+                  <div className="mt-2 max-h-48 overflow-y-auto rounded-[20px] border-2 border-border bg-background px-3 py-2.5">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-medium text-muted-foreground">
+                        {pendingAttachments.length}/{IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {pendingAttachments.map((attachment) => (
+                        <div
+                          key={attachment.id}
+                          className="group flex items-center gap-2 rounded-[18px] border-2 border-border bg-card px-2 py-2"
+                          data-testid={`image-pending-attachment-${attachment.id}`}
+                        >
+                          <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted">
+                            <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
+                          </div>
+                          <div className="max-w-[120px]">
+                            <p className="truncate text-[11px] font-medium text-foreground">{formatPendingAttachmentLabel(attachment, imageCopy)}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">
+                              {attachment.uploading ? imageCopy.preparingAttachment : attachment.file.name}
+                            </p>
+                            <p className="truncate text-[10px] text-muted-foreground">
+                              {formatBytes(attachment.uploadFileSize)}
+                              {attachment.transportOptimized && attachment.uploadFileSize < attachment.originalFileSize
+                                ? ` / ${extraCopy.optimizedBadge} ${formatBytes(attachment.originalFileSize)} -> ${formatBytes(attachment.uploadFileSize)}`
+                                : ""}
+                            </p>
+                          </div>
+                          <Button
+                            size="icon"
+                            type="button"
+                            variant="ghost"
+                            className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
+                            onClick={() => removePendingAttachment(attachment.id)}
+                            aria-label={imageCopy.removePendingImage}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-2">
+                  <Textarea
+                    data-testid="image-prompt-input"
+                    value={prompt}
+                    onChange={(event) => {
+                      setPrompt(event.target.value)
+                      if (jobError) setJobError(null)
+                    }}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        event.preventDefault()
+                        if (canSubmit) {
+                          void runJob(primaryRunKind)
+                        }
+                      }
+                    }}
+                    placeholder={extraCopy.additionalNotesPlaceholder}
+                    className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
+                    disabled={isBusy}
+                  />
+                  {jobError ? (
+                    <div className="px-3.5 pb-1 text-[12px] text-destructive">{jobError}</div>
+                  ) : null}
                 </div>
-              </section>
+              </WorkspaceComposerPanel>
+              </div>
             </div>
           </div>
         </div>
@@ -3972,17 +4069,104 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       <Dialog open={mode === "canvas"} onOpenChange={(open) => { if (!open) handleCloseEditor() }}>
         <DialogContent showCloseButton={false} className="h-[min(92vh,1040px)] w-[min(96vw,1680px)] max-w-[min(96vw,1680px)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,1680px)]">
           <DialogTitle className="sr-only">{imageCopy.editorTitle}</DialogTitle>
-          <div className="relative grid h-full w-full grid-cols-[minmax(0,1fr)_92px] items-stretch gap-4 overflow-hidden rounded-[32px] border border-border/70 bg-background/45 p-4 shadow-[0_40px_120px_-45px_rgba(15,23,42,0.45)] backdrop-blur-md md:gap-5 md:p-5 lg:gap-6 lg:p-6">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.5),rgba(255,255,255,0.2)_38%,rgba(15,23,42,0.12)_100%)]" />
+          <DialogDescription className="sr-only">
+            {`${imageCopy.editorTitle}. ${imageCopy.autoSaveHint}`}
+          </DialogDescription>
+          <div className="relative grid h-full w-full grid-cols-[minmax(0,1fr)_116px] items-stretch gap-4 overflow-hidden rounded-[32px] border-2 border-border bg-muted/30 p-4 md:gap-5 md:p-5 lg:gap-6 lg:p-6">
 
-            <div className="relative z-10 col-start-1 row-start-1 min-w-0 overflow-hidden rounded-[28px] border border-border/60 bg-background/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+            <div className="relative z-10 col-start-1 row-start-1 min-w-0 overflow-hidden rounded-[28px] border-2 border-border bg-card">
+              <div className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-32px))] rounded-[24px] border-2 border-border bg-card p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
+                    {dirtyCanvas ? imageCopy.unsaved : imageCopy.synced}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
+                    {currentVersionKindLabel}
+                  </Badge>
+                </div>
+                <div className="mt-3">
+                  <p className="text-[10px] font-medium tracking-[0.24em] text-muted-foreground uppercase">
+                    {imageCopy.editorWorkspace}
+                  </p>
+                  <div className="mt-1 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-foreground">
+                        {currentVersion
+                          ? `${imageCopy.currentVersionLabel} V${currentVersionIndex >= 0 ? currentVersionIndex + 1 : 1}`
+                          : imageCopy.editorTitle}
+                      </h3>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-muted-foreground">
+                        {currentVersion?.prompt_text?.trim() || imageCopy.autoSaveHint}
+                      </p>
+                    </div>
+                    {detail?.versions?.length ? (
+                      <Badge variant="outline" className="shrink-0 rounded-full px-2.5 py-1 text-[10px]">
+                        {Math.max(currentVersionIndex + 1, 1)}/{detail.versions.length}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
+                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                      {imageCopy.canvasSizeLabel}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {canvas ? `${canvas.width} × ${canvas.height}` : "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
+                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                      {imageCopy.layersLabel}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{canvas?.layers.length ?? 0}</p>
+                  </div>
+                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
+                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                      {imageCopy.activeToolLabel}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{activeToolLabel}</p>
+                  </div>
+                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
+                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                      {imageCopy.zoomLabel}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{zoomLabel}</p>
+                  </div>
+                </div>
+                <div className="mt-3 rounded-[18px] border-2 border-border bg-background p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                        {imageCopy.selectedLayerLabel}
+                      </p>
+                      <p className="mt-1 truncate text-sm font-semibold text-foreground">{selectedLayerSummary}</p>
+                      {selectedLayer ? (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {Math.round(selectedLayer.transform.width)} × {Math.round(selectedLayer.transform.height)}
+                        </p>
+                      ) : null}
+                    </div>
+                    {selectedLayer ? (
+                      <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
+                        {selectedLayerTypeLabel}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
+                    <span>{imageCopy.updatedAtLabel}</span>
+                    <span className="text-right text-foreground/80">{editorUpdatedAtLabel}</span>
+                  </div>
+                </div>
+              </div>
+
               {selectedLayer?.layer_type === "text" ? (
-                <div className="absolute right-4 bottom-24 z-20 w-[min(560px,calc(100%-32px))] rounded-[18px] border border-border bg-background/94 p-3 shadow-lg backdrop-blur">
+                <div className="absolute right-4 bottom-24 z-20 w-[min(560px,calc(100%-32px))] rounded-[18px] border-2 border-border bg-card p-3">
                   <p className="mb-2 text-[11px] font-medium text-foreground">{imageCopy.textLabel}</p>
                   <Input
                     value={selectedLayer.content?.text || ""}
                     onChange={(event) => updateSelectedText(event.target.value)}
-                    className="h-10 rounded-xl border-border bg-background"
+                    className="h-10 rounded-xl border-2 border-border bg-background"
                     placeholder={imageCopy.editTextPlaceholder}
                   />
                 </div>
@@ -3996,7 +4180,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   <div
                     ref={canvasStageRef}
                     data-testid="image-canvas-stage"
-                    className="relative overflow-hidden rounded-[32px] border border-border/80 bg-background shadow-[0_40px_120px_-55px_rgba(15,23,42,0.42)]"
+                    className="relative overflow-hidden rounded-[32px] border-2 border-border bg-background"
                     style={{ width: canvas.width * scale, height: canvas.height * scale, flex: "0 0 auto" }}
                     onMouseDown={(event) => {
                       if (event.target === event.currentTarget) {
@@ -4036,7 +4220,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                 )}
               </div>
 
-              <div className="absolute bottom-4 left-[calc(50%-46px)] z-20 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-[20px] border border-border bg-background/92 p-2 shadow-lg backdrop-blur">
+              <div className="absolute bottom-4 left-[calc(50%-46px)] z-20 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-[20px] border-2 border-border bg-card p-2">
                 <Button variant="outline" className="h-8 rounded-full px-3 text-[11px]" onClick={() => setZoomLevel("fit")}>
                   {imageCopy.fit}
                 </Button>
@@ -4062,7 +4246,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                 </Button>
               </div>
 
-              <div className="absolute bottom-16 left-[calc(50%-46px)] z-20 flex max-w-[min(680px,calc(100%-140px))] -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/88 px-3 py-2 shadow-lg backdrop-blur">
+              <div className="absolute bottom-16 left-[calc(50%-46px)] z-20 flex max-w-[min(680px,calc(100%-140px))] -translate-x-1/2 items-center gap-2 rounded-full border-2 border-border bg-card px-3 py-2">
                 <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[10px]">
                   {imageCopy.attachOnClose}
                 </Badge>
@@ -4071,60 +4255,80 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             </div>
 
             <div className="relative z-20 col-start-2 row-start-1 flex h-full items-center justify-center">
-              <div className="pointer-events-auto flex h-fit w-[92px] flex-col items-center gap-2 rounded-[28px] border border-border/70 bg-background/94 px-2 py-3 shadow-[0_18px_60px_-30px_rgba(15,23,42,0.45)] backdrop-blur-xl">
+              <div className="pointer-events-auto flex h-fit w-[116px] flex-col items-center gap-3 rounded-[28px] border-2 border-border bg-card px-2.5 py-3.5">
                 <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
                   {dirtyCanvas ? imageCopy.unsaved : imageCopy.synced}
                 </Badge>
-                <Button data-testid="image-select-tool" size="icon" variant={canvasTool === "select" ? "default" : "outline"} onClick={() => { setCanvasTool("select"); setPaintPreview(null) }} title={imageCopy.selectTool} className="h-11 w-11 rounded-full">
-                  <MousePointer2 className="h-4.5 w-4.5" />
-                </Button>
-                <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => setCanvasTool((current) => (current === "brush" ? "select" : "brush"))} title={imageCopy.brushTool} className="h-11 w-11 rounded-full">
-                  <Pencil className="h-4.5 w-4.5" />
-                </Button>
-                <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => setCanvasTool((current) => (current === "eraser" ? "select" : "eraser"))} title={imageCopy.eraserTool} className="h-11 w-11 rounded-full">
-                  <Eraser className="h-4.5 w-4.5" />
-                </Button>
-                <Button size="icon" variant="outline" onClick={() => addShapeToCanvas("rect")} title={imageCopy.shapeTool} className="h-11 w-11 rounded-full">
-                  <Square className="h-4.5 w-4.5" />
-                </Button>
-                <Button size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-11 w-11 rounded-full">
-                  <Type className="h-4.5 w-4.5" />
-                </Button>
-                <div className="my-1 h-px w-8 bg-border" />
-                <div className="flex flex-col items-center gap-2 rounded-[22px] border border-border/80 bg-muted/20 px-2 py-2">
-                  <Palette className="h-3.5 w-3.5 text-primary" />
-                  <input
-                    aria-label={imageCopy.brushColor}
-                    type="color"
-                    value={brushColor}
-                    onChange={(event) => updateSelectedLayerColor(event.target.value)}
-                    className="h-10 w-10 cursor-pointer rounded-full border border-border bg-transparent p-1"
-                  />
+                <div className="flex w-full flex-col items-center gap-2">
+                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                    {imageCopy.toolGroupLabel}
+                  </p>
+                  <Button data-testid="image-select-tool" size="icon" variant={canvasTool === "select" ? "default" : "outline"} onClick={() => { setCanvasTool("select"); setPaintPreview(null) }} title={imageCopy.selectTool} className="h-11 w-11 rounded-full">
+                    <MousePointer2 className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => setCanvasTool((current) => (current === "brush" ? "select" : "brush"))} title={imageCopy.brushTool} className="h-11 w-11 rounded-full">
+                    <Pencil className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => setCanvasTool((current) => (current === "eraser" ? "select" : "eraser"))} title={imageCopy.eraserTool} className="h-11 w-11 rounded-full">
+                    <Eraser className="h-4.5 w-4.5" />
+                  </Button>
+                  <div className="flex flex-col items-center gap-2 rounded-[22px] border-2 border-border bg-background px-2 py-2">
+                    <Palette className="h-3.5 w-3.5 text-primary" />
+                    <input
+                      aria-label={imageCopy.brushColor}
+                      type="color"
+                      value={brushColor}
+                      onChange={(event) => updateSelectedLayerColor(event.target.value)}
+                      className="h-10 w-10 cursor-pointer rounded-full border border-border bg-transparent p-1"
+                    />
+                  </div>
                 </div>
-                <div className="my-1 h-px w-8 bg-border" />
-                <Button variant="outline" size="icon" data-testid="image-canvas-undo-button" onClick={undoCanvasChange} disabled={!undoStack.length} title={imageCopy.undo} className="h-11 w-11 rounded-full">
-                  <Undo2 className="h-4.5 w-4.5" />
-                </Button>
-                <Button variant="outline" size="icon" data-testid="image-canvas-redo-button" onClick={redoCanvasChange} disabled={!redoStack.length} title={imageCopy.redo} className="h-11 w-11 rounded-full">
-                  <Redo2 className="h-4.5 w-4.5" />
-                </Button>
-                <Button variant="outline" size="icon" onClick={removeSelectedLayer} disabled={!selectedLayerId || !selectedLayer || !isEditableLayer(selectedLayer)} title={imageCopy.delete} className="h-11 w-11 rounded-full">
-                  <Trash2 className="h-4.5 w-4.5" />
-                </Button>
-                <div className="my-1 h-px w-8 bg-border" />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  data-testid="image-canvas-export-button"
-                  className="h-11 w-11 rounded-full"
-                  onClick={() => void exportCurrent("png")}
-                  title={imageCopy.export}
-                >
-                  <Download className="h-4.5 w-4.5" />
-                </Button>
-                <Button variant="ghost" size="icon" data-testid="image-canvas-close-button" onClick={handleCloseEditor} title={imageCopy.close} className="h-11 w-11 rounded-full">
-                  <X className="h-4.5 w-4.5" />
-                </Button>
+                <div className="h-px w-10 bg-border" />
+                <div className="flex w-full flex-col items-center gap-2">
+                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                    {imageCopy.insertGroupLabel}
+                  </p>
+                  <Button size="icon" variant="outline" onClick={() => addShapeToCanvas("rect")} title={imageCopy.shapeTool} className="h-11 w-11 rounded-full">
+                    <Square className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-11 w-11 rounded-full">
+                    <Type className="h-4.5 w-4.5" />
+                  </Button>
+                </div>
+                <div className="h-px w-10 bg-border" />
+                <div className="flex w-full flex-col items-center gap-2">
+                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                    {imageCopy.historyGroupLabel}
+                  </p>
+                  <Button variant="outline" size="icon" data-testid="image-canvas-undo-button" onClick={undoCanvasChange} disabled={!undoStack.length} title={imageCopy.undo} className="h-11 w-11 rounded-full">
+                    <Undo2 className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button variant="outline" size="icon" data-testid="image-canvas-redo-button" onClick={redoCanvasChange} disabled={!redoStack.length} title={imageCopy.redo} className="h-11 w-11 rounded-full">
+                    <Redo2 className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={removeSelectedLayer} disabled={!selectedLayerId || !selectedLayer || !isEditableLayer(selectedLayer)} title={imageCopy.delete} className="h-11 w-11 rounded-full">
+                    <Trash2 className="h-4.5 w-4.5" />
+                  </Button>
+                </div>
+                <div className="h-px w-10 bg-border" />
+                <div className="flex w-full flex-col items-center gap-2">
+                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                    {imageCopy.outputGroupLabel}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    data-testid="image-canvas-export-button"
+                    className="h-11 w-11 rounded-full"
+                    onClick={() => void exportCurrent("png")}
+                    title={imageCopy.export}
+                  >
+                    <Download className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" data-testid="image-canvas-close-button" onClick={handleCloseEditor} title={imageCopy.close} className="h-11 w-11 rounded-full">
+                    <X className="h-4.5 w-4.5" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

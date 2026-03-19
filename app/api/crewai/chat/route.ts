@@ -9,6 +9,48 @@ export const maxDuration = 600
 
 const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "https://api.aimarketingsite.com"
 
+function createAvailabilityResponse(enabled: boolean, reason: string | null, status = 200) {
+  return new Response(JSON.stringify({ enabled, reason }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await requireSessionUser(request, "video_generation")
+    if ("response" in auth) {
+      return auth.response
+    }
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+
+    try {
+      const response = await fetch(`${AGENT_URL}/health`, {
+        method: "GET",
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      if (response.ok || response.status === 404) {
+        return createAvailabilityResponse(true, null)
+      }
+
+      return createAvailabilityResponse(false, `agent_health_status_${response.status}`)
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+      if (error?.name === "AbortError") {
+        return createAvailabilityResponse(false, "agent_health_timeout")
+      }
+      return createAvailabilityResponse(false, error?.message || "agent_health_fetch_failed")
+    }
+  } catch (error: any) {
+    return createAvailabilityResponse(false, error?.message || "availability_failed")
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireSessionUser(request, "video_generation")

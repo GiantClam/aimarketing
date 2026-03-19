@@ -1,662 +1,535 @@
-﻿"use client";
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, MessageSquare, Send } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { ClipboardList, Compass, Copy, History, Loader2, MessageSquare, Radar, Send, Sparkles, Target, TrendingUp, Workflow } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  WorkspaceComposerPanel,
+  WorkspaceEmptyState,
+  WorkspacePromptChips,
+} from "@/components/workspace/workspace-primitives";
+import {
+  WorkspaceLoadingMessage,
+  WorkspaceMessageFrame,
+} from "@/components/workspace/workspace-message-primitives";
+import { ensureWorkspaceQueryData, fetchWorkspaceQueryData, getAdvisorMessagesPage, getAdvisorMessagesQueryKey, invalidateAdvisorConversationQueries } from "@/lib/query/workspace-cache";
+import { ADVISOR_SESSION_CACHE_TTL_MS, getAdvisorConversationCache, isAdvisorConversationCacheFresh, mapAdvisorMessagePageToChatMessages, saveAdvisorConversationCache, type AdvisorChatMessage } from "@/lib/advisor/session-store";
+import { findAdvisorPendingTask, removePendingAssistantTask, savePendingAssistantTask, updatePendingAssistantTask } from "@/lib/assistant-task-store";
+import { cn } from "@/lib/utils";
 import { CodeBlock } from "./CodeBlock";
-import {
-    ensureWorkspaceQueryData,
-    fetchWorkspaceQueryData,
-    getAdvisorMessagesPage,
-    getAdvisorMessagesQueryKey,
-    invalidateAdvisorConversationQueries,
-} from "@/lib/query/workspace-cache";
-import {
-    ADVISOR_SESSION_CACHE_TTL_MS,
-    getAdvisorConversationCache,
-    isAdvisorConversationCacheFresh,
-    mapAdvisorMessagePageToChatMessages,
-    saveAdvisorConversationCache,
-    type AdvisorChatMessage,
-} from "@/lib/advisor/session-store";
-import {
-    findAdvisorPendingTask,
-    removePendingAssistantTask,
-    savePendingAssistantTask,
-    updatePendingAssistantTask,
-} from "@/lib/assistant-task-store";
 
 type Message = AdvisorChatMessage;
 
-const ADVISOR_LABEL_MAP: Record<string, string> = {
-    "brand-strategy": "品牌战略顾问",
-    growth: "增长顾问",
-    "lead-hunter": "海外猎客",
-    copywriting: "文案写作专家",
+type WorkspaceMeta = {
+  icon: typeof Target;
+  eyebrow: string;
+  title: string;
+  description: string;
+  contextMode: string;
+  outputMode: string;
+  focus: string[];
+  deliverables: string[];
+  promptTips: string[];
+  quickPrompts: string[];
+  composerPlaceholder: string;
+  workflowNote: string;
+  complianceNote: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyChecklist: string[];
+};
+
+const WORKSPACE_META: Record<string, WorkspaceMeta> = {
+  "brand-strategy": {
+    icon: Target,
+    eyebrow: "品牌策略工作台",
+    title: "品牌战略顾问",
+    description: "把定位、差异化、叙事和活动方向放进同一条线程里持续打磨，而不是每轮都从空白开始。",
+    contextMode: "多轮连续推演",
+    outputMode: "判断框架 + 信息建议",
+    focus: ["定位与目标人群", "价值主张与差异化", "首页 / 活动信息层级"],
+    deliverables: ["定位判断", "叙事结构", "下一步验证建议"],
+    promptTips: ["产品 / 服务是什么", "目标客户是谁", "当前最想解决的问题"],
+    quickPrompts: [
+      "请帮我重新梳理官网首页的品牌定位和价值主张。",
+      "请判断我们的目标人群是否过宽，并给出更清晰的叙事方向。",
+      "围绕一次新品发布，请给我品牌主张和首页英雄区表达。",
+    ],
+    composerPlaceholder: "描述品牌、产品、目标客户、市场环境和当前问题，我会按品牌顾问方式帮你拆解定位与叙事。",
+    workflowNote: "品牌顾问会保留上下文，适合同一命题的连续追问、收敛和迭代。",
+    complianceNote: "Shift + Enter 换行，Enter 发送。AI 输出适合作为讨论底稿，需要结合真实市场验证。",
+    emptyTitle: "把品牌判断留在一条可持续追问的线程里",
+    emptyDescription: "先给我品牌背景，再逐步收敛定位、叙事和信息方向。",
+    emptyChecklist: ["品牌 / 产品背景", "目标客户", "当前表达问题"],
+  },
+  growth: {
+    icon: TrendingUp,
+    eyebrow: "增长工作台",
+    title: "增长顾问",
+    description: "适合持续拆解目标、渠道、实验和执行节奏，把增长判断放在同一条线程里复盘和更新。",
+    contextMode: "多轮连续推演",
+    outputMode: "策略判断 + 执行动作",
+    focus: ["渠道优先级", "转化链路", "实验节奏"],
+    deliverables: ["增长策略框架", "实验清单", "动作优先级"],
+    promptTips: ["目标与时间窗", "已有渠道与限制", "当前最大瓶颈"],
+    quickPrompts: [
+      "我们想在 8 周内把官网试用注册提升 30%，请给我增长动作优先级。",
+      "围绕小红书与官网表单转化，帮我设计 3 周实验计划。",
+      "我们有投放但合格线索不稳定，请帮我拆解漏斗并给出修复动作。",
+    ],
+    composerPlaceholder: "描述增长目标、时间窗口、渠道、资源约束和当前卡点，我会帮你拆解优先级与下一步。",
+    workflowNote: "同一会话会保留上下文，适合连续追问、复盘和调整增长动作。",
+    complianceNote: "Shift + Enter 换行，Enter 发送。AI 输出适合作为判断底稿，不替代业务验证。",
+    emptyTitle: "把一个增长问题留在同一条线程里持续拆解",
+    emptyDescription: "先给我目标和现状，再逐步收敛动作、实验与节奏。",
+    emptyChecklist: ["明确目标值", "补充渠道与预算", "说明最大卡点"],
+  },
+  "lead-hunter": {
+    icon: Radar,
+    eyebrow: "线索检索工作台",
+    title: "海外猎客",
+    description: "把客户条件说清楚，我会触发 workflow 返回海外线索。历史仅用于展示，不会作为检索上下文重新发送。",
+    contextMode: "仅当前搜索条件",
+    outputMode: "线索列表 + 下一轮建议",
+    focus: ["地区与市场范围", "行业 / 规模 / 角色", "筛选条件与输出字段"],
+    deliverables: ["线索列表", "目标画像", "下一轮筛选建议"],
+    promptTips: ["越具体越好", "说明需要的字段", "说明排除条件"],
+    quickPrompts: [
+      "帮我找美国和加拿大的 DTC 美妆品牌创始人或增长负责人，优先 11-200 人团队。",
+      "搜索德国和荷兰做 AI 自动化软件的中型企业，给我 CTO 或 Head of Operations 线索。",
+      "找澳洲跨境电商服务商里负责 performance marketing 的负责人，排除代理公司。",
+    ],
+    composerPlaceholder: "直接写客户画像、地区、行业、职位、公司规模、排除条件和你想拿到的字段。",
+    workflowNote: "海外猎客每次只根据当前搜索条件触发 workflow，不会把前文重新作为检索输入。",
+    complianceNote: "Shift + Enter 换行，Enter 发送。结果依赖外部数据源，建议二次验证后再触达。",
+    emptyTitle: "先把这次搜索条件讲完整，再让 workflow 去找人",
+    emptyDescription: "这个工作台更像结构化检索入口，而不是开放式聊天。",
+    emptyChecklist: ["地区范围", "行业与角色", "保留 / 排除条件"],
+  },
 };
 
 const ADVISOR_INITIAL_MESSAGE_LIMIT = 20;
 const ADVISOR_HISTORY_PAGE_SIZE = 20;
 
-function getAdvisorLabel(advisorType: string) {
-    return ADVISOR_LABEL_MAP[advisorType] || "专家顾问";
-}
-
 function normalizeMessageContent(content: string) {
-    return content.trim();
+  return content.trim();
 }
 
 function getMessageSignature(message: Message) {
-    return [
-        message.role,
-        normalizeMessageContent(message.content),
-        message.agentName || "",
-    ].join("|");
+  return [message.role, normalizeMessageContent(message.content), message.agentName || ""].join("|");
 }
 
 function areMessageListsEquivalent(left: Message[], right: Message[]) {
-    if (left.length !== right.length) return false;
-    return left.every((message, index) => getMessageSignature(message) === getMessageSignature(right[index]));
+  if (left.length !== right.length) return false;
+  return left.every((message, index) => getMessageSignature(message) === getMessageSignature(right[index]));
 }
 
 function isMessageListPrefix(prefix: Message[], full: Message[]) {
-    if (prefix.length > full.length) return false;
-    return prefix.every((message, index) => getMessageSignature(message) === getMessageSignature(full[index]));
+  if (prefix.length > full.length) return false;
+  return prefix.every((message, index) => getMessageSignature(message) === getMessageSignature(full[index]));
 }
 
-export function DifyChatArea({
-    user,
-    advisorType,
-    initialConversationId
-}: {
-    user: string;
-    advisorType: string;
-    initialConversationId: string | null;
-}) {
-    const advisorLabel = getAdvisorLabel(advisorType);
-    const isLeadHunter = advisorType === "lead-hunter";
-    const queryClient = useQueryClient();
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [inputVal, setInputVal] = useState("");
-    const [isLoading, setIsLoading] = useState(false);
-    const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId));
-    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-    const [hasMoreHistory, setHasMoreHistory] = useState(false);
-    const [historyCursor, setHistoryCursor] = useState<string | null>(null);
-    const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0);
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const historyAbortRef = useRef<AbortController | null>(null);
-    const router = useRouter();
+export function DifyChatArea({ user, advisorType, initialConversationId }: { user: string; advisorType: string; initialConversationId: string | null }) {
+  const meta = useMemo(() => WORKSPACE_META[advisorType] ?? WORKSPACE_META["brand-strategy"], [advisorType]);
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const [messagesState, setMessagesState] = useState<Message[]>([]);
+  const [inputVal, setInputVal] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId));
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0);
+  const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const historyRestoreRef = useRef<{ height: number; top: number } | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<Message[]>([]);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
-    const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
+  useEffect(() => {
+    messagesRef.current = messagesState;
+  }, [messagesState]);
 
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const historyRestoreRef = useRef<{ height: number; top: number } | null>(null);
-    const messagesRef = useRef<Message[]>([]);
+  useEffect(() => {
+    const viewport = scrollRef.current?.querySelector("[data-slot='scroll-area-viewport']") as HTMLElement | null;
+    if (historyRestoreRef.current && viewport) {
+      viewport.scrollTop = viewport.scrollHeight - historyRestoreRef.current.height + historyRestoreRef.current.top;
+      historyRestoreRef.current = null;
+      return;
+    }
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messagesState, isLoading]);
 
-    useEffect(() => {
-        messagesRef.current = messages;
-    }, [messages]);
+  const persistConversationCache = useCallback((convId: string, nextMessages: Message[], nextCursor: string | null, nextHasMoreHistory: boolean, loadedMessageCount?: number) => {
+    saveAdvisorConversationCache(advisorType, convId, {
+      messages: nextMessages,
+      historyCursor: nextCursor,
+      hasMoreHistory: nextHasMoreHistory,
+      loadedMessageCount: loadedMessageCount ?? Math.ceil(nextMessages.length / 2),
+      updatedAt: Date.now(),
+    });
+  }, [advisorType]);
 
-    useEffect(() => {
-        if (scrollRef.current) {
-            const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
-            if (viewport) {
-                viewport.style.overflowY = "auto";
-            }
+  const fetchMessages = useCallback(async (convId: string, options?: { firstId?: string | null; append?: boolean; keepCurrentOnError?: boolean; forceRefresh?: boolean; background?: boolean }) => {
+    try {
+      const limit = options?.append ? ADVISOR_HISTORY_PAGE_SIZE : ADVISOR_INITIAL_MESSAGE_LIMIT;
+      const queryKey = getAdvisorMessagesQueryKey(advisorType, convId, limit, options?.firstId);
+      const data = options?.append || options?.forceRefresh
+        ? await fetchWorkspaceQueryData(queryClient, { queryKey, queryFn: () => getAdvisorMessagesPage(user, advisorType, convId, limit, options?.firstId) })
+        : await ensureWorkspaceQueryData(queryClient, { queryKey, queryFn: () => getAdvisorMessagesPage(user, advisorType, convId, limit, options?.firstId) });
+      const rawMessages = Array.isArray(data.data) ? data.data : [];
+      const nextCursor = Boolean(data?.has_more) && rawMessages.length > 0 ? rawMessages[0]?.id ?? null : null;
+      setHistoryCursor(nextCursor);
+      setHasMoreHistory(Boolean(data?.has_more) && Boolean(nextCursor));
+      const serverMessages = mapAdvisorMessagePageToChatMessages(data, meta.title);
+      setMessagesState((current) => {
+        let resolvedMessages = options?.append ? [...serverMessages, ...current] : serverMessages;
+        if (!options?.append && options?.background && (areMessageListsEquivalent(current, serverMessages) || isMessageListPrefix(serverMessages, current))) {
+          resolvedMessages = current;
         }
-    }, []);
+        persistConversationCache(convId, resolvedMessages, nextCursor, Boolean(data?.has_more) && Boolean(nextCursor), options?.append ? Math.ceil(resolvedMessages.length / 2) : rawMessages.length);
+        return resolvedMessages;
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes("Failed to fetch")) return;
+      console.error("advisor.fetch-messages.failed", error);
+      if (options?.append || options?.keepCurrentOnError) return;
+      setMessagesState([{ id: `history_error_${Date.now()}`, conversation_id: convId, role: "assistant", content: `历史消息加载失败：${error instanceof Error ? error.message : "未知错误"}`, agentName: meta.title }]);
+    }
+  }, [advisorType, meta.title, persistConversationCache, queryClient, user]);
 
-    useEffect(() => {
-        const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
-        if (historyRestoreRef.current && viewport) {
-            viewport.scrollTop = viewport.scrollHeight - historyRestoreRef.current.height + historyRestoreRef.current.top;
-            historyRestoreRef.current = null;
+  useEffect(() => {
+    setConversationId(initialConversationId);
+    setHistoryCursor(null);
+    setHasMoreHistory(false);
+    if (!initialConversationId) {
+      setMessagesState([]);
+      setIsConversationLoading(false);
+      return;
+    }
+    const cached = getAdvisorConversationCache(advisorType, initialConversationId);
+    if (cached && isAdvisorConversationCacheFresh(cached, ADVISOR_SESSION_CACHE_TTL_MS)) {
+      setMessagesState(cached.messages);
+      setHistoryCursor(cached.historyCursor);
+      setHasMoreHistory(Boolean(cached.hasMoreHistory));
+      setIsConversationLoading(false);
+    } else {
+      setMessagesState([]);
+      setIsConversationLoading(true);
+    }
+    void fetchMessages(initialConversationId, { keepCurrentOnError: Boolean(cached), forceRefresh: Boolean(cached), background: Boolean(cached) }).finally(() => setIsConversationLoading(false));
+  }, [advisorType, fetchMessages, initialConversationId]);
+
+  useEffect(() => {
+    const pendingTask = findAdvisorPendingTask({ advisorType, conversationId });
+    if (!pendingTask) return;
+    let cancelled = false;
+    setIsLoading(true);
+
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const response = await fetch(`/api/tasks/${pendingTask.taskId}`);
+          const payload = (await response.json().catch(() => null)) as { data?: { status?: string; result?: { conversation_id?: string | null; answer?: string; agent_name?: string; error?: string } | null } } | null;
+          const status = payload?.data?.status;
+          const taskResult = payload?.data?.result || null;
+          const nextConversationId = typeof taskResult?.conversation_id === "string" ? taskResult.conversation_id : null;
+
+          if (nextConversationId && pendingTask.conversationId !== nextConversationId && !conversationId) {
+            updatePendingAssistantTask(pendingTask.taskId, { conversationId: nextConversationId });
+            const optimisticMessages = messagesRef.current.map((message) => ({ ...message, conversation_id: nextConversationId }));
+            persistConversationCache(nextConversationId, optimisticMessages, historyCursor, hasMoreHistory);
+            setConversationId(nextConversationId);
+            window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
+            router.replace(`/dashboard/advisor/${advisorType}/${nextConversationId}`);
+          }
+
+          if (status === "success") {
+            const targetConversationId = nextConversationId || conversationId;
+            if (targetConversationId) {
+              setMessagesState((prev) => {
+                const next = [...prev];
+                for (let index = next.length - 1; index >= 0; index -= 1) {
+                  if (next[index]?.role === "assistant" && !normalizeMessageContent(next[index]?.content || "")) {
+                    next[index] = { ...next[index], conversation_id: targetConversationId, content: typeof taskResult?.answer === "string" ? taskResult.answer : next[index].content, agentName: typeof taskResult?.agent_name === "string" ? taskResult.agent_name : next[index].agentName || meta.title };
+                    break;
+                  }
+                }
+                const normalizedNext = next.map((message) => ({ ...message, conversation_id: message.conversation_id || targetConversationId }));
+                persistConversationCache(targetConversationId, normalizedNext, historyCursor, hasMoreHistory);
+                return normalizedNext;
+              });
+              void invalidateAdvisorConversationQueries(queryClient, advisorType, targetConversationId).then(() => fetchMessages(targetConversationId, { forceRefresh: true, keepCurrentOnError: true, background: true })).catch((error) => console.error("advisor.reconcile.failed", error));
+            }
+            removePendingAssistantTask(pendingTask.taskId);
+            if (!cancelled) setIsLoading(false);
             return;
-        }
-        if (viewport) {
-            viewport.scrollTop = viewport.scrollHeight;
-        }
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, [messages, isLoading]);
+          }
 
-    const persistConversationCache = useCallback((
-        convId: string,
-        nextMessages: Message[],
-        nextCursor: string | null,
-        nextHasMoreHistory: boolean,
-        loadedMessageCount?: number,
-    ) => {
-        saveAdvisorConversationCache(advisorType, convId, {
-            messages: nextMessages,
-            historyCursor: nextCursor,
-            hasMoreHistory: nextHasMoreHistory,
-            loadedMessageCount: loadedMessageCount ?? Math.ceil(nextMessages.length / 2),
-            updatedAt: Date.now(),
-        });
-    }, [advisorType]);
-
-    const fetchMessages = useCallback(async (
-        convId: string,
-        options?: { firstId?: string | null; append?: boolean; keepCurrentOnError?: boolean; forceRefresh?: boolean; background?: boolean },
-    ) => {
-        try {
-            const limit = options?.append ? ADVISOR_HISTORY_PAGE_SIZE : ADVISOR_INITIAL_MESSAGE_LIMIT;
-            const queryKey = getAdvisorMessagesQueryKey(advisorType, convId, limit, options?.firstId);
-            const shouldForceRefresh = Boolean(options?.append || options?.forceRefresh);
-            const data = shouldForceRefresh
-                ? await fetchWorkspaceQueryData(queryClient, {
-                    queryKey,
-                    queryFn: () => getAdvisorMessagesPage(user, advisorType, convId, limit, options?.firstId),
-                })
-                : await ensureWorkspaceQueryData(queryClient, {
-                    queryKey,
-                    queryFn: () => getAdvisorMessagesPage(user, advisorType, convId, limit, options?.firstId),
-                });
-
-            const rawMessages = Array.isArray(data.data) ? data.data : [];
-            const nextCursor = Boolean(data?.has_more) && rawMessages.length > 0 ? rawMessages[0]?.id ?? null : null;
-            setHistoryCursor(nextCursor);
-            setHasMoreHistory(Boolean(data?.has_more) && Boolean(nextCursor));
-            const serverMessages = mapAdvisorMessagePageToChatMessages(data, advisorLabel);
-            setMessages((current) => {
-                let resolvedMessages = options?.append ? [...serverMessages, ...current] : serverMessages;
-
-                if (!options?.append && options?.background) {
-                    if (areMessageListsEquivalent(current, serverMessages)) {
-                        resolvedMessages = current;
-                    } else if (isMessageListPrefix(serverMessages, current)) {
-                        // Keep the optimistic tail until the backend catches up.
-                        resolvedMessages = current;
-                    }
-                }
-
-                persistConversationCache(
-                    convId,
-                    resolvedMessages,
-                    nextCursor,
-                    Boolean(data?.has_more) && Boolean(nextCursor),
-                    options?.append ? Math.ceil(resolvedMessages.length / 2) : rawMessages.length,
-                );
-                return resolvedMessages;
-            });
-        } catch (e) {
-            if (e instanceof TypeError && e.message.includes("Failed to fetch")) return;
-            console.error("Failed to fetch messages", e);
-            if (options?.append || options?.keepCurrentOnError) {
-                return;
+          if (status === "failed") {
+            removePendingAssistantTask(pendingTask.taskId);
+            if (!cancelled) {
+              setIsLoading(false);
+              setMessagesState((prev) => [...prev.filter((message, index, source) => !(index === source.length - 1 && message.role === "assistant" && !message.content.trim())), { id: `advisor_error_${Date.now()}`, conversation_id: conversationId || "", role: "assistant", content: `请求失败：${taskResult?.error || "未知错误"}`, agentName: meta.title }]);
             }
-            const errorText = e instanceof Error ? e.message : "未知错误";
-            setMessages([
-                {
-                    id: `history_error_${Date.now()}`,
-                    conversation_id: convId,
-                    role: "assistant",
-                    content: `历史消息加载失败：${errorText}`,
-                    agentName: advisorLabel,
-                },
-            ]);
-        }
-    }, [advisorLabel, advisorType, persistConversationCache, queryClient, user]);
-
-    useEffect(() => {
-        historyAbortRef.current?.abort();
-
-        setConversationId(initialConversationId);
-        setHistoryCursor(null);
-        setHasMoreHistory(false);
-        if (initialConversationId) {
-            const cachedConversation = getAdvisorConversationCache(advisorType, initialConversationId);
-            if (cachedConversation) {
-                setMessages(cachedConversation.messages);
-                setHistoryCursor(cachedConversation.historyCursor);
-                setHasMoreHistory(Boolean(cachedConversation.hasMoreHistory));
-                setIsConversationLoading(false);
-            } else {
-                setMessages([]);
-                setIsConversationLoading(true);
-            }
-
-            void fetchMessages(initialConversationId, {
-                keepCurrentOnError: Boolean(cachedConversation),
-                forceRefresh: Boolean(cachedConversation),
-                background: Boolean(cachedConversation),
-            }).finally(() => setIsConversationLoading(false));
-        } else {
-            setMessages([]);
-            setIsConversationLoading(false);
-        }
-
-        return () => {
-            historyAbortRef.current?.abort();
-        };
-    }, [fetchMessages, initialConversationId]);
-
-    useEffect(() => {
-        const pendingTask = findAdvisorPendingTask({ advisorType, conversationId });
-        if (!pendingTask) return;
-
-        let cancelled = false;
-        setIsLoading(true);
-
-        const poll = async () => {
-            while (!cancelled) {
-                try {
-                    const response = await fetch(`/api/tasks/${pendingTask.taskId}`);
-                    const payload = await response.json().catch(() => null) as {
-                        data?: {
-                            status?: string;
-                            result?: {
-                                conversation_id?: string | null;
-                                answer?: string;
-                                agent_name?: string;
-                                error?: string;
-                            } | null
-                        }
-                    } | null;
-                    const status = payload?.data?.status;
-                    const taskResult = payload?.data?.result || null;
-                    const nextConversationId = typeof payload?.data?.result?.conversation_id === "string"
-                        ? payload.data.result.conversation_id
-                        : null;
-
-                    if (nextConversationId && pendingTask.conversationId !== nextConversationId) {
-                        updatePendingAssistantTask(pendingTask.taskId, { conversationId: nextConversationId });
-                        if (!conversationId) {
-                            const optimisticMessages = messagesRef.current.map((message) => ({
-                                ...message,
-                                conversation_id: nextConversationId,
-                            }));
-                            persistConversationCache(nextConversationId, optimisticMessages, historyCursor, hasMoreHistory);
-                            setConversationId(nextConversationId);
-                            window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
-                            router.replace(`/dashboard/advisor/${advisorType}/${nextConversationId}`);
-                        }
-                    }
-
-                    if (status === "success") {
-                        const targetConversationId = nextConversationId || conversationId;
-                        if (targetConversationId) {
-                            setMessages((prev) => {
-                                const next = [...prev];
-                                let patchedAssistant = false;
-
-                                for (let index = next.length - 1; index >= 0; index -= 1) {
-                                    if (next[index]?.role === "assistant" && !normalizeMessageContent(next[index]?.content || "")) {
-                                        next[index] = {
-                                            ...next[index],
-                                            conversation_id: targetConversationId,
-                                            content: typeof taskResult?.answer === "string" ? taskResult.answer : next[index].content,
-                                            agentName: typeof taskResult?.agent_name === "string" ? taskResult.agent_name : (next[index].agentName || advisorLabel),
-                                        };
-                                        patchedAssistant = true;
-                                        break;
-                                    }
-                                }
-
-                                const normalizedNext = next.map((message) => ({
-                                    ...message,
-                                    conversation_id: message.conversation_id || targetConversationId,
-                                }));
-
-                                if (targetConversationId) {
-                                    persistConversationCache(targetConversationId, normalizedNext, historyCursor, hasMoreHistory);
-                                }
-
-                                if (!patchedAssistant) {
-                                    return normalizedNext;
-                                }
-
-                                return normalizedNext;
-                            });
-
-                            void invalidateAdvisorConversationQueries(queryClient, advisorType, targetConversationId)
-                                .then(() => fetchMessages(targetConversationId, {
-                                    forceRefresh: true,
-                                    keepCurrentOnError: true,
-                                    background: true,
-                                }))
-                                .catch((error) => {
-                                    console.error("advisor.messages.reconcile-failed", error);
-                                });
-                            if (!cancelled) {
-                                setConversationId(targetConversationId);
-                                window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
-                                setIsLoading(false);
-                            }
-                        }
-                        removePendingAssistantTask(pendingTask.taskId);
-                        if (!targetConversationId && !cancelled) setIsLoading(false);
-                        return;
-                    }
-
-                    if (status === "failed") {
-                        removePendingAssistantTask(pendingTask.taskId);
-                        if (!cancelled) {
-                            setIsLoading(false);
-                            setMessages((prev) => {
-                                const next = [...prev];
-                                for (let index = next.length - 1; index >= 0; index -= 1) {
-                                    if (next[index]?.role === "assistant" && !next[index]?.content?.trim()) {
-                                        next[index] = {
-                                            ...next[index],
-                                            content: `请求失败：${payload?.data?.result?.error || "未知错误"}`,
-                                            agentName: advisorLabel,
-                                        };
-                                        return next;
-                                    }
-                                }
-                                return [
-                                    ...prev,
-                                    {
-                                        id: `advisor_error_${Date.now()}`,
-                                        conversation_id: conversationId || "",
-                                        role: "assistant",
-                                        content: `请求失败：${payload?.data?.result?.error || "未知错误"}`,
-                                        agentName: advisorLabel,
-                                    },
-                                ];
-                            });
-                        }
-                        return;
-                    }
-                } catch (error) {
-                    console.error("advisor.pending-task.poll-failed", error);
-                }
-
-                await new Promise((resolve) => window.setTimeout(resolve, 1200));
-            }
-        };
-
-        void poll();
-        return () => {
-            cancelled = true;
-        };
-    }, [advisorLabel, advisorType, conversationId, fetchMessages, pendingTaskRefreshKey, queryClient, router]);
-
-    const loadOlderMessages = async () => {
-        if (!conversationId || !historyCursor || isHistoryLoading) return;
-
-        const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
-        if (viewport) {
-            historyRestoreRef.current = {
-                height: viewport.scrollHeight,
-                top: viewport.scrollTop,
-            };
-        }
-
-        setIsHistoryLoading(true);
-        try {
-            await fetchMessages(conversationId, { firstId: historyCursor, append: true });
+            return;
+          }
         } catch (error) {
-            console.error("advisor.messages.load-more-failed", error);
-            historyRestoreRef.current = null;
-        } finally {
-            setIsHistoryLoading(false);
+          console.error("advisor.pending-task.poll.failed", error);
         }
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      }
     };
 
-    const handleSend = async () => {
-        if (!inputVal.trim() || isLoading) return;
-        const currentQuery = inputVal;
-        let taskAccepted = false;
-        setInputVal("");
-        setIsLoading(true);
-
-        const userMessageId = `temp_usr_${Date.now()}`;
-        const asstMessageId = `temp_asst_${Date.now()}`;
-
-        setMessages((prev) => {
-            const nextMessages: Message[] = [
-                ...prev,
-                { id: userMessageId, conversation_id: conversationId || "", role: "user", content: currentQuery },
-                { id: asstMessageId, conversation_id: conversationId || "", role: "assistant", content: "", agentName: advisorLabel },
-            ];
-            if (conversationId) {
-                persistConversationCache(conversationId, nextMessages, historyCursor, hasMoreHistory);
-            }
-            return nextMessages;
-        });
-
-        const patchAssistant = (content: string, agentName?: string) => {
-            setMessages((prev) => {
-                const newArr = [...prev];
-                const idx = newArr.findIndex((m) => m.id === asstMessageId);
-                if (idx > -1) {
-                    newArr[idx] = {
-                        ...newArr[idx],
-                        content,
-                        agentName: agentName || newArr[idx].agentName || advisorLabel,
-                    };
-                }
-                if (conversationId) {
-                    persistConversationCache(conversationId, newArr, historyCursor, hasMoreHistory);
-                }
-                return newArr;
-            });
-        };
-
-        try {
-            await queryClient.cancelQueries({
-                queryKey: ["advisor", advisorType, "messages"],
-            });
-
-            const payload: any = {
-                inputs: { contents: currentQuery },
-                query: currentQuery,
-                response_mode: "async",
-                user,
-                advisorType,
-            };
-            if (conversationId) {
-                payload.conversation_id = conversationId;
-            }
-
-            const res = await fetch("/api/dify/chat-messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            if (!res.ok) {
-                const errorData = await res.json().catch(() => null);
-                const details = errorData?.details || errorData?.error || `HTTP ${res.status}`;
-                throw new Error(String(details));
-            }
-            const payloadData = await res.json().catch(() => null) as {
-                task_id?: string;
-                conversation_id?: string | null;
-            } | null;
-            if (!payloadData?.task_id) {
-                throw new Error("未创建异步任务");
-            }
-
-            savePendingAssistantTask({
-                taskId: payloadData.task_id,
-                scope: "advisor",
-                advisorType,
-                conversationId: payloadData.conversation_id || conversationId,
-                prompt: currentQuery,
-                createdAt: Date.now(),
-            });
-            taskAccepted = true;
-            setPendingTaskRefreshKey(Date.now());
-
-            if (payloadData.conversation_id && !conversationId) {
-                persistConversationCache(
-                    payloadData.conversation_id,
-                    [
-                        { id: userMessageId, conversation_id: payloadData.conversation_id, role: "user", content: currentQuery },
-                        { id: asstMessageId, conversation_id: payloadData.conversation_id, role: "assistant", content: "", agentName: advisorLabel },
-                    ] satisfies Message[],
-                    null,
-                    false,
-                    1,
-                );
-                setConversationId(payloadData.conversation_id);
-                window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
-                router.replace(`/dashboard/advisor/${advisorType}/${payloadData.conversation_id}`);
-            }
-        } catch (e) {
-            console.error("Message error", e);
-            const errorText = e instanceof Error ? e.message : "未知错误";
-            patchAssistant(`请求失败：${errorText}`, advisorLabel);
-        } finally {
-            if (!taskAccepted) {
-                setIsLoading(false);
-            }
-        }
+    void poll();
+    return () => {
+      cancelled = true;
     };
+  }, [advisorType, conversationId, fetchMessages, hasMoreHistory, historyCursor, meta.title, pendingTaskRefreshKey, persistConversationCache, queryClient, router]);
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-        }
-    };
+  const handleCopyMessage = async (messageId: string, content: string) => {
+    if (!content.trim() || typeof navigator === "undefined" || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      window.setTimeout(() => setCopiedMessageId((current) => (current === messageId ? null : current)), 1200);
+    } catch (error) {
+      console.error("advisor.copy-message.failed", error);
+    }
+  };
 
-    return (
-        <div className="flex flex-col h-full w-full bg-background relative">
-            <div
-                ref={scrollRef}
-                className="flex-1 overflow-y-auto scrollbar-hide p-4 sm:p-6 lg:p-8"
-            >
-                {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-70 space-y-4 pt-20">
-                        <MessageSquare className="w-12 h-12 mb-2 opacity-20" />
-                        <p>请在下方输入框开始一段新的对话。</p>
-                    </div>
-                ) : (
-                    <div className="space-y-6 max-w-3xl mx-auto pb-6">
-                        {hasMoreHistory ? (
-                            <div className="flex justify-center">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-full"
-                                    onClick={() => void loadOlderMessages()}
-                                    disabled={isHistoryLoading}
-                                >
-                                    {isHistoryLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                                    加载更多历史
-                                </Button>
-                            </div>
-                        ) : null}
-                        {isConversationLoading ? (
-                            <div className="flex w-full justify-start">
-                                <div className="px-4 py-3 rounded-2xl bg-muted rounded-bl-sm flex items-center gap-2 text-muted-foreground text-sm border border-border/60">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    正在恢复会话...
-                                </div>
-                            </div>
-                        ) : null}
-                        {messages.map((msg, idx) => (
-                            <div
-                                key={msg.id || idx}
-                                className={cn(
-                                    "flex w-full",
-                                    msg.role === "user" ? "justify-end" : "justify-start"
-                                )}
-                            >
-                                <div
-                                    className={cn(
-                                        "px-4 py-3 rounded-2xl max-w-[90%] md:max-w-[85%] text-sm leading-relaxed shadow-sm",
-                                        msg.role === "user"
-                                            ? "bg-primary text-primary-foreground rounded-br-sm"
-                                            : "bg-card rounded-bl-sm border border-border/60"
-                                    )}
-                                >
-                                    {msg.role === "assistant" && msg.agentName && (
-                                        <div className="text-[11px] mb-1 text-muted-foreground font-medium">
-                                            {msg.agentName}
-                                        </div>
-                                    )}
-                                    <div
-                                        className={cn(
-                                            "break-words leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:my-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-2 [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/10 [&_pre]:p-3 [&_ul]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0",
-                                            msg.role === "assistant" ? "text-foreground" : "text-primary-foreground"
-                                        )}
-                                    >
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkGfm]}
-                                            components={{
-                                                code({ className, children, ...props }) {
-                                                    const match = /language-(\w+)/.exec(className || "");
-                                                    const isInline = !match && !className;
-                                                    if (isInline) {
-                                                        return (
-                                                            <code className={className} {...props}>
-                                                                {children}
-                                                            </code>
-                                                        );
-                                                    }
-                                                    return (
-                                                        <CodeBlock language={match?.[1]}>
-                                                            {String(children).replace(/\n$/, "")}
-                                                        </CodeBlock>
-                                                    );
-                                                },
-                                            }}
-                                        >
-                                            {msg.content}
-                                        </ReactMarkdown>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {isLoading && (
-                            <div className="flex w-full justify-start">
-                                <div className="px-4 py-3 rounded-2xl bg-muted rounded-bl-sm flex items-center gap-2 text-muted-foreground text-sm border-2 border-primary/10">
-                                    <span className="animate-pulse">思考中...</span>
-                                </div>
-                            </div>
-                        )}
-                        <div ref={messagesEndRef} className="h-1 w-full" />
-                    </div>
-                )}
+  const loadOlderMessages = async () => {
+    if (!conversationId || !historyCursor || isHistoryLoading) return;
+    const viewport = scrollRef.current?.querySelector("[data-slot='scroll-area-viewport']") as HTMLElement | null;
+    if (viewport) historyRestoreRef.current = { height: viewport.scrollHeight, top: viewport.scrollTop };
+    setIsHistoryLoading(true);
+    try {
+      await fetchMessages(conversationId, { firstId: historyCursor, append: true });
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!inputVal.trim() || isLoading) return;
+    const currentQuery = inputVal.trim();
+    let taskAccepted = false;
+    setInputVal("");
+    setIsLoading(true);
+    const userMessageId = `temp_usr_${Date.now()}`;
+    const assistantMessageId = `temp_asst_${Date.now()}`;
+
+    setMessagesState((prev) => {
+      const nextMessages: Message[] = [...prev, { id: userMessageId, conversation_id: conversationId || "", role: "user", content: currentQuery }, { id: assistantMessageId, conversation_id: conversationId || "", role: "assistant", content: "", agentName: meta.title }];
+      if (conversationId) persistConversationCache(conversationId, nextMessages, historyCursor, hasMoreHistory);
+      return nextMessages;
+    });
+
+    try {
+      await queryClient.cancelQueries({ queryKey: ["advisor", advisorType, "messages"] });
+      const payload: { inputs: { contents: string }; query: string; response_mode: "async"; user: string; advisorType: string; conversation_id?: string } = { inputs: { contents: currentQuery }, query: currentQuery, response_mode: "async", user, advisorType };
+      if (conversationId) payload.conversation_id = conversationId;
+      const response = await fetch("/api/dify/chat-messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(String(errorData?.details || errorData?.error || `HTTP ${response.status}`));
+      }
+      const payloadData = (await response.json().catch(() => null)) as { task_id?: string; conversation_id?: string | null } | null;
+      if (!payloadData?.task_id) throw new Error("未创建异步任务");
+      savePendingAssistantTask({ taskId: payloadData.task_id, scope: "advisor", advisorType, conversationId: payloadData.conversation_id || conversationId, prompt: currentQuery, createdAt: Date.now() });
+      taskAccepted = true;
+      setPendingTaskRefreshKey(Date.now());
+      if (payloadData.conversation_id && !conversationId) {
+        persistConversationCache(payloadData.conversation_id, [{ id: userMessageId, conversation_id: payloadData.conversation_id, role: "user", content: currentQuery }, { id: assistantMessageId, conversation_id: payloadData.conversation_id, role: "assistant", content: "", agentName: meta.title }], null, false, 1);
+        setConversationId(payloadData.conversation_id);
+        window.dispatchEvent(new CustomEvent("dify-refresh", { detail: { advisorType } }));
+        router.replace(`/dashboard/advisor/${advisorType}/${payloadData.conversation_id}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "未知错误";
+      setMessagesState((prev) => prev.map((item) => item.id === assistantMessageId ? { ...item, content: `请求失败：${message}`, agentName: meta.title } : item));
+      console.error("advisor.send.failed", error);
+    } finally {
+      if (!taskAccepted) setIsLoading(false);
+    }
+  };
+
+  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSend();
+    }
+  };
+
+  return (
+    <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="flex min-h-0 flex-col overflow-hidden rounded-[32px] border-2 border-border bg-card">
+        <div className="border-b-2 border-border px-4 py-4 lg:px-6 lg:py-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="rounded-full bg-primary px-3 py-1 text-[11px] text-primary-foreground hover:bg-primary">{meta.eyebrow}</Badge>
+                <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-3 py-1 text-[11px] text-foreground">{meta.contextMode}</Badge>
+                <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-3 py-1 text-[11px] text-foreground">{meta.outputMode}</Badge>
+              </div>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground lg:text-[2rem]">{meta.title}</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground lg:text-[15px]">{meta.description}</p>
             </div>
 
-            <div className="p-4 border-t bg-background/80 backdrop-blur-sm sticky bottom-0">
-                <div className="max-w-3xl mx-auto relative flex items-center gap-2">
-                    <Input
-                        placeholder="想聊点什么..."
-                        value={inputVal}
-                        onChange={(e) => setInputVal(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        disabled={isLoading}
-                        className="pr-12 py-6 rounded-full border-2 transition-colors border-primary/20 focus-visible:ring-primary/50 text-foreground bg-background"
-                    />
-                    {isLoading ? (
-                        <Button
-                            size="icon"
-                            variant="outline"
-                            className="absolute right-1 w-10 h-10 rounded-full"
-                            disabled
-                        >
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                        </Button>
-                    ) : (
-                        <Button
-                            size="icon"
-                            className="absolute right-1 w-10 h-10 rounded-full transition-all"
-                            onClick={handleSend}
-                            disabled={!inputVal.trim()}
-                        >
-                            <Send className="w-4 h-4" />
-                        </Button>
-                    )}
-                </div>
-                <div className="text-center mt-2 text-[10px] text-muted-foreground opacity-60 font-manrope space-y-1">
-                    <p>{isLeadHunter ? "海外猎客每次仅根据当前搜索条件触发 workflow，历史记录只用于展示。" : "同一会话通过 conversation_id 自动关联上下文，请求仅发送当前消息。"}</p>
-                    <p>AI 生成内容仅供参考。</p>
-                </div>
+            <div className="grid min-w-[220px] gap-2 rounded-[22px] border-2 border-border bg-background p-3 text-sm">
+              <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">线程状态</div>
+              <Badge variant="outline" className="w-fit rounded-full border-primary/20 bg-primary/8 px-2.5 py-1 text-[10px] text-foreground">{conversationId ? "持续跟进中" : "新线程"}</Badge>
+              <div className="space-y-1 text-[12px] leading-6 text-muted-foreground">
+                <div className="flex items-start gap-2"><Workflow className="mt-1 h-3.5 w-3.5 shrink-0 text-primary" /><span>{meta.workflowNote}</span></div>
+                <div className="flex items-start gap-2"><History className="mt-1 h-3.5 w-3.5 shrink-0 text-secondary" /><span>{conversationId ? "当前会话可继续追问" : "准备开始新的顾问线程"}</span></div>
+              </div>
             </div>
+          </div>
+
+          <div className="mt-5 grid gap-2 lg:grid-cols-3">
+            {meta.focus.map((item) => (
+              <div key={item} className="rounded-[22px] border-2 border-border bg-background px-4 py-3 text-sm leading-6 text-foreground">{item}</div>
+            ))}
+          </div>
         </div>
-    );
+
+        <div className="min-h-0 flex-1">
+          <ScrollArea ref={scrollRef} className="h-full" viewportClassName="px-4 pb-5 pt-4 lg:px-6 lg:pb-6 lg:pt-5">
+            {messagesState.length === 0 ? (
+              <div className="mx-auto flex min-h-full w-full max-w-4xl items-center">
+                <WorkspaceEmptyState
+                  icon={<meta.icon className="h-6 w-6" />}
+                  title={meta.emptyTitle}
+                  description={meta.emptyDescription}
+                  checklist={meta.emptyChecklist}
+                  quickStartLabel="快速开始"
+                  quickPrompts={meta.quickPrompts}
+                  onSelectPrompt={(prompt) => {
+                    setInputVal(prompt);
+                    composerRef.current?.focus();
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
+                {hasMoreHistory ? (
+                  <div className="flex justify-center">
+                    <Button variant="outline" size="sm" className="rounded-full border-border/80 bg-white/78 px-4" onClick={() => void loadOlderMessages()} disabled={isHistoryLoading}>
+                      {isHistoryLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <History className="mr-1.5 h-3.5 w-3.5" />}加载更早记录
+                    </Button>
+                  </div>
+                ) : null}
+                {isConversationLoading ? (
+                  <div className="flex justify-start">
+                    <div className="rounded-[24px] border border-border/70 bg-white/85 px-4 py-3 text-sm text-muted-foreground shadow-sm"><div className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-primary" />正在恢复顾问会话...</div></div>
+                  </div>
+                ) : null}
+                {messagesState.map((message, index) => {
+                  const isAssistant = message.role === "assistant";
+                  const isPendingAssistant = isAssistant && !message.content.trim();
+                  return (
+                    <WorkspaceMessageFrame
+                      key={message.id || index}
+                      role={isAssistant ? "assistant" : "user"}
+                      label={isAssistant ? message.agentName || meta.title : "你"}
+                      icon={isAssistant ? <Sparkles className="h-3.5 w-3.5 text-primary" /> : <MessageSquare className="h-3.5 w-3.5" />}
+                      action={
+                        isAssistant && message.content.trim() ? (
+                          <button type="button" onClick={() => void handleCopyMessage(message.id, message.content)} className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] tracking-normal transition hover:bg-primary/10 hover:text-foreground">
+                            <Copy className="h-3 w-3" />
+                            {copiedMessageId === message.id ? "已复制" : "复制回复"}
+                          </button>
+                        ) : null
+                      }
+                    >
+                      {isPendingAssistant ? (
+                        <WorkspaceLoadingMessage
+                          label={
+                            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                              正在等待顾问返回结果...
+                            </span>
+                          }
+                        />
+                      ) : (
+                        <div className={cn("break-words leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:my-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-2 [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:p-3 [&_ul]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0", isAssistant ? "text-foreground [&_code]:bg-accent/6 [&_pre]:bg-accent [&_pre]:text-accent-foreground" : "text-accent-foreground [&_code]:bg-white/12 [&_pre]:bg-white/10 [&_pre]:text-accent-foreground")}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code({ className, children, ...props }) { const match = /language-(\w+)/.exec(className || ""); if (!match && !className) return <code className={className} {...props}>{children}</code>; return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, "")}</CodeBlock>; } }}>{message.content}</ReactMarkdown>
+                        </div>
+                      )}
+                    </WorkspaceMessageFrame>
+                  );
+                })}
+                <div ref={messagesEndRef} className="h-1 w-full" />
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+
+        <div className="border-t border-border/70 bg-white/48 px-4 py-4 backdrop-blur-sm lg:px-6 lg:py-5">
+          <div className="mx-auto w-full max-w-4xl">
+            <WorkspaceComposerPanel
+              className="rounded-[28px] border-white/60 bg-white/82 p-3 shadow-[0_18px_60px_-45px_rgba(31,41,55,0.35)]"
+              cardClassName="rounded-[24px] border-border/70 bg-transparent"
+              bodyClassName="px-2"
+              toolbar={
+                <WorkspacePromptChips
+                  prompts={meta.quickPrompts}
+                  onSelect={(prompt) => {
+                    setInputVal(prompt);
+                    composerRef.current?.focus();
+                  }}
+                />
+              }
+              footer={
+                <>
+                  <div className="space-y-1 text-[11px] leading-5 text-muted-foreground">
+                    <p>{meta.workflowNote}</p>
+                    <p>{meta.complianceNote}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="rounded-full border-border/70 bg-background/70 px-2.5 py-1 text-[10px] text-foreground">{conversationId ? "持续跟进中" : "新线程"}</Badge>
+                    <Badge variant="outline" className="rounded-full border-border/70 bg-background/70 px-2.5 py-1 text-[10px] text-foreground">Enter / Shift + Enter</Badge>
+                    <Button className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={!inputVal.trim() || isLoading}>{isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}发送</Button>
+                  </div>
+                </>
+              }
+            >
+              <Textarea ref={composerRef} value={inputVal} onChange={(event) => setInputVal(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder={meta.composerPlaceholder} disabled={isLoading} className="min-h-[116px] border-0 bg-transparent px-2 py-2 text-[15px] leading-7 shadow-none focus-visible:ring-0" />
+            </WorkspaceComposerPanel>
+          </div>
+        </div>
+      </section>
+
+      <aside className="hidden min-h-0 flex-col gap-4 xl:flex">
+        <div className="rounded-[28px] border border-white/60 bg-white/78 p-5 shadow-[0_20px_60px_-42px_rgba(31,41,55,0.26)] backdrop-blur">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><Compass className="h-4 w-4 text-primary" />输入建议</div>
+          <div className="mt-4 space-y-3">{meta.promptTips.map((item) => <div key={item} className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-sm leading-6 text-foreground">{item}</div>)}</div>
+        </div>
+        <div className="rounded-[28px] border border-white/60 bg-white/78 p-5 shadow-[0_20px_60px_-42px_rgba(31,41,55,0.26)] backdrop-blur">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><ClipboardList className="h-4 w-4 text-secondary" />典型输出</div>
+          <ul className="mt-4 space-y-3">{meta.deliverables.map((item) => <li key={item} className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-sm leading-6 text-foreground">{item}</li>)}</ul>
+        </div>
+        <div className="rounded-[28px] border border-white/60 bg-white/78 p-5 shadow-[0_20px_60px_-42px_rgba(31,41,55,0.26)] backdrop-blur">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><Workflow className="h-4 w-4 text-primary" />会话规则</div>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+            <div className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-foreground">{meta.contextMode}</div>
+            <div className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-foreground">{meta.outputMode}</div>
+            <div className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-foreground">{meta.workflowNote}</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
 }

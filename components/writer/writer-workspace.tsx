@@ -29,6 +29,13 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
+import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
+import {
+  WorkspaceActionRow,
+  WorkspaceLoadingMessage,
+  WorkspaceMessageFrame,
+} from "@/components/workspace/workspace-message-primitives"
 import {
   findWriterPendingTask,
   removePendingAssistantTask,
@@ -232,17 +239,17 @@ const findRenderableWriterAsset = (src: string, assets: WriterAsset[]) => {
 }
 
 const getPlatformPreviewPalette = (platform: WriterPlatform) => {
-  if (platform === "wechat") return "from-emerald-50 via-white to-emerald-100/70"
-  if (platform === "xiaohongshu") return "from-rose-50 via-white to-orange-50"
-  if (platform === "x") return "from-slate-950 via-slate-900 to-slate-950"
-  return "from-blue-50 via-white to-indigo-100/70"
+  if (platform === "wechat") return "bg-emerald-50/70"
+  if (platform === "xiaohongshu") return "bg-rose-50/70"
+  if (platform === "x") return "bg-slate-100"
+  return "bg-blue-50/70"
 }
 
 const getPlatformShellClass = (platform: WriterPlatform) => {
-  if (platform === "x") return "border-slate-200 bg-white/86 text-slate-950"
-  if (platform === "facebook") return "border-blue-100 bg-white/88 text-slate-950"
-  if (platform === "xiaohongshu") return "border-rose-100 bg-white/88 text-slate-950"
-  return "border-emerald-100 bg-white/90 text-slate-950"
+  if (platform === "x") return "border-slate-300 bg-card text-slate-950"
+  if (platform === "facebook") return "border-blue-200 bg-card text-slate-950"
+  if (platform === "xiaohongshu") return "border-rose-200 bg-card text-slate-950"
+  return "border-emerald-200 bg-card text-slate-950"
 }
 
 function renderMarkdown(content: string, assets: WriterAsset[], className?: string, copy?: WriterCopy) {
@@ -257,7 +264,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
         "prose-p:my-5 prose-p:text-[17px] prose-p:leading-[2] prose-p:text-slate-900",
         "prose-li:text-slate-900 prose-strong:text-slate-950 prose-a:text-blue-600",
         "prose-blockquote:border-l-4 prose-blockquote:border-slate-300 prose-blockquote:text-slate-700",
-        "prose-hr:my-8 prose-hr:border-slate-200 prose-img:rounded-[28px] prose-img:shadow-sm",
+        "prose-hr:my-8 prose-hr:border-slate-200 prose-img:rounded-[28px]",
         className,
       )}
     >
@@ -271,7 +278,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
             const writerAsset = findWriterAsset(src, assets) || findRenderableWriterAsset(src, assets)
             if (writerAsset) {
               return (
-                <figure className="my-8 overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-black/5">
+                <figure className="my-8 overflow-hidden rounded-[28px] border-2 border-border bg-card">
                   <div className="flex min-h-56 items-center justify-center bg-slate-100/60">
                     {writerAsset.url ? (
                       <img
@@ -304,7 +311,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
                 loading="lazy"
                 decoding="async"
                 {...props}
-                className="my-6 max-h-[420px] w-full rounded-[24px] border border-slate-200 bg-slate-50 object-cover shadow-sm"
+                className="my-6 max-h-[420px] w-full rounded-[24px] border-2 border-border bg-slate-50 object-cover"
               />
             )
           },
@@ -392,8 +399,8 @@ function PlatformPreview({
 
   if (platform === "wechat") {
     return (
-      <div className="mx-auto max-w-[760px] rounded-[40px] border border-emerald-100/80 bg-white px-10 py-12 shadow-[0_30px_100px_-52px_rgba(16,185,129,0.22)]">
-        <div className="border-b border-emerald-100 pb-8 text-center">
+      <div className="mx-auto max-w-[760px] rounded-[40px] border-2 border-emerald-200 bg-card px-10 py-12">
+        <div className="border-b-2 border-emerald-100 pb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
             <BookText className="h-6 w-6" />
           </div>
@@ -416,9 +423,9 @@ function PlatformPreview({
 
   if (platform === "xiaohongshu") {
     return (
-      <div className="mx-auto max-w-[430px] rounded-[40px] border border-rose-100 bg-[#fff7f6] p-4 shadow-[0_28px_90px_-48px_rgba(244,114,182,0.32)]">
-        <div className="overflow-hidden rounded-[30px] bg-white shadow-sm">
-          <div className="border-b border-rose-100/80 px-5 py-5">
+      <div className="mx-auto max-w-[430px] rounded-[40px] border-2 border-rose-200 bg-[#fff7f6] p-4">
+        <div className="overflow-hidden rounded-[30px] border-2 border-rose-100 bg-white">
+          <div className="border-b-2 border-rose-100/80 px-5 py-5">
             <div className="mb-4 flex items-center justify-between">
               <Badge className="rounded-full bg-rose-500 px-3 py-1 text-[11px] text-white hover:bg-rose-500">{copy.xiaohongshuPreview}</Badge>
               <span className="text-[11px] text-slate-400">{copy.xiaohongshuBadge}</span>
@@ -441,7 +448,7 @@ function PlatformPreview({
     return (
       <div className="mx-auto max-w-[760px] space-y-4">
         {posts.map((post, index) => (
-          <div key={`${index}_${post.slice(0, 12)}`} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)]">
+          <div key={`${index}_${post.slice(0, 12)}`} className="rounded-[28px] border-2 border-slate-300 bg-card p-5">
             <div className="flex items-start gap-3">
               <div className="mt-1 h-11 w-11 rounded-full bg-slate-900" />
               <div className="min-w-0 flex-1">
@@ -488,7 +495,7 @@ function PlatformPreview({
   return (
     <div className="mx-auto max-w-[760px] space-y-4">
       {posts.map((post, index) => (
-        <div key={`${index}_${post.slice(0, 12)}`} className="rounded-[28px] border border-blue-100 bg-white p-5 shadow-[0_28px_90px_-48px_rgba(59,130,246,0.25)]">
+        <div key={`${index}_${post.slice(0, 12)}`} className="rounded-[28px] border-2 border-blue-200 bg-card p-5">
           <div className="flex items-start gap-3">
             <div className="mt-1 h-11 w-11 rounded-full bg-blue-600/90" />
             <div className="min-w-0 flex-1">
@@ -553,7 +560,7 @@ function PreviewResourceStrip({
   if (!assetsLoading && !assetsError && visibleAssets.length === 0) return null
 
   return (
-    <div className="rounded-[24px] border border-slate-300 bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.28)] ring-1 ring-slate-950/6">
+    <div className="rounded-[24px] border-2 border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-950">{copy.imageActionsTitle}</p>
@@ -562,7 +569,7 @@ function PreviewResourceStrip({
         <Badge
           variant={assetsLoading ? "outline" : "secondary"}
           className={cn(
-            "rounded-full border px-3 py-1 text-[11px] font-medium",
+            "rounded-full border-2 px-3 py-1 text-[11px] font-medium",
             assetsLoading
               ? "border-amber-300 bg-amber-50 text-amber-900"
               : "border-emerald-300 bg-emerald-50 text-emerald-900",
@@ -572,18 +579,18 @@ function PreviewResourceStrip({
         </Badge>
       </div>
       {assetsError ? (
-        <div className="mt-3 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-medium leading-5 text-destructive">
+        <div className="mt-3 rounded-2xl border-2 border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-medium leading-5 text-destructive">
           {copy.imageGenerationFailedPrefix}
           {assetsError}
         </div>
       ) : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {(visibleAssets.length > 0 ? visibleAssets : assets).map((asset) => (
-          <div key={asset.id} className="rounded-2xl border border-slate-300 bg-slate-50 p-3 shadow-[0_12px_32px_-26px_rgba(15,23,42,0.35)]">
+          <div key={asset.id} className="rounded-2xl border-2 border-border bg-background p-3">
             {asset.url ? (
               <img src={asset.url} alt={copy.imageAlt} loading="lazy" decoding="async" className="h-24 w-full rounded-xl object-cover" />
             ) : (
-              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-3 text-center text-xs font-medium text-slate-700">
+              <div className="flex h-24 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white px-3 text-center text-xs font-medium text-slate-700">
                 {asset.status === "failed" ? copy.imageUnavailable : assetsLoading ? copy.generatingImages : copy.waitingImage}
               </div>
             )}
@@ -746,7 +753,7 @@ function InlineMarkdownCanvas({
 
   if (isEditing) {
     return (
-      <div className="rounded-[24px] border border-slate-950/10 bg-white px-5 py-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.38)] ring-2 ring-slate-950/5">
+      <div className="rounded-[24px] border-2 border-border bg-card px-5 py-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <p className="text-xs font-medium tracking-[0.16em] text-slate-500">{copy.editContent}</p>
@@ -797,7 +804,7 @@ function InlineMarkdownCanvas({
     <div
       role="button"
       tabIndex={0}
-      className="group block w-full rounded-[24px] border border-transparent text-left transition hover:border-slate-200 hover:bg-white/70 hover:shadow-[0_14px_36px_-30px_rgba(15,23,42,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+      className="group block w-full rounded-[24px] border-2 border-transparent text-left transition hover:border-border hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
       onClick={() => setIsEditing(true)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1799,67 +1806,96 @@ export function WriterWorkspace({
               : hasDraft
                 ? "Copy draft ready. Confirm the text before generating images."
                 : "Describe the topic, audience, tone, or structure to start."
+  const writerDraftState =
+    conversationStatus === "ready"
+      ? "Preview ready"
+      : conversationStatus === "failed"
+        ? "Needs retry"
+        : hasDraft
+          ? "Draft in progress"
+          : "Awaiting brief"
   return (
     <>
       <div className="flex h-[calc(100vh-65px)] flex-col bg-background lg:h-screen">
-        <header className="border-b border-border/60 bg-background/90 px-3 py-2 backdrop-blur-sm lg:px-5">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
-              <p className="truncate text-xs text-muted-foreground">{workspaceStatus}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                {writerConfig.shortLabel}
-              </Badge>
-              <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                {currentModeLabel}
-              </Badge>
-              <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                {currentLanguageLabel}
-              </Badge>
-              <Badge
-                variant={knowledgeStatus?.enabled ? "default" : "outline"}
-                className="rounded-full px-2.5 py-0.5 text-[10px]"
-              >
-                {knowledgeStatus?.enabled
-                  ? `${writerCopy.enterpriseKnowledge} ${knowledgeStatus.datasetCount || 0}`
-                  : writerCopy.noEnterpriseKnowledge}
-              </Badge>
-              {knowledgeStatus?.enabled && knowledgeStatus.profile?.configuredScopes?.length ? (
-                <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {writerCopy.knowledgeProfile}{" "}
-                  {knowledgeStatus.profile.configuredScopes
-                    .slice(0, 2)
-                    .map((scope) => getKnowledgeScopeLabel(writerCopy, scope))
-                    .filter(Boolean)
-                    .join("/")}
-                </Badge>
-              ) : null}
-              {groundingBadges.map((item) => (
-                <Badge key={item} variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {item}
-                </Badge>
-              ))}
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-8 w-8 rounded-full border-slate-300 bg-white text-slate-950 hover:bg-slate-100"
-                onClick={openLatestPreview}
-                disabled={!hasDraft}
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </header>
-        <div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
-          <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-2 px-3 py-2 lg:px-5 lg:py-3">
-            <div className="min-h-0 flex-1 overflow-hidden rounded-[26px] border bg-card shadow-sm">
+        <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
+          <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-3 px-3 py-3 lg:px-5 lg:py-4">
+            <WorkspaceHero
+              eyebrow={i18n.dashboardPage.writer.label}
+              title={writerCopy.assistantName}
+              description={i18n.dashboardPage.writer.description}
+              status={workspaceStatus}
+              badges={[
+                <Badge key="platform" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {writerConfig.shortLabel}
+                </Badge>,
+                <Badge key="mode" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {currentModeLabel}
+                </Badge>,
+                <Badge key="language" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                  {currentLanguageLabel}
+                </Badge>,
+                <Badge
+                  key="knowledge"
+                  variant={knowledgeStatus?.enabled ? "default" : "outline"}
+                  className="rounded-full px-2.5 py-0.5 text-[10px]"
+                >
+                  {knowledgeStatus?.enabled
+                    ? `${writerCopy.enterpriseKnowledge} ${knowledgeStatus.datasetCount || 0}`
+                    : writerCopy.noEnterpriseKnowledge}
+                </Badge>,
+                ...(knowledgeStatus?.enabled && knowledgeStatus.profile?.configuredScopes?.length
+                  ? [
+                      <Badge key="profile" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                        {writerCopy.knowledgeProfile}{" "}
+                        {knowledgeStatus.profile.configuredScopes
+                          .slice(0, 2)
+                          .map((scope) => getKnowledgeScopeLabel(writerCopy, scope))
+                          .filter(Boolean)
+                          .join("/")}
+                      </Badge>,
+                    ]
+                  : []),
+                ...groundingBadges.map((item) => (
+                  <Badge key={item} variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
+                    {item}
+                  </Badge>
+                )),
+              ]}
+              stats={[
+                { label: "Platform", value: writerConfig.shortLabel },
+                { label: "Mode", value: currentModeLabel },
+                { label: "Language", value: currentLanguageLabel },
+                { label: "Draft", value: writerDraftState },
+              ]}
+              actions={
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 rounded-full px-3 text-[11px]"
+                    data-testid="writer-hero-new-session-trigger"
+                    onClick={handleCreateConversation}
+                  >
+                    {writerCopy.newChat}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                    onClick={openLatestPreview}
+                    disabled={!hasDraft}
+                  >
+                    <Eye className="mr-1.5 h-3.5 w-3.5" />
+                    {writerCopy.preview}
+                  </Button>
+                </>
+              }
+            />
+            <div className="min-h-0 flex-1 overflow-hidden rounded-[30px] border-2 border-border bg-card">
               <ScrollArea className="h-full" ref={viewportRef}>
-                <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 lg:px-5">
+                <div className="space-y-0">
                   {hasMoreHistory ? (
-                    <div className="flex justify-center">
+                    <div className="flex justify-center px-4 py-4">
                       <Button
                         size="sm"
                         variant="outline"
@@ -1875,28 +1911,18 @@ export function WriterWorkspace({
                   ) : null}
 
                   {messages.length === 0 && !isConversationLoading ? (
-                    <div className="space-y-3 rounded-[24px] border border-dashed bg-muted/20 p-4">
-                      <div className="flex items-center gap-2 text-primary">
-                        <Sparkles className="h-4 w-4" />
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em]">{writerCopy.quickStart}</span>
-                      </div>
-                      <div className="grid gap-2.5 lg:grid-cols-3">
-                        {writerCopy.quickStartPrompts.map((prompt) => (
-                          <button
-                            key={prompt}
-                            type="button"
-                            onClick={() => setInputValue(prompt)}
-                            className="rounded-2xl border bg-background px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-                          >
-                            <p className="text-[12px] leading-5 text-muted-foreground">{prompt}</p>
-                          </button>
-                        ))}
-                      </div>
+                    <div className="px-4 py-4">
+                      <WorkspacePromptGrid
+                        eyebrow={writerCopy.quickStart}
+                        prompts={writerCopy.quickStartPrompts}
+                        onSelect={(prompt) => setInputValue(prompt)}
+                        gridClassName="lg:grid-cols-3"
+                      />
                     </div>
                   ) : null}
 
                   {isConversationLoading ? (
-                    <div className="flex items-center gap-2 rounded-2xl border border-dashed bg-muted/20 px-3.5 py-2.5 text-xs text-muted-foreground">
+                    <div className="mx-4 my-4 flex items-center gap-2 rounded-[22px] border-2 border-dashed border-border bg-background px-3.5 py-3 text-xs text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       {writerCopy.restoringConversation}
                     </div>
@@ -1909,26 +1935,14 @@ export function WriterWorkspace({
                       message.role === "assistant" && isPreviewableWriterDraft(message.content, writerCopy)
 
                     return (
-                      <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                        <div
-                          className={cn(
-                            "max-w-[94%] overflow-hidden rounded-[24px] px-3.5 py-3 shadow-sm lg:max-w-[84%]",
-                            message.role === "user"
-                              ? "rounded-br-md bg-primary text-primary-foreground"
-                              : "rounded-bl-md border border-slate-200/90 bg-white text-slate-950 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.35)]",
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              "mb-2 text-[10px] font-medium",
-                              message.role === "assistant"
-                                ? "flex items-center gap-1.5 text-slate-600"
-                                : "opacity-80",
-                            )}
-                          >
-                            {message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
-                            {message.authorLabel || writerCopy.you}
-                          </div>
+                      <WorkspaceMessageFrame
+                        key={message.id}
+                        role={message.role}
+                        label={message.authorLabel || (message.role === "assistant" ? writerCopy.assistantName : writerCopy.you)}
+                        icon={message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
+                        bodyClassName="space-y-3"
+                      >
+                        <div className={cn("rounded-[24px] border-2 p-4", message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}>
                           {renderMarkdown(
                             messagePreview?.previewMarkdown || message.content,
                             messagePreview?.assets || [],
@@ -1938,11 +1952,11 @@ export function WriterWorkspace({
                             writerCopy,
                           )}
                           {messageIsPreviewable && messagePreview ? (
-                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+                            <WorkspaceActionRow>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                                className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
                                 onClick={() => openPreviewForMessage(message.id)}
                               >
                                 <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -1954,7 +1968,7 @@ export function WriterWorkspace({
                                 className={cn(
                                   "h-8 rounded-full px-3 text-[11px]",
                                   messagePreview.imagesRequested || messagePreview.hasGeneratedImages
-                                    ? "border-slate-300 bg-white text-slate-950 hover:bg-slate-100"
+                                    ? "border-2 border-border bg-card text-foreground hover:bg-muted"
                                     : "",
                                 )}
                                 onClick={() => void handleGenerateAssets(messagePreview)}
@@ -1970,7 +1984,7 @@ export function WriterWorkspace({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                                className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
                                 onClick={() => requestRichTextCopyForMessage(message.id)}
                               >
                                 <BookText className="mr-1.5 h-3.5 w-3.5" />
@@ -1979,114 +1993,104 @@ export function WriterWorkspace({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
+                                className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
                                 onClick={() => void handleCopyMarkdown(messagePreview.previewMarkdown)}
                               >
                                 <Copy className="mr-1.5 h-3.5 w-3.5" />
                                 {writerCopy.copyMarkdown}
                               </Button>
-                            </div>
+                            </WorkspaceActionRow>
                           ) : null}
                         </div>
-                      </div>
+                      </WorkspaceMessageFrame>
                     )
                   })}
 
                   {isLoading ? (
-                    <div className="flex justify-start">
-                      <div className="rounded-[24px] rounded-bl-md border border-slate-200/90 bg-white px-3.5 py-3 text-xs text-slate-700 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.35)]">
-                        <span className="animate-pulse">{writerCopy.generatingDraft}</span>
-                      </div>
-                    </div>
+                    <WorkspaceMessageFrame
+                      role="assistant"
+                      label={writerCopy.assistantName}
+                      icon={<Sparkles className="h-3.5 w-3.5" />}
+                    >
+                      <WorkspaceLoadingMessage label={<span className="animate-pulse">{writerCopy.generatingDraft}</span>} />
+                    </WorkspaceMessageFrame>
                   ) : null}
                 </div>
               </ScrollArea>
             </div>
 
-            <section className="rounded-[24px] border bg-background/96 p-2.5 shadow-lg backdrop-blur">
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={platform}
-                  onChange={(event) => {
-                    const nextPlatform = event.target.value as WriterPlatform
-                    setPlatform(nextPlatform)
-                    setMode(normalizeWriterMode(nextPlatform, mode))
-                  }}
-                  className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                  disabled={composerDisabled || isLoading}
-                >
-                  {WRITER_PLATFORM_ORDER.map((item) => (
-                    <option key={item} value={item}>
-                      {WRITER_PLATFORM_CONFIG[item].shortLabel}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={mode}
-                  onChange={(event) => setMode(event.target.value as WriterMode)}
-                  className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                  disabled={composerDisabled || isLoading}
-                >
-                  {writerModeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={language}
-                  onChange={(event) => setLanguage(normalizeWriterLanguage(event.target.value))}
-                  className="h-9 rounded-2xl border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                  disabled={composerDisabled || isLoading}
-                >
-                  {WRITER_LANGUAGE_ORDER.map((item) => (
-                    <option key={item} value={item}>
-                      {WRITER_LANGUAGE_CONFIG[item].label}
-                    </option>
-                  ))}
-                </select>
-                <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
-                  {workspaceStatus}
-                </Badge>
-                <div className="ml-auto flex items-center gap-1.5">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 rounded-full px-3 text-[11px]"
-                    data-testid="writer-inline-new-session-trigger"
-                    onClick={handleCreateConversation}
+            <WorkspaceComposerPanel
+              toolbar={
+                <>
+                  <select
+                    value={platform}
+                    onChange={(event) => {
+                      const nextPlatform = event.target.value as WriterPlatform
+                      setPlatform(nextPlatform)
+                      setMode(normalizeWriterMode(nextPlatform, mode))
+                    }}
+                    className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                    disabled={composerDisabled || isLoading}
                   >
-                    {writerCopy.newChat}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100"
-                    onClick={openLatestPreview}
-                    disabled={!hasDraft}
+                    {WRITER_PLATFORM_ORDER.map((item) => (
+                      <option key={item} value={item}>
+                        {WRITER_PLATFORM_CONFIG[item].shortLabel}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={mode}
+                    onChange={(event) => setMode(event.target.value as WriterMode)}
+                    className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                    disabled={composerDisabled || isLoading}
                   >
-                    <Eye className="mr-1.5 h-3.5 w-3.5" />
-                    {writerCopy.preview}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-2 rounded-[22px] border border-border/70 bg-card">
-                <Textarea
-                  ref={composerRef}
-                  value={inputValue}
-                  onChange={(event) => setInputValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                      event.preventDefault()
-                      void handleSend()
-                    }
-                  }}
-                  placeholder={`${writerCopy.composerPlaceholderPrefix} ${writerConfig.shortLabel} ${writerCopy.composerPlaceholderSuffix}`}
-                  className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
-                  disabled={composerDisabled}
-                />
-                <div className="flex items-center justify-between gap-3 border-t border-border/70 px-3.5 py-2.5">
+                    {writerModeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={language}
+                    onChange={(event) => setLanguage(normalizeWriterLanguage(event.target.value))}
+                    className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                    disabled={composerDisabled || isLoading}
+                  >
+                    {WRITER_LANGUAGE_ORDER.map((item) => (
+                      <option key={item} value={item}>
+                        {WRITER_LANGUAGE_CONFIG[item].label}
+                      </option>
+                    ))}
+                  </select>
+                  <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
+                    {workspaceStatus}
+                  </Badge>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 rounded-full px-3 text-[11px]"
+                      data-testid="writer-inline-new-session-trigger"
+                      onClick={handleCreateConversation}
+                    >
+                      {writerCopy.newChat}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                      onClick={openLatestPreview}
+                      disabled={!hasDraft}
+                    >
+                      <Eye className="mr-1.5 h-3.5 w-3.5" />
+                      {writerCopy.preview}
+                    </Button>
+                  </div>
+                </>
+              }
+              bodyClassName="px-0"
+              footer={
+                <>
                   <p className="text-[11px] leading-5 text-muted-foreground">
                     {writerConfig.shortLabel} / {currentModeLabel} / {currentLanguageLabel}
                     {composerDisabled ? ` / ${writerCopy.preparingCapabilities}` : ` / ${writerCopy.supportsPreviewAndImages}`}
@@ -2108,9 +2112,24 @@ export function WriterWorkspace({
                       {writerCopy.send}
                     </Button>
                   )}
-                </div>
-              </div>
-            </section>
+                </>
+              }
+            >
+              <Textarea
+                ref={composerRef}
+                value={inputValue}
+                onChange={(event) => setInputValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                    event.preventDefault()
+                    void handleSend()
+                  }
+                }}
+                placeholder={`${writerCopy.composerPlaceholderPrefix} ${writerConfig.shortLabel} ${writerCopy.composerPlaceholderSuffix}`}
+                className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
+                disabled={composerDisabled}
+              />
+            </WorkspaceComposerPanel>
           </div>
         </div>
       </div>
@@ -2121,22 +2140,22 @@ export function WriterWorkspace({
           if (!open) setPendingRichCopyMessageId(null)
         }}
       >
-        <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 sm:max-w-[920px]">
-          <div className={cn("h-full bg-gradient-to-b", getPlatformPreviewPalette(platform))}>
-            <SheetHeader className="border-b border-slate-300 bg-white/96 px-4 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm">
+        <SheetContent side="right" className="w-full gap-0 overflow-hidden border-l-2 border-border bg-card p-0 sm:max-w-[920px]">
+          <div className={cn("h-full", getPlatformPreviewPalette(platform))}>
+            <SheetHeader className="border-b-2 border-border bg-card px-4 py-3">
               <div className="flex items-center justify-between gap-3 pr-8">
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="rounded-full border border-slate-300 bg-slate-950 px-2.5 py-1 text-[10px] font-medium text-white">
+                  <Badge variant="secondary" className="rounded-full border-2 border-border bg-accent px-2.5 py-1 text-[10px] font-medium text-accent-foreground">
                     {writerConfig.shortLabel}
                   </Badge>
-                  <Badge variant="outline" className="rounded-full border-slate-400 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-900">
+                  <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] font-medium text-slate-900">
                     {estimateReadingTime(activePreview.previewMarkdown, writerCopy)}
                   </Badge>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 rounded-full border-slate-950 bg-slate-950 px-3 text-[11px] text-white hover:bg-slate-800"
+                  className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
                   onClick={() => setPreviewOpen(false)}
                 >
                   <ChevronLeft className="mr-1.5 h-3.5 w-3.5" />
@@ -2150,7 +2169,7 @@ export function WriterWorkspace({
               <div className="space-y-4 p-4">
                 <div
                   className={cn(
-                    "space-y-4 rounded-[32px] border border-slate-300 p-5 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.55)] ring-1 ring-slate-950/5",
+                    "space-y-4 rounded-[32px] border-2 p-5",
                     getPlatformShellClass(platform),
                   )}
                 >
@@ -2169,10 +2188,10 @@ export function WriterWorkspace({
                           size="sm"
                           variant={activePreview.imagesRequested || activePreview.hasGeneratedImages ? "outline" : "default"}
                           className={cn(
-                            "h-8 rounded-full border px-3 text-[11px] font-medium shadow-sm",
+                            "h-8 rounded-full border-2 px-3 text-[11px] font-medium",
                             activePreview.imagesRequested || activePreview.hasGeneratedImages
-                              ? "border-slate-500 bg-white text-slate-950 hover:bg-slate-100"
-                              : "border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
+                              ? "border-border bg-card text-slate-950 hover:bg-muted"
+                              : "border-primary bg-primary text-primary-foreground hover:bg-primary/90",
                           )}
                           onClick={() => void handleGenerateAssets(activePreview)}
                           disabled={activePreview.assetsLoading}
@@ -2189,7 +2208,7 @@ export function WriterWorkspace({
                         <Badge
                           variant="outline"
                           className={cn(
-                            "rounded-full border px-2.5 py-1 text-[10px] font-medium",
+                            "rounded-full border-2 px-2.5 py-1 text-[10px] font-medium",
                             draftSaveState === "saving"
                               ? "border-amber-300 bg-amber-50 text-amber-900"
                               : draftSaveState === "saved"
@@ -2211,7 +2230,7 @@ export function WriterWorkspace({
                       <Button
                         size="sm"
                         variant="default"
-                        className="h-8 rounded-full border border-slate-950 bg-slate-950 px-3 text-[11px] font-medium text-white shadow-sm hover:bg-slate-800"
+                        className="h-8 rounded-full border-2 border-primary bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
                         onClick={() => void handleCopyText()}
                         disabled={!activePreview.hasDraft}
                       >
@@ -2221,7 +2240,7 @@ export function WriterWorkspace({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 rounded-full border-slate-400 bg-white px-3 text-[11px] font-medium text-slate-950 hover:bg-slate-100"
+                        className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] font-medium text-slate-950 hover:bg-muted"
                         onClick={() => void handleCopyMarkdown()}
                         disabled={!activePreview.hasDraft}
                       >
@@ -2230,7 +2249,7 @@ export function WriterWorkspace({
                       </Button>
                     </div>
                   </div>
-                  <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_18px_50px_-32px_rgba(15,23,42,0.32)] ring-1 ring-slate-950/8">
+                  <div className="overflow-hidden rounded-[28px] border-2 border-border bg-card">
                     <div ref={previewContentRef} className="p-6">
                       <PlatformPreview
                         copy={writerCopy}

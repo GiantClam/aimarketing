@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Building2, Check, Clock3, LogOut, Save, Shield, User, X } from "lucide-react"
+import { AlertTriangle, Bot, Building2, Check, Clock3, Database, LogOut, Save, Shield, Sparkles, User, Users, Workflow, X, type LucideIcon } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FEATURE_KEYS, FEATURE_LABELS, buildPermissionMap, type PermissionMap } from "@/lib/enterprise/constants"
 import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
+import { cn } from "@/lib/utils"
 
 type PendingRequest = {
   requestId: number
@@ -78,6 +79,38 @@ function formatEnterpriseDifyMessage(error: unknown, fallback: string) {
   if (message === "datasets_required_when_enabled") return "启用企业知识检索前，请至少启用一个知识库。"
   if (message === "dify_config_incomplete") return "请先填写完整的 Dify API Base URL 和 API Key。"
   return message || fallback
+}
+
+type OverviewMetricProps = {
+  icon: LucideIcon
+  label: string
+  value: string
+  hint: string
+  tone?: "warm" | "teal" | "ink"
+}
+
+function OverviewMetric({ icon: Icon, label, value, hint, tone = "warm" }: OverviewMetricProps) {
+  const toneClassName =
+    tone === "teal"
+      ? "border-teal-200/70 bg-teal-50/85"
+      : tone === "ink"
+        ? "border-slate-300/80 bg-slate-900 text-white"
+        : "border-orange-200/70 bg-orange-50/90"
+
+  return (
+    <div className={cn("rounded-[1.4rem] border p-4 shadow-sm", toneClassName)}>
+      <div className="flex items-center gap-3">
+        <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border", tone === "ink" ? "border-white/15 bg-white/10" : "border-black/5 bg-white/70")}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className={cn("text-[11px] font-semibold uppercase tracking-[0.18em]", tone === "ink" ? "text-white/70" : "text-muted-foreground")}>{label}</p>
+          <p className="mt-1 font-sans text-2xl font-semibold">{value}</p>
+        </div>
+      </div>
+      <p className={cn("mt-4 text-sm leading-6", tone === "ink" ? "text-white/78" : "text-muted-foreground")}>{hint}</p>
+    </div>
+  )
 }
 
 export default function SettingsPage() {
@@ -387,103 +420,211 @@ export default function SettingsPage() {
       ]
       : []),
   ]
+  const overviewMetrics = useMemo(
+    () => [
+      {
+        icon: User,
+        label: "账号状态",
+        value: statusText,
+        hint: user?.enterpriseName ? `${user.enterpriseName} / ${user.enterpriseRole || "member"}` : "当前账号尚未绑定企业。",
+        tone: "warm" as const,
+      },
+      {
+        icon: Users,
+        label: "企业治理",
+        value: isEnterpriseAdmin ? `${members.length}` : "只读",
+        hint: isEnterpriseAdmin ? `成员 ${members.length} 人，待审核 ${requests.length} 项。` : "仅企业管理员可处理成员与权限配置。",
+        tone: "teal" as const,
+      },
+      {
+        icon: Database,
+        label: "知识资源",
+        value: `${enabledDifyDatasetCount}/${difyDatasets.length}`,
+        hint: canViewEnterpriseDify ? "显示已启用知识库数量 / 已绑定知识库总数。" : "企业激活后可查看企业知识检索配置。",
+        tone: "ink" as const,
+      },
+      {
+        icon: Bot,
+        label: "顾问工作流",
+        value: `${advisorCards.length}`,
+        hint: isEnterpriseAdmin ? "展示当前可见的顾问 workflow 条目。" : "顾问 workflow 详情仅向企业管理员开放。",
+        tone: "warm" as const,
+      },
+    ],
+    [
+      advisorCards.length,
+      canViewEnterpriseDify,
+      difyDatasets.length,
+      enabledDifyDatasetCount,
+      isEnterpriseAdmin,
+      members.length,
+      requests.length,
+      statusText,
+      user?.enterpriseName,
+      user?.enterpriseRole,
+    ],
+  )
 
   return (
-    <div className="h-full overflow-y-auto bg-muted/10 p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div>
-          <h1 className="font-sans text-2xl font-bold text-foreground">用户设置</h1>
-          <p className="mt-1 text-sm font-manrope text-muted-foreground">管理账号资料、企业归属和成员权限。</p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><User className="h-4 w-4" />账号信息</CardTitle>
-            <CardDescription>可修改显示名称。企业信息由企业管理员维护。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="display-name">显示名称</Label>
-                <Input id="display-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="请输入显示名称" />
+    <div className="h-full overflow-y-auto px-6 py-6 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-6xl space-y-8">
+        <section className="rounded-[32px] border-2 border-border bg-card">
+          <div className="grid gap-8 p-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:p-10">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary-foreground">
+                <Sparkles className="h-3.5 w-3.5" />
+                Settings Console
               </div>
-              <div className="grid gap-2">
-                <Label>邮箱</Label>
-                <Input value={user?.email || ""} disabled />
+              <div className="max-w-3xl space-y-4">
+                <h1 className="text-4xl font-semibold tracking-tight text-foreground lg:text-5xl">用户设置</h1>
+                <p className="max-w-2xl text-base leading-8 text-muted-foreground lg:text-lg">
+                  将账号资料、企业治理和 AI 资源配置放进同一个工作台，减少切页和状态判断。
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <div className="rounded-full border-2 border-border bg-background px-4 py-2 text-sm font-medium text-foreground">
+                  企业状态: {statusText}
+                </div>
+                <div className="rounded-full border-2 border-border bg-background px-4 py-2 text-sm font-medium text-foreground">
+                  成员角色: {user?.enterpriseRole || "未绑定"}
+                </div>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
-              <div className="grid gap-2"><Label>企业 ID</Label><Input value={user?.enterpriseCode || "未绑定"} disabled /></div>
-              <div className="grid gap-2"><Label>企业名称</Label><Input value={user?.enterpriseName || "未绑定"} disabled /></div>
-              <div className="grid gap-2"><Label>企业角色</Label><Input value={user?.enterpriseRole || "未知"} disabled /></div>
-              <div className="grid gap-2"><Label>账号状态</Label><Input value={statusText} disabled /></div>
-            </div>
+            <div className="rounded-[28px] border-2 border-border bg-background p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Identity Brief</p>
+              <h2 className="mt-2 text-xl font-semibold text-foreground">{user?.name || "未命名成员"}</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{user?.email || "未绑定邮箱"}</p>
 
-            <div className="flex items-center gap-3">
-              <Button onClick={handleSaveProfile} disabled={isSaving}><Save className="mr-2 h-4 w-4" />{isSaving ? "保存中..." : "保存设置"}</Button>
-              {saveMessage && <span className="text-sm text-muted-foreground">{saveMessage}</span>}
+              <div className="mt-5 space-y-3">
+                <div className="rounded-[22px] border-2 border-border bg-card px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Enterprise</p>
+                  <p className="mt-2 text-sm text-foreground">{user?.enterpriseName || "尚未绑定企业"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{user?.enterpriseCode || "No enterprise code"}</p>
+                </div>
+                <div className="rounded-[22px] border-2 border-border bg-card px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Configuration</p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {canViewEnterpriseDify ? "已连接企业知识资源" : "等待企业激活或配置"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {isEnterpriseAdmin ? "你可以管理成员权限和顾问配置。" : "你当前拥有只读或有限配置权限。"}
+                  </p>
+                </div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         {user?.enterpriseStatus === "pending" && (
-          <Card className="border-amber-300 bg-amber-50/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-amber-700"><Clock3 className="h-4 w-4" />加入企业待审核</CardTitle>
-              <CardDescription>企业管理员审核通过后，企业功能权限才会生效。</CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="rounded-[1.6rem] border border-amber-300/80 bg-amber-50/90 p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <Clock3 className="mt-0.5 h-5 w-5 text-amber-700" />
+              <div>
+                <p className="font-sans text-lg font-semibold text-amber-900">加入企业待审核</p>
+                <p className="mt-1 text-sm leading-6 text-amber-800/85">企业管理员审核通过后，企业功能权限与知识资源才会对当前账号生效。</p>
+              </div>
+            </div>
+          </div>
         )}
 
-        {isEnterpriseAdmin && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Building2 className="h-4 w-4" />企业成员申请审核</CardTitle>
-              <CardDescription>审核待加入企业的成员申请。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-8">
+            <section className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">个人设置</p>
+                <h2 className="font-sans text-2xl font-semibold text-foreground">账号与企业身份</h2>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">优先保证账号基础资料、企业归属和身份状态清晰，避免后续工作台入口与权限判断出现偏差。</p>
+              </div>
+
+              <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 font-sans text-xl"><User className="h-5 w-5 text-primary" />账号信息</CardTitle>
+                  <CardDescription>可修改显示名称。企业信息由企业管理员维护。</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="display-name">显示名称</Label>
+                      <Input id="display-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="请输入显示名称" />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>邮箱</Label>
+                      <Input value={user?.email || ""} disabled />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-2"><Label>企业 ID</Label><Input value={user?.enterpriseCode || "未绑定"} disabled /></div>
+                    <div className="grid gap-2"><Label>企业名称</Label><Input value={user?.enterpriseName || "未绑定"} disabled /></div>
+                    <div className="grid gap-2"><Label>企业角色</Label><Input value={user?.enterpriseRole || "未知"} disabled /></div>
+                    <div className="grid gap-2"><Label>账号状态</Label><Input value={statusText} disabled /></div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button onClick={handleSaveProfile} disabled={isSaving} className="rounded-full px-5"><Save className="mr-2 h-4 w-4" />{isSaving ? "保存中..." : "保存设置"}</Button>
+                    {saveMessage && <span className="text-sm text-muted-foreground">{saveMessage}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
+
+            {isEnterpriseAdmin && (
+              <section className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">企业治理</p>
+                  <h2 className="font-sans text-2xl font-semibold text-foreground">成员审核与权限分配</h2>
+                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground">把待审核申请和成员权限放在同一段，先处理准入，再决定每个成员可进入哪些工作台。</p>
+                </div>
+
+                <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 font-sans text-xl"><Building2 className="h-5 w-5 text-primary" />企业成员申请审核</CardTitle>
+                    <CardDescription>审核待加入企业的成员申请。</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
               {loadingAdminData && <p className="text-sm text-muted-foreground">加载中...</p>}
               {!loadingAdminData && requests.length === 0 && <p className="text-sm text-muted-foreground">暂无待审核申请。</p>}
               {requests.map((request) => (
-                <div key={request.requestId} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                <div key={request.requestId} className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-sm font-medium">{request.userName}（{request.userEmail}）</p>
-                    <p className="text-xs text-muted-foreground">申请时间：{new Date(request.createdAt).toLocaleString()}</p>
-                    {request.note && <p className="text-xs text-muted-foreground">说明：{request.note}</p>}
+                    <p className="text-sm font-medium text-foreground">{request.userName}（{request.userEmail}）</p>
+                    <p className="mt-1 text-xs text-muted-foreground">申请时间：{new Date(request.createdAt).toLocaleString()}</p>
+                    {request.note && <p className="mt-1 text-xs text-muted-foreground">说明：{request.note}</p>}
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => reviewRequest(request.requestId, "reject")}><X className="mr-1 h-4 w-4" />拒绝</Button>
-                    <Button size="sm" onClick={() => reviewRequest(request.requestId, "approve")}><Check className="mr-1 h-4 w-4" />通过</Button>
+                    <Button size="sm" variant="outline" onClick={() => reviewRequest(request.requestId, "reject")} className="rounded-full"><X className="mr-1 h-4 w-4" />拒绝</Button>
+                    <Button size="sm" onClick={() => reviewRequest(request.requestId, "approve")} className="rounded-full"><Check className="mr-1 h-4 w-4" />通过</Button>
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-        )}
+                  </CardContent>
+                </Card>
 
-        {isEnterpriseAdmin && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Shield className="h-4 w-4" />成员功能权限</CardTitle>
-              <CardDescription>配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问与增长顾问；企业管理员始终可见。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+                <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />成员功能权限</CardTitle>
+                    <CardDescription>配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问与增长顾问；企业管理员始终可见。</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+              {members.length === 0 && !loadingAdminData ? (
+                <p className="text-sm text-muted-foreground">当前没有可配置权限的企业成员。</p>
+              ) : null}
               {members.map((member) => {
                 const draft = permissionDrafts[member.id] || buildPermissionMap(false)
                 return (
-                  <div key={member.id} className="space-y-3 rounded-lg border p-4">
-                    <div className="flex items-center justify-between gap-3">
+                  <div key={member.id} className="space-y-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <p className="text-sm font-medium">{member.name}（{member.email}）</p>
-                        <p className="text-xs text-muted-foreground">角色：{member.enterpriseRole || "member"} / 状态：{member.enterpriseStatus || "unknown"}</p>
+                        <p className="text-sm font-medium text-foreground">{member.name}（{member.email}）</p>
+                        <p className="mt-1 text-xs text-muted-foreground">角色：{member.enterpriseRole || "member"} / 状态：{member.enterpriseStatus || "unknown"}</p>
                       </div>
-                      <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={member.enterpriseStatus !== "active"}>保存权限</Button>
+                      <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={member.enterpriseStatus !== "active"} className="rounded-full">保存权限</Button>
                     </div>
 
                     <div className="grid gap-2 md:grid-cols-2">
                       {configurableFeatureKeys.map((feature) => (
-                        <label key={feature} className="flex items-center gap-2 text-sm">
+                        <label key={feature} className="flex items-center gap-2 rounded-xl border border-border/50 bg-card/80 px-3 py-2 text-sm">
                           <input
                             type="checkbox"
                             className="rounded border-border"
@@ -506,24 +647,33 @@ export default function SettingsPage() {
                   </div>
                 )
               })}
-            </CardContent>
-          </Card>
-        )}
+                  </CardContent>
+                </Card>
+              </section>
+            )}
 
-        {canViewEnterpriseDify && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Building2 className="h-4 w-4" />Dify 企业知识库</CardTitle>
-              <CardDescription>
+            {(canViewEnterpriseDify || isEnterpriseAdmin) && (
+              <section className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">AI 资源配置</p>
+                  <h2 className="font-sans text-2xl font-semibold text-foreground">企业知识库与顾问工作流</h2>
+                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground">把知识检索和顾问 workflow 放在同一层，便于判断当前企业到底拥有哪些 AI 能力，以及哪些只是系统默认兜底。</p>
+                </div>
+
+                {canViewEnterpriseDify && (
+                  <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Database className="h-5 w-5 text-primary" />Dify 企业知识库</CardTitle>
+                      <CardDescription>
                 {hasEnterpriseKnowledgeBinding
                   ? "当前企业已配置专属 Dify 知识库。设置页展示数据库中的绑定信息；只有企业管理员可启用或停用企业知识库。"
                   : "当前企业还没有配置 Dify 企业知识库。"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
               {hasEnterpriseKnowledgeBinding ? (
                 <>
-                  <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
                     <div className="space-y-1">
                       <p className="font-medium text-foreground">当前企业已配置知识库</p>
                       <p>已读取数据库中的 Dify Base URL、脱敏 API Key 和 dataset 绑定信息。</p>
@@ -553,7 +703,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
                     <input
                       type="checkbox"
                       className="rounded border-border"
@@ -570,14 +720,14 @@ export default function SettingsPage() {
                     {difyMessage && <span className="text-sm text-muted-foreground">{difyMessage}</span>}
                   </div>
 
-                  <div className="space-y-3 rounded-lg border p-4">
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <p className="text-sm font-medium">知识库绑定与检索用途</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm font-medium text-foreground">知识库绑定与检索用途</p>
+                        <p className="mt-1 text-xs leading-6 text-muted-foreground">
                           企业知识库绑定仅支持数据库配置。设置页只展示当前已保存的 dataset 绑定，不提供远端拉取和页面内编辑，避免共享 Dify 时误拉到其他企业知识库。
                         </p>
-                        <p className="text-xs text-muted-foreground">优先级数字越小越靠前；当前单次检索最多使用前 4 个符合用途的知识库。</p>
+                        <p className="text-xs leading-6 text-muted-foreground">优先级数字越小越靠前；当前单次检索最多使用前 4 个符合用途的知识库。</p>
                       </div>
                       <span className="text-xs text-muted-foreground">
                         数据库已配置 {difyDatasets.length} 个 / 已启用 {enabledDifyDatasetCount} 个
@@ -589,28 +739,28 @@ export default function SettingsPage() {
                     ) : (
                       <div className="space-y-3">
                         {difyDatasets.map((dataset) => (
-                          <div key={dataset.datasetId} className="rounded-lg border p-3">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div key={dataset.datasetId} className="rounded-2xl border border-border/70 bg-card/80 p-4">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div className="space-y-1 text-sm">
-                                <p className="font-medium">{dataset.datasetName}</p>
+                                <p className="font-medium text-foreground">{dataset.datasetName}</p>
                                 <p className="text-xs text-muted-foreground">{dataset.datasetId}</p>
                               </div>
                               <div className="grid min-w-[220px] gap-3 sm:grid-cols-3">
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>状态</span>
-                                  <span className="rounded-md border bg-muted px-3 py-2 text-sm text-foreground">
+                                  <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
                                     {dataset.enabled ? "已启用" : "已停用"}
                                   </span>
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>检索用途</span>
-                                  <span className="rounded-md border bg-muted px-3 py-2 text-sm text-foreground">
+                                  <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
                                     {KNOWLEDGE_SCOPE_OPTIONS.find((option) => option.value === dataset.scope)?.label || dataset.scope}
                                   </span>
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>优先级</span>
-                                  <span className="rounded-md border bg-muted px-3 py-2 text-sm text-foreground">
+                                  <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
                                     {dataset.priority}
                                   </span>
                                 </div>
@@ -623,23 +773,23 @@ export default function SettingsPage() {
                   </div>
                 </>
               ) : (
-                <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">当前企业未配置知识库</p>
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        )}
+                    </CardContent>
+                  </Card>
+                )}
 
-        {isEnterpriseAdmin && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Shield className="h-4 w-4" />专家顾问 Dify Workflow 配置</CardTitle>
-              <CardDescription>设置页只展示当前工作流信息。企业数据库中的 workflow 优先级高于系统默认 workflow；只有当前企业已配置 lead hunter 时才展示该项。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+                {isEnterpriseAdmin && (
+                  <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />专家顾问 Dify Workflow 配置</CardTitle>
+                      <CardDescription>设置页只展示当前工作流信息。企业数据库中的 workflow 优先级高于系统默认 workflow；只有当前企业已配置 lead hunter 时才展示该项。</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
               {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">正在读取顾问配置...</p>}
               <div className="grid gap-4">
                 {advisorCards.map((card) => {
@@ -664,33 +814,33 @@ export default function SettingsPage() {
                           ? "当前生效：系统默认"
                           : "当前生效：未配置"
                   return (
-                    <div key={card.advisorType} className="space-y-4 rounded-lg border p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div key={card.advisorType} className="space-y-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                          <p className="text-sm font-medium">{card.title}</p>
-                          <p className="text-xs text-muted-foreground">{card.description}</p>
+                          <p className="text-sm font-medium text-foreground">{card.title}</p>
+                          <p className="mt-1 text-xs leading-6 text-muted-foreground">{card.description}</p>
                         </div>
-                        <span className="rounded-full border px-3 py-1 text-xs text-muted-foreground">
+                        <span className="rounded-full border border-border/70 bg-card/80 px-3 py-1 text-xs text-muted-foreground">
                           {statusLabel}
                         </span>
                       </div>
 
-                      <div className="grid gap-3 rounded-md border bg-muted/20 p-4 text-sm">
+                      <div className="grid gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 text-sm">
                         {card.advisorType === "lead-hunter" ? (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs leading-6 text-muted-foreground">
                             海外猎客没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示该入口。
                           </p>
                         ) : (
                           <div className="grid gap-3 md:grid-cols-2">
                             <div className="grid gap-1">
                               <span className="text-xs text-muted-foreground">系统默认 Base URL</span>
-                              <span className="rounded-md border bg-background px-3 py-2 text-foreground">
+                              <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-foreground">
                                 {defaultInfo?.baseUrl || advisorDefaults?.baseUrl || "未配置"}
                               </span>
                             </div>
                             <div className="grid gap-1">
                               <span className="text-xs text-muted-foreground">系统默认 API Key</span>
-                              <span className="rounded-md border bg-background px-3 py-2 text-foreground">
+                              <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-foreground">
                                 {defaultInfo?.configured ? "已配置" : "未配置"}
                               </span>
                             </div>
@@ -701,20 +851,56 @@ export default function SettingsPage() {
                   )
                 })}
               </div>
-            </CardContent>
-          </Card>
-        )}
+                    </CardContent>
+                  </Card>
+                )}
+              </section>
+            )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive"><Shield className="h-4 w-4" />会话管理</CardTitle>
-            <CardDescription>退出登录会清除当前服务端会话，并返回登录页。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut}><LogOut className="mr-2 h-4 w-4" />{isLoggingOut ? "退出中..." : "退出登录"}</Button>
-            {isDemoMode && <p className="mt-2 text-xs text-muted-foreground">当前为体验账号。</p>}
-          </CardContent>
-        </Card>
+            <section className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">危险操作</p>
+                <h2 className="font-sans text-2xl font-semibold text-foreground">会话与退出</h2>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">单独放出退出操作，避免与普通配置动作并排出现导致误触。</p>
+              </div>
+
+              <Card className="rounded-[1.75rem] border-destructive/30 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 font-sans text-xl text-destructive"><AlertTriangle className="h-5 w-5" />会话管理</CardTitle>
+                  <CardDescription>退出登录会清除当前服务端会话，并返回登录页。</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut} className="rounded-full px-5"><LogOut className="mr-2 h-4 w-4" />{isLoggingOut ? "退出中..." : "退出登录"}</Button>
+                  {isDemoMode && <p className="text-xs text-muted-foreground">当前为体验账号。</p>}
+                </CardContent>
+              </Card>
+            </section>
+          </div>
+
+          <aside className="space-y-4 xl:sticky xl:top-8 xl:self-start">
+            <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-48px_rgba(31,41,55,0.5)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Management Brief</p>
+              <h2 className="mt-2 font-sans text-xl font-semibold text-foreground">当前配置摘要</h2>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground">右侧摘要不承载操作，只帮助管理员快速确认企业状态、资源规模和治理负载。</p>
+            </div>
+
+            {overviewMetrics.map((metric) => (
+              <OverviewMetric key={metric.label} icon={metric.icon} label={metric.label} value={metric.value} hint={metric.hint} tone={metric.tone} />
+            ))}
+
+            <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-48px_rgba(31,41,55,0.5)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Workflow className="h-4 w-4 text-primary" />
+                优化原则
+              </div>
+              <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+                <p>先确认身份和企业状态，再处理成员准入和权限，最后才是知识库与顾问资源。</p>
+                <p>知识库与 workflow 分开展示来源，但在同一个版块内查看，减少“为什么看得到入口却用不了”的理解成本。</p>
+                <p>危险操作单独成段，和保存类动作分离，避免误触。</p>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   )

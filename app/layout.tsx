@@ -48,7 +48,7 @@ export default async function RootLayout({
   )
 
   return (
-    <html lang={locale === "zh" ? "zh-CN" : "en"} className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased dark`}>
+    <html lang={locale === "zh" ? "zh-CN" : "en"} className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased`}>
       <body suppressHydrationWarning>
         <LocaleProvider initialLocale={locale}>
           <QueryProvider>

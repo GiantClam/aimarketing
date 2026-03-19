@@ -2,22 +2,26 @@
 
 import { useCallback, useEffect, useState, type MouseEvent } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Check,
-  ChevronDown,
-  ChevronRight,
   Edit2,
   Loader2,
   MessageSquare,
-  Plus,
   Trash2,
   X,
 } from "lucide-react"
 
 import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
+import {
+  SidebarCreateLink,
+  SidebarListState,
+  SidebarSectionBody,
+  SidebarSectionToggle,
+  SidebarSessionLink,
+  SidebarSessionRow,
+} from "@/components/dashboard/sidebar-session-ui"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
@@ -28,7 +32,6 @@ import {
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
 import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
-import { cn } from "@/lib/utils"
 import { WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
 import {
   deleteWriterSessionMeta,
@@ -291,39 +294,16 @@ export function WriterSidebarItem({
   return (
     <>
       <div className="mb-2">
-        <Button
-          variant="ghost"
-          className={cn("w-full justify-between font-manrope", isExpanded && "bg-sidebar-accent text-sidebar-accent-foreground")}
-          size="sm"
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          <div className="flex items-center">
-            <Icon className="mr-2 h-4 w-4" />
-            {title}
-          </div>
-          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
+        <SidebarSectionToggle title={title} icon={Icon} expanded={isExpanded} onToggle={() => setIsOpen((current) => !current)} />
 
         {isExpanded && (
-          <div className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-2">
-            <Link href="/dashboard/writer">
-              <Button
-                variant="ghost"
-                className="h-8 w-full justify-start text-xs text-primary hover:text-primary/80"
-                data-testid="writer-new-session-button"
-              >
-                <Plus className="mr-2 h-3 w-3" />
-                {messages.sidebar.newSession}
-              </Button>
-            </Link>
+          <SidebarSectionBody>
+            <SidebarCreateLink href="/dashboard/writer" label={messages.sidebar.newSession} testId="writer-new-session-button" />
 
             {isLoading && conversations.length === 0 ? (
-              <div className="flex items-center px-3 py-2 text-xs text-muted-foreground">
-                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                {messages.sidebar.loading}
-              </div>
+              <SidebarListState loading label={messages.sidebar.loading} />
             ) : conversations.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">{messages.sidebar.noSessions}</div>
+              <SidebarListState label={messages.sidebar.noSessions} />
             ) : (
               <div
                 className="max-h-72 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -343,20 +323,13 @@ export function WriterSidebarItem({
                   query.set("language", language)
 
                   return (
-                    <Link
+                    <SidebarSessionLink
                       key={conversation.id}
                       href={`/dashboard/writer/${conversation.id}?${query.toString()}`}
-                      onMouseEnter={() => void warmConversation(conversation.id)}
+                      onWarm={() => void warmConversation(conversation.id)}
+                      active={isActive}
+                      testId={`writer-conversation-${conversation.id}`}
                     >
-                      <div
-                        data-testid={`writer-conversation-${conversation.id}`}
-                        className={cn(
-                          "group flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-colors",
-                          isActive
-                            ? "bg-primary/10 font-medium text-primary"
-                            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                        )}
-                      >
                         {editingConvId === conversation.id ? (
                           <div className="flex w-full items-center gap-1" onClick={(event) => event.preventDefault()}>
                             <Input
@@ -385,19 +358,13 @@ export function WriterSidebarItem({
                             </button>
                           </div>
                         ) : (
-                          <>
-                            <div className="flex min-w-0 flex-1 items-center gap-2 md:max-w-[160px]">
-                              <MessageSquare className="h-3 w-3 shrink-0 opacity-70" />
-                              <div className="min-w-0">
-                                <div className="truncate">{conversation.name || messages.sidebar.newArticle}</div>
-                                <div className="truncate text-[10px] opacity-70">
-                                  {WRITER_PLATFORM_CONFIG[platform as keyof typeof WRITER_PLATFORM_CONFIG].shortLabel}
-                                  {mode === "thread" ? messages.sidebar.threadSuffix : ""}
-                                  {getConversationStatusLabel(conversation.status, messages.sidebar.readySuffix, messages.sidebar.generatingImagesSuffix)}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <SidebarSessionRow
+                            active={isActive}
+                            leading={<MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-70" />}
+                            title={conversation.name || messages.sidebar.newArticle}
+                            subtitle={`${WRITER_PLATFORM_CONFIG[platform as keyof typeof WRITER_PLATFORM_CONFIG].shortLabel}${mode === "thread" ? messages.sidebar.threadSuffix : ""}${getConversationStatusLabel(conversation.status, messages.sidebar.readySuffix, messages.sidebar.generatingImagesSuffix)}`}
+                            actions={
+                              <>
                               <button
                                 type="button"
                                 aria-label={messages.shared.rename}
@@ -418,22 +385,19 @@ export function WriterSidebarItem({
                               >
                                 {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                               </button>
-                            </div>
-                          </>
+                              </>
+                            }
+                          />
                         )}
-                      </div>
-                    </Link>
+                    </SidebarSessionLink>
                   )
                 })}
                 {isLoadingMore ? (
-                  <div className="flex items-center px-3 py-2 text-xs text-muted-foreground">
-                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                    {messages.sidebar.loading}
-                  </div>
+                  <SidebarListState loading label={messages.sidebar.loading} />
                 ) : null}
               </div>
             )}
-          </div>
+          </SidebarSectionBody>
         )}
       </div>
 
