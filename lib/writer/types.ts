@@ -1,4 +1,4 @@
-import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
+import type { WriterContentType, WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 
 export type WriterConversationStatus = "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
 export type WriterRetrievalStrategy =
@@ -18,6 +18,18 @@ export type WriterTurnDiagnostics = {
   webResearchUsed: boolean
   webResearchStatus: "ready" | "disabled" | "timed_out" | "unavailable" | "skipped"
   webSourceCount: number
+  routing?: WriterRoutingDecision | null
+}
+
+export type WriterRoutingDecision = {
+  contentType: WriterContentType
+  targetPlatform: string
+  outputForm: string
+  lengthTarget: string
+  renderPlatform: WriterPlatform
+  renderMode: WriterMode
+  selectedSkillId: string
+  selectedSkillLabel: string
 }
 
 export type WriterConversationSummary = {

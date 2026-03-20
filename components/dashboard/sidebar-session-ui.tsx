@@ -25,7 +25,7 @@ export function SidebarSectionToggle({
     <Button
       variant="ghost"
       className={cn(
-        "h-11 w-full justify-between rounded-[18px] border-2 border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:bg-primary hover:text-primary-foreground",
+        "box-border h-11 w-full min-w-0 justify-between rounded-[18px] border-2 border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:bg-primary hover:text-primary-foreground",
         expanded && "bg-primary text-primary-foreground",
       )}
       size="sm"
@@ -41,7 +41,7 @@ export function SidebarSectionToggle({
 }
 
 export function SidebarSectionBody({ children }: { children: ReactNode }) {
-  return <div className="ml-2 mt-2 space-y-2 border-l-2 border-sidebar-border pl-3">{children}</div>
+  return <div className="mt-2.5 w-full min-w-0 space-y-2 overflow-hidden">{children}</div>
 }
 
 type SidebarCreateLinkProps = {
@@ -55,7 +55,7 @@ export function SidebarCreateLink({ href, label, testId }: SidebarCreateLinkProp
     <Link href={href}>
       <Button
         variant="ghost"
-        className="h-9 w-full justify-start rounded-[16px] border-2 border-dashed border-sidebar-border bg-sidebar px-3 text-xs text-sidebar-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground"
+        className="box-border h-9 w-full min-w-0 justify-start overflow-hidden rounded-[18px] border-0 bg-sidebar-accent px-3 text-xs font-medium text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
         data-testid={testId}
       >
         <Plus className="mr-2 h-3 w-3" />
@@ -73,7 +73,7 @@ export function SidebarListState({
   label: string
 }) {
   return (
-    <div className="flex items-center rounded-xl px-3 py-2 text-xs text-muted-foreground">
+    <div className="box-border flex w-full min-w-0 items-center overflow-hidden rounded-[18px] bg-sidebar-accent px-3 py-2.5 text-xs text-muted-foreground">
       {loading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
       {label}
     </div>
@@ -96,13 +96,13 @@ export function SidebarSessionLink({
   children,
 }: SidebarSessionLinkProps) {
   return (
-    <Link href={href} onMouseEnter={onWarm} data-testid={testId}>
+    <Link href={href} onMouseEnter={onWarm} data-testid={testId} className="block w-full min-w-0 max-w-full overflow-hidden">
       <div
         className={cn(
-          "group rounded-[18px] border-2 px-3 py-3 text-xs transition",
+          "group relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-[18px] px-3 py-2.5 text-xs transition-colors",
           active
-            ? "border-primary bg-primary text-primary-foreground"
-            : "border-sidebar-border bg-card text-sidebar-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground",
+            ? "bg-primary text-primary-foreground"
+            : "bg-sidebar-accent text-sidebar-foreground hover:bg-primary hover:text-primary-foreground",
         )}
       >
         {children}
@@ -127,15 +127,15 @@ export function SidebarSessionRow({
   actions,
 }: SidebarSessionRowProps) {
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className={cn("relative flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden", actions && "pr-10")}>
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         {leading}
-        <div className="min-w-0">
-          <div className={cn("truncate text-[12px]", active && "font-semibold")}>{title}</div>
-          {subtitle ? <div className="truncate text-[10px] opacity-70">{subtitle}</div> : null}
+        <div className="min-w-0 flex-1">
+          <div className={cn("truncate text-[12px] leading-5", active && "font-semibold")}>{title}</div>
+          {subtitle ? <div className="truncate text-[10px] leading-4 opacity-70">{subtitle}</div> : null}
         </div>
       </div>
-      {actions ? <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">{actions}</div> : null}
+      {actions ? <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">{actions}</div> : null}
     </div>
   )
 }

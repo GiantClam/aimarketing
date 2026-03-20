@@ -87,8 +87,8 @@ export function AdvisorSidebarItem({
     items: conversations,
     isLoading,
     isLoadingMore,
-    hasMore,
-    nextCursor: nextLastId,
+    hasMore: _hasMore,
+    nextCursor: _nextLastId,
     fetchItems: fetchConversations,
     updateList,
     createSnapshot,
@@ -236,7 +236,7 @@ export function AdvisorSidebarItem({
 
   return (
     <>
-      <div className="mb-2">
+      <div className="mb-2 w-full min-w-0">
         <SidebarSectionToggle title={title} icon={Icon} expanded={isOpen} onToggle={() => setIsOpen(!isOpen)} />
 
         {isOpen && (
@@ -249,7 +249,7 @@ export function AdvisorSidebarItem({
               <SidebarListState label={messages.sidebar.noSessions} />
             ) : (
               <div
-                className="max-h-72 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="w-full min-w-0 max-h-72 space-y-2 overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 onScroll={handleListScroll}
               >
                 {conversations.map((conv) => {
@@ -280,7 +280,7 @@ export function AdvisorSidebarItem({
                         ) : (
                           <SidebarSessionRow
                             active={isActive}
-                            leading={<MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-70" />}
+                            leading={<MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-60" />}
                             title={conv.name || messages.sidebar.newChatFallback}
                             actions={
                               <>

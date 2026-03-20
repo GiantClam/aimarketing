@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceLoadingMessage,
@@ -2393,7 +2393,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     })
   }, [])
 
-  const clearPendingAttachments = useCallback(() => {
+  const _clearPendingAttachments = useCallback(() => {
     setPendingAttachments((current) => {
       current.forEach((attachment) => {
         URL.revokeObjectURL(attachment.previewUrl)
@@ -3386,23 +3386,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     )
   }
 
-  const handleCreateSession = () => {
-    activeJobAbortRef.current?.abort()
-    activeJobAbortRef.current = null
-    void createSession(imageCopy.newDesign).then(() => {
-      resetCanvasHistory()
-      setDetail(null)
-      setCanvas(null)
-      setSelectedLayerId(null)
-      setPrompt("")
-      setPendingTurn(null)
-      setPaintPreview(null)
-      setSelectedVersionId(null)
-      clearPendingAttachments()
-      setMode("chat")
-    })
-  }
-
   const handleCloseEditor = () => {
     if (isClosingEditorRef.current) return
     isClosingEditorRef.current = true
@@ -3569,66 +3552,26 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     )
   }
 
-  const workspaceStatus = isUploading
-    ? imageCopy.statusUploading
-    : isBusy
-      ? imageCopy.statusGenerating
-      : dirtyCanvas
-        ? imageCopy.statusDirty
-        : detail?.messages?.length
-          ? imageCopy.statusCanRefine
-          : imageCopy.statusIdle
-
   return (
     <>
       <div className="flex h-full min-h-0 flex-col">
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
-          <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3 px-3 py-3 lg:px-5 lg:py-4">
-            <WorkspaceHero
-              eyebrow={i18n.dashboardPage.imageAssistant.label}
-              title={detail?.session.name || imageCopy.assistantName}
-              description={imageCopy.workspaceDescription}
-              status={workspaceStatus}
-              badges={[
-                <Badge key="provider" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {availability.provider}
-                </Badge>,
-                <Badge key="mode" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {composerModeLabel}
-                </Badge>,
-                <Badge key="size" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {sizePreset}
-                </Badge>,
-                <Badge key="resolution" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {resolution}
-                </Badge>,
-                <Badge key="attachments" variant={composerAttachmentCount ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {composerAttachmentCount
-                    ? imageCopy.imagesAttached.replace("{count}", String(composerAttachmentCount))
-                    : imageCopy.noImageAttached}
-                </Badge>,
-              ]}
-              stats={[
-                { label: "Messages", value: String(displayMessages.length) },
-                { label: "Versions", value: String(detail?.versions?.length || 0) },
-                { label: "References", value: String(composerAttachmentCount) },
-                { label: "Provider", value: availability.provider },
-              ]}
-              actions={
-                <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-[11px]" onClick={handleCreateSession}>
-                  {imageCopy.newDesign}
-                </Button>
-              }
-            />
-            <div className="flex min-h-0 flex-1 px-0">
-              <div className="flex min-w-0 flex-1 flex-col gap-3">
-                <div className="min-h-0 flex-1 overflow-hidden rounded-[30px] border-2 border-border bg-card">
+          <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+              <WorkspaceConversationHeader
+                title={detail?.session.name || imageCopy.assistantName}
+                description={`在这里与 ${imageCopy.assistantName} 进行多轮次对话，发送消息后会自动生成回复`}
+                variant="inline"
+              />
+              <div className="flex min-h-0 flex-1 bg-[#f7f7f7] px-0">
+                <div className="flex min-w-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 overflow-hidden">
                   <ScrollArea className="h-full" ref={messageViewportRef}>
                     <div className="space-y-0">
                     {displayMessages.length ? (
                       <>
                         {hasMoreMessages ? (
-                          <div className="flex justify-center px-4 py-4">
+                          <div className="flex justify-center px-3 py-3">
                             <Button
                               variant="outline"
                               size="sm"
@@ -3641,7 +3584,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                             </Button>
                           </div>
                         ) : null}
-                        {displayMessages.map((message) => {
+                        {displayMessages.map((message, index) => {
                           const optimisticUserMessageId = pendingTurn ? `${pendingTurn.id}:user` : null
                           const optimisticAssistantMessageId = pendingTurn ? `${pendingTurn.id}:assistant` : null
                           const optimisticAttachments =
@@ -3657,6 +3600,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                             <WorkspaceMessageFrame
                               key={message.id}
                               role={message.role === "user" ? "user" : "assistant"}
+                              className={cn(index === 0 && "border-b border-border/40 bg-transparent pt-5 lg:pt-6")}
                               label={formatMessageRoleLabel(message.role, imageCopy)}
                               icon={message.role !== "user" ? <Sparkles className="h-3.5 w-3.5" /> : null}
                               action={
@@ -3852,7 +3796,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                         })}
                       </>
                     ) : (
-                      <div className="px-4 py-4">
+                      <div className="px-3 py-3">
                         <WorkspacePromptGrid
                           eyebrow={imageCopy.quickStart}
                           prompts={imageCopy.starterPrompts}
@@ -3870,15 +3814,16 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                     </div>
                   </ScrollArea>
                 </div>
-              <WorkspaceComposerPanel
-                data-testid="image-composer-dropzone"
-                className={cn(
-                  "relative rounded-[28px] border-2 border-border bg-card p-2.5 transition-colors",
-                  isComposerDragActive && "border-primary bg-primary/10",
-                )}
-                toolbarClassName="items-center"
-                toolbar={
-                  <>
+                  <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
+                    <WorkspaceComposerPanel
+                      data-testid="image-composer-dropzone"
+                      className={cn(
+                        "relative border-none bg-transparent p-0 transition-colors",
+                        isComposerDragActive && "rounded-[24px] bg-primary/10",
+                      )}
+                      toolbarClassName="items-center"
+                      toolbar={
+                        <>
                     <select
                       value={sizePreset}
                       onChange={(event) => setSizePreset(event.target.value as ImageAssistantSizePreset)}
@@ -3930,136 +3875,138 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       }}
                       className="ml-auto"
                     />
-                  </>
-                }
-                bodyClassName="px-0"
-                footer={
-                  <>
-                    <p className="text-[11px] leading-5 text-muted-foreground">
-                      {composerAttachmentCount
-                        ? imageCopy.imagesAttached.replace("{count}", String(composerAttachmentCount))
-                        : imageCopy.noImageAttached}
-                      {" / "}
-                      {sizePreset}
-                      {" / "}
-                      {resolution}
-                      {" / "}
-                      {extraCopy.uploadLimit}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-muted-foreground">Ctrl/Cmd + Enter</span>
-                      {isBusy ? (
-                        <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
-                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                          {imageCopy.statusGenerating}
-                        </Button>
-                      ) : null}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-[11px]"
-                        data-testid="image-edit-button"
-                        onClick={() => void runJob("edit")}
-                        disabled={!canSubmit || !composerAttachmentCount}
-                      >
-                        {imageCopy.editWithImage}
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-8 rounded-full px-3 text-[11px]"
-                        data-testid="image-generate-button"
-                        onClick={() => void runJob(primaryRunKind)}
-                        disabled={!canSubmit}
-                      >
-                        {isBusy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                        {imageCopy.send}
-                      </Button>
-                    </div>
-                  </>
-                }
-                onDragEnter={handleComposerDragEnter}
-                onDragOver={handleComposerDragOver}
-                onDragLeave={handleComposerDragLeave}
-                onDrop={handleComposerDrop}
-              >
-                {isComposerDragActive ? (
-                  <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[20px] border-2 border-dashed border-primary bg-background px-4 text-center">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">{extraCopy.dragDropActiveHint}</p>
-                      <p className="text-xs text-muted-foreground">{extraCopy.dragDropHint}</p>
-                    </div>
-                  </div>
-                ) : null}
-                {pendingAttachments.length ? (
-                  <div className="mt-2 max-h-48 overflow-y-auto rounded-[20px] border-2 border-border bg-background px-3 py-2.5">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-[11px] font-medium text-muted-foreground">
-                        {pendingAttachments.length}/{IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {pendingAttachments.map((attachment) => (
-                        <div
-                          key={attachment.id}
-                          className="group flex items-center gap-2 rounded-[18px] border-2 border-border bg-card px-2 py-2"
-                          data-testid={`image-pending-attachment-${attachment.id}`}
-                        >
-                          <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted">
-                            <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
-                          </div>
-                          <div className="max-w-[120px]">
-                            <p className="truncate text-[11px] font-medium text-foreground">{formatPendingAttachmentLabel(attachment, imageCopy)}</p>
-                            <p className="truncate text-[10px] text-muted-foreground">
-                              {attachment.uploading ? imageCopy.preparingAttachment : attachment.file.name}
-                            </p>
-                            <p className="truncate text-[10px] text-muted-foreground">
-                              {formatBytes(attachment.uploadFileSize)}
-                              {attachment.transportOptimized && attachment.uploadFileSize < attachment.originalFileSize
-                                ? ` / ${extraCopy.optimizedBadge} ${formatBytes(attachment.originalFileSize)} -> ${formatBytes(attachment.uploadFileSize)}`
-                                : ""}
-                            </p>
-                          </div>
-                          <Button
-                            size="icon"
-                            type="button"
-                            variant="ghost"
-                            className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
-                            onClick={() => removePendingAttachment(attachment.id)}
-                            aria-label={imageCopy.removePendingImage}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="mt-2">
-                  <Textarea
-                    data-testid="image-prompt-input"
-                    value={prompt}
-                    onChange={(event) => {
-                      setPrompt(event.target.value)
-                      if (jobError) setJobError(null)
-                    }}
-                    onKeyDown={(event) => {
-                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                        event.preventDefault()
-                        if (canSubmit) {
-                          void runJob(primaryRunKind)
-                        }
+                        </>
                       }
-                    }}
-                    placeholder={extraCopy.additionalNotesPlaceholder}
-                    className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
-                    disabled={isBusy}
-                  />
-                  {jobError ? (
-                    <div className="px-3.5 pb-1 text-[12px] text-destructive">{jobError}</div>
-                  ) : null}
+                      bodyClassName="px-0"
+                      footer={
+                        <>
+                          <p className="text-[11px] leading-5 text-muted-foreground">
+                            {composerAttachmentCount
+                              ? imageCopy.imagesAttached.replace("{count}", String(composerAttachmentCount))
+                              : imageCopy.noImageAttached}
+                            {" / "}
+                            {sizePreset}
+                            {" / "}
+                            {resolution}
+                            {" / "}
+                            {extraCopy.uploadLimit}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground">Ctrl/Cmd + Enter</span>
+                            {isBusy ? (
+                              <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                {imageCopy.statusGenerating}
+                              </Button>
+                            ) : null}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 rounded-full px-3 text-[11px]"
+                              data-testid="image-edit-button"
+                              onClick={() => void runJob("edit")}
+                              disabled={!canSubmit || !composerAttachmentCount}
+                            >
+                              {imageCopy.editWithImage}
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-8 rounded-full px-3 text-[11px]"
+                              data-testid="image-generate-button"
+                              onClick={() => void runJob(primaryRunKind)}
+                              disabled={!canSubmit}
+                            >
+                              {isBusy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                              {imageCopy.send}
+                            </Button>
+                          </div>
+                        </>
+                      }
+                      onDragEnter={handleComposerDragEnter}
+                      onDragOver={handleComposerDragOver}
+                      onDragLeave={handleComposerDragLeave}
+                      onDrop={handleComposerDrop}
+                    >
+                      {isComposerDragActive ? (
+                        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[20px] border-2 border-dashed border-primary bg-background px-4 text-center">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-foreground">{extraCopy.dragDropActiveHint}</p>
+                            <p className="text-xs text-muted-foreground">{extraCopy.dragDropHint}</p>
+                          </div>
+                        </div>
+                      ) : null}
+                      {pendingAttachments.length ? (
+                        <div className="mt-2 max-h-48 overflow-y-auto rounded-[20px] border-2 border-border bg-background px-3 py-2.5">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-[11px] font-medium text-muted-foreground">
+                              {pendingAttachments.length}/{IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {pendingAttachments.map((attachment) => (
+                              <div
+                                key={attachment.id}
+                                className="group flex items-center gap-2 rounded-[18px] border-2 border-border bg-card px-2 py-2"
+                                data-testid={`image-pending-attachment-${attachment.id}`}
+                              >
+                                <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted">
+                                  <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
+                                </div>
+                                <div className="max-w-[120px]">
+                                  <p className="truncate text-[11px] font-medium text-foreground">{formatPendingAttachmentLabel(attachment, imageCopy)}</p>
+                                  <p className="truncate text-[10px] text-muted-foreground">
+                                    {attachment.uploading ? imageCopy.preparingAttachment : attachment.file.name}
+                                  </p>
+                                  <p className="truncate text-[10px] text-muted-foreground">
+                                    {formatBytes(attachment.uploadFileSize)}
+                                    {attachment.transportOptimized && attachment.uploadFileSize < attachment.originalFileSize
+                                      ? ` / ${extraCopy.optimizedBadge} ${formatBytes(attachment.originalFileSize)} -> ${formatBytes(attachment.uploadFileSize)}`
+                                      : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="icon"
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
+                                  onClick={() => removePendingAttachment(attachment.id)}
+                                  aria-label={imageCopy.removePendingImage}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-2">
+                        <Textarea
+                          data-testid="image-prompt-input"
+                          value={prompt}
+                          onChange={(event) => {
+                            setPrompt(event.target.value)
+                            if (jobError) setJobError(null)
+                          }}
+                          onKeyDown={(event) => {
+                            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                              event.preventDefault()
+                              if (canSubmit) {
+                                void runJob(primaryRunKind)
+                              }
+                            }
+                          }}
+                          placeholder={extraCopy.additionalNotesPlaceholder}
+                          className="min-h-12 resize-none border-0 bg-transparent px-3 py-2.5 text-[13px] leading-6 shadow-none focus-visible:ring-0"
+                          disabled={isBusy}
+                        />
+                        {jobError ? (
+                          <div className="px-3.5 pb-1 text-[12px] text-destructive">{jobError}</div>
+                        ) : null}
+                      </div>
+                    </WorkspaceComposerPanel>
+                  </div>
                 </div>
-              </WorkspaceComposerPanel>
               </div>
             </div>
           </div>

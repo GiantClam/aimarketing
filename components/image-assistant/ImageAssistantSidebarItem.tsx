@@ -76,8 +76,8 @@ export function ImageAssistantSidebarItem({
     items: sessions,
     isLoading,
     isLoadingMore,
-    hasMore,
-    nextCursor,
+    hasMore: _hasMore,
+    nextCursor: _nextCursor,
     fetchItems: fetchSessions,
     updateList,
     createSnapshot,
@@ -219,7 +219,7 @@ export function ImageAssistantSidebarItem({
 
   return (
     <>
-      <div className="mb-2">
+      <div className="mb-2 w-full min-w-0">
         <SidebarSectionToggle title={title} icon={Icon} expanded={isExpanded} onToggle={() => setIsOpen((current) => !current)} />
 
         {isExpanded ? (
@@ -232,7 +232,7 @@ export function ImageAssistantSidebarItem({
               <SidebarListState label={messages.sidebar.noDesignSessions} />
             ) : (
               <div
-                className="max-h-72 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="w-full min-w-0 max-h-72 space-y-2 overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 onScroll={handleListScroll}
               >
                 {sessions.map((session) => {
@@ -270,10 +270,10 @@ export function ImageAssistantSidebarItem({
                                   alt=""
                                   loading="lazy"
                                   decoding="async"
-                                  className="h-6 w-6 shrink-0 rounded-md object-cover"
+                                  className="h-6 w-6 shrink-0 rounded-[8px] object-cover"
                                 />
                               ) : (
-                                <ImageIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                                <ImageIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
                               )
                             }
                             title={session.name || messages.sidebar.newDesignFallback}

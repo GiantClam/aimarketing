@@ -46,13 +46,9 @@ def wait_for_writer_workspace_ready(page, timeout_ms: int = 45000):
     while time() < deadline:
         selects = page.locator("select:visible")
         textarea = page.locator("textarea:visible")
-        if selects.count() >= 3 and textarea.count() >= 1:
-            if (
-                not selects.nth(0).is_disabled()
-                and not selects.nth(1).is_disabled()
-                and not selects.nth(2).is_disabled()
-                and not textarea.first.is_disabled()
-            ):
+        send_button = page.get_by_test_id("writer-send-button")
+        if selects.count() >= 1 and textarea.count() >= 1 and send_button.count() >= 1:
+            if not selects.first.is_disabled() and not textarea.first.is_disabled() and not send_button.is_disabled():
                 return
         page.wait_for_timeout(500)
 
@@ -168,6 +164,13 @@ def assert_no_critical_console_errors(console_errors):
     expect(not critical_errors, f"critical console errors found: {critical_errors[:5]}")
 
 
+def set_writer_language(page, language: str):
+    selects = page.locator("select:visible")
+    expect(selects.count() >= 1, "writer page should render the language select")
+    selects.first.select_option(language)
+    page.wait_for_timeout(300)
+
+
 wait_until_http_ready()
 
 
@@ -187,19 +190,12 @@ with sync_playwright() as p:
         wait_for_writer_workspace_ready(page)
         save_debug(page, "01-writer-home")
 
-        selects = page.locator("select:visible")
-        expect(selects.count() >= 3, "writer page should render platform, mode, and language selects")
-        selects.nth(0).select_option("wechat")
-        page.wait_for_timeout(400)
-        selects.nth(1).select_option("article")
-        page.wait_for_timeout(400)
-        selects.nth(2).select_option("zh")
-        page.wait_for_timeout(400)
-        save_debug(page, "02-wechat-article-mode")
+        set_writer_language(page, "zh")
+        save_debug(page, "02-chinese-writer-mode")
 
         input_box = page.locator("textarea:visible").first
         input_box.fill(
-            "写一篇公众号文章，主题是 AI 创业团队如何避免内容空转。请使用 Markdown 输出，包含一个主标题、至少两个二级标题、一个引用块、一个加粗重点和一个项目符号列表，语言专业，给出实际建议。"
+            "写一篇公众号文章，主题是 AI 创业团队如何避免内容空转。请用 Markdown 输出，包含一个主标题、至少两个二级标题、一个引用块、一个加粗重点和一个项目符号列表，语气专业，并给出实际建议。"
         )
 
         send_button = page.locator("button:visible").filter(has=page.locator("svg.lucide-send")).last

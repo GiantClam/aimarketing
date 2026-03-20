@@ -1,0 +1,92 @@
+[
+  {
+    "conversation_id": 251,
+    "platform": "generic",
+    "mode": "article",
+    "language": "auto",
+    "status": "drafting",
+    "id": 3305,
+    "role": "user",
+    "content": "对GTC 2026大会进行 介绍，特别是黄仁勋的关于AI和token的演讲进行总结分析，写一篇微信公众号文章",
+    "diagnostics": null,
+    "created_at": "2026-03-19T19:51:41.729Z"
+  },
+  {
+    "conversation_id": 251,
+    "platform": "generic",
+    "mode": "article",
+    "language": "auto",
+    "status": "drafting",
+    "id": 3306,
+    "role": "assistant",
+    "content": "我先确认一下当前信息：主题：AI和token的演讲进行总结分析；受众：待补充；目标：待补充；语气：待补充。\n为了把文章写得更贴合预期，还差 2 项关键信息。\n1. 这篇文章主要是写给谁看的？\n补充这些信息后，我就可以直接开始生成文章。",
+    "diagnostics": {
+      "routing": {
+        "outputForm": "WeChat Official Account native post",
+        "renderMode": "article",
+        "contentType": "social_cn",
+        "lengthTarget": "platform-native medium length",
+        "renderPlatform": "wechat",
+        "targetPlatform": "WeChat Official Account",
+        "selectedSkillId": "social_cn",
+        "selectedSkillLabel": "中文社媒"
+      },
+      "webSourceCount": 0,
+      "webResearchUsed": false,
+      "enterpriseTitles": [],
+      "retrievalStrategy": "fresh_external",
+      "webResearchStatus": "skipped",
+      "enterpriseDatasets": [],
+      "enterpriseSourceCount": 0,
+      "enterpriseDatasetCount": 0,
+      "enterpriseKnowledgeUsed": false,
+      "enterpriseKnowledgeEnabled": false
+    },
+    "created_at": "2026-03-19T19:51:41.729Z"
+  },
+  {
+    "conversation_id": 251,
+    "platform": "generic",
+    "mode": "article",
+    "language": "auto",
+    "status": "drafting",
+    "id": 3307,
+    "role": "user",
+    "content": "主要是喜欢AI的小白看的",
+    "diagnostics": null,
+    "created_at": "2026-03-19T19:53:19.674Z"
+  },
+  {
+    "conversation_id": 251,
+    "platform": "generic",
+    "mode": "article",
+    "language": "auto",
+    "status": "drafting",
+    "id": 3308,
+    "role": "assistant",
+    "content": "我先确认一下当前信息：主题：AI和token的演讲进行总结分析; 主要是喜欢AI的小白看的；受众：待补充；目标：待补充；语气：待补充。\n为了把文章写得更贴合预期，还差 2 项关键信息。\n1. 这篇文章主要是写给谁看的？\n补充这些信息后，我就可以直接开始生成文章。",
+    "diagnostics": {
+      "routing": {
+        "outputForm": "long-form article",
+        "renderMode": "article",
+        "contentType": "longform",
+        "lengthTarget": "800-1500 words",
+        "renderPlatform": "generic",
+        "targetPlatform": "Long-form publishing",
+        "selectedSkillId": "longform",
+        "selectedSkillLabel": "长文内容"
+      },
+      "webSourceCount": 0,
+      "webResearchUsed": false,
+      "enterpriseTitles": [],
+      "retrievalStrategy": "enterprise_grounded",
+      "webResearchStatus": "skipped",
+      "enterpriseDatasets": [],
+      "enterpriseSourceCount": 0,
+      "enterpriseDatasetCount": 0,
+      "enterpriseKnowledgeUsed": false,
+      "enterpriseKnowledgeEnabled": false
+    },
+    "created_at": "2026-03-19T19:53:19.674Z"
+  }
+]

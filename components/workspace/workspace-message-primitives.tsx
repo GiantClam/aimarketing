@@ -40,16 +40,16 @@ export function WorkspaceMessageFrame({
         : "bg-secondary text-secondary-foreground"
 
   return (
-    <div className={cn("w-full border-b border-border px-5 py-5", toneClass, className)}>
-      <div className="mx-auto flex w-full max-w-4xl gap-4">
-        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px]", avatarClass)}>
+    <div className={cn("w-full border-b border-border px-4 py-3.5", toneClass, className)}>
+      <div className="mx-auto flex w-full max-w-5xl gap-3">
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px]", avatarClass)}>
           {icon ?? <span className="text-xs font-bold">{isUser ? "U" : "AI"}</span>}
         </div>
         <div className="min-w-0 flex-1">
           {(label || action) ? (
-            <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="mb-1.5 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                {label ? <span className="truncate text-sm font-medium text-foreground">{label}</span> : null}
+                {label ? <span className="truncate text-[13px] font-medium text-foreground">{label}</span> : null}
               </div>
               {action}
             </div>

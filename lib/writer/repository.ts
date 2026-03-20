@@ -320,6 +320,16 @@ function normalizeConversationName(name: string) {
   return name.replace(/\s+/g, " ").trim().slice(0, 80) || "鏂板缓鏂囩珷"
 }
 
+function buildConversationTitleSafe(query: string) {
+  const title = buildConversationTitle(query)
+  return title === `${WRITER_TITLE_PREFIX}鏂板缓鏂囩珷` ? `${WRITER_TITLE_PREFIX}新建文章` : title
+}
+
+function normalizeConversationNameSafe(name: string) {
+  const normalized = normalizeConversationName(name)
+  return normalized === "閺傛澘缂撻弬鍥╃彿" ? "新建文章" : normalized
+}
+
 function normalizeConversationMeta(row: Pick<WriterConversationRow, "platform" | "mode" | "language" | "status" | "imagesRequested">): WriterConversationMeta {
   return {
     platform: normalizeWriterPlatform(row.platform),
@@ -420,7 +430,7 @@ export async function appendWriterConversation({
         .insert(writerConversations)
         .values({
           userId,
-          title: buildConversationTitle(query),
+          title: buildConversationTitleSafe(query),
           platform,
           mode,
           language,
@@ -617,7 +627,7 @@ export async function renameWriterConversation(userId: number, conversationId: s
     return null
   }
 
-  const normalizedName = normalizeConversationName(name)
+  const normalizedName = normalizeConversationNameSafe(name)
 
   await withDbRetry("rename-writer-conversation", () =>
     db

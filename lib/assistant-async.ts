@@ -228,9 +228,9 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
     status: turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready",
     imagesRequested: false,
     language: payload.language,
-    platform: payload.platform,
-    mode: payload.mode,
-    diagnostics: turnResult.outcome === "draft_ready" ? turnResult.diagnostics : null,
+    platform: turnResult.routing.renderPlatform,
+    mode: turnResult.routing.renderMode,
+    diagnostics: turnResult.diagnostics,
   })
 
   await updateTaskStatus(taskId, {
@@ -382,7 +382,7 @@ async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload
   const abortController = new AbortController()
   const abortTimer = setTimeout(() => abortController.abort("advisor_task_timeout"), ADVISOR_TASK_TIMEOUT_MS)
 
-  let answer = ""
+  let answer: string | null | undefined
   let conversationId = payload.conversationId || null
   let agentName = ""
 

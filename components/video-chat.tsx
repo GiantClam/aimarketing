@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptChips } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
@@ -107,7 +107,7 @@ export function VideoChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null)
+  const [, setAgentAvailable] = useState<boolean | null>(null)
   const [conversationState, setConversationState] = useState<ConversationState>({
     status: "idle",
   })
@@ -904,19 +904,6 @@ export function VideoChat() {
     setUploadedImageUrl(null)
   }, [])
 
-  const workspaceStatus =
-    agentAvailable === false
-      ? "Video agent unavailable. Service configuration needs attention."
-      : conversationState.status === "collecting"
-      ? "Collecting production inputs."
-      : conversationState.status === "generating"
-        ? "Generating storyboard, clips, and final composition."
-        : conversationState.status === "completed"
-          ? "Video pipeline completed."
-        : conversationState.status === "error"
-            ? "Flow interrupted. Update the brief and retry."
-            : "Describe the video goal to begin."
-
   const starterPrompts = [
     "做一个 30 秒品牌介绍视频，风格要专业、简洁、有产品质感。",
     "围绕新品功能演示生成短视频脚本，突出 3 个核心卖点和结尾 CTA。",
@@ -936,34 +923,18 @@ export function VideoChat() {
   }, [addMessage])
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      <div className="border-b border-border/60 bg-background/96 px-3 py-3 backdrop-blur-sm lg:px-5 lg:py-4">
-        <WorkspaceHero
-          eyebrow="Video Generator"
+    <div className="h-full flex flex-col bg-muted/30">
+      <div className="px-2 py-2 lg:px-4 lg:py-3">
+        <WorkspaceConversationHeader
           title="视频生成 Agent"
           description="通过多轮对话整理创意要求，再串联故事板、片段生成和最终合成流程。"
-          status={workspaceStatus}
-          badges={[
-            <Badge key="flow" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-              Multi-agent
-            </Badge>,
-            <Badge key="state" variant={loading ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
-              {loading ? "Running" : "Ready"}
-            </Badge>,
-          ]}
-          stats={[
-            { label: "Messages", value: String(messages.length) },
-            { label: "State", value: conversationState.status },
-            { label: "Storyboard", value: messages.some((message) => message.storyboard?.scenes?.length) ? "Ready" : "Pending" },
-            { label: "Final video", value: messages.some((message) => message.finalVideo?.video_url) ? "Ready" : "Pending" },
-          ]}
         />
       </div>
 
       {/* 对话区域 */}
       <div 
         ref={scrollAreaRef}
-        className="flex-1 px-6 py-4 overflow-y-auto"
+        className="flex-1 px-3 py-3 overflow-y-auto lg:px-4 lg:py-4"
         style={{
           scrollbarWidth: 'none', // Firefox
           msOverflowStyle: 'none', // IE/Edge
@@ -974,7 +945,7 @@ export function VideoChat() {
             display: none; /* Chrome, Safari and Opera */
           }
         `}</style>
-        <div className="mx-auto max-w-4xl space-y-0">
+        <div className="mx-auto max-w-5xl space-y-0">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -1450,8 +1421,8 @@ export function VideoChat() {
       </div>
 
       {/* 输入区域 */}
-      <div className="border-t-2 border-border bg-muted/20 px-6 py-4">
-        <div className="max-w-4xl mx-auto">
+      <div className="border-t-2 border-border bg-muted/20 px-3 py-3 lg:px-4 lg:py-4">
+        <div className="max-w-5xl mx-auto">
           <WorkspaceComposerPanel
             className="border-2 border-border bg-card p-2.5"
             toolbar={
@@ -1493,7 +1464,7 @@ export function VideoChat() {
                 }
               }}
               placeholder="输入您的回答或选择上面的选项..."
-              className="min-h-[88px] resize-none border-0 bg-transparent px-3.5 py-3 shadow-none focus-visible:ring-0"
+              className="min-h-[72px] resize-none border-0 bg-transparent px-3 py-2.5 shadow-none focus-visible:ring-0"
               disabled={loading || conversationState.status === "generating" || conversationState.status === "completed"}
             />
           </WorkspaceComposerPanel>

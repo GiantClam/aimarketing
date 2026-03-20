@@ -76,7 +76,7 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
 
   if (advisorType === "copywriting") {
     return (
-      <div className="flex h-[calc(100vh-65px)] w-full items-center justify-center text-sm text-muted-foreground lg:h-screen">
+      <div className="flex h-full min-h-0 w-full items-center justify-center text-sm text-muted-foreground">
         正在跳转到文章写作工作台...
       </div>
     )
@@ -84,13 +84,13 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
 
   if (loading || !user || !difyUser) {
     return (
-      <div className="flex h-[calc(100vh-65px)] w-full items-center justify-center text-sm text-muted-foreground lg:h-screen">正在加载顾问会话...</div>
+      <div className="flex h-full min-h-0 w-full items-center justify-center text-sm text-muted-foreground">正在加载顾问会话...</div>
     )
   }
 
   return (
-    <div className="h-[calc(100vh-65px)] w-full bg-transparent lg:h-screen">
-      <main className="mx-auto h-full max-w-[1680px] p-4 lg:p-6">
+    <div className="h-full min-h-0 w-full bg-transparent">
+      <main className="mx-auto h-full min-h-0 max-w-[1680px] px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
         <DifyChatArea
           user={difyUser}
           advisorType={advisorType}

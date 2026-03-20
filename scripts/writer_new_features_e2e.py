@@ -64,9 +64,9 @@ def read_seed():
 
 
 def wait_for_writer_workspace_ready(page, timeout_ms: int = 90000):
-    page.wait_for_selector("select", state="attached", timeout=timeout_ms)
+    page.wait_for_selector("select:visible", state="attached", timeout=timeout_ms)
     page.wait_for_selector("textarea", state="visible", timeout=timeout_ms)
-    page.wait_for_selector("[data-testid='writer-send-button']", state="attached", timeout=timeout_ms)
+    page.wait_for_selector("[data-testid='writer-send-button']", state="visible", timeout=timeout_ms)
 
 
 def wait_for_text(page, text: str, timeout_ms: int = 30000):
@@ -111,6 +111,13 @@ def clear_writer_session_store(page):
             window.localStorage.removeItem("writer-session-store-v1")
         }"""
     )
+
+
+def set_writer_language(page, language: str):
+    selects = page.locator("select:visible")
+    expect(selects.count() >= 1, "writer page should render the language select")
+    selects.first.select_option(language)
+    page.wait_for_timeout(200)
 
 
 def get_displayed_source_count(used: bool, count: int) -> int:
@@ -280,7 +287,7 @@ def wait_for_writer_messages_cleared(page, timeout_ms: int = 20000):
     raise AssertionError("writer workspace did not clear previous messages in time")
 
 
-def open_fresh_writer_session(page, *, platform: str, mode: str, language: str, debug_name: str | None = None):
+def open_fresh_writer_session(page, *, language: str, debug_name: str | None = None):
     close_preview_if_open(page, timeout_ms=20000)
     clear_writer_session_store(page)
     page.goto(f"{BASE_URL}/dashboard/writer", wait_until="domcontentloaded", timeout=90000)
@@ -290,14 +297,7 @@ def open_fresh_writer_session(page, *, platform: str, mode: str, language: str, 
     page.wait_for_load_state("networkidle", timeout=90000)
     wait_for_writer_workspace_ready(page)
     wait_for_writer_messages_cleared(page)
-
-    selects = page.locator("select:visible")
-    selects.nth(0).select_option(platform)
-    page.wait_for_timeout(200)
-    selects.nth(1).select_option(mode)
-    page.wait_for_timeout(200)
-    selects.nth(2).select_option(language)
-    page.wait_for_timeout(200)
+    set_writer_language(page, language)
 
     if debug_name:
         save_debug(page, debug_name)
@@ -340,20 +340,20 @@ def fetch_writer_history(page):
 def run_brief_regression_checks(page):
     report: dict[str, dict] = {}
     article_markers = (
-        "\u4f01\u4e1a\u77e5\u8bc6\u8981\u70b9",
-        "\u786e\u8ba4\u6587\u6848\u5e76\u751f\u6210\u914d\u56fe",
-        "\u590d\u5236 Markdown",
+        "企业知识要点",
+        "确认文案并生成配图",
+        "复制 Markdown",
     )
-    thread_markers = ("Segment 1", "\u786e\u8ba4\u6587\u6848\u5e76\u751f\u6210\u914d\u56fe")
+    thread_markers = ("Segment 1", "确认文案并生成配图")
     clarification_markers = (
-        "\u4e3b\u8981\u662f\u5199\u7ed9\u8c01",
-        "\u8fbe\u6210\u4ec0\u4e48\u7ed3\u679c",
+        "主要是写给谁",
+        "达成什么结果",
         "Who is the primary audience",
         "What result should the article drive",
     )
 
-    open_fresh_writer_session(page, platform="wechat", mode="article", language="zh", debug_name="06-brief-short-objective-start")
-    send_writer_message(page, "\u6211\u60f3\u5199\u4e00\u7bc7\u5173\u4e8e AI \u9500\u552e\u81ea\u52a8\u5316\u7684\u6587\u7ae0\u3002")
+    open_fresh_writer_session(page, language="zh", debug_name="06-brief-short-objective-start")
+    send_writer_message(page, "我想写一篇关于 AI 销售自动化的公众号文章。")
     page.wait_for_url(re.compile(r".*/dashboard/writer/\d+(?:\\?.*)?$"), timeout=90000)
     first_reply = wait_for_non_empty_last_assistant(page, timeout_ms=60000)
     if text_contains_any_marker(first_reply, article_markers):
@@ -363,7 +363,7 @@ def run_brief_regression_checks(page):
             text_contains_any_marker(first_reply, clarification_markers),
             f"short-objective scenario should either clarify or draft, got: {first_reply}",
         )
-        send_writer_message(page, "\u4fc3\u6210\u54a8\u8be2")
+        send_writer_message(page, "促成咨询")
         short_reply_draft = wait_for_writer_draft(page, article_markers, timeout_ms=60000)
 
     short_reply_history = fetch_writer_history(page)
@@ -378,16 +378,16 @@ def run_brief_regression_checks(page):
     }
     save_debug(page, "07-brief-short-objective-complete")
 
-    open_fresh_writer_session(page, platform="x", mode="thread", language="zh", debug_name="08-brief-direct-output-start")
-    send_writer_message(page, "\u76f4\u63a5\u751f\u6210\u4e00\u7bc7\u5173\u4e8e AI agent \u9500\u552e\u81ea\u52a8\u5316\u7684 X thread")
+    open_fresh_writer_session(page, language="zh", debug_name="08-brief-direct-output-start")
+    send_writer_message(page, "直接生成一篇关于 AI agent 销售自动化的 X thread")
     page.wait_for_url(re.compile(r".*/dashboard/writer/\d+(?:\\?.*)?$"), timeout=90000)
     direct_output_text = wait_for_writer_draft(page, thread_markers, timeout_ms=60000)
     expect(
-        "\u4e3b\u8981\u662f\u5199\u7ed9\u8c01" not in direct_output_text,
+        "主要是写给谁" not in direct_output_text,
         "direct-output scenario should not keep clarifying audience",
     )
     expect(
-        "\u8fbe\u6210\u4ec0\u4e48\u7ed3\u679c" not in direct_output_text,
+        "达成什么结果" not in direct_output_text,
         "direct-output scenario should not keep clarifying objective",
     )
     report["direct_output_skip_clarification"] = {
@@ -396,13 +396,13 @@ def run_brief_regression_checks(page):
     }
     save_debug(page, "09-brief-direct-output-complete")
 
-    open_fresh_writer_session(page, platform="wechat", mode="article", language="zh", debug_name="10-brief-turn-limit-start")
+    open_fresh_writer_session(page, language="zh", debug_name="10-brief-turn-limit-start")
     turn_inputs = [
-        "\u60f3\u505a\u4e00\u7bc7\u6587\u7ae0",
-        "AI \u63d0\u6548",
-        "\u8fd8\u6ca1\u60f3\u597d",
-        "\u5148\u770b\u770b\u65b9\u5411",
-        "\u8865\u5145\u4e0d\u591a",
+        "想做一篇公众号文章",
+        "AI 提效",
+        "还没想好",
+        "先看看方向",
+        "补充不多",
     ]
     for index, text in enumerate(turn_inputs):
         send_writer_message(page, text)
@@ -503,13 +503,7 @@ def run_fixture_enabled(page):
     page.get_by_test_id("writer-delete-confirm-button").click()
     page.get_by_test_id(f"writer-conversation-{seed['conversationId']}").wait_for(state="detached", timeout=10000)
 
-    selects = page.locator("select:visible")
-    selects.nth(0).select_option("wechat")
-    page.wait_for_timeout(200)
-    selects.nth(1).select_option("article")
-    page.wait_for_timeout(200)
-    selects.nth(2).select_option("en")
-    page.wait_for_timeout(200)
+    set_writer_language(page, "en")
 
     input_box = page.locator("textarea:visible").first
     input_box.fill("Write a WeChat article about AI workflow systems.")

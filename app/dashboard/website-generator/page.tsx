@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Layout, Rocket, Send, Sparkles } from "lucide-react"
+import { Layout, Send, Sparkles } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import { WorkspaceMessageFrame, WorkspaceSectionCard } from "@/components/workspace/workspace-message-primitives"
 
@@ -47,12 +47,6 @@ export default function WebsiteGeneratorPage() {
     doc.write(currentHtml)
     doc.close()
   }, [currentHtml])
-
-  const workspaceStatus = isGenerating
-    ? status || "正在生成页面结构与内容..."
-    : logs.length > 0
-      ? "已生成最新页面，可继续补充需求迭代。"
-      : "描述企业、产品和风格后即可开始生成。"
 
   const starterPrompts = [
     "为跨境电商品牌生成一个高转化落地页，强调产品优势、用户评价和限时优惠。",
@@ -123,40 +117,15 @@ export default function WebsiteGeneratorPage() {
 
   return (
     <div className="flex h-full overflow-hidden bg-muted/30">
-      <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3 px-3 py-3 lg:px-5 lg:py-4">
-        <WorkspaceHero
-          eyebrow="Website Generator"
+      <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-2 px-2 py-2 lg:px-4 lg:py-3">
+        <WorkspaceConversationHeader
           title="网站生成 Agent"
           description="用对话逐步定义企业站点，再在右侧实时查看生成中的页面结果。"
-          status={workspaceStatus}
-          badges={[
-            <Badge key="mode" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-              Streaming
-            </Badge>,
-            <Badge key="preview" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-              Live preview
-            </Badge>,
-            <Badge key="status" variant={isGenerating ? "default" : "outline"} className="rounded-full px-2.5 py-0.5 text-[10px]">
-              {isGenerating ? "Generating" : "Ready"}
-            </Badge>,
-          ]}
-          stats={[
-            { label: "Messages", value: String(messages.length) },
-            { label: "Logs", value: String(logs.length) },
-            { label: "Preview", value: currentHtml ? "Live" : "Empty" },
-            { label: "Deploy", value: "Reserved" },
-          ]}
-          actions={
-            <Button size="sm" variant="outline" className="h-8 rounded-full border-slate-300 bg-white px-3 text-[11px] text-slate-950 hover:bg-slate-100" disabled>
-              <Rocket className="mr-1.5 h-3.5 w-3.5" />
-              部署入口预留
-            </Button>
-          }
         />
 
-        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[440px_minmax(0,1fr)]">
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-[30px] border-2 border-border bg-card">
-            <div className="border-b-2 border-border px-5 py-4">
+        <div className="grid min-h-0 flex-1 gap-2 xl:grid-cols-[420px_minmax(0,1fr)]">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border-2 border-border bg-card">
+            <div className="border-b-2 border-border px-4 py-3.5">
               <div className="flex items-center gap-2 text-primary">
                 <Sparkles className="h-4 w-4" />
                 <span className="text-xs font-semibold uppercase tracking-[0.18em]">Prompt lane</span>
@@ -169,7 +138,7 @@ export default function WebsiteGeneratorPage() {
             <ScrollArea className="flex-1">
               <div className="space-y-0">
                 {messages.length === 1 ? (
-                  <div className="p-4">
+                  <div className="p-3">
                     <WorkspacePromptGrid
                       eyebrow="Quick start"
                       prompts={starterPrompts}
@@ -191,7 +160,7 @@ export default function WebsiteGeneratorPage() {
                 ))}
 
                 {logs.length > 0 && (
-                  <div className="p-4 pt-0">
+                  <div className="p-3 pt-0">
                     <WorkspaceSectionCard
                       title="执行日志"
                       description="生成器会按节点流式返回状态，用于追踪页面结构、内容和预览同步。"
@@ -211,7 +180,7 @@ export default function WebsiteGeneratorPage() {
               </div>
             </ScrollArea>
 
-            <div className="border-t-2 border-border bg-muted/20 p-3">
+            <div className="border-t-2 border-border bg-muted/20 p-2.5">
               <WorkspaceComposerPanel
                 className="border-none bg-transparent p-0"
                 footer={
@@ -231,15 +200,15 @@ export default function WebsiteGeneratorPage() {
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && handleSend()}
                   placeholder="描述你想要的网站需求..."
-                  className="h-14 border-0 bg-transparent px-3.5 shadow-none focus-visible:ring-0"
+                  className="h-12 border-0 bg-transparent px-3 shadow-none focus-visible:ring-0"
                   disabled={isGenerating}
                 />
               </WorkspaceComposerPanel>
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-[30px] border-2 border-border bg-card">
-            <div className="flex items-center justify-between border-b-2 border-border px-5 py-3.5">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border-2 border-border bg-card">
+            <div className="flex items-center justify-between border-b-2 border-border px-4 py-3">
               <div className="flex items-center gap-3">
                 <Badge variant="outline" className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px]">
                   <Layout className="h-3 w-3" />

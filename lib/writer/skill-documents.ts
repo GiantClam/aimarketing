@@ -3,7 +3,7 @@ import "server-only"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
-import type { WriterPlatform } from "@/lib/writer/config"
+import type { WriterContentType, WriterPlatform } from "@/lib/writer/config"
 
 export type WriterRuntimeSkillDocument = {
   runtimeLabel: string
@@ -24,43 +24,45 @@ export type WriterBriefingSkillDocument = {
   defaultAssumptions: string[]
 }
 
-const WRITER_SKILL_FILE_BY_PLATFORM: Record<WriterPlatform, string> = {
+export type WriterContentSkillDocument = {
+  runtimeLabel: string
+  guidance: string
+}
+
+const WRITER_SKILL_FILE_BY_PLATFORM: Partial<Record<WriterPlatform, string>> = {
   wechat: "writer-wechat",
   xiaohongshu: "writer-xiaohongshu",
   x: "writer-x",
   facebook: "writer-facebook",
 }
-const WRITER_BRIEFING_SKILL_DIR = "writer-briefing"
+const WRITER_CONTENT_SKILL_DIR_BY_TYPE: Record<WriterContentType, string> = {
+  social_cn: "social-writing-cn",
+  social_global: "social-writing-global",
+  longform: "longform-writing",
+  email: "email-writing",
+  newsletter: "newsletter-writing",
+  website_copy: "website-copy",
+  ads: "ads-writing",
+  case_study: "case-study-writing",
+  product: "product-writing",
+  speech: "speech-writing",
+}
+const WRITER_BRIEFING_SKILL_DIR = "content-briefing"
 
-const writerSkillCache = new Map<WriterPlatform, Promise<string>>()
-let writerBriefingSkillCache: Promise<string> | null = null
+const writerSkillCache = new Map<string, Promise<string>>()
 
-function getWriterSkillDocumentPath(platform: WriterPlatform) {
-  return path.join(process.cwd(), "content", "skills", WRITER_SKILL_FILE_BY_PLATFORM[platform], "SKILL.md")
+function getSkillDocumentPath(dirName: string) {
+  return path.join(process.cwd(), "content", "skills", dirName, "SKILL.md")
 }
 
-function getWriterBriefingSkillDocumentPath() {
-  return path.join(process.cwd(), "content", "skills", WRITER_BRIEFING_SKILL_DIR, "SKILL.md")
-}
-
-async function readWriterSkillDocument(platform: WriterPlatform) {
-  const existing = writerSkillCache.get(platform)
+async function readSkillDocument(dirName: string) {
+  const existing = writerSkillCache.get(dirName)
   if (existing) {
     return existing
   }
 
-  const nextPromise = readFile(getWriterSkillDocumentPath(platform), "utf8")
-  writerSkillCache.set(platform, nextPromise)
-  return nextPromise
-}
-
-async function readWriterBriefingSkillDocument() {
-  if (writerBriefingSkillCache) {
-    return writerBriefingSkillCache
-  }
-
-  const nextPromise = readFile(getWriterBriefingSkillDocumentPath(), "utf8")
-  writerBriefingSkillCache = nextPromise
+  const nextPromise = readFile(getSkillDocumentPath(dirName), "utf8")
+  writerSkillCache.set(dirName, nextPromise)
   return nextPromise
 }
 
@@ -112,8 +114,13 @@ export async function getWriterRepoHostedSkillDocument(
   platform: WriterPlatform,
   fallback: WriterRuntimeSkillDocument,
 ): Promise<WriterRuntimeSkillDocument> {
+  const dirName = WRITER_SKILL_FILE_BY_PLATFORM[platform]
+  if (!dirName) {
+    return fallback
+  }
+
   try {
-    const markdown = await readWriterSkillDocument(platform)
+    const markdown = await readSkillDocument(dirName)
     return {
       runtimeLabel: collapseWhitespace(extractSection(markdown, "Runtime Label")) || fallback.runtimeLabel,
       tone: collapseWhitespace(extractSection(markdown, "Tone")) || fallback.tone,
@@ -131,7 +138,7 @@ export async function getWriterRepoHostedSkillDocument(
   } catch (error) {
     console.warn("writer.skill-doc.read-failed", {
       platform,
-      path: getWriterSkillDocumentPath(platform),
+      path: getSkillDocumentPath(dirName),
       message: error instanceof Error ? error.message : String(error),
     })
     return fallback
@@ -142,7 +149,7 @@ export async function getWriterBriefingSkillDocument(
   fallback: WriterBriefingSkillDocument,
 ): Promise<WriterBriefingSkillDocument> {
   try {
-    const markdown = await readWriterBriefingSkillDocument()
+    const markdown = await readSkillDocument(WRITER_BRIEFING_SKILL_DIR)
     return {
       runtimeLabel: collapseWhitespace(extractSection(markdown, "Runtime Label")) || fallback.runtimeLabel,
       requiredBriefFields: parseListSection(extractSection(markdown, "Required Brief Fields")).length
@@ -158,7 +165,29 @@ export async function getWriterBriefingSkillDocument(
     }
   } catch (error) {
     console.warn("writer.briefing-skill.read-failed", {
-      path: getWriterBriefingSkillDocumentPath(),
+      path: getSkillDocumentPath(WRITER_BRIEFING_SKILL_DIR),
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return fallback
+  }
+}
+
+export async function getWriterContentSkillDocument(
+  contentType: WriterContentType,
+  fallback: WriterContentSkillDocument,
+): Promise<WriterContentSkillDocument> {
+  const dirName = WRITER_CONTENT_SKILL_DIR_BY_TYPE[contentType]
+
+  try {
+    const markdown = await readSkillDocument(dirName)
+    return {
+      runtimeLabel: collapseWhitespace(extractSection(markdown, "Runtime Label")) || fallback.runtimeLabel,
+      guidance: stripFrontmatter(markdown) || fallback.guidance,
+    }
+  } catch (error) {
+    console.warn("writer.content-skill.read-failed", {
+      contentType,
+      path: getSkillDocumentPath(dirName),
       message: error instanceof Error ? error.message : String(error),
     })
     return fallback
@@ -166,9 +195,10 @@ export async function getWriterBriefingSkillDocument(
 }
 
 export function getWriterRepoHostedSkillPath(platform: WriterPlatform) {
-  return getWriterSkillDocumentPath(platform)
+  const dirName = WRITER_SKILL_FILE_BY_PLATFORM[platform]
+  return dirName ? getSkillDocumentPath(dirName) : ""
 }
 
 export function getWriterBriefingSkillPath() {
-  return getWriterBriefingSkillDocumentPath()
+  return getSkillDocumentPath(WRITER_BRIEFING_SKILL_DIR)
 }

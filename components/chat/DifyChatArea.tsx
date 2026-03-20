@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, Compass, Copy, History, Loader2, MessageSquare, Radar, Send, Sparkles, Target, TrendingUp, Workflow } from "lucide-react";
+import { Copy, History, Loader2, MessageSquare, Radar, Send, Sparkles, Target, TrendingUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -14,8 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   WorkspaceComposerPanel,
   WorkspaceEmptyState,
-  WorkspacePromptChips,
 } from "@/components/workspace/workspace-primitives";
+import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header";
 import {
   WorkspaceLoadingMessage,
   WorkspaceMessageFrame,
@@ -23,6 +23,7 @@ import {
 import { ensureWorkspaceQueryData, fetchWorkspaceQueryData, getAdvisorMessagesPage, getAdvisorMessagesQueryKey, invalidateAdvisorConversationQueries } from "@/lib/query/workspace-cache";
 import { ADVISOR_SESSION_CACHE_TTL_MS, getAdvisorConversationCache, isAdvisorConversationCacheFresh, mapAdvisorMessagePageToChatMessages, saveAdvisorConversationCache, type AdvisorChatMessage } from "@/lib/advisor/session-store";
 import { findAdvisorPendingTask, removePendingAssistantTask, savePendingAssistantTask, updatePendingAssistantTask } from "@/lib/assistant-task-store";
+import { readStorageJson } from "@/lib/browser-storage";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./CodeBlock";
 
@@ -139,6 +140,7 @@ function isMessageListPrefix(prefix: Message[], full: Message[]) {
 
 export function DifyChatArea({ user, advisorType, initialConversationId }: { user: string; advisorType: string; initialConversationId: string | null }) {
   const meta = useMemo(() => WORKSPACE_META[advisorType] ?? WORKSPACE_META["brand-strategy"], [advisorType]);
+  const headerDescription = useMemo(() => `在这里与 ${meta.title} 进行多轮次对话，发送消息后会自动生成回复`, [meta.title]);
   const queryClient = useQueryClient();
   const router = useRouter();
   const [messagesState, setMessagesState] = useState<Message[]>([]);
@@ -150,6 +152,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
+  const [conversationTitle, setConversationTitle] = useState(meta.title);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyRestoreRef = useRef<{ height: number; top: number } | null>(null);
@@ -231,6 +234,20 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
     }
     void fetchMessages(initialConversationId, { keepCurrentOnError: Boolean(cached), forceRefresh: Boolean(cached), background: Boolean(cached) }).finally(() => setIsConversationLoading(false));
   }, [advisorType, fetchMessages, initialConversationId]);
+
+  useEffect(() => {
+    if (!conversationId) {
+      setConversationTitle(meta.title);
+      return;
+    }
+
+    const cachedList = readStorageJson<{ items?: Array<{ id: string; name?: string | null }> }>(
+      "session",
+      `advisor-conversations-cache-v2:${advisorType}`,
+    );
+    const matchedTitle = cachedList?.items?.find((item) => item.id === conversationId)?.name?.trim();
+    setConversationTitle(matchedTitle || meta.title);
+  }, [advisorType, conversationId, meta.title, pendingTaskRefreshKey]);
 
   useEffect(() => {
     const pendingTask = findAdvisorPendingTask({ advisorType, conversationId });
@@ -374,41 +391,18 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
   };
 
   return (
-    <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <section className="flex min-h-0 flex-col overflow-hidden rounded-[32px] border-2 border-border bg-card">
-        <div className="border-b-2 border-border px-4 py-4 lg:px-6 lg:py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-3xl">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className="rounded-full bg-primary px-3 py-1 text-[11px] text-primary-foreground hover:bg-primary">{meta.eyebrow}</Badge>
-                <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-3 py-1 text-[11px] text-foreground">{meta.contextMode}</Badge>
-                <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-3 py-1 text-[11px] text-foreground">{meta.outputMode}</Badge>
-              </div>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground lg:text-[2rem]">{meta.title}</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground lg:text-[15px]">{meta.description}</p>
-            </div>
+    <div className="flex h-full min-h-0 justify-center">
+      <section className="flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+        <WorkspaceConversationHeader
+          title={conversationTitle}
+          description={headerDescription}
+          variant="inline"
+        />
 
-            <div className="grid min-w-[220px] gap-2 rounded-[22px] border-2 border-border bg-background p-3 text-sm">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">线程状态</div>
-              <Badge variant="outline" className="w-fit rounded-full border-primary/20 bg-primary/8 px-2.5 py-1 text-[10px] text-foreground">{conversationId ? "持续跟进中" : "新线程"}</Badge>
-              <div className="space-y-1 text-[12px] leading-6 text-muted-foreground">
-                <div className="flex items-start gap-2"><Workflow className="mt-1 h-3.5 w-3.5 shrink-0 text-primary" /><span>{meta.workflowNote}</span></div>
-                <div className="flex items-start gap-2"><History className="mt-1 h-3.5 w-3.5 shrink-0 text-secondary" /><span>{conversationId ? "当前会话可继续追问" : "准备开始新的顾问线程"}</span></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-2 lg:grid-cols-3">
-            {meta.focus.map((item) => (
-              <div key={item} className="rounded-[22px] border-2 border-border bg-background px-4 py-3 text-sm leading-6 text-foreground">{item}</div>
-            ))}
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1">
-          <ScrollArea ref={scrollRef} className="h-full" viewportClassName="px-4 pb-5 pt-4 lg:px-6 lg:pb-6 lg:pt-5">
+        <div className="min-h-0 flex-1 bg-[#f7f7f7]">
+          <ScrollArea ref={scrollRef} className="h-full" viewportClassName="px-3 pb-3 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
             {messagesState.length === 0 ? (
-              <div className="mx-auto flex min-h-full w-full max-w-4xl items-center">
+              <div className="mx-auto flex min-h-full w-full max-w-5xl items-center">
                 <WorkspaceEmptyState
                   icon={<meta.icon className="h-6 w-6" />}
                   title={meta.emptyTitle}
@@ -423,17 +417,20 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                 />
               </div>
             ) : (
-              <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
+              <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
                 {hasMoreHistory ? (
                   <div className="flex justify-center">
-                    <Button variant="outline" size="sm" className="rounded-full border-border/80 bg-white/78 px-4" onClick={() => void loadOlderMessages()} disabled={isHistoryLoading}>
+                    <Button variant="outline" size="sm" className="rounded-full border-2 border-border bg-background px-4" onClick={() => void loadOlderMessages()} disabled={isHistoryLoading}>
                       {isHistoryLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <History className="mr-1.5 h-3.5 w-3.5" />}加载更早记录
                     </Button>
                   </div>
                 ) : null}
                 {isConversationLoading ? (
-                  <div className="flex justify-start">
-                    <div className="rounded-[24px] border border-border/70 bg-white/85 px-4 py-3 text-sm text-muted-foreground shadow-sm"><div className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-primary" />正在恢复顾问会话...</div></div>
+                  <div className="rounded-[24px] border-2 border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      正在恢复顾问会话...
+                    </div>
                   </div>
                 ) : null}
                 {messagesState.map((message, index) => {
@@ -443,6 +440,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                     <WorkspaceMessageFrame
                       key={message.id || index}
                       role={isAssistant ? "assistant" : "user"}
+                      className={cn(index === 0 && "border-b border-border/40 bg-transparent pt-5 lg:pt-6")}
                       label={isAssistant ? message.agentName || meta.title : "你"}
                       icon={isAssistant ? <Sparkles className="h-3.5 w-3.5 text-primary" /> : <MessageSquare className="h-3.5 w-3.5" />}
                       action={
@@ -464,8 +462,10 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                           }
                         />
                       ) : (
-                        <div className={cn("break-words leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:my-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-2 [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:p-3 [&_ul]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0", isAssistant ? "text-foreground [&_code]:bg-accent/6 [&_pre]:bg-accent [&_pre]:text-accent-foreground" : "text-accent-foreground [&_code]:bg-white/12 [&_pre]:bg-white/10 [&_pre]:text-accent-foreground")}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code({ className, children, ...props }) { const match = /language-(\w+)/.exec(className || ""); if (!match && !className) return <code className={className} {...props}>{children}</code>; return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, "")}</CodeBlock>; } }}>{message.content}</ReactMarkdown>
+                        <div className={cn("rounded-[24px] border-2 px-4 py-3.5", isAssistant ? "border-border bg-background text-foreground" : "border-primary bg-primary text-primary-foreground")}>
+                          <div className={cn("break-words leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:my-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-2 [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:p-3 [&_ul]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0", isAssistant ? "text-foreground [&_code]:bg-accent/6 [&_pre]:bg-accent [&_pre]:text-accent-foreground" : "text-primary-foreground [&_code]:bg-black/10 [&_pre]:bg-black/10 [&_pre]:text-primary-foreground")}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code({ className, children, ...props }) { const match = /language-(\w+)/.exec(className || ""); if (!match && !className) return <code className={className} {...props}>{children}</code>; return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, "")}</CodeBlock>; } }}>{message.content}</ReactMarkdown>
+                          </div>
                         </div>
                       )}
                     </WorkspaceMessageFrame>
@@ -477,59 +477,27 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
           </ScrollArea>
         </div>
 
-        <div className="border-t border-border/70 bg-white/48 px-4 py-4 backdrop-blur-sm lg:px-6 lg:py-5">
-          <div className="mx-auto w-full max-w-4xl">
+        <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
+          <div className="mx-auto w-full max-w-5xl">
             <WorkspaceComposerPanel
-              className="rounded-[28px] border-white/60 bg-white/82 p-3 shadow-[0_18px_60px_-45px_rgba(31,41,55,0.35)]"
-              cardClassName="rounded-[24px] border-border/70 bg-transparent"
+              className="rounded-[24px] border-2 border-border bg-card p-2"
+              cardClassName="rounded-[18px] border-2 border-border bg-background"
               bodyClassName="px-2"
-              toolbar={
-                <WorkspacePromptChips
-                  prompts={meta.quickPrompts}
-                  onSelect={(prompt) => {
-                    setInputVal(prompt);
-                    composerRef.current?.focus();
-                  }}
-                />
-              }
               footer={
                 <>
-                  <div className="space-y-1 text-[11px] leading-5 text-muted-foreground">
-                    <p>{meta.workflowNote}</p>
-                    <p>{meta.complianceNote}</p>
-                  </div>
+                  <p className="text-[11px] leading-5 text-muted-foreground">Enter 发送，Shift + Enter 换行</p>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="rounded-full border-border/70 bg-background/70 px-2.5 py-1 text-[10px] text-foreground">{conversationId ? "持续跟进中" : "新线程"}</Badge>
-                    <Badge variant="outline" className="rounded-full border-border/70 bg-background/70 px-2.5 py-1 text-[10px] text-foreground">Enter / Shift + Enter</Badge>
+                    <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] text-foreground">{conversationId ? "持续跟进中" : "新线程"}</Badge>
                     <Button className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={!inputVal.trim() || isLoading}>{isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}发送</Button>
                   </div>
                 </>
               }
             >
-              <Textarea ref={composerRef} value={inputVal} onChange={(event) => setInputVal(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder={meta.composerPlaceholder} disabled={isLoading} className="min-h-[116px] border-0 bg-transparent px-2 py-2 text-[15px] leading-7 shadow-none focus-visible:ring-0" />
+              <Textarea ref={composerRef} value={inputVal} onChange={(event) => setInputVal(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder={meta.composerPlaceholder} disabled={isLoading} className="min-h-[80px] border-0 bg-transparent px-2 py-2 text-[14px] leading-6 shadow-none focus-visible:ring-0" />
             </WorkspaceComposerPanel>
           </div>
         </div>
       </section>
-
-      <aside className="hidden min-h-0 flex-col gap-4 xl:flex">
-        <div className="rounded-[28px] border border-white/60 bg-white/78 p-5 shadow-[0_20px_60px_-42px_rgba(31,41,55,0.26)] backdrop-blur">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><Compass className="h-4 w-4 text-primary" />输入建议</div>
-          <div className="mt-4 space-y-3">{meta.promptTips.map((item) => <div key={item} className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-sm leading-6 text-foreground">{item}</div>)}</div>
-        </div>
-        <div className="rounded-[28px] border border-white/60 bg-white/78 p-5 shadow-[0_20px_60px_-42px_rgba(31,41,55,0.26)] backdrop-blur">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><ClipboardList className="h-4 w-4 text-secondary" />典型输出</div>
-          <ul className="mt-4 space-y-3">{meta.deliverables.map((item) => <li key={item} className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-sm leading-6 text-foreground">{item}</li>)}</ul>
-        </div>
-        <div className="rounded-[28px] border border-white/60 bg-white/78 p-5 shadow-[0_20px_60px_-42px_rgba(31,41,55,0.26)] backdrop-blur">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><Workflow className="h-4 w-4 text-primary" />会话规则</div>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-            <div className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-foreground">{meta.contextMode}</div>
-            <div className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-foreground">{meta.outputMode}</div>
-            <div className="rounded-[20px] border border-border/70 bg-background/78 px-4 py-3 text-foreground">{meta.workflowNote}</div>
-          </div>
-        </div>
-      </aside>
     </div>
   );
 }

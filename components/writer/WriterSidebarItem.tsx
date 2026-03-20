@@ -32,7 +32,7 @@ import {
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
 import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
-import { WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
+import { WRITER_CONTENT_TYPE_CONFIG, WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
 import {
   deleteWriterSessionMeta,
   getWriterConversationCache,
@@ -95,8 +95,8 @@ export function WriterSidebarItem({
     items: conversations,
     isLoading,
     isLoadingMore,
-    hasMore,
-    nextCursor,
+    hasMore: _hasMore,
+    nextCursor: _nextCursor,
     fetchItems: fetchConversations,
     updateList,
     createSnapshot,
@@ -141,6 +141,9 @@ export function WriterSidebarItem({
       queryFn: () => getWriterMessagesPage(conversationId, WRITER_PREFETCH_TURN_LIMIT),
     })
 
+    const latestDiagnostics =
+      [...(data.data || [])].reverse().find((entry) => entry.diagnostics?.routing)?.diagnostics || null
+
     saveWriterConversationCache(conversationId, {
       entries: data.data || [],
       conversation: data.conversation,
@@ -158,14 +161,15 @@ export function WriterSidebarItem({
         draft: "",
         imagesRequested: Boolean(data.conversation.images_requested),
         status: data.conversation.status,
+        diagnostics: latestDiagnostics,
         updatedAt: Date.now(),
       })
     }
   }, [queryClient])
 
-  const upsertConversation = (conversation: WriterConversationSummary) => {
+  const upsertConversation = useCallback((conversation: WriterConversationSummary) => {
     updateList((current) => [conversation, ...current.filter((item) => item.id !== conversation.id)])
-  }
+  }, [updateList])
 
   useEffect(() => {
     if (isWriterRoute) {
@@ -202,7 +206,7 @@ export function WriterSidebarItem({
 
     window.addEventListener(WRITER_REFRESH_EVENT, handleRefresh)
     return () => window.removeEventListener(WRITER_REFRESH_EVENT, handleRefresh)
-  }, [conversations.length, fetchConversations, isExpanded, updateList])
+  }, [conversations.length, fetchConversations, isExpanded, updateList, upsertConversation])
 
   const handleDeleteRequest = (conversation: WriterConversationSummary, event: MouseEvent) => {
     event.preventDefault()
@@ -293,7 +297,7 @@ export function WriterSidebarItem({
 
   return (
     <>
-      <div className="mb-2">
+      <div className="mb-2 w-full min-w-0">
         <SidebarSectionToggle title={title} icon={Icon} expanded={isExpanded} onToggle={() => setIsOpen((current) => !current)} />
 
         {isExpanded && (
@@ -306,26 +310,31 @@ export function WriterSidebarItem({
               <SidebarListState label={messages.sidebar.noSessions} />
             ) : (
               <div
-                className="max-h-72 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="w-full min-w-0 max-h-72 space-y-2 overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 onScroll={handleListScroll}
               >
                 {conversations.map((conversation) => {
                   const isActive = pathname === `/dashboard/writer/${conversation.id}`
                   const meta = getWriterSessionMeta(conversation.id)
+                  const cache = getWriterConversationCache(conversation.id)
+                  const cachedRouting =
+                    [...(cache?.entries || [])].reverse().find((entry) => entry.diagnostics?.routing)?.diagnostics?.routing || null
+                  const routing = meta?.diagnostics?.routing || cachedRouting
                   const platform = conversation.platform || meta?.platform || "wechat"
                   const mode = conversation.mode || meta?.mode || "article"
-                  const language = conversation.language || meta?.language || "auto"
-                  const query = new URLSearchParams()
+                  const routedPlatform =
+                    routing?.targetPlatform ||
+                    WRITER_PLATFORM_CONFIG[platform as keyof typeof WRITER_PLATFORM_CONFIG].shortLabel
+                  const contentTypeLabel =
+                    (routing?.contentType && WRITER_CONTENT_TYPE_CONFIG[routing.contentType]?.label) ||
+                    routing?.selectedSkillLabel ||
+                    ""
                   const isDeleting = deletingConvId === conversation.id
-
-                  query.set("platform", platform)
-                  query.set("mode", mode)
-                  query.set("language", language)
 
                   return (
                     <SidebarSessionLink
                       key={conversation.id}
-                      href={`/dashboard/writer/${conversation.id}?${query.toString()}`}
+                      href={`/dashboard/writer/${conversation.id}`}
                       onWarm={() => void warmConversation(conversation.id)}
                       active={isActive}
                       testId={`writer-conversation-${conversation.id}`}
@@ -360,9 +369,9 @@ export function WriterSidebarItem({
                         ) : (
                           <SidebarSessionRow
                             active={isActive}
-                            leading={<MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-70" />}
+                            leading={<MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-60" />}
                             title={conversation.name || messages.sidebar.newArticle}
-                            subtitle={`${WRITER_PLATFORM_CONFIG[platform as keyof typeof WRITER_PLATFORM_CONFIG].shortLabel}${mode === "thread" ? messages.sidebar.threadSuffix : ""}${getConversationStatusLabel(conversation.status, messages.sidebar.readySuffix, messages.sidebar.generatingImagesSuffix)}`}
+                            subtitle={`${contentTypeLabel ? `${contentTypeLabel} / ` : ""}${routedPlatform}${mode === "thread" ? messages.sidebar.threadSuffix : ""}${getConversationStatusLabel(conversation.status, messages.sidebar.readySuffix, messages.sidebar.generatingImagesSuffix)}`}
                             actions={
                               <>
                               <button

@@ -110,17 +110,17 @@ export function WorkspaceComposerPanel({
     <section
       {...props}
       className={cn(
-        "rounded-[28px] border-2 border-border bg-card p-3",
+        "rounded-[24px] border-2 border-border bg-card p-2.5",
         className,
       )}
     >
-      {toolbar ? <div className={cn("flex flex-wrap items-center gap-2", toolbarClassName)}>{toolbar}</div> : null}
-      <div className={cn("rounded-[22px] border-2 border-border bg-background", toolbar ? "mt-3" : "", cardClassName)}>
+      {toolbar ? <div className={cn("flex flex-wrap items-center gap-1.5", toolbarClassName)}>{toolbar}</div> : null}
+      <div className={cn("rounded-[18px] border-2 border-border bg-background", toolbar ? "mt-2.5" : "", cardClassName)}>
         <div className={bodyClassName}>{children}</div>
         {footer ? (
           <div
             className={cn(
-              "flex items-center justify-between gap-3 border-t-2 border-border px-3.5 py-3",
+              "flex items-center justify-between gap-2 border-t-2 border-border px-3 py-2.5",
               footerClassName,
             )}
           >
@@ -154,12 +154,12 @@ export function WorkspaceEmptyState({
   className,
 }: WorkspaceEmptyStateProps) {
   return (
-    <div className={cn("w-full rounded-[32px] border-2 border-border bg-card p-6 lg:p-8", className)}>
+    <div className={cn("w-full rounded-[28px] border-2 border-border bg-card p-5 lg:p-6", className)}>
       <div className="flex flex-wrap items-start gap-4">
         {icon ? <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-accent text-accent-foreground shadow-sm">{icon}</div> : null}
         <div className="max-w-2xl">
           <h3 className="text-2xl font-semibold text-foreground">{title}</h3>
-          <p className="mt-3 text-sm leading-7 text-muted-foreground">{description}</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
       </div>
       {checklist.length ? (

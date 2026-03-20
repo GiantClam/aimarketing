@@ -96,29 +96,29 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 border-r border-sidebar-border bg-sidebar shadow-none transform transition-all duration-200 ease-in-out lg:static ${
-          sidebarCollapsed ? "w-20" : "w-80"
+        className={`fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static ${
+          sidebarCollapsed ? "w-[88px]" : "w-[320px]"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-full flex-col">
-          <div className="border-b border-sidebar-border p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-11 w-11 items-center justify-center rounded-[20px] bg-accent">
+          <div className={sidebarCollapsed ? "border-b border-sidebar-border p-3" : "border-b border-sidebar-border p-4"}>
+            <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex items-start justify-between gap-3"}>
+              <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex min-w-0 items-center gap-3"}>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[20px] bg-accent">
                   <span className="text-base font-bold lowercase text-primary">ai</span>
                 </div>
                 {!sidebarCollapsed && (
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">workspace</div>
-                    <h1 className="text-lg font-semibold text-sidebar-foreground">{messages.shared.appName}</h1>
+                    <h1 className="truncate text-lg font-semibold text-sidebar-foreground">{messages.shared.appName}</h1>
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-1">
+              <div className={sidebarCollapsed ? "flex w-full flex-col items-center gap-2" : "flex items-center gap-1"}>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hidden rounded-full border border-transparent lg:inline-flex"
+                  className={sidebarCollapsed ? "hidden h-9 w-9 rounded-[14px] border border-sidebar-border bg-card p-0 lg:inline-flex" : "hidden rounded-full border border-transparent lg:inline-flex"}
                   onClick={() => setSidebarCollapsed((current) => !current)}
                   title={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
                   aria-label={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
@@ -138,7 +138,10 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col">
-            <ScrollArea className="h-full">
+            <ScrollArea
+              className="h-full"
+              viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!w-full [&>div]:!min-w-0"
+            >
               <div className={sidebarCollapsed ? "space-y-3 p-3" : "space-y-4 p-4"}>
                 {(enterprisePending || enterpriseRejected) && (
                   <div className="rounded-[20px] border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-700">

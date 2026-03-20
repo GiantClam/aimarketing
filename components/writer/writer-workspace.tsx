@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
-import { WorkspaceHero } from "@/components/workspace/workspace-hero"
+import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
@@ -60,12 +60,11 @@ import {
   DEFAULT_WRITER_LANGUAGE,
   WRITER_LANGUAGE_CONFIG,
   WRITER_LANGUAGE_ORDER,
+  WRITER_CONTENT_TYPE_CONFIG,
   normalizeWriterLanguage,
-  getWriterModeOptions,
   normalizeWriterMode,
   normalizeWriterPlatform,
   WRITER_PLATFORM_CONFIG,
-  WRITER_PLATFORM_ORDER,
   type WriterLanguage,
   type WriterMode,
   type WriterPlatform,
@@ -241,12 +240,12 @@ const findRenderableWriterAsset = (src: string, assets: WriterAsset[]) => {
 const getPlatformPreviewPalette = (platform: WriterPlatform) => {
   if (platform === "wechat") return "bg-emerald-50/70"
   if (platform === "xiaohongshu") return "bg-rose-50/70"
-  if (platform === "x") return "bg-slate-100"
+  if (platform === "x" || platform === "weibo" || platform === "generic") return "bg-slate-100"
   return "bg-blue-50/70"
 }
 
 const getPlatformShellClass = (platform: WriterPlatform) => {
-  if (platform === "x") return "border-slate-300 bg-card text-slate-950"
+  if (platform === "x" || platform === "weibo" || platform === "generic") return "border-slate-300 bg-card text-slate-950"
   if (platform === "facebook") return "border-blue-200 bg-card text-slate-950"
   if (platform === "xiaohongshu") return "border-rose-200 bg-card text-slate-950"
   return "border-emerald-200 bg-card text-slate-950"
@@ -443,7 +442,7 @@ function PlatformPreview({
     )
   }
 
-  if (platform === "x") {
+  if (platform === "x" || platform === "weibo") {
     const posts = mode === "thread" && threadPosts.length > 0 ? threadPosts : [markdown]
     return (
       <div className="mx-auto max-w-[760px] space-y-4">
@@ -454,9 +453,9 @@ function PlatformPreview({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-black">AI Marketing Site</p>
-                  <p className="text-xs text-slate-500">@aimarketingsite</p>
+                  <p className="text-xs text-slate-500">{platform === "weibo" ? "@aimarketing" : "@aimarketingsite"}</p>
                   <span className="text-slate-300">·</span>
-                  <p className="text-xs text-slate-500">{mode === "thread" ? `Thread ${index + 1}` : "Just now"}</p>
+                  <p className="text-xs text-slate-500">{mode === "thread" ? `Thread ${index + 1}` : platform === "weibo" ? "Weibo" : "Just now"}</p>
                 </div>
                 {mode === "article" && index === 0 ? <p className="mt-2 text-xs text-slate-500">{lead}</p> : null}
                 <div className="mt-4">
@@ -487,6 +486,25 @@ function PlatformPreview({
             </div>
           </div>
         ))}
+      </div>
+    )
+  }
+
+  if (platform === "generic" || platform === "douyin" || platform === "tiktok") {
+    return (
+      <div className="mx-auto max-w-[760px] rounded-[32px] border-2 border-slate-300 bg-card px-8 py-10">
+        <div className="mb-6 border-b border-slate-200 pb-4">
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{copy.finalPreviewTitle}</p>
+          <div className="mt-3 flex items-center gap-3 text-xs text-slate-400">
+            <span>{estimateReadingTime(markdown, copy)}</span>
+            <span>/</span>
+            <span>{platform === "generic" ? "Document" : "Script"}</span>
+          </div>
+        </div>
+        {renderArticleBody(
+          markdown,
+          "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h2:border-0 prose-h2:pt-0",
+        )}
       </div>
     )
   }
@@ -615,7 +633,7 @@ function PreviewResourceStrip({
   )
 }
 
-function getKnowledgeScopeLabel(copy: WriterCopy, scope: KnowledgeScope | "mixed" | "unknown") {
+function _getKnowledgeScopeLabel(copy: WriterCopy, scope: KnowledgeScope | "mixed" | "unknown") {
   if (scope === "general") return copy.knowledgeScopeGeneral
   if (scope === "brand") return copy.knowledgeScopeBrand
   if (scope === "product") return copy.knowledgeScopeProduct
@@ -852,8 +870,9 @@ export function WriterWorkspace({
 
   const [availabilityLoading, setAvailabilityLoading] = useState(true)
   const [availabilityReady, setAvailabilityReady] = useState(false)
-  const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null)
+  const [_knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
+  const [conversationName, setConversationName] = useState<string | null>(null)
   const [platform, setPlatform] = useState<WriterPlatform>(() => normalizeWriterPlatform(initialPlatform))
   const [mode, setMode] = useState<WriterMode>(() =>
     normalizeWriterMode(normalizeWriterPlatform(initialPlatform), initialMode),
@@ -899,6 +918,7 @@ export function WriterWorkspace({
 
   useEffect(() => {
     setPreviewMessageId(null)
+    setConversationName(null)
     setVersionAssetState({})
     setPendingRichCopyMessageId(null)
   }, [conversationId])
@@ -941,7 +961,6 @@ export function WriterWorkspace({
   }, [router, user])
 
   const writerConfig = WRITER_PLATFORM_CONFIG[platform]
-  const writerModeOptions = useMemo(() => getWriterModeOptions(platform), [platform])
   const baseDraft = useMemo(
     () => draft || (conversationStatus === "drafting" ? "" : inferDraft(messages)),
     [conversationStatus, draft, messages],
@@ -1007,7 +1026,7 @@ export function WriterWorkspace({
   }
 
   const activePreview = buildPreviewContextForMessage(activePreviewMessage)
-  const groundingBadges = useMemo(() => {
+  const _groundingBadges = useMemo(() => {
     if (!latestDiagnostics) return []
 
     const items = [`${writerCopy.groundingSummary}: ${getGroundingStrategyLabel(writerCopy, latestDiagnostics.retrievalStrategy)}`]
@@ -1022,6 +1041,17 @@ export function WriterWorkspace({
 
     return items
   }, [latestDiagnostics, writerCopy])
+  const routingBadges = useMemo(() => {
+    const routing = latestDiagnostics?.routing
+    if (!routing) return []
+
+    return [
+      WRITER_CONTENT_TYPE_CONFIG[routing.contentType]?.label || routing.selectedSkillLabel,
+      routing.targetPlatform,
+      routing.outputForm,
+      routing.lengthTarget,
+    ].filter(Boolean)
+  }, [latestDiagnostics])
 
   useEffect(() => {
     messagesRef.current = messages
@@ -1029,10 +1059,10 @@ export function WriterWorkspace({
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const nextHref = `${conversationId ? `/dashboard/writer/${conversationId}` : "/dashboard/writer"}?${new URLSearchParams({ platform, mode, language }).toString()}`
+    const nextHref = conversationId ? `/dashboard/writer/${conversationId}` : "/dashboard/writer"
     const currentHref = `${window.location.pathname}${window.location.search}`
     if (currentHref !== nextHref) replaceWriterUrl(nextHref)
-  }, [conversationId, language, mode, platform])
+  }, [conversationId])
 
   useEffect(() => {
     if (!baseDraft.trim()) {
@@ -1094,6 +1124,7 @@ export function WriterWorkspace({
         setLanguage(nextLanguage)
         setImagesRequested(Boolean(cachedConversation.conversation.images_requested))
         setConversationStatus(nextStatus)
+        setConversationName(cachedConversation.conversation.name || null)
         if (!meta?.draft) {
           setDraft(inferFinalDraft(cachedMessages, nextStatus))
         }
@@ -1123,6 +1154,7 @@ export function WriterWorkspace({
         setLanguage(normalizeWriterLanguage(data.conversation.language))
         setImagesRequested(Boolean(data.conversation.images_requested))
         setConversationStatus(data.conversation.status || "drafting")
+        setConversationName(data.conversation.name || null)
       }
       if (reset) {
         setLatestDiagnostics(nextDiagnostics)
@@ -1299,6 +1331,7 @@ export function WriterWorkspace({
         setLanguage(nextLanguage)
         setImagesRequested(Boolean(data.conversation.images_requested))
         setConversationStatus(nextStatus)
+        setConversationName(data.conversation.name || null)
         saveWriterSessionMeta(conversationId, {
           platform: nextPlatform,
           mode: nextMode,
@@ -1474,8 +1507,9 @@ export function WriterWorkspace({
     setVersionAssetState({})
     setPendingRichCopyMessageId(null)
     setConversationStatus("drafting")
+    setConversationName(null)
     setDraftSaveState("idle")
-    router.push(`/dashboard/writer?platform=${platform}&mode=${mode}&language=${language}`)
+    router.push("/dashboard/writer")
   }
 
   const handleSend = async () => {
@@ -1531,6 +1565,7 @@ export function WriterWorkspace({
 
       setConversationId(payload.conversation_id)
       setConversationStatus(payload.conversation.status || "drafting")
+      setConversationName(payload.conversation.name || null)
       saveWriterSessionMeta(payload.conversation_id, {
         platform: payload.conversation.platform,
         mode: payload.conversation.mode,
@@ -1556,9 +1591,7 @@ export function WriterWorkspace({
       })
 
       if (!conversationId) {
-        replaceWriterUrl(
-          `/dashboard/writer/${payload.conversation_id}?platform=${payload.conversation.platform}&mode=${payload.conversation.mode}&language=${payload.conversation.language}`,
-        )
+        replaceWriterUrl(`/dashboard/writer/${payload.conversation_id}`)
       }
     } catch (error) {
       setConversationStatus("failed")
@@ -1789,7 +1822,10 @@ export function WriterWorkspace({
 
   const composerDisabled = loading || availabilityLoading || !availabilityReady
   const hasDraft = Boolean(baseDraft.trim())
-  const currentModeLabel = writerModeOptions.find((option) => option.value === mode)?.label || "Standard"
+  const activeRouting = latestDiagnostics?.routing || null
+  const currentPlatformLabel = activeRouting?.targetPlatform || writerConfig.shortLabel
+  const currentModeLabel = activeRouting?.outputForm || (mode === "thread" ? "Thread" : "Standard")
+  const currentLengthLabel = activeRouting?.lengthTarget || writerConfig.wordRange
   const currentLanguageLabel = WRITER_LANGUAGE_CONFIG[language].label
   const workspaceStatus = loading
     ? "Checking sign-in..."
@@ -1806,96 +1842,22 @@ export function WriterWorkspace({
               : hasDraft
                 ? "Copy draft ready. Confirm the text before generating images."
                 : "Describe the topic, audience, tone, or structure to start."
-  const writerDraftState =
-    conversationStatus === "ready"
-      ? "Preview ready"
-      : conversationStatus === "failed"
-        ? "Needs retry"
-        : hasDraft
-          ? "Draft in progress"
-          : "Awaiting brief"
   return (
     <>
-      <div className="flex h-[calc(100vh-65px)] flex-col bg-background lg:h-screen">
+      <div className="flex h-full min-h-0 flex-col bg-background">
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
-          <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-3 px-3 py-3 lg:px-5 lg:py-4">
-            <WorkspaceHero
-              eyebrow={i18n.dashboardPage.writer.label}
-              title={writerCopy.assistantName}
-              description={i18n.dashboardPage.writer.description}
-              status={workspaceStatus}
-              badges={[
-                <Badge key="platform" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {writerConfig.shortLabel}
-                </Badge>,
-                <Badge key="mode" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {currentModeLabel}
-                </Badge>,
-                <Badge key="language" variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                  {currentLanguageLabel}
-                </Badge>,
-                <Badge
-                  key="knowledge"
-                  variant={knowledgeStatus?.enabled ? "default" : "outline"}
-                  className="rounded-full px-2.5 py-0.5 text-[10px]"
-                >
-                  {knowledgeStatus?.enabled
-                    ? `${writerCopy.enterpriseKnowledge} ${knowledgeStatus.datasetCount || 0}`
-                    : writerCopy.noEnterpriseKnowledge}
-                </Badge>,
-                ...(knowledgeStatus?.enabled && knowledgeStatus.profile?.configuredScopes?.length
-                  ? [
-                      <Badge key="profile" variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                        {writerCopy.knowledgeProfile}{" "}
-                        {knowledgeStatus.profile.configuredScopes
-                          .slice(0, 2)
-                          .map((scope) => getKnowledgeScopeLabel(writerCopy, scope))
-                          .filter(Boolean)
-                          .join("/")}
-                      </Badge>,
-                    ]
-                  : []),
-                ...groundingBadges.map((item) => (
-                  <Badge key={item} variant="outline" className="rounded-full px-2.5 py-0.5 text-[10px]">
-                    {item}
-                  </Badge>
-                )),
-              ]}
-              stats={[
-                { label: "Platform", value: writerConfig.shortLabel },
-                { label: "Mode", value: currentModeLabel },
-                { label: "Language", value: currentLanguageLabel },
-                { label: "Draft", value: writerDraftState },
-              ]}
-              actions={
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 rounded-full px-3 text-[11px]"
-                    data-testid="writer-hero-new-session-trigger"
-                    onClick={handleCreateConversation}
-                  >
-                    {writerCopy.newChat}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
-                    onClick={openLatestPreview}
-                    disabled={!hasDraft}
-                  >
-                    <Eye className="mr-1.5 h-3.5 w-3.5" />
-                    {writerCopy.preview}
-                  </Button>
-                </>
-              }
-            />
-            <div className="min-h-0 flex-1 overflow-hidden rounded-[30px] border-2 border-border bg-card">
-              <ScrollArea className="h-full" ref={viewportRef}>
+          <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+              <WorkspaceConversationHeader
+                title={conversationName || writerCopy.assistantName}
+                description={`在这里与 ${writerCopy.assistantName} 进行多轮次对话，发送消息后会自动生成回复`}
+                variant="inline"
+              />
+              <div className="min-h-0 flex-1 bg-[#f7f7f7]">
+                <ScrollArea className="h-full" ref={viewportRef}>
                 <div className="space-y-0">
                   {hasMoreHistory ? (
-                    <div className="flex justify-center px-4 py-4">
+                    <div className="flex justify-center px-3 py-3">
                       <Button
                         size="sm"
                         variant="outline"
@@ -1911,7 +1873,7 @@ export function WriterWorkspace({
                   ) : null}
 
                   {messages.length === 0 && !isConversationLoading ? (
-                    <div className="px-4 py-4">
+                    <div className="px-3 py-3">
                       <WorkspacePromptGrid
                         eyebrow={writerCopy.quickStart}
                         prompts={writerCopy.quickStartPrompts}
@@ -1922,13 +1884,13 @@ export function WriterWorkspace({
                   ) : null}
 
                   {isConversationLoading ? (
-                    <div className="mx-4 my-4 flex items-center gap-2 rounded-[22px] border-2 border-dashed border-border bg-background px-3.5 py-3 text-xs text-muted-foreground">
+                    <div className="mx-3 my-3 flex items-center gap-2 rounded-[20px] border-2 border-dashed border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       {writerCopy.restoringConversation}
                     </div>
                   ) : null}
 
-                  {messages.map((message) => {
+                  {messages.map((message, index) => {
                     const messagePreview =
                       message.role === "assistant" ? buildPreviewContextForMessage(message) : null
                     const messageIsPreviewable =
@@ -1938,6 +1900,7 @@ export function WriterWorkspace({
                       <WorkspaceMessageFrame
                         key={message.id}
                         role={message.role}
+                        className={cn(index === 0 && "border-b border-border/40 bg-transparent pt-5 lg:pt-6")}
                         label={message.authorLabel || (message.role === "assistant" ? writerCopy.assistantName : writerCopy.you)}
                         icon={message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
                         bodyClassName="space-y-3"
@@ -2016,120 +1979,101 @@ export function WriterWorkspace({
                     </WorkspaceMessageFrame>
                   ) : null}
                 </div>
-              </ScrollArea>
-            </div>
+                </ScrollArea>
+              </div>
 
-            <WorkspaceComposerPanel
-              toolbar={
-                <>
-                  <select
-                    value={platform}
-                    onChange={(event) => {
-                      const nextPlatform = event.target.value as WriterPlatform
-                      setPlatform(nextPlatform)
-                      setMode(normalizeWriterMode(nextPlatform, mode))
-                    }}
-                    className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                    disabled={composerDisabled || isLoading}
-                  >
-                    {WRITER_PLATFORM_ORDER.map((item) => (
-                      <option key={item} value={item}>
-                        {WRITER_PLATFORM_CONFIG[item].shortLabel}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={mode}
-                    onChange={(event) => setMode(event.target.value as WriterMode)}
-                    className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                    disabled={composerDisabled || isLoading}
-                  >
-                    {writerModeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={language}
-                    onChange={(event) => setLanguage(normalizeWriterLanguage(event.target.value))}
-                    className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                    disabled={composerDisabled || isLoading}
-                  >
-                    {WRITER_LANGUAGE_ORDER.map((item) => (
-                      <option key={item} value={item}>
-                        {WRITER_LANGUAGE_CONFIG[item].label}
-                      </option>
-                    ))}
-                  </select>
-                  <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
-                    {workspaceStatus}
-                  </Badge>
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 rounded-full px-3 text-[11px]"
-                      data-testid="writer-inline-new-session-trigger"
-                      onClick={handleCreateConversation}
-                    >
-                      {writerCopy.newChat}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
-                      onClick={openLatestPreview}
-                      disabled={!hasDraft}
-                    >
-                      <Eye className="mr-1.5 h-3.5 w-3.5" />
-                      {writerCopy.preview}
-                    </Button>
-                  </div>
-                </>
-              }
-              bodyClassName="px-0"
-              footer={
-                <>
-                  <p className="text-[11px] leading-5 text-muted-foreground">
-                    {writerConfig.shortLabel} / {currentModeLabel} / {currentLanguageLabel}
-                    {composerDisabled ? ` / ${writerCopy.preparingCapabilities}` : ` / ${writerCopy.supportsPreviewAndImages}`}
-                  </p>
-                  {isLoading ? (
-                    <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      {writerCopy.generatingDraft}
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      className="h-8 rounded-full px-3 text-[11px]"
-                      data-testid="writer-send-button"
-                      onClick={() => void handleSend()}
-                      disabled={!inputValue.trim() || composerDisabled}
-                    >
-                      <Send className="mr-1.5 h-3.5 w-3.5" />
-                      {writerCopy.send}
-                    </Button>
-                  )}
-                </>
-              }
-            >
-              <Textarea
-                ref={composerRef}
-                value={inputValue}
-                onChange={(event) => setInputValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                    event.preventDefault()
-                    void handleSend()
+              <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
+                <WorkspaceComposerPanel
+                  className="border-none bg-transparent p-0"
+                  toolbar={
+                    <>
+                      {routingBadges.map((item) => (
+                        <Badge key={item} variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
+                          {item}
+                        </Badge>
+                      ))}
+                      <select
+                        value={language}
+                        onChange={(event) => setLanguage(normalizeWriterLanguage(event.target.value))}
+                        className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                        disabled={composerDisabled || isLoading}
+                      >
+                        {WRITER_LANGUAGE_ORDER.map((item) => (
+                          <option key={item} value={item}>
+                            {WRITER_LANGUAGE_CONFIG[item].label}
+                          </option>
+                        ))}
+                      </select>
+                      <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
+                        {workspaceStatus}
+                      </Badge>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 rounded-full px-3 text-[11px]"
+                          data-testid="writer-inline-new-session-trigger"
+                          onClick={handleCreateConversation}
+                        >
+                          {writerCopy.newChat}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                          onClick={openLatestPreview}
+                          disabled={!hasDraft}
+                        >
+                          <Eye className="mr-1.5 h-3.5 w-3.5" />
+                          {writerCopy.preview}
+                        </Button>
+                      </div>
+                    </>
                   }
-                }}
-                placeholder={`${writerCopy.composerPlaceholderPrefix} ${writerConfig.shortLabel} ${writerCopy.composerPlaceholderSuffix}`}
-                className="min-h-14 resize-none border-0 bg-transparent px-3.5 py-3 text-[13px] leading-6 shadow-none focus-visible:ring-0"
-                disabled={composerDisabled}
-              />
-            </WorkspaceComposerPanel>
+                  bodyClassName="px-0"
+                  footer={
+                    <>
+                      <p className="text-[11px] leading-5 text-muted-foreground">
+                        {currentPlatformLabel} / {currentModeLabel} / {currentLengthLabel} / {currentLanguageLabel}
+                        {composerDisabled ? ` / ${writerCopy.preparingCapabilities}` : ` / ${writerCopy.supportsPreviewAndImages}`}
+                      </p>
+                      {isLoading ? (
+                        <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          {writerCopy.generatingDraft}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-8 rounded-full px-3 text-[11px]"
+                          data-testid="writer-send-button"
+                          onClick={() => void handleSend()}
+                          disabled={!inputValue.trim() || composerDisabled}
+                        >
+                          <Send className="mr-1.5 h-3.5 w-3.5" />
+                          {writerCopy.send}
+                        </Button>
+                      )}
+                    </>
+                  }
+                >
+                  <Textarea
+                    ref={composerRef}
+                    value={inputValue}
+                    onChange={(event) => setInputValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        event.preventDefault()
+                        void handleSend()
+                      }
+                    }}
+                    placeholder={`${writerCopy.composerPlaceholderPrefix} ${currentPlatformLabel} ${writerCopy.composerPlaceholderSuffix}`}
+                    className="min-h-12 resize-none border-0 bg-transparent px-3 py-2.5 text-[13px] leading-6 shadow-none focus-visible:ring-0"
+                    disabled={composerDisabled}
+                  />
+                </WorkspaceComposerPanel>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2146,7 +2090,7 @@ export function WriterWorkspace({
               <div className="flex items-center justify-between gap-3 pr-8">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="rounded-full border-2 border-border bg-accent px-2.5 py-1 text-[10px] font-medium text-accent-foreground">
-                    {writerConfig.shortLabel}
+                    {currentPlatformLabel}
                   </Badge>
                   <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] font-medium text-slate-900">
                     {estimateReadingTime(activePreview.previewMarkdown, writerCopy)}
@@ -2162,7 +2106,7 @@ export function WriterWorkspace({
                   {writerCopy.collapse}
                 </Button>
               </div>
-              <SheetTitle className="sr-only">{`${writerConfig.shortLabel} ${writerCopy.previewSheetTitle}`}</SheetTitle>
+              <SheetTitle className="sr-only">{`${currentPlatformLabel} ${writerCopy.previewSheetTitle}`}</SheetTitle>
               <SheetDescription className="sr-only">{writerCopy.previewSheetDescription}</SheetDescription>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-73px)]">
