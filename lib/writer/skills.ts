@@ -31,6 +31,7 @@ import {
 import type {
   WriterConversationStatus,
   WriterHistoryEntry,
+  WriterPreloadedBrief,
   WriterRetrievalStrategy,
   WriterRoutingDecision,
   WriterTurnDiagnostics,
@@ -377,6 +378,13 @@ type WriterConversationBrief = {
   objective: string
   tone: string
   constraints: string
+}
+
+type WriterScopedFieldId = Exclude<WriterBriefFieldId, "contentType" | "targetPlatform">
+type WriterRoutingHistory = Partial<Pick<WriterRoutingDecision, "contentType" | "targetPlatform" | "outputForm" | "lengthTarget">>
+type WriterHardLengthTarget = {
+  maxUnits: number
+  unit: "chars" | "words"
 }
 
 type WriterBriefPlan = {
@@ -943,9 +951,8 @@ function getWriterActionableMissingFields(
     missingFields.push("topic")
   }
 
-  if (!brief.audience && !brief.objective) {
-    missingFields.push("audience", "objective")
-  }
+  if (!brief.audience) missingFields.push("audience")
+  if (!brief.objective) missingFields.push("objective")
 
   return missingFields
 }
@@ -998,7 +1005,7 @@ function _legacyIsLowSignalWriterReply(text: string) {
 
 function coerceWriterReplyForField(
   text: string,
-  field: Exclude<WriterBriefFieldId, "contentType" | "targetPlatform">,
+  field: WriterScopedFieldId,
 ) {
   const normalized = normalizeBriefValue(text)
   if (!normalized || safeIsLowSignalWriterReply(normalized)) {
@@ -1020,25 +1027,84 @@ function coerceWriterReplyForField(
   return normalized.length <= 120 ? compactText(normalized, 90) : ""
 }
 
+function hasExplicitWriterFieldSignal(text: string, field: WriterScopedFieldId) {
+  if (field === "topic") {
+    return /(?:主题|话题|选题|核心角度|关于|围绕|聚焦于?|topic|angle|about|on)/iu.test(text)
+  }
+  if (field === "audience") {
+    return /(?:面向|针对|适合|读者是|受众是|目标读者|目标用户|目标受众|写给.*看|给.*看|audience|reader|target user|for)/iu.test(
+      text,
+    )
+  }
+  if (field === "objective") {
+    return /(?:目标是|目的是|诉求是|希望|用于|想达到|想实现|想让读者|objective|goal|cta|result)/iu.test(text)
+  }
+  return /(?:语气|口吻|风格|基调|文风|tone|style)/iu.test(text)
+}
+
+function mergeWriterFieldCandidate(
+  currentValue: string,
+  candidate: string,
+  scopedFollowUp: boolean,
+  requestedFields: WriterBriefFieldId[],
+  field: WriterScopedFieldId,
+  normalizedTurn: string,
+) {
+  const fieldWasRequested = requestedFields.includes(field)
+  const hasExplicitSignal = hasExplicitWriterFieldSignal(normalizedTurn, field)
+  if (!candidate) return currentValue
+  if (scopedFollowUp && !fieldWasRequested && !hasExplicitSignal) {
+    return currentValue
+  }
+  return joinBriefValues(currentValue, candidate)
+}
+
 function mergeWriterTurnIntoBrief(
   brief: WriterConversationBrief,
   turn: string,
   requestedFields: WriterBriefFieldId[] = [],
 ) {
-  if (!turn.trim()) return brief
+  const normalizedTurn = normalizeBriefValue(turn)
+  if (!normalizedTurn) return brief
+
+  const scopedFollowUp = requestedFields.length > 0
+  const allowTopicFallback = !scopedFollowUp || requestedFields.includes("topic")
+  const topicCandidate = safeExtractTopicFromText(normalizedTurn, { allowShortFallback: allowTopicFallback })
+  const audienceCandidate = safeExtractAudienceFromText(normalizedTurn)
+  const objectiveCandidate = safeExtractObjectiveFromText(normalizedTurn)
+  const toneCandidate = safeExtractToneFromText(normalizedTurn)
+  const constraintsCandidate = safeExtractConstraintsFromText(normalizedTurn)
 
   const nextBrief: WriterConversationBrief = {
-    topic: joinBriefValues(brief.topic, safeExtractTopicFromText(turn)),
-    audience: joinBriefValues(brief.audience, safeExtractAudienceFromText(turn)),
-    objective: joinBriefValues(brief.objective, safeExtractObjectiveFromText(turn)),
-    tone: joinBriefValues(brief.tone, safeExtractToneFromText(turn)),
-    constraints: joinBriefValues(brief.constraints, safeExtractConstraintsFromText(turn)),
+    topic: mergeWriterFieldCandidate(brief.topic, topicCandidate, scopedFollowUp, requestedFields, "topic", normalizedTurn),
+    audience: mergeWriterFieldCandidate(
+      brief.audience,
+      audienceCandidate,
+      scopedFollowUp,
+      requestedFields,
+      "audience",
+      normalizedTurn,
+    ),
+    objective: mergeWriterFieldCandidate(
+      brief.objective,
+      objectiveCandidate,
+      scopedFollowUp,
+      requestedFields,
+      "objective",
+      normalizedTurn,
+    ),
+    tone: mergeWriterFieldCandidate(brief.tone, toneCandidate, scopedFollowUp, requestedFields, "tone", normalizedTurn),
+    constraints: joinBriefValues(brief.constraints, constraintsCandidate),
   }
 
-  if (requestedFields.length === 1) {
-    const field = requestedFields[0]
-    if (field !== "contentType" && field !== "targetPlatform" && !nextBrief[field]) {
-      nextBrief[field] = joinBriefValues(nextBrief[field], coerceWriterReplyForField(turn, field))
+  if (requestedFields.length >= 1) {
+    const scopedFields = requestedFields.filter(
+      (field): field is WriterScopedFieldId => field !== "contentType" && field !== "targetPlatform",
+    )
+    for (const field of scopedFields) {
+      if (!nextBrief[field]) {
+        nextBrief[field] = joinBriefValues(nextBrief[field], coerceWriterReplyForField(normalizedTurn, field))
+      }
     }
   }
 
@@ -1047,14 +1113,91 @@ function mergeWriterTurnIntoBrief(
 
 function collectWriterBriefFromConversation(history: WriterHistoryEntry[], currentQuery: string) {
   let brief = createEmptyWriterBrief()
+  let requestedFieldsForNextTurn: WriterBriefFieldId[] = []
 
   for (const entry of history) {
-    const requestedFields = safeInferWriterRequestedFieldsFromAnswer(entry.answer || "")
-    brief = mergeWriterTurnIntoBrief(brief, entry.query || entry.inputs?.contents || "", requestedFields)
+    brief = mergeWriterTurnIntoBrief(brief, entry.query || entry.inputs?.contents || "", requestedFieldsForNextTurn)
+    requestedFieldsForNextTurn = safeInferWriterRequestedFieldsFromAnswer(entry.answer || "")
   }
 
-  const currentRequestedFields = safeInferWriterRequestedFieldsFromAnswer(history[history.length - 1]?.answer || "")
-  return mergeWriterTurnIntoBrief(brief, currentQuery, currentRequestedFields)
+  return mergeWriterTurnIntoBrief(brief, currentQuery, requestedFieldsForNextTurn)
+}
+
+function getPriorRoutingFromHistory(history: WriterHistoryEntry[]): WriterRoutingHistory {
+  for (const entry of [...history].reverse()) {
+    const routing = entry.diagnostics?.routing
+    if (routing?.contentType) {
+      return {
+        contentType: routing.contentType,
+        targetPlatform: routing.targetPlatform || "",
+        outputForm: routing.outputForm || "",
+        lengthTarget: routing.lengthTarget || "",
+      }
+    }
+  }
+  return {}
+}
+
+function hasExplicitWriterLengthTarget(query: string) {
+  return /(\d{2,5})\s*(字|words?)/iu.test(query)
+}
+
+function hasExplicitWriterPlatformTarget(query: string) {
+  return /(wechat|公众号|小红书|weibo|douyin|linkedin|twitter|x thread|x post|instagram|facebook|tiktok|\b发x\b|\bto x\b)/iu.test(
+    query,
+  )
+}
+
+function detectWriterLengthCorrectionIntent(query: string) {
+  return /(?:字数太多|太长了|超字数|超出.?字数|压缩到|控制在|shorter|too long|over(?: the)? (?:character|word)? ?limit|exceeds? (?:the )?limit|trim it down)/iu.test(
+    query,
+  )
+}
+
+function shouldPreservePriorWriterRouting(query: string, conversationStatus?: WriterConversationStatus) {
+  return (
+    (conversationStatus || "drafting") !== "drafting" ||
+    detectRewriteOnlyIntentSafe(query) ||
+    detectWriterLengthCorrectionIntent(query)
+  )
+}
+
+function resolveWriterRoutingFromSignals(params: {
+  query: string
+  priorRouting: WriterRoutingHistory
+  structuredRouting?: WriterRoutingHistory | null
+  conversationStatus?: WriterConversationStatus
+}) {
+  const currentRouting = buildWriterRoutingDecision({ query: params.query })
+  const preservePriorRouting = shouldPreservePriorWriterRouting(params.query, params.conversationStatus)
+  const effectiveContentType =
+    params.structuredRouting?.contentType ||
+    (params.priorRouting.contentType && currentRouting.contentType === "longform"
+      ? params.priorRouting.contentType
+      : currentRouting.contentType)
+  const effectiveTargetPlatform =
+    params.structuredRouting?.targetPlatform ||
+    (((params.priorRouting.contentType && currentRouting.contentType === "longform") ||
+      (preservePriorRouting && params.priorRouting.targetPlatform && !hasExplicitWriterPlatformTarget(params.query))) &&
+    params.priorRouting.targetPlatform
+      ? params.priorRouting.targetPlatform
+      : currentRouting.targetPlatform)
+  const effectiveOutputForm =
+    params.structuredRouting?.outputForm ||
+    (preservePriorRouting && params.priorRouting.outputForm ? params.priorRouting.outputForm : currentRouting.outputForm)
+  const effectiveLengthTarget =
+    params.structuredRouting?.lengthTarget ||
+    (!hasExplicitWriterLengthTarget(params.query) && preservePriorRouting && params.priorRouting.lengthTarget
+      ? params.priorRouting.lengthTarget
+      : currentRouting.lengthTarget)
+
+  return buildWriterRoutingDecision({
+    query: params.query,
+    contentType: effectiveContentType as WriterContentType | "" | null | undefined,
+    targetPlatform: effectiveTargetPlatform,
+    outputForm: effectiveOutputForm,
+    lengthTarget: effectiveLengthTarget,
+  })
 }
 
 function stripHiddenReasoning(raw: string) {
@@ -1131,12 +1274,20 @@ function buildWriterBriefExtractionPrompt(params: {
   mode: WriterMode
   preferredLanguage: WriterLanguage
   briefingGuide: WriterBriefingSkillDocument
+  conversationStatus?: WriterConversationStatus
 }) {
   const conversationContext = buildWriterBriefExtractionContext(params.history, params.query)
-  const currentRouting = buildWriterRoutingDecision({ query: params.query })
+  const priorRouting = getPriorRoutingFromHistory(params.history)
+  const heuristicRouting = resolveWriterRoutingFromSignals({
+    query: params.query,
+    priorRouting,
+    conversationStatus: params.conversationStatus,
+  })
   const currentBriefSummary = [
-    `contentType=${currentRouting.contentType}`,
-    `targetPlatform=${currentRouting.targetPlatform}`,
+    `contentType=${heuristicRouting.contentType}`,
+    `targetPlatform=${heuristicRouting.targetPlatform}`,
+    `outputForm=${heuristicRouting.outputForm}`,
+    `lengthTarget=${heuristicRouting.lengthTarget}`,
     `topic=${params.brief.topic || "missing"}`,
     `audience=${params.brief.audience || "missing"}`,
     `objective=${params.brief.objective || "missing"}`,
@@ -1193,6 +1344,7 @@ function buildWriterBriefExtractionPrompt(params: {
     "- answeredFields must only contain contentType, targetPlatform, topic, audience, objective, or tone.",
     "- suggestedFollowUpFields must contain at most two items from contentType, targetPlatform, topic, audience, objective, or tone.",
     "- routingDecision.contentType must be one of the available content types or an empty string.",
+    `- If the latest reply is a short follow-up answer or revision request, inherit routing defaults from the heuristic route (${heuristicRouting.contentType} / ${heuristicRouting.targetPlatform} / ${heuristicRouting.outputForm} / ${heuristicRouting.lengthTarget}) unless the user explicitly changes them.`,
     "- suggestedFollowUpQuestion must be empty if no clarification is needed.",
     "- briefSufficient should be true when the topic is clear and the assistant can reasonably draft now.",
     "- userWantsDirectOutput should be true if the latest user turn asks to start writing immediately.",
@@ -1205,7 +1357,7 @@ const WRITER_OBJECTIVE_SIGNAL_RE =
   /(?:咨询|转化|认知|获客|线索|留资|预约|试用|成交|下单|报名|涨粉|曝光|awareness|trust|conversion|lead|signup|sign-up|trial|purchase|consultation|demo)/iu
 
 const WRITER_AUDIENCE_SIGNAL_RE =
-  /(?:老板|创始人|创业者|制造业|企业主|高管|决策者|销售|运营|市场|用户|客户|团队|读者|founder|buyer|leader|executive|sales|operator|marketer|customer|team)/iu
+  /(?:老板|创始人|创业者|制造业|企业主|高管|决策者|销售|运营|市场|用户|客户|团队|读者|小白|新手|入门者|爱好者|粉丝|求职者|消费者|买家|卖家|开发者|设计师|产品经理|founder|buyer|leader|executive|sales|operator|marketer|customer|team|beginner|enthusiast)/iu
 
 function inferWriterBriefFromPromptedReply(
   query: string,
@@ -1270,6 +1422,36 @@ function inferWriterBriefFromPromptedReply(
   return inferred
 }
 
+function normalizeWriterPreloadedBrief(input?: WriterPreloadedBrief | null): Partial<WriterConversationBrief> | null {
+  if (!input) return null
+
+  const brief = {
+    topic: normalizeBriefValue(input.topic || ""),
+    audience: normalizeBriefValue(input.audience || ""),
+    objective: normalizeBriefValue(input.objective || ""),
+    tone: normalizeBriefValue(input.tone || ""),
+    constraints: normalizeBriefValue(input.constraints || ""),
+  }
+
+  return Object.values(brief).some(Boolean) ? brief : null
+}
+
+function isRichFirstMessage(input: {
+  query: string
+  historyLength: number
+  brief: WriterConversationBrief
+  routing: WriterRoutingDecision | null
+}) {
+  if (input.historyLength > 0) return false
+  const normalized = normalizeBriefValue(input.query)
+  if (normalized.length < 40) return false
+  return Boolean(
+    input.brief.topic &&
+      (input.brief.audience || input.brief.objective) &&
+      (input.brief.tone || input.routing?.contentType || input.routing?.targetPlatform),
+  )
+}
+
 function extractWriterBriefWithFixture(params: {
   query: string
   history: WriterHistoryEntry[]
@@ -1278,13 +1460,19 @@ function extractWriterBriefWithFixture(params: {
   mode: WriterMode
   preferredLanguage: WriterLanguage
   briefingGuide: WriterBriefingSkillDocument
+  conversationStatus?: WriterConversationStatus
 }): WriterBriefExtractionResult {
   const latestAssistantAnswer = params.history[params.history.length - 1]?.answer || ""
   const requestedFields = safeInferWriterRequestedFieldsFromAnswer(latestAssistantAnswer)
   const inferredFromPromptedReply = inferWriterBriefFromPromptedReply(params.query, requestedFields, params.brief)
-  const routingDecision = buildWriterRoutingDecision({ query: params.query })
+  const prior = getPriorRoutingFromHistory(params.history)
+  const finalRouting = resolveWriterRoutingFromSignals({
+    query: params.query,
+    priorRouting: prior,
+    conversationStatus: params.conversationStatus,
+  })
   const resolvedBrief = mergeStructuredWriterBrief(params.brief, inferredFromPromptedReply)
-  const actionableMissingFields = getWriterActionableMissingFields(resolvedBrief, routingDecision)
+  const actionableMissingFields = getWriterActionableMissingFields(resolvedBrief, finalRouting)
   const chinese = isChineseConversation(params.query, params.preferredLanguage)
   const userWantsDirectOutput = safeWantsDirectWriterOutput(params.query)
   const briefSufficient = actionableMissingFields.length === 0
@@ -1294,19 +1482,19 @@ function extractWriterBriefWithFixture(params: {
   return {
     resolvedBrief,
     routingDecision: {
-      contentType: routingDecision.contentType,
-      targetPlatform: routingDecision.targetPlatform,
-      outputForm: routingDecision.outputForm,
-      lengthTarget: routingDecision.lengthTarget,
+      contentType: finalRouting.contentType,
+      targetPlatform: finalRouting.targetPlatform,
+      outputForm: finalRouting.outputForm,
+      lengthTarget: finalRouting.lengthTarget,
     },
     answeredFields: sanitizeWriterBriefFields([
       ...requestedFields.filter((field) => {
-        if (field === "contentType") return Boolean(routingDecision.contentType)
-        if (field === "targetPlatform") return Boolean(routingDecision.targetPlatform)
+        if (field === "contentType") return Boolean(finalRouting.contentType)
+        if (field === "targetPlatform") return Boolean(finalRouting.targetPlatform)
         return Boolean(inferredFromPromptedReply[field as keyof WriterConversationBrief])
       }),
-      ...(routingDecision.contentType ? ["contentType" as const] : []),
-      ...(routingDecision.targetPlatform ? ["targetPlatform" as const] : []),
+      ...(finalRouting.contentType ? ["contentType" as const] : []),
+      ...(finalRouting.targetPlatform ? ["targetPlatform" as const] : []),
       ...(resolvedBrief.topic && !params.brief.topic ? ["topic" as const] : []),
       ...(resolvedBrief.audience && !params.brief.audience ? ["audience" as const] : []),
       ...(resolvedBrief.objective && !params.brief.objective ? ["objective" as const] : []),
@@ -1337,6 +1525,7 @@ async function extractWriterBriefWithModel(params: {
   mode: WriterMode
   preferredLanguage: WriterLanguage
   briefingGuide: WriterBriefingSkillDocument
+  conversationStatus?: WriterConversationStatus
 }): Promise<WriterBriefExtractionResult | null> {
   if (shouldUseWriterE2EFixtures()) {
     return extractWriterBriefWithFixture(params)
@@ -1596,6 +1785,101 @@ function buildWriterBriefPrompt(
     .join("\n")
 }
 
+function parseHardWriterLengthTarget(lengthTarget: string): WriterHardLengthTarget | null {
+  const match = /(\d{2,5})\s*(字|words?)/iu.exec(lengthTarget)
+  if (!match) return null
+  const maxUnits = Number.parseInt(match[1], 10)
+  if (!Number.isFinite(maxUnits) || maxUnits <= 0) return null
+  return {
+    maxUnits,
+    unit: /word/i.test(match[2]) ? "words" : "chars",
+  }
+}
+
+function stripWriterLengthArtifacts(markdown: string) {
+  return markdown
+    .replace(/^writer-asset:\/\/[^\r\n]+$/gimu, " ")
+    .replace(/writer-asset:\/\/[^\s)]+/gimu, " ")
+    .replace(/!\[[^\]]*\]\([^)]+\)/gimu, " ")
+}
+
+function getWriterLengthPlainText(markdown: string) {
+  return stripMarkdownForContext(stripWriterLengthArtifacts(stripHiddenReasoning(markdown))).replace(/\s+/g, " ").trim()
+}
+
+function countWriterLengthUnits(text: string, unit: WriterHardLengthTarget["unit"]) {
+  if (!text.trim()) return 0
+  if (unit === "words") {
+    return text.trim().split(/\s+/u).filter(Boolean).length
+  }
+  return Array.from(text).length
+}
+
+function trimWriterTextToUnitLimit(text: string, target: WriterHardLengthTarget) {
+  if (target.unit === "words") {
+    return text
+      .trim()
+      .split(/\s+/u)
+      .filter(Boolean)
+      .slice(0, target.maxUnits)
+      .join(" ")
+      .trim()
+  }
+
+  return Array.from(text).slice(0, target.maxUnits).join("").trim()
+}
+
+function condenseWriterTextToHardLimit(text: string, target: WriterHardLengthTarget) {
+  const hashtagPattern = /#[\p{L}\p{N}_-]+/gu
+  const hashtags = [...new Set(text.match(hashtagPattern) || [])].join(" ").trim()
+  const body = text.replace(hashtagPattern, " ").replace(/\s+/g, " ").trim()
+  const sentences = body
+    .split(/(?<=[。！？!?.])\s+|\n+/u)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  let next = ""
+  for (const sentence of sentences) {
+    const candidate = next ? `${next} ${sentence}` : sentence
+    if (countWriterLengthUnits(candidate, target.unit) <= target.maxUnits) {
+      next = candidate
+      continue
+    }
+    break
+  }
+
+  if (!next) {
+    next = trimWriterTextToUnitLimit(body, target)
+  }
+
+  if (hashtags) {
+    const tagged = `${next} ${hashtags}`.trim()
+    if (countWriterLengthUnits(tagged, target.unit) <= target.maxUnits) {
+      return tagged
+    }
+  }
+
+  return next.trim()
+}
+
+function enforceWriterHardLengthTarget(markdown: string, routing: WriterRoutingDecision) {
+  const hardTarget = parseHardWriterLengthTarget(routing.lengthTarget)
+  if (!hardTarget) {
+    return normalizeLineBreaks(markdown).trim()
+  }
+
+  const plainText = getWriterLengthPlainText(markdown)
+  if (!plainText) {
+    return normalizeLineBreaks(markdown).trim()
+  }
+
+  if (countWriterLengthUnits(plainText, hardTarget.unit) <= hardTarget.maxUnits) {
+    return normalizeLineBreaks(markdown).trim()
+  }
+
+  return condenseWriterTextToHardLimit(plainText, hardTarget)
+}
+
 function shouldUseWriterE2EFixtures() {
   return process.env.WRITER_E2E_FIXTURES === "true"
 }
@@ -1631,6 +1915,88 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
       clearTimeout(timer)
     }
   }
+}
+
+function extractWriterEnterpriseBriefDefaultsFromSnippets(
+  snippets: EnterpriseKnowledgeContext["snippets"],
+): Partial<WriterConversationBrief> | null {
+  let tone = ""
+  let audience = ""
+
+  const prioritizedSnippets = [...snippets].sort((left, right) => {
+    const leftPriority = left.scope === "brand" || left.inferredScope === "brand" ? 0 : 1
+    const rightPriority = right.scope === "brand" || right.inferredScope === "brand" ? 0 : 1
+    return leftPriority - rightPriority
+  })
+
+  for (const snippet of prioritizedSnippets) {
+    const content = normalizeBriefValue(snippet.content || "")
+    if (!content) continue
+
+    if (!tone) {
+      const explicitTone = safeExtractFirstChineseMatch(content, [
+        /(?:品牌语调|品牌语气|语调|语气|口吻|文风|tone|voice|style)\s*(?::|：)?\s*([^，。；;\n]+)/iu,
+      ])
+      tone = explicitTone || extractToneKeywords(content)
+    }
+
+    if (!audience) {
+      audience = safeExtractFirstChineseMatch(content, [
+        /(?:目标受众|目标读者|目标用户|适合人群|核心人群|受众|读者)\s*(?::|：)?\s*([^，。；;\n]+)/iu,
+      ])
+    }
+
+    if (tone && audience) {
+      break
+    }
+  }
+
+  const defaults: Partial<WriterConversationBrief> = {}
+  if (tone) defaults.tone = clipBriefField(tone)
+  if (audience) defaults.audience = clipBriefField(audience)
+  return Object.keys(defaults).length > 0 ? defaults : null
+}
+
+async function extractBriefDefaultsFromEnterpriseKnowledge(params: {
+  enterpriseId?: number | null
+  query: string
+  brief: WriterConversationBrief
+  platform: WriterPlatform
+  mode: WriterMode
+}) {
+  if (!params.enterpriseId || (params.brief.audience && params.brief.tone)) {
+    return null
+  }
+
+  const enterpriseKnowledge = await withTimeout(
+    loadEnterpriseKnowledgeContext({
+      enterpriseId: params.enterpriseId,
+      query: params.query,
+      queryVariants: [
+        `${params.query}\n补充品牌语气和目标受众`,
+        `${params.query}\nbrand tone and target audience`,
+      ],
+      preferredScopes: ["brand", "general"],
+      platform: params.platform,
+      mode: params.mode,
+    }).catch(() => null),
+    WRITER_ENTERPRISE_KNOWLEDGE_BUDGET_MS,
+    () => null,
+  )
+
+  if (!enterpriseKnowledge?.snippets?.length) {
+    return null
+  }
+
+  const defaults = extractWriterEnterpriseBriefDefaultsFromSnippets(enterpriseKnowledge.snippets)
+  if (!defaults) {
+    return null
+  }
+
+  return {
+    ...(params.brief.audience ? {} : defaults.audience ? { audience: defaults.audience } : {}),
+    ...(params.brief.tone ? {} : defaults.tone ? { tone: defaults.tone } : {}),
+  } satisfies Partial<WriterConversationBrief>
 }
 
 function _legacyBuildFixtureKnowledgeBlock(enterpriseKnowledge?: EnterpriseKnowledgeContext | null) {
@@ -2034,7 +2400,7 @@ function safeExtractFirstChineseMatch(text: string, patterns: RegExp[]) {
   return ""
 }
 
-function safeExtractTopicFromText(text: string) {
+function safeExtractTopicFromText(text: string, options?: { allowShortFallback?: boolean }) {
   const explicit = safeExtractFirstChineseMatch(text, [
     /(?:\u4e3b\u9898|\u8bdd\u9898|\u9009\u9898|\u6807\u9898\u65b9\u5411|\u6838\u5fc3\u89d2\u5ea6)\s*(?::|\uff1a)?\s*([^\uff0c\u3002\uff1b;\n]+)/iu,
     /(?:\u5173\u4e8e|\u56f4\u7ed5|\u805a\u7126\u4e8e?)\s*([^\uff0c\u3002\uff1b;\n]+)/iu,
@@ -2044,17 +2410,26 @@ function safeExtractTopicFromText(text: string) {
   if (explicit) return explicit
   const objectiveLike = WRITER_OBJECTIVE_SIGNAL_RE.test(text)
   const audienceLike = WRITER_AUDIENCE_SIGNAL_RE.test(text)
-  if (!/[\u3002\uff01\uff1f?]/u.test(text) && text.length <= 120 && !objectiveLike && !audienceLike) {
+  const allowShortFallback = options?.allowShortFallback !== false
+  if (allowShortFallback && !/[\u3002\uff01\uff1f?]/u.test(text) && text.length <= 120 && !objectiveLike && !audienceLike) {
     return compactText(text, 90)
   }
   return ""
 }
 
 function safeExtractAudienceFromText(text: string) {
-  return safeExtractFirstChineseMatch(text, [
-    /(?:\u9762\u5411|\u9488\u5bf9|\u9002\u5408|\u8bfb\u8005\u662f|\u53d7\u4f17\u662f|\u76ee\u6807\u8bfb\u8005|\u76ee\u6807\u7528\u6237|\u76ee\u6807\u53d7\u4f17)\s*(?::|\uff1a)?\s*([^\uff0c\u3002\uff1b;\n]+)/iu,
+  const explicit = safeExtractFirstChineseMatch(text, [
+    /(?:面向|针对|适合|读者是|受众是|目标读者|目标用户|目标受众)\s*(?::|：)?\s*([^，。；;\n]+)/iu,
     /(?:for|target(?:ing)?|audience(?: is)?)\s+([^,.;\n]+)/iu,
   ])
+  if (explicit) return explicit
+  // Colloquial Chinese patterns: "主要是喜欢AI的小白看的", "写给新手看的", "给企业主看的"
+  const colloquial = safeExtractFirstChineseMatch(text, [
+    /(?:主要是|主要|专门)?\s*([^\s,，。；;\n]{2,30}?)\s*(?:看的|来看的)/iu,
+    /(?:写给|给|面向)\s*([^\s,，。；;\n]{2,30}?)\s*(?:看|阅读|参考)/iu,
+    /(?:适合|针对)\s*([^\s,，。；;\n]{2,30}?)\s*(?:小白|新手|入门|阅读)/iu,
+  ])
+  return colloquial
 }
 
 function safeExtractObjectiveFromText(text: string) {
@@ -2122,7 +2497,9 @@ function safeIsLowSignalWriterReply(text: string) {
 }
 
 function safeWantsDirectWriterOutput(query: string) {
-  return /(?:\u76f4\u63a5\u5199|\u76f4\u63a5\u751f\u6210|\u76f4\u63a5\u51fa\u7a3f|\u76f4\u63a5\u5f00\u59cb|\u76f4\u63a5\u7ed9\u6211\u6210\u7a3f|\u7acb\u5373\u51fa\u7a3f|\u5e2e\u6211\u8d77\u8349|\u4e3b\u9898\u662f|\u6807\u9898\u662f|Markdown \u8f93\u51fa|Markdown output|\u5305\u542b\u4e00\u4e2a\u4e3b\u6807\u9898|\u81f3\u5c11\u4e24\u4e2a\u4e8c\u7ea7\u6807\u9898|quote block|bullet list|go ahead|just write|draft it now|generate now)/iu.test(query)
+  return /(?:\u76f4\u63a5\u5199|\u76f4\u63a5\u751f\u6210|\u76f4\u63a5\u51fa\u7a3f|\u76f4\u63a5\u5f00\u59cb|\u76f4\u63a5\u7ed9\u6211\u6210\u7a3f|\u7acb\u5373\u51fa\u7a3f|\u5e2e\u6211\u8d77\u8349|\u4e0d\u7528\u518d\u95ee|\u76f4\u63a5\u51fa\u5b8c\u6574\u7a3f|\u76f4\u63a5\u7ed9\u6211\u6210\u6587|go ahead|just write|draft it now|generate now|no need to ask|write it directly)/iu.test(
+    query,
+  )
 }
 
 function safeSummarizeCollectedWriterBrief(brief: WriterConversationBrief, chinese: boolean) {
@@ -2495,6 +2872,7 @@ async function buildSystemPrompt(
         ? "Live web research was intentionally skipped for this request. Do not imply that outside research was performed."
       : "External research may be partial or unavailable. If so, rely on enterprise knowledge and broadly known information, and avoid precise unsupported claims.",
     "Do not reveal chain-of-thought, hidden reasoning, or internal analysis.",
+    "If the length target is numeric, treat it as a hard maximum rather than a soft suggestion.",
     "Use `writer-asset://cover` for the opening image and add only the inline placeholders that the draft genuinely needs, such as `writer-asset://inline-1`, `writer-asset://inline-2`, or `writer-asset://inline-3`, placing each one beside the section it should illustrate.",
   ].join("\n")
 }
@@ -2573,6 +2951,7 @@ async function buildUserPrompt(
     "- Use the source material for trends, external facts, and cases. Do not invent specific data.",
     "- The result must be clean Markdown suitable for continued editing and publishing.",
     "- Keep the structure native to the selected scenario, platform, and output form.",
+    "- If the length target is numeric, do not exceed it.",
   ].join("\n")
 }
 
@@ -2689,7 +3068,10 @@ export async function generateWriterDraftWithSkills(
   const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL)
 
   return {
-    answer: postProcessWriterDraft(routing.renderPlatform, routing.renderMode, answer, language.label),
+    answer: enforceWriterHardLengthTarget(
+      postProcessWriterDraft(routing.renderPlatform, routing.renderMode, answer, language.label),
+      routing,
+    ),
     diagnostics: buildWriterTurnDiagnostics({
       retrievalStrategy,
       enterpriseKnowledge,
@@ -2711,6 +3093,7 @@ const defaultWriterSkillsRuntime: WriterSkillsRuntime = {
 export async function runWriterSkillsTurnWithRuntime(
   params: {
     query: string
+    preloadedBrief?: WriterPreloadedBrief | null
     platform: WriterPlatform
     mode: WriterMode
     preferredLanguage?: WriterLanguage
@@ -2724,27 +3107,39 @@ export async function runWriterSkillsTurnWithRuntime(
   const contextHistory = (params.history || []).slice(-WRITER_CONTEXT_MAX_TURNS)
   const recentHistory = contextHistory.slice(-WRITER_BRIEF_MAX_TURNS)
   const turnCount = Math.min(WRITER_BRIEF_MAX_TURNS, recentHistory.length + 1)
-  const heuristicBrief = collectWriterBriefFromConversation(recentHistory, params.query)
+  const heuristicBrief = mergeStructuredWriterBrief(
+    collectWriterBriefFromConversation(recentHistory, params.query),
+    normalizeWriterPreloadedBrief(params.preloadedBrief),
+  )
+  const enterpriseBriefDefaults = await extractBriefDefaultsFromEnterpriseKnowledge({
+    enterpriseId: params.enterpriseId,
+    query: params.query,
+    brief: heuristicBrief,
+    platform: params.platform,
+    mode: params.mode,
+  })
+  const seededBrief = mergeStructuredWriterBrief(heuristicBrief, enterpriseBriefDefaults)
   const briefingGuide = await runtime.getBriefingGuide()
   const structuredExtraction = await runtime.extractBrief({
     query: params.query,
     history: recentHistory,
-    brief: heuristicBrief,
+    brief: seededBrief,
     platform: params.platform,
     mode: params.mode,
     preferredLanguage,
     briefingGuide,
+    conversationStatus: params.conversationStatus,
   })
   const mergedBrief =
     structuredExtraction && structuredExtraction.confidence >= 0.45
-      ? mergeStructuredWriterBrief(heuristicBrief, structuredExtraction.resolvedBrief)
-      : heuristicBrief
-  const routing = buildWriterRoutingDecision({
+      ? mergeStructuredWriterBrief(seededBrief, structuredExtraction.resolvedBrief)
+      : seededBrief
+  const priorRouting = getPriorRoutingFromHistory(recentHistory)
+  const routing = resolveWriterRoutingFromSignals({
     query: params.query,
-    contentType: structuredExtraction?.routingDecision.contentType as WriterContentType | "" | undefined,
-    targetPlatform: structuredExtraction?.routingDecision.targetPlatform,
-    outputForm: structuredExtraction?.routingDecision.outputForm,
-    lengthTarget: structuredExtraction?.routingDecision.lengthTarget,
+    priorRouting,
+    structuredRouting: structuredExtraction?.routingDecision,
+    conversationStatus: params.conversationStatus,
   })
   const retrievalStrategy = decideWriterRetrievalStrategy({
     query: params.query,
@@ -2763,12 +3158,28 @@ export async function runWriterSkillsTurnWithRuntime(
     mergedBrief.tone = platformGuide.tone
   }
 
+  const modelApprovedBrief = Boolean(
+    structuredExtraction?.briefSufficient &&
+      structuredExtraction.confidence >= 0.6 &&
+      mergedBrief.topic &&
+      (mergedBrief.audience || mergedBrief.objective),
+  )
+  const richBriefSignal =
+    safeWantsDirectWriterOutput(params.query) ||
+    Boolean(structuredExtraction?.userWantsDirectOutput) ||
+    modelApprovedBrief ||
+    isRichFirstMessage({
+      query: params.query,
+      historyLength: recentHistory.length,
+      brief: mergedBrief,
+      routing,
+    })
+
   const shouldClarify =
     (params.conversationStatus || "drafting") === "drafting" &&
     actionableMissingFields.length > 0 &&
     turnCount < WRITER_BRIEF_MAX_TURNS &&
-    !safeWantsDirectWriterOutput(params.query) &&
-    !structuredExtraction?.userWantsDirectOutput
+    !richBriefSignal
 
   if (shouldClarify) {
     const chinese = isChineseConversation(params.query, preferredLanguage)
@@ -2811,10 +3222,11 @@ export async function runWriterSkillsTurnWithRuntime(
     enterpriseQueryVariants: buildEnterpriseQueryVariantsSafe(mergedBrief.topic || params.query, preferredEnterpriseScopes),
     preferredEnterpriseScopes,
   })
+  const finalAnswer = enforceWriterHardLengthTarget(draftResult.answer, routing)
 
   return {
     outcome: "draft_ready",
-    answer: draftResult.answer,
+    answer: finalAnswer,
     diagnostics: draftResult.diagnostics,
     brief: mergedBrief,
     routing,
@@ -2832,6 +3244,7 @@ export async function runWriterSkillsTurnWithRuntime(
 
 export async function runWriterSkillsTurn(params: {
   query: string
+  preloadedBrief?: WriterPreloadedBrief | null
   platform: WriterPlatform
   mode: WriterMode
   preferredLanguage?: WriterLanguage

@@ -5,10 +5,26 @@ import { requireSessionUser } from "@/lib/auth/guards"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
 import { getWriterConversation, listWriterMessages } from "@/lib/writer/repository"
-import type { WriterConversationStatus } from "@/lib/writer/types"
+import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
 const WRITER_CHAT_HISTORY_LIMIT = 12
+
+function normalizeWriterPreloadedBrief(input: unknown): WriterPreloadedBrief | null {
+  if (!input || typeof input !== "object") return null
+
+  const candidate = input as Record<string, unknown>
+  const brief: WriterPreloadedBrief = {}
+
+  for (const key of ["topic", "audience", "objective", "tone", "constraints"] as const) {
+    const value = typeof candidate[key] === "string" ? candidate[key].trim() : ""
+    if (value) {
+      brief[key] = value
+    }
+  }
+
+  return Object.keys(brief).length > 0 ? brief : null
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,6 +52,7 @@ export async function POST(req: NextRequest) {
     if (!userQuery || typeof userQuery !== "string" || !userQuery.trim()) {
       return NextResponse.json({ error: "query is required" }, { status: 400 })
     }
+    const preloadedBrief = normalizeWriterPreloadedBrief(body?.brief)
 
     const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : null
     const existingConversation = conversationId ? await getWriterConversation(auth.user.id, conversationId) : null
@@ -59,6 +76,7 @@ export async function POST(req: NextRequest) {
         enterpriseId: auth.user.enterpriseId,
         conversationId: persisted.conversationId,
         query: userQuery,
+        brief: preloadedBrief,
         platform,
         mode,
         language,

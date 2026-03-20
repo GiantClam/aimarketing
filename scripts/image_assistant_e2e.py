@@ -415,9 +415,10 @@ def run_fixture_enabled(page):
     )
     visible_test_id(page, "image-canvas-redo-button").click()
     page.wait_for_timeout(400)
-    visible_test_id(page, "image-canvas-close-button").click()
+    visible_test_id(page, "image-canvas-attach-button").click()
     pending_attachment = page.locator("[data-testid^='image-pending-attachment-']").first
     pending_attachment.wait_for(state="visible", timeout=90000)
+    visible_test_id(page, "image-canvas-close-button").click()
     pending_attachment_img = pending_attachment.locator("img")
     edited_attachment_src = pending_attachment_img.get_attribute("src") or ""
     result["edited_attachment_src"] = edited_attachment_src

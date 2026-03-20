@@ -19,6 +19,7 @@
     "seed:writer:history": "node scripts/seed-writer-history.js",
     "seed:loadtest:lead-hunter": "node scripts/provision_lead_hunter_load_test_user.js",
     "test:openrouter:smoke": "node scripts/openrouter_smoke_test.js",
+    "test:writer:skills": "tsx --test lib/writer/skills.regression.test.ts",
     "test:e2e:writer:real": "python scripts/run_writer_real_validation_with_server.py",
     "test:e2e:writer:new-features": "python scripts/run_writer_new_features_with_server.py",
     "test:image-assistant:patch-composite": "python scripts/validate_image_patch_composite_math.py",
@@ -111,6 +112,7 @@
     "globals": "^17.4.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
+    "tsx": "^4.21.0",
     "tw-animate-css": "1.3.3",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.57.0"

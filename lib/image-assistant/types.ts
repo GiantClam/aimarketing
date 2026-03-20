@@ -1,5 +1,17 @@
 export type ImageAssistantTaskType = "generate" | "edit" | "blend" | "style_transfer" | "mask_edit"
-export type ImageAssistantBriefField = "goal" | "subject" | "style" | "composition"
+export type ImageAssistantSizePreset = "1:1" | "4:5" | "3:4" | "4:3" | "16:9" | "9:16"
+export type ImageAssistantResolution = "512" | "1K" | "2K" | "4K"
+export type ImageAssistantUsagePresetId = "website_banner" | "social_cover" | "ad_poster" | "avatar"
+export type ImageAssistantOrientation = "landscape" | "portrait"
+export type ImageAssistantBriefField =
+  | "usage"
+  | "orientation"
+  | "resolution"
+  | "ratio"
+  | "goal"
+  | "subject"
+  | "style"
+  | "composition"
 export type ImageAssistantSkillId = "graphic-design-brief" | "canvas-design-execution"
 export type ImageAssistantToolName =
   | "collect_brief"
@@ -13,9 +25,6 @@ export type ImageAssistantMode = "chat" | "canvas"
 export type ImageAssistantVersionKind = "ai_generate" | "ai_edit" | "canvas_save" | "restore"
 export type ImageAssistantAssetType = "reference" | "generated" | "canvas_snapshot" | "mask" | "sticker" | "export"
 export type ImageAssistantReferenceRole = "subject" | "background" | "style" | "logo"
-
-export type ImageAssistantSizePreset = "1:1" | "4:5" | "3:4" | "16:9" | "9:16"
-export type ImageAssistantResolution = "512" | "1K" | "2K" | "4K"
 
 export type ImageAssistantConversationSummary = {
   id: string
@@ -37,11 +46,36 @@ export type ImageAssistantConversationPage = {
 }
 
 export type ImageAssistantBrief = {
+  usage_preset: ImageAssistantUsagePresetId | ""
+  usage_label: string
+  orientation: ImageAssistantOrientation | ""
+  resolution: ImageAssistantResolution | ""
+  size_preset: ImageAssistantSizePreset | ""
+  ratio_confirmed: boolean
   goal: string
   subject: string
   style: string
   composition: string
   constraints: string
+}
+
+export type ImageAssistantPromptOption = {
+  id: string
+  label: string
+  description?: string
+  emphasis?: "card" | "button"
+  prompt_value?: string
+  brief_patch?: Partial<ImageAssistantBrief>
+  size_preset?: ImageAssistantSizePreset | null
+  resolution?: ImageAssistantResolution | null
+}
+
+export type ImageAssistantPromptQuestion = {
+  id: string
+  title: string
+  description?: string
+  display: "cards" | "buttons"
+  options: ImageAssistantPromptOption[]
 }
 
 export type ImageAssistantSkillSelection = {
@@ -68,6 +102,7 @@ export type ImageAssistantOrchestrationState = {
   reference_count: number
   recommended_mode: "generate" | "edit"
   follow_up_question: string | null
+  prompt_questions: ImageAssistantPromptQuestion[]
   generated_prompt: string | null
 }
 

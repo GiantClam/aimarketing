@@ -29,7 +29,6 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
-import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
@@ -872,7 +871,6 @@ export function WriterWorkspace({
   const [availabilityReady, setAvailabilityReady] = useState(false)
   const [_knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
-  const [conversationName, setConversationName] = useState<string | null>(null)
   const [platform, setPlatform] = useState<WriterPlatform>(() => normalizeWriterPlatform(initialPlatform))
   const [mode, setMode] = useState<WriterMode>(() =>
     normalizeWriterMode(normalizeWriterPlatform(initialPlatform), initialMode),
@@ -918,7 +916,6 @@ export function WriterWorkspace({
 
   useEffect(() => {
     setPreviewMessageId(null)
-    setConversationName(null)
     setVersionAssetState({})
     setPendingRichCopyMessageId(null)
   }, [conversationId])
@@ -1124,7 +1121,6 @@ export function WriterWorkspace({
         setLanguage(nextLanguage)
         setImagesRequested(Boolean(cachedConversation.conversation.images_requested))
         setConversationStatus(nextStatus)
-        setConversationName(cachedConversation.conversation.name || null)
         if (!meta?.draft) {
           setDraft(inferFinalDraft(cachedMessages, nextStatus))
         }
@@ -1154,7 +1150,6 @@ export function WriterWorkspace({
         setLanguage(normalizeWriterLanguage(data.conversation.language))
         setImagesRequested(Boolean(data.conversation.images_requested))
         setConversationStatus(data.conversation.status || "drafting")
-        setConversationName(data.conversation.name || null)
       }
       if (reset) {
         setLatestDiagnostics(nextDiagnostics)
@@ -1331,7 +1326,6 @@ export function WriterWorkspace({
         setLanguage(nextLanguage)
         setImagesRequested(Boolean(data.conversation.images_requested))
         setConversationStatus(nextStatus)
-        setConversationName(data.conversation.name || null)
         saveWriterSessionMeta(conversationId, {
           platform: nextPlatform,
           mode: nextMode,
@@ -1507,7 +1501,6 @@ export function WriterWorkspace({
     setVersionAssetState({})
     setPendingRichCopyMessageId(null)
     setConversationStatus("drafting")
-    setConversationName(null)
     setDraftSaveState("idle")
     router.push("/dashboard/writer")
   }
@@ -1516,6 +1509,8 @@ export function WriterWorkspace({
     if (!inputValue.trim() || isLoading) return
 
     const query = inputValue.trim()
+    const optimisticCreatedAt = Math.floor(Date.now() / 1000)
+    const userMessageId = `writer_user_${Date.now()}`
     const assistantId = `writer_assistant_${Date.now()}`
     let taskAccepted = false
     setInputValue("")
@@ -1529,7 +1524,7 @@ export function WriterWorkspace({
     setPendingRichCopyMessageId(null)
     setMessages((current) => [
       ...current,
-      { id: `writer_user_${Date.now()}`, conversation_id: conversationId || "", role: "user", content: query },
+      { id: userMessageId, conversation_id: conversationId || "", role: "user", content: query },
       {
         id: assistantId,
         conversation_id: conversationId || "",
@@ -1563,9 +1558,40 @@ export function WriterWorkspace({
         throw new Error(payload?.error || `HTTP ${response.status}`)
       }
 
+      const optimisticCacheEntries: WriterHistoryEntry[] = [
+        ...historyEntriesRef.current,
+        {
+          id: `pending_${assistantId}`,
+          conversation_id: payload.conversation_id,
+          query,
+          answer: writerCopy.generatingDraft,
+          diagnostics: null,
+          inputs: { contents: query },
+          created_at: optimisticCreatedAt,
+        },
+      ]
+
+      historyEntriesRef.current = optimisticCacheEntries
+      setMessages((current) =>
+        current.map((message) =>
+          message.conversation_id
+            ? message
+            : {
+                ...message,
+                conversation_id: payload.conversation_id,
+              },
+        ),
+      )
+      saveWriterConversationCache(payload.conversation_id, {
+        entries: optimisticCacheEntries,
+        conversation: payload.conversation,
+        historyCursor,
+        hasMoreHistory,
+        loadedTurnCount: optimisticCacheEntries.length,
+        updatedAt: Date.now(),
+      })
       setConversationId(payload.conversation_id)
       setConversationStatus(payload.conversation.status || "drafting")
-      setConversationName(payload.conversation.name || null)
       saveWriterSessionMeta(payload.conversation_id, {
         platform: payload.conversation.platform,
         mode: payload.conversation.mode,
@@ -1848,11 +1874,6 @@ export function WriterWorkspace({
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
           <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
-              <WorkspaceConversationHeader
-                title={conversationName || writerCopy.assistantName}
-                description={`在这里与 ${writerCopy.assistantName} 进行多轮次对话，发送消息后会自动生成回复`}
-                variant="inline"
-              />
               <div className="min-h-0 flex-1 bg-[#f7f7f7]">
                 <ScrollArea className="h-full" ref={viewportRef}>
                 <div className="space-y-0">

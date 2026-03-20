@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptChips } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
@@ -924,13 +923,6 @@ export function VideoChat() {
 
   return (
     <div className="h-full flex flex-col bg-muted/30">
-      <div className="px-2 py-2 lg:px-4 lg:py-3">
-        <WorkspaceConversationHeader
-          title="视频生成 Agent"
-          description="通过多轮对话整理创意要求，再串联故事板、片段生成和最终合成流程。"
-        />
-      </div>
-
       {/* 对话区域 */}
       <div 
         ref={scrollAreaRef}

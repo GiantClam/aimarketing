@@ -50,9 +50,10 @@ export async function POST(req: NextRequest) {
     const brief = body?.brief && typeof body.brief === "object" ? body.brief : null
     const hasBrief = Boolean(
       brief &&
-        ["goal", "subject", "style", "composition", "constraints"].some(
+        ["usage_preset", "usage_label", "orientation", "resolution", "size_preset", "goal", "subject", "style", "composition", "constraints"].some(
           (key) => typeof brief[key] === "string" && brief[key].trim(),
-        ),
+        ) ||
+        Boolean(brief?.ratio_confirmed),
     )
     if (!prompt.trim() && !hasBrief) {
       return NextResponse.json({ error: "prompt is required" }, { status: 400 })

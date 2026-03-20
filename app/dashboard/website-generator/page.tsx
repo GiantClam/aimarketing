@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import { WorkspaceMessageFrame, WorkspaceSectionCard } from "@/components/workspace/workspace-message-primitives"
 
@@ -118,11 +117,6 @@ export default function WebsiteGeneratorPage() {
   return (
     <div className="flex h-full overflow-hidden bg-muted/30">
       <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-2 px-2 py-2 lg:px-4 lg:py-3">
-        <WorkspaceConversationHeader
-          title="网站生成 Agent"
-          description="用对话逐步定义企业站点，再在右侧实时查看生成中的页面结果。"
-        />
-
         <div className="grid min-h-0 flex-1 gap-2 xl:grid-cols-[420px_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border-2 border-border bg-card">
             <div className="border-b-2 border-border px-4 py-3.5">

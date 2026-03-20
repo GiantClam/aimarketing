@@ -12,7 +12,7 @@ import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service
 import { runWriterSkillsTurn } from "@/lib/writer/skills"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
-import type { WriterConversationStatus, WriterHistoryEntry } from "@/lib/writer/types"
+import type { WriterConversationStatus, WriterHistoryEntry, WriterPreloadedBrief } from "@/lib/writer/types"
 import type { ImageAssistantBrief, ImageAssistantTaskType } from "@/lib/image-assistant/types"
 
 type AssistantTaskStatus = "pending" | "running" | "success" | "failed"
@@ -22,6 +22,7 @@ type WriterTurnTaskPayload = {
   enterpriseId?: number | null
   conversationId: string
   query: string
+  brief?: WriterPreloadedBrief | null
   platform: WriterPlatform
   mode: WriterMode
   language: WriterLanguage
@@ -213,6 +214,7 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
   const turnResult = await withTaskTimeout(
     runWriterSkillsTurn({
       query: payload.query,
+      preloadedBrief: payload.brief,
       platform: payload.platform,
       mode: payload.mode,
       preferredLanguage: payload.language,

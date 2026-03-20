@@ -74,7 +74,7 @@ function buildHeaders() {
 
 function normalizeAspectRatio(sizePreset?: string | null) {
   const value = sizePreset || "1:1"
-  if (["1:1", "4:5", "3:4", "16:9", "9:16"].includes(value)) {
+  if (["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"].includes(value)) {
     return value
   }
 
@@ -200,7 +200,7 @@ export function getImageAssistantAvailability() {
   }
 }
 
-function isFallbackEligibleAibermError(error: unknown) {
+function _isFallbackEligibleAibermError(error: unknown) {
   if (!(error instanceof Error)) {
     return false
   }

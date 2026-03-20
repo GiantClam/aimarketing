@@ -15,7 +15,6 @@ import {
   WorkspaceComposerPanel,
   WorkspaceEmptyState,
 } from "@/components/workspace/workspace-primitives";
-import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header";
 import {
   WorkspaceLoadingMessage,
   WorkspaceMessageFrame,
@@ -23,7 +22,6 @@ import {
 import { ensureWorkspaceQueryData, fetchWorkspaceQueryData, getAdvisorMessagesPage, getAdvisorMessagesQueryKey, invalidateAdvisorConversationQueries } from "@/lib/query/workspace-cache";
 import { ADVISOR_SESSION_CACHE_TTL_MS, getAdvisorConversationCache, isAdvisorConversationCacheFresh, mapAdvisorMessagePageToChatMessages, saveAdvisorConversationCache, type AdvisorChatMessage } from "@/lib/advisor/session-store";
 import { findAdvisorPendingTask, removePendingAssistantTask, savePendingAssistantTask, updatePendingAssistantTask } from "@/lib/assistant-task-store";
-import { readStorageJson } from "@/lib/browser-storage";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./CodeBlock";
 
@@ -140,7 +138,6 @@ function isMessageListPrefix(prefix: Message[], full: Message[]) {
 
 export function DifyChatArea({ user, advisorType, initialConversationId }: { user: string; advisorType: string; initialConversationId: string | null }) {
   const meta = useMemo(() => WORKSPACE_META[advisorType] ?? WORKSPACE_META["brand-strategy"], [advisorType]);
-  const headerDescription = useMemo(() => `在这里与 ${meta.title} 进行多轮次对话，发送消息后会自动生成回复`, [meta.title]);
   const queryClient = useQueryClient();
   const router = useRouter();
   const [messagesState, setMessagesState] = useState<Message[]>([]);
@@ -152,7 +149,6 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
-  const [conversationTitle, setConversationTitle] = useState(meta.title);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyRestoreRef = useRef<{ height: number; top: number } | null>(null);
@@ -234,20 +230,6 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
     }
     void fetchMessages(initialConversationId, { keepCurrentOnError: Boolean(cached), forceRefresh: Boolean(cached), background: Boolean(cached) }).finally(() => setIsConversationLoading(false));
   }, [advisorType, fetchMessages, initialConversationId]);
-
-  useEffect(() => {
-    if (!conversationId) {
-      setConversationTitle(meta.title);
-      return;
-    }
-
-    const cachedList = readStorageJson<{ items?: Array<{ id: string; name?: string | null }> }>(
-      "session",
-      `advisor-conversations-cache-v2:${advisorType}`,
-    );
-    const matchedTitle = cachedList?.items?.find((item) => item.id === conversationId)?.name?.trim();
-    setConversationTitle(matchedTitle || meta.title);
-  }, [advisorType, conversationId, meta.title, pendingTaskRefreshKey]);
 
   useEffect(() => {
     const pendingTask = findAdvisorPendingTask({ advisorType, conversationId });
@@ -393,12 +375,6 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
   return (
     <div className="flex h-full min-h-0 justify-center">
       <section className="flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
-        <WorkspaceConversationHeader
-          title={conversationTitle}
-          description={headerDescription}
-          variant="inline"
-        />
-
         <div className="min-h-0 flex-1 bg-[#f7f7f7]">
           <ScrollArea ref={scrollRef} className="h-full" viewportClassName="px-3 pb-3 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
             {messagesState.length === 0 ? (

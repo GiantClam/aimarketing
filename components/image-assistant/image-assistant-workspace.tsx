@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   Download,
+  Eye,
   Eraser,
   ImageIcon,
   Loader2,
   MousePointer2,
   Palette,
   Pencil,
+  Plus,
   Redo2,
   Square,
   Sparkles,
@@ -27,7 +29,6 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { WorkspaceConversationHeader } from "@/components/workspace/workspace-conversation-header"
 import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceLoadingMessage,
@@ -59,11 +60,14 @@ import {
 } from "@/lib/image-assistant/session-store"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
 import type {
+  ImageAssistantBrief,
   ImageAssistantAsset,
   ImageAssistantCanvasDocument,
   ImageAssistantConversationSummary,
   ImageAssistantLayer,
   ImageAssistantMessage,
+  ImageAssistantOrchestrationState,
+  ImageAssistantPromptOption,
   ImageAssistantResolution,
   ImageAssistantSessionDetail,
   ImageAssistantSizePreset,
@@ -151,6 +155,13 @@ function getStoredPendingTurn(sessionId: string | null): PendingConversationTurn
 type MessageMetaPill = {
   label: string
   value: string
+}
+
+const RESOLUTION_DISPLAY: Record<ImageAssistantResolution, { zh: string; en: string }> = {
+  "512": { zh: "标清 512", en: "Standard 512" },
+  "1K": { zh: "高清 1K", en: "High 1K" },
+  "2K": { zh: "超清 2K", en: "Ultra 2K" },
+  "4K": { zh: "超高清 4K", en: "Ultra HD 4K" },
 }
 
 type CanvasSelectionBounds = {
@@ -355,6 +366,7 @@ function getNearestSizePresetForAspectRatio(aspectRatio: number | null): ImageAs
     { preset: "1:1", ratio: 1 },
     { preset: "4:5", ratio: 4 / 5 },
     { preset: "3:4", ratio: 3 / 4 },
+    { preset: "4:3", ratio: 4 / 3 },
     { preset: "16:9", ratio: 16 / 9 },
     { preset: "9:16", ratio: 9 / 16 },
   ]
@@ -585,6 +597,16 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
+function guessImageFileExtension(mimeType?: string | null, fallbackUrl?: string | null) {
+  if (mimeType === "image/jpeg") return "jpg"
+  if (mimeType === "image/webp") return "webp"
+  if (mimeType === "image/png") return "png"
+
+  const fromUrl = /\.(png|jpe?g|webp)(?:$|[?#])/i.exec(fallbackUrl || "")
+  if (!fromUrl) return "png"
+  return fromUrl[1].toLowerCase() === "jpeg" ? "jpg" : fromUrl[1].toLowerCase()
+}
+
 function isAcceptedUploadFile(file: File) {
   return IMAGE_ASSISTANT_ACCEPTED_UPLOAD_TYPES.has(file.type) || /\.(png|jpe?g|webp)$/i.test(file.name)
 }
@@ -605,7 +627,7 @@ function parseMessageBubbleContent(content: string) {
   const meta: MessageMetaPill[] = []
 
   for (const line of lines) {
-    const match = /^(Requested mode|Output spec)\s*:\s*(.+)$/i.exec(line)
+    const match = /^(Requested mode|Output spec|Usage|Orientation|Quality|Ratio)\s*:\s*(.+)$/i.exec(line)
     if (match) {
       meta.push({ label: match[1], value: match[2] })
       continue
@@ -704,6 +726,41 @@ function getCandidatePreviewCacheKey(params: {
     patchBounds.width,
     patchBounds.height,
   ].join(":")
+}
+
+function getMessageOrchestration(message: ImageAssistantMessage | null | undefined): ImageAssistantOrchestrationState | null {
+  if (!message) return null
+
+  const payloads = [message.response_payload, message.request_payload]
+  for (const payload of payloads) {
+    const orchestration =
+      payload && typeof payload === "object" && (payload as Record<string, unknown>).orchestration
+        ? ((payload as Record<string, unknown>).orchestration as ImageAssistantOrchestrationState)
+        : null
+    if (orchestration && typeof orchestration === "object") {
+      return orchestration
+    }
+  }
+
+  return null
+}
+
+function hasBriefPatchInput(brief?: Partial<ImageAssistantBrief> | null) {
+  if (!brief) return false
+
+  return Boolean(
+    brief.usage_preset ||
+      brief.usage_label ||
+      brief.orientation ||
+      brief.resolution ||
+      brief.size_preset ||
+      brief.ratio_confirmed ||
+      brief.goal ||
+      brief.subject ||
+      brief.style ||
+      brief.composition ||
+      brief.constraints,
+  )
 }
 
 function getMessageAttachmentPreviewCacheKey(params: {
@@ -1432,6 +1489,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       dragDropActiveHint: isEnglish
         ? `Release to attach up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} images.`
         : `松开即可添加，单次最多 ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} 张。`,
+      previewImage: isEnglish ? "Preview image" : "预览图片",
+      exportImage: isEnglish ? "Export image" : "导出图片",
+      editImage: isEnglish ? "Open refine editor" : "打开精修",
+      addAsAttachment: isEnglish ? "Add as attachment" : "添加为附件",
+      addCurrentCanvas: isEnglish ? "Add current image to attachments" : "将当前图片添加为附件",
+      clickImageToPreview: isEnglish ? "Click the image to preview it." : "点击图片仅预览。",
+      candidateActionsHint: isEnglish
+        ? "Preview on image click. Use the actions below for export, refine, or attach."
+        : "点击图片仅预览，下方按钮可导出、精修或添加为附件。",
     }),
     [isEnglish],
   )
@@ -1482,6 +1548,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [isComposerDragActive, setIsComposerDragActive] = useState(false)
   const [candidatePreviewUrls, setCandidatePreviewUrls] = useState<Record<string, string>>({})
   const [messageAttachmentPreviewUrls, setMessageAttachmentPreviewUrls] = useState<Record<string, string>>({})
+  const [previewImage, setPreviewImage] = useState<{ src: string; label: string } | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const messageViewportRef = useRef<HTMLDivElement | null>(null)
@@ -1665,6 +1732,29 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const hasCanvasEditAttachment = pendingAttachments.some((attachment) => attachment.source === "canvas")
   const primaryRunKind: ImageAssistantRunKind = hasCanvasEditAttachment ? "edit" : "generate"
   const composerModeLabel = getRunKindLabel(primaryRunKind, extraCopy)
+  const latestOrchestration = useMemo(() => {
+    const messages = detail?.messages || []
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const orchestration = getMessageOrchestration(messages[index])
+      if (orchestration) {
+        return orchestration
+      }
+    }
+    return null
+  }, [detail?.messages])
+  const currentUsageDisplay = latestOrchestration?.brief.usage_label || (isEnglish ? "Use + ratio pending" : "待确认用途 + 比例")
+  const currentOrientationDisplay = latestOrchestration?.brief.orientation
+    ? latestOrchestration.brief.orientation === "landscape"
+      ? isEnglish ? "Landscape" : "横版画面"
+      : isEnglish ? "Portrait" : "竖版画面"
+    : isEnglish ? "Direction pending" : "待确认方向"
+  const currentResolutionDisplay = latestOrchestration?.brief.resolution
+    ? isEnglish
+      ? RESOLUTION_DISPLAY[latestOrchestration.brief.resolution].en
+      : RESOLUTION_DISPLAY[latestOrchestration.brief.resolution].zh
+    : isEnglish
+      ? RESOLUTION_DISPLAY[resolution].en
+      : RESOLUTION_DISPLAY[resolution].zh
   const clarificationCarryoverReferenceAssetIds = useMemo(
     () => getClarificationCarryoverReferenceAssetIds(detail?.messages || []),
     [detail?.messages],
@@ -2305,6 +2395,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
   }, [resolution, sessionId])
 
+  useEffect(() => {
+    if (!latestOrchestration?.brief) return
+
+    if (latestOrchestration.brief.size_preset) {
+      const nextSizePreset = latestOrchestration.brief.size_preset
+      setSizePreset((current) => (current === nextSizePreset ? current : nextSizePreset))
+    }
+    if (latestOrchestration.brief.resolution) {
+      const nextResolution = latestOrchestration.brief.resolution
+      setResolution((current) => (current === nextResolution ? current : nextResolution))
+    }
+  }, [latestOrchestration])
+
   const createSession = async (title?: string, options?: { navigate?: boolean; activate?: boolean }) => {
     const json = await requestJson("/api/image-assistant/sessions", {
       method: "POST",
@@ -2333,11 +2436,33 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
     return creatingSessionRef.current
   }
-  const buildTurnPreviewContent = useCallback(() => {
+  const buildTurnPreviewContent = useCallback((options?: {
+    prompt?: string
+    briefPatch?: Partial<ImageAssistantBrief> | null
+    sizePreset?: ImageAssistantSizePreset | null
+    resolution?: ImageAssistantResolution | null
+  }) => {
+    const effectiveBrief = {
+      ...(latestOrchestration?.brief || {}),
+      ...(options?.briefPatch || {}),
+    } as Partial<ImageAssistantBrief>
+    const effectivePrompt = options?.prompt ?? prompt.trim()
+    const effectiveSizePreset = options?.sizePreset || effectiveBrief.size_preset || sizePreset
+    const effectiveResolution = options?.resolution || effectiveBrief.resolution || resolution
+    const effectiveResolutionLabel = isImageAssistantResolution(effectiveResolution)
+      ? (isEnglish ? RESOLUTION_DISPLAY[effectiveResolution].en : RESOLUTION_DISPLAY[effectiveResolution].zh)
+      : effectiveResolution
     const sections = [
-      prompt.trim() || (composerAttachmentCount ? chatComposerCopy.imageOnlyPromptFallback : null),
+      effectivePrompt || (composerAttachmentCount ? chatComposerCopy.imageOnlyPromptFallback : null),
       `Requested mode: ${composerModeLabel}`,
-      `Output spec: ${sizePreset} / ${resolution}`,
+      effectiveBrief.usage_label ? `Usage: ${effectiveBrief.usage_label}` : null,
+      effectiveBrief.orientation
+        ? `Orientation: ${effectiveBrief.orientation === "landscape" ? (isEnglish ? "Landscape" : "横版画面") : isEnglish ? "Portrait" : "竖版画面"}`
+        : null,
+      effectiveBrief.size_preset
+        ? `Ratio: ${effectiveBrief.usage_label ? `${effectiveBrief.usage_label}` : effectiveBrief.size_preset}`
+        : null,
+      `Output spec: ${(effectiveBrief.usage_label && effectiveBrief.size_preset) ? effectiveBrief.usage_label : effectiveSizePreset} / ${effectiveResolutionLabel}`,
     ]
 
     return sections.filter(Boolean).join("\n")
@@ -2345,6 +2470,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     chatComposerCopy.imageOnlyPromptFallback,
     composerAttachmentCount,
     composerModeLabel,
+    isEnglish,
+    latestOrchestration?.brief,
     prompt,
     resolution,
     sizePreset,
@@ -2652,13 +2779,33 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return nextPromise
   }, [])
 
-  const runJob = async (kind: "generate" | "edit") => {
-    if (!hasComposerInput) {
+  const runJob = async (
+    kind: "generate" | "edit",
+    options?: {
+      prompt?: string
+      briefPatch?: Partial<ImageAssistantBrief> | null
+      sizePreset?: ImageAssistantSizePreset | null
+      resolution?: ImageAssistantResolution | null
+      preservePrompt?: boolean
+    },
+  ) => {
+    const submissionPrompt = typeof options?.prompt === "string" ? options.prompt : prompt.trim()
+    const submissionBrief = options?.briefPatch || null
+    const submissionSizePreset = options?.sizePreset || latestOrchestration?.brief.size_preset || sizePreset
+    const submissionResolution = options?.resolution || latestOrchestration?.brief.resolution || resolution
+    const hasTurnInput = Boolean(submissionPrompt || pendingAttachments.length || hasBriefPatchInput(submissionBrief))
+
+    if (!hasTurnInput) {
       setJobError(extraCopy.additionalNotesPlaceholder)
       return
     }
 
-    const optimisticPrompt = buildTurnPreviewContent()
+    const optimisticPrompt = buildTurnPreviewContent({
+      prompt: submissionPrompt,
+      briefPatch: submissionBrief,
+      sizePreset: submissionSizePreset,
+      resolution: submissionResolution,
+    })
     if (!optimisticPrompt) return
     const currentAttachments = [...pendingAttachments]
 
@@ -2709,7 +2856,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             canvasAttachment?.previewWidth || canvasAttachment?.width || null,
             canvasAttachment?.previewHeight || canvasAttachment?.height || null,
           )
-        : sizePreset
+        : submissionSizePreset
       const response = await requestJson(
         shouldUseCanvasSnapshotEdit ? "/api/image-assistant/canvas-snapshot-edit" : `/api/image-assistant/${kind}`,
         {
@@ -2718,7 +2865,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           signal: abortController.signal,
           body: JSON.stringify({
             sessionId: nextSessionId,
-            prompt: prompt.trim(),
+            prompt: submissionPrompt,
+            brief: submissionBrief,
             referenceAssetIds: nextReferenceAssetIds,
             snapshotAssetId: shouldUseCanvasSnapshotEdit ? canvasSnapshotAssetId : null,
             maskAssetId: shouldUseCanvasSnapshotEdit ? canvasMaskAssetId : null,
@@ -2730,7 +2878,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             canvasHeight: shouldUseCanvasSnapshotEdit ? canvasAttachment?.height || null : null,
             candidateCount: 1,
             sizePreset: canvasPatchSizePreset,
-            resolution,
+            resolution: submissionResolution,
             parentVersionId: detail?.session.current_version_id || null,
           }),
         })
@@ -2753,7 +2901,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       })
       setSessionId(taskData.session_id)
       setPendingTaskRefreshKey(Date.now())
-      setPrompt("")
+      if (!options?.preservePrompt) {
+        setPrompt("")
+      }
     } catch (error) {
       if (isAbortError(error)) {
         restorePendingAttachments(currentAttachments)
@@ -2770,6 +2920,23 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       }
       setIsBusy(false)
     }
+  }
+
+  const submitPromptQuestionOption = async (option: ImageAssistantPromptOption) => {
+    if (option.size_preset) {
+      setSizePreset(option.size_preset)
+    }
+    if (option.resolution) {
+      setResolution(option.resolution)
+    }
+
+    await runJob(primaryRunKind, {
+      prompt: option.prompt_value || option.label,
+      briefPatch: option.brief_patch || null,
+      sizePreset: option.size_preset || null,
+      resolution: option.resolution || null,
+      preservePrompt: true,
+    })
   }
 
   const uploadFiles = useCallback(async (files: FileList | File[] | null) => {
@@ -2996,6 +3163,109 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     },
     [createCanvasPendingAttachment, replaceCanvasAttachment, sessionId, uploadPendingAttachment],
   )
+
+  const resolveCandidateDisplaySource = useCallback(
+    async (version: ImageAssistantVersionSummary, candidate: ImageAssistantVersionSummary["candidates"][number]) => {
+      const cachedPreview = candidatePreviewUrls[candidate.id]
+      if (cachedPreview) return cachedPreview
+
+      const composedPreview = await composeCandidatePreview(version, candidate.id)
+      if (composedPreview) {
+        setCandidatePreviewUrls((current) => (current[candidate.id] ? current : { ...current, [candidate.id]: composedPreview }))
+        return composedPreview
+      }
+
+      return candidate.url || null
+    },
+    [candidatePreviewUrls, composeCandidatePreview],
+  )
+
+  const exportImageSource = useCallback(
+    async (src: string, fileStem: string, mimeType?: string | null) => {
+      const response = await fetch(src)
+      if (!response.ok) {
+        throw new Error(`asset_download_failed:${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const extension = guessImageFileExtension(blob.type || mimeType, src)
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = blobUrl
+      link.download = `${fileStem}-${Date.now()}.${extension}`
+      link.click()
+      URL.revokeObjectURL(blobUrl)
+    },
+    [],
+  )
+
+  const addImageSourceToComposer = useCallback(
+    async (src: string, fileStem: string, mimeType?: string | null) => {
+      if (pendingAttachments.length >= IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS) {
+        setJobError(extraCopy.attachmentLimitReached)
+        return
+      }
+
+      const response = await fetch(src)
+      if (!response.ok) {
+        throw new Error(`asset_attachment_failed:${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const extension = guessImageFileExtension(blob.type || mimeType, src)
+      const nextFile = new File([blob], `${fileStem}-${Date.now()}.${extension}`, {
+        type: blob.type || mimeType || "image/png",
+      })
+      const previewUrl = URL.createObjectURL(nextFile)
+      attachmentPreviewUrlsRef.current.add(previewUrl)
+
+      const previewImageAsset = await loadImageForCanvas(previewUrl).catch(() => null)
+      const width = previewImageAsset?.naturalWidth || previewImageAsset?.width || 0
+      const height = previewImageAsset?.naturalHeight || previewImageAsset?.height || 0
+
+      setPendingAttachments((current) => [
+        ...current,
+        {
+          id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: nextFile,
+          previewUrl,
+          previewWidth: width || undefined,
+          previewHeight: height || undefined,
+          width: width || 0,
+          height: height || 0,
+          originalFileSize: nextFile.size,
+          uploadFileSize: nextFile.size,
+          transportOptimized: false,
+          source: "upload",
+          referenceRole: "subject",
+          assetType: "reference",
+        } satisfies PendingAttachment,
+      ].slice(0, IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS))
+      setJobError(null)
+    },
+    [extraCopy.attachmentLimitReached, pendingAttachments.length],
+  )
+
+  const handleAttachCurrentCanvas = async () => {
+    try {
+      const hadPendingPaintStroke = Boolean(paintStrokeRef.current)
+      if (paintStrokeRef.current) {
+        await finishPaintStroke()
+      }
+
+      const latestCanvas = canvasRef.current
+      if (!latestCanvas) return
+
+      await attachCanvasToComposer(latestCanvas)
+      if (dirtyCanvas || hadPendingPaintStroke) {
+        await persistCurrentCanvas(latestCanvas)
+      }
+    } catch (error) {
+      console.error("image-assistant.canvas-attach-failed", error)
+      const nextMessage = error instanceof Error ? error.message : ""
+      setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
+    }
+  }
 
   useEffect(() => {
     if (!dirtyCanvas || mode !== "canvas" || !sessionId || !canvas) return
@@ -3398,18 +3668,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
         const latestCanvas = canvasRef.current
         if (latestCanvas && (dirtyCanvas || hadPendingPaintStroke)) {
-          await attachCanvasToComposer(latestCanvas)
+          await persistCurrentCanvas(latestCanvas)
         }
       } catch (error) {
-        console.error("image-assistant.close-editor-attach-failed", error)
+        console.error("image-assistant.close-editor-persist-failed", error)
       } finally {
         setMode("chat")
         isClosingEditorRef.current = false
-      }
-
-      const latestCanvas = canvasRef.current
-      if (dirtyCanvas && latestCanvas) {
-        await persistCurrentCanvas(latestCanvas)
       }
     })().catch((error) => {
       console.error("image-assistant.close-editor-failed", error)
@@ -3558,11 +3823,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
           <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
-              <WorkspaceConversationHeader
-                title={detail?.session.name || imageCopy.assistantName}
-                description={`在这里与 ${imageCopy.assistantName} 进行多轮次对话，发送消息后会自动生成回复`}
-                variant="inline"
-              />
               <div className="flex min-h-0 flex-1 bg-[#f7f7f7] px-0">
                 <div className="flex min-w-0 flex-1 flex-col">
                 <div className="min-h-0 flex-1 overflow-hidden">
@@ -3593,6 +3853,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                             message.role === "user" && (!optimisticUserMessageId || message.id !== optimisticUserMessageId)
                               ? getPersistedMessageAttachments(message)
                               : []
+                          const messageOrchestration = getMessageOrchestration(message)
+                          const promptQuestions =
+                            message.role === "assistant" ? messageOrchestration?.prompt_questions || [] : []
                           const parsedContent = parseMessageBubbleContent(message.content)
                           const hasBubbleMeta = parsedContent.meta.length > 0
                           const bubbleAttachmentCount = optimisticAttachments.length || persistedAttachments.length
@@ -3750,40 +4013,157 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                     }
                                   />
                                 ) : null}
+                                {message.role === "assistant" && promptQuestions.length ? (
+                                  <div className="mt-3 space-y-3">
+                                    {promptQuestions.map((question) => (
+                                      <div key={`${message.id}:${question.id}`} className="rounded-[20px] border-2 border-border bg-card p-3">
+                                        <div className="mb-3">
+                                          <p className="text-[12px] font-semibold text-foreground">{question.title}</p>
+                                          {question.description ? (
+                                            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{question.description}</p>
+                                          ) : null}
+                                        </div>
+                                        <div
+                                          className={cn(
+                                            "gap-2",
+                                            question.display === "cards" ? "grid sm:grid-cols-2" : "flex flex-wrap",
+                                          )}
+                                        >
+                                          {question.options.map((option) => (
+                                            <button
+                                              key={`${question.id}:${option.id}`}
+                                              type="button"
+                                              onClick={() => void submitPromptQuestionOption(option)}
+                                              disabled={isBusy}
+                                              className={cn(
+                                                "rounded-[18px] border-2 border-border text-left transition hover:border-primary",
+                                                question.display === "cards"
+                                                  ? "bg-background px-4 py-3"
+                                                  : "bg-background px-3 py-2 text-[11px]",
+                                              )}
+                                            >
+                                              <div className="font-medium text-foreground">{option.label}</div>
+                                              {option.description && question.display === "cards" ? (
+                                                <div className="mt-1 text-[11px] leading-5 text-muted-foreground">{option.description}</div>
+                                              ) : null}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
                                 {message.role === "assistant" && message.created_version_id
                                   ? (() => {
                                     const messageVersion = versionById.get(message.created_version_id)
                                     if (!messageVersion?.candidates.length) return null
 
                                     return (
-                                      <WorkspaceSectionCard title="候选结果" description={imageCopy.clickToRefine}>
+                                      <WorkspaceSectionCard title="候选结果" description={extraCopy.candidateActionsHint}>
                                         <div className={cn("grid gap-3", messageVersion.candidates.length > 1 ? "sm:grid-cols-2" : "max-w-md")}>
                                           {messageVersion.candidates.map((candidate) => (
-                                            <button
+                                            <div
                                               key={candidate.id}
-                                              type="button"
-                                              data-testid={`image-open-canvas-${candidate.id}`}
-                                              onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
-                                              className="overflow-hidden rounded-[20px] border-2 border-border bg-card text-left transition hover:border-primary"
+                                              className="overflow-hidden rounded-[20px] border-2 border-border bg-card"
                                             >
-                                              <div className="aspect-[4/5] bg-muted/30">
-                                                <CandidatePreviewImage
-                                                  candidateId={candidate.id}
-                                                  fallbackSrc={candidate.url}
-                                                  resolvedSrc={candidatePreviewUrls[candidate.id] || null}
-                                                  loadPreview={() => composeCandidatePreview(messageVersion, candidate.id)}
-                                                  onResolved={(nextSrc) =>
-                                                    nextSrc !== candidate.url
-                                                      ? setCandidatePreviewUrls((current) =>
-                                                          current[candidate.id] ? current : { ...current, [candidate.id]: nextSrc },
-                                                        )
-                                                      : undefined
-                                                  }
-                                                  className="h-full w-full object-cover"
-                                                />
+                                              <button
+                                                type="button"
+                                                className="block w-full text-left transition hover:bg-muted/20"
+                                                title={extraCopy.previewImage}
+                                                aria-label={extraCopy.previewImage}
+                                                onClick={() => {
+                                                  void (async () => {
+                                                    const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                    if (!previewSrc) return
+                                                    setPreviewImage({ src: previewSrc, label: extraCopy.previewImage })
+                                                  })().catch((error) => {
+                                                    console.error("image-assistant.candidate-preview-open-failed", error)
+                                                  })
+                                                }}
+                                              >
+                                                <div className="aspect-[4/5] bg-muted/30">
+                                                  <CandidatePreviewImage
+                                                    candidateId={candidate.id}
+                                                    fallbackSrc={candidate.url}
+                                                    resolvedSrc={candidatePreviewUrls[candidate.id] || null}
+                                                    loadPreview={() => composeCandidatePreview(messageVersion, candidate.id)}
+                                                    onResolved={(nextSrc) =>
+                                                      nextSrc !== candidate.url
+                                                        ? setCandidatePreviewUrls((current) =>
+                                                            current[candidate.id] ? current : { ...current, [candidate.id]: nextSrc },
+                                                          )
+                                                        : undefined
+                                                    }
+                                                    className="h-full w-full object-cover"
+                                                  />
+                                                </div>
+                                              </button>
+                                              <div className="space-y-2 px-3 py-3">
+                                                <p className="text-[11px] text-muted-foreground">{extraCopy.clickImageToPreview}</p>
+                                                <div className="flex items-center gap-1.5">
+                                                  <Button
+                                                    size="icon"
+                                                    type="button"
+                                                    variant="outline"
+                                                    data-testid={`image-export-candidate-${candidate.id}`}
+                                                    className="h-8 w-8 rounded-full"
+                                                    title={extraCopy.exportImage}
+                                                    aria-label={extraCopy.exportImage}
+                                                    onClick={() => {
+                                                      void (async () => {
+                                                        const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                        if (!previewSrc) return
+                                                        await exportImageSource(previewSrc, "image-design-candidate")
+                                                      })().catch((error) => {
+                                                        console.error("image-assistant.candidate-export-failed", error)
+                                                        const nextMessage = error instanceof Error ? error.message : ""
+                                                        setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
+                                                      })
+                                                    }}
+                                                  >
+                                                    <Download className="h-3.5 w-3.5" />
+                                                  </Button>
+                                                  <Button
+                                                    size="icon"
+                                                    type="button"
+                                                    variant="outline"
+                                                    data-testid={`image-open-canvas-${candidate.id}`}
+                                                    className="h-8 w-8 rounded-full"
+                                                    title={extraCopy.editImage}
+                                                    aria-label={extraCopy.editImage}
+                                                    onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
+                                                  >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                  </Button>
+                                                  <Button
+                                                    size="icon"
+                                                    type="button"
+                                                    variant="outline"
+                                                    data-testid={`image-attach-candidate-${candidate.id}`}
+                                                    className="h-8 w-8 rounded-full"
+                                                    title={extraCopy.addAsAttachment}
+                                                    aria-label={extraCopy.addAsAttachment}
+                                                    onClick={() => {
+                                                      void (async () => {
+                                                        const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                        if (!previewSrc) return
+                                                        await addImageSourceToComposer(previewSrc, "image-design-attachment")
+                                                      })().catch((error) => {
+                                                        console.error("image-assistant.candidate-attach-failed", error)
+                                                        const nextMessage = error instanceof Error ? error.message : ""
+                                                        setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
+                                                      })
+                                                    }}
+                                                  >
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                  </Button>
+                                                  <div className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 px-2 py-1 text-[10px] text-muted-foreground">
+                                                    <Eye className="h-3 w-3" />
+                                                    {extraCopy.previewImage}
+                                                  </div>
+                                                </div>
                                               </div>
-                                              <div className="px-3 py-2 text-[11px] text-muted-foreground">{imageCopy.clickToRefine}</div>
-                                            </button>
+                                            </div>
                                           ))}
                                         </div>
                                       </WorkspaceSectionCard>
@@ -3824,29 +4204,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       toolbarClassName="items-center"
                       toolbar={
                         <>
-                    <select
-                      value={sizePreset}
-                      onChange={(event) => setSizePreset(event.target.value as ImageAssistantSizePreset)}
-                      className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                      disabled={isBusy || isUploading}
-                    >
-                      <option value="1:1">1:1</option>
-                      <option value="4:5">4:5</option>
-                      <option value="3:4">3:4</option>
-                      <option value="16:9">16:9</option>
-                      <option value="9:16">9:16</option>
-                    </select>
-                    <select
-                      value={resolution}
-                      onChange={(event) => setResolution(event.target.value as ImageAssistantResolution)}
-                      className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-                      disabled={isBusy || isUploading}
-                    >
-                      <option value="512">512 (0.5K)</option>
-                      <option value="1K">1K</option>
-                      <option value="2K">2K</option>
-                      <option value="4K">4K</option>
-                    </select>
+                    <Badge variant="outline" className="h-9 rounded-full px-3 text-[11px]">
+                      {currentUsageDisplay}
+                    </Badge>
+                    <Badge variant="outline" className="h-9 rounded-full px-3 text-[11px]">
+                      {currentOrientationDisplay}
+                    </Badge>
+                    <Badge variant="outline" className="h-9 rounded-full px-3 text-[11px]">
+                      {currentResolutionDisplay}
+                    </Badge>
                     <Button
                       size="sm"
                       variant="outline"
@@ -3885,9 +4251,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                               ? imageCopy.imagesAttached.replace("{count}", String(composerAttachmentCount))
                               : imageCopy.noImageAttached}
                             {" / "}
-                            {sizePreset}
+                            {currentUsageDisplay}
                             {" / "}
-                            {resolution}
+                            {currentResolutionDisplay}
                             {" / "}
                             {extraCopy.uploadLimit}
                           </p>
@@ -4265,6 +4631,18 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   <Button
                     variant="outline"
                     size="icon"
+                    data-testid="image-canvas-attach-button"
+                    className="h-11 w-11 rounded-full"
+                    disabled={!canvas}
+                    onClick={() => void handleAttachCurrentCanvas()}
+                    title={extraCopy.addCurrentCanvas}
+                    aria-label={extraCopy.addCurrentCanvas}
+                  >
+                    <Plus className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
                     data-testid="image-canvas-export-button"
                     className="h-11 w-11 rounded-full"
                     onClick={() => void exportCurrent("png")}
@@ -4279,6 +4657,22 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(previewImage)} onOpenChange={(open) => { if (!open) setPreviewImage(null) }}>
+        <DialogContent className="max-h-[92vh] w-[min(94vw,1200px)] max-w-[min(94vw,1200px)] border-2 border-border bg-card p-3 sm:p-4">
+          <DialogTitle className="sr-only">{previewImage?.label || extraCopy.previewImage}</DialogTitle>
+          <DialogDescription className="sr-only">{extraCopy.clickImageToPreview}</DialogDescription>
+          {previewImage ? (
+            <div className="overflow-hidden rounded-[24px] border-2 border-border bg-muted/30">
+              <img
+                src={previewImage.src}
+                alt={previewImage.label}
+                className="max-h-[82vh] w-full object-contain"
+              />
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>

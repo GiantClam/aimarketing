@@ -1,4 +1,4 @@
-import {
+﻿import {
   getImageAssistantAgentMetadata,
   getImageAssistantFailureChecks,
   getImageAssistantPromptCompositionRules,
@@ -11,15 +11,110 @@ import type {
   ImageAssistantBrief,
   ImageAssistantBriefField,
   ImageAssistantMessage,
+  ImageAssistantOrientation,
   ImageAssistantOrchestrationState,
+  ImageAssistantPromptOption,
+  ImageAssistantPromptQuestion,
+  ImageAssistantResolution,
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
   ImageAssistantToolTrace,
+  ImageAssistantUsagePresetId,
 } from "@/lib/image-assistant/types"
 
-const REQUIRED_BRIEF_FIELDS: ImageAssistantBriefField[] = ["goal", "subject", "style", "composition"]
+const REQUIRED_BRIEF_FIELDS: ImageAssistantBriefField[] = [
+  "usage",
+  "orientation",
+  "resolution",
+  "ratio",
+  "subject",
+  "style",
+  "composition",
+]
+const GUIDED_BRIEF_FIELDS = new Set<ImageAssistantBriefField>(["usage", "orientation", "resolution", "ratio"])
+
+const USAGE_PRESET_DEFINITIONS: Record<
+  ImageAssistantUsagePresetId,
+  {
+    sizePreset: ImageAssistantSizePreset
+    orientation: ImageAssistantOrientation
+    zhLabel: string
+    enLabel: string
+    zhDescription: string
+    enDescription: string
+  }
+> = {
+  website_banner: {
+    sizePreset: "16:9",
+    orientation: "landscape",
+    zhLabel: "官网横幅 16:9",
+    enLabel: "Website banner 16:9",
+    zhDescription: "适合官网首屏、品牌横幅和页面 Hero 区域。",
+    enDescription: "Best for homepage hero sections and brand banners.",
+  },
+  social_cover: {
+    sizePreset: "4:5",
+    orientation: "portrait",
+    zhLabel: "社媒封面 4:5",
+    enLabel: "Social cover 4:5",
+    zhDescription: "适合社媒封面、信息流视觉和种草卡片。",
+    enDescription: "Best for social covers, feeds, and tall campaign visuals.",
+  },
+  ad_poster: {
+    sizePreset: "4:3",
+    orientation: "landscape",
+    zhLabel: "广告海报 4:3",
+    enLabel: "Ad poster 4:3",
+    zhDescription: "适合活动海报、广告主视觉和通用宣传图。",
+    enDescription: "Best for campaign posters and general ad creatives.",
+  },
+  avatar: {
+    sizePreset: "1:1",
+    orientation: "portrait",
+    zhLabel: "头像图片 1:1",
+    enLabel: "Avatar image 1:1",
+    zhDescription: "适合头像、品牌图标和小尺寸识别图。",
+    enDescription: "Best for avatars, profile images, and square brand icons.",
+  },
+}
+
+const RESOLUTION_PRESET_DEFINITIONS: Record<
+  ImageAssistantResolution,
+  { zhLabel: string; enLabel: string; zhDescription: string; enDescription: string }
+> = {
+  "512": {
+    zhLabel: "标清 512",
+    enLabel: "Standard 512",
+    zhDescription: "快速出图，适合草图和方向确认。",
+    enDescription: "Fast draft output for rough visual direction checks.",
+  },
+  "1K": {
+    zhLabel: "高清 1K",
+    enLabel: "High 1K",
+    zhDescription: "平衡速度和质量，适合多数常规设计需求。",
+    enDescription: "Balanced speed and quality for most design tasks.",
+  },
+  "2K": {
+    zhLabel: "超清 2K",
+    enLabel: "Ultra 2K",
+    zhDescription: "更适合正式交付和细节要求更高的广告图。",
+    enDescription: "Better for production-ready images with clearer detail.",
+  },
+  "4K": {
+    zhLabel: "超高清 4K",
+    enLabel: "Ultra HD 4K",
+    zhDescription: "最高精度，适合大尺寸输出和精修细节。",
+    enDescription: "Highest fidelity for large-format or detailed refinement.",
+  },
+}
 
 const EMPTY_BRIEF: ImageAssistantBrief = {
+  usage_preset: "",
+  usage_label: "",
+  orientation: "",
+  resolution: "",
+  size_preset: "",
+  ratio_confirmed: false,
   goal: "",
   subject: "",
   style: "",
@@ -28,13 +123,21 @@ const EMPTY_BRIEF: ImageAssistantBrief = {
 }
 
 const FIELD_QUESTIONS_ZH: Record<ImageAssistantBriefField, string> = {
-  goal: "这张图最终要用在哪里，目标是什么，比如封面、海报、广告主图还是活动 KV？",
+  usage: "先选这张图的用途卡片，我会按用途推荐交付比例。",
+  orientation: "再确认画面方向，只需要选择横版画面或竖版画面。",
+  resolution: "再确认图片清晰度，选择标清、高清、超清或超高清即可。",
+  ratio: "最后确认“用途 + 比例”卡片，我会按最终比例执行。",
+  goal: "这张图最终要用在哪里，核心目标是什么？",
   subject: "主体内容是什么，哪些人物、产品、场景或品牌元素必须保留？",
-  style: "你想要什么风格和氛围，比如高级极简、电商质感、杂志感、电影感、节日促销？",
+  style: "你想要什么风格和氛围，比如高级极简、电商质感、杂志感、电影感或节日促销？",
   composition: "构图怎么安排，焦点区域、留白、机位、标题区或角标区要放在哪里？",
 }
 
 const FIELD_QUESTIONS_EN: Record<ImageAssistantBriefField, string> = {
+  usage: "Pick the intended use first so I can keep the output aligned with the right delivery ratio.",
+  orientation: "Confirm the canvas direction next: landscape or portrait.",
+  resolution: "Confirm the image size next: standard, high, ultra, or ultra HD.",
+  ratio: "Confirm the final use + ratio card before generation.",
   goal: "What is the image for, such as a cover, poster, hero visual, product ad, or campaign KV?",
   subject: "What is the subject, and which people, products, scenes, or brand elements must stay?",
   style: "What style or mood do you want, such as minimal luxury, ecommerce polish, editorial, cinematic, or festive?",
@@ -45,8 +148,58 @@ function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function normalizeUsagePreset(value: unknown): ImageAssistantUsagePresetId | "" {
+  return value === "website_banner" || value === "social_cover" || value === "ad_poster" || value === "avatar" ? value : ""
+}
+
+function normalizeOrientation(value: unknown): ImageAssistantOrientation | "" {
+  return value === "landscape" || value === "portrait" ? value : ""
+}
+
+function normalizeResolution(value: unknown): ImageAssistantResolution | "" {
+  return value === "512" || value === "1K" || value === "2K" || value === "4K" ? value : ""
+}
+
+function normalizeSizePreset(value: unknown): ImageAssistantSizePreset | "" {
+  return value === "1:1" || value === "4:5" || value === "3:4" || value === "4:3" || value === "16:9" || value === "9:16" ? value : ""
+}
+
+function getUsagePresetDefinition(usagePreset: ImageAssistantUsagePresetId | "") {
+  return usagePreset ? USAGE_PRESET_DEFINITIONS[usagePreset] : null
+}
+
+function getUsagePresetLabel(usagePreset: ImageAssistantUsagePresetId | "", chinese: boolean) {
+  const preset = getUsagePresetDefinition(usagePreset)
+  return preset ? (chinese ? preset.zhLabel : preset.enLabel) : ""
+}
+
+function _getResolutionLabel(resolution: ImageAssistantResolution | "", chinese: boolean) {
+  if (!resolution) return ""
+  const preset = RESOLUTION_PRESET_DEFINITIONS[resolution]
+  return chinese ? preset.zhLabel : preset.enLabel
+}
+
+function inferUsagePresetFromPrompt(prompt: string): ImageAssistantUsagePresetId | "" {
+  if (/(?:官网|网站|首页横幅|hero|banner)/iu.test(prompt)) return "website_banner"
+  if (/(?:社媒|小红书|封面|feed|social)/iu.test(prompt)) return "social_cover"
+  if (/(?:海报|poster|广告图|ad creative|campaign)/iu.test(prompt)) return "ad_poster"
+  if (/(?:头像|avatar|profile|icon)/iu.test(prompt)) return "avatar"
+  return ""
+}
+
 function normalizeBrief(input?: Partial<ImageAssistantBrief> | null): ImageAssistantBrief {
+  const usagePreset = normalizeUsagePreset(input?.usage_preset)
+  const chinese = looksLikeChinese(
+    [input?.usage_label, input?.goal, input?.subject, input?.style, input?.composition].map(normalizeText).join(" "),
+  )
+
   return {
+    usage_preset: usagePreset,
+    usage_label: normalizeText(input?.usage_label) || getUsagePresetLabel(usagePreset, chinese),
+    orientation: normalizeOrientation(input?.orientation),
+    resolution: normalizeResolution(input?.resolution),
+    size_preset: normalizeSizePreset(input?.size_preset),
+    ratio_confirmed: Boolean(input?.ratio_confirmed),
     goal: normalizeText(input?.goal),
     subject: normalizeText(input?.subject),
     style: normalizeText(input?.style),
@@ -60,6 +213,12 @@ function mergeBrief(...briefs: Array<Partial<ImageAssistantBrief> | null | undef
     if (!candidate) return current
     const normalized = normalizeBrief(candidate)
     return {
+      usage_preset: normalized.usage_preset || current.usage_preset,
+      usage_label: normalized.usage_label || current.usage_label,
+      orientation: normalized.orientation || current.orientation,
+      resolution: normalized.resolution || current.resolution,
+      size_preset: normalized.size_preset || current.size_preset,
+      ratio_confirmed: normalized.ratio_confirmed || current.ratio_confirmed,
       goal: normalized.goal || current.goal,
       subject: normalized.subject || current.subject,
       style: normalized.style || current.style,
@@ -70,14 +229,31 @@ function mergeBrief(...briefs: Array<Partial<ImageAssistantBrief> | null | undef
 }
 
 function getMissingBriefFields(brief: ImageAssistantBrief) {
-  return REQUIRED_BRIEF_FIELDS.filter((field) => !normalizeText(brief[field]))
+  return REQUIRED_BRIEF_FIELDS.filter((field) => {
+    if (field === "usage") return !brief.usage_preset
+    if (field === "orientation") return !brief.orientation
+    if (field === "resolution") return !brief.resolution
+    if (field === "ratio") return !brief.size_preset || !brief.ratio_confirmed
+    return !normalizeText(brief[field])
+  })
 }
-
 function getActionableBriefMissingFields(brief: ImageAssistantBrief) {
   const missingFields: ImageAssistantBriefField[] = []
 
-  if (!normalizeText(brief.goal)) {
-    missingFields.push("goal")
+  if (!brief.usage_preset) {
+    missingFields.push("usage")
+  }
+
+  if (!brief.orientation) {
+    missingFields.push("orientation")
+  }
+
+  if (!brief.resolution) {
+    missingFields.push("resolution")
+  }
+
+  if (!brief.size_preset || !brief.ratio_confirmed) {
+    missingFields.push("ratio")
   }
 
   if (!normalizeText(brief.subject)) {
@@ -86,6 +262,10 @@ function getActionableBriefMissingFields(brief: ImageAssistantBrief) {
 
   if (!normalizeText(brief.style) && !normalizeText(brief.composition)) {
     missingFields.push("style")
+  } else if (!normalizeText(brief.style)) {
+    missingFields.push("style")
+  } else if (!normalizeText(brief.composition)) {
+    missingFields.push("composition")
   }
 
   return missingFields
@@ -96,16 +276,16 @@ function looksLikeChinese(text: string) {
 }
 
 function truncate(value: string, max = 180) {
-  return value.length > max ? `${value.slice(0, max - 1).trim()}…` : value
+  return value.length > max ? `${value.slice(0, max - 1).trim()}...` : value
 }
 
 function isLowSignalBriefReply(value: string) {
-  return /^(ok|okay|yes|no|好的|好|行|可以|收到|明白了|嗯|恩|随便|都行)$/iu.test(value)
+  return /^(ok|okay|yes|no|濂界殑|濂絴琛寍鍙互|鏀跺埌|鏄庣櫧浜唡鍡瘄鎭﹟闅忎究|閮借)$/iu.test(value)
 }
 
 function splitBriefReplySegments(value: string) {
   return value
-    .split(/\r?\n|[；;]+/)
+    .split(/\r?\n|[锛?]+/)
     .map((segment) => normalizeText(segment))
     .filter(Boolean)
 }
@@ -124,13 +304,32 @@ function inferBriefFromFollowUpAnswer(input: {
   const extracted: Partial<ImageAssistantBrief> = {}
 
   if (requestedFields.length === 1) {
-    extracted[requestedFields[0]] = truncate(prompt, 160)
+    const field = requestedFields[0]
+    if (field === "orientation") {
+      extracted.orientation = /(?:横|landscape|wide)/iu.test(prompt) ? "landscape" : /(?:竖|portrait|tall)/iu.test(prompt) ? "portrait" : ""
+    } else if (field === "resolution") {
+      extracted.resolution =
+        /(?:4k|超高清)/iu.test(prompt) ? "4K" : /(?:2k|超清)/iu.test(prompt) ? "2K" : /(?:1k|高清)/iu.test(prompt) ? "1K" : /(?:512|标清|standard)/iu.test(prompt) ? "512" : ""
+    } else if (field === "usage" || field === "ratio") {
+      const usagePreset = inferUsagePresetFromPrompt(prompt)
+      if (usagePreset) {
+        const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
+        extracted.usage_preset = usagePreset
+        extracted.usage_label = preset.zhLabel
+        extracted.size_preset = preset.sizePreset
+        extracted.ratio_confirmed = field === "ratio"
+      }
+    } else {
+      extracted[field] = truncate(prompt, 160)
+    }
     return normalizeBrief(extracted)
   }
 
   if (requestedFields.length <= 2 && segments.length >= requestedFields.length) {
     requestedFields.forEach((field, index) => {
-      extracted[field] = truncate(segments[index] || "", 160)
+      if (field === "goal" || field === "subject" || field === "style" || field === "composition") {
+        extracted[field] = truncate(segments[index] || "", 160)
+      }
     })
   }
 
@@ -167,7 +366,7 @@ function _usesReferenceEditShortcut(input: {
   if (!prompt) return false
 
   return (
-    /(?:删除|删掉|去掉|去除|移除|擦掉|抹掉|消除|拿掉|修掉|修除|改成|换成|替换|保留|只修改|局部修改|局部编辑|去眼镜|摘掉|去瑕疵|磨皮|p掉)/.test(prompt) ||
+    /(?:删除|删掉|去掉|去除|移除|擦掉|抹掉|消除|拿掉|修掉|换成|替换|保留|只修改|局部修改|局部编辑|去眼袋|去瑕疵|磨皮)/.test(prompt) ||
     /\b(remove|delete|erase|retouch|edit out|clean up|replace|swap|change|fix|touch up|take off|keep)\b/i.test(prompt)
   )
 }
@@ -217,30 +416,49 @@ function extractBriefFromLabeledLines(prompt: string) {
     .filter(Boolean)
 
   for (const line of lines) {
-    const match = /^([^:：-]{2,24})\s*[:：-]\s*(.+)$/i.exec(line)
+    const match = /^([^:锛?]{2,24})\s*[:锛?]\s*(.+)$/i.exec(line)
     if (!match) continue
 
     const label = match[1].trim().toLowerCase()
     const value = truncate(match[2].trim(), 180)
     if (!value) continue
 
-    if (!extracted.goal && /^(goal|objective|usage|use case|用途|目标)$/.test(label)) {
+    if (!extracted.usage_preset && /^(usage|use case|用途|场景)$/.test(label)) {
+      const usagePreset = inferUsagePresetFromPrompt(value)
+      if (usagePreset) {
+        const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
+        extracted.usage_preset = usagePreset
+        extracted.usage_label = preset.zhLabel
+        extracted.size_preset = preset.sizePreset
+      }
+      continue
+    }
+    if (!extracted.orientation && /^(orientation|direction|方向)$/.test(label)) {
+      extracted.orientation = /(?:横|landscape|wide)/iu.test(value) ? "landscape" : /(?:竖|portrait|tall)/iu.test(value) ? "portrait" : ""
+      continue
+    }
+    if (!extracted.resolution && /^(resolution|quality|size|清晰度|大小)$/.test(label)) {
+      extracted.resolution =
+        /(?:4k|超高清)/iu.test(value) ? "4K" : /(?:2k|超清)/iu.test(value) ? "2K" : /(?:1k|高清)/iu.test(value) ? "1K" : /(?:512|标清|standard)/iu.test(value) ? "512" : ""
+      continue
+    }
+    if (!extracted.goal && /^(goal|objective|usage|use case|鐢ㄩ€攟鐩爣)$/.test(label)) {
       extracted.goal = value
       continue
     }
-    if (!extracted.subject && /^(subject|main subject|主体|内容)$/.test(label)) {
+    if (!extracted.subject && /^(subject|main subject|涓讳綋|鍐呭)$/.test(label)) {
       extracted.subject = value
       continue
     }
-    if (!extracted.style && /^(style|mood|look|风格|氛围)$/.test(label)) {
+    if (!extracted.style && /^(style|mood|look|椋庢牸|姘涘洿)$/.test(label)) {
       extracted.style = value
       continue
     }
-    if (!extracted.composition && /^(composition|layout|framing|构图|版式|镜头)$/.test(label)) {
+    if (!extracted.composition && /^(composition|layout|framing|鏋勫浘|鐗堝紡|闀滃ご)$/.test(label)) {
       extracted.composition = value
       continue
     }
-    if (!extracted.constraints && /^(constraints|must keep|preserve|限制|约束|保留)$/.test(label)) {
+    if (!extracted.constraints && /^(constraints|must keep|preserve|闄愬埗|绾︽潫|淇濈暀)$/.test(label)) {
       extracted.constraints = value
     }
   }
@@ -279,8 +497,47 @@ function inferBriefFromPrompt(input: {
   const inferred: Partial<ImageAssistantBrief> = extractBriefFromLabeledLines(prompt)
   const lower = prompt.toLowerCase()
   const hasStructuredBrief = Boolean(
-    inferred.goal || inferred.subject || inferred.style || inferred.composition || inferred.constraints,
+    inferred.goal ||
+      inferred.subject ||
+      inferred.style ||
+      inferred.composition ||
+      inferred.constraints ||
+      inferred.usage_preset ||
+      inferred.orientation ||
+      inferred.resolution,
   )
+
+  const usagePreset = inferred.usage_preset || inferUsagePresetFromPrompt(prompt)
+  if (usagePreset) {
+    const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
+    inferred.usage_preset = usagePreset
+    inferred.usage_label = inferred.usage_label || (looksLikeChinese(prompt) ? preset.zhLabel : preset.enLabel)
+    inferred.size_preset = inferred.size_preset || preset.sizePreset
+  }
+
+  if (!inferred.orientation) {
+    inferred.orientation = /(?:横版|横图|landscape|wide)/iu.test(prompt)
+      ? "landscape"
+      : /(?:竖版|竖图|portrait|tall)/iu.test(prompt)
+        ? "portrait"
+        : ""
+  }
+
+  if (!inferred.resolution) {
+    inferred.resolution = /(?:4k|超高清)/iu.test(lower)
+      ? "4K"
+      : /(?:2k|超清)/iu.test(lower)
+        ? "2K"
+        : /(?:1k|高清)/iu.test(lower)
+          ? "1K"
+          : /(?:512|标清|standard)/iu.test(lower)
+            ? "512"
+            : ""
+  }
+
+  if (!inferred.goal && inferred.usage_label) {
+    inferred.goal = inferred.usage_label
+  }
 
   if (!inferred.goal && !hasStructuredBrief && /cover|poster|ad|kv|banner/.test(lower)) {
     inferred.goal = truncate(prompt, 120)
@@ -400,41 +657,130 @@ async function maybePlanWithTextModel(input: {
   }
 }
 
-function _legacyBuildClarificationReply(input: {
+function isBriefFieldFilled(brief: ImageAssistantBrief, field: ImageAssistantBriefField) {
+  if (field === "usage") return Boolean(brief.usage_preset)
+  if (field === "orientation") return Boolean(brief.orientation)
+  if (field === "resolution") return Boolean(brief.resolution)
+  if (field === "ratio") return Boolean(brief.size_preset && brief.ratio_confirmed)
+  return Boolean(normalizeText(brief[field]))
+}
+
+function getCollectedBriefFieldCount(brief: ImageAssistantBrief) {
+  return REQUIRED_BRIEF_FIELDS.filter((field) => isBriefFieldFilled(brief, field)).length
+}
+
+function buildPromptQuestions(input: {
   brief: ImageAssistantBrief
   missingFields: ImageAssistantBriefField[]
-  turnCount: number
-  maxTurns: number
-  recommendedMode: "generate" | "edit"
-  referenceCount: number
   userPrompt: string
-}) {
+}): ImageAssistantPromptQuestion[] {
   const isZh = looksLikeChinese(`${input.userPrompt} ${input.brief.goal} ${input.brief.subject} ${input.brief.style}`)
-  const questions = isZh ? FIELD_QUESTIONS_ZH : FIELD_QUESTIONS_EN
-  const filled = REQUIRED_BRIEF_FIELDS.filter((field) => normalizeText(input.brief[field])).length
+  const nextGuidedField = input.missingFields.find((field) => GUIDED_BRIEF_FIELDS.has(field))
+  if (!nextGuidedField) return []
 
-  if (input.turnCount >= input.maxTurns) {
-    return isZh
-      ? `我已经完成第 ${input.turnCount}/${input.maxTurns} 轮需求收集，但还缺少这些关键信息：${input.missingFields.map((field) => FIELD_QUESTIONS_ZH[field]).join("；")}。补齐后我再开始${input.recommendedMode === "generate" ? "生图" : "改图"}。`
-      : `This is turn ${input.turnCount}/${input.maxTurns}. I still need these details before I can ${input.recommendedMode === "generate" ? "generate" : "edit"} the image: ${input.missingFields.map((field) => FIELD_QUESTIONS_EN[field]).join("; ")}.`
+  const usageOptions: ImageAssistantPromptOption[] = (Object.entries(USAGE_PRESET_DEFINITIONS) as Array<
+    [ImageAssistantUsagePresetId, (typeof USAGE_PRESET_DEFINITIONS)[ImageAssistantUsagePresetId]]
+  >).map(([presetId, preset]) => ({
+    id: presetId,
+    label: isZh ? preset.zhLabel : preset.enLabel,
+    description: isZh ? preset.zhDescription : preset.enDescription,
+    emphasis: "card",
+    prompt_value: isZh ? preset.zhLabel : preset.enLabel,
+    brief_patch: {
+      usage_preset: presetId,
+      usage_label: isZh ? preset.zhLabel : preset.enLabel,
+      size_preset: preset.sizePreset,
+      goal: isZh ? preset.zhLabel : preset.enLabel,
+    },
+    size_preset: preset.sizePreset,
+  }))
+
+  if (nextGuidedField === "usage") {
+    return [
+      {
+        id: "usage",
+        title: isZh ? "Q1 先选用途" : "Q1 Pick the use case",
+        description: isZh ? "直接选择“用途 + 推荐比例”卡片。" : "Pick a use-case card with its recommended ratio.",
+        display: "cards",
+        options: usageOptions,
+      },
+    ]
   }
 
-  const intro = isZh
-    ? `已收到当前设计信息，必填项已收集 ${filled}/${REQUIRED_BRIEF_FIELDS.length}。`
-    : `I have the current design brief progress: ${filled}/${REQUIRED_BRIEF_FIELDS.length} required items collected.`
-  const referenceLine =
-    input.referenceCount > 0
-      ? isZh
-        ? `当前已关联 ${input.referenceCount} 张参考图，我会按带图${input.recommendedMode === "edit" ? "编辑" : "生成"}来理解。`
-        : `${input.referenceCount} reference image(s) are attached, so I will treat this as an image-guided ${input.recommendedMode}.`
-      : isZh
-        ? "当前没有参考图，我会按文生图来理解。"
-        : "There are no reference images attached, so I will treat this as a text-to-image request."
-  const askLine = isZh
-    ? `为了继续，请补充：${input.missingFields.map((field) => questions[field]).join(" ")}`
-    : `To continue, please clarify: ${input.missingFields.map((field) => questions[field]).join(" ")}`
+  if (nextGuidedField === "orientation") {
+    return [
+      {
+        id: "orientation",
+        title: isZh ? "Q2 再确认方向" : "Q2 Confirm the direction",
+        description: isZh ? "只需要选择横版画面或竖版画面。" : "Choose landscape or portrait only.",
+        display: "buttons",
+        options: [
+          {
+            id: "landscape",
+            label: isZh ? "横版画面" : "Landscape",
+            emphasis: "button",
+            prompt_value: isZh ? "横版画面" : "Landscape",
+            brief_patch: { orientation: "landscape" },
+          },
+          {
+            id: "portrait",
+            label: isZh ? "竖版画面" : "Portrait",
+            emphasis: "button",
+            prompt_value: isZh ? "竖版画面" : "Portrait",
+            brief_patch: { orientation: "portrait" },
+          },
+        ],
+      },
+    ]
+  }
 
-  return [intro, referenceLine, askLine].join(" ")
+  if (nextGuidedField === "resolution") {
+    return [
+      {
+        id: "resolution",
+        title: isZh ? "Q3 再确认图片大小" : "Q3 Confirm the image size",
+        description: isZh ? "按清晰度选择即可，不需要输入数字。" : "Choose the delivery quality directly.",
+        display: "buttons",
+        options: (Object.entries(RESOLUTION_PRESET_DEFINITIONS) as Array<
+          [ImageAssistantResolution, (typeof RESOLUTION_PRESET_DEFINITIONS)[ImageAssistantResolution]]
+        >).map(([resolution, preset]) => ({
+          id: resolution,
+          label: isZh ? preset.zhLabel : preset.enLabel,
+          description: isZh ? preset.zhDescription : preset.enDescription,
+          emphasis: "button",
+          prompt_value: isZh ? preset.zhLabel : preset.enLabel,
+          brief_patch: { resolution },
+          resolution,
+        })),
+      },
+    ]
+  }
+
+  const ratioOptions = usageOptions
+    .filter((option) => {
+      if (!input.brief.orientation) return true
+      const preset = option.brief_patch?.usage_preset ? USAGE_PRESET_DEFINITIONS[option.brief_patch.usage_preset] : null
+      if (!preset) return true
+      if (input.brief.orientation === "landscape") return preset.orientation === "landscape"
+      return preset.orientation === "portrait" || preset.sizePreset === "1:1"
+    })
+    .map((option) => ({
+      ...option,
+      brief_patch: {
+        ...option.brief_patch,
+        ratio_confirmed: true,
+      },
+    }))
+
+  return [
+    {
+      id: "ratio",
+      title: isZh ? "Q4 最后确认用途与比例" : "Q4 Confirm the final use + ratio",
+      description: isZh ? "只显示“用途 + 比例”卡片，不显示裸数字比例。" : "Choose the final use + ratio card instead of a bare numeric ratio.",
+      display: "cards",
+      options: ratioOptions,
+    },
+  ]
 }
 
 function buildClarificationReply(input: {
@@ -445,25 +791,31 @@ function buildClarificationReply(input: {
   recommendedMode: "generate" | "edit"
   referenceCount: number
   userPrompt: string
+  promptQuestions: ImageAssistantPromptQuestion[]
 }) {
   const isZh = looksLikeChinese(`${input.userPrompt} ${input.brief.goal} ${input.brief.subject} ${input.brief.style}`)
   const questions = isZh ? FIELD_QUESTIONS_ZH : FIELD_QUESTIONS_EN
-  const filled = REQUIRED_BRIEF_FIELDS.filter((field) => normalizeText(input.brief[field])).length
+  const filled = getCollectedBriefFieldCount(input.brief)
+  const nextPromptQuestion = input.promptQuestions[0] || null
 
   const intro = isZh
-    ? `已收到当前设计信息，必填项已收集 ${filled}/${REQUIRED_BRIEF_FIELDS.length}。`
+    ? `当前已收集 ${filled}/${REQUIRED_BRIEF_FIELDS.length} 个关键设计信息。`
     : `I have the current design brief progress: ${filled}/${REQUIRED_BRIEF_FIELDS.length} key items collected.`
   const referenceLine =
     input.referenceCount > 0
       ? isZh
-        ? `当前已关联 ${input.referenceCount} 张参考图，我会按${input.recommendedMode === "edit" ? "改图" : "参考图生成"}来理解。`
+        ? `当前已关联 ${input.referenceCount} 张参考图，我会按${input.recommendedMode === "edit" ? "带图编辑" : "参考图辅助生成"}来处理。`
         : `${input.referenceCount} reference image(s) are attached, so I will treat this as an image-guided ${input.recommendedMode}.`
       : isZh
-        ? "当前没有参考图，我会按文生图来理解。"
+        ? "当前没有参考图，我会按文生图来理解需求。"
         : "There are no reference images attached, so I will treat this as a text-to-image request."
   const askLine = isZh
-    ? `为了继续，请补充：${input.missingFields.map((field) => questions[field]).join(" ")}`
-    : `To continue, please clarify: ${input.missingFields.map((field) => questions[field]).join(" ")}`
+    ? nextPromptQuestion
+      ? `下一步请先完成 ${nextPromptQuestion.title}。`
+      : `为了继续，请补充：${input.missingFields.map((field) => questions[field]).join(" ")}`
+    : nextPromptQuestion
+      ? `Please complete ${nextPromptQuestion.title} next.`
+      : `To continue, please clarify: ${input.missingFields.map((field) => questions[field]).join(" ")}`
 
   return [intro, referenceLine, askLine].join(" ")
 }
@@ -486,15 +838,22 @@ async function buildGenerationPrompt(input: {
     ...(await getImageAssistantFailureChecks("graphic-design-brief")),
     ...(await getImageAssistantFailureChecks("canvas-design-execution")),
   ])
+  const effectiveSizePreset = input.brief.size_preset || input.sizePreset
+  const effectiveResolution = input.brief.resolution || input.resolution
+  const usageLabel = input.brief.usage_label || input.brief.goal || "image delivery"
+  const orientationLabel =
+    input.brief.orientation === "landscape" ? "landscape" : input.brief.orientation === "portrait" ? "portrait" : null
   const lines = [
     `Execution mindset: ${runtimeSystemPrompt}`,
     input.taskType === "generate"
       ? "Create a production-ready image based on this approved design brief."
       : "Edit the provided reference image(s) according to this approved design brief.",
-    `Design objective: ${input.brief.goal || "Produce a strong result that matches the user's request."}`,
+    `Design objective: ${input.brief.goal || usageLabel || "Produce a strong result that matches the user's request."}`,
+    `Delivery context: ${usageLabel}.`,
+    orientationLabel ? `Canvas direction: ${orientationLabel}.` : null,
     `Subject and must-have elements: ${input.brief.subject || "Use the user's prompt as the primary subject description."}`,
     `Style and mood: ${input.brief.style || "Use a polished, production-ready visual direction inferred from the request."}`,
-    `Composition and layout: ${input.brief.composition || `Use a ${input.sizePreset} layout with clear focal hierarchy and safe whitespace.`}`,
+    `Composition and layout: ${input.brief.composition || `Use a ${effectiveSizePreset} layout with clear focal hierarchy and safe whitespace.`}`,
     input.brief.constraints ? `Constraints and must-keep details: ${input.brief.constraints}` : null,
     input.referenceCount > 0
       ? `Reference handling: ${input.taskType === "generate" ? "use the uploaded images as guidance while preserving key identity cues." : "preserve the recognizable identity and only change what the brief requires."}`
@@ -503,7 +862,7 @@ async function buildGenerationPrompt(input: {
     failureChecks.length ? `Failure checks: ${failureChecks.join(" ")}` : null,
     input.taskType === "mask_edit"
       ? "Output requirement: return the fully edited image at the original dimensions while preserving framing and subject placement as closely as possible."
-      : `Output requirement: ${input.sizePreset} composition, ${input.resolution} resolution target, clean focal hierarchy, production-safe framing.`,
+      : `Output requirement: ${effectiveSizePreset} composition, ${effectiveResolution} resolution target, clean focal hierarchy, production-safe framing.`,
     input.extraInstructions ? input.extraInstructions : null,
   ]
 
@@ -522,7 +881,7 @@ function buildToolTraces(input: {
   generatedPrompt: string | null
   turnCount: number
 }) {
-  const collectedCount = REQUIRED_BRIEF_FIELDS.filter((field) => normalizeText(input.brief[field])).length
+  const collectedCount = getCollectedBriefFieldCount(input.brief)
   const traces: ImageAssistantToolTrace[] = [
     {
       name: "collect_brief",
@@ -542,9 +901,9 @@ function buildToolTraces(input: {
     {
       name: "compose_generation_prompt",
       status: input.generatedPrompt ? "completed" : "skipped",
-      summary: input.generatedPrompt
-        ? "Built the final image-model prompt from the approved brief."
-        : `Waiting for remaining brief fields: ${input.missingFields.join(", ") || "none"}.`,
+        summary: input.generatedPrompt
+          ? "Built the final image-model prompt from the approved brief."
+          : `Waiting for remaining brief fields: ${input.missingFields.join(", ") || "none"}.`,
     },
   ]
 
@@ -580,6 +939,12 @@ export function extractLatestImageAssistantOrchestration(messages: ImageAssistan
         reference_count: Number(orchestration.reference_count || 0),
         recommended_mode: orchestration.recommended_mode === "edit" ? "edit" : "generate",
         follow_up_question: normalizeText(orchestration.follow_up_question),
+        prompt_questions: Array.isArray(orchestration.prompt_questions)
+          ? orchestration.prompt_questions.filter(
+              (question: unknown): question is ImageAssistantPromptQuestion =>
+                Boolean(question && typeof question === "object" && typeof (question as any).id === "string"),
+            )
+          : [],
         generated_prompt: normalizeText(orchestration.generated_prompt),
       } satisfies ImageAssistantOrchestrationState
     }
@@ -597,6 +962,10 @@ export function buildImageAssistantTurnContent(input: {
   const brief = normalizeBrief(input.brief)
   const sections = [
     prompt ? `User request: ${prompt}` : null,
+    brief.usage_label ? `Usage: ${brief.usage_label}` : null,
+    brief.orientation ? `Orientation: ${brief.orientation === "landscape" ? "Landscape" : "Portrait"}` : null,
+    brief.resolution ? `Quality: ${brief.resolution}` : null,
+    brief.size_preset ? `Ratio: ${brief.size_preset}${brief.ratio_confirmed ? " (confirmed)" : ""}` : null,
     brief.goal ? `Objective: ${brief.goal}` : null,
     brief.subject ? `Subject: ${brief.subject}` : null,
     brief.style ? `Style: ${brief.style}` : null,
@@ -636,7 +1005,8 @@ export async function planImageAssistantTurn(input: {
   const mergedBrief = mergeBrief(input.previousState?.brief, input.currentBrief, inferred, contextual)
   const initialMissingFields = getActionableBriefMissingFields(mergedBrief)
   const turnCount = Math.min((input.previousState?.turn_count || 0) + 1, IMAGE_ASSISTANT_MAX_BRIEF_TURNS)
-  const modelPlan = useEditShortcut
+  const hasGuidedGap = initialMissingFields.some((field) => GUIDED_BRIEF_FIELDS.has(field))
+  const modelPlan = useEditShortcut || hasGuidedGap
     ? null
     : await maybePlanWithTextModel({
         prompt: input.prompt,
@@ -653,6 +1023,11 @@ export async function planImageAssistantTurn(input: {
     ? applyReferenceEditDefaults(modelPlan?.brief || mergedBrief, input.prompt)
     : modelPlan?.brief || mergedBrief
   const missingFields = getActionableBriefMissingFields(brief)
+  const promptQuestions = buildPromptQuestions({
+    brief,
+    missingFields,
+    userPrompt: input.prompt,
+  })
   const selectedSkill = await resolveSelectedSkillMetadata(
     selectImageAssistantSkill({ taskType: input.taskType, readyForGeneration: missingFields.length === 0 }),
   )
@@ -668,8 +1043,6 @@ export async function planImageAssistantTurn(input: {
              extraInstructions: input.extraInstructions,
            })))
       : null
-  const readyForGeneration = Boolean(generatedPrompt) && missingFields.length === 0
-
   const replyToUser =
     modelPlan?.replyToUser ||
     buildClarificationReply({
@@ -680,6 +1053,7 @@ export async function planImageAssistantTurn(input: {
       recommendedMode: input.taskType === "generate" ? "generate" : "edit",
       referenceCount: input.referenceCount,
       userPrompt: input.prompt,
+      promptQuestions,
     })
   const plannerStrategy = useEditShortcut ? "rule_shortcut" : modelPlan ? "text_model" : "heuristic"
 
@@ -702,6 +1076,7 @@ export async function planImageAssistantTurn(input: {
     reference_count: input.referenceCount,
     recommended_mode: input.taskType === "generate" ? "generate" : "edit",
     follow_up_question: missingFields.length ? replyToUser : null,
+    prompt_questions: promptQuestions,
     generated_prompt: generatedPrompt,
   }
 
@@ -710,3 +1085,4 @@ export async function planImageAssistantTurn(input: {
     assistantReply: missingFields.length ? replyToUser : null,
   }
 }
+

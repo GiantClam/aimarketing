@@ -99,7 +99,7 @@ function getGoogleClient() {
 
 function normalizeAspectRatio(sizePreset?: string | null) {
   const value = sizePreset || "1:1"
-  if (["1:1", "4:5", "3:4", "16:9", "9:16"].includes(value)) {
+  if (["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"].includes(value)) {
     return value
   }
 

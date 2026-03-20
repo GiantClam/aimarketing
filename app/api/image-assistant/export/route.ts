@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const dataUrl = typeof body?.dataUrl === "string" ? body.dataUrl : ""
     const format = typeof body?.format === "string" ? body.format : "png"
     const sizePreset =
-      body?.sizePreset === "4:5" || body?.sizePreset === "3:4" || body?.sizePreset === "16:9" || body?.sizePreset === "9:16"
+      body?.sizePreset === "4:5" || body?.sizePreset === "3:4" || body?.sizePreset === "4:3" || body?.sizePreset === "16:9" || body?.sizePreset === "9:16"
         ? body.sizePreset
         : "1:1"
 

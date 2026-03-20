@@ -54,7 +54,7 @@ function normalizeResolution(value: unknown): ImageAssistantResolution {
 }
 
 function normalizeSizePreset(value: unknown): ImageAssistantSizePreset {
-  return value === "4:5" || value === "3:4" || value === "16:9" || value === "9:16" ? value : "1:1"
+  return value === "4:5" || value === "3:4" || value === "4:3" || value === "16:9" || value === "9:16" ? value : "1:1"
 }
 
 function getCachedGeminiFileMeta(asset: ImageAssistantAsset) {

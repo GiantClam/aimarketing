@@ -32,6 +32,14 @@ export type WriterRoutingDecision = {
   selectedSkillLabel: string
 }
 
+export type WriterPreloadedBrief = Partial<{
+  topic: string
+  audience: string
+  objective: string
+  tone: string
+  constraints: string
+}>
+
 export type WriterConversationSummary = {
   id: string
   name: string
