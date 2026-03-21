@@ -73,7 +73,12 @@ export type RemoteEnterpriseDifyDatasetRecord = {
 
 const DEFAULT_RETRIEVAL_TOP_K = 3
 const DEFAULT_RETRIEVAL_SCORE_THRESHOLD = 0.35
-const DEFAULT_MAX_QUERY_VARIANTS = 2
+const DEFAULT_FALLBACK_RETRIEVAL_TOP_K = 5
+const DEFAULT_MAX_QUERY_VARIANTS = 4
+const DIFY_RETRIEVAL_QUERY_MAX_CHARS = Math.min(
+  250,
+  Math.max(120, Number.parseInt(process.env.DIFY_RETRIEVAL_QUERY_MAX_CHARS || "240", 10) || 240),
+)
 const WRITER_ENTERPRISE_KNOWLEDGE_CACHE_TTL_MS = Math.max(
   0,
   Number.parseInt(process.env.WRITER_ENTERPRISE_KNOWLEDGE_CACHE_TTL_MS || "300000", 10) || 300_000,
@@ -212,9 +217,41 @@ function buildEnterpriseKnowledgeProfile(
   }
 }
 
+function truncateDifyRetrievalQuery(query: string, maxChars = DIFY_RETRIEVAL_QUERY_MAX_CHARS) {
+  const normalizedLines = query
+    .split(/\r?\n/u)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+
+  if (normalizedLines.length === 0) {
+    return ""
+  }
+
+  const selectedLines: string[] = []
+  let totalLength = 0
+
+  for (const line of normalizedLines) {
+    const separatorLength = selectedLines.length > 0 ? 1 : 0
+    if (totalLength + separatorLength + line.length <= maxChars) {
+      selectedLines.push(line)
+      totalLength += separatorLength + line.length
+      continue
+    }
+
+    if (selectedLines.length === 0) {
+      const compact = line.slice(0, maxChars).trim()
+      return compact.length <= maxChars ? compact : compact.slice(0, maxChars)
+    }
+
+    break
+  }
+
+  return selectedLines.join("\n")
+}
+
 function normalizeQueryVariants(query: string, queryVariants?: string[]) {
   const variants = [query, ...(queryVariants || [])]
-    .map((item) => item.replace(/\s+/g, " ").trim())
+    .map((item) => truncateDifyRetrievalQuery(item))
     .filter(Boolean)
 
   return [...new Set(variants)].slice(0, DEFAULT_MAX_QUERY_VARIANTS)
@@ -661,6 +698,62 @@ function parseRetrieveRecords(data: any) {
     .filter((row: { content: string }) => row.content)
 }
 
+function buildDifyRetrievalBody(query: string, options?: { relaxThreshold?: boolean }) {
+  return {
+    query,
+    retrieval_model: {
+      search_method: "semantic_search",
+      reranking_enable: true,
+      top_k: options?.relaxThreshold ? DEFAULT_FALLBACK_RETRIEVAL_TOP_K : DEFAULT_RETRIEVAL_TOP_K,
+      score_threshold_enabled: !options?.relaxThreshold,
+      ...(options?.relaxThreshold ? {} : { score_threshold: DEFAULT_RETRIEVAL_SCORE_THRESHOLD }),
+    },
+  }
+}
+
+async function retrieveEnterpriseDatasetRecords(params: {
+  difyBaseUrl: string
+  headers: Record<string, string>
+  datasetId: string
+  queryVariants: string[]
+}) {
+  const requestDataset = async (query: string, options?: { relaxThreshold?: boolean }) =>
+    writerRequestJson(
+      `${params.difyBaseUrl}/datasets/${encodeURIComponent(params.datasetId)}/retrieve`,
+      {
+        method: "POST",
+        headers: params.headers,
+        body: JSON.stringify(buildDifyRetrievalBody(query, options)),
+      },
+      { attempts: 2, timeoutMs: 60_000 },
+    )
+
+  const primaryResponses = await Promise.all(params.queryVariants.map((query) => requestDataset(query)))
+  const primaryRecords = primaryResponses
+    .filter((response) => response.ok)
+    .flatMap((response) => parseRetrieveRecords(response.data))
+
+  if (primaryRecords.length > 0 || params.queryVariants.length === 0) {
+    return primaryRecords
+  }
+
+  const relaxedQueries = [...new Set(params.queryVariants.map((query) => query.trim()).filter(Boolean))]
+    .sort((left, right) => left.length - right.length)
+    .slice(0, DEFAULT_MAX_QUERY_VARIANTS)
+
+  for (const relaxedQuery of relaxedQueries) {
+    const relaxedResponse = await requestDataset(relaxedQuery, { relaxThreshold: true })
+    if (!relaxedResponse.ok) continue
+
+    const relaxedRecords = parseRetrieveRecords(relaxedResponse.data)
+    if (relaxedRecords.length > 0) {
+      return relaxedRecords
+    }
+  }
+
+  return []
+}
+
 export async function loadEnterpriseKnowledgeContext(params: {
   enterpriseId: number | null | undefined
   query: string
@@ -709,6 +802,7 @@ async function loadEnterpriseKnowledgeContextFresh(params: {
     return null
   }
 
+  const allActiveDatasets = binding.datasets.filter((dataset) => dataset.enabled)
   const activeDatasets = filterActiveDatasetsByScope(binding.datasets, params.preferredScopes)
   if (activeDatasets.length === 0) {
     return null
@@ -753,57 +847,44 @@ async function loadEnterpriseKnowledgeContextFresh(params: {
 
   const headers = getDifyHeaders(binding.apiKey)
   const difyBaseUrl = normalizeDifyApiBase(binding.baseUrl)
+  const retrieveFromDatasets = async (datasets: typeof activeDatasets) =>
+    Promise.all(
+      datasets.slice(0, 4).map(async (dataset) => {
+        const records = sortSnippetsByScore(
+          (
+            await retrieveEnterpriseDatasetRecords({
+              difyBaseUrl,
+              headers,
+              datasetId: dataset.datasetId,
+              queryVariants,
+            })
+          ).map((record: { score: number | null; title: string; content: string }) => ({
+            datasetId: dataset.datasetId,
+            datasetName: dataset.datasetName,
+            scope: dataset.scope,
+            inferredScope: inferSnippetScope(record.title, record.content, dataset.scope),
+            score: record.score,
+            title: record.title,
+            content: record.content,
+          })),
+        ).filter((record, index, all) => all.findIndex((item) => item.title === record.title && item.content === record.content) === index)
+
+        if (records.length === 0) {
+          return null
+        }
+
+        return { dataset, records: records.slice(0, 3) }
+      }),
+    )
+
+  const scopedResults = await retrieveFromDatasets(activeDatasets)
+  const retrievalResults =
+    scopedResults.some(Boolean) || activeDatasets.length === allActiveDatasets.length
+      ? scopedResults
+      : await retrieveFromDatasets(allActiveDatasets)
+
   const datasetsUsed: EnterpriseKnowledgeContext["datasetsUsed"] = []
   const snippets: EnterpriseKnowledgeSnippet[] = []
-
-  const retrievalResults = await Promise.all(
-    activeDatasets.slice(0, 4).map(async (dataset) => {
-      const responses = await Promise.all(
-        queryVariants.map((query) =>
-          writerRequestJson(
-            `${difyBaseUrl}/datasets/${encodeURIComponent(dataset.datasetId)}/retrieve`,
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                query,
-                retrieval_model: {
-                  search_method: "semantic_search",
-                  reranking_enable: true,
-                  top_k: DEFAULT_RETRIEVAL_TOP_K,
-                  score_threshold_enabled: true,
-                  score_threshold: DEFAULT_RETRIEVAL_SCORE_THRESHOLD,
-                },
-              }),
-            },
-            { attempts: 2, timeoutMs: 60_000 },
-          ),
-        ),
-      )
-
-      const records = sortSnippetsByScore(
-        responses
-          .filter((response) => response.ok)
-          .flatMap((response) =>
-            parseRetrieveRecords(response.data).map((record: { score: number | null; title: string; content: string }) => ({
-              datasetId: dataset.datasetId,
-              datasetName: dataset.datasetName,
-              scope: dataset.scope,
-              inferredScope: inferSnippetScope(record.title, record.content, dataset.scope),
-              score: record.score,
-              title: record.title,
-              content: record.content,
-            })),
-          ),
-      ).filter((record, index, all) => all.findIndex((item) => item.title === record.title && item.content === record.content) === index)
-
-      if (records.length === 0) {
-        return null
-      }
-
-      return { dataset, records: records.slice(0, 3) }
-    }),
-  )
 
   for (const item of retrievalResults) {
     if (!item) {

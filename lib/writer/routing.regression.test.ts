@@ -67,6 +67,14 @@ test("linkedin routing works for professional post request", () => {
   })
 })
 
+test("linkedin post request is not downgraded to email when the topic mentions follow-up emails", () => {
+  assertRoute("Write a LinkedIn post about how to make product demo follow-up emails more effective", {
+    contentType: "social_global",
+    targetPlatform: "LinkedIn",
+    renderPlatform: "linkedin",
+  })
+})
+
 test("email routing works for Chinese business email request", () => {
   assertRoute("写一封商务邮件，跟进上周沟通过的自动化方案", {
     contentType: "email",

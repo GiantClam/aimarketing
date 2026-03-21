@@ -31,6 +31,25 @@ function matchesAny(query: string, patterns: RegExp[]) {
 export function inferWriterContentType(query: string): WriterContentType {
   if (
     matchesAny(query, [
+      /\b(?:linkedin|facebook|instagram|tiktok)\b.*\b(?:post|caption)\b/i,
+      /\b(?:post|caption)\b.*\b(?:linkedin|facebook|instagram|tiktok)\b/i,
+      /\b(?:twitter|x)\b.*\bthread\b/i,
+      /\bthread\b.*\b(?:twitter|x)\b/i,
+      /wechat.*article/i,
+      /公众号.*文章/u,
+      /小红书.*笔记/u,
+      /微博.*(?:帖子|内容)/u,
+      /抖音.*(?:脚本|口播)/u,
+    ])
+  ) {
+    if (matchesAny(query, [/(wechat|公众号|小红书|微博|抖音)/iu])) {
+      return "social_cn"
+    }
+    return "social_global"
+  }
+
+  if (
+    matchesAny(query, [
       /cold email/i,
       /follow-up email/i,
       /business email/i,

@@ -47,7 +47,7 @@ const WRITER_CONTENT_SKILL_DIR_BY_TYPE: Record<WriterContentType, string> = {
   product: "product-writing",
   speech: "speech-writing",
 }
-const WRITER_BRIEFING_SKILL_DIR = "content-briefing"
+const WRITER_BRIEFING_SKILL_DIR_CANDIDATES = ["writer-briefing", "content-briefing"] as const
 
 const writerSkillCache = new Map<string, Promise<string>>()
 
@@ -148,28 +148,31 @@ export async function getWriterRepoHostedSkillDocument(
 export async function getWriterBriefingSkillDocument(
   fallback: WriterBriefingSkillDocument,
 ): Promise<WriterBriefingSkillDocument> {
-  try {
-    const markdown = await readSkillDocument(WRITER_BRIEFING_SKILL_DIR)
-    return {
-      runtimeLabel: collapseWhitespace(extractSection(markdown, "Runtime Label")) || fallback.runtimeLabel,
-      requiredBriefFields: parseListSection(extractSection(markdown, "Required Brief Fields")).length
-        ? parseListSection(extractSection(markdown, "Required Brief Fields"))
-        : fallback.requiredBriefFields,
-      collectionRules: parseListSection(extractSection(markdown, "Collection Rules")).length
-        ? parseListSection(extractSection(markdown, "Collection Rules"))
-        : fallback.collectionRules,
-      followUpStyle: collapseWhitespace(extractSection(markdown, "Follow-up Style")) || fallback.followUpStyle,
-      defaultAssumptions: parseListSection(extractSection(markdown, "Default Assumptions")).length
-        ? parseListSection(extractSection(markdown, "Default Assumptions"))
-        : fallback.defaultAssumptions,
+  for (const dirName of WRITER_BRIEFING_SKILL_DIR_CANDIDATES) {
+    try {
+      const markdown = await readSkillDocument(dirName)
+      return {
+        runtimeLabel: collapseWhitespace(extractSection(markdown, "Runtime Label")) || fallback.runtimeLabel,
+        requiredBriefFields: parseListSection(extractSection(markdown, "Required Brief Fields")).length
+          ? parseListSection(extractSection(markdown, "Required Brief Fields"))
+          : fallback.requiredBriefFields,
+        collectionRules: parseListSection(extractSection(markdown, "Collection Rules")).length
+          ? parseListSection(extractSection(markdown, "Collection Rules"))
+          : fallback.collectionRules,
+        followUpStyle: collapseWhitespace(extractSection(markdown, "Follow-up Style")) || fallback.followUpStyle,
+        defaultAssumptions: parseListSection(extractSection(markdown, "Default Assumptions")).length
+          ? parseListSection(extractSection(markdown, "Default Assumptions"))
+          : fallback.defaultAssumptions,
+      }
+    } catch (error) {
+      console.warn("writer.briefing-skill.read-failed", {
+        path: getSkillDocumentPath(dirName),
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
-  } catch (error) {
-    console.warn("writer.briefing-skill.read-failed", {
-      path: getSkillDocumentPath(WRITER_BRIEFING_SKILL_DIR),
-      message: error instanceof Error ? error.message : String(error),
-    })
-    return fallback
   }
+
+  return fallback
 }
 
 export async function getWriterContentSkillDocument(
@@ -200,5 +203,5 @@ export function getWriterRepoHostedSkillPath(platform: WriterPlatform) {
 }
 
 export function getWriterBriefingSkillPath() {
-  return getSkillDocumentPath(WRITER_BRIEFING_SKILL_DIR)
+  return getSkillDocumentPath(WRITER_BRIEFING_SKILL_DIR_CANDIDATES[0])
 }

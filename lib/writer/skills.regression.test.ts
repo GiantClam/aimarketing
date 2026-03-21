@@ -20,7 +20,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 let runWriterSkillsTurnWithRuntime: (...args: any[]) => Promise<any>
 
 test.before(async () => {
-  ;({ runWriterSkillsTurnWithRuntime } = await import("./skills.ts"))
+  ;({ runWriterSkillsTurnWithRuntime } = await import("./skills"))
 })
 
 const baseDiagnostics: WriterTurnDiagnostics = {
@@ -72,7 +72,7 @@ function createHistoryEntry(
 
 function createRuntime(options: {
   extractBrief: (...args: any[]) => Promise<any> | any
-  onGenerate?: (compiledPrompt: string) => void
+  onGenerate?: (compiledPrompt: string, generationOptions?: any) => void
   draftAnswer?: string
 }) {
   return {
@@ -110,8 +110,8 @@ function createRuntime(options: {
       threadStructureGuidance: "Write as a thread.",
     }),
     extractBrief: options.extractBrief,
-    generateDraft: async (compiledPrompt: string) => {
-      options.onGenerate?.(compiledPrompt)
+    generateDraft: async (compiledPrompt: string, _routing: any, _preferredLanguage: any, generationOptions?: any) => {
+      options.onGenerate?.(compiledPrompt, generationOptions)
       return {
         answer: options.draftAnswer || "# Draft\n\nGenerated body.",
         diagnostics: {
@@ -120,6 +120,53 @@ function createRuntime(options: {
         },
       }
     },
+  }
+}
+
+function createBriefExtraction(
+  overrides: Partial<{
+    resolvedBrief: {
+      topic: string
+      audience: string
+      objective: string
+      tone: string
+      constraints: string
+    }
+    routingDecision: NonNullable<WriterTurnDiagnostics["routing"]>
+    userWantsDirectOutput: boolean
+    briefSufficient: boolean
+    retrievalHints: {
+      enterpriseKnowledgeNeeded: boolean
+      freshResearchNeeded: boolean
+      confidence: number
+      reason: string
+    }
+    confidence: number
+  }> = {},
+) {
+  return {
+    resolvedBrief: {
+      topic: "generic topic",
+      audience: "generic audience",
+      objective: "generic objective",
+      tone: "professional",
+      constraints: "",
+      ...(overrides.resolvedBrief || {}),
+    },
+    routingDecision: overrides.routingDecision || createRouting(),
+    answeredFields: ["topic", "audience", "objective", "tone"],
+    suggestedFollowUpFields: [],
+    suggestedFollowUpQuestion: "",
+    userWantsDirectOutput: overrides.userWantsDirectOutput ?? false,
+    briefSufficient: overrides.briefSufficient ?? true,
+    retrievalHints: {
+      enterpriseKnowledgeNeeded: false,
+      freshResearchNeeded: false,
+      confidence: 0.9,
+      reason: "generic_writing",
+      ...(overrides.retrievalHints || {}),
+    },
+    confidence: overrides.confidence ?? 0.9,
   }
 }
 
@@ -164,8 +211,8 @@ test("clarification asks only one missing item early in the briefing flow", asyn
   )
 
   assert.equal(result.outcome, "needs_clarification")
-  assert.match(result.answer, /1\./)
-  assert.doesNotMatch(result.answer, /2\./)
+  assert.match(result.answer, /who is this article for/i)
+  assert.match(result.answer, /what should it achieve/i)
 })
 
 test("short reply can fill objective and proceed to drafting", async () => {
@@ -260,6 +307,40 @@ test("direct output intent skips clarification even when brief is incomplete", a
   assert.equal(result.routing.targetPlatform, "X")
 })
 
+test("model-authored follow-up question is used when clarification is still needed", async () => {
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "Write something about AI outbound",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "AI outbound",
+          audience: "",
+          objective: "",
+          tone: "",
+          constraints: "",
+        },
+        routingDecision: createRouting(),
+        answeredFields: ["topic"],
+        suggestedFollowUpFields: ["audience", "objective"],
+        suggestedFollowUpQuestion: "Who exactly is this for, and what should the piece make them do next?",
+        userWantsDirectOutput: false,
+        briefSufficient: false,
+        confidence: 0.91,
+      }),
+    }),
+  )
+
+  assert.equal(result.outcome, "needs_clarification")
+  assert.equal(result.answer, "Who exactly is this for, and what should the piece make them do next?")
+})
+
 test("turn limit falls back to platform tone and proceeds", async () => {
   const history = [
     createHistoryEntry(1, "Help me write something", "What topic should it focus on?"),
@@ -301,6 +382,149 @@ test("turn limit falls back to platform tone and proceeds", async () => {
   assert.equal(result.turnCount, 5)
   assert.equal(result.brief.tone, "platform default tone")
   assert.equal(result.readyForGeneration, true)
+})
+
+test("multi-turn briefing returns a confirmation prompt before drafting", async () => {
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "Professional and restrained.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [
+        createHistoryEntry(1, "Write about AI sales automation", "Who is it for?"),
+        createHistoryEntry(2, "Factory owners", "What should it achieve?"),
+      ],
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "AI sales automation",
+          audience: "factory owners",
+          objective: "drive consultation requests",
+          tone: "professional and restrained",
+          constraints: "",
+        },
+        routingDecision: createRouting(),
+        answeredFields: ["audience", "objective", "tone"],
+        suggestedFollowUpFields: [],
+        suggestedFollowUpQuestion: "",
+        userWantsDirectOutput: false,
+        briefSufficient: true,
+        confidence: 0.95,
+      }),
+    }),
+  )
+
+  assert.equal(result.outcome, "needs_clarification")
+  assert.equal(result.selectedSkill.stage, "briefing")
+  assert.match(result.answer, /confirm and write/i)
+  assert.match(result.answer, /Suggested writing prompt:/)
+})
+
+test("second-turn follow-up completion returns confirmation prompt before drafting", async () => {
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Audience: overseas B2B buyers and sourcing managers. Objective: build trust and drive consultation. Tone: professional and trustworthy.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [createHistoryEntry(1, "I want to write a WeChat article about our textile products.", "Who is the target audience, and what is the main goal of this article?")],
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "our textile products",
+          audience: "overseas B2B buyers and sourcing managers",
+          objective: "build trust and drive consultation",
+          tone: "professional and trustworthy",
+          constraints: "",
+        },
+        routingDecision: createRouting({
+          contentType: "social_cn",
+          targetPlatform: "WeChat Official Account",
+          outputForm: "WeChat Official Account native post",
+          lengthTarget: "platform-native medium length",
+        }),
+        answeredFields: ["audience", "objective", "tone"],
+        suggestedFollowUpFields: [],
+        suggestedFollowUpQuestion: "",
+        userWantsDirectOutput: false,
+        briefSufficient: true,
+        confidence: 0.95,
+      }),
+    }),
+  )
+
+  assert.equal(result.outcome, "needs_clarification")
+  assert.equal(result.selectedSkill.stage, "briefing")
+  assert.match(result.answer, /confirm and write/i)
+  assert.match(result.answer, /Topic: our textile products/i)
+  assert.match(result.answer, /Audience: overseas B2B buyers and sourcing managers/i)
+})
+
+test("confirm-and-write keeps enterprise grounding on the final drafting turn", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "confirm and write",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      enterpriseId: 45,
+      history: [
+        createHistoryEntry(
+          1,
+          "I want to write a WeChat Official Account article about our textile products.",
+          "Who is the target audience, and what is the main goal of this article?",
+        ),
+        createHistoryEntry(
+          2,
+          "Audience: overseas B2B buyers and sourcing managers. Objective: build trust and drive consultation. Tone: professional and trustworthy.",
+          'Here is my current understanding: Topic: our textile products; Audience: overseas B2B buyers and sourcing managers; Objective: build trust and drive consultation; Tone: professional and trustworthy. If this looks right, reply "confirm and write" or tell me what to change.',
+        ),
+      ],
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "our textile products",
+          audience: "overseas B2B buyers and sourcing managers",
+          objective: "build trust and drive consultation",
+          tone: "professional and trustworthy",
+          constraints: "",
+        },
+        routingDecision: createRouting({
+          contentType: "social_cn",
+          targetPlatform: "WeChat Official Account",
+          outputForm: "WeChat Official Account native post",
+          lengthTarget: "platform-native medium length",
+        }),
+        answeredFields: [],
+        suggestedFollowUpFields: [],
+        suggestedFollowUpQuestion: "",
+        userWantsDirectOutput: false,
+        briefSufficient: true,
+        confidence: 0.95,
+      }),
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(generationOptions?.retrievalStrategy, "enterprise_grounded")
+  assert.match(generationOptions?.researchQuery || "", /Topic: our textile products/)
+  assert.match(generationOptions?.researchQuery || "", /Audience: overseas B2B buyers and sourcing managers/)
+  assert.match(generationOptions?.researchQuery || "", /Objective: build trust and drive consultation/)
+  assert.ok((generationOptions?.researchQuery || "").length <= 220)
+  assert.ok((generationOptions?.enterpriseQueryVariants || []).every((variant: string) => variant.length <= 220))
 })
 
 test("colloquial audience reply is captured without polluting topic and routing stays locked", async () => {
@@ -412,6 +636,471 @@ test("preloaded brief supports one-shot drafting without clarification", async (
   assert.equal(result.brief.objective, "drive consultation requests")
 })
 
+test("generic writing request with an enterprise account skips enterprise retrieval by default", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Write a WeChat article for startup operators about how to run better weekly planning meetings with a practical and concise tone.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+      enterpriseId: 45,
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "how to run better weekly planning meetings",
+          audience: "startup operators",
+          objective: "teach a practical workflow",
+          tone: "practical and concise",
+          constraints: "",
+        },
+        routingDecision: createRouting(),
+        answeredFields: ["topic", "audience", "objective", "tone"],
+        suggestedFollowUpFields: [],
+        suggestedFollowUpQuestion: "",
+        userWantsDirectOutput: false,
+        briefSufficient: true,
+        retrievalHints: {
+          enterpriseKnowledgeNeeded: false,
+          freshResearchNeeded: false,
+          confidence: 0.94,
+          reason: "generic_writing",
+        },
+        confidence: 0.94,
+      }),
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(generationOptions?.retrievalStrategy, "no_retrieval")
+})
+
+test("retrieval hints can force enterprise grounding for product-intro requests", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Write an English product overview email introducing multi-spindle engraving machines for procurement directors.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+      enterpriseId: 46,
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "multi-spindle engraving machines",
+          audience: "procurement directors",
+          objective: "introduce the offer and drive replies",
+          tone: "concise and professional",
+          constraints: "",
+        },
+        routingDecision: createRouting({
+          contentType: "email",
+          targetPlatform: "Email",
+          outputForm: "single email",
+          lengthTarget: "120-220 words",
+          renderPlatform: "generic",
+          renderMode: "article",
+          selectedSkillId: "email",
+          selectedSkillLabel: "Email",
+        }),
+        answeredFields: ["topic", "audience", "objective", "tone"],
+        suggestedFollowUpFields: [],
+        suggestedFollowUpQuestion: "",
+        userWantsDirectOutput: false,
+        briefSufficient: true,
+        retrievalHints: {
+          enterpriseKnowledgeNeeded: true,
+          freshResearchNeeded: false,
+          confidence: 0.91,
+          reason: "enterprise_fact_request",
+        },
+        confidence: 0.91,
+      }),
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(generationOptions?.retrievalStrategy, "enterprise_grounded")
+})
+
+test("explicit enterprise fact signals override model hints that incorrectly skip grounding", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Write an English cold email introducing our textile products and manufacturing strengths to overseas buyers.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+      enterpriseId: 45,
+    },
+    createRuntime({
+      extractBrief: async () => ({
+        resolvedBrief: {
+          topic: "our textile products and manufacturing strengths",
+          audience: "overseas buyers",
+          objective: "build trust and drive replies",
+          tone: "professional and concise",
+          constraints: "",
+        },
+        routingDecision: createRouting({
+          contentType: "email",
+          targetPlatform: "Email",
+          outputForm: "single email",
+          lengthTarget: "120-220 words",
+          renderPlatform: "generic",
+          renderMode: "article",
+          selectedSkillId: "email",
+          selectedSkillLabel: "Email",
+        }),
+        answeredFields: ["topic", "audience", "objective", "tone"],
+        suggestedFollowUpFields: [],
+        suggestedFollowUpQuestion: "",
+        userWantsDirectOutput: true,
+        briefSufficient: true,
+        retrievalHints: {
+          enterpriseKnowledgeNeeded: false,
+          freshResearchNeeded: false,
+          confidence: 0.93,
+          reason: "generic_writing",
+        },
+        confidence: 0.93,
+      }),
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(generationOptions?.retrievalStrategy, "enterprise_grounded")
+})
+
+test("generic linkedin post phrased as post for audience about topic drafts without retrieval", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Write an English LinkedIn post for B2B sales leaders about how to improve discovery call preparation. Audience: sales leaders. Objective: share practical tips. Tone: concise and professional. Directly write it, no follow-up questions.",
+      platform: "generic",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+      enterpriseId: 45,
+    },
+    createRuntime({
+      extractBrief: async () => null,
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.brief.topic, "how to improve discovery call preparation")
+  assert.equal(result.brief.audience, "B2B sales leaders")
+  assert.equal(generationOptions?.retrievalStrategy, "no_retrieval")
+})
+
+test("translation request with inline source text drafts immediately without clarification", async () => {
+  let generationOptions: any = null
+  let compiledPrompt = ""
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Translate this paragraph into English and keep it concise and professional: 我们专注于为制造业客户提供自动化设备解决方案，并提供持续的技术支持。",
+      platform: "generic",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+      enterpriseId: 46,
+    },
+    createRuntime({
+      extractBrief: async () => null,
+      onGenerate: (prompt, options) => {
+        compiledPrompt = prompt
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(generationOptions?.retrievalStrategy, "rewrite_only")
+  assert.match(compiledPrompt, /Source text to transform:/)
+  assert.match(compiledPrompt, /Translate the provided source text directly/i)
+  assert.match(compiledPrompt, /without adding a title, headings, or image placeholders unless requested/i)
+  assert.match(compiledPrompt, /我们专注于为制造业客户提供自动化设备解决方案/u)
+})
+
+test("retrieval strategy matrix covers broader writer intents", async () => {
+  const scenarios = [
+    {
+      name: "rewrite request stays rewrite_only",
+      input: {
+        query: "Rewrite this product intro email to sound more concise and professional.",
+        enterpriseId: 45,
+      },
+      extraction: createBriefExtraction({
+        resolvedBrief: {
+          topic: "product intro email rewrite",
+          audience: "procurement directors",
+          objective: "make the copy cleaner",
+          tone: "concise and professional",
+          constraints: "",
+        },
+      }),
+      expected: "rewrite_only",
+    },
+    {
+      name: "translation request stays rewrite_only",
+      input: {
+        query: "Translate this landing page paragraph into English and keep the tone natural.",
+        enterpriseId: 45,
+      },
+      extraction: createBriefExtraction({
+        resolvedBrief: {
+          topic: "landing page paragraph translation",
+          audience: "overseas buyers",
+          objective: "translate existing copy",
+          tone: "natural and clear",
+          constraints: "",
+        },
+      }),
+      expected: "rewrite_only",
+    },
+    {
+      name: "latest-trend prompt uses fresh_external",
+      input: {
+        query:
+          "Write a LinkedIn post about the latest 2026 AI sales automation trends for revenue leaders.",
+        enterpriseId: 45,
+      },
+      extraction: createBriefExtraction({
+        resolvedBrief: {
+          topic: "the latest 2026 AI sales automation trends",
+          audience: "revenue leaders",
+          objective: "summarize current market changes",
+          tone: "insightful and concise",
+          constraints: "",
+        },
+        routingDecision: createRouting({
+          contentType: "social_global",
+          targetPlatform: "LinkedIn",
+          outputForm: "LinkedIn native post",
+          lengthTarget: "platform-native medium length",
+          renderPlatform: "linkedin",
+          renderMode: "article",
+          selectedSkillId: "social_global",
+          selectedSkillLabel: "Global Social",
+        }),
+        retrievalHints: {
+          enterpriseKnowledgeNeeded: false,
+          freshResearchNeeded: true,
+          confidence: 0.95,
+          reason: "fresh_research_request",
+        },
+      }),
+      expected: "fresh_external",
+    },
+    {
+      name: "explicit knowledge-base wording forces enterprise grounding",
+      input: {
+        query: "Write a company overview based on our knowledge base and official company info.",
+        enterpriseId: 45,
+      },
+      extraction: createBriefExtraction({
+        resolvedBrief: {
+          topic: "company overview",
+          audience: "overseas buyers",
+          objective: "build trust",
+          tone: "professional",
+          constraints: "",
+        },
+        retrievalHints: {
+          enterpriseKnowledgeNeeded: false,
+          freshResearchNeeded: false,
+          confidence: 0.92,
+          reason: "generic_writing",
+        },
+      }),
+      expected: "enterprise_grounded",
+    },
+    {
+      name: "enterprise plus latest market angle uses hybrid grounding",
+      input: {
+        query:
+          "Write a market update using the latest robotics manufacturing trends and our company positioning.",
+        enterpriseId: 46,
+      },
+      extraction: createBriefExtraction({
+        resolvedBrief: {
+          topic: "latest robotics manufacturing trends and our company positioning",
+          audience: "industrial distributors",
+          objective: "show why our offer matters now",
+          tone: "authoritative",
+          constraints: "",
+        },
+        retrievalHints: {
+          enterpriseKnowledgeNeeded: true,
+          freshResearchNeeded: true,
+          confidence: 0.96,
+          reason: "hybrid_grounding_request",
+        },
+      }),
+      expected: "hybrid_grounded",
+    },
+    {
+      name: "generic website copy for enterprise account still skips retrieval",
+      input: {
+        query: "Write homepage hero copy for a SaaS analytics startup.",
+        enterpriseId: 45,
+      },
+      extraction: createBriefExtraction({
+        resolvedBrief: {
+          topic: "homepage hero copy",
+          audience: "SaaS founders",
+          objective: "improve conversion",
+          tone: "clear and sharp",
+          constraints: "",
+        },
+        routingDecision: createRouting({
+          contentType: "website_copy",
+          targetPlatform: "Website",
+          outputForm: "homepage copy",
+          lengthTarget: "page-section length with scannable blocks",
+          renderPlatform: "generic",
+          renderMode: "article",
+          selectedSkillId: "website_copy",
+          selectedSkillLabel: "Website Copy",
+        }),
+      }),
+      expected: "no_retrieval",
+    },
+  ] as const
+
+  for (const scenario of scenarios) {
+    let generationOptions: any = null
+
+    const result = await runWriterSkillsTurnWithRuntime(
+      {
+        query: scenario.input.query,
+        platform: "generic",
+        mode: "article",
+        preferredLanguage: "en",
+        conversationStatus: "drafting",
+        history: [],
+        enterpriseId: scenario.input.enterpriseId,
+      },
+      createRuntime({
+        extractBrief: async () => scenario.extraction,
+        onGenerate: (_prompt, options) => {
+          generationOptions = options
+        },
+      }),
+    )
+
+    assert.equal(result.outcome, "draft_ready", scenario.name)
+    assert.equal(generationOptions?.retrievalStrategy, scenario.expected, scenario.name)
+  }
+})
+
+test("english Topic/Audience labels are enough to draft immediately without model extraction", async () => {
+  let compiledPrompt = ""
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: [
+        "Write a WeChat Official Account article.",
+        "Topic: Introduce our company's core textile product lines and overseas B2B differentiators.",
+        "Audience: overseas B2B buyers and sourcing managers.",
+        "Objective: build initial trust and drive consultation.",
+        "Tone: professional and trustworthy.",
+      ].join(" "),
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+      enterpriseId: 45,
+    },
+    createRuntime({
+      extractBrief: async () => null,
+      onGenerate: (prompt, options) => {
+        compiledPrompt = prompt
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.brief.topic, "Introduce our company's core textile product lines and overseas B2B differentiators")
+  assert.equal(result.brief.audience, "overseas B2B buyers and sourcing managers")
+  assert.equal(result.brief.objective, "build initial trust and drive consultation")
+  assert.match(result.brief.tone, /professional and trustworthy/i)
+  assert.equal(generationOptions?.enterpriseId, 45)
+  assert.equal(generationOptions?.retrievalStrategy, "enterprise_grounded")
+  assert.match(generationOptions?.researchQuery || "", /core textile product lines/i)
+  assert.match(compiledPrompt, /Target audience: overseas B2B buyers and sourcing managers/i)
+})
+
+test("introducing-pattern prompts infer topic and explicit no-follow-up wording skips clarification", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Write an English cold email to precision manufacturing buyers introducing our multi-spindle engraving machines, multi-spindle machining centers, and smart equipment solutions. Audience: procurement directors and factory owners. Objective: book a meeting. Tone: concise and professional. Output the full draft now without follow-up questions.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [],
+      enterpriseId: 46,
+    },
+    createRuntime({
+      extractBrief: async () => null,
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.routing.contentType, "email")
+  assert.equal(result.routing.targetPlatform, "Email")
+  assert.match(result.brief.topic, /multi-spindle engraving machines/i)
+  assert.equal(result.brief.audience, "procurement directors and factory owners")
+  assert.equal(result.brief.objective, "book a meeting")
+  assert.deepEqual(generationOptions?.preferredEnterpriseScopes, ["general", "product"])
+  assert.ok(Array.isArray(generationOptions?.enterpriseQueryVariants))
+  assert.ok((generationOptions?.enterpriseQueryVariants || []).length >= 1)
+  assert.ok((generationOptions?.enterpriseQueryVariants || []).every((variant: string) => variant.length <= 220))
+})
+
 test("revision keeps prior hard length target and compresses an oversized X post", async () => {
   const priorDiagnostics: WriterTurnDiagnostics = {
     ...baseDiagnostics,
@@ -454,4 +1143,42 @@ test("revision keeps prior hard length target and compresses an oversized X post
   assert.equal(result.routing.targetPlatform, "X")
   assert.equal(result.routing.lengthTarget, "100 words")
   assert.ok(toPlainLengthText(result.answer).split(/\s+/u).filter(Boolean).length <= 100)
+})
+
+test("new standalone request after a finished draft does not inherit the previous wechat route", async () => {
+  const priorDiagnostics: WriterTurnDiagnostics = {
+    ...baseDiagnostics,
+    routing: createRouting({
+      contentType: "social_cn",
+      targetPlatform: "WeChat Official Account",
+      outputForm: "WeChat Official Account native post",
+      lengthTarget: "platform-native medium length",
+      renderPlatform: "wechat",
+      renderMode: "article",
+      selectedSkillId: "social_cn",
+      selectedSkillLabel: "Chinese social",
+    }),
+  }
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "Write an English cold email for operations leaders about AI sales automation.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "text_ready",
+      history: [
+        createHistoryEntry(1, "写一篇公众号文章，主题是 AI 销售自动化。", "已生成公众号文章。", priorDiagnostics),
+      ],
+    },
+    createRuntime({
+      extractBrief: async () => null,
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.routing.contentType, "email")
+  assert.equal(result.routing.targetPlatform, "Email")
+  assert.equal(result.routing.renderPlatform, "generic")
+  assert.equal(result.routing.outputForm, "single email")
 })

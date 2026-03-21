@@ -1558,11 +1558,12 @@ export function WriterWorkspace({
         throw new Error(payload?.error || `HTTP ${response.status}`)
       }
 
+      const resolvedConversationId = payload.conversation_id
       const optimisticCacheEntries: WriterHistoryEntry[] = [
         ...historyEntriesRef.current,
         {
           id: `pending_${assistantId}`,
-          conversation_id: payload.conversation_id,
+          conversation_id: resolvedConversationId,
           query,
           answer: writerCopy.generatingDraft,
           diagnostics: null,
@@ -1578,11 +1579,11 @@ export function WriterWorkspace({
             ? message
             : {
                 ...message,
-                conversation_id: payload.conversation_id,
+                conversation_id: resolvedConversationId,
               },
         ),
       )
-      saveWriterConversationCache(payload.conversation_id, {
+      saveWriterConversationCache(resolvedConversationId, {
         entries: optimisticCacheEntries,
         conversation: payload.conversation,
         historyCursor,

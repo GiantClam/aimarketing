@@ -6,6 +6,8 @@
 # next.js
 /.next/
 /.next-*/
+/.next_backup_20260321013958/
+/.next-writer-real-accounts/
 /out/
 
 # production
