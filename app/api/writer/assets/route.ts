@@ -160,6 +160,9 @@ async function generateWriterImage(prompt: string, aspectRatio: string) {
   if (GOOGLE_IMAGE_API_KEY) {
     providerPlan.push("gemini")
   }
+
+  console.log("writer.assets.provider_plan", { providerPlan, aspectRatio })
+
   const { provider, result } = await executeImageProviderPlan({
     providerPlan,
     handlers: {
@@ -212,6 +215,7 @@ function summarizeWriterAssetError(error: unknown) {
     return {
       name: error.name,
       message: error.message || "writer_asset_failed",
+      stack: error.stack?.split("\n").slice(0, 8).join("\n"),
       cause:
         cause && typeof cause === "object"
           ? {
@@ -226,6 +230,7 @@ function summarizeWriterAssetError(error: unknown) {
   return {
     name: "UnknownError",
     message: typeof error === "string" ? error : "writer_asset_failed",
+    stack: undefined,
     cause: undefined,
   }
 }
@@ -262,18 +267,24 @@ export async function POST(request: NextRequest) {
     const plannedAssets = buildPendingWriterAssets(markdown, platform, mode)
 
     if (conversationId) {
-      await updateWriterConversationMeta(auth.user.id, conversationId, {
-        status: "image_generating",
-        imagesRequested: true,
-      })
+      try {
+        await updateWriterConversationMeta(auth.user.id, conversationId, {
+          status: "image_generating",
+          imagesRequested: true,
+        })
+      } catch (dbError) {
+        console.warn("writer.assets.db_update_generating_failed", { conversationId, error: dbError instanceof Error ? dbError.message : String(dbError) })
+      }
     }
 
     if (!hasAibermApiKey() && !GOOGLE_IMAGE_API_KEY && !hasOpenRouterApiKey()) {
       if (conversationId) {
-        await updateWriterConversationMeta(auth.user.id, conversationId, {
-          status: "failed",
-          imagesRequested: true,
-        })
+        try {
+          await updateWriterConversationMeta(auth.user.id, conversationId, {
+            status: "failed",
+            imagesRequested: true,
+          })
+        } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
       }
       return NextResponse.json(
         {
@@ -297,10 +308,12 @@ export async function POST(request: NextRequest) {
 
     if (!isWriterR2Available()) {
       if (conversationId) {
-        await updateWriterConversationMeta(auth.user.id, conversationId, {
-          status: "failed",
-          imagesRequested: true,
-        })
+        try {
+          await updateWriterConversationMeta(auth.user.id, conversationId, {
+            status: "failed",
+            imagesRequested: true,
+          })
+        } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
       }
       return NextResponse.json(
         {
@@ -326,7 +339,9 @@ export async function POST(request: NextRequest) {
 
     for (const asset of plannedAssets) {
       try {
+        console.log("writer.assets.generating", { assetId: asset.id, platform, aspectRatio: WRITER_PLATFORM_CONFIG[platform].imageAspectRatio })
         const generated = await generateWriterImage(asset.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio)
+        console.log("writer.assets.generated", { assetId: asset.id, provider: generated.provider, dataUrlLength: generated.dataUrl.length })
         let uploaded
         try {
           uploaded = await uploadWriterImageToR2({
@@ -337,7 +352,7 @@ export async function POST(request: NextRequest) {
           })
         } catch (error) {
           const summary = summarizeWriterAssetError(error)
-          console.warn("writer.assets.upload_failed", {
+          console.error("writer.assets.upload_failed", {
             assetId: asset.id,
             provider: generated.provider,
             ...summary,
@@ -355,8 +370,9 @@ export async function POST(request: NextRequest) {
         })
       } catch (error: any) {
         const summary = summarizeWriterAssetError(error)
-        console.warn("writer.assets.asset_failed", {
+        console.error("writer.assets.asset_failed", {
           assetId: asset.id,
+          prompt: asset.prompt.slice(0, 100),
           ...summary,
         })
 
@@ -374,10 +390,12 @@ export async function POST(request: NextRequest) {
     const resolvedProvider = resolveWriterImageProvider(assets)
     if (successCount === 0) {
       if (conversationId) {
-        await updateWriterConversationMeta(auth.user.id, conversationId, {
-          status: "failed",
-          imagesRequested: true,
-        })
+        try {
+          await updateWriterConversationMeta(auth.user.id, conversationId, {
+            status: "failed",
+            imagesRequested: true,
+          })
+        } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
       }
       return NextResponse.json(
         {
@@ -393,10 +411,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (conversationId) {
-      await updateWriterConversationMeta(auth.user.id, conversationId, {
-        status: "ready",
-        imagesRequested: true,
-      })
+      try {
+        await updateWriterConversationMeta(auth.user.id, conversationId, {
+          status: "ready",
+          imagesRequested: true,
+        })
+      } catch (dbError) {
+        console.warn("writer.assets.db_update_ready_failed", { conversationId, error: dbError instanceof Error ? dbError.message : String(dbError) })
+      }
     }
 
     return NextResponse.json({

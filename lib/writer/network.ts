@@ -337,6 +337,15 @@ export async function writerRequest(
       return await requestWithNode(url, init, timeoutMs)
     } catch (error) {
       lastError = error
+      console.error("writer.network.request_error", {
+        attempt,
+        url: url.slice(0, 120),
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : undefined,
+        hasProxy: hasWriterProxyTransport(),
+        isProxyError: isProxyTransportError(error),
+      })
       if (hasWriterProxyTransport() && isProxyTransportError(error)) {
         try {
           return await requestWithNode(url, { ...init }, timeoutMs, undefined)

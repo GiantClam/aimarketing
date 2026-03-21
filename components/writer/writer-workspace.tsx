@@ -49,6 +49,7 @@ import {
 } from "@/lib/query/workspace-cache"
 import {
   buildPendingWriterAssets,
+  buildWriterAssetBlueprints,
   extractWriterAssetsFromMarkdown,
   markWriterAssetsFailed,
   resolveWriterAssetMarkdown,
@@ -210,6 +211,13 @@ const buildPreviewMarkdown = ({
   const normalizedMarkdown = markdown.trim()
   if (!normalizedMarkdown) return copy.textPreviewHint
 
+  const resolvedAssets =
+    assets.length > 0
+      ? assets
+      : buildWriterAssetBlueprints(normalizedMarkdown, platform, mode).length > 0
+        ? buildPendingWriterAssets(normalizedMarkdown, platform, mode)
+        : []
+
   const threadSegments = mode === "thread" ? parseThread(normalizedMarkdown) : []
   if (mode === "thread" && threadSegments.length > 0) {
     const threadMarkdown = threadSegments
@@ -218,10 +226,10 @@ const buildPreviewMarkdown = ({
           `### ${copy.threadSectionPrefix}${index + 1}${copy.threadSectionSuffix}\n${segment}`,
       )
       .join("\n\n")
-    return assets.length > 0 ? resolveWriterAssetMarkdown(threadMarkdown, assets, platform, mode) : threadMarkdown
+    return resolvedAssets.length > 0 ? resolveWriterAssetMarkdown(threadMarkdown, resolvedAssets, platform, mode) : threadMarkdown
   }
 
-  return assets.length > 0 ? resolveWriterAssetMarkdown(normalizedMarkdown, assets, platform, mode) : normalizedMarkdown
+  return resolvedAssets.length > 0 ? resolveWriterAssetMarkdown(normalizedMarkdown, resolvedAssets, platform, mode) : normalizedMarkdown
 }
 
 const extractTitle = (markdown: string, copy: WriterCopy) =>
@@ -1748,29 +1756,6 @@ export function WriterWorkspace({
     if (markdown.trim()) await navigator.clipboard.writeText(markdown)
   }
 
-  const handleCopyAssetLink = async (asset: WriterAsset) => {
-    if (!asset.url) return
-    await navigator.clipboard.writeText(asset.url)
-  }
-
-  const handleCopyAssetMarkdown = async (asset: WriterAsset) => {
-    if (!asset.url) return
-    await navigator.clipboard.writeText(`![${asset.label}](${asset.url})`)
-  }
-
-  const handleDownloadAsset = async (asset: WriterAsset) => {
-    if (!asset.url) return
-    const response = await fetch(asset.url)
-    if (!response.ok) return
-    const blob = await response.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = blobUrl
-    link.download = `${platform}-${asset.id}.png`
-    link.click()
-    URL.revokeObjectURL(blobUrl)
-  }
-
   const handleDraftChange = (nextDraft: string) => {
     setDraft(nextDraft)
     setDraftSaveState("idle")
@@ -1820,6 +1805,7 @@ export function WriterWorkspace({
     }
 
     try {
+      console.log("writer.client.generate_assets_start", { platform, mode, conversationId, markdownLength: target.sourceMarkdown.length })
       const response = await fetch("/api/writer/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1831,6 +1817,7 @@ export function WriterWorkspace({
         }),
       })
       const data = await response.json().catch(() => null)
+      console.log("writer.client.generate_assets_response", { status: response.status, ok: response.ok, error: data?.error, assetCount: data?.data?.assets?.length })
       const nextAssets = Array.isArray(data?.data?.assets) ? (data.data.assets as WriterAsset[]) : []
 
       if (!response.ok) {
