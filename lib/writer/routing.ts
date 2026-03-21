@@ -36,13 +36,15 @@ export function inferWriterContentType(query: string): WriterContentType {
       /\b(?:twitter|x)\b.*\bthread\b/i,
       /\bthread\b.*\b(?:twitter|x)\b/i,
       /wechat.*article/i,
+      /\b(?:xiaohongshu|rednote)\b.*\b(?:note|post)\b/i,
+      /\b(?:note|post)\b.*\b(?:xiaohongshu|rednote)\b/i,
       /公众号.*文章/u,
       /小红书.*笔记/u,
       /微博.*(?:帖子|内容)/u,
       /抖音.*(?:脚本|口播)/u,
     ])
   ) {
-    if (matchesAny(query, [/(wechat|公众号|小红书|微博|抖音)/iu])) {
+    if (matchesAny(query, [/(wechat|xiaohongshu|rednote|公众号|小红书|微博|抖音)/iu])) {
       return "social_cn"
     }
     return "social_global"
@@ -159,7 +161,7 @@ export function inferWriterContentType(query: string): WriterContentType {
     return "speech"
   }
 
-  if (matchesAny(query, [/(wechat|公众号|小红书|微博|抖音)/i])) {
+  if (matchesAny(query, [/(wechat|xiaohongshu|rednote|公众号|小红书|微博|抖音)/i])) {
     return "social_cn"
   }
 
@@ -172,7 +174,7 @@ export function inferWriterContentType(query: string): WriterContentType {
 
 export function inferWriterTargetPlatform(query: string, contentType: WriterContentType): string {
   if (/(wechat|公众号)/i.test(query)) return "WeChat Official Account"
-  if (/小红书/i.test(query)) return "Xiaohongshu"
+  if (/(xiaohongshu|rednote|小红书)/i.test(query)) return "Xiaohongshu"
   if (/微博/i.test(query)) return "Weibo"
   if (/抖音/i.test(query)) return "Douyin"
   if (/\blinkedin\b/i.test(query)) return "LinkedIn"

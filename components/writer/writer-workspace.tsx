@@ -667,6 +667,25 @@ const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[], assistantNam
     },
   ])
 
+const buildOptimisticWriterHistoryEntry = (
+  id: string,
+  conversationId: string,
+  query: string,
+  answer: string,
+  createdAt: number,
+): WriterHistoryEntry => ({
+  id,
+  conversation_id: conversationId,
+  query,
+  answer,
+  diagnostics: null,
+  inputs: { contents: query },
+  created_at: createdAt,
+})
+
+const hasMessagesForWriterConversation = (messages: WriterMessage[], conversationId: string) =>
+  messages.some((message) => !message.conversation_id || message.conversation_id === conversationId)
+
 const getLatestHistoryDiagnostics = (entries: WriterHistoryEntry[]) =>
   [...entries].reverse().find((entry) => entry.diagnostics)?.diagnostics || null
 
@@ -1084,9 +1103,13 @@ export function WriterWorkspace({
     setHasMoreHistory(false)
     const meta = getWriterSessionMeta(conversationId)
     const cachedConversation = getWriterConversationCache(conversationId)
+    const keepOptimisticMessagesVisible =
+      !cachedConversation && hasMessagesForWriterConversation(messagesRef.current, conversationId)
     if (!cachedConversation) {
       historyEntriesRef.current = []
-      setMessages([])
+      if (!keepOptimisticMessagesVisible) {
+        setMessages([])
+      }
     }
     if (meta) {
       setPlatform(meta.platform)
@@ -1223,6 +1246,13 @@ export function WriterWorkspace({
 
     const hasCache = applyCachedConversation()
     if (hasCache && cachedConversation) {
+      void load({
+        background: true,
+        forceRefresh: true,
+      })
+    } else if (keepOptimisticMessagesVisible) {
+      shouldScrollToBottomRef.current = true
+      setIsConversationLoading(false)
       void load({
         background: true,
         forceRefresh: true,
@@ -1512,6 +1542,7 @@ export function WriterWorkspace({
     const optimisticCreatedAt = Math.floor(Date.now() / 1000)
     const userMessageId = `writer_user_${Date.now()}`
     const assistantId = `writer_assistant_${Date.now()}`
+    const pendingHistoryEntryId = `pending_${assistantId}`
     let taskAccepted = false
     setInputValue("")
     setIsLoading(true)
@@ -1522,6 +1553,7 @@ export function WriterWorkspace({
     setAssetsError(null)
     setPreviewMessageId(null)
     setPendingRichCopyMessageId(null)
+    shouldScrollToBottomRef.current = true
     setMessages((current) => [
       ...current,
       { id: userMessageId, conversation_id: conversationId || "", role: "user", content: query },
@@ -1533,6 +1565,28 @@ export function WriterWorkspace({
         authorLabel: writerCopy.assistantName,
       },
     ])
+
+    if (conversationId) {
+      const optimisticCacheEntries = [
+        ...historyEntriesRef.current,
+        buildOptimisticWriterHistoryEntry(
+          pendingHistoryEntryId,
+          conversationId,
+          query,
+          writerCopy.generatingDraft,
+          optimisticCreatedAt,
+        ),
+      ]
+      historyEntriesRef.current = optimisticCacheEntries
+      saveWriterConversationCache(conversationId, {
+        entries: optimisticCacheEntries,
+        conversation: getWriterConversationCache(conversationId)?.conversation || null,
+        historyCursor,
+        hasMoreHistory,
+        loadedTurnCount: optimisticCacheEntries.length,
+        updatedAt: Date.now(),
+      })
+    }
 
     try {
       const response = await fetch("/api/writer/chat", {
@@ -1559,18 +1613,25 @@ export function WriterWorkspace({
       }
 
       const resolvedConversationId = payload.conversation_id
-      const optimisticCacheEntries: WriterHistoryEntry[] = [
-        ...historyEntriesRef.current,
-        {
-          id: `pending_${assistantId}`,
-          conversation_id: resolvedConversationId,
-          query,
-          answer: writerCopy.generatingDraft,
-          diagnostics: null,
-          inputs: { contents: query },
-          created_at: optimisticCreatedAt,
-        },
-      ]
+      const optimisticCacheEntries = historyEntriesRef.current.some((entry) => entry.id === pendingHistoryEntryId)
+        ? historyEntriesRef.current.map((entry) =>
+            entry.id === pendingHistoryEntryId
+              ? {
+                  ...entry,
+                  conversation_id: resolvedConversationId,
+                }
+              : entry,
+          )
+        : [
+            ...historyEntriesRef.current,
+            buildOptimisticWriterHistoryEntry(
+              pendingHistoryEntryId,
+              resolvedConversationId,
+              query,
+              writerCopy.generatingDraft,
+              optimisticCreatedAt,
+            ),
+          ]
 
       historyEntriesRef.current = optimisticCacheEntries
       setMessages((current) =>
@@ -1621,11 +1682,28 @@ export function WriterWorkspace({
         replaceWriterUrl(`/dashboard/writer/${payload.conversation_id}`)
       }
     } catch (error) {
+      const failedMessage = `${writerCopy.requestFailedPrefix}${error instanceof Error ? error.message : writerCopy.unknownError}`
       setConversationStatus("failed")
-      patchAssistantMessage(
-        assistantId,
-        `${writerCopy.requestFailedPrefix}${error instanceof Error ? error.message : writerCopy.unknownError}`,
-      )
+      patchAssistantMessage(assistantId, failedMessage)
+      if (conversationId && historyEntriesRef.current.some((entry) => entry.id === pendingHistoryEntryId)) {
+        const failedEntries = historyEntriesRef.current.map((entry) =>
+          entry.id === pendingHistoryEntryId
+            ? {
+                ...entry,
+                answer: failedMessage,
+              }
+            : entry,
+        )
+        historyEntriesRef.current = failedEntries
+        saveWriterConversationCache(conversationId, {
+          entries: failedEntries,
+          conversation: getWriterConversationCache(conversationId)?.conversation || null,
+          historyCursor,
+          hasMoreHistory,
+          loadedTurnCount: failedEntries.length,
+          updatedAt: Date.now(),
+        })
+      }
     } finally {
       if (!taskAccepted) {
         setIsLoading(false)

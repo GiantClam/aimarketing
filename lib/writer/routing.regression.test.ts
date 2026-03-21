@@ -32,6 +32,15 @@ test("xiaohongshu note routing works for Chinese note request", () => {
   })
 })
 
+test("xiaohongshu routing works for English platform wording", () => {
+  assertRoute("Write a Xiaohongshu post about AI workflow automation for founders", {
+    contentType: "social_cn",
+    targetPlatform: "Xiaohongshu",
+    outputForm: "Xiaohongshu native post",
+    renderPlatform: "xiaohongshu",
+  })
+})
+
 test("weibo routing works for Chinese short post request", () => {
   assertRoute("帮我写一条微博，预热下周的 AI 线下活动", {
     contentType: "social_cn",

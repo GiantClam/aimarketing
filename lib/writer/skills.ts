@@ -1429,7 +1429,7 @@ function hasExplicitWriterLengthTarget(query: string) {
 }
 
 function hasExplicitWriterPlatformTarget(query: string) {
-  return /(wechat|公众号|小红书|weibo|douyin|linkedin|twitter|x thread|x post|instagram|facebook|tiktok|\b发x\b|\bto x\b)/iu.test(
+  return /(wechat|公众号|小红书|xiaohongshu|rednote|weibo|douyin|linkedin|twitter|x thread|x post|instagram|facebook|tiktok|\b发x\b|\bto x\b)/iu.test(
     query,
   )
 }
@@ -1480,6 +1480,10 @@ function hasInlineWriterSourceText(query: string) {
 }
 
 function shouldPreservePriorWriterRouting(query: string, conversationStatus?: WriterConversationStatus) {
+  if (hasExplicitWriterPlatformTarget(query)) {
+    return false
+  }
+
   if (detectRewriteOnlyIntentSafe(query) || detectWriterLengthCorrectionIntent(query)) {
     return true
   }
@@ -1503,6 +1507,12 @@ function resolveWriterRoutingFromSignals(params: {
     Boolean(params.priorRouting.contentType) &&
     currentRouting.contentType !== "longform" &&
     currentRouting.contentType !== params.priorRouting.contentType
+  const explicitPlatformShift =
+    Boolean(params.priorRouting.targetPlatform) &&
+    hasExplicitWriterPlatformTarget(params.query) &&
+    Boolean(currentRouting.targetPlatform) &&
+    currentRouting.targetPlatform !== params.priorRouting.targetPlatform
+  const explicitRouteShift = explicitScenarioShift || explicitPlatformShift
   const effectiveContentType =
     params.structuredRouting?.contentType ||
     (params.priorRouting.contentType && currentRouting.contentType === "longform"
@@ -1512,7 +1522,7 @@ function resolveWriterRoutingFromSignals(params: {
     params.structuredRouting?.targetPlatform ||
     (((params.priorRouting.contentType && currentRouting.contentType === "longform") ||
       (preservePriorRouting &&
-        !explicitScenarioShift &&
+        !explicitRouteShift &&
         params.priorRouting.targetPlatform &&
         !hasExplicitWriterPlatformTarget(params.query))) &&
     params.priorRouting.targetPlatform
@@ -1520,14 +1530,14 @@ function resolveWriterRoutingFromSignals(params: {
       : currentRouting.targetPlatform)
   const effectiveOutputForm =
     params.structuredRouting?.outputForm ||
-    (preservePriorRouting && !explicitScenarioShift && params.priorRouting.outputForm
+    (preservePriorRouting && !explicitRouteShift && params.priorRouting.outputForm
       ? params.priorRouting.outputForm
       : currentRouting.outputForm)
   const effectiveLengthTarget =
     params.structuredRouting?.lengthTarget ||
     (!hasExplicitWriterLengthTarget(params.query) &&
     preservePriorRouting &&
-    !explicitScenarioShift &&
+    !explicitRouteShift &&
     params.priorRouting.lengthTarget
       ? params.priorRouting.lengthTarget
       : currentRouting.lengthTarget)

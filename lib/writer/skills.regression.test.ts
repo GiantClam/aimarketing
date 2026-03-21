@@ -1182,3 +1182,60 @@ test("new standalone request after a finished draft does not inherit the previou
   assert.equal(result.routing.renderPlatform, "generic")
   assert.equal(result.routing.outputForm, "single email")
 })
+
+test("explicit platform switch in a rewrite request does not inherit the prior X route", async () => {
+  const priorDiagnostics: WriterTurnDiagnostics = {
+    ...baseDiagnostics,
+    routing: createRouting({
+      contentType: "social_global",
+      targetPlatform: "X",
+      outputForm: "X multi-part post",
+      lengthTarget: "5-10 short segments",
+      renderPlatform: "x",
+      renderMode: "thread",
+      selectedSkillId: "social_global",
+      selectedSkillLabel: "Global social",
+    }),
+  }
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query:
+        "Now switch this to Xiaohongshu, rewrite it in Simplified Chinese, and make the tone more conversational while keeping the same topic.",
+      platform: "generic",
+      mode: "article",
+      preferredLanguage: "auto",
+      conversationStatus: "text_ready",
+      history: [
+        createHistoryEntry(
+          1,
+          "Write an English Twitter thread for B2B sales leaders about how to improve follow-up emails.",
+          [
+            "### Segment 1",
+            "",
+            "Most B2B follow-ups are just digital noise. Here are 5 practical ways to fix your follow-up game.",
+            "",
+            "### Segment 2",
+            "",
+            "Add value in every follow-up instead of just checking in.",
+          ].join("\n"),
+          priorDiagnostics,
+        ),
+      ],
+    },
+    createRuntime({
+      extractBrief: async () => null,
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.routing.contentType, "social_cn")
+  assert.equal(result.routing.targetPlatform, "Xiaohongshu")
+  assert.equal(result.routing.renderPlatform, "xiaohongshu")
+  assert.equal(result.routing.outputForm, "Xiaohongshu native post")
+  assert.equal(generationOptions?.retrievalStrategy, "rewrite_only")
+})
