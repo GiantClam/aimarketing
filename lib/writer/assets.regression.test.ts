@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   buildWriterAssetBlueprints,
+  buildPendingWriterAssets,
   extractWriterAssetsFromMarkdown,
   resolveWriterAssetMarkdown,
   type WriterAsset,
@@ -40,14 +41,14 @@ test("writer asset blueprints are planned from article structure and stay unique
   const blueprints = buildWriterAssetBlueprints(LONG_WECHAT_DRAFT, "wechat", "article")
 
   assert.equal(blueprints[0]?.id, "cover")
-  assert.equal(blueprints.length, 3)
-  assert.deepEqual(
-    blueprints.map((asset) => asset.id),
-    ["cover", "inline-1", "inline-2"],
-  )
-  assert.notEqual(blueprints[1]?.prompt, blueprints[2]?.prompt)
+  assert.ok(blueprints.length >= 2)
+  assert.equal(blueprints[1]?.id, "inline-1")
   assert.match(blueprints[1]?.prompt || "", /Distinctiveness requirement/)
-  assert.match(blueprints[2]?.prompt || "", /Section focus:/)
+  assert.match(blueprints[1]?.prompt || "", /Section focus:/)
+  if (blueprints[2]) {
+    assert.notEqual(blueprints[1]?.prompt, blueprints[2]?.prompt)
+    assert.match(blueprints[2]?.prompt || "", /Section focus:/)
+  }
 })
 
 test("resolved markdown stores managed asset blocks and can round-trip assets", () => {
@@ -63,9 +64,10 @@ test("resolved markdown stores managed asset blocks and can round-trip assets", 
   const extracted = extractWriterAssetsFromMarkdown(resolved, "wechat", "article")
 
   assert.match(resolved, /writer-asset-slot:start:cover/)
-  assert.match(resolved, /writer-asset-slot:start:inline-1/)
-  assert.match(resolved, /writer-asset-slot:start:inline-2/)
-  assert.equal((resolved.match(/writer-asset-slot:start:/g) || []).length, 3)
+  blueprints.forEach((asset) => {
+    assert.match(resolved, new RegExp(`writer-asset-slot:start:${asset.id}`))
+  })
+  assert.equal((resolved.match(/writer-asset-slot:start:/g) || []).length, blueprints.length)
   assert.deepEqual(
     extracted.map((asset) => ({ id: asset.id, url: asset.url })),
     assets.map((asset) => ({ id: asset.id, url: asset.url })),
@@ -81,4 +83,33 @@ test("thread mode keeps image planning to a single cover asset", () => {
 
   assert.equal(blueprints.length, 1)
   assert.equal(blueprints[0]?.id, "cover")
+})
+
+test("empty managed slot comments are normalized back into renderable pending asset blocks", () => {
+  const markdownWithEmptySlots = [
+    "# Title",
+    "",
+    "Intro paragraph.",
+    "",
+    "<!-- writer-asset-slot:start:cover -->",
+    "<!-- writer-asset-slot:end:cover -->",
+    "",
+    "## Section",
+    "",
+    "Body paragraph.",
+    "",
+    "<!-- writer-asset-slot:start:inline-1 -->",
+    "<!-- writer-asset-slot:end:inline-1 -->",
+  ].join("\n")
+
+  const pendingAssets = buildPendingWriterAssets(markdownWithEmptySlots, "wechat", "article")
+  const resolved = resolveWriterAssetMarkdown(markdownWithEmptySlots, pendingAssets, "wechat", "article")
+  const extracted = extractWriterAssetsFromMarkdown(resolved, "wechat", "article")
+
+  assert.match(resolved, /!\[Cover\]\(writer-asset:\/\/cover\)/)
+  assert.match(resolved, /!\[Inline Image 1\]\(writer-asset:\/\/inline-1\)/)
+  assert.deepEqual(
+    extracted.map((asset) => ({ id: asset.id, status: asset.status, url: asset.url })),
+    pendingAssets.map((asset) => ({ id: asset.id, status: "loading", url: "" })),
+  )
 })

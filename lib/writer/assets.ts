@@ -145,6 +145,8 @@ const WRITER_PLACEHOLDER_LINE_RE =
   /^\s*!\[[^\]]*\]\(writer-asset:\/\/([a-z0-9-]+)(?:\s+["'][^"']*["'])?\)\s*$/gim
 const WRITER_MANAGED_BLOCK_RE =
   /<!--\s*writer-asset-slot:start:([a-z0-9-]+)\s*-->\s*\r?\n\s*!\[([^\]]*)\]\(([^)]+)\)\s*\r?\n\s*<!--\s*writer-asset-slot:end:\1\s*-->/gim
+const WRITER_EMPTY_MANAGED_BLOCK_RE =
+  /<!--\s*writer-asset-slot:start:([a-z0-9-]+)\s*-->\s*\r?\n\s*<!--\s*writer-asset-slot:end:\1\s*-->/gim
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
 const LEGACY_WRITER_IMAGE_LINE_RE =
   /^\s*!\[(?:Cover|Inline Image \d+|Section Image \d+|Core Insight|Action Step|Article image)\]\(([^)]+)\)\s*$/gim
@@ -196,7 +198,11 @@ function normalizeMarkdownImageUrl(rawUrl: string) {
 }
 
 function stripManagedWriterAssetBlocks(markdown: string) {
-  return markdown.replace(WRITER_MANAGED_BLOCK_RE, "").replace(/\n{3,}/g, "\n\n").trim()
+  return markdown
+    .replace(WRITER_MANAGED_BLOCK_RE, "")
+    .replace(WRITER_EMPTY_MANAGED_BLOCK_RE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
 
 function stripWriterPlaceholderLines(markdown: string) {
@@ -616,11 +622,22 @@ type ManagedWriterAssetBlock = {
 }
 
 function extractManagedWriterAssetBlocks(markdown: string): ManagedWriterAssetBlock[] {
-  return [...markdown.matchAll(WRITER_MANAGED_BLOCK_RE)].map((match) => ({
+  const managedBlocks = [...markdown.matchAll(WRITER_MANAGED_BLOCK_RE)].map((match) => ({
     id: match[1] || "",
     label: match[2] || "",
-    url: normalizeMarkdownImageUrl(match[3] || ""),
+    url: (() => {
+      const normalizedUrl = normalizeMarkdownImageUrl(match[3] || "")
+      return normalizedUrl.startsWith("writer-asset://") ? "" : normalizedUrl
+    })(),
   }))
+
+  const emptyBlocks = [...markdown.matchAll(WRITER_EMPTY_MANAGED_BLOCK_RE)].map((match) => ({
+    id: match[1] || "",
+    label: "",
+    url: "",
+  }))
+
+  return [...managedBlocks, ...emptyBlocks]
 }
 
 export function extractWriterAssetsFromMarkdown(
@@ -639,9 +656,9 @@ export function extractWriterAssetsFromMarkdown(
       return {
         ...asset,
         url: match?.url || "",
-        status: match?.url ? "ready" : "failed",
-        provider: match?.url ? ("gemini" as const) : ("error" as const),
-        error: match?.url ? undefined : "writer_asset_missing",
+        status: match?.url ? "ready" : "loading",
+        provider: match?.url ? ("gemini" as const) : ("loading" as const),
+        error: match?.url ? undefined : "writer_asset_pending",
       }
     })
   }

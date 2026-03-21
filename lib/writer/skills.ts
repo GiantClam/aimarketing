@@ -12,6 +12,7 @@ import {
 } from "@/lib/writer/aiberm"
 import {
   WRITER_CONTENT_TYPE_CONFIG,
+  WRITER_PLATFORM_CONFIG,
   isWriterContentType,
   type WriterContentType,
   type WriterLanguage,
@@ -992,7 +993,10 @@ async function getWriterRuntimeGuide(platform: WriterPlatform) {
 }
 
 function normalizeBriefValue(value: string) {
-  return value.replace(/\s+/g, " ").trim()
+  const normalized = value.replace(/\s+/g, " ").trim()
+  if (!normalized) return ""
+  if (/^[,.;:!?，。；：！？、\/\\|()[\]{}"'`~-]+$/u.test(normalized)) return ""
+  return normalized
 }
 
 function joinBriefValues(current: string, next: string) {
@@ -1345,6 +1349,35 @@ function extractEnglishLabeledAudienceFallback(text: string) {
   ])
 }
 
+function sanitizeWriterAudienceCandidate(value: string) {
+  const normalized = normalizeBriefValue(value)
+  if (!normalized) return ""
+
+  const looksLikePublishingSurfacePhrase =
+    /(?:(?:wechat|公众号|小红书|xiaohongshu|rednote|weibo|douyin|linkedin|twitter|facebook|instagram|tiktok|\bx\b).{0,24}(?:发布|发到|发在|post|thread|article|email|newsletter|website|landing page|线程|帖子|贴文)|(?:发布|发到|发在).{0,24}(?:wechat|公众号|小红书|xiaohongshu|rednote|weibo|douyin|linkedin|twitter|facebook|instagram|tiktok|\bx\b)|发布的)/iu.test(
+      normalized,
+    )
+
+  if (looksLikePublishingSurfacePhrase) {
+    return ""
+  }
+
+  return normalized
+}
+
+function sanitizeWriterTopicCandidate(value: string) {
+  const normalized = normalizeBriefValue(value)
+  if (!normalized) return ""
+  if (
+    /^(?:wechat|公众号|微信公众号|公众号文章|小红书|xiaohongshu|rednote|微博|weibo|抖音|douyin|linkedin|twitter|facebook|instagram|tiktok|x|post|thread|article|email|newsletter|website|facebook post|x thread)$/iu.test(
+      normalized,
+    )
+  ) {
+    return ""
+  }
+  return normalized
+}
+
 function mergeWriterTurnIntoBrief(
   brief: WriterConversationBrief,
   turn: string,
@@ -1355,8 +1388,12 @@ function mergeWriterTurnIntoBrief(
 
   const scopedFollowUp = requestedFields.length > 0
   const allowTopicFallback = !scopedFollowUp || requestedFields.includes("topic")
-  const topicCandidate = safeExtractTopicFromText(normalizedTurn, { allowShortFallback: allowTopicFallback })
-  const audienceCandidate = safeExtractAudienceFromText(normalizedTurn) || extractEnglishLabeledAudienceFallback(normalizedTurn)
+  const topicCandidate = sanitizeWriterTopicCandidate(
+    safeExtractTopicFromText(normalizedTurn, { allowShortFallback: allowTopicFallback }),
+  )
+  const audienceCandidate =
+    sanitizeWriterAudienceCandidate(safeExtractAudienceFromText(normalizedTurn)) ||
+    sanitizeWriterAudienceCandidate(extractEnglishLabeledAudienceFallback(normalizedTurn))
   const objectiveCandidate = safeExtractObjectiveFromText(normalizedTurn)
   const toneCandidate = safeExtractToneFromText(normalizedTurn)
   const constraintsCandidate = safeExtractConstraintsFromText(normalizedTurn)
@@ -1734,9 +1771,9 @@ function inferWriterBriefFromPromptedReply(
 
   const inferred = createEmptyWriterBrief()
   const objectiveCandidate = safeExtractObjectiveFromText(normalized)
-  const audienceCandidate = safeExtractAudienceFromText(normalized)
+  const audienceCandidate = sanitizeWriterAudienceCandidate(safeExtractAudienceFromText(normalized))
   const toneCandidate = safeExtractToneFromText(normalized)
-  const topicCandidate = safeExtractTopicFromText(normalized)
+  const topicCandidate = sanitizeWriterTopicCandidate(safeExtractTopicFromText(normalized))
   const objectiveLike = WRITER_OBJECTIVE_SIGNAL_RE.test(normalized)
   const audienceLike = WRITER_AUDIENCE_SIGNAL_RE.test(normalized)
   const looksLikeShortFollowUpReply = normalized.length <= 32 && Boolean(brief.topic)
@@ -2835,6 +2872,8 @@ function safeExtractTopicFromText(text: string, options?: { allowShortFallback?:
     /(?:\u4e3b\u9898|\u8bdd\u9898|\u9009\u9898|\u6807\u9898\u65b9\u5411|\u6838\u5fc3\u89d2\u5ea6)\s*(?::|\uff1a)?\s*([^\uff0c\u3002\uff1b;\n]+)/iu,
     /(?:topic|subject|angle)\s*(?::|\uff1a)?\s*([^,.;\n]+)/iu,
     /(?:\u5173\u4e8e|\u56f4\u7ed5|\u805a\u7126\u4e8e?)\s*([^\uff0c\u3002\uff1b;\n]+)/iu,
+    /(?:适合|适用于)\s*[^，。；;\n]+?\s*发布的\s*([^，。；;\n]+?)(?:文章|帖子|贴文|线程|串文|post|thread)/iu,
+    /(?:写|生成|起草)\s*(?:一组|一篇|一条|一个)?\s*(?:适合\s*[^，。；;\n]+?\s*发布的\s*)?([^，。；;\n]+?)(?:文章|帖子|贴文|线程|串文|post|thread)/iu,
     /(?:write|draft|create)\s+(?:an?|the)?\s*[^,.;\n]*?\s+for\s+[^,.;\n]+?\s+(?:about|on)\s+([^,.;\n]+)/iu,
     /(?:article|post|thread|email)\s+for\s+[^,.;\n]+?\s+(?:about|on)\s+([^,.;\n]+)/iu,
     /(?:write|draft|create)\s+(?:an?|the)?\s*(?:article|post|thread|wechat article|xiaohongshu note)?\s*(?:about|on)\s+([^,.;\n]+)/iu,
@@ -2842,7 +2881,11 @@ function safeExtractTopicFromText(text: string, options?: { allowShortFallback?:
     /(?:write|draft|create)\s+(?:an?|the)?\s*[^,.;\n]*?\s+introduc(?:e|ing)\s+([^.;\n]+)/iu,
     /(?:introduc(?:e|ing)|highlight(?:ing)?|focus(?:ed)?\s+on)\s+([^.;\n]+)/iu,
   ])
-  if (explicit) return explicit
+  const emphasizedChineseAngle = extractFirstMatch(text, [
+    /(?:特别是|尤其是|重点是)\s*([^，。；;\n]+)/u,
+  ])
+  if (emphasizedChineseAngle) return sanitizeWriterTopicCandidate(emphasizedChineseAngle)
+  if (explicit) return sanitizeWriterTopicCandidate(explicit)
   const objectiveLike = WRITER_OBJECTIVE_SIGNAL_RE.test(text)
   const audienceLike = WRITER_AUDIENCE_SIGNAL_RE.test(text)
   const allowShortFallback = options?.allowShortFallback !== false
@@ -2864,13 +2907,13 @@ function safeExtractAudienceFromText(text: string) {
     /(?:写给|给|面向)\s*([^\s,，。；;\n]{2,30}?)\s*(?:看|阅读|参考)/iu,
     /(?:适合|针对)\s*([^\s,，。；;\n]{2,30}?)\s*(?:小白|新手|入门|阅读)/iu,
   ])
-  return colloquial
+  return sanitizeWriterAudienceCandidate(colloquial)
 }
 
 function safeExtractObjectiveFromText(text: string) {
   return safeExtractFirstChineseMatch(text, [
     /(?:\u76ee\u6807\u662f|\u76ee\u7684\u662f|\u8bc9\u6c42\u662f|\u5e0c\u671b|\u7528\u4e8e|\u60f3\u8fbe\u5230|\u60f3\u5b9e\u73b0|\u60f3\u8ba9\u8bfb\u8005)\s*(?::|\uff1a)?\s*([^\uff0c\u3002\uff1b;\n]+)/iu,
-    /(?:goal|objective|cta|call to action)(?: is|:)?\s*([^,.;\n]+)/iu,
+    /(?:goal|objective|desired outcome|purpose|call to action)(?: is|:)?\s*([^,.;\n]+)/iu,
   ])
 }
 
@@ -2912,7 +2955,9 @@ function safeExtractToneFromText(text: string) {
 function safeExtractConstraintsFromText(text: string) {
   return safeExtractFirstChineseMatch(text, [
     /(?:\u7bc7\u5e45|\u957f\u5ea6|\u7ed3\u6784|\u683c\u5f0f|\u5fc5\u987b\u5305\u542b|\u9700\u8981\u5305\u542b|\u5b57\u6570|\u9650\u5236)\s*(?::|\uff1a)?\s*([^\u3002\uff1b;\n]+)/iu,
+    /(?:包含|包括|需要带上|需要包含|带上|带有)\s*([^\u3002\uff1b;\n]+)/iu,
     /(?:length|format|structure|must include|constraints?)(?: is|:)?\s*([^.\n]+)/iu,
+    /(?:with|including|include)\s+([^.\n]+)/iu,
   ])
 }
 
@@ -3576,6 +3621,82 @@ const defaultWriterSkillsRuntime: WriterSkillsRuntime = {
   generateDraft: generateWriterDraftWithSkills,
 }
 
+function detectWriterCapabilityQuestion(query: string) {
+  const normalized = normalizeBriefValue(query)
+  if (!normalized) return false
+
+  if (
+    detectStandaloneWriterRequest(normalized) ||
+    safeWantsDirectWriterOutput(normalized) ||
+    detectRewriteOnlyIntentSafe(normalized)
+  ) {
+    return false
+  }
+
+  const asksCapabilityInChinese =
+    /(?:你支持|你能写|你会写|你能做什么|你会做什么|能力边界|支持哪些|支持什么|有哪些(?:文章|内容|文案|格式|平台)|能写哪些|会写哪些)/u.test(
+      normalized,
+    )
+  const asksCapabilityInEnglish =
+    /(?:\bwhat\s+(?:can|do)\s+you\s+(?:write|help(?:\s+with)?|support)\b|\bwhat\s+formats?\s+do\s+you\s+support\b|\bwhich\s+platforms?\s+do\s+you\s+support\b|\bwhat\s+content\s+types?\s+do\s+you\s+support\b|\bwhat\s+can\s+this\s+writer\s+do\b|\bwriter\s+capabilit(?:y|ies)\b)/iu.test(
+      normalized,
+    )
+  const looksLikeCapabilityQuestion =
+    asksCapabilityInChinese ||
+    asksCapabilityInEnglish ||
+    ((/[?？]/u.test(normalized) || /(?:哪些|什么|怎么|what|which|how)/iu.test(normalized)) &&
+      /(?:支持|格式|平台|能力|边界|support|format|platform|capabilit(?:y|ies))/iu.test(normalized))
+
+  return looksLikeCapabilityQuestion
+}
+
+function buildWriterCapabilityAnswer(params: {
+  preferredLanguage: WriterLanguage
+  query: string
+  enterpriseEnabled: boolean
+}) {
+  const chinese = isChineseConversation(params.query, params.preferredLanguage)
+  const supportedPlatforms = [
+    WRITER_PLATFORM_CONFIG.wechat.shortLabel,
+    WRITER_PLATFORM_CONFIG.xiaohongshu.shortLabel,
+    WRITER_PLATFORM_CONFIG.weibo.shortLabel,
+    WRITER_PLATFORM_CONFIG.douyin.shortLabel,
+    WRITER_PLATFORM_CONFIG.x.shortLabel,
+    WRITER_PLATFORM_CONFIG.linkedin.shortLabel,
+    WRITER_PLATFORM_CONFIG.instagram.shortLabel,
+    WRITER_PLATFORM_CONFIG.tiktok.shortLabel,
+    WRITER_PLATFORM_CONFIG.facebook.shortLabel,
+  ].join(chinese ? "、" : ", ")
+
+  if (chinese) {
+    return [
+      "我目前支持这些写作场景：",
+      "- 长文内容：公众号文章、品牌故事、教程指南、案例分析",
+      "- 社媒内容：小红书、微博、抖音、X、LinkedIn、Instagram、TikTok、Facebook",
+      "- 商业文案：cold email、newsletter、网站文案、广告文案、产品介绍、案例、演讲稿",
+      "- 文本改写：翻译、润色、缩写、扩写、改语气、换平台重写",
+      params.enterpriseEnabled
+        ? "- 企业知识库：在确实需要企业事实、产品参数、案例、认证等信息时按需调用，不会每次都检索"
+        : "- 企业知识库：当前会话没有启用企业知识库，会按通用写作方式回答",
+      `当前支持的平台包括：${supportedPlatforms}。`,
+      "如果你愿意，可以直接告诉我：1）要写的格式或平台 2）主题 3）受众 4）目标，我就直接开始。",
+    ].join("\n")
+  }
+
+  return [
+    "Here is what I can help write:",
+    "- Long-form content: articles, guides, tutorials, brand stories, and case studies",
+    "- Social content: Xiaohongshu, Weibo, Douyin, X, LinkedIn, Instagram, TikTok, and Facebook",
+    "- Business copy: cold emails, newsletters, website copy, ads, product copy, case studies, and speeches",
+    "- Transformations: translate, rewrite, shorten, expand, change tone, or adapt content for another platform",
+    params.enterpriseEnabled
+      ? "- Enterprise knowledge: I use it only when first-party facts, product details, certifications, or case evidence are actually needed"
+      : "- Enterprise knowledge: this conversation is currently operating without enterprise knowledge grounding",
+    `Supported platforms include: ${supportedPlatforms}.`,
+    "If you want, send me the format/platform, topic, audience, and goal, and I can draft it directly.",
+  ].join("\n")
+}
+
 export async function runWriterSkillsTurnWithRuntime(
   params: {
     query: string
@@ -3593,6 +3714,37 @@ export async function runWriterSkillsTurnWithRuntime(
   const contextHistory = (params.history || []).slice(-WRITER_CONTEXT_MAX_TURNS)
   const recentHistory = contextHistory.slice(-WRITER_BRIEF_MAX_TURNS)
   const turnCount = Math.min(WRITER_BRIEF_MAX_TURNS, recentHistory.length + 1)
+  const priorRouting = getPriorRoutingFromHistory(recentHistory)
+
+  if (detectWriterCapabilityQuestion(params.query)) {
+    const routing = resolveWriterRoutingFromSignals({
+      query: params.query,
+      priorRouting,
+      conversationStatus: params.conversationStatus,
+    })
+
+    return {
+      outcome: "needs_clarification",
+      answer: buildWriterCapabilityAnswer({
+        preferredLanguage,
+        query: params.query,
+        enterpriseEnabled: Boolean(params.enterpriseId),
+      }),
+      diagnostics: { ...createEmptyWriterDiagnostics("rewrite_only"), routing },
+      brief: createEmptyWriterBrief(),
+      routing,
+      missingFields: [],
+      turnCount,
+      maxTurns: WRITER_BRIEF_MAX_TURNS,
+      readyForGeneration: false,
+      selectedSkill: {
+        id: "writer-briefing",
+        label: "Writer capability guidance",
+        stage: "briefing",
+      },
+    }
+  }
+
   const heuristicBrief = mergeStructuredWriterBrief(
     collectWriterBriefFromConversation(recentHistory, params.query),
     normalizeWriterPreloadedBrief(params.preloadedBrief),
@@ -3620,7 +3772,6 @@ export async function runWriterSkillsTurnWithRuntime(
     structuredExtraction && structuredExtraction.confidence >= 0.45
       ? mergeStructuredWriterBrief(seededBrief, structuredExtraction.resolvedBrief)
       : seededBrief
-  const priorRouting = getPriorRoutingFromHistory(recentHistory)
   const routing = resolveWriterRoutingFromSignals({
     query: params.query,
     priorRouting,

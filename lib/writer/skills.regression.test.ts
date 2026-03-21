@@ -855,6 +855,62 @@ test("translation request with inline source text drafts immediately without cla
   assert.match(compiledPrompt, /我们专注于为制造业客户提供自动化设备解决方案/u)
 })
 
+test("capability question returns guidance instead of entering the drafting flow", async () => {
+  let generated = false
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "你支持哪些文章格式？",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "zh",
+      conversationStatus: "drafting",
+      enterpriseId: 12,
+      history: [],
+    },
+    createRuntime({
+      extractBrief: async () => {
+        throw new Error("extractBrief should not run for capability questions")
+      },
+      onGenerate: () => {
+        generated = true
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "needs_clarification")
+  assert.equal(result.readyForGeneration, false)
+  assert.equal(generated, false)
+  assert.equal(result.selectedSkill.id, "writer-briefing")
+  assert.match(result.answer, /我目前支持这些写作场景：/)
+  assert.match(result.answer, /企业知识库：在确实需要企业事实/u)
+})
+
+test("platform publishing phrasing does not pollute audience and keeps topic/constraints intact", async () => {
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "写一组适合 X / Facebook 发布的 AI 创业观察线程，包含 hook、核心观点和结尾 CTA。",
+      platform: "generic",
+      mode: "article",
+      preferredLanguage: "zh",
+      conversationStatus: "drafting",
+      history: [],
+    },
+    createRuntime({
+      extractBrief: async () => null,
+    }),
+  )
+
+  assert.equal(result.outcome, "needs_clarification")
+  assert.equal(result.brief.topic, "AI 创业观察")
+  assert.equal(result.brief.audience, "")
+  assert.equal(result.brief.objective, "")
+  assert.match(result.brief.constraints, /hook/u)
+  assert.match(result.brief.constraints, /CTA/)
+  assert.doesNotMatch(result.answer, /主题或核心角度/u)
+  assert.match(result.answer, /受众|目标/u)
+})
+
 test("retrieval strategy matrix covers broader writer intents", async () => {
   const scenarios = [
     {

@@ -206,6 +206,30 @@ function getWriterImageModelForProvider(provider: "aiberm" | "gemini" | "openrou
   return WRITER_OPENROUTER_IMAGE_MODEL
 }
 
+function summarizeWriterAssetError(error: unknown) {
+  if (error instanceof Error) {
+    const cause = error.cause as { message?: string; code?: string; name?: string } | undefined
+    return {
+      name: error.name,
+      message: error.message || "writer_asset_failed",
+      cause:
+        cause && typeof cause === "object"
+          ? {
+              name: cause.name,
+              message: cause.message,
+              code: cause.code,
+            }
+          : undefined,
+    }
+  }
+
+  return {
+    name: "UnknownError",
+    message: typeof error === "string" ? error : "writer_asset_failed",
+    cause: undefined,
+  }
+}
+
 function resolveWriterImageProvider(
   assets: Array<{
     status: "ready" | "failed"
@@ -303,12 +327,23 @@ export async function POST(request: NextRequest) {
     for (const asset of plannedAssets) {
       try {
         const generated = await generateWriterImage(asset.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio)
-        const uploaded = await uploadWriterImageToR2({
-          userId: auth.user.id,
-          conversationId,
-          assetId: asset.id,
-          dataUrl: generated.dataUrl,
-        })
+        let uploaded
+        try {
+          uploaded = await uploadWriterImageToR2({
+            userId: auth.user.id,
+            conversationId,
+            assetId: asset.id,
+            dataUrl: generated.dataUrl,
+          })
+        } catch (error) {
+          const summary = summarizeWriterAssetError(error)
+          console.warn("writer.assets.upload_failed", {
+            assetId: asset.id,
+            provider: generated.provider,
+            ...summary,
+          })
+          throw error
+        }
 
         assets.push({
           ...asset,
@@ -319,16 +354,10 @@ export async function POST(request: NextRequest) {
           provider: generated.provider,
         })
       } catch (error: any) {
+        const summary = summarizeWriterAssetError(error)
         console.warn("writer.assets.asset_failed", {
           assetId: asset.id,
-          message: error?.message || "writer_asset_failed",
-          cause:
-            error?.cause && typeof error.cause === "object"
-              ? {
-                message: "message" in error.cause ? error.cause.message : undefined,
-                code: "code" in error.cause ? error.cause.code : undefined,
-              }
-              : undefined,
+          ...summary,
         })
 
         assets.push({
@@ -336,7 +365,7 @@ export async function POST(request: NextRequest) {
           url: "",
           status: "failed",
           provider: "error",
-          error: error?.message || "writer_asset_failed",
+          error: summary.message,
         })
       }
     }

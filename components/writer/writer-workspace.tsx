@@ -91,6 +91,7 @@ type WriterMessage = {
   role: "user" | "assistant"
   content: string
   authorLabel?: string
+  diagnostics?: WriterTurnDiagnostics | null
 }
 
 type WriterCopy = AppMessages["writer"]
@@ -105,6 +106,9 @@ type WriterPreviewContext = {
   messageId: string | null
   sourceMarkdown: string
   previewMarkdown: string
+  platform: WriterPlatform
+  mode: WriterMode
+  routing: WriterTurnDiagnostics["routing"] | null
   assets: WriterAsset[]
   assetsLoading: boolean
   assetsError: string | null
@@ -133,8 +137,25 @@ type KnowledgeStatus = {
 
 const sanitize = (raw: string) => raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
 const normalizeWriterMessageContent = (content: string) => content.trim()
+const getWriterRoutingSignature = (diagnostics?: WriterTurnDiagnostics | null) => {
+  const routing = diagnostics?.routing
+  if (!routing) return ""
+  return [
+    routing.contentType,
+    routing.targetPlatform,
+    routing.outputForm,
+    routing.lengthTarget,
+    routing.renderPlatform,
+    routing.renderMode,
+  ].join("|")
+}
 const getWriterMessageSignature = (message: WriterMessage) =>
-  [message.role, normalizeWriterMessageContent(message.content), message.authorLabel || ""].join("|")
+  [
+    message.role,
+    normalizeWriterMessageContent(message.content),
+    message.authorLabel || "",
+    getWriterRoutingSignature(message.diagnostics),
+  ].join("|")
 const areWriterMessageListsEquivalent = (left: WriterMessage[], right: WriterMessage[]) => {
   if (left.length !== right.length) return false
   return left.every((message, index) => getWriterMessageSignature(message) === getWriterMessageSignature(right[index]))
@@ -250,6 +271,68 @@ const getPlatformShellClass = (platform: WriterPlatform) => {
   return "border-emerald-200 bg-card text-slate-950"
 }
 
+function WriterAssetPlaceholder({
+  asset,
+  copy,
+  compact = false,
+}: {
+  asset: WriterAsset
+  copy?: WriterCopy
+  compact?: boolean
+}) {
+  const isFailed = asset.status === "failed"
+  const statusLabel = isFailed
+    ? copy?.imageUnavailable || "Image unavailable"
+    : asset.status === "loading"
+      ? copy?.imageGenerating || "Generating image"
+      : copy?.waitingImage || "Waiting for image"
+  const accentClass = isFailed
+    ? "border-destructive/30 bg-destructive/5"
+    : asset.id === "cover"
+      ? "border-sky-200 bg-sky-50/70"
+      : "border-violet-200 bg-violet-50/70"
+  const labelClass = isFailed
+    ? "bg-destructive/10 text-destructive"
+    : asset.id === "cover"
+      ? "bg-sky-100 text-sky-700"
+      : "bg-violet-100 text-violet-700"
+
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-xl border-2",
+        compact ? "h-24" : "min-h-56",
+        accentClass,
+      )}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.9),transparent_42%),linear-gradient(135deg,rgba(15,23,42,0.06),transparent_55%,rgba(15,23,42,0.08))]" />
+      <div className="absolute inset-0 opacity-60 [background-image:linear-gradient(135deg,rgba(148,163,184,0.12)_25%,transparent_25%,transparent_50%,rgba(148,163,184,0.12)_50%,rgba(148,163,184,0.12)_75%,transparent_75%,transparent)] [background-size:24px_24px]" />
+      <div className="relative flex h-full flex-col justify-between p-4">
+        <div className="flex items-start justify-between gap-3">
+          <Badge className={cn("rounded-full border-0 px-2.5 py-1 text-[10px] font-medium", labelClass)}>
+            {asset.label}
+          </Badge>
+          <div className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-medium text-slate-600 backdrop-blur">
+            {isFailed ? <Sparkles className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}
+            {statusLabel}
+          </div>
+        </div>
+        <div className="max-w-[85%]">
+          <p className={cn("font-medium text-slate-800", compact ? "text-xs leading-5" : "text-sm leading-6")}>
+            {asset.title}
+          </p>
+          {!compact ? (
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              {isFailed ? copy?.imageGenerationFailedPrefix || "Image generation failed: " : "Placeholder visible while the image is being prepared."}
+              {isFailed && asset.error ? asset.error : ""}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function renderMarkdown(content: string, assets: WriterAsset[], className?: string, copy?: WriterCopy) {
   return (
     <div
@@ -288,14 +371,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
                         className="max-h-[420px] w-full object-cover"
                       />
                     ) : (
-                      <div className="flex w-full flex-col items-center justify-center gap-2 px-5 py-12 text-center text-slate-500">
-                        {writerAsset.status === "failed" ? null : <Loader2 className="h-5 w-5 animate-spin" />}
-                        <p className="text-sm font-medium text-slate-700">
-                          {writerAsset.status === "failed"
-                            ? copy?.imageUnavailable || "Image unavailable"
-                            : copy?.imageGenerating || "Generating image"}
-                        </p>
-                      </div>
+                      <WriterAssetPlaceholder asset={writerAsset} copy={copy} />
                     )}
                   </div>
                 </figure>
@@ -607,9 +683,7 @@ function PreviewResourceStrip({
             {asset.url ? (
               <img src={asset.url} alt={copy.imageAlt} loading="lazy" decoding="async" className="h-24 w-full rounded-xl object-cover" />
             ) : (
-              <div className="flex h-24 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white px-3 text-center text-xs font-medium text-slate-700">
-                {asset.status === "failed" ? copy.imageUnavailable : assetsLoading ? copy.generatingImages : copy.waitingImage}
-              </div>
+              <WriterAssetPlaceholder asset={asset} copy={copy} compact />
             )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" className="rounded-full border-slate-950 bg-slate-950 text-white hover:bg-slate-800 hover:text-white" onClick={() => onDownload(asset)} disabled={!asset.url}>
@@ -664,6 +738,7 @@ const mapHistoryEntriesToMessages = (entries: WriterHistoryEntry[], assistantNam
       role: "assistant" as const,
       content: sanitize(message.answer || ""),
       authorLabel: assistantName,
+      diagnostics: message.diagnostics || null,
     },
   ])
 
@@ -997,6 +1072,14 @@ export function WriterWorkspace({
 
   const buildPreviewContextForMessage = (message: WriterMessage | null): WriterPreviewContext => {
     const isLatest = Boolean(message?.id && message.id === latestAssistantMessageId)
+    const previewRouting =
+      message?.diagnostics?.routing || (isLatest ? latestDiagnostics?.routing || null : null)
+    const previewPlatform = previewRouting?.renderPlatform
+      ? normalizeWriterPlatform(previewRouting.renderPlatform)
+      : platform
+    const previewMode = previewRouting?.renderMode
+      ? normalizeWriterMode(previewPlatform, previewRouting.renderMode)
+      : mode
     const sourceMarkdown = message
       ? isLatest
         ? (baseDraft.trim() || sanitize(message.content))
@@ -1004,16 +1087,15 @@ export function WriterWorkspace({
       : baseDraft
     const scopedAssetState = message && !isLatest ? (versionAssetState[message.id] ?? EMPTY_VERSION_ASSET_STATE) : null
     const extractedAssets =
-      message && !isLatest ? extractWriterAssetsFromMarkdown(sourceMarkdown, platform, mode) : []
-    const renderableExtractedAssets = extractedAssets.some((asset) => Boolean(asset.url)) ? extractedAssets : []
+      message && !isLatest ? extractWriterAssetsFromMarkdown(sourceMarkdown, previewPlatform, previewMode) : []
     const scopedAssets = isLatest
       ? assets
       : scopedAssetState && scopedAssetState.assets.length > 0
         ? scopedAssetState.assets
-        : renderableExtractedAssets
+        : extractedAssets
     const markdownAssets = isLatest
       ? scopedAssets
-      : scopedAssets.some((asset) => Boolean(asset.url))
+      : scopedAssets.length > 0
         ? scopedAssets
         : []
     const hasGeneratedImages = scopedAssets.some((asset) => Boolean(asset.url))
@@ -1027,10 +1109,13 @@ export function WriterWorkspace({
       previewMarkdown: buildPreviewMarkdown({
         markdown: sourceMarkdown,
         assets: markdownAssets,
-        mode,
-        platform,
+        mode: previewMode,
+        platform: previewPlatform,
         copy: writerCopy,
       }),
+      platform: previewPlatform,
+      mode: previewMode,
+      routing: previewRouting,
       assets: scopedAssets,
       assetsLoading: isLatest ? assetsLoading : scopedAssetState?.loading ?? false,
       assetsError: isLatest ? assetsError : scopedAssetState?.error ?? null,
@@ -1931,6 +2016,9 @@ export function WriterWorkspace({
   const currentPlatformLabel = activeRouting?.targetPlatform || writerConfig.shortLabel
   const currentModeLabel = activeRouting?.outputForm || (mode === "thread" ? "Thread" : "Standard")
   const currentLengthLabel = activeRouting?.lengthTarget || writerConfig.wordRange
+  const activePreviewRouting = activePreview.routing || activeRouting
+  const activePreviewPlatformLabel =
+    activePreviewRouting?.targetPlatform || WRITER_PLATFORM_CONFIG[activePreview.platform].shortLabel
   const currentLanguageLabel = WRITER_LANGUAGE_CONFIG[language].label
   const workspaceStatus = loading
     ? "Checking sign-in..."
@@ -2185,12 +2273,12 @@ export function WriterWorkspace({
         }}
       >
         <SheetContent side="right" className="w-full gap-0 overflow-hidden border-l-2 border-border bg-card p-0 sm:max-w-[920px]">
-          <div className={cn("h-full", getPlatformPreviewPalette(platform))}>
+          <div className={cn("h-full", getPlatformPreviewPalette(activePreview.platform))}>
             <SheetHeader className="border-b-2 border-border bg-card px-4 py-3">
               <div className="flex items-center justify-between gap-3 pr-8">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="rounded-full border-2 border-border bg-accent px-2.5 py-1 text-[10px] font-medium text-accent-foreground">
-                    {currentPlatformLabel}
+                    {activePreviewPlatformLabel}
                   </Badge>
                   <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] font-medium text-slate-900">
                     {estimateReadingTime(activePreview.previewMarkdown, writerCopy)}
@@ -2206,7 +2294,7 @@ export function WriterWorkspace({
                   {writerCopy.collapse}
                 </Button>
               </div>
-              <SheetTitle className="sr-only">{`${currentPlatformLabel} ${writerCopy.previewSheetTitle}`}</SheetTitle>
+              <SheetTitle className="sr-only">{`${activePreviewPlatformLabel} ${writerCopy.previewSheetTitle}`}</SheetTitle>
               <SheetDescription className="sr-only">{writerCopy.previewSheetDescription}</SheetDescription>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-73px)]">
@@ -2214,7 +2302,7 @@ export function WriterWorkspace({
                 <div
                   className={cn(
                     "space-y-4 rounded-[32px] border-2 p-5",
-                    getPlatformShellClass(platform),
+                    getPlatformShellClass(activePreview.platform),
                   )}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2297,8 +2385,8 @@ export function WriterWorkspace({
                     <div ref={previewContentRef} className="p-6">
                       <PlatformPreview
                         copy={writerCopy}
-                        platform={platform}
-                        mode={mode}
+                        platform={activePreview.platform}
+                        mode={activePreview.mode}
                         markdown={activePreview.previewMarkdown}
                         assets={activePreview.assets}
                         editable={activePreview.isLatest && activePreview.hasDraft}
