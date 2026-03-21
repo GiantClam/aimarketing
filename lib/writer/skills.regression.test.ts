@@ -856,6 +856,7 @@ test("translation request with inline source text drafts immediately without cla
 })
 
 test("capability question returns guidance instead of entering the drafting flow", async () => {
+  let extracted = false
   let generated = false
 
   const result = await runWriterSkillsTurnWithRuntime(
@@ -870,7 +871,30 @@ test("capability question returns guidance instead of entering the drafting flow
     },
     createRuntime({
       extractBrief: async () => {
-        throw new Error("extractBrief should not run for capability questions")
+        extracted = true
+        return {
+          resolvedBrief: {
+            topic: "",
+            audience: "",
+            objective: "",
+            tone: "",
+            constraints: "",
+          },
+          routingDecision: createRouting(),
+          answeredFields: [],
+          suggestedFollowUpFields: [],
+          suggestedFollowUpQuestion: "",
+          turnIntent: "capability_question",
+          userWantsDirectOutput: false,
+          briefSufficient: false,
+          retrievalHints: {
+            enterpriseKnowledgeNeeded: false,
+            freshResearchNeeded: false,
+            confidence: 0.95,
+            reason: "capability_question",
+          },
+          confidence: 0.95,
+        }
       },
       onGenerate: () => {
         generated = true
@@ -880,6 +904,7 @@ test("capability question returns guidance instead of entering the drafting flow
 
   assert.equal(result.outcome, "needs_clarification")
   assert.equal(result.readyForGeneration, false)
+  assert.equal(extracted, true)
   assert.equal(generated, false)
   assert.equal(result.selectedSkill.id, "writer-briefing")
   assert.match(result.answer, /我目前支持这些写作场景：/)

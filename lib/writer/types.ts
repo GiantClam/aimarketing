@@ -31,6 +31,10 @@ export type WriterRoutingDecision = {
   renderMode: WriterMode
   selectedSkillId: string
   selectedSkillLabel: string
+  selectedPlatformSkillId?: string | null
+  selectedPlatformSkillLabel?: string | null
+  selectedStyleSkillId?: string | null
+  selectedStyleSkillLabel?: string | null
 }
 
 export type WriterPreloadedBrief = Partial<{

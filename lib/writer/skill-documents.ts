@@ -4,6 +4,12 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { WriterContentType, WriterPlatform } from "@/lib/writer/config"
+import {
+  getWriterBriefingSkillDirs,
+  getWriterContentSkillMeta,
+  getWriterPlatformSkillByTargetPlatform,
+  getWriterStyleSkillMeta,
+} from "@/lib/writer/skill-catalog"
 
 export type WriterRuntimeSkillDocument = {
   runtimeLabel: string
@@ -28,26 +34,6 @@ export type WriterContentSkillDocument = {
   runtimeLabel: string
   guidance: string
 }
-
-const WRITER_SKILL_FILE_BY_PLATFORM: Partial<Record<WriterPlatform, string>> = {
-  wechat: "writer-wechat",
-  xiaohongshu: "writer-xiaohongshu",
-  x: "writer-x",
-  facebook: "writer-facebook",
-}
-const WRITER_CONTENT_SKILL_DIR_BY_TYPE: Record<WriterContentType, string> = {
-  social_cn: "social-writing-cn",
-  social_global: "social-writing-global",
-  longform: "longform-writing",
-  email: "email-writing",
-  newsletter: "newsletter-writing",
-  website_copy: "website-copy",
-  ads: "ads-writing",
-  case_study: "case-study-writing",
-  product: "product-writing",
-  speech: "speech-writing",
-}
-const WRITER_BRIEFING_SKILL_DIR_CANDIDATES = ["writer-briefing", "content-briefing"] as const
 
 const writerSkillCache = new Map<string, Promise<string>>()
 
@@ -111,10 +97,13 @@ function parseListSection(value: string) {
 }
 
 export async function getWriterRepoHostedSkillDocument(
-  platform: WriterPlatform,
+  params: {
+    renderPlatform: WriterPlatform
+    targetPlatform?: string | null
+  },
   fallback: WriterRuntimeSkillDocument,
 ): Promise<WriterRuntimeSkillDocument> {
-  const dirName = WRITER_SKILL_FILE_BY_PLATFORM[platform]
+  const dirName = getWriterPlatformSkillByTargetPlatform(params.targetPlatform || "")?.dirName
   if (!dirName) {
     return fallback
   }
@@ -137,7 +126,8 @@ export async function getWriterRepoHostedSkillDocument(
     }
   } catch (error) {
     console.warn("writer.skill-doc.read-failed", {
-      platform,
+      platform: params.renderPlatform,
+      targetPlatform: params.targetPlatform,
       path: getSkillDocumentPath(dirName),
       message: error instanceof Error ? error.message : String(error),
     })
@@ -148,7 +138,7 @@ export async function getWriterRepoHostedSkillDocument(
 export async function getWriterBriefingSkillDocument(
   fallback: WriterBriefingSkillDocument,
 ): Promise<WriterBriefingSkillDocument> {
-  for (const dirName of WRITER_BRIEFING_SKILL_DIR_CANDIDATES) {
+  for (const dirName of getWriterBriefingSkillDirs()) {
     try {
       const markdown = await readSkillDocument(dirName)
       return {
@@ -179,7 +169,10 @@ export async function getWriterContentSkillDocument(
   contentType: WriterContentType,
   fallback: WriterContentSkillDocument,
 ): Promise<WriterContentSkillDocument> {
-  const dirName = WRITER_CONTENT_SKILL_DIR_BY_TYPE[contentType]
+  const dirName = getWriterContentSkillMeta(contentType)?.dirName
+  if (!dirName) {
+    return fallback
+  }
 
   try {
     const markdown = await readSkillDocument(dirName)
@@ -197,11 +190,33 @@ export async function getWriterContentSkillDocument(
   }
 }
 
-export function getWriterRepoHostedSkillPath(platform: WriterPlatform) {
-  const dirName = WRITER_SKILL_FILE_BY_PLATFORM[platform]
+export async function getWriterStyleSkillDocument(styleId: string, fallback: WriterContentSkillDocument) {
+  const dirName = getWriterStyleSkillMeta(styleId)?.dirName
+  if (!dirName) {
+    return fallback
+  }
+
+  try {
+    const markdown = await readSkillDocument(dirName)
+    return {
+      runtimeLabel: collapseWhitespace(extractSection(markdown, "Runtime Label")) || fallback.runtimeLabel,
+      guidance: stripFrontmatter(markdown) || fallback.guidance,
+    }
+  } catch (error) {
+    console.warn("writer.style-skill.read-failed", {
+      styleId,
+      path: getSkillDocumentPath(dirName),
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return fallback
+  }
+}
+
+export function getWriterRepoHostedSkillPath(targetPlatform: string) {
+  const dirName = getWriterPlatformSkillByTargetPlatform(targetPlatform)?.dirName
   return dirName ? getSkillDocumentPath(dirName) : ""
 }
 
 export function getWriterBriefingSkillPath() {
-  return getSkillDocumentPath(WRITER_BRIEFING_SKILL_DIR_CANDIDATES[0])
+  return getSkillDocumentPath(getWriterBriefingSkillDirs()[0] || "writer-briefing")
 }

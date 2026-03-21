@@ -1,0 +1,218 @@
+{
+  "briefingSkillDirs": ["writer-briefing", "content-briefing"],
+  "contentSkills": [
+    {
+      "id": "social_cn",
+      "dirName": "social-writing-cn",
+      "label": "China-platform social writing",
+      "defaultTargetPlatform": "WeChat Official Account",
+      "defaultOutputForm": "platform-native social draft",
+      "defaultLengthTarget": "platform-native medium length"
+    },
+    {
+      "id": "social_global",
+      "dirName": "social-writing-global",
+      "label": "Global social writing",
+      "defaultTargetPlatform": "LinkedIn",
+      "defaultOutputForm": "platform-native social draft",
+      "defaultLengthTarget": "platform-native medium length"
+    },
+    {
+      "id": "longform",
+      "dirName": "longform-writing",
+      "label": "Long-form writing",
+      "defaultTargetPlatform": "Long-form publishing",
+      "defaultOutputForm": "long-form article",
+      "defaultLengthTarget": "800-1500 words"
+    },
+    {
+      "id": "email",
+      "dirName": "email-writing",
+      "label": "Email writing",
+      "defaultTargetPlatform": "Email",
+      "defaultOutputForm": "single email",
+      "defaultLengthTarget": "120-220 words"
+    },
+    {
+      "id": "newsletter",
+      "dirName": "newsletter-writing",
+      "label": "Newsletter and lifecycle writing",
+      "defaultTargetPlatform": "Email",
+      "defaultOutputForm": "newsletter issue",
+      "defaultLengthTarget": "250-600 words"
+    },
+    {
+      "id": "website_copy",
+      "dirName": "website-copy",
+      "label": "Website copywriting",
+      "defaultTargetPlatform": "Website",
+      "defaultOutputForm": "sectioned website copy",
+      "defaultLengthTarget": "page-section length with scannable blocks"
+    },
+    {
+      "id": "ads",
+      "dirName": "ads-writing",
+      "label": "Ads and performance copy",
+      "defaultTargetPlatform": "Ads",
+      "defaultOutputForm": "ad copy variant set",
+      "defaultLengthTarget": "short-form variants"
+    },
+    {
+      "id": "case_study",
+      "dirName": "case-study-writing",
+      "label": "Case study writing",
+      "defaultTargetPlatform": "Case Study",
+      "defaultOutputForm": "formal case study",
+      "defaultLengthTarget": "600-1200 words"
+    },
+    {
+      "id": "product",
+      "dirName": "product-writing",
+      "label": "Product writing",
+      "defaultTargetPlatform": "Product",
+      "defaultOutputForm": "product marketing copy",
+      "defaultLengthTarget": "300-800 words"
+    },
+    {
+      "id": "speech",
+      "dirName": "speech-writing",
+      "label": "Speech writing",
+      "defaultTargetPlatform": "Speech",
+      "defaultOutputForm": "full speech script",
+      "defaultLengthTarget": "fit the requested speaking time"
+    }
+  ],
+  "platformSkills": [
+    {
+      "id": "wechat",
+      "dirName": "writer-wechat",
+      "label": "WeChat Official Account",
+      "targetPlatform": "WeChat Official Account",
+      "renderPlatform": "wechat",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": ["wechat", "wechat official account", "\u516c\u4f17\u53f7", "\u5fae\u4fe1\u516c\u4f17\u53f7"]
+    },
+    {
+      "id": "xiaohongshu",
+      "dirName": "writer-xiaohongshu",
+      "label": "Xiaohongshu",
+      "targetPlatform": "Xiaohongshu",
+      "renderPlatform": "xiaohongshu",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": ["xiaohongshu", "rednote", "\u5c0f\u7ea2\u4e66"]
+    },
+    {
+      "id": "weibo",
+      "label": "Weibo",
+      "targetPlatform": "Weibo",
+      "renderPlatform": "weibo",
+      "supportsThread": true,
+      "listed": true,
+      "aliases": ["weibo", "\u5fae\u535a"]
+    },
+    {
+      "id": "douyin",
+      "label": "Douyin",
+      "targetPlatform": "Douyin",
+      "renderPlatform": "douyin",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": ["douyin", "\u6296\u97f3", "tiktok china"]
+    },
+    {
+      "id": "x",
+      "dirName": "writer-x",
+      "label": "X",
+      "targetPlatform": "X",
+      "renderPlatform": "x",
+      "supportsThread": true,
+      "listed": true,
+      "aliases": ["twitter", "x thread", "x post"],
+      "queryPatterns": ["(^|[^a-z])x( thread| post)?([^a-z]|$)", "twitter"]
+    },
+    {
+      "id": "linkedin",
+      "label": "LinkedIn",
+      "targetPlatform": "LinkedIn",
+      "renderPlatform": "linkedin",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": ["linkedin"]
+    },
+    {
+      "id": "instagram",
+      "label": "Instagram",
+      "targetPlatform": "Instagram",
+      "renderPlatform": "instagram",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": ["instagram", "ig"]
+    },
+    {
+      "id": "tiktok",
+      "label": "TikTok",
+      "targetPlatform": "TikTok",
+      "renderPlatform": "tiktok",
+      "supportsThread": false,
+      "listed": true,
+      "aliases": ["tiktok"]
+    },
+    {
+      "id": "facebook",
+      "dirName": "writer-facebook",
+      "label": "Facebook",
+      "targetPlatform": "Facebook",
+      "renderPlatform": "facebook",
+      "supportsThread": true,
+      "listed": true,
+      "aliases": ["facebook", "fb"]
+    }
+  ],
+  "styleSkills": [
+    {
+      "id": "analytical",
+      "dirName": "style-analytical",
+      "label": "Analytical",
+      "aliases": [
+        "analytical",
+        "analysis-driven",
+        "deep analysis",
+        "\u4e13\u4e1a\u5206\u6790",
+        "\u7406\u6027\u5206\u6790",
+        "\u6df1\u5ea6\u5206\u6790",
+        "\u4e13\u4e1a\u611f"
+      ]
+    },
+    {
+      "id": "story-driven",
+      "dirName": "style-story-driven",
+      "label": "Story-driven",
+      "aliases": [
+        "story-driven",
+        "storytelling",
+        "narrative",
+        "\u6545\u4e8b\u5316",
+        "\u53d9\u4e8b\u611f",
+        "\u8bb2\u6545\u4e8b",
+        "\u6709\u6545\u4e8b\u611f"
+      ]
+    },
+    {
+      "id": "conversion",
+      "dirName": "style-conversion",
+      "label": "Conversion-focused",
+      "aliases": [
+        "conversion-focused",
+        "conversion",
+        "persuasive",
+        "salesy",
+        "\u8f6c\u5316\u5bfc\u5411",
+        "\u8f6c\u5316\u578b",
+        "\u6210\u4ea4\u5bfc\u5411",
+        "\u8bf4\u670d\u578b"
+      ]
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import {
   type EnterpriseKnowledgeContext,
   type EnterpriseKnowledgeScope,
 } from "@/lib/dify/enterprise-knowledge"
+/* eslint-disable no-useless-escape */
 import { z } from "zod"
 import {
   generateTextWithWriterModel,
@@ -22,10 +23,12 @@ import {
 import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
 import { buildWriterRoutingDecision, describeWriterRoute } from "@/lib/writer/routing"
+import { listWriterPlatformSkills } from "@/lib/writer/skill-catalog"
 import {
   getWriterBriefingSkillDocument,
   getWriterContentSkillDocument,
   getWriterRepoHostedSkillDocument,
+  getWriterStyleSkillDocument,
   type WriterBriefingSkillDocument,
   type WriterContentSkillDocument,
   type WriterRuntimeSkillDocument,
@@ -44,6 +47,7 @@ const GOOGLE_SEARCH_ENGINE_ID = process.env.GOOGLE_SEARCH_ENGINE_ID || ""
 const JINA_API_KEY = process.env.JINA_API_KEY || ""
 
 const WRITER_TEXT_MODEL = process.env.WRITER_TEXT_MODEL || "google/gemini-3-flash"
+const WRITER_SKILL_MODEL = process.env.WRITER_SKILL_MODEL || "gpt-5.3-codex"
 const WRITER_ENABLE_WEB_RESEARCH = process.env.WRITER_ENABLE_WEB_RESEARCH !== "false"
 const WRITER_REQUIRE_WEB_RESEARCH = process.env.WRITER_REQUIRE_WEB_RESEARCH === "true"
 const WRITER_RESEARCH_CACHE_TTL_MS = Math.max(
@@ -298,6 +302,7 @@ const WRITER_CONTEXT_ENTRY_MAX_CHARS = 360
 const WRITER_PRIOR_DRAFT_MAX_CHARS = 6_000
 const WRITER_BRIEF_EXTRACTION_MAX_CHARS = 220
 const WRITER_BRIEF_FIELD_IDS = ["contentType", "targetPlatform", "topic", "audience", "objective", "tone"] as const
+const WRITER_TURN_INTENT_IDS = ["capability_question", "briefing", "direct_draft", "rewrite"] as const
 const WRITER_RETRIEVAL_HINT_SCHEMA = z
   .object({
     enterpriseKnowledgeNeeded: z.boolean().default(false),
@@ -333,6 +338,7 @@ const WRITER_BRIEF_EXTRACTION_SCHEMA = z.object({
   answeredFields: z.array(z.enum(WRITER_BRIEF_FIELD_IDS)).default([]),
   suggestedFollowUpFields: z.array(z.enum(WRITER_BRIEF_FIELD_IDS)).max(2).default([]),
   suggestedFollowUpQuestion: z.string().default(""),
+  turnIntent: z.enum(WRITER_TURN_INTENT_IDS).default("briefing"),
   userWantsDirectOutput: z.boolean().default(false),
   briefSufficient: z.boolean().default(false),
   retrievalHints: WRITER_RETRIEVAL_HINT_SCHEMA,
@@ -391,6 +397,7 @@ const _CLEAN_WRITER_TONE_KEYWORDS = [
 ]
 
 type WriterBriefFieldId = (typeof WRITER_BRIEF_FIELD_IDS)[number]
+type WriterTurnIntent = (typeof WRITER_TURN_INTENT_IDS)[number]
 type WriterRetrievalHints = z.infer<typeof WRITER_RETRIEVAL_HINT_SCHEMA>
 
 type WriterConversationBrief = {
@@ -758,7 +765,7 @@ function detectEnterpriseGroundingNeedSafe(query: string, brief: WriterConversat
   )
 }
 
-function detectFreshResearchNeedSafe(query: string, brief: WriterConversationBrief) {
+function _detectFreshResearchNeedSafe(query: string, brief: WriterConversationBrief) {
   const haystack = [query, brief.topic, brief.objective].filter(Boolean).join("\n")
   return /(?:最新|趋势|报告|调研|数据|统计|行业洞察|市场规模|竞品|新闻|今年|明年|202[4-9]|latest|trend|report|research|market|benchmark|news|forecast|survey)/iu.test(
     haystack,
@@ -799,7 +806,7 @@ function getPreferredEnterpriseScopesSafe(
   return [...scopes]
 }
 
-function buildEnterpriseQueryVariantsSafe(
+function _buildEnterpriseQueryVariantsSafe(
   baseQuery: string,
   scopes: EnterpriseKnowledgeScope[],
 ): string[] {
@@ -978,9 +985,23 @@ async function getWriterContentGuide(contentType: WriterContentType) {
   } satisfies WriterContentSkillDocument)
 }
 
-async function getWriterRuntimeGuide(platform: WriterPlatform) {
-  const fallback = WRITER_PLATFORM_GUIDE[platform]
-  return getWriterRepoHostedSkillDocument(platform, {
+async function getWriterStyleGuide(styleId: string) {
+  return getWriterStyleSkillDocument(styleId, {
+    runtimeLabel: "Style Guidance",
+    guidance: "",
+  } satisfies WriterContentSkillDocument)
+}
+
+async function getWriterRuntimeGuide(params: WriterPlatform | WriterRoutingDecision) {
+  const renderPlatform = typeof params === "string" ? params : params.renderPlatform
+  const targetPlatform = typeof params === "string" ? "" : params.targetPlatform
+  const fallback = WRITER_PLATFORM_GUIDE[renderPlatform]
+  return getWriterRepoHostedSkillDocument(
+    {
+      renderPlatform,
+      targetPlatform,
+    },
+    {
     runtimeLabel: fallback.label,
     tone: fallback.tone,
     contentFormat: fallback.format,
@@ -989,7 +1010,8 @@ async function getWriterRuntimeGuide(platform: WriterPlatform) {
     promptRules: fallback.promptRules,
     articleStructureGuidance: fallback.articleStructureGuidance,
     threadStructureGuidance: fallback.threadStructureGuidance,
-  } satisfies WriterRuntimeSkillDocument)
+    } satisfies WriterRuntimeSkillDocument,
+  )
 }
 
 function normalizeBriefValue(value: string) {
@@ -1074,6 +1096,7 @@ type WriterBriefExtractionResult = {
   answeredFields: WriterBriefFieldId[]
   suggestedFollowUpFields: WriterBriefFieldId[]
   suggestedFollowUpQuestion: string
+  turnIntent: WriterTurnIntent
   userWantsDirectOutput: boolean
   briefSufficient: boolean
   retrievalHints: WriterRetrievalHints
@@ -1512,7 +1535,7 @@ function extractInlineWriterSourceText(query: string) {
   return compactText(normalizeBriefValue(quotedSourceMatch?.[1] || ""), WRITER_PRIOR_DRAFT_MAX_CHARS)
 }
 
-function hasInlineWriterSourceText(query: string) {
+function _hasInlineWriterSourceText(query: string) {
   return Boolean(extractInlineWriterSourceText(query))
 }
 
@@ -1724,6 +1747,7 @@ function buildWriterBriefExtractionPrompt(params: {
       answeredFields: ["contentType"],
       suggestedFollowUpFields: ["targetPlatform"],
       suggestedFollowUpQuestion: "question text here",
+      turnIntent: "briefing",
       userWantsDirectOutput: false,
       briefSufficient: false,
       retrievalHints: {
@@ -1737,6 +1761,7 @@ function buildWriterBriefExtractionPrompt(params: {
     "Rules for the JSON response:",
     "- answeredFields must only contain contentType, targetPlatform, topic, audience, objective, or tone.",
     "- suggestedFollowUpFields must contain at most two items from contentType, targetPlatform, topic, audience, objective, or tone.",
+    "- turnIntent must be one of: capability_question, briefing, direct_draft, rewrite.",
     "- routingDecision.contentType must be one of the available content types or an empty string.",
     `- If the latest reply is a short follow-up answer or revision request, inherit routing defaults from the heuristic route (${heuristicRouting.contentType} / ${heuristicRouting.targetPlatform} / ${heuristicRouting.outputForm} / ${heuristicRouting.lengthTarget}) unless the user explicitly changes them.`,
     "- suggestedFollowUpQuestion must be empty if no clarification is needed.",
@@ -1875,6 +1900,10 @@ function extractWriterBriefWithFixture(params: {
   const actionableMissingFields = getWriterActionableMissingFields(resolvedBrief, finalRouting)
   const chinese = isChineseConversation(params.query, params.preferredLanguage)
   const userWantsDirectOutput = safeWantsDirectWriterOutput(params.query)
+  const turnIntent = resolveWriterTurnIntent({
+    query: params.query,
+    structuredIntent: null,
+  })
   const briefSufficient = actionableMissingFields.length === 0
   const turnCount = Math.min(WRITER_BRIEF_MAX_TURNS, params.history.length + 1)
   const followUpFieldCount = getWriterFollowUpFieldCount(turnCount, WRITER_BRIEF_MAX_TURNS, actionableMissingFields.length)
@@ -1912,6 +1941,7 @@ function extractWriterBriefWithFixture(params: {
           maxTurns: WRITER_BRIEF_MAX_TURNS,
           chinese,
         }),
+    turnIntent,
     userWantsDirectOutput,
     briefSufficient,
     retrievalHints,
@@ -1939,7 +1969,7 @@ async function extractWriterBriefWithModel(params: {
 
   try {
     const { systemPrompt, userPrompt } = buildWriterBriefExtractionPrompt(params)
-    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL, {
+    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_SKILL_MODEL, {
       temperature: 0,
       maxTokens: 900,
     })
@@ -1955,6 +1985,7 @@ async function extractWriterBriefWithModel(params: {
       answeredFields: sanitizeWriterBriefFields(parsed.data.answeredFields),
       suggestedFollowUpFields: sanitizeWriterBriefFields(parsed.data.suggestedFollowUpFields),
       suggestedFollowUpQuestion: parsed.data.suggestedFollowUpQuestion.trim(),
+      turnIntent: parsed.data.turnIntent,
       userWantsDirectOutput: parsed.data.userWantsDirectOutput,
       briefSufficient: parsed.data.briefSufficient,
       retrievalHints: parsed.data.retrievalHints,
@@ -3359,15 +3390,18 @@ async function buildSystemPrompt(
   enterpriseKnowledge?: EnterpriseKnowledgeContext | null,
 ) {
   const transformMode = detectWriterTransformModeFromPrompt(query)
-  const [guide, contentGuide] = await Promise.all([
-    getWriterRuntimeGuide(routing.renderPlatform),
+  const [guide, contentGuide, styleGuide] = await Promise.all([
+    getWriterRuntimeGuide(routing),
     getWriterContentGuide(routing.contentType),
+    routing.selectedStyleSkillId ? getWriterStyleGuide(routing.selectedStyleSkillId) : Promise.resolve(null),
   ])
   const modeLabel = routing.renderMode === "thread" ? "thread or multi-part post" : "single structured draft"
 
   return [
     `You are a ${contentGuide.runtimeLabel}.`,
     `Scenario routing: ${describeWriterRoute(routing)}.`,
+    routing.selectedPlatformSkillLabel ? `Platform skill: ${routing.selectedPlatformSkillLabel}.` : null,
+    styleGuide?.guidance ? `Style skill: ${styleGuide.runtimeLabel}.` : null,
     `Tone: ${guide.tone}.`,
     `Output mode: ${modeLabel}.`,
     `Content format: ${routing.outputForm}.`,
@@ -3376,6 +3410,8 @@ async function buildSystemPrompt(
     ...guide.promptRules,
     "Scenario-specific guidance:",
     contentGuide.guidance,
+    styleGuide?.guidance ? "Style-specific guidance:" : null,
+    styleGuide?.guidance || null,
     languageInstruction,
     enterpriseKnowledge?.snippets?.length
       ? "Enterprise knowledge is provided separately. Treat it as first-party brand truth and prefer it over generic assumptions."
@@ -3395,7 +3431,9 @@ async function buildSystemPrompt(
     transformMode
       ? "Do not add `writer-asset://cover` or inline asset placeholders for a direct translation or rewrite task."
       : "Use `writer-asset://cover` for the opening image and add only the inline placeholders that the draft genuinely needs, such as `writer-asset://inline-1`, `writer-asset://inline-2`, or `writer-asset://inline-3`, placing each one beside the section it should illustrate.",
-  ].join("\n")
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n")
 }
 
 async function buildUserPrompt(
@@ -3440,7 +3478,7 @@ async function buildUserPrompt(
         .join("\n\n")
     : ""
 
-  const guide = await getWriterRuntimeGuide(routing.renderPlatform)
+  const guide = await getWriterRuntimeGuide(routing)
   const platformStructureGuide =
     routing.renderPlatform === "wechat" || routing.renderPlatform === "xiaohongshu"
       ? guide.articleStructureGuidance
@@ -3650,13 +3688,37 @@ function detectWriterCapabilityQuestion(query: string) {
   return looksLikeCapabilityQuestion
 }
 
+function resolveWriterTurnIntent(params: {
+  query: string
+  structuredIntent?: WriterTurnIntent | null
+}): WriterTurnIntent {
+  if (params.structuredIntent && WRITER_TURN_INTENT_IDS.includes(params.structuredIntent)) {
+    return params.structuredIntent
+  }
+  if (detectWriterCapabilityQuestion(params.query)) {
+    return "capability_question"
+  }
+  if (detectRewriteOnlyIntentSafe(params.query)) {
+    return "rewrite"
+  }
+  if (safeWantsDirectWriterOutput(params.query)) {
+    return "direct_draft"
+  }
+  return "briefing"
+}
+
+function getWriterSupportedPlatformsText(chinese: boolean) {
+  const labels = listWriterPlatformSkills().map((item) => item.label).filter(Boolean)
+  return labels.length > 0 ? labels.join(chinese ? "、" : ", ") : ""
+}
+
 function buildWriterCapabilityAnswer(params: {
   preferredLanguage: WriterLanguage
   query: string
   enterpriseEnabled: boolean
 }) {
   const chinese = isChineseConversation(params.query, params.preferredLanguage)
-  const supportedPlatforms = [
+  const supportedPlatforms = getWriterSupportedPlatformsText(chinese) || [
     WRITER_PLATFORM_CONFIG.wechat.shortLabel,
     WRITER_PLATFORM_CONFIG.xiaohongshu.shortLabel,
     WRITER_PLATFORM_CONFIG.weibo.shortLabel,
@@ -3716,35 +3778,6 @@ export async function runWriterSkillsTurnWithRuntime(
   const turnCount = Math.min(WRITER_BRIEF_MAX_TURNS, recentHistory.length + 1)
   const priorRouting = getPriorRoutingFromHistory(recentHistory)
 
-  if (detectWriterCapabilityQuestion(params.query)) {
-    const routing = resolveWriterRoutingFromSignals({
-      query: params.query,
-      priorRouting,
-      conversationStatus: params.conversationStatus,
-    })
-
-    return {
-      outcome: "needs_clarification",
-      answer: buildWriterCapabilityAnswer({
-        preferredLanguage,
-        query: params.query,
-        enterpriseEnabled: Boolean(params.enterpriseId),
-      }),
-      diagnostics: { ...createEmptyWriterDiagnostics("rewrite_only"), routing },
-      brief: createEmptyWriterBrief(),
-      routing,
-      missingFields: [],
-      turnCount,
-      maxTurns: WRITER_BRIEF_MAX_TURNS,
-      readyForGeneration: false,
-      selectedSkill: {
-        id: "writer-briefing",
-        label: "Writer capability guidance",
-        stage: "briefing",
-      },
-    }
-  }
-
   const heuristicBrief = mergeStructuredWriterBrief(
     collectWriterBriefFromConversation(recentHistory, params.query),
     normalizeWriterPreloadedBrief(params.preloadedBrief),
@@ -3784,6 +3817,32 @@ export async function runWriterSkillsTurnWithRuntime(
     enterpriseId: params.enterpriseId,
     retrievalHints: structuredExtraction?.retrievalHints,
   })
+  const turnIntent = resolveWriterTurnIntent({
+    query: params.query,
+    structuredIntent: structuredExtraction?.turnIntent,
+  })
+  if (turnIntent === "capability_question") {
+    return {
+      outcome: "needs_clarification",
+      answer: buildWriterCapabilityAnswer({
+        preferredLanguage,
+        query: params.query,
+        enterpriseEnabled: Boolean(params.enterpriseId),
+      }),
+      diagnostics: { ...createEmptyWriterDiagnostics("rewrite_only"), routing },
+      brief: createEmptyWriterBrief(),
+      routing,
+      missingFields: [],
+      turnCount,
+      maxTurns: WRITER_BRIEF_MAX_TURNS,
+      readyForGeneration: false,
+      selectedSkill: {
+        id: "writer-briefing",
+        label: "Writer capability guidance",
+        stage: "briefing",
+      },
+    }
+  }
   const codeMissingFields = getWriterActionableMissingFields(mergedBrief, routing)
   const structuredMissingFields = structuredExtraction?.suggestedFollowUpFields?.filter((field) =>
     codeMissingFields.includes(field),
@@ -3792,14 +3851,15 @@ export async function runWriterSkillsTurnWithRuntime(
     structuredMissingFields && structuredMissingFields.length > 0 ? structuredMissingFields : codeMissingFields
 
   if (!mergedBrief.tone && (turnCount >= WRITER_BRIEF_MAX_TURNS || actionableMissingFields.length === 0)) {
-    const platformGuide = await runtime.getRuntimeGuide(routing.renderPlatform)
+    const platformGuide = await runtime.getRuntimeGuide(routing)
     mergedBrief.tone = platformGuide.tone
   }
 
   const latestDraft = extractLatestWriterDraft(contextHistory)
   const inlineSourceText = extractInlineWriterSourceText(params.query)
   const rewriteSourceAvailable =
-    retrievalStrategy === "rewrite_only" && (Boolean(inlineSourceText) || Boolean(latestDraft))
+    (turnIntent === "rewrite" || retrievalStrategy === "rewrite_only") &&
+    (Boolean(inlineSourceText) || Boolean(latestDraft))
   if (rewriteSourceAvailable) {
     if (!mergedBrief.topic) {
       mergedBrief.topic = detectTranslationIntentSafe(params.query)
@@ -3820,7 +3880,7 @@ export async function runWriterSkillsTurnWithRuntime(
   )
   const richBriefSignal =
     rewriteSourceAvailable ||
-    safeWantsDirectWriterOutput(params.query) ||
+    turnIntent === "direct_draft" ||
     safeIsWriterConfirmationReply(params.query) ||
     Boolean(structuredExtraction?.userWantsDirectOutput) ||
     modelApprovedBrief ||
@@ -3877,7 +3937,7 @@ export async function runWriterSkillsTurnWithRuntime(
     }) &&
     actionableMissingFields.length === 0 &&
     !safeIsWriterConfirmationReply(params.query) &&
-    !safeWantsDirectWriterOutput(params.query) &&
+    turnIntent !== "direct_draft" &&
     !structuredExtraction?.userWantsDirectOutput
 
   if (shouldConfirmBrief) {

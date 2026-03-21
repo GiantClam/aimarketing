@@ -8,7 +8,6 @@ import {
   Bookmark,
   ChevronLeft,
   Copy,
-  Download,
   Eye,
   Heart,
   ImageIcon,
@@ -627,81 +626,6 @@ function PlatformPreview({
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-function PreviewResourceStrip({
-  copy,
-  assets,
-  assetsLoading,
-  assetsError,
-  onDownload,
-  onCopyLink,
-  onCopyMarkdown,
-}: {
-  copy: WriterCopy
-  assets: WriterAsset[]
-  assetsLoading: boolean
-  assetsError: string | null
-  onDownload: (asset: WriterAsset) => void | Promise<void>
-  onCopyLink: (asset: WriterAsset) => Promise<void>
-  onCopyMarkdown: (asset: WriterAsset) => Promise<void>
-}) {
-  const visibleAssets = assets.filter((asset) => asset.url)
-
-  if (!assetsLoading && !assetsError && visibleAssets.length === 0) return null
-
-  return (
-    <div className="rounded-[24px] border-2 border-border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-950">{copy.imageActionsTitle}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-700">{copy.imageActionsDescription}</p>
-        </div>
-        <Badge
-          variant={assetsLoading ? "outline" : "secondary"}
-          className={cn(
-            "rounded-full border-2 px-3 py-1 text-[11px] font-medium",
-            assetsLoading
-              ? "border-amber-300 bg-amber-50 text-amber-900"
-              : "border-emerald-300 bg-emerald-50 text-emerald-900",
-          )}
-        >
-          {assetsLoading ? copy.imageGenerating : "Gemini 3.1 Flash Image Preview"}
-        </Badge>
-      </div>
-      {assetsError ? (
-        <div className="mt-3 rounded-2xl border-2 border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-medium leading-5 text-destructive">
-          {copy.imageGenerationFailedPrefix}
-          {assetsError}
-        </div>
-      ) : null}
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {(visibleAssets.length > 0 ? visibleAssets : assets).map((asset) => (
-          <div key={asset.id} className="rounded-2xl border-2 border-border bg-background p-3">
-            {asset.url ? (
-              <img src={asset.url} alt={copy.imageAlt} loading="lazy" decoding="async" className="h-24 w-full rounded-xl object-cover" />
-            ) : (
-              <WriterAssetPlaceholder asset={asset} copy={copy} compact />
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" className="rounded-full border-slate-950 bg-slate-950 text-white hover:bg-slate-800 hover:text-white" onClick={() => onDownload(asset)} disabled={!asset.url}>
-                <Download className="mr-1.5 h-3.5 w-3.5" />
-                {copy.download}
-              </Button>
-              <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyLink(asset)} disabled={!asset.url}>
-                <Copy className="mr-1.5 h-3.5 w-3.5" />
-                {copy.imageLink}
-              </Button>
-              <Button size="sm" variant="outline" className="rounded-full border-slate-400 bg-white text-slate-950 hover:bg-slate-100" onClick={() => void onCopyMarkdown(asset)} disabled={!asset.url}>
-                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                {copy.markdown}
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
@@ -2396,15 +2320,7 @@ export function WriterWorkspace({
                       />
                     </div>
                   </div>
-                  <PreviewResourceStrip
-                    copy={writerCopy}
-                    assets={activePreview.imagesRequested || activePreview.hasGeneratedImages ? activePreview.assets : []}
-                    assetsLoading={activePreview.imagesRequested && activePreview.assetsLoading}
-                    assetsError={activePreview.imagesRequested ? activePreview.assetsError : null}
-                    onDownload={handleDownloadAsset}
-                    onCopyLink={handleCopyAssetLink}
-                    onCopyMarkdown={handleCopyAssetMarkdown}
-                  />
+
                 </div>
               </div>
             </ScrollArea>

@@ -3,6 +3,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { createImageAssistantSession, listImageAssistantSessions } from "@/lib/image-assistant/repository"
 
+function toSafeImageAssistantError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes("Failed query:")) {
+    return { status: 503, error: "image_assistant_data_temporarily_unavailable" }
+  }
+  return { status: 500, error: message || fallback }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireSessionUser(req, "image_design_generation")
@@ -15,7 +23,9 @@ export async function GET(req: NextRequest) {
     const data = await listImageAssistantSessions(auth.user.id, limit, cursor)
     return NextResponse.json(data)
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error("image-assistant.sessions.get.error", error)
+    const safe = toSafeImageAssistantError(error, "sessions_list_failed")
+    return NextResponse.json({ error: safe.error }, { status: safe.status })
   }
 }
 
@@ -35,6 +45,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ data: session })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error("image-assistant.sessions.post.error", error)
+    const safe = toSafeImageAssistantError(error, "session_create_failed")
+    return NextResponse.json({ error: safe.error }, { status: safe.status })
   }
 }

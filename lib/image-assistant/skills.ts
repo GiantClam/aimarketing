@@ -1,8 +1,15 @@
-import type { ImageAssistantSkillId, ImageAssistantSkillSelection, ImageAssistantTaskType } from "@/lib/image-assistant/types"
+﻿import type {
+  ImageAssistantSkillId,
+  ImageAssistantSkillSelection,
+  ImageAssistantTaskType,
+  ImageAssistantUsagePresetId,
+} from "@/lib/image-assistant/types"
 
 export const IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS = 10
 export const IMAGE_ASSISTANT_MAX_BRIEF_TURNS = 5
 export const IMAGE_ASSISTANT_TEXT_MODEL = process.env.IMAGE_ASSISTANT_TEXT_MODEL || process.env.WRITER_TEXT_MODEL || "google/gemini-3-flash"
+export const IMAGE_ASSISTANT_SKILL_MODEL =
+  process.env.IMAGE_ASSISTANT_SKILL_MODEL || process.env.WRITER_SKILL_MODEL || "gpt-5.3-codex"
 
 type ImageAssistantSkillDefinition = ImageAssistantSkillSelection & {
   description: string
@@ -37,14 +44,41 @@ const IMAGE_ASSISTANT_SKILLS: Record<ImageAssistantSkillId, ImageAssistantSkillD
       "Keep the execution prompt concrete and visually directive.",
     ].join(" "),
   },
+  "enterprise-ad-image": {
+    id: "enterprise-ad-image",
+    label: "Enterprise Ad Image",
+    stage: "execution",
+    description: "Generate marketing and ad-focused visuals with production-safe framing, channel fit, and brand constraints.",
+    system_prompt: [
+      "You are an enterprise advertising image execution specialist.",
+      "Translate approved briefs into high-conversion marketing visuals.",
+      "Prioritize brand safety, clear focal hierarchy, ad-friendly whitespace, and channel-ready framing.",
+      "Keep output actionable for campaign creatives, posters, covers, and hero visuals.",
+    ].join(" "),
+  },
 }
 
 export function selectImageAssistantSkill(params: {
   taskType: ImageAssistantTaskType
   readyForGeneration: boolean
+  prompt?: string | null
+  usagePreset?: ImageAssistantUsagePresetId | ""
+  goal?: string | null
 }): ImageAssistantSkillSelection {
   if (!params.readyForGeneration) {
     const skill = IMAGE_ASSISTANT_SKILLS["graphic-design-brief"]
+    return { id: skill.id, label: skill.label, stage: skill.stage }
+  }
+
+  const adSignal = `${params.prompt || ""} ${params.goal || ""}`.toLowerCase()
+  const shouldUseEnterpriseAdExecution =
+    params.usagePreset === "ad_poster" ||
+    /(?:\b(ad|ads|advertising|campaign|poster|promo|promotion|performance|kv|hero)\b|\u5e7f\u544a|\u6d77\u62a5|\u6295\u653e|\u4fc3\u9500|\u6d3b\u52a8\u4e3b\u89c6\u89c9)/iu.test(
+      adSignal,
+    )
+
+  if (shouldUseEnterpriseAdExecution) {
+    const skill = IMAGE_ASSISTANT_SKILLS["enterprise-ad-image"]
     return { id: skill.id, label: skill.label, stage: skill.stage }
   }
 
@@ -54,4 +88,8 @@ export function selectImageAssistantSkill(params: {
 
 export function getImageAssistantSkillDefinition(skillId: ImageAssistantSkillId) {
   return IMAGE_ASSISTANT_SKILLS[skillId]
+}
+
+export function isImageAssistantSkillId(value: unknown): value is ImageAssistantSkillId {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(IMAGE_ASSISTANT_SKILLS, value)
 }

@@ -151,6 +151,21 @@ function createTaskWorkerId(taskId: number) {
   ].join(":")
 }
 
+function toSafeImageAssistantTaskErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (!message) return "image_generation_failed"
+
+  if (
+    message.includes("Failed query:") ||
+    /cover_asset_id/i.test(message) ||
+    (/image_design_sessions/i.test(message) && /does not exist/i.test(message))
+  ) {
+    return "image_assistant_data_temporarily_unavailable"
+  }
+
+  return message
+}
+
 async function withTaskTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string) {
   if (timeoutMs <= 0) {
     return promise
@@ -353,14 +368,14 @@ async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayl
 
   const answer = sanitizeAssistantContent(formatLeadHunterChatOutput(accumulated))
 
-  await appendLeadHunterMessage(payload.userId, payload.conversationId, payload.query, answer || "未返回客户信息列表。")
+  await appendLeadHunterMessage(payload.userId, payload.conversationId, payload.query, answer || "No lead data returned.")
 
   await updateTaskStatus(taskId, {
     status: "success",
     result: {
       conversation_id: payload.conversationId,
-      answer: answer || "未返回客户信息列表。",
-      agent_name: "海外猎客",
+      answer: answer || "No lead data returned.",
+      agent_name: "Lead Hunter",
     },
   })
 }
@@ -520,12 +535,13 @@ function launchClaimedTask(taskId: number, workerId: string) {
           imagesRequested: false,
         }).catch(() => null)
       }
+      const imageTaskError = task?.parsedPayload?.kind === "image_turn" ? toSafeImageAssistantTaskErrorMessage(error) : null
       if (task?.parsedPayload?.kind === "image_turn") {
         await createImageAssistantMessage({
           sessionId: task.parsedPayload.sessionId,
           role: "assistant",
           messageType: "error",
-          content: error instanceof Error ? error.message : "image_generation_failed",
+          content: imageTaskError || "image_generation_failed",
           taskType: task.parsedPayload.taskType,
         }).catch(() => null)
       }
@@ -533,7 +549,7 @@ function launchClaimedTask(taskId: number, workerId: string) {
         status: "failed",
         result: {
           ...(task?.parsedResult || {}),
-          error: error instanceof Error ? error.message : "assistant_task_failed",
+          error: imageTaskError || (error instanceof Error ? error.message : "assistant_task_failed"),
         },
       }).catch(() => null)
     })

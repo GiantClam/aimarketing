@@ -12,7 +12,7 @@ export type ImageAssistantBriefField =
   | "subject"
   | "style"
   | "composition"
-export type ImageAssistantSkillId = "graphic-design-brief" | "canvas-design-execution"
+export type ImageAssistantSkillId = "graphic-design-brief" | "canvas-design-execution" | "enterprise-ad-image"
 export type ImageAssistantToolName =
   | "collect_brief"
   | "analyze_references"

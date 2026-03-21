@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm"
+﻿import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import {
@@ -74,11 +74,55 @@ function getErrorMessage(error: unknown) {
   return String(error)
 }
 
-function isRetryableDbError(error: unknown) {
+function getCombinedErrorMessage(error: unknown) {
   const message = getErrorMessage(error)
   const causeMessage =
     error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
-  const combined = `${message} ${causeMessage}`.toLowerCase()
+  return `${message} ${causeMessage}`.toLowerCase()
+}
+
+function isMissingColumnError(error: unknown, columnName: string) {
+  const combined = getCombinedErrorMessage(error)
+  return (
+    combined.includes(columnName.toLowerCase()) &&
+    (combined.includes("does not exist") || combined.includes("undefined column") || combined.includes("column"))
+  )
+}
+
+function isLegacySessionColumnMissingError(error: unknown) {
+  return (
+    isMissingColumnError(error, "cover_asset_id") ||
+    isMissingColumnError(error, "status") ||
+    isMissingColumnError(error, "current_mode") ||
+    isMissingColumnError(error, "current_version_id") ||
+    isMissingColumnError(error, "current_canvas_document_id")
+  )
+}
+
+function removeMissingSessionPatchFields(error: unknown, patch: Record<string, unknown>) {
+  const fieldColumnPairs: Array<{ field: string; column: string }> = [
+    { field: "coverAssetId", column: "cover_asset_id" },
+    { field: "status", column: "status" },
+    { field: "currentMode", column: "current_mode" },
+    { field: "currentVersionId", column: "current_version_id" },
+    { field: "currentCanvasDocumentId", column: "current_canvas_document_id" },
+  ]
+
+  const fallbackPatch: Record<string, unknown> = { ...patch }
+  let removed = 0
+
+  for (const pair of fieldColumnPairs) {
+    if (Object.prototype.hasOwnProperty.call(fallbackPatch, pair.field) && isMissingColumnError(error, pair.column)) {
+      delete fallbackPatch[pair.field]
+      removed += 1
+    }
+  }
+
+  return { fallbackPatch, removed }
+}
+
+function isRetryableDbError(error: unknown) {
+  const combined = getCombinedErrorMessage(error)
 
   return (
     combined.includes("error connecting to database") ||
@@ -138,7 +182,7 @@ function normalizeListCoverUrl(url?: string | null) {
 
 function toStoredSessionTitle(title: string) {
   const normalized = title.replace(/\s+/g, " ").trim().slice(0, 80)
-  return `${SESSION_PREFIX}${normalized || "未命名设计"}`
+  return `${SESSION_PREFIX}${normalized || "Untitled design"}`
 }
 
 function parseDatabaseId(value: string | null | undefined) {
@@ -304,20 +348,46 @@ export async function createImageAssistantSession(params: {
   enterpriseId?: number | null
   title?: string | null
 }) {
-  const inserted = await withDbRetry("create-image-session", () =>
-    db
-      .insert(imageDesignSessions)
-      .values({
-        userId: params.userId,
-        enterpriseId: params.enterpriseId || null,
-        title: toStoredSessionTitle(params.title || "未命名设计"),
-        status: "active",
-        currentMode: "chat",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning(),
-  )
+  const payload = {
+    userId: params.userId,
+    enterpriseId: params.enterpriseId || null,
+    title: toStoredSessionTitle(params.title || "Untitled design"),
+    status: "active",
+    currentMode: "chat",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+
+  let inserted: Array<Record<string, unknown>>
+  try {
+    inserted = await withDbRetry("create-image-session", () =>
+      db
+        .insert(imageDesignSessions)
+        .values(payload)
+        .returning(),
+    )
+  } catch (error) {
+    if (!isLegacySessionColumnMissingError(error)) {
+      throw error
+    }
+
+    const { fallbackPatch, removed } = removeMissingSessionPatchFields(error, payload as Record<string, unknown>)
+    if (removed <= 0) {
+      throw error
+    }
+
+    console.warn("image-assistant.db.legacy-session-column-missing", {
+      scope: "create-image-session",
+      message: getErrorMessage(error),
+    })
+
+    inserted = await withDbRetry("create-image-session-legacy", () =>
+      db
+        .insert(imageDesignSessions)
+        .values(fallbackPatch as any)
+        .returning(),
+    )
+  }
 
   return mapSession(inserted[0])
 }
@@ -331,43 +401,73 @@ export async function listImageAssistantSessions(
   const parsedCursor = cursor ? /^(\d+):(\d+)$/u.exec(cursor.trim()) : null
   const cursorTimestamp = parsedCursor ? new Date(Number(parsedCursor[1]) * 1000) : null
   const cursorId = parsedCursor ? Number.parseInt(parsedCursor[2], 10) : Number.NaN
-  const rows = await withDbRetry("list-image-sessions", () =>
-    db
-      .select({
-        id: imageDesignSessions.id,
-        title: imageDesignSessions.title,
-        status: imageDesignSessions.status,
-        currentMode: imageDesignSessions.currentMode,
-        currentVersionId: imageDesignSessions.currentVersionId,
-        currentCanvasDocumentId: imageDesignSessions.currentCanvasDocumentId,
-        createdAt: imageDesignSessions.createdAt,
-        updatedAt: imageDesignSessions.updatedAt,
-        coverAssetUrl: imageDesignAssets.publicUrl,
-      })
-      .from(imageDesignSessions)
-      .leftJoin(imageDesignAssets, eq(imageDesignSessions.coverAssetId, imageDesignAssets.id))
-      .where(
-        and(
-          eq(imageDesignSessions.userId, userId),
-          sql`${imageDesignSessions.title} LIKE ${`${SESSION_PREFIX}%`}`,
-          parsedCursor && cursorTimestamp && Number.isFinite(cursorId)
-            ? sql`(
-                ${imageDesignSessions.updatedAt} < ${cursorTimestamp}
-                OR (${imageDesignSessions.updatedAt} = ${cursorTimestamp} AND ${imageDesignSessions.id} < ${cursorId})
-              )`
-            : undefined,
-        ),
-      )
-      .orderBy(desc(imageDesignSessions.updatedAt), desc(imageDesignSessions.id))
-      .limit(safeLimit + 1),
+  const cursorFilter =
+    parsedCursor && cursorTimestamp && Number.isFinite(cursorId)
+      ? sql`(
+          ${imageDesignSessions.updatedAt} < ${cursorTimestamp}
+          OR (${imageDesignSessions.updatedAt} = ${cursorTimestamp} AND ${imageDesignSessions.id} < ${cursorId})
+        )`
+      : undefined
+  const baseWhere = and(
+    eq(imageDesignSessions.userId, userId),
+    sql`${imageDesignSessions.title} LIKE ${`${SESSION_PREFIX}%`}`,
+    cursorFilter,
   )
 
+  let rows: Array<Record<string, unknown>>
+  try {
+    rows = await withDbRetry("list-image-sessions", () =>
+      db
+        .select({
+          id: imageDesignSessions.id,
+          title: imageDesignSessions.title,
+          status: imageDesignSessions.status,
+          currentMode: imageDesignSessions.currentMode,
+          currentVersionId: imageDesignSessions.currentVersionId,
+          currentCanvasDocumentId: imageDesignSessions.currentCanvasDocumentId,
+          createdAt: imageDesignSessions.createdAt,
+          updatedAt: imageDesignSessions.updatedAt,
+          coverAssetUrl: imageDesignAssets.publicUrl,
+        })
+        .from(imageDesignSessions)
+        .leftJoin(imageDesignAssets, eq(imageDesignSessions.coverAssetId, imageDesignAssets.id))
+        .where(baseWhere)
+        .orderBy(desc(imageDesignSessions.updatedAt), desc(imageDesignSessions.id))
+        .limit(safeLimit + 1),
+    )
+  } catch (error) {
+    if (!isLegacySessionColumnMissingError(error)) {
+      throw error
+    }
+
+    console.warn("image-assistant.db.legacy-session-column-missing", {
+      scope: "list-image-sessions",
+      message: getErrorMessage(error),
+    })
+
+    rows = await withDbRetry("list-image-sessions-legacy", () =>
+      db
+        .select({
+          id: imageDesignSessions.id,
+          title: imageDesignSessions.title,
+          createdAt: imageDesignSessions.createdAt,
+          updatedAt: imageDesignSessions.updatedAt,
+        })
+        .from(imageDesignSessions)
+        .where(baseWhere)
+        .orderBy(desc(imageDesignSessions.updatedAt), desc(imageDesignSessions.id))
+        .limit(safeLimit + 1),
+    )
+  }
+
   const visibleRows = rows.slice(0, safeLimit)
-  const data = visibleRows.map((row) => mapSession(row, normalizeListCoverUrl(row.coverAssetUrl)))
+  const data = visibleRows.map((row) =>
+    mapSession(row, normalizeListCoverUrl(typeof row.coverAssetUrl === "string" ? row.coverAssetUrl : null)),
+  )
   const lastVisibleRow = visibleRows.at(-1)
   const nextCursor =
     rows.length > safeLimit && lastVisibleRow
-      ? buildCursor(lastVisibleRow.updatedAt, lastVisibleRow.id)
+      ? buildCursor(lastVisibleRow.updatedAt as Date | string | number | null | undefined, lastVisibleRow.id as number | null | undefined)
       : null
 
   return { data, has_more: rows.length > safeLimit, limit: safeLimit, next_cursor: nextCursor }
@@ -377,25 +477,51 @@ export async function getImageAssistantSession(userId: number, sessionId: string
   const parsedId = parseDatabaseId(sessionId)
   if (!parsedId) return null
 
-  const rows = await withDbRetry("get-image-session", () =>
-    db
-      .select({
-        id: imageDesignSessions.id,
-        userId: imageDesignSessions.userId,
-        title: imageDesignSessions.title,
-        status: imageDesignSessions.status,
-        currentMode: imageDesignSessions.currentMode,
-        currentVersionId: imageDesignSessions.currentVersionId,
-        currentCanvasDocumentId: imageDesignSessions.currentCanvasDocumentId,
-        createdAt: imageDesignSessions.createdAt,
-        updatedAt: imageDesignSessions.updatedAt,
-        coverAssetUrl: imageDesignAssets.publicUrl,
-      })
-      .from(imageDesignSessions)
-      .leftJoin(imageDesignAssets, eq(imageDesignSessions.coverAssetId, imageDesignAssets.id))
-      .where(and(eq(imageDesignSessions.id, parsedId), eq(imageDesignSessions.userId, userId)))
-      .limit(1),
-  )
+  let rows: Array<Record<string, unknown>>
+  try {
+    rows = await withDbRetry("get-image-session", () =>
+      db
+        .select({
+          id: imageDesignSessions.id,
+          userId: imageDesignSessions.userId,
+          title: imageDesignSessions.title,
+          status: imageDesignSessions.status,
+          currentMode: imageDesignSessions.currentMode,
+          currentVersionId: imageDesignSessions.currentVersionId,
+          currentCanvasDocumentId: imageDesignSessions.currentCanvasDocumentId,
+          createdAt: imageDesignSessions.createdAt,
+          updatedAt: imageDesignSessions.updatedAt,
+          coverAssetUrl: imageDesignAssets.publicUrl,
+        })
+        .from(imageDesignSessions)
+        .leftJoin(imageDesignAssets, eq(imageDesignSessions.coverAssetId, imageDesignAssets.id))
+        .where(and(eq(imageDesignSessions.id, parsedId), eq(imageDesignSessions.userId, userId)))
+        .limit(1),
+    )
+  } catch (error) {
+    if (!isLegacySessionColumnMissingError(error)) {
+      throw error
+    }
+
+    console.warn("image-assistant.db.legacy-session-column-missing", {
+      scope: "get-image-session",
+      message: getErrorMessage(error),
+    })
+
+    rows = await withDbRetry("get-image-session-legacy", () =>
+      db
+        .select({
+          id: imageDesignSessions.id,
+          userId: imageDesignSessions.userId,
+          title: imageDesignSessions.title,
+          createdAt: imageDesignSessions.createdAt,
+          updatedAt: imageDesignSessions.updatedAt,
+        })
+        .from(imageDesignSessions)
+        .where(and(eq(imageDesignSessions.id, parsedId), eq(imageDesignSessions.userId, userId)))
+        .limit(1),
+    )
+  }
 
   if (!rows[0] || !String(rows[0].title || "").startsWith(SESSION_PREFIX)) {
     return null
@@ -528,6 +654,38 @@ async function listImageAssistantAssetsForSession(userId: number, sessionId: str
   return new Set(rows.map((row) => row.id))
 }
 
+async function applyImageAssistantSessionPatchWithLegacyFallback(
+  sessionId: string,
+  patch: Record<string, unknown>,
+  label: string,
+) {
+  const sessionIdNumber = Number(sessionId)
+  try {
+    await withDbRetry(label, () =>
+      db.update(imageDesignSessions).set(patch as any).where(eq(imageDesignSessions.id, sessionIdNumber)),
+    )
+    return
+  } catch (error) {
+    if (!isLegacySessionColumnMissingError(error)) {
+      throw error
+    }
+
+    const { fallbackPatch, removed } = removeMissingSessionPatchFields(error, patch)
+    if (removed <= 0) {
+      throw error
+    }
+
+    console.warn("image-assistant.db.legacy-session-column-missing", {
+      scope: label,
+      message: getErrorMessage(error),
+    })
+
+    await withDbRetry(`${label}-legacy`, () =>
+      db.update(imageDesignSessions).set(fallbackPatch as any).where(eq(imageDesignSessions.id, sessionIdNumber)),
+    )
+  }
+}
+
 export async function updateImageAssistantSession(params: {
   userId: number
   sessionId: string
@@ -571,9 +729,7 @@ export async function updateImageAssistantSession(params: {
     }
   }
 
-  await withDbRetry("update-image-session", () =>
-    db.update(imageDesignSessions).set(patch as any).where(eq(imageDesignSessions.id, Number(params.sessionId))),
-  )
+  await applyImageAssistantSessionPatchWithLegacyFallback(params.sessionId, patch, "update-image-session")
 
   const next = await getImageAssistantSession(params.userId, params.sessionId)
   return next ? mapSession(next, next.coverAssetUrl) : null
@@ -910,15 +1066,14 @@ export async function setSelectedVersionCandidate(params: {
       .where(eq(imageDesignVersions.id, version.id)),
   )
 
-  await withDbRetry("update-session-current-version-pointer", () =>
-    db
-      .update(imageDesignSessions)
-      .set({
-        currentVersionId: version.id,
-        coverAssetId: candidate.assetId || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(imageDesignSessions.id, Number(params.sessionId))),
+  await applyImageAssistantSessionPatchWithLegacyFallback(
+    params.sessionId,
+    {
+      currentVersionId: version.id,
+      coverAssetId: candidate.assetId || null,
+      updatedAt: new Date(),
+    },
+    "update-session-current-version-pointer",
   )
 
   return true
@@ -1363,3 +1518,4 @@ export async function logImageAssistantExport(params: {
 
   return true
 }
+

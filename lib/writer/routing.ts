@@ -5,6 +5,12 @@ import {
   WRITER_PLATFORM_CONFIG,
   type WriterContentType,
 } from "@/lib/writer/config"
+import {
+  getWriterContentSkillMeta,
+  getWriterPlatformSkillByTargetPlatform,
+  matchWriterPlatformSkill,
+  matchWriterStyleSkill,
+} from "@/lib/writer/skill-catalog"
 import type { WriterRoutingDecision } from "@/lib/writer/types"
 
 type RoutingInput = {
@@ -173,6 +179,8 @@ export function inferWriterContentType(query: string): WriterContentType {
 }
 
 export function inferWriterTargetPlatform(query: string, contentType: WriterContentType): string {
+  const matchedPlatformSkill = matchWriterPlatformSkill(query)
+  if (matchedPlatformSkill?.targetPlatform) return matchedPlatformSkill.targetPlatform
   if (/(wechat|公众号)/i.test(query)) return "WeChat Official Account"
   if (/(xiaohongshu|rednote|小红书)/i.test(query)) return "Xiaohongshu"
   if (/微博/i.test(query)) return "Weibo"
@@ -307,6 +315,13 @@ export function inferWriterRenderProfile(input: {
 }): Pick<WriterRoutingDecision, "renderPlatform" | "renderMode"> {
   const target = input.targetPlatform.toLowerCase()
   const wantsThread = /thread|多段|串文/i.test(input.outputForm) || /thread|多段|串文/i.test(input.query)
+  const matchedPlatformSkill = getWriterPlatformSkillByTargetPlatform(input.targetPlatform)
+  if (matchedPlatformSkill) {
+    return {
+      renderPlatform: matchedPlatformSkill.renderPlatform,
+      renderMode: wantsThread && matchedPlatformSkill.supportsThread ? "thread" : "article",
+    }
+  }
 
   if (target.includes("wechat")) return { renderPlatform: "wechat", renderMode: "article" }
   if (target.includes("xiaohongshu")) return { renderPlatform: "xiaohongshu", renderMode: "article" }
@@ -331,16 +346,29 @@ export function inferWriterRenderProfile(input: {
 
 export function buildWriterRoutingDecision(input: RoutingInput): WriterRoutingDecision {
   const contentType = input.contentType || inferWriterContentType(input.query)
-  const targetPlatform = compact(input.targetPlatform, inferWriterTargetPlatform(input.query, contentType))
+  const contentMeta = getWriterContentSkillMeta(contentType)
+  const targetPlatform = compact(
+    input.targetPlatform,
+    inferWriterTargetPlatform(input.query, contentType) ||
+      contentMeta?.defaultTargetPlatform ||
+      WRITER_CONTENT_TYPE_CONFIG[contentType].defaultTargetPlatform,
+  )
   const outputForm = compact(
     input.outputForm,
-    inferWriterOutputForm({ contentType, targetPlatform, query: input.query }),
+    inferWriterOutputForm({ contentType, targetPlatform, query: input.query }) ||
+      contentMeta?.defaultOutputForm ||
+      WRITER_CONTENT_TYPE_CONFIG[contentType].defaultOutputForm,
   )
   const lengthTarget = compact(
     input.lengthTarget,
-    inferWriterLengthTarget({ contentType, targetPlatform, outputForm, query: input.query }),
+    inferWriterLengthTarget({ contentType, targetPlatform, outputForm, query: input.query }) ||
+      contentMeta?.defaultLengthTarget ||
+      WRITER_CONTENT_TYPE_CONFIG[contentType].defaultLengthTarget,
   )
   const renderProfile = inferWriterRenderProfile({ contentType, targetPlatform, outputForm, query: input.query })
+  const selectedPlatformSkill =
+    getWriterPlatformSkillByTargetPlatform(targetPlatform) || matchWriterPlatformSkill(input.query)
+  const selectedStyleSkill = matchWriterStyleSkill(input.query)
 
   return {
     contentType,
@@ -350,7 +378,11 @@ export function buildWriterRoutingDecision(input: RoutingInput): WriterRoutingDe
     renderPlatform: renderProfile.renderPlatform,
     renderMode: renderProfile.renderMode,
     selectedSkillId: contentType,
-    selectedSkillLabel: WRITER_CONTENT_TYPE_CONFIG[contentType].label,
+    selectedSkillLabel: contentMeta?.label || WRITER_CONTENT_TYPE_CONFIG[contentType].label,
+    selectedPlatformSkillId: selectedPlatformSkill?.id || null,
+    selectedPlatformSkillLabel: selectedPlatformSkill?.label || null,
+    selectedStyleSkillId: selectedStyleSkill?.id || null,
+    selectedStyleSkillLabel: selectedStyleSkill?.label || null,
   }
 }
 

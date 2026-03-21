@@ -388,7 +388,7 @@ export async function POST(request: NextRequest) {
           },
           error: "writer_assets_failed",
         },
-        { status: 200 },
+        { status: 502 },
       )
     }
 

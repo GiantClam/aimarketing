@@ -6,7 +6,13 @@
 } from "@/lib/image-assistant/skill-documents"
 import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
 import { generateTextWithWriterModel, hasWriterTextProvider } from "@/lib/writer/aiberm"
-import { getImageAssistantSkillDefinition, IMAGE_ASSISTANT_MAX_BRIEF_TURNS, IMAGE_ASSISTANT_TEXT_MODEL, selectImageAssistantSkill } from "@/lib/image-assistant/skills"
+import {
+  getImageAssistantSkillDefinition,
+  IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
+  IMAGE_ASSISTANT_SKILL_MODEL,
+  isImageAssistantSkillId,
+  selectImageAssistantSkill,
+} from "@/lib/image-assistant/skills"
 import type {
   ImageAssistantBrief,
   ImageAssistantBriefField,
@@ -16,6 +22,7 @@ import type {
   ImageAssistantPromptOption,
   ImageAssistantPromptQuestion,
   ImageAssistantResolution,
+  ImageAssistantSkillId,
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
   ImageAssistantToolTrace,
@@ -280,14 +287,43 @@ function truncate(value: string, max = 180) {
 }
 
 function isLowSignalBriefReply(value: string) {
-  return /^(ok|okay|yes|no|濂界殑|濂絴琛寍鍙互|鏀跺埌|鏄庣櫧浜唡鍡瘄鎭﹟闅忎究|閮借)$/iu.test(value)
+  return /^(ok|okay|yes|no|好的|好|可以|收到|明白了|随便|都行)$/iu.test(value)
 }
 
 function splitBriefReplySegments(value: string) {
   return value
-    .split(/\r?\n|[锛?]+/)
+    .split(/\r?\n|[,，;；。!?！？]+/)
     .map((segment) => normalizeText(segment))
     .filter(Boolean)
+}
+
+function inferBriefFromPromptQuestionOption(input: {
+  prompt: string
+  previousState: ImageAssistantOrchestrationState | null
+}) {
+  const prompt = normalizeText(input.prompt)
+  if (!prompt || !input.previousState?.prompt_questions?.length) {
+    return { ...EMPTY_BRIEF }
+  }
+
+  const normalizedPrompt = prompt.toLowerCase()
+  for (const question of input.previousState.prompt_questions) {
+    for (const option of question.options || []) {
+      const matchCandidates = [option.id, option.label, option.prompt_value]
+        .map((value) => normalizeText(value))
+        .filter(Boolean)
+      const matched = matchCandidates.some((candidate) => candidate.toLowerCase() === normalizedPrompt)
+      if (!matched) continue
+
+      return normalizeBrief({
+        ...(option.brief_patch || {}),
+        ...(option.size_preset ? { size_preset: option.size_preset } : {}),
+        ...(option.resolution ? { resolution: option.resolution } : {}),
+      })
+    }
+  }
+
+  return { ...EMPTY_BRIEF }
 }
 
 function inferBriefFromFollowUpAnswer(input: {
@@ -303,33 +339,41 @@ function inferBriefFromFollowUpAnswer(input: {
   const segments = splitBriefReplySegments(prompt)
   const extracted: Partial<ImageAssistantBrief> = {}
 
-  if (requestedFields.length === 1) {
-    const field = requestedFields[0]
+  for (const field of requestedFields) {
     if (field === "orientation") {
-      extracted.orientation = /(?:横|landscape|wide)/iu.test(prompt) ? "landscape" : /(?:竖|portrait|tall)/iu.test(prompt) ? "portrait" : ""
-    } else if (field === "resolution") {
+      extracted.orientation =
+        extracted.orientation ||
+        (/(?:横|landscape|wide)/iu.test(prompt) ? "landscape" : /(?:竖|portrait|tall)/iu.test(prompt) ? "portrait" : "")
+      continue
+    }
+    if (field === "resolution") {
       extracted.resolution =
+        extracted.resolution ||
         /(?:4k|超高清)/iu.test(prompt) ? "4K" : /(?:2k|超清)/iu.test(prompt) ? "2K" : /(?:1k|高清)/iu.test(prompt) ? "1K" : /(?:512|标清|standard)/iu.test(prompt) ? "512" : ""
-    } else if (field === "usage" || field === "ratio") {
+      continue
+    }
+    if (field === "usage" || field === "ratio") {
       const usagePreset = inferUsagePresetFromPrompt(prompt)
       if (usagePreset) {
         const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
         extracted.usage_preset = usagePreset
         extracted.usage_label = preset.zhLabel
         extracted.size_preset = preset.sizePreset
-        extracted.ratio_confirmed = field === "ratio"
+        extracted.ratio_confirmed = extracted.ratio_confirmed || field === "ratio"
       }
-    } else {
-      extracted[field] = truncate(prompt, 160)
+      continue
     }
-    return normalizeBrief(extracted)
   }
 
-  if (requestedFields.length <= 2 && segments.length >= requestedFields.length) {
-    requestedFields.forEach((field, index) => {
-      if (field === "goal" || field === "subject" || field === "style" || field === "composition") {
-        extracted[field] = truncate(segments[index] || "", 160)
-      }
+  const requestedTextFields = requestedFields.filter(
+    (field): field is "goal" | "subject" | "style" | "composition" =>
+      field === "goal" || field === "subject" || field === "style" || field === "composition",
+  )
+  if (requestedTextFields.length === 1) {
+    extracted[requestedTextFields[0]] = truncate(prompt, 160)
+  } else if (requestedTextFields.length > 1 && segments.length >= requestedTextFields.length) {
+    requestedTextFields.forEach((field, index) => {
+      extracted[field] = truncate(segments[index] || "", 160)
     })
   }
 
@@ -416,7 +460,7 @@ function extractBriefFromLabeledLines(prompt: string) {
     .filter(Boolean)
 
   for (const line of lines) {
-    const match = /^([^:锛?]{2,24})\s*[:锛?]\s*(.+)$/i.exec(line)
+    const match = /^([^:：]{2,24})\s*[:：]\s*(.+)$/i.exec(line)
     if (!match) continue
 
     const label = match[1].trim().toLowerCase()
@@ -612,9 +656,11 @@ async function maybePlanWithTextModel(input: {
     runtimeSystemPrompt,
     promptCompositionRules.length ? `Follow-up rules: ${promptCompositionRules.join(" ")}` : null,
     "Return strict JSON only.",
-    'Schema: {"brief":{"goal":"","subject":"","style":"","composition":"","constraints":""},"reply_to_user":"","generated_prompt":"","missing_fields":["goal","subject"],"ready_for_generation":false}.',
+    'Schema: {"brief":{"goal":"","subject":"","style":"","composition":"","constraints":""},"reply_to_user":"","generated_prompt":"","missing_fields":["goal","subject"],"ready_for_generation":false,"selected_skill":"graphic-design-brief"}.',
     "If the brief is not complete, generated_prompt must be an empty string.",
     "Keep reply_to_user concise and practical.",
+    "selected_skill must be one of: graphic-design-brief, canvas-design-execution, enterprise-ad-image.",
+    "Use graphic-design-brief while the brief is incomplete; use an execution skill only when the brief is complete enough to generate now.",
   ]
     .filter(Boolean)
     .join(" ")
@@ -633,7 +679,7 @@ async function maybePlanWithTextModel(input: {
   })
 
   try {
-    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, IMAGE_ASSISTANT_TEXT_MODEL)
+    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, IMAGE_ASSISTANT_SKILL_MODEL)
     const parsed = extractJsonObject(raw)
     if (!parsed || typeof parsed !== "object") return null
 
@@ -650,6 +696,7 @@ async function maybePlanWithTextModel(input: {
       readyForGeneration: Boolean((parsed as any).ready_for_generation) && missingFields.length === 0,
       replyToUser: normalizeText((parsed as any).reply_to_user),
       generatedPrompt: normalizeText((parsed as any).generated_prompt),
+      selectedSkillId: isImageAssistantSkillId((parsed as any).selected_skill) ? ((parsed as any).selected_skill as ImageAssistantSkillId) : null,
     }
   } catch (error) {
     console.warn("image-assistant.text-planner.failed", error)
@@ -667,6 +714,51 @@ function isBriefFieldFilled(brief: ImageAssistantBrief, field: ImageAssistantBri
 
 function getCollectedBriefFieldCount(brief: ImageAssistantBrief) {
   return REQUIRED_BRIEF_FIELDS.filter((field) => isBriefFieldFilled(brief, field)).length
+}
+
+function hasImageAssistantDeliverySkeleton(brief: ImageAssistantBrief) {
+  return Boolean(
+    brief.usage_preset &&
+      brief.orientation &&
+      brief.resolution &&
+      brief.size_preset &&
+      brief.ratio_confirmed &&
+      normalizeText(brief.subject),
+  )
+}
+
+function applyBriefProgressionFallbacks(input: {
+  brief: ImageAssistantBrief
+  userPrompt: string
+  turnCount: number
+  maxTurns: number
+}) {
+  const base = normalizeBrief(input.brief)
+  const isZh = looksLikeChinese(`${input.userPrompt} ${base.goal} ${base.subject} ${base.usage_label}`)
+  const hasDeliverySkeleton = hasImageAssistantDeliverySkeleton(base)
+  const patch: Partial<ImageAssistantBrief> = {}
+
+  if (!base.goal && base.usage_label) {
+    patch.goal = base.usage_label
+  }
+
+  if (!base.subject && input.turnCount >= input.maxTurns) {
+    patch.subject = truncate(input.userPrompt, 140)
+  }
+
+  if (hasDeliverySkeleton && !normalizeText(base.style)) {
+    patch.style = isZh
+      ? "整体保持商业级视觉质感，突出主体识别，色彩与光影统一，风格简洁高级并可直接用于投放。"
+      : "Use a polished commercial visual style with clear subject identity, cohesive lighting and color, and production-ready quality."
+  }
+
+  if (hasDeliverySkeleton && !normalizeText(base.composition)) {
+    patch.composition = isZh
+      ? `按 ${base.size_preset || "1:1"} 画幅组织画面，保留主视觉焦点，并预留可放标题与卖点文案的安全区域。`
+      : `Use a ${base.size_preset || "1:1"} composition with a clear focal area and safe whitespace for headline overlays.`
+  }
+
+  return mergeBrief(base, patch)
 }
 
 function buildPromptQuestions(input: {
@@ -826,17 +918,22 @@ async function buildGenerationPrompt(input: {
   sizePreset: ImageAssistantSizePreset
   resolution: string
   referenceCount: number
+  executionSkillId?: ImageAssistantSkillId | null
   extraInstructions?: string | null
 }) {
-  const executionSkill = getImageAssistantSkillDefinition("canvas-design-execution")
+  const requestedExecutionSkillId =
+    input.executionSkillId && getImageAssistantSkillDefinition(input.executionSkillId).stage === "execution"
+      ? input.executionSkillId
+      : "canvas-design-execution"
+  const executionSkill = getImageAssistantSkillDefinition(requestedExecutionSkillId)
   const runtimeSystemPrompt = await getImageAssistantRuntimeSystemPrompt(
-    "canvas-design-execution",
+    requestedExecutionSkillId,
     executionSkill.system_prompt,
   )
-  const compositionRules = await getImageAssistantPromptCompositionRules("canvas-design-execution")
+  const compositionRules = await getImageAssistantPromptCompositionRules(requestedExecutionSkillId)
   const failureChecks = dedupeStrings([
     ...(await getImageAssistantFailureChecks("graphic-design-brief")),
-    ...(await getImageAssistantFailureChecks("canvas-design-execution")),
+    ...(await getImageAssistantFailureChecks(requestedExecutionSkillId)),
   ])
   const effectiveSizePreset = input.brief.size_preset || input.sizePreset
   const effectiveResolution = input.brief.resolution || input.resolution
@@ -998,15 +1095,18 @@ export async function planImageAssistantTurn(input: {
     sizePreset: input.sizePreset,
     referenceCount: input.referenceCount,
   })
+  const promptOptionBrief = inferBriefFromPromptQuestionOption({
+    prompt: input.prompt,
+    previousState: input.previousState,
+  })
   const contextual = inferBriefFromFollowUpAnswer({
     prompt: input.prompt,
     previousState: input.previousState,
   })
-  const mergedBrief = mergeBrief(input.previousState?.brief, input.currentBrief, inferred, contextual)
+  const mergedBrief = mergeBrief(input.previousState?.brief, input.currentBrief, promptOptionBrief, inferred, contextual)
   const initialMissingFields = getActionableBriefMissingFields(mergedBrief)
   const turnCount = Math.min((input.previousState?.turn_count || 0) + 1, IMAGE_ASSISTANT_MAX_BRIEF_TURNS)
-  const hasGuidedGap = initialMissingFields.some((field) => GUIDED_BRIEF_FIELDS.has(field))
-  const modelPlan = useEditShortcut || hasGuidedGap
+  const modelPlan = useEditShortcut
     ? null
     : await maybePlanWithTextModel({
         prompt: input.prompt,
@@ -1019,17 +1119,43 @@ export async function planImageAssistantTurn(input: {
         referenceCount: input.referenceCount,
       })
 
-  const brief = useEditShortcut
+  const rawBrief = useEditShortcut
     ? applyReferenceEditDefaults(modelPlan?.brief || mergedBrief, input.prompt)
     : modelPlan?.brief || mergedBrief
+  const brief = applyBriefProgressionFallbacks({
+    brief: rawBrief,
+    userPrompt: input.prompt,
+    turnCount,
+    maxTurns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
+  })
   const missingFields = getActionableBriefMissingFields(brief)
   const promptQuestions = buildPromptQuestions({
     brief,
     missingFields,
     userPrompt: input.prompt,
   })
+  const deterministicSkill = selectImageAssistantSkill({
+    taskType: input.taskType,
+    readyForGeneration: missingFields.length === 0,
+    prompt: input.prompt,
+    usagePreset: brief.usage_preset,
+    goal: brief.goal,
+  })
+  const modelSelectedSkillStage = modelPlan?.selectedSkillId
+    ? getImageAssistantSkillDefinition(modelPlan.selectedSkillId).stage
+    : null
+  const selectedSkillSeed =
+    modelPlan?.selectedSkillId &&
+    ((missingFields.length > 0 && modelSelectedSkillStage === "briefing") ||
+      (missingFields.length === 0 && modelSelectedSkillStage === "execution"))
+      ? {
+          id: modelPlan.selectedSkillId,
+          label: getImageAssistantSkillDefinition(modelPlan.selectedSkillId).label,
+          stage: getImageAssistantSkillDefinition(modelPlan.selectedSkillId).stage,
+        }
+      : deterministicSkill
   const selectedSkill = await resolveSelectedSkillMetadata(
-    selectImageAssistantSkill({ taskType: input.taskType, readyForGeneration: missingFields.length === 0 }),
+    selectedSkillSeed,
   )
   const generatedPrompt =
     missingFields.length === 0
@@ -1037,15 +1163,16 @@ export async function planImageAssistantTurn(input: {
           (await buildGenerationPrompt({
              brief,
              taskType: input.taskType,
-             sizePreset: input.sizePreset,
-            resolution: input.resolution,
-             referenceCount: input.referenceCount,
-             extraInstructions: input.extraInstructions,
-           })))
+              sizePreset: input.sizePreset,
+             resolution: input.resolution,
+              referenceCount: input.referenceCount,
+              executionSkillId: selectedSkill.id,
+              extraInstructions: input.extraInstructions,
+            })))
       : null
   const replyToUser =
-    modelPlan?.replyToUser ||
-    buildClarificationReply({
+    missingFields.length > 0
+      ? buildClarificationReply({
       brief,
       missingFields,
       turnCount,
@@ -1055,6 +1182,7 @@ export async function planImageAssistantTurn(input: {
       userPrompt: input.prompt,
       promptQuestions,
     })
+      : null
   const plannerStrategy = useEditShortcut ? "rule_shortcut" : modelPlan ? "text_model" : "heuristic"
 
   const orchestration: ImageAssistantOrchestrationState = {
@@ -1075,14 +1203,14 @@ export async function planImageAssistantTurn(input: {
     }),
     reference_count: input.referenceCount,
     recommended_mode: input.taskType === "generate" ? "generate" : "edit",
-    follow_up_question: missingFields.length ? replyToUser : null,
+    follow_up_question: replyToUser,
     prompt_questions: promptQuestions,
     generated_prompt: generatedPrompt,
   }
 
   return {
     orchestration,
-    assistantReply: missingFields.length ? replyToUser : null,
+    assistantReply: replyToUser,
   }
 }
 
