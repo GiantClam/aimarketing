@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { listImageAssistantAssets } from "@/lib/image-assistant/repository"
+import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
@@ -14,6 +15,29 @@ const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
   "image_assistant_asset_not_found",
   "image_assistant_canvas_document_not_found",
 ])
+
+function normalizeGuidedSelection(input: unknown): ImageAssistantGuidedSelection | null {
+  if (!input || typeof input !== "object") return null
+  const candidate = input as Record<string, unknown>
+  const sourceMessageId =
+    typeof candidate.source_message_id === "string" && candidate.source_message_id.trim()
+      ? candidate.source_message_id.trim()
+      : null
+  const questionId =
+    typeof candidate.question_id === "string" && candidate.question_id.trim() ? candidate.question_id.trim() : null
+  const optionId =
+    typeof candidate.option_id === "string" && candidate.option_id.trim() ? candidate.option_id.trim() : null
+
+  if (!sourceMessageId && !questionId && !optionId) {
+    return null
+  }
+
+  return {
+    source_message_id: sourceMessageId,
+    question_id: questionId,
+    option_id: optionId,
+  }
+}
 
 async function hasActualEditContext(input: {
   userId: number
@@ -104,6 +128,7 @@ export async function POST(req: NextRequest) {
         sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
         resolution: typeof body?.resolution === "string" ? body.resolution : null,
         parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
+        guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       },
     })
 

@@ -75,6 +75,24 @@ export function getOpenRouterImageModel() {
 type AibermTextGenerationOptions = {
   temperature?: number
   maxTokens?: number
+  signal?: AbortSignal
+}
+
+type WriterStructuredObjectOptions = {
+  temperature?: number
+  maxTokens?: number
+  timeoutMs?: number
+  signal?: AbortSignal
+}
+
+type WriterStructuredObjectParams = {
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  toolName: string
+  toolDescription?: string
+  jsonSchema: Record<string, unknown>
+  options?: WriterStructuredObjectOptions
 }
 
 export function extractTextFromOpenAICompatibleResponse(data: any) {
@@ -112,6 +130,26 @@ export function extractTextFromOpenAICompatibleResponse(data: any) {
   throw new Error("openai_compatible_text_empty")
 }
 
+function extractToolCallArgumentsFromOpenAICompatibleResponse(data: any, toolName?: string) {
+  const choice = Array.isArray(data?.choices) ? data.choices[0] : null
+  const message = choice?.message || {}
+  const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
+  const targetToolCall = toolCalls.find((toolCall: any) => {
+    const calledName = typeof toolCall?.function?.name === "string" ? toolCall.function.name : ""
+    return !toolName || calledName === toolName
+  })
+
+  const argumentsPayload = targetToolCall?.function?.arguments
+  if (typeof argumentsPayload === "string" && argumentsPayload.trim()) {
+    return JSON.parse(argumentsPayload)
+  }
+  if (argumentsPayload && typeof argumentsPayload === "object") {
+    return argumentsPayload
+  }
+
+  throw new Error("openai_compatible_tool_call_missing")
+}
+
 function buildOpenRouterHeaders() {
   if (!OPENROUTER_API_KEY) {
     throw new Error("openrouter_api_key_missing")
@@ -147,6 +185,7 @@ export async function generateTextWithAiberm(
     {
       method: "POST",
       headers: buildAibermHeaders(),
+      signal: options.signal,
       body: JSON.stringify({
         model,
         messages: [
@@ -179,6 +218,7 @@ export async function generateTextWithOpenRouter(
     {
       method: "POST",
       headers: buildOpenRouterHeaders(),
+      signal: options.signal,
       body: JSON.stringify({
         model,
         messages: [
@@ -225,7 +265,7 @@ export async function generateTextWithWriterModel(
 
   if (hasOpenRouterApiKey()) {
     try {
-      return await generateTextWithOpenRouter(systemPrompt, userPrompt, OPENROUTER_TEXT_MODEL, options)
+      return await generateTextWithOpenRouter(systemPrompt, userPrompt, model || OPENROUTER_TEXT_MODEL, options)
     } catch (error) {
       if (isAbortLikeError(error)) {
         throw error
@@ -235,6 +275,131 @@ export async function generateTextWithWriterModel(
   }
 
   throw lastError instanceof Error ? lastError : new Error("writer_text_provider_missing")
+}
+
+async function generateStructuredObjectWithAiberm(params: WriterStructuredObjectParams) {
+  const response = await writerRequestJson(
+    `${AIBERM_API_BASE}/chat/completions`,
+    {
+      method: "POST",
+      headers: buildAibermHeaders(),
+      signal: params.options?.signal,
+      body: JSON.stringify({
+        model: params.model,
+        messages: [
+          { role: "system", content: params.systemPrompt } satisfies OpenAICompatibleMessage,
+          { role: "user", content: params.userPrompt } satisfies OpenAICompatibleMessage,
+        ],
+        temperature: params.options?.temperature ?? 0,
+        max_tokens: params.options?.maxTokens ?? 1024,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: params.toolName,
+              description: params.toolDescription || "Return the structured extraction result.",
+              parameters: params.jsonSchema,
+              strict: true,
+            },
+          },
+        ],
+        tool_choice: {
+          type: "function",
+          function: {
+            name: params.toolName,
+          },
+        },
+      }),
+    },
+    { attempts: 1, timeoutMs: params.options?.timeoutMs ?? 30_000 },
+  )
+
+  if (!response.ok) {
+    const data = response.data as any
+    throw new Error(data?.error?.message || `aiberm_structured_http_${response.status}`)
+  }
+
+  return extractToolCallArgumentsFromOpenAICompatibleResponse(response.data, params.toolName)
+}
+
+async function generateStructuredObjectWithOpenRouter(params: WriterStructuredObjectParams) {
+  const response = await writerRequestJson(
+    `${OPENROUTER_API_BASE}/chat/completions`,
+    {
+      method: "POST",
+      headers: buildOpenRouterHeaders(),
+      signal: params.options?.signal,
+      body: JSON.stringify({
+        model: params.model || OPENROUTER_TEXT_MODEL,
+        messages: [
+          { role: "system", content: params.systemPrompt } satisfies OpenAICompatibleMessage,
+          { role: "user", content: params.userPrompt } satisfies OpenAICompatibleMessage,
+        ],
+        temperature: params.options?.temperature ?? 0,
+        max_tokens: params.options?.maxTokens ?? 1024,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: params.toolName,
+              description: params.toolDescription || "Return the structured extraction result.",
+              parameters: params.jsonSchema,
+              strict: true,
+            },
+          },
+        ],
+        tool_choice: {
+          type: "function",
+          function: {
+            name: params.toolName,
+          },
+        },
+      }),
+    },
+    { attempts: 1, timeoutMs: params.options?.timeoutMs ?? 30_000 },
+  )
+
+  if (!response.ok) {
+    const data = response.data as any
+    throw new Error(data?.error?.message || `openrouter_structured_http_${response.status}`)
+  }
+
+  return extractToolCallArgumentsFromOpenAICompatibleResponse(response.data, params.toolName)
+}
+
+export async function generateStructuredObjectWithWriterModel(params: WriterStructuredObjectParams) {
+  let lastError: unknown = null
+
+  if (hasAibermApiKey()) {
+    try {
+      return await generateStructuredObjectWithAiberm(params)
+    } catch (error) {
+      if (isAbortLikeError(error)) {
+        throw error
+      }
+      lastError = error
+      console.warn("writer.structured.aiberm_fallback", {
+        message: error instanceof Error ? error.message : String(error),
+        fallbackProvider: hasOpenRouterApiKey() ? "openrouter" : null,
+      })
+    }
+  }
+
+  if (hasOpenRouterApiKey()) {
+    try {
+      return await generateStructuredObjectWithOpenRouter({
+        ...params,
+        model: params.model || OPENROUTER_TEXT_MODEL,
+      })
+    } catch (error) {
+      if (isAbortLikeError(error)) {
+        throw error
+      }
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("writer_structured_provider_missing")
 }
 
 function normalizeAspectRatio(aspectRatio: string) {
@@ -361,12 +526,13 @@ export async function generateImagesWithOpenRouter(
     throw new Error(data?.error?.message || `openrouter_image_http_${response.status}`)
   }
 
-  let textSummary = ""
-  try {
-    textSummary = extractTextFromOpenAICompatibleResponse(response.data)
-  } catch {
-    textSummary = ""
-  }
+  const textSummary = (() => {
+    try {
+      return extractTextFromOpenAICompatibleResponse(response.data)
+    } catch {
+      return ""
+    }
+  })()
 
   return {
     images: extractOpenRouterImageDataUrls(response.data),

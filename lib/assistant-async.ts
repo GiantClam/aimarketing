@@ -13,7 +13,7 @@ import { runWriterSkillsTurn } from "@/lib/writer/skills"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 import type { WriterConversationStatus, WriterHistoryEntry, WriterPreloadedBrief } from "@/lib/writer/types"
-import type { ImageAssistantBrief, ImageAssistantTaskType } from "@/lib/image-assistant/types"
+import type { ImageAssistantBrief, ImageAssistantGuidedSelection, ImageAssistantTaskType } from "@/lib/image-assistant/types"
 
 type AssistantTaskStatus = "pending" | "running" | "success" | "failed"
 
@@ -48,6 +48,7 @@ type ImageTurnTaskPayload = {
   snapshotAssetId?: string | null
   maskAssetId?: string | null
   versionMeta?: Record<string, unknown> | null
+  guidedSelection?: ImageAssistantGuidedSelection | null
 }
 
 type AdvisorTurnTaskPayload = {
@@ -285,6 +286,7 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
     snapshotAssetId: payload.snapshotAssetId,
     maskAssetId: payload.maskAssetId,
     versionMeta: payload.versionMeta,
+    guidedSelection: payload.guidedSelection,
   })
 
   await updateTaskStatus(taskId, {

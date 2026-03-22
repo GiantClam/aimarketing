@@ -33,12 +33,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
       mode === "summary"
         ? {
             includeMessages: true,
-            includeVersions: true,
-            includeAssets: true,
+            includeVersions: false,
+            includeAssets: false,
             includeCanvas: false,
             messageLimit: parsePositiveInt(req.nextUrl.searchParams.get("messageLimit")) ?? 16,
-            versionLimit: parsePositiveInt(req.nextUrl.searchParams.get("versionLimit")) ?? 8,
-            assetLimit: parsePositiveInt(req.nextUrl.searchParams.get("assetLimit")) ?? 24,
           }
         : mode === "content"
           ? {

@@ -1503,6 +1503,40 @@ export function WriterWorkspace({
     )
   }
 
+  const extractAssistantDbMessageId = (messageId: string | null) => {
+    if (!messageId) return null
+    const normalized = messageId.trim()
+    const prefixedMatch = /^assistant_(\d+)$/i.exec(normalized)
+    const numericId = prefixedMatch ? prefixedMatch[1] : normalized
+    return /^\d+$/.test(numericId) ? numericId : null
+  }
+
+  const patchAssistantHistoryEntry = (messageId: string | null, content: string) => {
+    const assistantDbId = extractAssistantDbMessageId(messageId)
+    if (!assistantDbId) return
+
+    historyEntriesRef.current = historyEntriesRef.current.map((entry) =>
+      String(entry.id) === assistantDbId
+        ? {
+            ...entry,
+            answer: content,
+          }
+        : entry,
+    )
+
+    if (!conversationId) return
+
+    const cachedConversation = getWriterConversationCache(conversationId)
+    saveWriterConversationCache(conversationId, {
+      entries: historyEntriesRef.current,
+      conversation: cachedConversation?.conversation || null,
+      historyCursor,
+      hasMoreHistory,
+      loadedTurnCount: historyEntriesRef.current.length,
+      updatedAt: Date.now(),
+    })
+  }
+
   const replaceLatestAssistantMessage = (content: string) => {
     setMessages((current) => {
       const next = [...current]
@@ -1805,7 +1839,14 @@ export function WriterWorkspace({
     }
 
     try {
-      console.log("writer.client.generate_assets_start", { platform, mode, conversationId, markdownLength: target.sourceMarkdown.length })
+      console.log("writer.client.generate_assets_start", {
+        platform,
+        mode,
+        conversationId,
+        targetMessageId: target.messageId,
+        targetIsLatest: target.isLatest,
+        markdownLength: target.sourceMarkdown.length,
+      })
       const response = await fetch("/api/writer/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1843,28 +1884,32 @@ export function WriterWorkspace({
       }
 
       const resolvedMarkdown = resolveWriterAssetMarkdown(target.sourceMarkdown, nextAssets, platform, mode)
-      if (target.isLatest && resolvedMarkdown && resolvedMarkdown !== target.sourceMarkdown) {
-        setDraft(resolvedMarkdown)
-        setMessages((current) => {
-          const next = [...current]
-          for (let index = next.length - 1; index >= 0; index -= 1) {
-            if (next[index]?.role === "assistant") {
-              next[index] = {
-                ...next[index],
-                content: resolvedMarkdown,
-                authorLabel: writerCopy.assistantName,
-              }
-              break
-            }
-          }
-          return next
-        })
+      if (resolvedMarkdown && resolvedMarkdown !== target.sourceMarkdown) {
+        if (target.isLatest) {
+          setDraft(resolvedMarkdown)
+        }
+
+        patchAssistantMessage(target.messageId, resolvedMarkdown)
+        patchAssistantHistoryEntry(target.messageId, resolvedMarkdown)
 
         if (conversationId) {
+          const assistantDbMessageId = extractAssistantDbMessageId(target.messageId)
+          const patchPayload: Record<string, unknown> = {
+            conversation_id: conversationId,
+            content: resolvedMarkdown,
+          }
+          if (assistantDbMessageId) {
+            patchPayload.message_id = assistantDbMessageId
+          }
+          if (target.isLatest) {
+            patchPayload.status = "ready"
+            patchPayload.imagesRequested = true
+          }
+
           void fetch("/api/writer/messages", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ conversation_id: conversationId, content: resolvedMarkdown, status: "ready", imagesRequested: true }),
+            body: JSON.stringify(patchPayload),
           })
             .then(() => invalidateWriterConversationQueries(queryClient, conversationId))
             .catch(() => null)
@@ -2035,6 +2080,7 @@ export function WriterWorkspace({
                                 )}
                                 onClick={() => void handleGenerateAssets(messagePreview)}
                                 disabled={messagePreview.assetsLoading}
+                                data-testid={`writer-generate-images-${message.id}`}
                               >
                                 {messagePreview.assetsLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="mr-1.5 h-3.5 w-3.5" />}
                                 {messagePreview.assetsLoading

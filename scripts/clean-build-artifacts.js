@@ -2,9 +2,9 @@ const fs = require("fs")
 const path = require("path")
 
 const root = process.cwd()
+const distDir = process.env.NEXT_DIST_DIR || ".next"
 const targets = [
-  ".next",
-  ".next-image-assistant-e2e",
+  distDir,
   "tsconfig.tsbuildinfo",
 ]
 

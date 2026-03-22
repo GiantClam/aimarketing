@@ -32,9 +32,10 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-writer-real-accounts/types/**/*.ts",
+    ".next-writer-real-validation/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-writer-real-validation/types/**/*.ts"
+    ".next-image-assistant-e2e/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

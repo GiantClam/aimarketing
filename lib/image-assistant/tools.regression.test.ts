@@ -9,19 +9,22 @@ const nodeModule = require("node:module") as {
 const originalLoad = nodeModule._load
 
 let plannerCalls = 0
+let structuredCalls = 0
+let textCalls = 0
+let structuredShouldThrow = false
 let mockedPlannerResponse = JSON.stringify({
-  brief: {
-    goal: "Launch campaign visual",
+  brief_delta: {
+    goal: "Launch homepage visual",
     subject: "Modern AI workflow illustration",
     style: "Crisp editorial product art",
     composition: "16:9 hero with safe whitespace for headline",
     constraints: "",
   },
-  reply_to_user: "",
-  generated_prompt: "Final generation prompt",
   missing_fields: [],
+  conflicts: [],
+  confidence: 0.92,
+  next_question: "",
   ready_for_generation: true,
-  selected_skill: "canvas-design-execution",
 })
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
@@ -31,7 +34,16 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/writer/aiberm") {
     return {
       hasWriterTextProvider: () => true,
+      generateStructuredObjectWithWriterModel: async () => {
+        structuredCalls += 1
+        if (structuredShouldThrow) {
+          throw new Error("tool not supported")
+        }
+        plannerCalls += 1
+        return JSON.parse(mockedPlannerResponse)
+      },
       generateTextWithWriterModel: async () => {
+        textCalls += 1
         plannerCalls += 1
         return mockedPlannerResponse
       },
@@ -56,25 +68,28 @@ test.before(async () => {
 
 test.beforeEach(() => {
   plannerCalls = 0
+  structuredCalls = 0
+  textCalls = 0
+  structuredShouldThrow = false
   mockedPlannerResponse = JSON.stringify({
-    brief: {
-      goal: "Launch campaign visual",
+    brief_delta: {
+      goal: "Launch homepage visual",
       subject: "Modern AI workflow illustration",
       style: "Crisp editorial product art",
       composition: "16:9 hero with safe whitespace for headline",
       constraints: "",
     },
-    reply_to_user: "",
-    generated_prompt: "Final generation prompt",
     missing_fields: [],
+    conflicts: [],
+    confidence: 0.92,
+    next_question: "",
     ready_for_generation: true,
-    selected_skill: "canvas-design-execution",
   })
 })
 
-test("planner can promote a complete brief into execution skill selection", async () => {
+test("planner can promote a complete brief into execution", async () => {
   const result = await planImageAssistantTurn({
-    prompt: "Create a website hero image for an AI workflow launch campaign",
+    prompt: "Create a website homepage image for an AI workflow launch",
     currentBrief: {
       usage_preset: "website_banner",
       usage_label: "Website banner",
@@ -91,10 +106,40 @@ test("planner can promote a complete brief into execution skill selection", asyn
   })
 
   assert.equal(plannerCalls, 1)
+  assert.equal(structuredCalls, 1)
+  assert.equal(textCalls, 0)
   assert.equal(result.orchestration.planner_strategy, "text_model")
   assert.equal(result.orchestration.ready_for_generation, true)
   assert.equal(result.orchestration.selected_skill.id, "canvas-design-execution")
-  assert.equal(result.orchestration.generated_prompt, "Final generation prompt")
+  assert.equal(result.orchestration.schema_version, "image_assistant_brief_extract.v1")
+  assert.equal(result.orchestration.prompt_version, "image_assistant_prompt_compose.v1")
+  assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
+  assert.ok(result.orchestration.generated_prompt?.includes("Design objective:"))
+})
+
+test("falls back to text JSON extraction when structured tool-call is unsupported", async () => {
+  structuredShouldThrow = true
+  const result = await planImageAssistantTurn({
+    prompt: "Create a website homepage image for product launch",
+    currentBrief: {
+      usage_preset: "website_banner",
+      usage_label: "Website banner",
+      orientation: "landscape",
+      resolution: "2K",
+      size_preset: "16:9",
+      ratio_confirmed: true,
+    },
+    previousState: null,
+    taskType: "generate",
+    sizePreset: "16:9",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  assert.equal(structuredCalls, 1)
+  assert.equal(textCalls, 1)
+  assert.equal(result.orchestration.planner_strategy, "text_model")
+  assert.equal(result.orchestration.ready_for_generation, true)
 })
 
 test("hard reference edit shortcut still bypasses the planner model", async () => {
@@ -116,22 +161,22 @@ test("hard reference edit shortcut still bypasses the planner model", async () =
 
 test("guided brief can auto-complete style fallback and continue to generation", async () => {
   mockedPlannerResponse = JSON.stringify({
-    brief: {
+    brief_delta: {
       goal: "Ad poster 4:3",
       subject: "Black and red industrial lathe",
       style: "",
       composition: "Keep a centered hero product with text-safe whitespace.",
       constraints: "",
     },
-    reply_to_user: "Please share the style.",
-    generated_prompt: "",
     missing_fields: ["style"],
+    conflicts: [],
+    confidence: 0.7,
+    next_question: "Please share the style.",
     ready_for_generation: false,
-    selected_skill: "graphic-design-brief",
   })
 
   const result = await planImageAssistantTurn({
-    prompt: "继续",
+    prompt: "continue",
     currentBrief: {
       usage_preset: "ad_poster",
       usage_label: "Ad poster 4:3",
@@ -158,20 +203,20 @@ test("guided brief can auto-complete style fallback and continue to generation",
   assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
 })
 
-test("planner can explicitly route completed ad briefs to enterprise-ad-image", async () => {
+test("completed ad brief routes to enterprise-ad-image", async () => {
   mockedPlannerResponse = JSON.stringify({
-    brief: {
+    brief_delta: {
       goal: "Campaign ad poster",
       subject: "Black and red industrial machine",
       style: "Premium industrial campaign visual",
       composition: "4:3 ad poster with center focal area and text-safe top zone",
       constraints: "Keep product geometry accurate",
     },
-    reply_to_user: "",
-    generated_prompt: "Enterprise ad generation prompt",
     missing_fields: [],
+    conflicts: [],
+    confidence: 0.95,
+    next_question: "",
     ready_for_generation: true,
-    selected_skill: "enterprise-ad-image",
   })
 
   const result = await planImageAssistantTurn({
@@ -195,4 +240,113 @@ test("planner can explicitly route completed ad briefs to enterprise-ad-image", 
   assert.equal(result.orchestration.ready_for_generation, true)
   assert.equal(result.orchestration.selected_skill.id, "enterprise-ad-image")
   assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
+})
+
+test("one-shot prompt with ratio and resolution can skip guided Q1/Q2/Q3", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {
+      goal: "Homepage hero visual",
+      subject: "A red-black multi-head industrial lathe in a Tesla-like factory with one worker operating it",
+      style: "Industrial cinematic look with cool contrast",
+      composition: "16:9 landscape, centered focal machine with safe text area",
+      constraints: "",
+    },
+    missing_fields: [],
+    conflicts: [],
+    confidence: 0.96,
+    next_question: "",
+    ready_for_generation: true,
+  })
+
+  const result = await planImageAssistantTurn({
+    prompt: "Create a website banner 16:9 in 1K. Red-black multi-head lathe, Tesla-like factory, one worker operating it.",
+    currentBrief: null,
+    previousState: null,
+    taskType: "generate",
+    sizePreset: "16:9",
+    resolution: "1K",
+    referenceCount: 0,
+  })
+
+  assert.equal(plannerCalls, 1)
+  assert.equal(result.orchestration.brief.usage_preset, "website_banner")
+  assert.equal(result.orchestration.brief.orientation, "landscape")
+  assert.equal(result.orchestration.brief.resolution, "1K")
+  assert.equal(result.orchestration.brief.size_preset, "16:9")
+  assert.equal(result.orchestration.brief.ratio_confirmed, true)
+  assert.equal(result.orchestration.missing_fields.length, 0)
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.ok(Array.isArray(result.orchestration.prompt_questions) && result.orchestration.prompt_questions.length === 0)
+})
+
+test("usage card selection does not overwrite an existing creative goal", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {},
+    missing_fields: ["orientation", "resolution", "ratio", "style", "composition"],
+    conflicts: [],
+    confidence: 0.8,
+    next_question: "Continue to the next step.",
+    ready_for_generation: false,
+  })
+
+  const result = await planImageAssistantTurn({
+    prompt: "Website banner 16:9",
+    currentBrief: null,
+    previousState: {
+      brief: {
+        usage_preset: "",
+        usage_label: "",
+        orientation: "",
+        resolution: "",
+        size_preset: "",
+        ratio_confirmed: false,
+        goal: "Launch visual that emphasizes premium industrial quality",
+        subject: "Red-black multi-head lathe in a Tesla-like factory with one worker operating it",
+        style: "",
+        composition: "",
+        constraints: "",
+      },
+      missing_fields: ["usage", "orientation", "resolution", "ratio", "style", "composition"],
+      turn_count: 1,
+      max_turns: 5,
+      ready_for_generation: false,
+      planner_strategy: "text_model",
+      selected_skill: { id: "graphic-design-brief", label: "Graphic Design Brief", stage: "briefing" },
+      tool_traces: [],
+      reference_count: 0,
+      recommended_mode: "generate",
+      follow_up_question: "Q1 Pick the use case",
+      prompt_questions: [
+        {
+          id: "usage",
+          title: "Q1 Pick the use case",
+          display: "cards",
+          options: [
+            {
+              id: "website_banner",
+              label: "Website banner 16:9",
+              prompt_value: "Website banner 16:9",
+              brief_patch: {
+                usage_preset: "website_banner",
+                usage_label: "Website banner 16:9",
+                size_preset: "16:9",
+                orientation: "landscape",
+              },
+              size_preset: "16:9",
+            },
+          ],
+        },
+      ],
+      generated_prompt: null,
+    },
+    taskType: "generate",
+    sizePreset: "16:9",
+    resolution: "1K",
+    referenceCount: 0,
+  })
+
+  assert.equal(result.orchestration.brief.goal, "Launch visual that emphasizes premium industrial quality")
+  assert.equal(result.orchestration.brief.usage_preset, "website_banner")
+  assert.equal(result.orchestration.brief.size_preset, "16:9")
+  assert.equal(result.orchestration.brief.orientation, "landscape")
 })

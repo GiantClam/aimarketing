@@ -5,12 +5,13 @@
   getImageAssistantRuntimeSystemPrompt,
 } from "@/lib/image-assistant/skill-documents"
 import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
-import { generateTextWithWriterModel, hasWriterTextProvider } from "@/lib/writer/aiberm"
+import { generateStructuredObjectWithWriterModel, generateTextWithWriterModel } from "@/lib/writer/aiberm"
+import { z } from "zod"
 import {
   getImageAssistantSkillDefinition,
   IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
   IMAGE_ASSISTANT_SKILL_MODEL,
-  isImageAssistantSkillId,
+  IMAGE_ASSISTANT_TEXT_MODEL,
   selectImageAssistantSkill,
 } from "@/lib/image-assistant/skills"
 import type {
@@ -39,6 +40,12 @@ const REQUIRED_BRIEF_FIELDS: ImageAssistantBriefField[] = [
   "composition",
 ]
 const GUIDED_BRIEF_FIELDS = new Set<ImageAssistantBriefField>(["usage", "orientation", "resolution", "ratio"])
+const BRIEF_PLANNER_MAX_TOKENS = 900
+const BRIEF_PLANNER_GUIDED_MAX_TOKENS = 160
+const BRIEF_PLANNER_TIMEOUT_MS = 10_000
+const BRIEF_PLANNER_GUIDED_TIMEOUT_MS = Number.parseInt(process.env.IMAGE_ASSISTANT_GUIDED_PLANNER_TIMEOUT_MS || "", 10) || 2_500
+const BRIEF_EXTRACT_SCHEMA_VERSION = "image_assistant_brief_extract.v1"
+const BRIEF_PROMPT_VERSION = "image_assistant_prompt_compose.v1"
 
 const USAGE_PRESET_DEFINITIONS: Record<
   ImageAssistantUsagePresetId,
@@ -129,6 +136,55 @@ const EMPTY_BRIEF: ImageAssistantBrief = {
   constraints: "",
 }
 
+const BRIEF_FIELD_VALUES = [
+  "usage",
+  "orientation",
+  "resolution",
+  "ratio",
+  "goal",
+  "subject",
+  "style",
+  "composition",
+] as const satisfies readonly ImageAssistantBriefField[]
+
+const BriefDeltaSchema = z
+  .object({
+    usage_preset: z.enum(["website_banner", "social_cover", "ad_poster", "avatar"]).or(z.literal("")).optional(),
+    usage_label: z.string().max(120).optional(),
+    orientation: z.enum(["landscape", "portrait"]).or(z.literal("")).optional(),
+    resolution: z.enum(["512", "1K", "2K", "4K"]).or(z.literal("")).optional(),
+    size_preset: z.enum(["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"]).or(z.literal("")).optional(),
+    ratio_confirmed: z.boolean().optional(),
+    goal: z.string().max(220).optional(),
+    subject: z.string().max(220).optional(),
+    style: z.string().max(220).optional(),
+    composition: z.string().max(260).optional(),
+    constraints: z.string().max(260).optional(),
+  })
+  .strict()
+
+const BriefExtractionOutputSchema = z
+  .object({
+    brief_delta: BriefDeltaSchema.default({}),
+    missing_fields: z.array(z.enum(BRIEF_FIELD_VALUES)).max(BRIEF_FIELD_VALUES.length).default([]),
+    conflicts: z.array(z.string().min(1).max(180)).max(8).default([]),
+    confidence: z.number().min(0).max(1).default(0.5),
+    next_question: z.string().max(240).default(""),
+    ready_for_generation: z.boolean().default(false),
+  })
+  .strict()
+
+type BriefExtractionOutput = z.infer<typeof BriefExtractionOutputSchema>
+
+type BriefExtractionResult = {
+  brief: ImageAssistantBrief
+  missingFields: ImageAssistantBriefField[]
+  conflicts: string[]
+  confidence: number
+  nextQuestion: string
+  readyForGeneration: boolean
+}
+
 const FIELD_QUESTIONS_ZH: Record<ImageAssistantBriefField, string> = {
   usage: "先选这张图的用途卡片，我会按用途推荐交付比例。",
   orientation: "再确认画面方向，只需要选择横版画面或竖版画面。",
@@ -171,8 +227,52 @@ function normalizeSizePreset(value: unknown): ImageAssistantSizePreset | "" {
   return value === "1:1" || value === "4:5" || value === "3:4" || value === "4:3" || value === "16:9" || value === "9:16" ? value : ""
 }
 
+function inferSizePresetFromPrompt(prompt: string): ImageAssistantSizePreset | "" {
+  const normalized = normalizeText(prompt).toLowerCase()
+  if (!normalized) return ""
+
+  const compact = normalized.replace(/\s+/g, "")
+  if (/(16[:：]9|16x9|16／9|16-9)/iu.test(compact)) return "16:9"
+  if (/(9[:：]16|9x16|9／16|9-16)/iu.test(compact)) return "9:16"
+  if (/(4[:：]5|4x5|4／5|4-5)/iu.test(compact)) return "4:5"
+  if (/(3[:：]4|3x4|3／4|3-4)/iu.test(compact)) return "3:4"
+  if (/(4[:：]3|4x3|4／3|4-3)/iu.test(compact)) return "4:3"
+  if (/(1[:：]1|1x1|1／1|1-1)/iu.test(compact)) return "1:1"
+  return ""
+}
+
 function getUsagePresetDefinition(usagePreset: ImageAssistantUsagePresetId | "") {
   return usagePreset ? USAGE_PRESET_DEFINITIONS[usagePreset] : null
+}
+
+function inferOrientationFromPrompt(prompt: string): ImageAssistantOrientation | "" {
+  if (/(?:横版|横图|landscape|wide)/iu.test(prompt)) return "landscape"
+  if (/(?:竖版|竖图|portrait|tall)/iu.test(prompt)) return "portrait"
+  return ""
+}
+
+function inferResolutionFromPrompt(prompt: string): ImageAssistantResolution | "" {
+  const normalized = normalizeText(prompt).toLowerCase()
+  if (!normalized) return ""
+  if (/(?:4k|超高清)/iu.test(normalized)) return "4K"
+  if (/(?:2k|超清)/iu.test(normalized)) return "2K"
+  if (/(?:1k|高清)/iu.test(normalized)) return "1K"
+  if (/(?:512|标清|standard)/iu.test(normalized)) return "512"
+  return ""
+}
+
+function inferOrientationFromSizePreset(sizePreset: ImageAssistantSizePreset | ""): ImageAssistantOrientation | "" {
+  if (sizePreset === "16:9" || sizePreset === "4:3") return "landscape"
+  if (sizePreset === "9:16" || sizePreset === "4:5" || sizePreset === "3:4") return "portrait"
+  return ""
+}
+
+function inferUsagePresetFromSizePreset(sizePreset: ImageAssistantSizePreset | ""): ImageAssistantUsagePresetId | "" {
+  if (sizePreset === "16:9") return "website_banner"
+  if (sizePreset === "4:5") return "social_cover"
+  if (sizePreset === "4:3") return "ad_poster"
+  if (sizePreset === "1:1") return "avatar"
+  return ""
 }
 
 function getUsagePresetLabel(usagePreset: ImageAssistantUsagePresetId | "", chinese: boolean) {
@@ -235,7 +335,23 @@ function mergeBrief(...briefs: Array<Partial<ImageAssistantBrief> | null | undef
   }, { ...EMPTY_BRIEF })
 }
 
-function getMissingBriefFields(brief: ImageAssistantBrief) {
+function hasAnyBriefSignal(brief: Partial<ImageAssistantBrief> | null | undefined) {
+  const normalized = normalizeBrief(brief)
+  return Boolean(
+    normalized.usage_preset ||
+      normalized.orientation ||
+      normalized.resolution ||
+      normalized.size_preset ||
+      normalized.ratio_confirmed ||
+      normalized.goal ||
+      normalized.subject ||
+      normalized.style ||
+      normalized.composition ||
+      normalized.constraints,
+  )
+}
+
+function _getMissingBriefFields(brief: ImageAssistantBrief) {
   return REQUIRED_BRIEF_FIELDS.filter((field) => {
     if (field === "usage") return !brief.usage_preset
     if (field === "orientation") return !brief.orientation
@@ -341,25 +457,36 @@ function inferBriefFromFollowUpAnswer(input: {
 
   for (const field of requestedFields) {
     if (field === "orientation") {
-      extracted.orientation =
-        extracted.orientation ||
-        (/(?:横|landscape|wide)/iu.test(prompt) ? "landscape" : /(?:竖|portrait|tall)/iu.test(prompt) ? "portrait" : "")
+      extracted.orientation = extracted.orientation || inferOrientationFromPrompt(prompt)
       continue
     }
     if (field === "resolution") {
-      extracted.resolution =
-        extracted.resolution ||
-        /(?:4k|超高清)/iu.test(prompt) ? "4K" : /(?:2k|超清)/iu.test(prompt) ? "2K" : /(?:1k|高清)/iu.test(prompt) ? "1K" : /(?:512|标清|standard)/iu.test(prompt) ? "512" : ""
+      extracted.resolution = extracted.resolution || inferResolutionFromPrompt(prompt)
       continue
     }
     if (field === "usage" || field === "ratio") {
+      const explicitSizePreset = inferSizePresetFromPrompt(prompt)
       const usagePreset = inferUsagePresetFromPrompt(prompt)
       if (usagePreset) {
         const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
         extracted.usage_preset = usagePreset
         extracted.usage_label = preset.zhLabel
         extracted.size_preset = preset.sizePreset
-        extracted.ratio_confirmed = extracted.ratio_confirmed || field === "ratio"
+        extracted.orientation = extracted.orientation || preset.orientation
+        extracted.ratio_confirmed = extracted.ratio_confirmed || field === "ratio" || Boolean(explicitSizePreset)
+      }
+      if (explicitSizePreset) {
+        extracted.size_preset = explicitSizePreset
+        extracted.ratio_confirmed = true
+        extracted.orientation = extracted.orientation || inferOrientationFromSizePreset(explicitSizePreset)
+        if (!extracted.usage_preset) {
+          const inferredUsagePreset = inferUsagePresetFromSizePreset(explicitSizePreset)
+          if (inferredUsagePreset) {
+            const preset = USAGE_PRESET_DEFINITIONS[inferredUsagePreset]
+            extracted.usage_preset = inferredUsagePreset
+            extracted.usage_label = preset.zhLabel
+          }
+        }
       }
       continue
     }
@@ -474,16 +601,45 @@ function extractBriefFromLabeledLines(prompt: string) {
         extracted.usage_preset = usagePreset
         extracted.usage_label = preset.zhLabel
         extracted.size_preset = preset.sizePreset
+        extracted.orientation = extracted.orientation || preset.orientation
+      }
+      const explicitSizePreset = inferSizePresetFromPrompt(value)
+      if (explicitSizePreset) {
+        extracted.size_preset = explicitSizePreset
+        extracted.ratio_confirmed = true
+        extracted.orientation = extracted.orientation || inferOrientationFromSizePreset(explicitSizePreset)
+        if (!extracted.usage_preset) {
+          const inferredUsagePreset = inferUsagePresetFromSizePreset(explicitSizePreset)
+          if (inferredUsagePreset) {
+            const preset = USAGE_PRESET_DEFINITIONS[inferredUsagePreset]
+            extracted.usage_preset = inferredUsagePreset
+            extracted.usage_label = preset.zhLabel
+          }
+        }
       }
       continue
     }
     if (!extracted.orientation && /^(orientation|direction|方向)$/.test(label)) {
-      extracted.orientation = /(?:横|landscape|wide)/iu.test(value) ? "landscape" : /(?:竖|portrait|tall)/iu.test(value) ? "portrait" : ""
+      extracted.orientation = inferOrientationFromPrompt(value)
       continue
     }
     if (!extracted.resolution && /^(resolution|quality|size|清晰度|大小)$/.test(label)) {
-      extracted.resolution =
-        /(?:4k|超高清)/iu.test(value) ? "4K" : /(?:2k|超清)/iu.test(value) ? "2K" : /(?:1k|高清)/iu.test(value) ? "1K" : /(?:512|标清|standard)/iu.test(value) ? "512" : ""
+      extracted.resolution = inferResolutionFromPrompt(value)
+      continue
+    }
+    if (!extracted.size_preset && /^(ratio|aspect ratio|size preset|比例|画幅)$/.test(label)) {
+      const explicitSizePreset = inferSizePresetFromPrompt(value)
+      if (explicitSizePreset) {
+        extracted.size_preset = explicitSizePreset
+        extracted.ratio_confirmed = true
+        extracted.orientation = extracted.orientation || inferOrientationFromSizePreset(explicitSizePreset)
+        const inferredUsagePreset = inferUsagePresetFromSizePreset(explicitSizePreset)
+        if (!extracted.usage_preset && inferredUsagePreset) {
+          const preset = USAGE_PRESET_DEFINITIONS[inferredUsagePreset]
+          extracted.usage_preset = inferredUsagePreset
+          extracted.usage_label = preset.zhLabel
+        }
+      }
       continue
     }
     if (!extracted.goal && /^(goal|objective|usage|use case|鐢ㄩ€攟鐩爣)$/.test(label)) {
@@ -540,6 +696,7 @@ function inferBriefFromPrompt(input: {
 
   const inferred: Partial<ImageAssistantBrief> = extractBriefFromLabeledLines(prompt)
   const lower = prompt.toLowerCase()
+  const explicitSizePreset = inferSizePresetFromPrompt(prompt)
   const hasStructuredBrief = Boolean(
     inferred.goal ||
       inferred.subject ||
@@ -551,36 +708,29 @@ function inferBriefFromPrompt(input: {
       inferred.resolution,
   )
 
-  const usagePreset = inferred.usage_preset || inferUsagePresetFromPrompt(prompt)
+  const usagePreset = inferred.usage_preset || inferUsagePresetFromPrompt(prompt) || inferUsagePresetFromSizePreset(explicitSizePreset)
   if (usagePreset) {
     const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
     inferred.usage_preset = usagePreset
     inferred.usage_label = inferred.usage_label || (looksLikeChinese(prompt) ? preset.zhLabel : preset.enLabel)
-    inferred.size_preset = inferred.size_preset || preset.sizePreset
+    inferred.size_preset = inferred.size_preset || explicitSizePreset || preset.sizePreset
+    inferred.orientation = inferred.orientation || preset.orientation
+  }
+
+  if (!inferred.size_preset && explicitSizePreset) {
+    inferred.size_preset = explicitSizePreset
   }
 
   if (!inferred.orientation) {
-    inferred.orientation = /(?:横版|横图|landscape|wide)/iu.test(prompt)
-      ? "landscape"
-      : /(?:竖版|竖图|portrait|tall)/iu.test(prompt)
-        ? "portrait"
-        : ""
+    inferred.orientation = inferOrientationFromPrompt(prompt) || inferOrientationFromSizePreset(inferred.size_preset || "")
   }
 
   if (!inferred.resolution) {
-    inferred.resolution = /(?:4k|超高清)/iu.test(lower)
-      ? "4K"
-      : /(?:2k|超清)/iu.test(lower)
-        ? "2K"
-        : /(?:1k|高清)/iu.test(lower)
-          ? "1K"
-          : /(?:512|标清|standard)/iu.test(lower)
-            ? "512"
-            : ""
+    inferred.resolution = inferResolutionFromPrompt(lower)
   }
 
-  if (!inferred.goal && inferred.usage_label) {
-    inferred.goal = inferred.usage_label
+  if (explicitSizePreset) {
+    inferred.ratio_confirmed = true
   }
 
   if (!inferred.goal && !hasStructuredBrief && /cover|poster|ad|kv|banner/.test(lower)) {
@@ -637,7 +787,118 @@ function extractJsonObject(text: string) {
   }
 }
 
-async function maybePlanWithTextModel(input: {
+const BRIEF_EXTRACTION_JSON_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["brief_delta", "missing_fields", "conflicts", "confidence", "next_question", "ready_for_generation"],
+  properties: {
+    brief_delta: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        usage_preset: { type: "string", enum: ["", "website_banner", "social_cover", "ad_poster", "avatar"] },
+        usage_label: { type: "string", maxLength: 120 },
+        orientation: { type: "string", enum: ["", "landscape", "portrait"] },
+        resolution: { type: "string", enum: ["", "512", "1K", "2K", "4K"] },
+        size_preset: { type: "string", enum: ["", "1:1", "4:5", "3:4", "4:3", "16:9", "9:16"] },
+        ratio_confirmed: { type: "boolean" },
+        goal: { type: "string", maxLength: 220 },
+        subject: { type: "string", maxLength: 220 },
+        style: { type: "string", maxLength: 220 },
+        composition: { type: "string", maxLength: 260 },
+        constraints: { type: "string", maxLength: 260 },
+      },
+    },
+    missing_fields: { type: "array", items: { type: "string", enum: BRIEF_FIELD_VALUES }, maxItems: BRIEF_FIELD_VALUES.length },
+    conflicts: { type: "array", items: { type: "string", maxLength: 180 }, maxItems: 8 },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    next_question: { type: "string", maxLength: 240 },
+    ready_for_generation: { type: "boolean" },
+  },
+}
+
+function getBriefExtractionSchemaSpec() {
+  return JSON.stringify(BRIEF_EXTRACTION_JSON_SCHEMA, null, 0)
+}
+
+function shouldFallbackToTextFromStructuredError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+  if (!message) return false
+
+  if (
+    message.includes("user not found") ||
+    message.includes("unauthorized") ||
+    message.includes("invalid api key") ||
+    message.includes("forbidden") ||
+    message.includes("insufficient_quota") ||
+    message.includes("rate limit") ||
+    message.includes("429")
+  ) {
+    return false
+  }
+
+  return (
+    message.includes("tool") ||
+    message.includes("function") ||
+    message.includes("tool_choice") ||
+    message.includes("tool call") ||
+    message.includes("response_format") ||
+    message.includes("json_schema") ||
+    message.includes("strict") ||
+    message.includes("not supported") ||
+    message.includes("unsupported") ||
+    message.includes("openai_compatible_tool_call_missing")
+  )
+}
+
+function applyBriefSemanticValidation(input: {
+  brief: ImageAssistantBrief
+  fallbackSizePreset: ImageAssistantSizePreset
+  userPrompt: string
+}) {
+  const base = normalizeBrief(input.brief)
+  const patch: Partial<ImageAssistantBrief> = {}
+  const conflicts: string[] = []
+
+  if (base.usage_preset) {
+    const usage = USAGE_PRESET_DEFINITIONS[base.usage_preset]
+    if (!base.size_preset) {
+      patch.size_preset = usage.sizePreset
+    }
+    if (!base.orientation) {
+      patch.orientation = usage.orientation
+    }
+  }
+
+  if (!base.size_preset) {
+    const inferredFromPrompt = inferSizePresetFromPrompt(input.userPrompt)
+    if (inferredFromPrompt) {
+      patch.size_preset = inferredFromPrompt
+      patch.ratio_confirmed = true
+    }
+  }
+
+  const effectiveSizePreset = patch.size_preset || base.size_preset
+  const inferredOrientation = inferOrientationFromSizePreset(effectiveSizePreset || "")
+  if (inferredOrientation && !base.orientation) {
+    patch.orientation = inferredOrientation
+  } else if (inferredOrientation && base.orientation && base.orientation !== inferredOrientation) {
+    conflicts.push(`orientation_conflict:${base.orientation}->${inferredOrientation}`)
+    patch.orientation = inferredOrientation
+  }
+
+  const validated = mergeBrief(base, patch)
+  if (!validated.size_preset && input.fallbackSizePreset) {
+    return {
+      brief: mergeBrief(validated, { size_preset: input.fallbackSizePreset }),
+      conflicts: dedupeStrings(conflicts),
+    }
+  }
+
+  return { brief: validated, conflicts: dedupeStrings(conflicts) }
+}
+
+async function extractBriefWithSchema(input: {
   prompt: string
   priorState: ImageAssistantOrchestrationState | null
   mergedBrief: ImageAssistantBrief
@@ -646,60 +907,155 @@ async function maybePlanWithTextModel(input: {
   sizePreset: ImageAssistantSizePreset
   resolution: string
   referenceCount: number
-}) {
-  if (!hasWriterTextProvider()) return null
-
+  isGuidedOptionTurn: boolean
+  activePromptQuestionId: string | null
+  activePromptOptionIds: string[]
+}): Promise<BriefExtractionResult | null> {
+  const useGuidedPlannerPrompt = input.isGuidedOptionTurn
   const skill = getImageAssistantSkillDefinition("graphic-design-brief")
-  const runtimeSystemPrompt = await getImageAssistantRuntimeSystemPrompt("graphic-design-brief", skill.system_prompt)
-  const promptCompositionRules = await getImageAssistantPromptCompositionRules("graphic-design-brief")
+  const runtimeSystemPrompt = useGuidedPlannerPrompt
+    ? null
+    : await getImageAssistantRuntimeSystemPrompt("graphic-design-brief", skill.system_prompt)
+  const promptCompositionRules = useGuidedPlannerPrompt
+    ? []
+    : await getImageAssistantPromptCompositionRules("graphic-design-brief")
   const systemPrompt = [
-    runtimeSystemPrompt,
-    promptCompositionRules.length ? `Follow-up rules: ${promptCompositionRules.join(" ")}` : null,
-    "Return strict JSON only.",
-    'Schema: {"brief":{"goal":"","subject":"","style":"","composition":"","constraints":""},"reply_to_user":"","generated_prompt":"","missing_fields":["goal","subject"],"ready_for_generation":false,"selected_skill":"graphic-design-brief"}.',
-    "If the brief is not complete, generated_prompt must be an empty string.",
-    "Keep reply_to_user concise and practical.",
-    "selected_skill must be one of: graphic-design-brief, canvas-design-execution, enterprise-ad-image.",
-    "Use graphic-design-brief while the brief is incomplete; use an execution skill only when the brief is complete enough to generate now.",
+    useGuidedPlannerPrompt
+      ? "You are a schema-locked brief extractor for an image design assistant."
+      : runtimeSystemPrompt,
+    useGuidedPlannerPrompt
+      ? "The latest user message is usually a guided option click from the UI."
+      : promptCompositionRules.length
+        ? `Follow-up rules: ${promptCompositionRules.join(" ")}`
+        : null,
+    useGuidedPlannerPrompt
+      ? "Update only fields implied by the guided option while preserving already confirmed fields."
+      : "Extract structured brief deltas from the latest user turn without composing final image prompts.",
+    useGuidedPlannerPrompt
+      ? "If guided options are still available, keep reply_to_user short and point to the next guided question."
+      : null,
+    "Do not generate an image prompt in this stage.",
+    "Return strict JSON only. No markdown.",
+    `Schema version: ${BRIEF_EXTRACT_SCHEMA_VERSION}.`,
+    `Output JSON schema (must be exact): ${getBriefExtractionSchemaSpec()}`,
   ]
     .filter(Boolean)
     .join(" ")
 
-  const userPrompt = JSON.stringify({
-    task_type: input.taskType,
-    turn_count: (input.priorState?.turn_count || 0) + 1,
-    max_turns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
-    reference_count: input.referenceCount,
-    size_preset: input.sizePreset,
-    resolution: input.resolution,
-    previous_brief: input.priorState?.brief || EMPTY_BRIEF,
-    current_brief: input.mergedBrief,
-    current_prompt: input.prompt,
-    current_missing_fields: input.missingFields,
-  })
+  const userPromptPayload = useGuidedPlannerPrompt
+    ? {
+        planner_mode: "guided_option",
+        task_type: input.taskType,
+        turn_count: (input.priorState?.turn_count || 0) + 1,
+        reference_count: input.referenceCount,
+        size_preset: input.sizePreset,
+        resolution: input.resolution,
+        active_prompt_question_id: input.activePromptQuestionId,
+        active_prompt_option_ids: input.activePromptOptionIds,
+        previous_brief: input.priorState?.brief || EMPTY_BRIEF,
+        current_brief: input.mergedBrief,
+        current_prompt: input.prompt,
+        current_missing_fields: input.missingFields,
+        schema_version: BRIEF_EXTRACT_SCHEMA_VERSION,
+      }
+    : {
+        task_type: input.taskType,
+        turn_count: (input.priorState?.turn_count || 0) + 1,
+        max_turns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
+        reference_count: input.referenceCount,
+        size_preset: input.sizePreset,
+        resolution: input.resolution,
+        previous_brief: input.priorState?.brief || EMPTY_BRIEF,
+        current_brief: input.mergedBrief,
+        current_prompt: input.prompt,
+        current_missing_fields: input.missingFields,
+        schema_version: BRIEF_EXTRACT_SCHEMA_VERSION,
+      }
+  const userPrompt = JSON.stringify(userPromptPayload)
+  const textGenerationOptions = useGuidedPlannerPrompt
+    ? { temperature: 0, maxTokens: BRIEF_PLANNER_GUIDED_MAX_TOKENS }
+    : { temperature: 0.15, maxTokens: BRIEF_PLANNER_MAX_TOKENS }
+  const plannerModel = useGuidedPlannerPrompt
+    ? IMAGE_ASSISTANT_SKILL_MODEL || IMAGE_ASSISTANT_TEXT_MODEL
+    : IMAGE_ASSISTANT_TEXT_MODEL || IMAGE_ASSISTANT_SKILL_MODEL
+  const plannerTimeoutMs = useGuidedPlannerPrompt ? BRIEF_PLANNER_GUIDED_TIMEOUT_MS : BRIEF_PLANNER_TIMEOUT_MS
 
   try {
-    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, IMAGE_ASSISTANT_SKILL_MODEL)
-    const parsed = extractJsonObject(raw)
-    if (!parsed || typeof parsed !== "object") return null
-
-    const brief = mergeBrief(input.mergedBrief, parsed.brief as Partial<ImageAssistantBrief> | null | undefined)
-    const missingFields = Array.isArray((parsed as any).missing_fields)
-      ? (parsed as any).missing_fields.filter((field: unknown): field is ImageAssistantBriefField =>
-          REQUIRED_BRIEF_FIELDS.includes(field as ImageAssistantBriefField),
+    const plannerAbortController = new AbortController()
+    let plannerTimedOut = false
+    const timeoutId = setTimeout(() => {
+      plannerTimedOut = true
+      plannerAbortController.abort()
+    }, plannerTimeoutMs)
+    let raw = ""
+    let parsed: unknown = null
+    try {
+      try {
+        parsed = await generateStructuredObjectWithWriterModel({
+          systemPrompt,
+          userPrompt,
+          model: plannerModel,
+          toolName: "extract_brief_state",
+          toolDescription: "Extract structured brief delta, missing fields, conflicts, confidence, and readiness.",
+          jsonSchema: BRIEF_EXTRACTION_JSON_SCHEMA,
+          options: {
+            ...textGenerationOptions,
+            signal: plannerAbortController.signal,
+            timeoutMs: plannerTimeoutMs,
+          },
+        })
+      } catch (structuredError) {
+        const shouldFallback = shouldFallbackToTextFromStructuredError(structuredError)
+        console.warn(
+          shouldFallback
+            ? "image-assistant.structured-extract.fallback"
+            : "image-assistant.structured-extract.failed",
+          {
+          model: plannerModel,
+          guided: useGuidedPlannerPrompt,
+          message: structuredError instanceof Error ? structuredError.message : String(structuredError),
+          },
         )
-      : getMissingBriefFields(brief)
+        if (!shouldFallback) {
+          throw structuredError
+        }
+        raw = await generateTextWithWriterModel(systemPrompt, userPrompt, plannerModel, {
+          ...textGenerationOptions,
+          signal: plannerAbortController.signal,
+        })
+        parsed = extractJsonObject(raw)
+      }
+    } catch (error) {
+      if (plannerTimedOut) {
+        throw new Error("image_assistant_planner_timeout")
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutId)
+    }
+    if (!parsed || typeof parsed !== "object") return null
+    const validation = BriefExtractionOutputSchema.safeParse(parsed)
+    if (!validation.success) return null
+    const output: BriefExtractionOutput = validation.data
+    const brief = mergeBrief(input.mergedBrief, output.brief_delta)
+    const missingFields = output.missing_fields.filter((field): field is ImageAssistantBriefField =>
+      BRIEF_FIELD_VALUES.includes(field as (typeof BRIEF_FIELD_VALUES)[number]),
+    )
 
     return {
       brief,
       missingFields,
-      readyForGeneration: Boolean((parsed as any).ready_for_generation) && missingFields.length === 0,
-      replyToUser: normalizeText((parsed as any).reply_to_user),
-      generatedPrompt: normalizeText((parsed as any).generated_prompt),
-      selectedSkillId: isImageAssistantSkillId((parsed as any).selected_skill) ? ((parsed as any).selected_skill as ImageAssistantSkillId) : null,
+      readyForGeneration: Boolean(output.ready_for_generation) && missingFields.length === 0,
+      conflicts: dedupeStrings(output.conflicts || []),
+      confidence: Math.max(0, Math.min(1, Number(output.confidence || 0))),
+      nextQuestion: normalizeText(output.next_question || ""),
     }
   } catch (error) {
-    console.warn("image-assistant.text-planner.failed", error)
+    console.warn("image-assistant.text-planner.failed", {
+      model: plannerModel,
+      guided: useGuidedPlannerPrompt,
+      message: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -737,10 +1093,6 @@ function applyBriefProgressionFallbacks(input: {
   const isZh = looksLikeChinese(`${input.userPrompt} ${base.goal} ${base.subject} ${base.usage_label}`)
   const hasDeliverySkeleton = hasImageAssistantDeliverySkeleton(base)
   const patch: Partial<ImageAssistantBrief> = {}
-
-  if (!base.goal && base.usage_label) {
-    patch.goal = base.usage_label
-  }
 
   if (!base.subject && input.turnCount >= input.maxTurns) {
     patch.subject = truncate(input.userPrompt, 140)
@@ -782,7 +1134,8 @@ function buildPromptQuestions(input: {
       usage_preset: presetId,
       usage_label: isZh ? preset.zhLabel : preset.enLabel,
       size_preset: preset.sizePreset,
-      goal: isZh ? preset.zhLabel : preset.enLabel,
+      orientation: preset.orientation,
+      ratio_confirmed: true,
     },
     size_preset: preset.sizePreset,
   }))
@@ -912,7 +1265,7 @@ function buildClarificationReply(input: {
   return [intro, referenceLine, askLine].join(" ")
 }
 
-async function buildGenerationPrompt(input: {
+async function composePromptFromApprovedBrief(input: {
   brief: ImageAssistantBrief
   taskType: ImageAssistantTaskType
   sizePreset: ImageAssistantSizePreset
@@ -1031,6 +1384,17 @@ export function extractLatestImageAssistantOrchestration(messages: ImageAssistan
           orchestration.planner_strategy === "heuristic"
             ? orchestration.planner_strategy
             : undefined,
+        schema_version: normalizeText(orchestration.schema_version),
+        prompt_version: normalizeText(orchestration.prompt_version),
+        extraction_confidence:
+          typeof orchestration.extraction_confidence === "number"
+            ? Math.max(0, Math.min(1, orchestration.extraction_confidence))
+            : undefined,
+        extraction_conflicts: Array.isArray(orchestration.extraction_conflicts)
+          ? orchestration.extraction_conflicts
+              .map((value: unknown) => normalizeText(value))
+              .filter(Boolean)
+          : [],
         selected_skill: orchestration.selected_skill,
         tool_traces: Array.isArray(orchestration.tool_traces) ? orchestration.tool_traces : [],
         reference_count: Number(orchestration.reference_count || 0),
@@ -1089,26 +1453,37 @@ export async function planImageAssistantTurn(input: {
     taskType: input.taskType,
     referenceCount: input.referenceCount,
   })
-  const inferred = inferBriefFromPrompt({
-    prompt: input.prompt,
-    taskType: input.taskType,
-    sizePreset: input.sizePreset,
-    referenceCount: input.referenceCount,
-  })
+  const activePromptQuestion = input.previousState?.prompt_questions?.[0] || null
   const promptOptionBrief = inferBriefFromPromptQuestionOption({
     prompt: input.prompt,
     previousState: input.previousState,
   })
-  const contextual = inferBriefFromFollowUpAnswer({
-    prompt: input.prompt,
-    previousState: input.previousState,
-  })
+  const isGuidedOptionTurn = hasAnyBriefSignal(promptOptionBrief) && Boolean(activePromptQuestion)
+  const inferred = isGuidedOptionTurn
+    ? { ...EMPTY_BRIEF }
+    : inferBriefFromPrompt({
+        prompt: input.prompt,
+        taskType: input.taskType,
+        sizePreset: input.sizePreset,
+        referenceCount: input.referenceCount,
+      })
+  const contextual = isGuidedOptionTurn
+    ? { ...EMPTY_BRIEF }
+    : inferBriefFromFollowUpAnswer({
+        prompt: input.prompt,
+        previousState: input.previousState,
+      })
+  const activePromptOptionIds = activePromptQuestion
+    ? (activePromptQuestion.options || [])
+        .map((option) => normalizeText(option.id))
+        .filter(Boolean)
+    : []
   const mergedBrief = mergeBrief(input.previousState?.brief, input.currentBrief, promptOptionBrief, inferred, contextual)
   const initialMissingFields = getActionableBriefMissingFields(mergedBrief)
   const turnCount = Math.min((input.previousState?.turn_count || 0) + 1, IMAGE_ASSISTANT_MAX_BRIEF_TURNS)
-  const modelPlan = useEditShortcut
+  const extraction = useEditShortcut
     ? null
-    : await maybePlanWithTextModel({
+    : await extractBriefWithSchema({
         prompt: input.prompt,
         priorState: input.previousState,
         mergedBrief,
@@ -1117,17 +1492,26 @@ export async function planImageAssistantTurn(input: {
         sizePreset: input.sizePreset,
         resolution: input.resolution,
         referenceCount: input.referenceCount,
+        isGuidedOptionTurn,
+        activePromptQuestionId: activePromptQuestion?.id || null,
+        activePromptOptionIds,
       })
 
   const rawBrief = useEditShortcut
-    ? applyReferenceEditDefaults(modelPlan?.brief || mergedBrief, input.prompt)
-    : modelPlan?.brief || mergedBrief
-  const brief = applyBriefProgressionFallbacks({
+    ? applyReferenceEditDefaults(extraction?.brief || mergedBrief, input.prompt)
+    : extraction?.brief || mergedBrief
+  const briefWithFallbacks = applyBriefProgressionFallbacks({
     brief: rawBrief,
     userPrompt: input.prompt,
     turnCount,
     maxTurns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
   })
+  const semanticValidation = applyBriefSemanticValidation({
+    brief: briefWithFallbacks,
+    fallbackSizePreset: input.sizePreset,
+    userPrompt: input.prompt,
+  })
+  const brief = semanticValidation.brief
   const missingFields = getActionableBriefMissingFields(brief)
   const promptQuestions = buildPromptQuestions({
     brief,
@@ -1141,34 +1525,18 @@ export async function planImageAssistantTurn(input: {
     usagePreset: brief.usage_preset,
     goal: brief.goal,
   })
-  const modelSelectedSkillStage = modelPlan?.selectedSkillId
-    ? getImageAssistantSkillDefinition(modelPlan.selectedSkillId).stage
-    : null
-  const selectedSkillSeed =
-    modelPlan?.selectedSkillId &&
-    ((missingFields.length > 0 && modelSelectedSkillStage === "briefing") ||
-      (missingFields.length === 0 && modelSelectedSkillStage === "execution"))
-      ? {
-          id: modelPlan.selectedSkillId,
-          label: getImageAssistantSkillDefinition(modelPlan.selectedSkillId).label,
-          stage: getImageAssistantSkillDefinition(modelPlan.selectedSkillId).stage,
-        }
-      : deterministicSkill
-  const selectedSkill = await resolveSelectedSkillMetadata(
-    selectedSkillSeed,
-  )
+  const selectedSkill = await resolveSelectedSkillMetadata(deterministicSkill)
   const generatedPrompt =
     missingFields.length === 0
-      ? (modelPlan?.generatedPrompt ||
-          (await buildGenerationPrompt({
-             brief,
-             taskType: input.taskType,
-              sizePreset: input.sizePreset,
-             resolution: input.resolution,
-              referenceCount: input.referenceCount,
-              executionSkillId: selectedSkill.id,
-              extraInstructions: input.extraInstructions,
-            })))
+      ? await composePromptFromApprovedBrief({
+          brief,
+          taskType: input.taskType,
+          sizePreset: input.sizePreset,
+          resolution: input.resolution,
+          referenceCount: input.referenceCount,
+          executionSkillId: selectedSkill.id,
+          extraInstructions: input.extraInstructions,
+        })
       : null
   const replyToUser =
     missingFields.length > 0
@@ -1183,7 +1551,8 @@ export async function planImageAssistantTurn(input: {
       promptQuestions,
     })
       : null
-  const plannerStrategy = useEditShortcut ? "rule_shortcut" : modelPlan ? "text_model" : "heuristic"
+  const plannerStrategy = useEditShortcut ? "rule_shortcut" : extraction ? "text_model" : "heuristic"
+  const extractionConflicts = dedupeStrings([...(extraction?.conflicts || []), ...semanticValidation.conflicts])
 
   const orchestration: ImageAssistantOrchestrationState = {
     brief,
@@ -1192,6 +1561,10 @@ export async function planImageAssistantTurn(input: {
     max_turns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
     ready_for_generation: Boolean(generatedPrompt) && missingFields.length === 0,
     planner_strategy: plannerStrategy,
+    schema_version: BRIEF_EXTRACT_SCHEMA_VERSION,
+    prompt_version: BRIEF_PROMPT_VERSION,
+    extraction_confidence: extraction?.confidence ?? 0,
+    extraction_conflicts: extractionConflicts,
     selected_skill: selectedSkill,
     tool_traces: buildToolTraces({
       brief,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
+import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
@@ -13,6 +14,29 @@ const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
   "image_assistant_asset_not_found",
   "image_assistant_canvas_document_not_found",
 ])
+
+function normalizeGuidedSelection(input: unknown): ImageAssistantGuidedSelection | null {
+  if (!input || typeof input !== "object") return null
+  const candidate = input as Record<string, unknown>
+  const sourceMessageId =
+    typeof candidate.source_message_id === "string" && candidate.source_message_id.trim()
+      ? candidate.source_message_id.trim()
+      : null
+  const questionId =
+    typeof candidate.question_id === "string" && candidate.question_id.trim() ? candidate.question_id.trim() : null
+  const optionId =
+    typeof candidate.option_id === "string" && candidate.option_id.trim() ? candidate.option_id.trim() : null
+
+  if (!sourceMessageId && !questionId && !optionId) {
+    return null
+  }
+
+  return {
+    source_message_id: sourceMessageId,
+    question_id: questionId,
+    option_id: optionId,
+  }
+}
 
 function buildSelectionPrompt(input: {
   prompt: string
@@ -141,6 +165,7 @@ export async function POST(req: NextRequest) {
         snapshotAssetId: typeof body?.snapshotAssetId === "string" ? body.snapshotAssetId : null,
         maskAssetId: typeof body?.maskAssetId === "string" ? body.maskAssetId : null,
         versionMeta: null,
+        guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       },
     })
 

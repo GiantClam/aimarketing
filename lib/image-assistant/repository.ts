@@ -42,6 +42,7 @@ type CursorParts = {
 type ImageAssistantListMessagesOptions = {
   limit?: number
   cursor?: string | null
+  skipSessionValidation?: boolean
 }
 
 type ImageAssistantListVersionsOptions = {
@@ -52,6 +53,8 @@ type ImageAssistantListVersionsOptions = {
 type ImageAssistantListAssetsOptions = {
   limit?: number
   assetTypes?: ImageAssistantAssetType[]
+  assetIds?: string[]
+  skipSessionValidation?: boolean
 }
 
 type ImageAssistantSessionDetailOptions = {
@@ -870,12 +873,20 @@ export async function listImageAssistantAssets(
   sessionId: string,
   options?: ImageAssistantListAssetsOptions,
 ) {
-  const existing = await getImageAssistantSession(userId, sessionId)
-  if (!existing) return []
+  if (!options?.skipSessionValidation) {
+    const existing = await getImageAssistantSession(userId, sessionId)
+    if (!existing) return []
+  }
 
   const limit = options?.limit ? Math.max(1, Math.min(options.limit, 100)) : null
   const assetTypes = options?.assetTypes?.length ? options.assetTypes : null
+  const assetIds = (options?.assetIds || [])
+    .map((value) => Number.parseInt(String(value), 10))
+    .filter((value) => Number.isFinite(value) && value > 0)
   const filters = [eq(imageDesignAssets.userId, userId), eq(imageDesignAssets.sessionId, Number(sessionId))]
+  if (assetIds.length) {
+    filters.push(inArray(imageDesignAssets.id, assetIds))
+  }
   if (assetTypes?.length === 1) {
     filters.push(eq(imageDesignAssets.assetType, assetTypes[0]))
   } else if (assetTypes && assetTypes.length > 1) {
@@ -1084,9 +1095,11 @@ export async function listImageAssistantMessagesPage(
   sessionId: string,
   options?: ImageAssistantListMessagesOptions,
 ): Promise<ImageAssistantMessagePage> {
-  const existing = await getImageAssistantSession(userId, sessionId)
-  if (!existing) {
-    return { data: [], has_more: false, limit: options?.limit || 0, next_cursor: null }
+  if (!options?.skipSessionValidation) {
+    const existing = await getImageAssistantSession(userId, sessionId)
+    if (!existing) {
+      return { data: [], has_more: false, limit: options?.limit || 0, next_cursor: null }
+    }
   }
 
   const limit = Math.max(1, Math.min(options?.limit || 20, 200))

@@ -78,6 +78,12 @@ export type ImageAssistantPromptQuestion = {
   options: ImageAssistantPromptOption[]
 }
 
+export type ImageAssistantGuidedSelection = {
+  source_message_id?: string | null
+  question_id?: string | null
+  option_id?: string | null
+}
+
 export type ImageAssistantSkillSelection = {
   id: ImageAssistantSkillId
   label: string
@@ -97,6 +103,10 @@ export type ImageAssistantOrchestrationState = {
   max_turns: number
   ready_for_generation: boolean
   planner_strategy?: "rule_shortcut" | "text_model" | "heuristic"
+  schema_version?: string
+  prompt_version?: string
+  extraction_confidence?: number
+  extraction_conflicts?: string[]
   selected_skill: ImageAssistantSkillSelection
   tool_traces: ImageAssistantToolTrace[]
   reference_count: number

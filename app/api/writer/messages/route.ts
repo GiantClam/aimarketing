@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import { listWriterMessages, updateWriterAssistantMessageById, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -35,18 +35,35 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json()
     const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : ""
+    const messageId = typeof body?.message_id === "string" ? body.message_id : ""
     const content = typeof body?.content === "string" ? body.content : ""
 
     if (!conversationId || !content.trim()) {
       return NextResponse.json({ error: "conversation_id and content are required" }, { status: 400 })
     }
 
-    const updated = await updateWriterLatestAssistantMessage(auth.user.id, conversationId, content, {
-      status: typeof body?.status === "string" ? body.status : "text_ready",
-      imagesRequested: typeof body?.imagesRequested === "boolean" ? body.imagesRequested : undefined,
-    })
+    const hasDiagnosticsField = Object.prototype.hasOwnProperty.call(body || {}, "diagnostics")
+    const optionalMeta = {
+      ...(typeof body?.status === "string" ? { status: body.status } : {}),
+      ...(typeof body?.imagesRequested === "boolean" ? { imagesRequested: body.imagesRequested } : {}),
+      ...(typeof body?.language === "string" ? { language: body.language } : {}),
+      ...(typeof body?.platform === "string" ? { platform: body.platform } : {}),
+      ...(typeof body?.mode === "string" ? { mode: body.mode } : {}),
+      ...(hasDiagnosticsField ? { diagnostics: body?.diagnostics || null } : {}),
+    }
+
+    const updated = messageId
+      ? await updateWriterAssistantMessageById(auth.user.id, conversationId, messageId, content, optionalMeta)
+      : await updateWriterLatestAssistantMessage(auth.user.id, conversationId, content, {
+          ...(typeof body?.status === "string" ? { status: body.status } : { status: "text_ready" }),
+          ...(typeof body?.imagesRequested === "boolean" ? { imagesRequested: body.imagesRequested } : {}),
+          ...(typeof body?.language === "string" ? { language: body.language } : {}),
+          ...(typeof body?.platform === "string" ? { platform: body.platform } : {}),
+          ...(typeof body?.mode === "string" ? { mode: body.mode } : {}),
+          ...(hasDiagnosticsField ? { diagnostics: body?.diagnostics || null } : {}),
+        })
     if (!updated) {
-      return NextResponse.json({ error: "conversation_not_found" }, { status: 404 })
+      return NextResponse.json({ error: messageId ? "message_not_found" : "conversation_not_found" }, { status: 404 })
     }
 
     return NextResponse.json({ ok: true })

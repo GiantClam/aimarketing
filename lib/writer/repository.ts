@@ -726,6 +726,83 @@ export async function updateWriterLatestAssistantMessage(
   return true
 }
 
+export async function updateWriterAssistantMessageById(
+  userId: number,
+  conversationId: string,
+  messageId: string,
+  content: string,
+  meta?: Partial<{
+    status: WriterConversationStatus
+    imagesRequested: boolean
+    language: WriterLanguage
+    platform: WriterPlatform
+    mode: WriterMode
+    diagnostics: WriterTurnDiagnostics | null
+  }>,
+) {
+  await ensureWriterTables()
+
+  const conversation = await getWriterConversation(userId, conversationId)
+  if (!conversation) {
+    return false
+  }
+
+  const rawMessageId = messageId.trim()
+  const prefixedMatch = /^assistant_(\d+)$/i.exec(rawMessageId)
+  const parsedMessageId = Number.parseInt(prefixedMatch ? prefixedMatch[1] : rawMessageId, 10)
+  if (!Number.isFinite(parsedMessageId) || parsedMessageId <= 0) {
+    return false
+  }
+
+  const targetAssistantRows = await withDbRetry("select-writer-assistant-by-id", () =>
+    db
+      .select({ id: writerMessages.id })
+      .from(writerMessages)
+      .where(
+        and(
+          eq(writerMessages.id, parsedMessageId),
+          eq(writerMessages.conversationId, conversation.id),
+          eq(writerMessages.role, "assistant"),
+        ),
+      )
+      .limit(1),
+  )
+
+  const targetAssistant = targetAssistantRows[0]
+  if (!targetAssistant) {
+    return false
+  }
+
+  await withDbRetry("update-writer-assistant-content-by-id", () =>
+    db
+      .update(writerMessages)
+      .set({
+        content,
+        ...(meta && "diagnostics" in meta ? { diagnostics: meta.diagnostics || null } : {}),
+      })
+      .where(eq(writerMessages.id, targetAssistant.id)),
+  )
+
+  if (
+    meta &&
+    (typeof meta.status === "string" ||
+      typeof meta.imagesRequested === "boolean" ||
+      Boolean(meta.language) ||
+      Boolean(meta.platform) ||
+      Boolean(meta.mode))
+  ) {
+    await updateWriterConversationMeta(userId, conversationId, {
+      ...(typeof meta.status === "string" ? { status: meta.status } : {}),
+      ...(typeof meta.imagesRequested === "boolean" ? { imagesRequested: meta.imagesRequested } : {}),
+      ...(meta.language ? { language: meta.language } : {}),
+      ...(meta.platform ? { platform: meta.platform } : {}),
+      ...(meta.mode ? { mode: meta.mode } : {}),
+    })
+  }
+
+  return true
+}
+
 export async function deleteWriterConversation(userId: number, conversationId: string) {
   await ensureWriterTables()
 

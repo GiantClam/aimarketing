@@ -7,9 +7,16 @@
 
 export const IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS = 10
 export const IMAGE_ASSISTANT_MAX_BRIEF_TURNS = 5
-export const IMAGE_ASSISTANT_TEXT_MODEL = process.env.IMAGE_ASSISTANT_TEXT_MODEL || process.env.WRITER_TEXT_MODEL || "google/gemini-3-flash"
+export const IMAGE_ASSISTANT_TEXT_MODEL =
+  process.env.IMAGE_ASSISTANT_TEXT_MODEL ||
+  process.env.WRITER_TEXT_MODEL ||
+  process.env.WRITER_SKILL_MODEL ||
+  "google/gemini-3-flash-preview"
 export const IMAGE_ASSISTANT_SKILL_MODEL =
-  process.env.IMAGE_ASSISTANT_SKILL_MODEL || process.env.WRITER_SKILL_MODEL || "gpt-5.3-codex"
+  process.env.IMAGE_ASSISTANT_SKILL_MODEL ||
+  process.env.WRITER_SKILL_MODEL ||
+  process.env.WRITER_TEXT_MODEL ||
+  "google/gemini-3-flash-preview"
 
 type ImageAssistantSkillDefinition = ImageAssistantSkillSelection & {
   description: string

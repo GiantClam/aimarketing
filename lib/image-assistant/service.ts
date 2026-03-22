@@ -31,6 +31,8 @@ import type {
   ImageAssistantAsset,
   ImageAssistantBrief,
   ImageAssistantGenerateResult,
+  ImageAssistantGuidedSelection,
+  ImageAssistantMessage,
   ImageAssistantResolution,
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
@@ -47,6 +49,69 @@ function throwIfAborted(signal?: AbortSignal) {
 
 function logImageAssistantStage(stage: string, payload: Record<string, unknown>) {
   console.info(`image-assistant.${stage}`, payload)
+}
+
+function normalizeGuidedSelection(input: ImageAssistantGuidedSelection | null | undefined) {
+  if (!input) return null
+  const sourceMessageId =
+    typeof input.source_message_id === "string" && input.source_message_id.trim()
+      ? input.source_message_id.trim()
+      : null
+  const questionId =
+    typeof input.question_id === "string" && input.question_id.trim() ? input.question_id.trim() : null
+  const optionId = typeof input.option_id === "string" && input.option_id.trim() ? input.option_id.trim() : null
+
+  if (!sourceMessageId && !questionId && !optionId) {
+    return null
+  }
+
+  return {
+    source_message_id: sourceMessageId,
+    question_id: questionId,
+    option_id: optionId,
+  }
+}
+
+function getLatestPromptQuestionContext(messages: ImageAssistantMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== "assistant") continue
+
+    const payloads = [message.response_payload, message.request_payload]
+    for (const payload of payloads) {
+      const orchestration =
+        payload && typeof payload === "object" && (payload as Record<string, unknown>).orchestration
+          ? ((payload as Record<string, unknown>).orchestration as Record<string, unknown>)
+          : null
+      if (!orchestration) continue
+
+      const promptQuestions = Array.isArray(orchestration.prompt_questions)
+        ? (orchestration.prompt_questions as Array<Record<string, unknown>>)
+        : []
+      const firstQuestion = promptQuestions.find(
+        (question) => question && typeof question === "object" && typeof question.id === "string",
+      )
+      if (!firstQuestion) continue
+
+      const optionIds = new Set(
+        (Array.isArray(firstQuestion.options) ? firstQuestion.options : [])
+          .map((option) =>
+            option && typeof option === "object" && typeof (option as Record<string, unknown>).id === "string"
+              ? String((option as Record<string, unknown>).id)
+              : "",
+          )
+          .filter(Boolean),
+      )
+
+      return {
+        messageId: message.id,
+        questionId: String(firstQuestion.id),
+        optionIds,
+      }
+    }
+  }
+
+  return null
 }
 
 function normalizeResolution(value: unknown): ImageAssistantResolution {
@@ -196,10 +261,7 @@ async function ensureImageAssistantSession(params: {
   title: string
 }) {
   let sessionId = params.sessionId || null
-  let session =
-    sessionId && (await getImageAssistantSession(params.userId, sessionId))
-      ? await getImageAssistantSession(params.userId, sessionId)
-      : null
+  let session = sessionId ? await getImageAssistantSession(params.userId, sessionId) : null
 
   if (!session) {
     const created = await createImageAssistantSession({
@@ -222,10 +284,22 @@ async function resolveReferenceAssets(params: {
   userId: number
   sessionId: string
   referenceAssetIds?: string[]
+  sessionValidated?: boolean
 }) {
-  const assets = await listImageAssistantAssets(params.userId, params.sessionId)
-  const referencedAssets = (params.referenceAssetIds || [])
-    .slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
+  const scopedReferenceAssetIds = (params.referenceAssetIds || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
+  if (!scopedReferenceAssetIds.length) {
+    return {
+      assets: [] as ImageAssistantAsset[],
+      referencedAssets: [] as ImageAssistantAsset[],
+    }
+  }
+
+  const assets = await listImageAssistantAssets(params.userId, params.sessionId, {
+    limit: scopedReferenceAssetIds.length,
+    assetIds: scopedReferenceAssetIds,
+    skipSessionValidation: Boolean(params.sessionValidated),
+  })
+  const referencedAssets = scopedReferenceAssetIds
     .map((assetId) => assets.find((asset) => asset.id === assetId))
     .filter((asset): asset is ImageAssistantAsset => Boolean(asset))
 
@@ -396,6 +470,7 @@ export async function runImageAssistantJob(params: {
     userId: params.userId,
     sessionId,
     referenceAssetIds: params.referenceAssetIds,
+    sessionValidated: true,
   })
   logImageAssistantStage("job.references.resolved", {
     sessionId,
@@ -576,6 +651,7 @@ export async function runImageAssistantConversationTurn(params: {
   snapshotAssetId?: string | null
   maskAssetId?: string | null
   versionMeta?: Record<string, unknown> | null
+  guidedSelection?: ImageAssistantGuidedSelection | null
   signal?: AbortSignal
 }) {
   const startedAt = Date.now()
@@ -603,11 +679,12 @@ export async function runImageAssistantConversationTurn(params: {
   })
 
   const [messages, { referencedAssets }] = await Promise.all([
-    listImageAssistantMessages(params.userId, sessionId),
+    listImageAssistantMessages(params.userId, sessionId, { skipSessionValidation: true }),
     resolveReferenceAssets({
       userId: params.userId,
       sessionId,
       referenceAssetIds: params.referenceAssetIds,
+      sessionValidated: true,
     }),
   ])
   throwIfAborted(params.signal)
@@ -619,6 +696,51 @@ export async function runImageAssistantConversationTurn(params: {
   })
 
   const previousState = extractLatestImageAssistantOrchestration(messages)
+  const latestPromptQuestionContext = getLatestPromptQuestionContext(messages)
+  const guidedSelection = normalizeGuidedSelection(params.guidedSelection)
+  if (guidedSelection && previousState && latestPromptQuestionContext) {
+    const staleMessageSelection =
+      guidedSelection.source_message_id &&
+      guidedSelection.source_message_id !== latestPromptQuestionContext.messageId
+    const staleQuestionSelection =
+      guidedSelection.question_id &&
+      guidedSelection.question_id !== latestPromptQuestionContext.questionId
+    const staleOptionSelection =
+      guidedSelection.option_id && !latestPromptQuestionContext.optionIds.has(guidedSelection.option_id)
+
+    if (staleMessageSelection || staleQuestionSelection || staleOptionSelection) {
+      logImageAssistantStage("conversation.guided-selection.stale", {
+        sessionId,
+        sourceMessageId: guidedSelection.source_message_id,
+        sourceQuestionId: guidedSelection.question_id,
+        sourceOptionId: guidedSelection.option_id,
+        latestMessageId: latestPromptQuestionContext.messageId,
+        latestQuestionId: latestPromptQuestionContext.questionId,
+      })
+
+      const conversation = await updateImageAssistantSession({
+        userId: params.userId,
+        sessionId,
+        currentMode: "chat",
+        title: previousState.brief.goal || undefined,
+      })
+
+      return {
+        conversation: conversation!,
+        message_id: latestPromptQuestionContext.messageId,
+        version_id: null,
+        text_summary:
+          previousState.follow_up_question ||
+          "Please answer the latest clarification question shown in the newest assistant message.",
+        candidates: [],
+        outcome: "needs_clarification",
+        follow_up_message_id: latestPromptQuestionContext.messageId,
+        orchestration: previousState,
+        max_reference_attachments: IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS,
+      } satisfies ImageAssistantGenerateResult
+    }
+  }
+
   const plan = await planImageAssistantTurn({
     prompt: params.prompt,
     currentBrief: params.brief,

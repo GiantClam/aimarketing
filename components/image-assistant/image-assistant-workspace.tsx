@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   Download,
@@ -64,6 +64,7 @@ import type {
   ImageAssistantAsset,
   ImageAssistantCanvasDocument,
   ImageAssistantConversationSummary,
+  ImageAssistantGuidedSelection,
   ImageAssistantLayer,
   ImageAssistantMessage,
   ImageAssistantOrchestrationState,
@@ -137,6 +138,11 @@ type PendingConversationTurn = {
   prompt: string
   attachments: PendingAttachment[]
   status: "running" | "cancelled"
+}
+
+type PromptQuestionSelectionContext = {
+  sourceMessageId: string
+  questionId: string
 }
 
 function getStoredPendingTurn(sessionId: string | null): PendingConversationTurn | null {
@@ -300,6 +306,7 @@ const IMAGE_ASSISTANT_CLIENT_UPLOAD_TARGET_BYTES = 6 * 1024 * 1024
 const IMAGE_ASSISTANT_UPLOAD_ROUTE_MAX_BYTES = 10 * 1024 * 1024
 const IMAGE_ASSISTANT_ACCEPTED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp"])
 const IMAGE_ASSISTANT_CANDIDATE_PREVIEW_CACHE_LIMIT = 24
+const IMAGE_ASSISTANT_TASK_POLL_INTERVAL_MS = 450
 
 function getImageAssistantSessionResolutionKey(sessionId: string) {
   return `image-assistant:${sessionId}:resolution`
@@ -311,7 +318,7 @@ function isImageAssistantResolution(value: unknown): value is ImageAssistantReso
 
 function getSessionLoadSections(mode: SessionLoadMode) {
   if (mode === "summary") {
-    return { messages: true, versions: true, assets: true, canvas: false }
+    return { messages: true, versions: false, assets: false, canvas: false }
   }
   if (mode === "content") {
     return { messages: true, versions: true, assets: true, canvas: false }
@@ -1453,6 +1460,7 @@ const PROMPT_PRESETS: PromptPreset[] = [
 
 export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId: string | null }) {
   const router = useRouter()
+  const pathname = usePathname()
   const queryClient = useQueryClient()
   const { locale, messages: i18n } = useI18n()
   const imageCopy = i18n.imageAssistant
@@ -1623,6 +1631,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         preserveCanvas?: boolean
         keepEditorOpen?: boolean
         background?: boolean
+        force?: boolean
         messageLimit?: number
         versionLimit?: number
       },
@@ -1651,7 +1660,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             versionLimit: sections.versions && loadMode !== "full" ? effectiveVersionLimit : undefined,
           }),
         }
-        const nextDetail = options?.background
+        const shouldForceFetch = Boolean(options?.force)
+        const nextDetail = shouldForceFetch
+          ? await fetchWorkspaceQueryData(queryClient, queryOptions)
+          : options?.background
           ? await fetchWorkspaceQueryData(queryClient, queryOptions)
           : await ensureWorkspaceQueryData(queryClient, queryOptions)
         const shouldPreserveCanvas = Boolean(options?.preserveCanvas && canvasRef.current)
@@ -1705,8 +1717,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
 
   const syncSessionRoute = useCallback((targetSessionId: string) => {
-    router.replace(`/dashboard/image-assistant/${targetSessionId}`)
-  }, [router])
+    const nextPath = `/dashboard/image-assistant/${targetSessionId}`
+    if (pathname === nextPath) {
+      return
+    }
+    router.replace(nextPath)
+  }, [pathname, router])
 
   const fitScale = useMemo(() => {
     if (!canvas) return 1
@@ -1742,6 +1758,25 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
     return null
   }, [detail?.messages])
+  const latestAssistantMessage = useMemo(() => {
+    const messages = detail?.messages || []
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index]
+      if (message.role === "assistant") {
+        return message
+      }
+    }
+    return null
+  }, [detail?.messages])
+  const latestAssistantPromptQuestionId = useMemo(() => {
+    if (!latestAssistantMessage) return null
+    const orchestration = getMessageOrchestration(latestAssistantMessage)
+    return orchestration?.prompt_questions?.[0]?.id || null
+  }, [latestAssistantMessage])
+  const latestPromptQuestionMessageId = useMemo(() => {
+    if (!latestAssistantMessage || !latestAssistantPromptQuestionId) return null
+    return latestAssistantMessage.id
+  }, [latestAssistantMessage, latestAssistantPromptQuestionId])
   const currentUsageDisplay = latestOrchestration?.brief.usage_label || (isEnglish ? "Use + ratio pending" : "待确认用途 + 比例")
   const currentOrientationDisplay = latestOrchestration?.brief.orientation
     ? latestOrchestration.brief.orientation === "landscape"
@@ -2112,7 +2147,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
 
   const hasComposerInput = Boolean(prompt.trim() || pendingAttachments.length)
-  const canSubmit = hasComposerInput && !isBusy && !isUploading
+  const isPendingTurnRunning = pendingTurn?.status === "running"
+  const canSubmit = hasComposerInput && !isBusy && !isUploading && !isPendingTurnRunning
   const displayMessages = useMemo(() => {
     const currentMessages = detail?.messages || []
     if (!pendingTurn) return currentMessages
@@ -2317,16 +2353,26 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         try {
           const response = await fetch(`/api/tasks/${pendingTask.taskId}`)
           const payload = (await response.json().catch(() => null)) as {
-            data?: { status?: string; result?: { error?: string } | null }
+            data?: { status?: string; result?: { error?: string; outcome?: string } | null }
           } | null
           const status = payload?.data?.status
+          const outcome = payload?.data?.result?.outcome
 
           if (status === "success") {
             shouldScrollMessagesToBottomRef.current = true
-            await invalidateImageAssistantSessionQueries(queryClient, sessionId)
-            await refreshDetail(sessionId, { mode: "content" }).catch((error) => {
+            if (outcome !== "needs_clarification") {
+              await invalidateImageAssistantSessionQueries(queryClient, sessionId)
+            }
+            const refreshedDetail = await refreshDetail(sessionId, {
+              mode: outcome === "needs_clarification" ? "summary" : "content",
+              force: true,
+            }).catch((error) => {
               console.error("image-assistant.pending-task.refresh-failed", error)
+              return null
             })
+            if (refreshedDetail) {
+              saveImageAssistantSessionContentCache(sessionId, refreshedDetail)
+            }
             if (deferredRouteSessionIdRef.current === sessionId) {
               syncSessionRoute(sessionId)
               deferredRouteSessionIdRef.current = null
@@ -2356,7 +2402,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           console.error("image-assistant.pending-task.poll-failed", error)
         }
 
-        await wait(1200)
+        await wait(IMAGE_ASSISTANT_TASK_POLL_INTERVAL_MS)
       }
     }
 
@@ -2786,13 +2832,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       briefPatch?: Partial<ImageAssistantBrief> | null
       sizePreset?: ImageAssistantSizePreset | null
       resolution?: ImageAssistantResolution | null
+      guidedSelection?: ImageAssistantGuidedSelection | null
       preservePrompt?: boolean
     },
   ) => {
+    if (isBusy || activeJobAbortRef.current || isPendingTurnRunning) {
+      return
+    }
+
     const submissionPrompt = typeof options?.prompt === "string" ? options.prompt : prompt.trim()
     const submissionBrief = options?.briefPatch || null
     const submissionSizePreset = options?.sizePreset || latestOrchestration?.brief.size_preset || sizePreset
     const submissionResolution = options?.resolution || latestOrchestration?.brief.resolution || resolution
+    const submissionGuidedSelection = options?.guidedSelection || null
     const hasTurnInput = Boolean(submissionPrompt || pendingAttachments.length || hasBriefPatchInput(submissionBrief))
 
     if (!hasTurnInput) {
@@ -2880,12 +2932,36 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             sizePreset: canvasPatchSizePreset,
             resolution: submissionResolution,
             parentVersionId: detail?.session.current_version_id || null,
+            guidedSelection: submissionGuidedSelection,
           }),
         })
       const taskData = response.data as {
         accepted?: boolean
+        direct?: boolean
+        outcome?: string
+        version_id?: string | null
+        follow_up_message_id?: string | null
         task_id?: string
         session_id?: string
+      }
+      if (taskData?.direct && taskData?.session_id) {
+        shouldScrollMessagesToBottomRef.current = true
+        await refreshDetail(taskData.session_id, {
+          mode: taskData.outcome === "needs_clarification" ? "summary" : "content",
+          force: true,
+        }).catch((error) => {
+          console.error("image-assistant.direct-turn.refresh-failed", error)
+        })
+        if (deferredRouteSessionIdRef.current === taskData.session_id) {
+          syncSessionRoute(taskData.session_id)
+          deferredRouteSessionIdRef.current = null
+        }
+        setSessionId(taskData.session_id)
+        setPendingTurn(null)
+        if (!options?.preservePrompt) {
+          setPrompt("")
+        }
+        return
       }
       if (!taskData?.task_id || !taskData?.session_id) {
         throw new Error("image_assistant_async_task_missing")
@@ -2922,7 +2998,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
   }
 
-  const submitPromptQuestionOption = async (option: ImageAssistantPromptOption) => {
+  const submitPromptQuestionOption = async (
+    option: ImageAssistantPromptOption,
+    context: PromptQuestionSelectionContext,
+  ) => {
+    if (
+      !latestPromptQuestionMessageId ||
+      context.sourceMessageId !== latestPromptQuestionMessageId ||
+      !latestAssistantPromptQuestionId ||
+      context.questionId !== latestAssistantPromptQuestionId
+    ) {
+      return
+    }
+
     if (option.size_preset) {
       setSizePreset(option.size_preset)
     }
@@ -2935,6 +3023,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       briefPatch: option.brief_patch || null,
       sizePreset: option.size_preset || null,
       resolution: option.resolution || null,
+      guidedSelection: {
+        source_message_id: context.sourceMessageId,
+        question_id: context.questionId,
+        option_id: option.id,
+      },
       preservePrompt: true,
     })
   }
@@ -3856,6 +3949,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           const messageOrchestration = getMessageOrchestration(message)
                           const promptQuestions =
                             message.role === "assistant" ? messageOrchestration?.prompt_questions || [] : []
+                          const isPromptQuestionMessageInteractive =
+                            message.role === "assistant" &&
+                            Boolean(promptQuestions.length) &&
+                            latestPromptQuestionMessageId === message.id
                           const parsedContent = parseMessageBubbleContent(message.content)
                           const hasBubbleMeta = parsedContent.meta.length > 0
                           const bubbleAttachmentCount = optimisticAttachments.length || persistedAttachments.length
@@ -4013,10 +4110,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                     }
                                   />
                                 ) : null}
-                                {message.role === "assistant" && promptQuestions.length ? (
+                                {message.role === "assistant" && promptQuestions.length && isPromptQuestionMessageInteractive ? (
                                   <div className="mt-3 space-y-3">
                                     {promptQuestions.map((question) => (
-                                      <div key={`${message.id}:${question.id}`} className="rounded-[20px] border-2 border-border bg-card p-3">
+                                      <div
+                                        key={`${message.id}:${question.id}`}
+                                        data-testid={`image-prompt-question-${question.id}`}
+                                        className="rounded-[20px] border-2 border-border bg-card p-3"
+                                      >
                                         <div className="mb-3">
                                           <p className="text-[12px] font-semibold text-foreground">{question.title}</p>
                                           {question.description ? (
@@ -4033,10 +4134,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                             <button
                                               key={`${question.id}:${option.id}`}
                                               type="button"
-                                              onClick={() => void submitPromptQuestionOption(option)}
-                                              disabled={isBusy}
+                                              data-testid={`image-prompt-option-${question.id}-${option.id}`}
+                                              onClick={() =>
+                                                void submitPromptQuestionOption(option, {
+                                                  sourceMessageId: message.id,
+                                                  questionId: question.id,
+                                                })
+                                              }
+                                              disabled={isBusy || isPendingTurnRunning || !isPromptQuestionMessageInteractive}
                                               className={cn(
-                                                "rounded-[18px] border-2 border-border text-left transition hover:border-primary",
+                                                "rounded-[18px] border-2 border-border text-left transition",
+                                                isPromptQuestionMessageInteractive
+                                                  ? "hover:border-primary"
+                                                  : "cursor-not-allowed opacity-55",
                                                 question.display === "cards"
                                                   ? "bg-background px-4 py-3"
                                                   : "bg-background px-3 py-2 text-[11px]",
@@ -4364,7 +4474,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           }}
                           placeholder={extraCopy.additionalNotesPlaceholder}
                           className="min-h-12 resize-none border-0 bg-transparent px-3 py-2.5 text-[13px] leading-6 shadow-none focus-visible:ring-0"
-                          disabled={isBusy}
+                          disabled={isBusy || isPendingTurnRunning}
                         />
                         {jobError ? (
                           <div className="px-3.5 pb-1 text-[12px] text-destructive">{jobError}</div>
