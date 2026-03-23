@@ -18,11 +18,36 @@ function hashSessionToken(token: string) {
   return createHash("sha256").update(token).digest("hex")
 }
 
-function getCookieOptions(expiresAt: Date) {
+function isLoopbackHost(host: string) {
+  const normalized = host.trim().toLowerCase()
+  const hostname = normalized.startsWith("[") ? normalized.split("]")[0]?.slice(1) || normalized : normalized.split(":")[0]
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+}
+
+function shouldUseSecureCookie(request?: NextRequest) {
+  const explicit = process.env.AUTH_COOKIE_SECURE?.toLowerCase()
+  if (explicit === "true") return true
+  if (explicit === "false") return false
+
+  if (process.env.NODE_ENV !== "production") return false
+
+  const forwardedProto = request?.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase()
+  if (forwardedProto) return forwardedProto === "https"
+
+  const protocol = request?.nextUrl?.protocol?.replace(":", "").toLowerCase()
+  if (protocol) return protocol === "https"
+
+  const host = request?.headers.get("host")
+  if (host && isLoopbackHost(host)) return false
+
+  return true
+}
+
+function getCookieOptions(expiresAt: Date, request?: NextRequest) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookie(request),
     path: "/",
     expires: expiresAt,
   }
@@ -347,43 +372,46 @@ export async function deleteSessionFromRequest(request: NextRequest) {
   })
 }
 
-export function applySessionCookie(response: NextResponse, sessionToken: string, expiresAt: Date) {
-  response.cookies.set(SESSION_COOKIE_NAME, sessionToken, getCookieOptions(expiresAt))
+export function applySessionCookie(response: NextResponse, sessionToken: string, expiresAt: Date, request?: NextRequest) {
+  const secure = shouldUseSecureCookie(request)
+  response.cookies.set(SESSION_COOKIE_NAME, sessionToken, getCookieOptions(expiresAt, request))
   response.cookies.set(DEMO_SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     expires: new Date(0),
   })
   return response
 }
 
-export function applyDemoSessionCookie(response: NextResponse, expiresAt?: Date) {
+export function applyDemoSessionCookie(response: NextResponse, expiresAt?: Date, request?: NextRequest) {
+  const secure = shouldUseSecureCookie(request)
   const finalExpiresAt = expiresAt || new Date(Date.now() + SESSION_TTL_MS)
-  response.cookies.set(DEMO_SESSION_COOKIE_NAME, buildDemoCookieValue(finalExpiresAt), getCookieOptions(finalExpiresAt))
+  response.cookies.set(DEMO_SESSION_COOKIE_NAME, buildDemoCookieValue(finalExpiresAt), getCookieOptions(finalExpiresAt, request))
   response.cookies.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     expires: new Date(0),
   })
   return response
 }
 
-export function clearSessionCookie(response: NextResponse) {
+export function clearSessionCookie(response: NextResponse, request?: NextRequest) {
+  const secure = shouldUseSecureCookie(request)
   response.cookies.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     expires: new Date(0),
   })
   response.cookies.set(DEMO_SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     expires: new Date(0),
   })

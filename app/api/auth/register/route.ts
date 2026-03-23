@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
           enterpriseId: enterprise.id,
         })
         const response = NextResponse.json({ user: payload, requiresApproval: false })
-        return applySessionCookie(response, sessionToken, expiresAt)
+        return applySessionCookie(response, sessionToken, expiresAt, request)
       } catch (error) {
         if (userId) {
           await db.delete(userFeaturePermissions).where(eq(userFeaturePermissions.userId, userId))
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
         enterpriseId: targetEnterprise.id,
       })
       const response = NextResponse.json({ user: payload, requiresApproval: true })
-      return applySessionCookie(response, sessionToken, expiresAt)
+      return applySessionCookie(response, sessionToken, expiresAt, request)
     } catch (error) {
       if (createdUserId) {
         await db.delete(userFeaturePermissions).where(eq(userFeaturePermissions.userId, createdUserId))

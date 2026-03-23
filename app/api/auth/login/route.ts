@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const { sessionToken, expiresAt } = await createUserSession(user.id, request)
     logAuditEvent(request, "auth.login.success", { userId: user.id, enterpriseId: payload.enterpriseId })
     const response = NextResponse.json({ user: payload })
-    return applySessionCookie(response, sessionToken, expiresAt)
+    return applySessionCookie(response, sessionToken, expiresAt, request)
   } catch (error: any) {
     logAuditEvent(request, "auth.login.error", { message: error?.message || "unknown" })
     return NextResponse.json({ error: error.message || "login failed" }, { status: 500 })

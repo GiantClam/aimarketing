@@ -59,6 +59,7 @@ import {
   saveImageAssistantSessionContentCache,
 } from "@/lib/image-assistant/session-store"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
+import { getFallbackReferenceAssetIdsFromVersions, shouldUseImplicitEditMode } from "@/lib/image-assistant/turn-routing"
 import type {
   ImageAssistantBrief,
   ImageAssistantAsset,
@@ -294,6 +295,23 @@ function getClarificationCarryoverReferenceAssetIds(messages: ImageAssistantMess
   }
 
   return getMessageReferenceAssetIds(latestUserPrompt)
+}
+
+function hasDirectTurnMaterialized(params: {
+  detail: ImageAssistantSessionDetail | null | undefined
+  outcome?: string
+  followUpMessageId?: string | null
+  versionId?: string | null
+}) {
+  if (!params.detail) return false
+
+  if (params.outcome === "needs_clarification") {
+    if (!params.followUpMessageId) return true
+    return params.detail.messages.some((message) => message.id === params.followUpMessageId)
+  }
+
+  if (!params.versionId) return true
+  return params.detail.versions.some((version) => version.id === params.versionId)
 }
 
 const DEFAULT_IMAGE_RESOLUTION: ImageAssistantResolution = "2K"
@@ -1807,6 +1825,24 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     () => (currentVersion ? detail?.versions.findIndex((item) => item.id === currentVersion.id) ?? -1 : -1),
     [currentVersion, detail?.versions],
   )
+  const implicitVersionReferenceAssetIds = useMemo(
+    () =>
+      getFallbackReferenceAssetIdsFromVersions({
+        versions: detail?.versions || [],
+        selectedVersionId: selectedVersionId || null,
+        currentVersionId: detail?.session.current_version_id || null,
+      }),
+    [detail?.session.current_version_id, detail?.versions, selectedVersionId],
+  )
+  const carryoverReferenceAssetIds = useMemo(
+    () =>
+      (
+        clarificationCarryoverReferenceAssetIds.length
+          ? clarificationCarryoverReferenceAssetIds
+          : implicitVersionReferenceAssetIds
+      ).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
+    [clarificationCarryoverReferenceAssetIds, implicitVersionReferenceAssetIds],
+  )
 
   const hasMoreMessages = Boolean(detail?.meta.messages_has_more)
   const hasMoreVersions = Boolean(detail?.meta.versions_has_more)
@@ -2866,6 +2902,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     })
     if (!optimisticPrompt) return
     const currentAttachments = [...pendingAttachments]
+    const fallbackReferenceAssetIds = currentAttachments.length ? [] : carryoverReferenceAssetIds
+    const shouldPromoteToEdit = shouldUseImplicitEditMode({
+      requestedKind: kind,
+      prompt: submissionPrompt,
+      guidedSelection: submissionGuidedSelection,
+      explicitReferenceCount: currentAttachments.length,
+      fallbackReferenceCount: fallbackReferenceAssetIds.length,
+    })
+    const effectiveKind: ImageAssistantRunKind = shouldPromoteToEdit ? "edit" : kind
 
     const abortController = new AbortController()
     activeJobAbortRef.current = abortController
@@ -2875,7 +2920,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     shouldScrollMessagesToBottomRef.current = true
     setPendingTurn({
       id: optimisticTurnId,
-      kind,
+      kind: effectiveKind,
       prompt: optimisticPrompt,
       attachments: currentAttachments,
       status: "running",
@@ -2894,9 +2939,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         )
         : []
       const uploadedAssetIds = uploadedAssets.map((item) => item.assetId)
-      const nextReferenceAssetIds = (
-        currentAttachments.length ? uploadedAssetIds : clarificationCarryoverReferenceAssetIds
-      ).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
+      const nextReferenceAssetIds = (currentAttachments.length ? uploadedAssetIds : fallbackReferenceAssetIds).slice(
+        -IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS,
+      )
       const canvasAttachmentIndex = currentAttachments.findIndex((attachment) => attachment.source === "canvas")
       const canvasAttachment = canvasAttachmentIndex >= 0 ? currentAttachments[canvasAttachmentIndex] : null
       const canvasSnapshotAssetId =
@@ -2905,7 +2950,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         canvasAttachmentIndex >= 0 ? uploadedAssets[canvasAttachmentIndex]?.maskAssetId || canvasAttachment?.maskAssetId || null : null
       const canvasAnnotationMetadata = canvasAttachment?.annotationMetadata || null
       const shouldUseCanvasSnapshotEdit =
-        kind === "edit" &&
+        effectiveKind === "edit" &&
         Boolean(
           canvasAttachment &&
           canvasSnapshotAssetId &&
@@ -2918,7 +2963,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           )
         : submissionSizePreset
       const response = await requestJson(
-        shouldUseCanvasSnapshotEdit ? "/api/image-assistant/canvas-snapshot-edit" : `/api/image-assistant/${kind}`,
+        shouldUseCanvasSnapshotEdit ? "/api/image-assistant/canvas-snapshot-edit" : `/api/image-assistant/${effectiveKind}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2949,26 +2994,77 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         outcome?: string
         version_id?: string | null
         follow_up_message_id?: string | null
+        detail_mode?: "summary" | "content"
+        detail_snapshot?: ImageAssistantSessionDetail | null
         task_id?: string
         session_id?: string
       }
       if (taskData?.direct && taskData?.session_id) {
-        setSessionId(taskData.session_id)
-        syncSessionRoute(taskData.session_id)
+        const directSessionId = taskData.session_id
+        const directMode: SessionLoadMode =
+          taskData.detail_mode || (taskData.outcome === "needs_clarification" ? "summary" : "content")
+        setSessionId(directSessionId)
+        syncSessionRoute(directSessionId)
         shouldScrollMessagesToBottomRef.current = true
-        await refreshDetail(taskData.session_id, {
-          mode: taskData.outcome === "needs_clarification" ? "summary" : "content",
-          force: true,
-        }).catch((error) => {
-          console.error("image-assistant.direct-turn.refresh-failed", error)
-        })
-        if (deferredRouteSessionIdRef.current === taskData.session_id) {
-          syncSessionRoute(taskData.session_id)
-          deferredRouteSessionIdRef.current = null
+
+        let mergedDirectDetail: ImageAssistantSessionDetail | null = null
+        if (taskData.detail_snapshot) {
+          mergedDirectDetail = mergeSessionDetail(detailRef.current, taskData.detail_snapshot, directMode)
+          setDetail(mergedDirectDetail)
+          if (directMode !== "summary") {
+            setSelectedVersionId((current) => {
+              if (current && mergedDirectDetail?.versions.some((version) => version.id === current)) {
+                return current
+              }
+              return mergedDirectDetail?.session.current_version_id || mergedDirectDetail?.versions[0]?.id || null
+            })
+          }
+          saveImageAssistantSessionContentCache(directSessionId, mergedDirectDetail)
         }
+
         setPendingTurn(null)
         if (!options?.preservePrompt) {
           setPrompt("")
+        }
+
+        const shouldSyncDirectTurn = !hasDirectTurnMaterialized({
+          detail: mergedDirectDetail,
+          outcome: taskData.outcome,
+          followUpMessageId: taskData.follow_up_message_id || null,
+          versionId: taskData.version_id || null,
+        })
+        if (shouldSyncDirectTurn) {
+          void (async () => {
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+              const refreshedDetail = await refreshDetail(directSessionId, {
+                mode: directMode,
+                force: true,
+                background: true,
+              }).catch((error) => {
+                console.error("image-assistant.direct-turn.refresh-failed", error)
+                return null
+              })
+              if (refreshedDetail) {
+                saveImageAssistantSessionContentCache(directSessionId, refreshedDetail)
+              }
+              if (
+                hasDirectTurnMaterialized({
+                  detail: refreshedDetail,
+                  outcome: taskData.outcome,
+                  followUpMessageId: taskData.follow_up_message_id || null,
+                  versionId: taskData.version_id || null,
+                })
+              ) {
+                break
+              }
+              await wait(200 + attempt * 180)
+            }
+          })()
+        }
+
+        if (deferredRouteSessionIdRef.current === directSessionId) {
+          syncSessionRoute(directSessionId)
+          deferredRouteSessionIdRef.current = null
         }
         return
       }
@@ -2981,7 +3077,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         scope: "image",
         sessionId: taskData.session_id,
         prompt: optimisticPrompt,
-        taskType: kind,
+        taskType: effectiveKind,
         createdAt: Date.now(),
       })
       setSessionId(taskData.session_id)

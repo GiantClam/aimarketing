@@ -4,14 +4,31 @@ import sharp from "sharp"
 import { writerFetch } from "@/lib/writer/network"
 
 function parseDataUrl(dataUrl: string) {
-  const match = /^data:([^;,]+)(?:;[^,]*)?;base64,([\s\S]+)$/i.exec(dataUrl.trim())
-  if (!match) {
+  const trimmed = dataUrl.trim()
+  if (!trimmed.toLowerCase().startsWith("data:")) {
+    throw new Error("image_asset_data_url_invalid")
+  }
+
+  const commaIndex = trimmed.indexOf(",")
+  if (commaIndex <= 5 || commaIndex >= trimmed.length - 1) {
+    throw new Error("image_asset_data_url_invalid")
+  }
+
+  const header = trimmed.slice(5, commaIndex)
+  const payload = trimmed.slice(commaIndex + 1)
+  const headerParts = header
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const mimeType = (headerParts[0] || "").toLowerCase()
+  const isBase64 = headerParts.slice(1).some((part) => part.toLowerCase() === "base64")
+  if (!mimeType || !isBase64) {
     throw new Error("image_asset_data_url_invalid")
   }
 
   return {
-    mimeType: match[1].toLowerCase(),
-    buffer: Buffer.from(match[2], "base64"),
+    mimeType,
+    buffer: Buffer.from(payload, "base64"),
   }
 }
 

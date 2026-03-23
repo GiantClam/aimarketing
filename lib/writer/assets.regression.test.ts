@@ -113,3 +113,40 @@ test("empty managed slot comments are normalized back into renderable pending as
     pendingAssets.map((asset) => ({ id: asset.id, status: "loading", url: "" })),
   )
 })
+
+test("raw writer asset tokens are normalized to managed placeholder blocks without leaking token-only lines", () => {
+  const markdownWithRawTokens = [
+    "# 标题",
+    "",
+    "writer-asset://cover",
+    "",
+    "这里是正文段落。",
+    "",
+    "- writer-asset://inline-1",
+    "",
+    "收尾段落。",
+  ].join("\n")
+
+  const pendingAssets = buildPendingWriterAssets(markdownWithRawTokens, "wechat", "article")
+  const resolved = resolveWriterAssetMarkdown(markdownWithRawTokens, pendingAssets, "wechat", "article")
+  const extracted = extractWriterAssetsFromMarkdown(resolved, "wechat", "article")
+
+  assert.doesNotMatch(resolved, /^\s*(?:[-*+]\s+)?writer-asset:\/\/[a-z0-9-]+\s*$/gim)
+  assert.match(resolved, /!\[Cover\]\(writer-asset:\/\/cover\)/)
+  assert.match(resolved, /!\[Inline Image 1\]\(writer-asset:\/\/inline-1\)/)
+  assert.deepEqual(
+    extracted.map((asset) => ({ id: asset.id, status: asset.status, url: asset.url })),
+    pendingAssets.map((asset) => ({ id: asset.id, status: "loading", url: "" })),
+  )
+})
+
+test("managed slot-only markdown still resolves into placeholder image lines", () => {
+  const managedOnlyMarkdown = ["<!-- writer-asset-slot:start:cover -->", "<!-- writer-asset-slot:end:cover -->"].join("\n")
+
+  const resolved = resolveWriterAssetMarkdown(managedOnlyMarkdown, [], "wechat", "article")
+  const extracted = extractWriterAssetsFromMarkdown(resolved, "wechat", "article")
+
+  assert.match(resolved, /!\[Cover\]\(writer-asset:\/\/cover\)/)
+  assert.equal(extracted[0]?.id, "cover")
+  assert.equal(extracted[0]?.status, "loading")
+})

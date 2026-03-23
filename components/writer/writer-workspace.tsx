@@ -179,11 +179,18 @@ const parseThread = (markdown: string) =>
 
 const stripMarkdown = (markdown: string) =>
   markdown
+    .replace(/writer-asset:\/\/[^\s)]+/g, " ")
     .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/[`*_>#-]/g, " ")
     .replace(/\n{2,}/g, "\n")
     .replace(/\s+/g, " ")
+    .trim()
+
+const stripManagedWriterAssetCommentLines = (markdown: string) =>
+  markdown
+    .replace(/^\s*<!--\s*writer-asset-slot:(?:start|end):[a-z0-9-]+\s*-->\s*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim()
 
 const isPreviewableWriterDraft = (content: string, copy: WriterCopy) => {
@@ -211,10 +218,13 @@ const buildPreviewMarkdown = ({
   const normalizedMarkdown = markdown.trim()
   if (!normalizedMarkdown) return copy.textPreviewHint
 
+  const extractedAssets = extractWriterAssetsFromMarkdown(normalizedMarkdown, platform, mode)
   const resolvedAssets =
     assets.length > 0
       ? assets
-      : buildWriterAssetBlueprints(normalizedMarkdown, platform, mode).length > 0
+      : extractedAssets.length > 0
+        ? extractedAssets
+        : buildWriterAssetBlueprints(normalizedMarkdown, platform, mode).length > 0
         ? buildPendingWriterAssets(normalizedMarkdown, platform, mode)
         : []
 
@@ -262,6 +272,28 @@ const findWriterAsset = (src: string, assets: WriterAsset[]) => {
 const findRenderableWriterAsset = (src: string, assets: WriterAsset[]) => {
   if (!src.trim()) return null
   return assets.find((asset) => asset.url === src.trim()) ?? null
+}
+
+const buildWriterAssetFallbackFromSrc = (src: string): WriterAsset | null => {
+  const match = /^writer-asset:\/\/([a-z0-9-]+)$/i.exec(src.trim())
+  if (!match) return null
+
+  const id = match[1]
+  const inlineMatch = /^inline-(\d+)$/u.exec(id)
+  const inlineIndex = inlineMatch?.[1] || ""
+  const label = id === "cover" ? "Cover" : inlineIndex ? `Inline Image ${inlineIndex}` : "Article image"
+  const title = id === "cover" ? "Cover image placeholder" : inlineIndex ? `Inline image ${inlineIndex}` : "Article image placeholder"
+
+  return {
+    id,
+    label,
+    title,
+    prompt: "",
+    url: "",
+    status: "loading",
+    provider: "loading",
+    error: "writer_asset_pending",
+  }
 }
 
 const getPlatformPreviewPalette = (platform: WriterPlatform) => {
@@ -341,6 +373,7 @@ function WriterAssetPlaceholder({
 }
 
 function renderMarkdown(content: string, assets: WriterAsset[], className?: string, copy?: WriterCopy) {
+  const normalizedContent = stripManagedWriterAssetCommentLines(content)
   return (
     <div
       className={cn(
@@ -363,7 +396,8 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
             if (typeof src !== "string" || !src.trim()) return null
             if (src.startsWith("data:image")) return null
 
-            const writerAsset = findWriterAsset(src, assets) || findRenderableWriterAsset(src, assets)
+            const writerAsset =
+              findWriterAsset(src, assets) || findRenderableWriterAsset(src, assets) || buildWriterAssetFallbackFromSrc(src)
             if (writerAsset) {
               return (
                 <figure className="my-8 overflow-hidden rounded-[28px] border-2 border-border bg-card">
@@ -413,7 +447,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
           },
         }}
       >
-        {content}
+        {normalizedContent}
       </ReactMarkdown>
     </div>
   )
@@ -1817,7 +1851,24 @@ export function WriterWorkspace({
   const handleGenerateAssets = async (target: WriterPreviewContext = activePreview) => {
     if (!target.hasDraft || target.assetsLoading || !target.messageId) return
 
-    const pendingAssets = buildPendingWriterAssets(target.sourceMarkdown, platform, mode)
+    const generationPlatform = target.platform
+    const generationMode = target.mode
+    let pendingAssets = buildPendingWriterAssets(target.sourceMarkdown, generationPlatform, generationMode)
+    if (pendingAssets.length === 0) {
+      const extracted = extractWriterAssetsFromMarkdown(target.sourceMarkdown, generationPlatform, generationMode)
+      pendingAssets = extracted.map((asset) => ({
+        ...asset,
+        url: "",
+        status: "loading",
+        provider: "loading",
+        error: undefined,
+      }))
+    }
+    const pendingMarkdown =
+      pendingAssets.length > 0
+        ? resolveWriterAssetMarkdown(target.sourceMarkdown, pendingAssets, generationPlatform, generationMode)
+        : target.sourceMarkdown
+
     setPreviewMessageId(target.messageId)
     setPreviewOpen(true)
 
@@ -1827,6 +1878,9 @@ export function WriterWorkspace({
       setAssetsError(null)
       setAssetsLoading(true)
       setAssets(pendingAssets)
+      if (pendingMarkdown && pendingMarkdown !== target.sourceMarkdown) {
+        setDraft(pendingMarkdown)
+      }
     } else {
       setVersionAssetState((current) => ({
         ...current,
@@ -1838,10 +1892,37 @@ export function WriterWorkspace({
       }))
     }
 
+    if (pendingMarkdown && pendingMarkdown !== target.sourceMarkdown) {
+      patchAssistantMessage(target.messageId, pendingMarkdown)
+      patchAssistantHistoryEntry(target.messageId, pendingMarkdown)
+
+      if (conversationId) {
+        const assistantDbMessageId = extractAssistantDbMessageId(target.messageId)
+        if (target.isLatest || assistantDbMessageId) {
+          const patchPayload: Record<string, unknown> = {
+            conversation_id: conversationId,
+            content: pendingMarkdown,
+          }
+          if (assistantDbMessageId) {
+            patchPayload.message_id = assistantDbMessageId
+          }
+          if (target.isLatest) {
+            patchPayload.status = "image_generating"
+            patchPayload.imagesRequested = true
+          }
+          void fetch("/api/writer/messages", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patchPayload),
+          }).catch(() => null)
+        }
+      }
+    }
+
     try {
       console.log("writer.client.generate_assets_start", {
-        platform,
-        mode,
+        platform: generationPlatform,
+        mode: generationMode,
         conversationId,
         targetMessageId: target.messageId,
         targetIsLatest: target.isLatest,
@@ -1852,8 +1933,8 @@ export function WriterWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           markdown: target.sourceMarkdown,
-          platform,
-          mode,
+          platform: generationPlatform,
+          mode: generationMode,
           conversationId: target.isLatest ? conversationId : null,
         }),
       })
@@ -1883,8 +1964,9 @@ export function WriterWorkspace({
         }))
       }
 
-      const resolvedMarkdown = resolveWriterAssetMarkdown(target.sourceMarkdown, nextAssets, platform, mode)
-      if (resolvedMarkdown && resolvedMarkdown !== target.sourceMarkdown) {
+      const markdownBase = pendingMarkdown || target.sourceMarkdown
+      const resolvedMarkdown = resolveWriterAssetMarkdown(markdownBase, nextAssets, generationPlatform, generationMode)
+      if (resolvedMarkdown && resolvedMarkdown !== markdownBase) {
         if (target.isLatest) {
           setDraft(resolvedMarkdown)
         }

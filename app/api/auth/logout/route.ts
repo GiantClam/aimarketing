@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       console.warn("auth.logout.delete-session-failed", error)
     }
     const response = NextResponse.json({ success: true })
-    return clearSessionCookie(response)
+    return clearSessionCookie(response, request)
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "logout failed" }, { status: 500 })
   }

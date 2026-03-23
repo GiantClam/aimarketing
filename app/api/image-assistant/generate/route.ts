@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
+import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
+import { getImageAssistantSessionDetail, listImageAssistantVersions } from "@/lib/image-assistant/repository"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
+import { getFallbackReferenceAssetIdsFromVersions, shouldUseImplicitEditMode } from "@/lib/image-assistant/turn-routing"
 import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
@@ -39,6 +42,25 @@ function normalizeGuidedSelection(input: unknown): ImageAssistantGuidedSelection
   }
 }
 
+function normalizeReferenceAssetIds(input: unknown) {
+  if (!Array.isArray(input)) return []
+  return input.filter((value): value is string => typeof value === "string")
+}
+
+async function resolveImplicitReferenceAssetIds(input: {
+  userId: number
+  sessionId: string
+  selectedVersionId?: string | null
+  currentVersionId?: string | null
+}) {
+  const versions = await listImageAssistantVersions(input.userId, input.sessionId, { limit: 12 })
+  return getFallbackReferenceAssetIdsFromVersions({
+    versions,
+    selectedVersionId: input.selectedVersionId || null,
+    currentVersionId: input.currentVersionId || null,
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireSessionUser(req, "image_design_generation")
@@ -60,15 +82,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "prompt is required" }, { status: 400 })
     }
 
-    const { sessionId } = await ensureImageAssistantSessionForTask({
+    const { sessionId, session } = await ensureImageAssistantSessionForTask({
       userId: auth.user.id,
       enterpriseId: auth.user.enterpriseId,
       sessionId: typeof body?.sessionId === "string" ? body.sessionId : null,
       title: prompt.trim() || (typeof brief?.goal === "string" ? brief.goal : "image design"),
     })
     const guidedSelection = normalizeGuidedSelection(body?.guidedSelection)
-    const shouldRunDirectBriefTurn = Boolean(guidedSelection && guidedSelection.question_id && guidedSelection.question_id !== "resolution")
-    const shouldRunDirectConversationTurn = shouldRunDirectBriefTurn || !guidedSelection
+    const parentVersionId = typeof body?.parentVersionId === "string" ? body.parentVersionId : null
+    const explicitReferenceAssetIds = normalizeReferenceAssetIds(body?.referenceAssetIds)
+    const isLikelyReferenceEditPrompt = looksLikeReferenceEditIntent({
+      prompt,
+      taskType: null,
+      referenceCount: explicitReferenceAssetIds.length || undefined,
+    })
+    const implicitReferenceAssetIds =
+      !explicitReferenceAssetIds.length && isLikelyReferenceEditPrompt
+        ? await resolveImplicitReferenceAssetIds({
+            userId: auth.user.id,
+            sessionId,
+            selectedVersionId: parentVersionId,
+            currentVersionId: session.current_version_id || null,
+          })
+        : []
+    const shouldPromoteToEdit = shouldUseImplicitEditMode({
+      requestedKind: "generate",
+      prompt,
+      guidedSelection,
+      explicitReferenceCount: explicitReferenceAssetIds.length,
+      fallbackReferenceCount: implicitReferenceAssetIds.length,
+    })
+    const effectiveTaskType = shouldPromoteToEdit ? "edit" : "generate"
+    const effectiveReferenceAssetIds = (explicitReferenceAssetIds.length
+      ? explicitReferenceAssetIds
+      : implicitReferenceAssetIds) as string[]
+    const effectiveWorkflowName = shouldPromoteToEdit ? "image_turn_edit" : "image_turn_generate"
+
+    if (shouldPromoteToEdit) {
+      console.info("image-assistant.generate.promoted_to_edit", {
+        sessionId,
+        parentVersionId,
+        currentVersionId: session.current_version_id || null,
+        referenceAssetCount: effectiveReferenceAssetIds.length,
+      })
+    }
+
+    // Prefer direct execution by default for low-latency UX.
+    // Async mode remains as an explicit fallback for long-running scenarios.
+    const shouldRunDirectConversationTurn = body?.preferAsync !== true
 
     if (shouldRunDirectConversationTurn) {
       const directResult = await runImageAssistantConversationTurn({
@@ -78,13 +139,24 @@ export async function POST(req: NextRequest) {
         sessionId,
         prompt,
         brief,
-        taskType: "generate",
-        referenceAssetIds: Array.isArray(body?.referenceAssetIds) ? body.referenceAssetIds : [],
+        taskType: effectiveTaskType,
+        referenceAssetIds: effectiveReferenceAssetIds,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
         sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
         resolution: typeof body?.resolution === "string" ? body.resolution : null,
-        parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
+        parentVersionId,
         guidedSelection,
+      })
+
+      const directDetailMode = directResult.outcome === "needs_clarification" ? "summary" : "content"
+      const directSessionDetail = await getImageAssistantSessionDetail(auth.user.id, sessionId, {
+        includeMessages: true,
+        includeVersions: directDetailMode !== "summary",
+        includeAssets: directDetailMode !== "summary",
+        includeCanvas: false,
+        messageLimit: directDetailMode === "summary" ? 16 : 12,
+        versionLimit: directDetailMode === "summary" ? undefined : 6,
+        assetLimit: directDetailMode === "summary" ? undefined : 24,
       })
 
       return NextResponse.json({
@@ -95,13 +167,15 @@ export async function POST(req: NextRequest) {
           outcome: directResult.outcome,
           version_id: directResult.version_id,
           follow_up_message_id: directResult.follow_up_message_id,
+          detail_mode: directDetailMode,
+          detail_snapshot: directSessionDetail,
         },
       })
     }
 
     const task = await enqueueAssistantTask({
       userId: auth.user.id,
-      workflowName: "image_turn_generate",
+      workflowName: effectiveWorkflowName,
       payload: {
         kind: "image_turn",
         userId: auth.user.id,
@@ -110,12 +184,12 @@ export async function POST(req: NextRequest) {
         sessionId,
         prompt,
         brief,
-        taskType: "generate",
-        referenceAssetIds: Array.isArray(body?.referenceAssetIds) ? body.referenceAssetIds : [],
+        taskType: effectiveTaskType,
+        referenceAssetIds: effectiveReferenceAssetIds,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
         sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
         resolution: typeof body?.resolution === "string" ? body.resolution : null,
-        parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
+        parentVersionId,
         guidedSelection,
       },
     })

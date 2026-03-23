@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
-import { listImageAssistantAssets } from "@/lib/image-assistant/repository"
+import { getImageAssistantSessionDetail, listImageAssistantAssets } from "@/lib/image-assistant/repository"
+import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
@@ -54,12 +55,16 @@ async function hasActualEditContext(input: {
     return false
   }
 
-  const editAssets = await listImageAssistantAssets(input.userId, input.sessionId, {
-    assetTypes: ["canvas_snapshot", "mask"],
-    limit: 100,
+  const referencedAssets = await listImageAssistantAssets(input.userId, input.sessionId, {
+    assetIds: input.referenceAssetIds,
+    limit: input.referenceAssetIds.length,
   })
-  const editAssetIds = new Set(editAssets.map((asset) => asset.id))
-  return input.referenceAssetIds.some((assetId) => editAssetIds.has(assetId))
+  if (!referencedAssets.length) {
+    return false
+  }
+
+  const editContextAssetTypes = new Set(["reference", "generated", "canvas_snapshot", "mask"])
+  return referencedAssets.some((asset) => editContextAssetTypes.has(asset.asset_type))
 }
 
 export async function POST(req: NextRequest) {
@@ -108,6 +113,50 @@ export async function POST(req: NextRequest) {
       console.info("image-assistant.edit.normalized_to_generate", {
         sessionId,
         referenceAssetCount: referenceAssetIds.length,
+      })
+    }
+
+    const shouldRunDirectConversationTurn = body?.preferAsync !== true
+
+    if (shouldRunDirectConversationTurn) {
+      const directResult = await runImageAssistantConversationTurn({
+        userId: auth.user.id,
+        enterpriseId: auth.user.enterpriseId,
+        requestIp: getRequestIp(req),
+        sessionId,
+        prompt,
+        brief,
+        taskType,
+        referenceAssetIds,
+        candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
+        sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
+        resolution: typeof body?.resolution === "string" ? body.resolution : null,
+        parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
+        guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
+      })
+
+      const directDetailMode = directResult.outcome === "needs_clarification" ? "summary" : "content"
+      const directSessionDetail = await getImageAssistantSessionDetail(auth.user.id, sessionId, {
+        includeMessages: true,
+        includeVersions: directDetailMode !== "summary",
+        includeAssets: directDetailMode !== "summary",
+        includeCanvas: false,
+        messageLimit: directDetailMode === "summary" ? 16 : 12,
+        versionLimit: directDetailMode === "summary" ? undefined : 6,
+        assetLimit: directDetailMode === "summary" ? undefined : 24,
+      })
+
+      return NextResponse.json({
+        data: {
+          accepted: true,
+          direct: true,
+          session_id: sessionId,
+          outcome: directResult.outcome,
+          version_id: directResult.version_id,
+          follow_up_message_id: directResult.follow_up_message_id,
+          detail_mode: directDetailMode,
+          detail_snapshot: directSessionDetail,
+        },
       })
     }
 

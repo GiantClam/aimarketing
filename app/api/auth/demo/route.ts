@@ -3,9 +3,7 @@ import { eq } from "drizzle-orm"
 
 import {
   applyDemoSessionCookie,
-  applySessionCookie,
   createDemoAuthPayload,
-  createUserSession,
   isDemoLoginEnabled,
   withSessionDbRetry,
 } from "@/lib/auth/session"
@@ -94,15 +92,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "demo user not found" }, { status: 404 })
       }
 
-      const { sessionToken, expiresAt } = await createUserSession(userId, request)
       logAuditEvent(request, "auth.demo.success", { userId, enterpriseId: payload.enterpriseId })
       const response = NextResponse.json({ user: payload })
-      return applySessionCookie(response, sessionToken, expiresAt)
+      return applyDemoSessionCookie(response, undefined, request)
     } catch (dbError: any) {
       const payload = createDemoAuthPayload()
       logAuditEvent(request, "auth.demo.fallback", { message: dbError?.message || "unknown" })
       const response = NextResponse.json({ user: payload, fallback: "stateless_demo" })
-      return applyDemoSessionCookie(response)
+      return applyDemoSessionCookie(response, undefined, request)
     }
   } catch (error: any) {
     logAuditEvent(request, "auth.demo.error", { message: error?.message || "unknown" })

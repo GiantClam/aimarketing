@@ -143,6 +143,10 @@ const PLATFORM_IMAGE_META: Record<
 const WRITER_ASSET_PLACEHOLDER_RE = /writer-asset:\/\/([a-z0-9-]+)/i
 const WRITER_PLACEHOLDER_LINE_RE =
   /^\s*!\[[^\]]*\]\(writer-asset:\/\/([a-z0-9-]+)(?:\s+["'][^"']*["'])?\)\s*$/gim
+const WRITER_PLACEHOLDER_LINK_LINE_RE =
+  /^\s*(?:[-*+]\s+)?\[[^\]]*\]\(writer-asset:\/\/([a-z0-9-]+)(?:\s+["'][^"']*["'])?\)\s*$/gim
+const WRITER_PLACEHOLDER_TOKEN_LINE_RE = /^\s*(?:[-*+]\s+)?`?writer-asset:\/\/([a-z0-9-]+)`?\s*$/gim
+const WRITER_PLACEHOLDER_TOKEN_RE = /`?writer-asset:\/\/([a-z0-9-]+)`?/gim
 const WRITER_MANAGED_BLOCK_RE =
   /<!--\s*writer-asset-slot:start:([a-z0-9-]+)\s*-->\s*\r?\n\s*!\[([^\]]*)\]\(([^)]+)\)\s*\r?\n\s*<!--\s*writer-asset-slot:end:\1\s*-->/gim
 const WRITER_EMPTY_MANAGED_BLOCK_RE =
@@ -209,6 +213,16 @@ function stripWriterPlaceholderLines(markdown: string) {
   return markdown.replace(WRITER_PLACEHOLDER_LINE_RE, "").replace(/\n{3,}/g, "\n\n").trim()
 }
 
+function stripWriterPlaceholderTokens(markdown: string) {
+  return markdown
+    .replace(WRITER_PLACEHOLDER_LINK_LINE_RE, "")
+    .replace(WRITER_PLACEHOLDER_TOKEN_LINE_RE, "")
+    .replace(WRITER_PLACEHOLDER_TOKEN_RE, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 function stripLegacyWriterImageLines(markdown: string) {
   return markdown.replace(LEGACY_WRITER_IMAGE_LINE_RE, "").replace(/\n{3,}/g, "\n\n").trim()
 }
@@ -224,6 +238,28 @@ function normalizeAssetIdOrder(id: string) {
     return 100 + Number.parseInt(inlineMatch[1], 10)
   }
   return 1_000
+}
+
+function inferWriterAssetLabelFromId(id: string) {
+  if (id === "cover") return "Cover"
+  const inlineMatch = /^inline-(\d+)$/iu.exec(id)
+  if (inlineMatch) return `Inline Image ${inlineMatch[1]}`
+  return "Article image"
+}
+
+function buildFallbackWriterAssetBlueprint(id: string, order: number): WriterAssetBlueprint {
+  const inlineMatch = /^inline-(\d+)$/iu.exec(id)
+  const inlineIndex = inlineMatch ? Number.parseInt(inlineMatch[1], 10) : null
+  const isCover = id === "cover"
+  return {
+    id,
+    label: inferWriterAssetLabelFromId(id),
+    title: isCover ? "Cover image" : inlineIndex ? `Inline image ${inlineIndex}` : "Article image",
+    prompt: "",
+    role: isCover ? "cover" : "inline",
+    summary: "",
+    insertionLine: Math.max(0, order),
+  }
 }
 
 function countApproxWords(text: string) {
@@ -270,11 +306,15 @@ function inferVisualDirection(markdown: string, platform: WriterPlatform) {
 }
 
 function buildWriterAssetPlanningBase(markdown: string) {
-  return stripMarkdownImages(stripLegacyWriterImageLines(stripWriterPlaceholderLines(stripManagedWriterAssetBlocks(markdown))))
+  return stripWriterPlaceholderTokens(
+    stripMarkdownImages(stripLegacyWriterImageLines(stripWriterPlaceholderLines(stripManagedWriterAssetBlocks(markdown)))),
+  )
 }
 
 function buildWriterAssetInsertionBase(markdown: string) {
-  return stripLegacyWriterImageLines(stripWriterPlaceholderLines(stripManagedWriterAssetBlocks(markdown)))
+  return stripWriterPlaceholderTokens(
+    stripLegacyWriterImageLines(stripWriterPlaceholderLines(stripManagedWriterAssetBlocks(markdown))),
+  )
 }
 
 function extractExplicitSlotCount(markdown: string) {
@@ -572,9 +612,37 @@ function buildManagedAssetBlock(asset: Pick<WriterAsset, "id" | "label" | "url">
   )
 }
 
+function hasManagedWriterAssetBlocks(markdown: string) {
+  return /<!--\s*writer-asset-slot:start:[a-z0-9-]+\s*-->/iu.test(markdown)
+}
+
+function rebuildManagedAssetBlocks(markdown: string, assets: WriterAsset[]) {
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]))
+  const resolveBlock = (id: string, label: string, rawUrl: string) => {
+    const asset = assetById.get(id)
+    const normalizedUrl = normalizeMarkdownImageUrl(rawUrl)
+    const resolvedLabel = asset?.label || label || inferWriterAssetLabelFromId(id)
+    const resolvedUrl = asset?.url || (normalizedUrl && !normalizedUrl.startsWith("writer-asset://") ? normalizedUrl : "")
+    return buildManagedAssetBlock({ id, label: resolvedLabel, url: resolvedUrl })
+  }
+
+  const withManagedBlocks = markdown.replace(WRITER_MANAGED_BLOCK_RE, (_match, rawId, rawLabel, rawUrl) =>
+    resolveBlock(String(rawId || ""), String(rawLabel || ""), String(rawUrl || "")),
+  )
+
+  return withManagedBlocks.replace(WRITER_EMPTY_MANAGED_BLOCK_RE, (_match, rawId) =>
+    resolveBlock(String(rawId || ""), "", ""),
+  )
+}
+
 function insertManagedAssetBlocks(markdown: string, assets: WriterAsset[], platform: WriterPlatform, mode: WriterMode) {
   const baseMarkdown = buildWriterAssetInsertionBase(markdown)
   const blueprints = buildWriterAssetBlueprints(baseMarkdown, platform, mode)
+  if (blueprints.length === 0 && assets.length > 0) {
+    const sortedAssets = [...assets].sort((left, right) => normalizeAssetIdOrder(left.id) - normalizeAssetIdOrder(right.id))
+    const blocks = sortedAssets.map((asset) => buildManagedAssetBlock(asset)).join("\n\n")
+    return [baseMarkdown, blocks].filter(Boolean).join("\n\n").replace(/\n{3,}/g, "\n\n").trim()
+  }
   const lines = baseMarkdown ? baseMarkdown.split(/\r?\n/) : []
   const assetById = new Map(assets.map((asset) => [asset.id, asset]))
   const insertions = new Map<number, string[]>()
@@ -605,6 +673,10 @@ export function resolveWriterAssetMarkdown(
 ) {
   if (!content.trim()) {
     return ""
+  }
+
+  if (hasManagedWriterAssetBlocks(content)) {
+    return rebuildManagedAssetBlocks(content, assets).trim()
   }
 
   const cleanContent = insertManagedAssetBlocks(content, assets, platform, mode)
@@ -648,10 +720,16 @@ export function extractWriterAssetsFromMarkdown(
   const planningMarkdown = buildWriterAssetPlanningBase(markdown)
   const blueprints = buildWriterAssetBlueprints(planningMarkdown, platform, mode)
   const managedBlocks = extractManagedWriterAssetBlocks(markdown)
+  const derivedBlueprints =
+    blueprints.length > 0
+      ? blueprints
+      : managedBlocks
+          .map((asset, index) => buildFallbackWriterAssetBlueprint(asset.id || `inline-${index + 1}`, index))
+          .filter((asset, index, all) => all.findIndex((candidate) => candidate.id === asset.id) === index)
   const managedById = new Map(managedBlocks.map((asset) => [asset.id, asset]))
 
   if (managedBlocks.length > 0) {
-    return blueprints.map((asset) => {
+    return derivedBlueprints.map((asset) => {
       const match = managedById.get(asset.id)
       return {
         ...asset,
@@ -666,14 +744,14 @@ export function extractWriterAssetsFromMarkdown(
   const urls = [...markdown.matchAll(MARKDOWN_IMAGE_RE)]
     .map((match) => normalizeMarkdownImageUrl(match[2] || ""))
     .filter((url) => Boolean(url) && !url.startsWith("writer-asset://") && !url.startsWith("data:image"))
-    .slice(0, blueprints.length)
+    .slice(0, derivedBlueprints.length)
 
-  return blueprints.map((asset, index) => ({
+  return derivedBlueprints.map((asset, index) => ({
     ...asset,
     url: urls[index] || "",
-    status: urls[index] ? "ready" : "failed",
-    provider: urls[index] ? ("gemini" as const) : ("error" as const),
-    error: urls[index] ? undefined : "writer_asset_missing",
+    status: urls[index] ? "ready" : "loading",
+    provider: urls[index] ? ("gemini" as const) : ("loading" as const),
+    error: urls[index] ? undefined : "writer_asset_pending",
   }))
 }
 
