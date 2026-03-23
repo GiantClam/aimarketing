@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react"
-import { usePathname, useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   Download,
@@ -36,6 +35,7 @@ import {
   WorkspaceSectionCard,
 } from "@/components/workspace/workspace-message-primitives"
 import {
+  findLatestImagePendingTask,
   findImagePendingTask,
   removePendingAssistantTask,
   savePendingAssistantTask,
@@ -1459,8 +1459,6 @@ const PROMPT_PRESETS: PromptPreset[] = [
 ]
 
 export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId: string | null }) {
-  const router = useRouter()
-  const pathname = usePathname()
   const queryClient = useQueryClient()
   const { locale, messages: i18n } = useI18n()
   const imageCopy = i18n.imageAssistant
@@ -1717,12 +1715,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
 
   const syncSessionRoute = useCallback((targetSessionId: string) => {
+    if (typeof window === "undefined") return
     const nextPath = `/dashboard/image-assistant/${targetSessionId}`
-    if (pathname === nextPath) {
+    const currentPath = `${window.location.pathname}${window.location.search}`
+    if (currentPath === nextPath) {
       return
     }
-    router.replace(nextPath)
-  }, [pathname, router])
+    window.history.replaceState(window.history.state, "", nextPath)
+  }, [])
 
   const fitScale = useMemo(() => {
     if (!canvas) return 1
@@ -2333,8 +2333,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [detail, sessionId])
 
   useEffect(() => {
-    const pendingTask = findImagePendingTask(sessionId)
-    if (!sessionId || !pendingTask) return
+    const pendingTask = findImagePendingTask(sessionId) || (!sessionId ? findLatestImagePendingTask() : null)
+    const targetSessionId = sessionId || pendingTask?.sessionId || null
+    if (!pendingTask || !targetSessionId) return
+
+    if (pendingTask.sessionId && pendingTask.sessionId !== sessionId) {
+      setSessionId(pendingTask.sessionId)
+      syncSessionRoute(pendingTask.sessionId)
+    }
 
     let cancelled = false
     setIsBusy(true)
@@ -2361,9 +2367,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           if (status === "success") {
             shouldScrollMessagesToBottomRef.current = true
             if (outcome !== "needs_clarification") {
-              await invalidateImageAssistantSessionQueries(queryClient, sessionId)
+              await invalidateImageAssistantSessionQueries(queryClient, targetSessionId)
             }
-            const refreshedDetail = await refreshDetail(sessionId, {
+            const refreshedDetail = await refreshDetail(targetSessionId, {
               mode: outcome === "needs_clarification" ? "summary" : "content",
               force: true,
             }).catch((error) => {
@@ -2371,10 +2377,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
               return null
             })
             if (refreshedDetail) {
-              saveImageAssistantSessionContentCache(sessionId, refreshedDetail)
+              saveImageAssistantSessionContentCache(targetSessionId, refreshedDetail)
             }
-            if (deferredRouteSessionIdRef.current === sessionId) {
-              syncSessionRoute(sessionId)
+            if (deferredRouteSessionIdRef.current === targetSessionId) {
+              syncSessionRoute(targetSessionId)
               deferredRouteSessionIdRef.current = null
             }
             removePendingAssistantTask(pendingTask.taskId)
@@ -2386,8 +2392,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           }
 
           if (status === "failed") {
-            if (deferredRouteSessionIdRef.current === sessionId) {
-              syncSessionRoute(sessionId)
+            if (deferredRouteSessionIdRef.current === targetSessionId) {
+              syncSessionRoute(targetSessionId)
               deferredRouteSessionIdRef.current = null
             }
             removePendingAssistantTask(pendingTask.taskId)
@@ -2880,6 +2886,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       if (abortController.signal.aborted) {
         throw new DOMException("Aborted", "AbortError")
       }
+      setSessionId(nextSessionId)
+      syncSessionRoute(nextSessionId)
       const uploadedAssets = currentAttachments.length
         ? await Promise.all(
           currentAttachments.map((attachment) => uploadPendingAttachment(nextSessionId, attachment, abortController.signal)),
@@ -2945,6 +2953,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         session_id?: string
       }
       if (taskData?.direct && taskData?.session_id) {
+        setSessionId(taskData.session_id)
+        syncSessionRoute(taskData.session_id)
         shouldScrollMessagesToBottomRef.current = true
         await refreshDetail(taskData.session_id, {
           mode: taskData.outcome === "needs_clarification" ? "summary" : "content",
@@ -2956,7 +2966,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           syncSessionRoute(taskData.session_id)
           deferredRouteSessionIdRef.current = null
         }
-        setSessionId(taskData.session_id)
         setPendingTurn(null)
         if (!options?.preservePrompt) {
           setPrompt("")
@@ -2976,6 +2985,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         createdAt: Date.now(),
       })
       setSessionId(taskData.session_id)
+      syncSessionRoute(taskData.session_id)
       setPendingTaskRefreshKey(Date.now())
       if (!options?.preservePrompt) {
         setPrompt("")

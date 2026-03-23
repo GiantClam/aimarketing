@@ -73,6 +73,13 @@ export function findImagePendingTask(sessionId: string | null) {
   return tasks[0] || null
 }
 
+export function findLatestImagePendingTask() {
+  const tasks = Object.values(readStore())
+    .filter((task) => task.scope === "image")
+    .sort((a, b) => b.createdAt - a.createdAt)
+  return tasks[0] || null
+}
+
 export function findAdvisorPendingTask(input: { advisorType: string; conversationId?: string | null }) {
   const tasks = Object.values(readStore())
     .filter((task) => task.scope === "advisor" && task.advisorType === input.advisorType)
