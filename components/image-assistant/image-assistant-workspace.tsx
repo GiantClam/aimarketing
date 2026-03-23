@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   Download,
@@ -30,6 +30,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
+  WorkspaceConversationSkeleton,
   WorkspaceLoadingMessage,
   WorkspaceMessageFrame,
   WorkspaceSectionCard,
@@ -144,6 +145,12 @@ type PendingConversationTurn = {
 type PromptQuestionSelectionContext = {
   sourceMessageId: string
   questionId: string
+}
+
+type PreviewImageState = {
+  src: string
+  label: string
+  aspectRatio: number
 }
 
 function getStoredPendingTurn(sessionId: string | null): PendingConversationTurn | null {
@@ -1307,6 +1314,11 @@ async function requestJson(url: string, init?: RequestInit) {
   return json
 }
 
+function resolveImageAssistantFetchUrl(url: string) {
+  if (/^(data:|blob:|\/)/i.test(url)) return url
+  return `/api/image-assistant/assets/proxy?url=${encodeURIComponent(url)}`
+}
+
 async function persistCanvasDocument(input: {
   sessionId: string
   canvasDocumentId: string | null
@@ -1572,7 +1584,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [isComposerDragActive, setIsComposerDragActive] = useState(false)
   const [candidatePreviewUrls, setCandidatePreviewUrls] = useState<Record<string, string>>({})
   const [messageAttachmentPreviewUrls, setMessageAttachmentPreviewUrls] = useState<Record<string, string>>({})
-  const [previewImage, setPreviewImage] = useState<{ src: string; label: string } | null>(null)
+  const [previewImage, setPreviewImage] = useState<PreviewImageState | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const messageViewportRef = useRef<HTMLDivElement | null>(null)
@@ -3379,9 +3391,35 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     [candidatePreviewUrls, composeCandidatePreview],
   )
 
+  const openPreviewImage = useCallback((src: string, label: string) => {
+    setPreviewImage({ src, label, aspectRatio: 1 })
+    void (async () => {
+      try {
+        const image = await loadImageForCanvas(src)
+        const width = image.naturalWidth || image.width || 0
+        const height = image.naturalHeight || image.height || 0
+        if (width <= 0 || height <= 0) return
+        const nextAspectRatio = clamp(width / height, 0.25, 4)
+        setPreviewImage((current) => (current && current.src === src ? { ...current, aspectRatio: nextAspectRatio } : current))
+      } catch (error) {
+        console.warn("image-assistant.preview-image.load-failed", error)
+      }
+    })()
+  }, [])
+
+  const previewDialogStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!previewImage) return undefined
+    return {
+      width: `min(98vw, calc((98dvh - 88px) * ${clamp(previewImage.aspectRatio, 0.25, 4)}))`,
+    }
+  }, [previewImage])
+
   const exportImageSource = useCallback(
     async (src: string, fileStem: string, mimeType?: string | null) => {
-      const response = await fetch(src)
+      const response = await fetch(resolveImageAssistantFetchUrl(src), {
+        credentials: "include",
+        cache: "no-store",
+      })
       if (!response.ok) {
         throw new Error(`asset_download_failed:${response.status}`)
       }
@@ -3405,7 +3443,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         return
       }
 
-      const response = await fetch(src)
+      const response = await fetch(resolveImageAssistantFetchUrl(src), {
+        credentials: "include",
+        cache: "no-store",
+      })
       if (!response.ok) {
         throw new Error(`asset_attachment_failed:${response.status}`)
       }
@@ -3563,10 +3604,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [redoCanvasChange, undoCanvasChange])
 
   const ensurePaintLayer = useCallback(() => {
-    if (!canvas) return null
-    const existing = [...canvas.layers].sort((a, b) => b.z_index - a.z_index).find((layer) => layer.layer_type === "paint") || null
+    const workingCanvas = canvasRef.current || canvas
+    if (!workingCanvas) return null
+    const existing =
+      [...workingCanvas.layers].sort((a, b) => b.z_index - a.z_index).find((layer) => layer.layer_type === "paint") || null
     if (existing) return existing
-    return createPaintLayer(canvas.width, canvas.height, imageCopy)
+    return createPaintLayer(workingCanvas.width, workingCanvas.height, imageCopy)
   }, [canvas, imageCopy])
 
   const getCanvasPoint = useCallback(
@@ -3697,7 +3740,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
 
     const currentCanvas = canvasRef.current || canvas
-    const targetLayer = currentCanvas.layers.find((layer) => layer.id === activeStroke.layerId) || activeStroke
+    const latestPaintLayer =
+      [...currentCanvas.layers].sort((a, b) => b.z_index - a.z_index).find((layer) => layer.layer_type === "paint") || null
+    const targetLayer = currentCanvas.layers.find((layer) => layer.id === activeStroke.layerId) || latestPaintLayer
+    if (!targetLayer && activeStroke.tool === "eraser") {
+      setPaintPreview(null)
+      return
+    }
+    const targetLayerId = targetLayer?.id || activeStroke.layerId
     const bitmap = document.createElement("canvas")
     bitmap.width = canvas.width
     bitmap.height = canvas.height
@@ -3707,7 +3757,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       return
     }
 
-    if ("asset_url" in targetLayer && targetLayer.asset_url) {
+    if (targetLayer?.asset_url) {
       try {
         const image = await loadImageForCanvas(targetLayer.asset_url)
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
@@ -3737,7 +3787,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     const nextDataUrl = bitmap.toDataURL("image/png")
     applyCanvasChange((current) => {
       const ordered = [...current.layers].sort((a, b) => a.z_index - b.z_index)
-      const existingIndex = ordered.findIndex((layer) => layer.id === activeStroke.layerId)
+      const existingIndex = ordered.findIndex((layer) => layer.id === targetLayerId)
       if (existingIndex >= 0) {
         const existing = ordered[existingIndex]
         ordered[existingIndex] = {
@@ -3750,10 +3800,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             opacity: 1,
           },
         }
-      } else {
+      } else if (activeStroke.tool !== "eraser") {
         ordered.push({
           ...createPaintLayer(current.width, current.height, imageCopy),
-          id: activeStroke.layerId,
+          id: targetLayerId,
           z_index: ordered.reduce((max, layer) => Math.max(max, layer.z_index), 0) + 1,
           asset_url: nextDataUrl,
           style: { opacity: 1, strokeWidth: activeStroke.strokeWidth, stroke: activeStroke.color },
@@ -3992,10 +4042,22 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   if (!availability) {
     return (
-      <div className="flex h-full items-center justify-center p-8">
-        <div className="flex items-center gap-3 rounded-2xl border bg-card px-5 py-4 text-sm text-muted-foreground shadow-sm">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {imageCopy.loadingApp}
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
+          <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <ScrollArea className="h-full">
+                  <WorkspaceConversationSkeleton rows={3} loadingLabel={imageCopy.loadingApp} />
+                </ScrollArea>
+              </div>
+              <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
+                <div className="mx-auto w-full max-w-5xl rounded-[24px] border-2 border-border bg-card p-2.5">
+                  <div className="h-11 rounded-[18px] border-2 border-border bg-background/70" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -4078,7 +4140,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                               }
                               bodyClassName="space-y-3"
                             >
-                                <div className={cn("rounded-[24px] border-2 p-4", message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}>
+                                <div
+                                  className={cn(
+                                    "rounded-[24px] border-2 p-4 selection:bg-[#E8E8E8]",
+                                    message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background",
+                                  )}
+                                >
                                 {hasBubbleMeta ? (
                                   <div className="flex flex-col gap-2.5">
                                     {parsedContent.body ? (
@@ -4291,7 +4358,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                   void (async () => {
                                                     const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
                                                     if (!previewSrc) return
-                                                    setPreviewImage({ src: previewSrc, label: extraCopy.previewImage })
+                                                    openPreviewImage(previewSrc, extraCopy.previewImage)
                                                   })().catch((error) => {
                                                     console.error("image-assistant.candidate-preview-open-failed", error)
                                                   })
@@ -4877,15 +4944,18 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       </Dialog>
 
       <Dialog open={Boolean(previewImage)} onOpenChange={(open) => { if (!open) setPreviewImage(null) }}>
-        <DialogContent className="max-h-[92vh] w-[min(94vw,1200px)] max-w-[min(94vw,1200px)] border-2 border-border bg-card p-3 sm:p-4">
+        <DialogContent
+          style={previewDialogStyle}
+          className="max-h-[98dvh] w-auto min-w-[280px] max-w-[98vw] border-2 border-border bg-card p-1 selection:bg-[#E8E8E8] sm:max-h-[96dvh] sm:max-w-[96vw] sm:p-3 lg:p-4"
+        >
           <DialogTitle className="sr-only">{previewImage?.label || extraCopy.previewImage}</DialogTitle>
           <DialogDescription className="sr-only">{extraCopy.clickImageToPreview}</DialogDescription>
           {previewImage ? (
-            <div className="overflow-hidden rounded-[24px] border-2 border-border bg-muted/30">
+            <div className="flex max-h-[calc(98dvh-52px)] items-center justify-center overflow-hidden rounded-[20px] border-2 border-border bg-muted/30 sm:max-h-[calc(96dvh-72px)] sm:rounded-[24px]">
               <img
                 src={previewImage.src}
                 alt={previewImage.label}
-                className="max-h-[82vh] w-full object-contain"
+                className="block h-auto w-auto max-h-[calc(98dvh-64px)] max-w-full object-contain sm:max-h-[calc(96dvh-88px)]"
               />
             </div>
           ) : null}

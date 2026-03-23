@@ -85,6 +85,38 @@ test("thread mode keeps image planning to a single cover asset", () => {
   assert.equal(blueprints[0]?.id, "cover")
 })
 
+test("short unstructured drafts avoid forcing an early inline image", () => {
+  const blueprints = buildWriterAssetBlueprints(
+    [
+      "# Product launch update",
+      "",
+      "We shipped the first version and it is now being validated by pilot customers. The opening paragraph should stay clean.",
+      "",
+      "The second paragraph adds context, but this draft is still short and should not be forced into an extra inline image.",
+    ].join("\n"),
+    "wechat",
+    "article",
+  )
+
+  assert.equal(blueprints.length, 1)
+  assert.equal(blueprints[0]?.id, "cover")
+})
+
+test("long unstructured drafts place inline images after the opening paragraph", () => {
+  const opening = "The opening paragraph introduces the central narrative and should stay uninterrupted. ".repeat(120)
+  const bodyOne = "Execution details and supporting evidence are discussed in this middle section. ".repeat(120)
+  const bodyTwo = "The final section focuses on rollout priorities and measurable outcomes. ".repeat(120)
+  const blueprints = buildWriterAssetBlueprints(
+    ["# Growth operating model", "", opening, "", bodyOne, "", bodyTwo].join("\n"),
+    "wechat",
+    "article",
+  )
+
+  assert.ok(blueprints.length >= 2)
+  assert.equal(blueprints[1]?.id, "inline-1")
+  assert.ok((blueprints[1]?.insertionLine || 0) > 2)
+})
+
 test("empty managed slot comments are normalized back into renderable pending asset blocks", () => {
   const markdownWithEmptySlots = [
     "# Title",

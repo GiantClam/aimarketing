@@ -400,18 +400,22 @@ function analyzeWriterMarkdown(markdown: string, platform: WriterPlatform): Writ
       .split(/\n{2,}/)
       .map((block) => block.trim())
       .filter((block) => block && !/^#\s+/u.test(block))
+    const indexedBlocks = blocks.map((body, index) => ({ body, sourceIndex: index }))
+    const candidateBlocks = indexedBlocks.length > 1 ? indexedBlocks.slice(1) : indexedBlocks
 
-    for (let index = 0; index < blocks.length; index += 1) {
-      const body = blocks[index]
+    for (let index = 0; index < candidateBlocks.length; index += 1) {
+      const candidate = candidateBlocks[index]
+      if (!candidate) continue
+      const { body, sourceIndex } = candidate
       const firstLine = body.split(/\r?\n/)[0]?.trim() || ""
       const lineIndex = lines.findIndex((line) => line.includes(firstLine))
-      const summary = compactText(body, `${title} key point ${index + 1}`, 140)
+      const summary = compactText(body, `${title} key point ${sourceIndex + 1}`, 140)
       sections.push({
-        heading: `Key point ${index + 1}`,
+        heading: `Key point ${sourceIndex + 1}`,
         body,
         summary,
         insertionLine: lineIndex >= 0 ? lineIndex : Math.max(titleLineIndex + 1, 0),
-        score: Math.min(220, countApproxWords(body)) + Math.max(0, 18 - index * 4),
+        score: Math.min(220, countApproxWords(body)) + Math.max(0, 18 - sourceIndex * 4),
       })
     }
   }
@@ -462,6 +466,11 @@ function chooseWriterImageCount(
 
   if (platform === "generic" && analysis.wordCount < 500) {
     desired = 1
+  }
+
+  // Avoid forcing inline images on short, unstructured drafts where placement tends to feel abrupt.
+  if (analysis.explicitSlotCount === 0 && analysis.sections.length <= 1 && analysis.wordCount < 900) {
+    return 1
   }
 
   desired = Math.max(meta.minImages, Math.min(meta.maxImages, desired, WRITER_MAX_ARTICLE_IMAGES))
@@ -646,13 +655,25 @@ function insertManagedAssetBlocks(markdown: string, assets: WriterAsset[], platf
   const lines = baseMarkdown ? baseMarkdown.split(/\r?\n/) : []
   const assetById = new Map(assets.map((asset) => [asset.id, asset]))
   const insertions = new Map<number, string[]>()
+  const plannedAssetIds = new Set<string>()
 
   for (const blueprint of blueprints) {
     const asset = assetById.get(blueprint.id)
     if (!asset) continue
+    plannedAssetIds.add(blueprint.id)
     const insertionLine = Math.max(0, Math.min(lines.length, blueprint.insertionLine))
     const currentBlocks = insertions.get(insertionLine) || []
     currentBlocks.push(buildManagedAssetBlock(asset))
+    insertions.set(insertionLine, currentBlocks)
+  }
+
+  const trailingAssets = assets
+    .filter((asset) => !plannedAssetIds.has(asset.id))
+    .sort((left, right) => normalizeAssetIdOrder(left.id) - normalizeAssetIdOrder(right.id))
+  if (trailingAssets.length > 0) {
+    const insertionLine = lines.length
+    const currentBlocks = insertions.get(insertionLine) || []
+    currentBlocks.push(...trailingAssets.map((asset) => buildManagedAssetBlock(asset)))
     insertions.set(insertionLine, currentBlocks)
   }
 
@@ -720,12 +741,16 @@ export function extractWriterAssetsFromMarkdown(
   const planningMarkdown = buildWriterAssetPlanningBase(markdown)
   const blueprints = buildWriterAssetBlueprints(planningMarkdown, platform, mode)
   const managedBlocks = extractManagedWriterAssetBlocks(markdown)
+  const fallbackManagedBlueprints = managedBlocks
+    .map((asset, index) => buildFallbackWriterAssetBlueprint(asset.id || `inline-${index + 1}`, index))
+    .filter((asset, index, all) => all.findIndex((candidate) => candidate.id === asset.id) === index)
   const derivedBlueprints =
     blueprints.length > 0
-      ? blueprints
-      : managedBlocks
-          .map((asset, index) => buildFallbackWriterAssetBlueprint(asset.id || `inline-${index + 1}`, index))
-          .filter((asset, index, all) => all.findIndex((candidate) => candidate.id === asset.id) === index)
+      ? [
+          ...blueprints,
+          ...fallbackManagedBlueprints.filter((asset) => !blueprints.some((candidate) => candidate.id === asset.id)),
+        ]
+      : fallbackManagedBlueprints
   const managedById = new Map(managedBlocks.map((asset) => [asset.id, asset]))
 
   if (managedBlocks.length > 0) {

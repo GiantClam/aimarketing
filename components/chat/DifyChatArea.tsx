@@ -18,6 +18,7 @@ import {
 import {
   WorkspaceLoadingMessage,
   WorkspaceMessageFrame,
+  WorkspaceConversationSkeleton,
 } from "@/components/workspace/workspace-message-primitives";
 import { ensureWorkspaceQueryData, fetchWorkspaceQueryData, getAdvisorMessagesPage, getAdvisorMessagesQueryKey, invalidateAdvisorConversationQueries } from "@/lib/query/workspace-cache";
 import { ADVISOR_SESSION_CACHE_TTL_MS, getAdvisorConversationCache, isAdvisorConversationCacheFresh, mapAdvisorMessagePageToChatMessages, saveAdvisorConversationCache, type AdvisorChatMessage } from "@/lib/advisor/session-store";
@@ -372,6 +373,9 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
     }
   };
 
+  const shouldRenderConversationSkeleton =
+    isConversationLoading && Boolean(conversationId) && messagesState.length === 0;
+
   return (
     <div className="flex h-full min-h-0 justify-center">
       <section className="flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
@@ -379,18 +383,22 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
           <ScrollArea ref={scrollRef} className="h-full" viewportClassName="px-3 pb-3 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
             {messagesState.length === 0 ? (
               <div className="mx-auto flex min-h-full w-full max-w-5xl items-center">
-                <WorkspaceEmptyState
-                  icon={<meta.icon className="h-6 w-6" />}
-                  title={meta.emptyTitle}
-                  description={meta.emptyDescription}
-                  checklist={meta.emptyChecklist}
-                  quickStartLabel="快速开始"
-                  quickPrompts={meta.quickPrompts}
-                  onSelectPrompt={(prompt) => {
-                    setInputVal(prompt);
-                    composerRef.current?.focus();
-                  }}
-                />
+                {shouldRenderConversationSkeleton ? (
+                  <WorkspaceConversationSkeleton rows={3} loadingLabel="正在恢复顾问会话..." className="w-full" />
+                ) : (
+                  <WorkspaceEmptyState
+                    icon={<meta.icon className="h-6 w-6" />}
+                    title={meta.emptyTitle}
+                    description={meta.emptyDescription}
+                    checklist={meta.emptyChecklist}
+                    quickStartLabel="快速开始"
+                    quickPrompts={meta.quickPrompts}
+                    onSelectPrompt={(prompt) => {
+                      setInputVal(prompt);
+                      composerRef.current?.focus();
+                    }}
+                  />
+                )}
               </div>
             ) : (
               <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">

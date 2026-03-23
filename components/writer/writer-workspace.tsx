@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
+  WorkspaceConversationSkeleton,
   WorkspaceLoadingMessage,
   WorkspaceMessageFrame,
 } from "@/components/workspace/workspace-message-primitives"
@@ -2110,10 +2111,14 @@ export function WriterWorkspace({
                   ) : null}
 
                   {isConversationLoading ? (
-                    <div className="mx-3 my-3 flex items-center gap-2 rounded-[20px] border-2 border-dashed border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      {writerCopy.restoringConversation}
-                    </div>
+                    messages.length > 0 ? (
+                      <div className="mx-3 my-3 flex items-center gap-2 rounded-[20px] border-2 border-dashed border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {writerCopy.restoringConversation}
+                      </div>
+                    ) : (
+                      <WorkspaceConversationSkeleton rows={3} loadingLabel={writerCopy.restoringConversation} />
+                    )
                   ) : null}
 
                   {messages.map((message, index) => {
@@ -2131,7 +2136,14 @@ export function WriterWorkspace({
                         icon={message.role === "assistant" ? <Sparkles className="h-3.5 w-3.5" /> : null}
                         bodyClassName="space-y-3"
                       >
-                        <div className={cn("rounded-[24px] border-2 p-4", message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}>
+                        <div
+                          className={cn(
+                            "rounded-[24px] border-2 p-4",
+                            message.role === "user"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background selection:bg-[#E8E8E8]",
+                          )}
+                        >
                           {renderMarkdown(
                             messagePreview?.previewMarkdown || message.content,
                             messagePreview?.assets || [],
@@ -2421,7 +2433,7 @@ export function WriterWorkspace({
                     </div>
                   </div>
                   <div className="overflow-hidden rounded-[28px] border-2 border-border bg-card">
-                    <div ref={previewContentRef} className="p-6">
+                    <div ref={previewContentRef} className="p-6 selection:bg-[#E8E8E8]">
                       <PlatformPreview
                         copy={writerCopy}
                         platform={activePreview.platform}

@@ -11,6 +11,10 @@ import {
   hasOpenRouterApiKey,
 } from "@/lib/writer/aiberm"
 import { normalizeWriterMode, normalizeWriterPlatform, WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
+import {
+  ensureWriterPromptDiversity,
+  extractWriterPromptFocus,
+} from "@/lib/writer/prompt-similarity"
 import { updateWriterConversationMeta } from "@/lib/writer/repository"
 import { writerRequestJson } from "@/lib/writer/network"
 import { isWriterR2Available, uploadWriterImageToR2 } from "@/lib/writer/r2"
@@ -23,6 +27,15 @@ const GOOGLE_IMAGE_API_KEY =
 const WRITER_AIBERM_IMAGE_MODEL = process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 const WRITER_GEMINI_IMAGE_MODEL = process.env.WRITER_GEMINI_IMAGE_MODEL || process.env.WRITER_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 const WRITER_OPENROUTER_IMAGE_MODEL = getOpenRouterImageModel()
+const WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS = Math.max(
+  1,
+  Number.parseInt(process.env.WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS || "3", 10) || 3,
+)
+const WRITER_PROMPT_SIMILARITY_MAX = Math.max(
+  0,
+  Math.min(1, Number.parseFloat(process.env.WRITER_PROMPT_SIMILARITY_MAX || "0.82") || 0.82),
+)
+const WRITER_ENFORCE_PROMPT_DIVERSITY = process.env.WRITER_ENFORCE_PROMPT_DIVERSITY !== "false"
 
 function escapeSvgText(value: string) {
   return value
@@ -56,7 +69,12 @@ function createFixtureImageDataUrl(prompt: string, aspectRatio: string) {
 }
 
 function shouldUseWriterE2EFixtures() {
-  return process.env.WRITER_E2E_FIXTURES === "true"
+  if (process.env.WRITER_E2E_FIXTURES === "true") {
+    console.warn("writer.assets.fixtures_disabled", {
+      reason: "writer_e2e_fixtures_forbidden_for_generation",
+    })
+  }
+  return false
 }
 
 function extractInlineImageData(parts: Array<{ inlineData?: { mimeType?: string; data?: string } }> | undefined) {
@@ -336,12 +354,42 @@ export async function POST(request: NextRequest) {
       contentType?: string
       error?: string
     }>
+    const acceptedPromptFocuses: Array<{ assetId: string; focus: string }> = []
 
     for (const asset of plannedAssets) {
       try {
+        const promptGuard = WRITER_ENFORCE_PROMPT_DIVERSITY
+          ? ensureWriterPromptDiversity({
+              assetId: asset.id,
+              prompt: asset.prompt,
+              existing: acceptedPromptFocuses,
+              maxAttempts: WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS,
+              similarityMax: WRITER_PROMPT_SIMILARITY_MAX,
+            })
+          : {
+              prompt: asset.prompt,
+              focus: extractWriterPromptFocus(asset.prompt),
+              attempt: 1,
+              similarTo: null as string | null,
+              similarity: null as number | null,
+            }
+        if (promptGuard.attempt > 1) {
+          console.warn("writer.assets.prompt_diversity_retry", {
+            assetId: asset.id,
+            attempt: promptGuard.attempt,
+            similarTo: promptGuard.similarTo,
+            similarity: promptGuard.similarity,
+            threshold: WRITER_PROMPT_SIMILARITY_MAX,
+          })
+        }
         console.log("writer.assets.generating", { assetId: asset.id, platform, aspectRatio: WRITER_PLATFORM_CONFIG[platform].imageAspectRatio })
-        const generated = await generateWriterImage(asset.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio)
-        console.log("writer.assets.generated", { assetId: asset.id, provider: generated.provider, dataUrlLength: generated.dataUrl.length })
+        const generated = await generateWriterImage(promptGuard.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio)
+        console.log("writer.assets.generated", {
+          assetId: asset.id,
+          provider: generated.provider,
+          dataUrlLength: generated.dataUrl.length,
+          promptAttempt: promptGuard.attempt,
+        })
         let uploaded
         try {
           uploaded = await uploadWriterImageToR2({
@@ -367,6 +415,10 @@ export async function POST(request: NextRequest) {
           contentType: uploaded.contentType,
           status: "ready",
           provider: generated.provider,
+        })
+        acceptedPromptFocuses.push({
+          assetId: asset.id,
+          focus: promptGuard.focus,
         })
       } catch (error: any) {
         const summary = summarizeWriterAssetError(error)

@@ -67,10 +67,8 @@ export function shouldUseImplicitEditMode(input: {
   if (input.requestedKind !== "generate") {
     return false
   }
-  if (input.explicitReferenceCount > 0) {
-    return false
-  }
-  if (input.fallbackReferenceCount <= 0) {
+  const totalReferenceCount = Math.max(0, input.explicitReferenceCount) + Math.max(0, input.fallbackReferenceCount)
+  if (totalReferenceCount <= 0) {
     return false
   }
   if (input.guidedSelection?.question_id) {
@@ -80,6 +78,6 @@ export function shouldUseImplicitEditMode(input: {
   return looksLikeReferenceEditIntent({
     prompt: input.prompt,
     taskType: null,
-    referenceCount: input.fallbackReferenceCount,
+    referenceCount: totalReferenceCount,
   })
 }

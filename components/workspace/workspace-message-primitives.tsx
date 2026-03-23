@@ -40,7 +40,7 @@ export function WorkspaceMessageFrame({
         : "bg-secondary text-secondary-foreground"
 
   return (
-    <div className={cn("w-full border-b border-border px-4 py-3.5", toneClass, className)}>
+    <div className={cn("w-full border-b border-border px-4 py-3.5 selection:bg-[#E8E8E8]", toneClass, className)}>
       <div className="mx-auto flex w-full max-w-5xl gap-3">
         <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px]", avatarClass)}>
           {icon ?? <span className="text-xs font-bold">{isUser ? "U" : "AI"}</span>}
@@ -168,6 +168,34 @@ export function WorkspaceActionRow({
   return (
     <div className={cn("mt-3 flex flex-wrap items-center gap-2 border-t-2 border-border pt-3", className)}>
       {children}
+    </div>
+  )
+}
+
+export function WorkspaceConversationSkeleton({
+  rows = 3,
+  loadingLabel = "Loading conversation...",
+  className,
+}: {
+  rows?: number
+  loadingLabel?: ReactNode
+  className?: string
+}) {
+  const skeletonRows = Array.from({ length: Math.max(1, rows) })
+
+  return (
+    <div className={cn("mx-auto flex w-full max-w-5xl flex-col", className)} data-testid="workspace-conversation-skeleton">
+      {skeletonRows.map((_, index) => (
+        <WorkspaceMessageFrame
+          key={`workspace-skeleton-row-${index}`}
+          role={index % 2 === 0 ? "assistant" : "user"}
+          label={index % 2 === 0 ? "Assistant" : "You"}
+        >
+          <WorkspaceLoadingMessage
+            label={<span className="animate-pulse text-sm text-muted-foreground">{loadingLabel}</span>}
+          />
+        </WorkspaceMessageFrame>
+      ))}
     </div>
   )
 }

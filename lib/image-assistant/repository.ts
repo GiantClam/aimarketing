@@ -735,7 +735,7 @@ export async function updateImageAssistantSession(params: {
   await applyImageAssistantSessionPatchWithLegacyFallback(params.sessionId, patch, "update-image-session")
 
   const next = await getImageAssistantSession(params.userId, params.sessionId)
-  return next ? mapSession(next, next.coverAssetUrl) : null
+  return next ? mapSession(next, normalizeListCoverUrl(typeof next.coverAssetUrl === "string" ? next.coverAssetUrl : null)) : null
 }
 
 export async function deleteImageAssistantSession(userId: number, sessionId: string) {
@@ -1430,7 +1430,9 @@ export async function getImageAssistantSessionDetail(
   }
 
   const [summary, messagePage, versionPage, assets, canvasDocument] = await Promise.all([
-    Promise.resolve(mapSession(session, session.coverAssetUrl)),
+    Promise.resolve(
+      mapSession(session, normalizeListCoverUrl(typeof session.coverAssetUrl === "string" ? session.coverAssetUrl : null)),
+    ),
     config.includeMessages
       ? listImageAssistantMessagesPage(userId, sessionId, { limit: config.messageLimit })
       : Promise.resolve({ data: [], has_more: false, limit: config.messageLimit || 0, next_cursor: null }),

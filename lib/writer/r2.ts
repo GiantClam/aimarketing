@@ -8,13 +8,35 @@ type WriterUploadResult = {
   contentType: string
 }
 
-function dataUrlToBuffer(dataUrl: string) {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
-  if (!match) {
+export function parseWriterDataUrl(dataUrl: string) {
+  const normalized = dataUrl.trim()
+  if (!normalized.startsWith("data:")) {
     throw new Error("writer_asset_data_url_invalid")
   }
 
-  const [, contentType, base64] = match
+  const commaIndex = normalized.indexOf(",")
+  if (commaIndex <= 5) {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
+  const metadata = normalized.slice(5, commaIndex)
+  const payload = normalized.slice(commaIndex + 1)
+  const metadataParts = metadata
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  const contentType = metadataParts[0] || "application/octet-stream"
+  const isBase64 = metadataParts.slice(1).some((part) => part.toLowerCase() === "base64")
+  if (!isBase64) {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
+  const base64 = payload.replace(/\s+/g, "")
+  if (!base64) {
+    throw new Error("writer_asset_data_url_invalid")
+  }
+
   return {
     contentType,
     buffer: Buffer.from(base64, "base64"),
@@ -44,7 +66,7 @@ export async function uploadWriterImageToR2(params: {
     throw new Error("writer_r2_config_missing")
   }
 
-  const { contentType, buffer } = dataUrlToBuffer(params.dataUrl)
+  const { contentType, buffer } = parseWriterDataUrl(params.dataUrl)
   const ext = getFileExtension(contentType)
   const conversationPart = params.conversationId || "draft"
   const storageKey = `writer/${params.userId}/${conversationPart}/${Date.now()}-${params.assetId}.${ext}`

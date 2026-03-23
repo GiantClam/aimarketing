@@ -75,3 +75,27 @@ test("implicit edit mode stays off during guided selection turns", () => {
 
   assert.equal(shouldPromote, false)
 })
+
+test("implicit edit mode is enabled for explicit references when prompt asks upscale edit", () => {
+  const shouldPromote = shouldUseImplicitEditMode({
+    requestedKind: "generate",
+    prompt: "变成高清4k",
+    guidedSelection: null,
+    explicitReferenceCount: 1,
+    fallbackReferenceCount: 0,
+  })
+
+  assert.equal(shouldPromote, true)
+})
+
+test("implicit edit mode stays off for explicit references without edit intent", () => {
+  const shouldPromote = shouldUseImplicitEditMode({
+    requestedKind: "generate",
+    prompt: "Use this image as style reference and generate a new campaign poster",
+    guidedSelection: null,
+    explicitReferenceCount: 1,
+    fallbackReferenceCount: 0,
+  })
+
+  assert.equal(shouldPromote, false)
+})

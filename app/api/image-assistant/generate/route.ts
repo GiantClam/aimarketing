@@ -19,6 +19,14 @@ const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
   "image_assistant_canvas_document_not_found",
 ])
 
+function toSafeImageAssistantError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes("Failed query:")) {
+    return { status: 503, error: "image_assistant_data_temporarily_unavailable" }
+  }
+  return { status: 500, error: message || fallback }
+}
+
 function normalizeGuidedSelection(input: unknown): ImageAssistantGuidedSelection | null {
   if (!input || typeof input !== "object") return null
   const candidate = input as Record<string, unknown>
@@ -45,6 +53,15 @@ function normalizeGuidedSelection(input: unknown): ImageAssistantGuidedSelection
 function normalizeReferenceAssetIds(input: unknown) {
   if (!Array.isArray(input)) return []
   return input.filter((value): value is string => typeof value === "string")
+}
+
+function normalizeSessionCurrentVersionId(session: unknown): string | null {
+  if (!session || typeof session !== "object") return null
+  const candidate = session as { currentVersionId?: unknown; current_version_id?: unknown }
+  const raw = candidate.currentVersionId ?? candidate.current_version_id
+  if (typeof raw === "string" && raw.trim()) return raw.trim()
+  if (typeof raw === "number" && Number.isFinite(raw)) return String(raw)
+  return null
 }
 
 async function resolveImplicitReferenceAssetIds(input: {
@@ -91,6 +108,7 @@ export async function POST(req: NextRequest) {
     const guidedSelection = normalizeGuidedSelection(body?.guidedSelection)
     const parentVersionId = typeof body?.parentVersionId === "string" ? body.parentVersionId : null
     const explicitReferenceAssetIds = normalizeReferenceAssetIds(body?.referenceAssetIds)
+    const sessionCurrentVersionId = normalizeSessionCurrentVersionId(session)
     const isLikelyReferenceEditPrompt = looksLikeReferenceEditIntent({
       prompt,
       taskType: null,
@@ -98,13 +116,13 @@ export async function POST(req: NextRequest) {
     })
     const implicitReferenceAssetIds =
       !explicitReferenceAssetIds.length && isLikelyReferenceEditPrompt
-        ? await resolveImplicitReferenceAssetIds({
-            userId: auth.user.id,
-            sessionId,
-            selectedVersionId: parentVersionId,
-            currentVersionId: session.current_version_id || null,
-          })
-        : []
+          ? await resolveImplicitReferenceAssetIds({
+              userId: auth.user.id,
+              sessionId,
+              selectedVersionId: parentVersionId,
+              currentVersionId: sessionCurrentVersionId,
+            })
+          : []
     const shouldPromoteToEdit = shouldUseImplicitEditMode({
       requestedKind: "generate",
       prompt,
@@ -122,7 +140,7 @@ export async function POST(req: NextRequest) {
       console.info("image-assistant.generate.promoted_to_edit", {
         sessionId,
         parentVersionId,
-        currentVersionId: session.current_version_id || null,
+        currentVersionId: sessionCurrentVersionId,
         referenceAssetCount: effectiveReferenceAssetIds.length,
       })
     }
@@ -157,6 +175,14 @@ export async function POST(req: NextRequest) {
         messageLimit: directDetailMode === "summary" ? 16 : 12,
         versionLimit: directDetailMode === "summary" ? undefined : 6,
         assetLimit: directDetailMode === "summary" ? undefined : 24,
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn("image-assistant.generate.direct-detail-unavailable", {
+          sessionId,
+          detailMode: directDetailMode,
+          message,
+        })
+        return null
       })
 
       return NextResponse.json({
@@ -211,6 +237,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     console.error("image-assistant.generate.error", error)
-    return NextResponse.json({ error: error.message || "generate_failed" }, { status: 500 })
+    const safe = toSafeImageAssistantError(error, "generate_failed")
+    return NextResponse.json({ error: safe.error }, { status: safe.status })
   }
 }

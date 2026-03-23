@@ -17,6 +17,14 @@ const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
   "image_assistant_canvas_document_not_found",
 ])
 
+function toSafeImageAssistantError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes("Failed query:")) {
+    return { status: 503, error: "image_assistant_data_temporarily_unavailable" }
+  }
+  return { status: 500, error: message || fallback }
+}
+
 function normalizeGuidedSelection(input: unknown): ImageAssistantGuidedSelection | null {
   if (!input || typeof input !== "object") return null
   const candidate = input as Record<string, unknown>
@@ -144,6 +152,14 @@ export async function POST(req: NextRequest) {
         messageLimit: directDetailMode === "summary" ? 16 : 12,
         versionLimit: directDetailMode === "summary" ? undefined : 6,
         assetLimit: directDetailMode === "summary" ? undefined : 24,
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn("image-assistant.edit.direct-detail-unavailable", {
+          sessionId,
+          detailMode: directDetailMode,
+          message,
+        })
+        return null
       })
 
       return NextResponse.json({
@@ -198,6 +214,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     console.error("image-assistant.edit.error", error)
-    return NextResponse.json({ error: error.message || "edit_failed" }, { status: 500 })
+    const safe = toSafeImageAssistantError(error, "edit_failed")
+    return NextResponse.json({ error: safe.error }, { status: safe.status })
   }
 }
