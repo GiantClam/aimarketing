@@ -33,7 +33,9 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
   const demoSessionToken = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
-  const isAuthenticated = Boolean(sessionToken || demoSessionToken)
+  const hasUserSession = Boolean(sessionToken)
+  const hasDemoSession = Boolean(demoSessionToken)
+  const isAuthenticated = hasUserSession || hasDemoSession
 
   if (pathname.startsWith("/dashboard")) {
     if (!isAuthenticated) {
@@ -44,7 +46,7 @@ export function middleware(request: NextRequest) {
     return applySecurityHeaders(applyLocaleCookie(request, NextResponse.next()))
   }
 
-  if (PUBLIC_PATHS.has(pathname) && isAuthenticated) {
+  if (PUBLIC_PATHS.has(pathname) && hasUserSession) {
     return applySecurityHeaders(applyLocaleCookie(request, NextResponse.redirect(new URL("/dashboard", request.url))))
   }
 

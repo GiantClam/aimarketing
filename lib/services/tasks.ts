@@ -34,13 +34,47 @@ function getErrorMessage(error: unknown) {
   return String(error)
 }
 
+function getCombinedErrorMessage(error: unknown) {
+  const queue: unknown[] = [error]
+  const visited = new Set<unknown>()
+  const segments: string[] = []
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current || visited.has(current)) continue
+    visited.add(current)
+    segments.push(getErrorMessage(current))
+
+    if (typeof current === "object" && current) {
+      if ("cause" in current) {
+        queue.push((current as { cause?: unknown }).cause)
+      }
+      if ("errors" in current) {
+        const nested = (current as { errors?: unknown }).errors
+        if (Array.isArray(nested)) {
+          queue.push(...nested)
+        }
+      }
+    }
+  }
+
+  return segments.join(" ").toLowerCase()
+}
+
 function isRetryableDbError(error: unknown) {
-  const message = getErrorMessage(error).toLowerCase()
+  const message = getCombinedErrorMessage(error)
   return (
     message.includes("error connecting to database") ||
     message.includes("fetch failed") ||
     message.includes("connect timeout") ||
-    message.includes("und_err_connect_timeout")
+    message.includes("connection timeout") ||
+    message.includes("timeout exceeded when trying to connect") ||
+    message.includes("econnreset") ||
+    message.includes("econnrefused") ||
+    message.includes("und_err_connect_timeout") ||
+    message.includes("connection terminated unexpectedly") ||
+    message.includes("terminating connection") ||
+    message.includes("quota")
   )
 }
 
@@ -106,44 +140,48 @@ export async function updateTaskStatus(taskId: number, data: TaskStatusUpdate) {
 }
 
 export async function claimTaskExecution(taskId: number, workerId: string, leaseMs: number, staleAfterMs: number) {
-  const result = await db.execute(sql`
-    UPDATE "AI_MARKETING_tasks"
-    SET
-      status = 'running',
-      worker_id = ${workerId},
-      attempts = COALESCE(attempts, 0) + 1,
-      started_at = COALESCE(started_at, NOW()),
-      lease_expires_at = NOW() + ${msToPostgresInterval(leaseMs)},
-      updated_at = NOW()
-    WHERE id = ${taskId}
-      AND (
-        status = 'pending'
-        OR (
-          status = 'running'
-          AND (
-            lease_expires_at IS NULL
-            OR lease_expires_at <= NOW()
-            OR updated_at <= NOW() - ${msToPostgresInterval(staleAfterMs)}
+  const result = await withTaskDbRetry("claim-task-execution", () =>
+    db.execute(sql`
+      UPDATE "AI_MARKETING_tasks"
+      SET
+        status = 'running',
+        worker_id = ${workerId},
+        attempts = COALESCE(attempts, 0) + 1,
+        started_at = COALESCE(started_at, NOW()),
+        lease_expires_at = NOW() + ${msToPostgresInterval(leaseMs)},
+        updated_at = NOW()
+      WHERE id = ${taskId}
+        AND (
+          status = 'pending'
+          OR (
+            status = 'running'
+            AND (
+              lease_expires_at IS NULL
+              OR lease_expires_at <= NOW()
+              OR updated_at <= NOW() - ${msToPostgresInterval(staleAfterMs)}
+            )
           )
         )
-      )
-    RETURNING *
-  `)
+      RETURNING *
+    `),
+  )
 
   return result.rows[0] ?? null
 }
 
 export async function renewTaskLease(taskId: number, workerId: string, leaseMs: number) {
-  const result = await db.execute(sql`
-    UPDATE "AI_MARKETING_tasks"
-    SET
-      lease_expires_at = NOW() + ${msToPostgresInterval(leaseMs)},
-      updated_at = NOW()
-    WHERE id = ${taskId}
-      AND worker_id = ${workerId}
-      AND status = 'running'
-    RETURNING id
-  `)
+  const result = await withTaskDbRetry("renew-task-lease", () =>
+    db.execute(sql`
+      UPDATE "AI_MARKETING_tasks"
+      SET
+        lease_expires_at = NOW() + ${msToPostgresInterval(leaseMs)},
+        updated_at = NOW()
+      WHERE id = ${taskId}
+        AND worker_id = ${workerId}
+        AND status = 'running'
+      RETURNING id
+    `),
+  )
 
   return Boolean(result.rows[0]?.id)
 }

@@ -3,6 +3,11 @@ import sharp from "sharp"
 
 import { writerFetch } from "@/lib/writer/network"
 
+type AssetFetchOptions = {
+  signal?: AbortSignal
+  attempts?: number
+}
+
 function parseDataUrl(dataUrl: string) {
   const trimmed = dataUrl.trim()
   if (!trimmed.toLowerCase().startsWith("data:")) {
@@ -177,30 +182,109 @@ export function getInlineImageMetadata(dataUrl: string) {
   }
 }
 
-export async function urlToInlineImage(url: string) {
-  const normalized = await loadImageSourceForModel(url)
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableAssetFetchStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+}
+
+function isRetryableAssetFetchError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
+  const cause = error.cause as { code?: string } | undefined
+  return (
+    message.includes("fetch failed") ||
+    message.includes("socket hang up") ||
+    message.includes("timed out") ||
+    message.includes("timeout") ||
+    message.includes("econnreset") ||
+    message.includes("tls") ||
+    cause?.code === "ECONNRESET" ||
+    cause?.code === "ETIMEDOUT" ||
+    cause?.code === "UND_ERR_SOCKET" ||
+    cause?.code === "UND_ERR_CONNECT_TIMEOUT"
+  )
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    const error = new Error("request_aborted")
+    error.name = "AbortError"
+    throw error
+  }
+}
+
+function getAssetHost(url: string) {
+  try {
+    return new URL(url).host
+  } catch {
+    return "unknown"
+  }
+}
+
+export async function urlToInlineImage(url: string, options: AssetFetchOptions = {}) {
+  const normalized = await loadImageSourceForModel(url, options)
   return {
     mimeType: normalized.mimeType,
     base64Data: normalized.buffer.toString("base64"),
   }
 }
 
-export async function loadImageSourceForModel(url: string) {
+export async function loadImageSourceForModel(url: string, options: AssetFetchOptions = {}) {
   if (url.startsWith("data:")) {
     return normalizeImageForModel(parseDataUrl(url))
   }
 
-  const response = await writerFetch(url)
-  if (!response.ok) {
-    throw new Error(`image_asset_fetch_failed:${response.status}`)
+  const attempts = Math.max(1, Math.min(options.attempts || 3, 5))
+  const host = getAssetHost(url)
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    throwIfAborted(options.signal)
+
+    try {
+      const response = await writerFetch(url, {
+        signal: options.signal,
+        cache: "no-store",
+      })
+      if (!response.ok) {
+        if (attempt < attempts && isRetryableAssetFetchStatus(response.status)) {
+          console.warn("image-assistant.asset.fetch.retry", {
+            attempt,
+            status: response.status,
+            host,
+          })
+          await sleep(350 * attempt)
+          continue
+        }
+        throw new Error(`image_asset_fetch_failed:${response.status}`)
+      }
+
+      const mimeType = response.headers.get("content-type") || "image/png"
+      const arrayBuffer = await response.arrayBuffer()
+      return normalizeImageForModel({
+        mimeType,
+        buffer: Buffer.from(arrayBuffer),
+      })
+    } catch (error) {
+      if (options.signal?.aborted) {
+        throwIfAborted(options.signal)
+      }
+      if (attempt < attempts && isRetryableAssetFetchError(error)) {
+        console.warn("image-assistant.asset.fetch.retry", {
+          attempt,
+          host,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        await sleep(350 * attempt)
+        continue
+      }
+      throw error
+    }
   }
 
-  const mimeType = response.headers.get("content-type") || "image/png"
-  const arrayBuffer = await response.arrayBuffer()
-  return normalizeImageForModel({
-    mimeType,
-    buffer: Buffer.from(arrayBuffer),
-  })
+  throw new Error("image_asset_fetch_failed")
 }
 
 async function normalizeImageForModel(input: { mimeType: string; buffer: Buffer }) {

@@ -202,10 +202,10 @@ async function resolveReferenceImagesForModel(params: {
   const assetsWithUrls = params.referencedAssets.filter((asset): asset is ImageAssistantAsset => Boolean(asset?.url))
   if (!assetsWithUrls.length) return []
 
-  if (shouldUseImageAssistantFixtures()) {
-    return Promise.all(
+  const prepareInlineReferences = async () =>
+    Promise.all(
       assetsWithUrls.map(async (asset) => {
-        const inline = await urlToInlineImage(asset.url!)
+        const inline = await urlToInlineImage(asset.url!, { signal: params.signal })
         return {
           kind: "inline" as const,
           mimeType: inline.mimeType,
@@ -213,21 +213,12 @@ async function resolveReferenceImagesForModel(params: {
         }
       }),
     )
+
+  if (shouldUseImageAssistantFixtures()) {
+    return prepareInlineReferences()
   }
 
   const shouldPrepareInlineReferences = hasImageAssistantAibermKey() || hasOpenRouterApiKey()
-  const inlineReferencePromise = shouldPrepareInlineReferences
-    ? Promise.all(
-        assetsWithUrls.map(async (asset) => {
-          const inline = await urlToInlineImage(asset.url!)
-          return {
-            kind: "inline" as const,
-            mimeType: inline.mimeType,
-            base64Data: inline.base64Data,
-          }
-        }),
-      )
-    : Promise.resolve([])
 
   if (hasImageAssistantGoogleKey()) {
     try {
@@ -241,7 +232,17 @@ async function resolveReferenceImagesForModel(params: {
           }),
         ),
       )
-      const inlineReferences = await inlineReferencePromise
+      let inlineReferences: Array<{ kind: "inline"; mimeType: string; base64Data: string }> = []
+      if (shouldPrepareInlineReferences) {
+        try {
+          inlineReferences = await prepareInlineReferences()
+        } catch (error) {
+          console.warn("image-assistant.references.inline-fallback", {
+            sessionId: params.sessionId,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
       return [...fileReferences, ...inlineReferences]
     } catch (error) {
       console.warn("image-assistant.references.google-file-fallback", {
@@ -251,7 +252,11 @@ async function resolveReferenceImagesForModel(params: {
     }
   }
 
-  return inlineReferencePromise
+  if (!shouldPrepareInlineReferences) {
+    return []
+  }
+
+  return prepareInlineReferences()
 }
 
 async function ensureImageAssistantSession(params: {

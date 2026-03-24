@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getSessionUser } from "@/lib/auth/session"
+import { getSessionUser, isSessionDbUnavailableError } from "@/lib/auth/session"
 import type { FeatureKey } from "@/lib/enterprise/constants"
 import type { AuthUserPayload } from "@/lib/enterprise/server"
 import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
@@ -20,7 +20,21 @@ export function getAdvisorFeature(advisorType: string | null | undefined): Featu
 }
 
 export async function requireSessionUser(request: NextRequest, feature?: FeatureKey) {
-  const user = await getSessionUser(request)
+  let user: Awaited<ReturnType<typeof getSessionUser>>
+  try {
+    user = await getSessionUser(request)
+  } catch (error) {
+    if (isSessionDbUnavailableError(error)) {
+      console.warn("auth.session.user.lookup.unavailable", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return {
+        response: NextResponse.json({ error: "auth_session_temporarily_unavailable" }, { status: 503 }),
+      }
+    }
+    throw error
+  }
+
   if (!user) {
     return {
       response: NextResponse.json({ error: "Authentication required" }, { status: 401 }),

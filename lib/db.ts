@@ -3,6 +3,9 @@ import { Pool, type PoolConfig } from "pg"
 
 const PLACEHOLDER_CONNECTION_STRING = "postgresql://user:password@localhost:5432/aimarketing"
 const DEFAULT_POOL_MAX = process.env.NODE_ENV === "development" ? 5 : 10
+const DEFAULT_CONNECTION_TIMEOUT_MS = 12_000
+const DEFAULT_IDLE_TIMEOUT_MS = 30_000
+const POOL_WARMUP_RETRY_DELAYS_MS = [1_000, 3_000]
 
 declare global {
   var __aimarketingPgPool: Pool | undefined
@@ -63,8 +66,9 @@ const getPoolConfig = (connectionString: string): PoolConfig => {
         rejectUnauthorized: false,
       },
       max: DEFAULT_POOL_MAX,
-      connectionTimeoutMillis: 5_000,
-      idleTimeoutMillis: 30_000,
+      min: 1,
+      connectionTimeoutMillis: DEFAULT_CONNECTION_TIMEOUT_MS,
+      idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
       keepAlive: true,
     }
   }
@@ -72,9 +76,37 @@ const getPoolConfig = (connectionString: string): PoolConfig => {
   return {
     connectionString,
     max: DEFAULT_POOL_MAX,
-    connectionTimeoutMillis: 5_000,
-    idleTimeoutMillis: 30_000,
+    min: 1,
+    connectionTimeoutMillis: DEFAULT_CONNECTION_TIMEOUT_MS,
+    idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
     keepAlive: true,
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function warmupPool(nextPool: Pool) {
+  const attempts = POOL_WARMUP_RETRY_DELAYS_MS.length + 1
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await nextPool.query("select 1")
+      if (attempt > 0) {
+        console.info("db.pool.warmup.recovered", { attempt: attempt + 1 })
+      }
+      return
+    } catch (error) {
+      const isLastAttempt = attempt === attempts - 1
+      console.warn("db.pool.warmup.failed", {
+        attempt: attempt + 1,
+        message: error instanceof Error ? error.message : String(error),
+      })
+
+      if (isLastAttempt) return
+      await sleep(POOL_WARMUP_RETRY_DELAYS_MS[attempt])
+    }
   }
 }
 
@@ -84,6 +116,8 @@ function createPool(connectionString: string) {
   nextPool.on("error", (error) => {
     console.error("db.pool.error", error)
   })
+
+  void warmupPool(nextPool)
 
   return nextPool
 }

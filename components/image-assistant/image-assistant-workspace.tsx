@@ -25,7 +25,6 @@ import { useI18n } from "@/components/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
@@ -130,6 +129,14 @@ type LayerDragState = {
   changed: boolean
 }
 
+type LayerResizeState = {
+  layerId: string
+  startPoint: { x: number; y: number }
+  startTransform: ImageAssistantLayer["transform"]
+  beforeResize: ImageAssistantCanvasDocument
+  changed: boolean
+}
+
 type SessionLoadMode = "summary" | "content" | "canvas" | "full"
 type ImageAssistantCopy = AppMessages["imageAssistant"]
 type ImageAssistantRunKind = "generate" | "edit"
@@ -223,51 +230,6 @@ function getRunKindLabel(kind: ImageAssistantRunKind, copy: { generateMode: stri
   return kind === "edit" ? copy.editMode : copy.generateMode
 }
 
-function getCanvasToolLabel(
-  tool: CanvasTool,
-  copy: {
-    selectTool: string
-    brushTool: string
-    eraserTool: string
-  },
-) {
-  if (tool === "brush") return copy.brushTool
-  if (tool === "eraser") return copy.eraserTool
-  return copy.selectTool
-}
-
-function getVersionKindLabel(
-  kind: ImageAssistantVersionSummary["version_kind"] | null | undefined,
-  copy: {
-    versionKindGenerate: string
-    versionKindEdit: string
-    versionKindCanvas: string
-    versionKindRestore: string
-  },
-) {
-  if (kind === "ai_edit") return copy.versionKindEdit
-  if (kind === "canvas_save") return copy.versionKindCanvas
-  if (kind === "restore") return copy.versionKindRestore
-  return copy.versionKindGenerate
-}
-
-function getLayerTypeLabel(
-  layerType: ImageAssistantLayer["layer_type"] | null | undefined,
-  copy: {
-    layerTypeBackground: string
-    layerTypeText: string
-    layerTypeShape: string
-    layerTypeImage: string
-    layerTypePaint: string
-  },
-) {
-  if (layerType === "text") return copy.layerTypeText
-  if (layerType === "shape") return copy.layerTypeShape
-  if (layerType === "image") return copy.layerTypeImage
-  if (layerType === "paint") return copy.layerTypePaint
-  return copy.layerTypeBackground
-}
-
 function getMessageReferenceAssetIds(message: ImageAssistantMessage | null | undefined) {
   const requestPayload =
     message?.request_payload && typeof message.request_payload === "object"
@@ -304,6 +266,29 @@ function getClarificationCarryoverReferenceAssetIds(messages: ImageAssistantMess
   return getMessageReferenceAssetIds(latestUserPrompt)
 }
 
+function getLatestPromptReferenceAssetIds(messages: ImageAssistantMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== "user" || message.message_type !== "prompt") continue
+    const ids = getMessageReferenceAssetIds(message)
+    if (ids.length) return ids
+  }
+  return []
+}
+
+function mergeReferenceAssetIds(...groups: string[][]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const group of groups) {
+    for (const value of group) {
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      result.push(value)
+    }
+  }
+  return result
+}
+
 function hasDirectTurnMaterialized(params: {
   detail: ImageAssistantSessionDetail | null | undefined
   outcome?: string
@@ -332,6 +317,10 @@ const IMAGE_ASSISTANT_UPLOAD_ROUTE_MAX_BYTES = 10 * 1024 * 1024
 const IMAGE_ASSISTANT_ACCEPTED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp"])
 const IMAGE_ASSISTANT_CANDIDATE_PREVIEW_CACHE_LIMIT = 24
 const IMAGE_ASSISTANT_TASK_POLL_INTERVAL_MS = 450
+const IMAGE_ASSISTANT_TASK_POLL_MAX_DURATION_MS = 180_000
+const IMAGE_ASSISTANT_TASK_POLL_MAX_FAILURES = 8
+const MIN_LAYER_SIZE = 18
+const MIN_LINE_LAYER_HEIGHT = 8
 
 function getImageAssistantSessionResolutionKey(sessionId: string) {
   return `image-assistant:${sessionId}:resolution`
@@ -1382,6 +1371,15 @@ function formatImageAssistantErrorMessage(message: string, copy: ImageAssistantC
   if (message === "image_assistant_data_temporarily_unavailable") {
     return "Image assistant data is temporarily unavailable. Please retry in a moment."
   }
+  if (message === "image_assistant_task_poll_timeout") {
+    return "Task status polling timed out. Please refresh the session and retry."
+  }
+  if (message === "image_assistant_task_status_unavailable") {
+    return "Task status is temporarily unavailable. Please refresh and try again."
+  }
+  if (message === "cancelled" || message === "rejected") {
+    return "Task was cancelled before completion."
+  }
   if (message === "file_too_large") {
     return copyMap.fileTooLarge ?? "One of the images is still too large after local optimization."
   }
@@ -1462,91 +1460,69 @@ function createTextLayer(canvas: ImageAssistantCanvasDocument, color: string, co
 
 const PROMPT_PRESETS: PromptPreset[] = [
   {
-    label: "电商主图",
-    prompt:
-      "基于我上传的产品图，生成一张适合电商投放的 4:5 主图。产品保持真实比例，主体居中偏下，画面干净高级，背景做柔和渐变和轻微景深，预留顶部标题区与右下角价格角标区，不要自动生成中文文案。",
+    label: "E-commerce hero",
+    prompt: "Create a clean 4:5 e-commerce hero image, keep the product realistic and centered, reserve safe space for title and price badge, and do not render text directly.",
   },
   {
-    label: "活动 KV",
-    prompt:
-      "把当前素材做成活动 KV 主视觉，要求品牌感强、构图集中、适合首页首屏横幅。请保留主体识别度，强化光影层次和空间感，画面留出中心标题区与底部 CTA 区，不直接生成文字。",
+    label: "Campaign KV",
+    prompt: "Turn current materials into a branded campaign key visual for a homepage hero banner with clear subject focus and space for headline plus CTA.",
   },
   {
-    label: "社媒封面",
-    prompt:
-      "生成一张适合社媒封面的视觉图，风格简洁但有传播感，主体突出，背景不过度复杂，适合后续叠加标题。整体色调统一，边缘避免过满，保留安全留白。",
+    label: "Social cover",
+    prompt: "Generate a social cover image with strong focal point, simplified background, balanced color palette, and safe blank area for overlay text.",
   },
   {
-    label: "夏季促销",
-    prompt:
-      "将这张图改成夏季促销海报风格，氛围轻快明亮，加入夏日色彩与促销节奏感，但保持商品本身真实。请强化视觉焦点，并留出左上标题区、右下按钮区，不自动生成中文文案。",
+    label: "Summer promo",
+    prompt: "Refine this image into a bright summer promotion visual while preserving product authenticity and leaving clear spaces for title and action areas.",
   },
   {
-    label: "高级极简",
-    prompt:
-      "把当前图片改成高级极简品牌风，减少杂乱元素，统一材质与色彩，提升留白与质感。保留核心主体和识别特征，让整体更像成熟品牌宣传视觉，而不是普通海报。",
+    label: "Premium minimal",
+    prompt: "Refine the composition into a premium minimal brand style by reducing clutter, unifying texture and color, and enhancing whitespace quality.",
   },
 ]
 
 export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId: string | null }) {
   const queryClient = useQueryClient()
-  const { locale, messages: i18n } = useI18n()
+  const { messages: i18n } = useI18n()
   const imageCopy = i18n.imageAssistant
   const isEnglish = imageCopy.assistantName === "Image design assistant"
   const extraCopy = useMemo(
     () => ({
-      uploadLimit: isEnglish
-        ? `Up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} reference images can be attached in one request.`
-        : `单次最多上传 ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} 张参考图，可用于文生图、图生图和二次编辑。`,
-      uploadOptimization: isEnglish
-        ? "Large PNG/WEBP files are transport-optimized losslessly on-device before upload."
-        : "较大的 PNG/WEBP 图片会在端侧先做无损传输优化，再上传。",
-      optimizedBadge: isEnglish ? "Lossless optimized" : "已无损压缩",
-      generateMode: isEnglish ? "Text-to-image" : "文生图",
-      editMode: isEnglish ? "Image-guided edit" : "带图编辑",
-      waitingReply: isEnglish ? "Waiting for image response..." : "正在等待图片设计结果...",
-      cancelledReply: isEnglish ? "This request was cancelled before completion." : "这次发送已取消，未继续等待结果。",
-      cancelWaiting: isEnglish ? "Cancel wait" : "取消等待",
-      skillBadge: isEnglish ? "Skill" : "Skill",
-      toolsBadge: isEnglish ? "Tools" : "Tools",
-      turnBadge: isEnglish ? "Turn" : "轮次",
-      additionalNotes: isEnglish ? "Additional notes" : "补充说明",
-      additionalNotesPlaceholder: isEnglish
-        ? "Optional details: brand keywords, must-keep elements, text-safe areas, material cues..."
-        : "补充品牌词、必须保留元素、留白区域、材质感、光影要求等，可选。",
-      missingBriefPrefix: isEnglish ? "Still need: " : "仍缺少：",
-      pendingImagesLabel: isEnglish ? "Attached references" : "附加参考图",
-      attachmentLimitReached: isEnglish
-        ? `You can attach up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} images in one request.`
-        : `单次最多可添加 ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} 张图片。`,
-      dragDropHint: isEnglish
-        ? "Drop images here to attach them to the conversation."
-        : "将图片拖放到这里，添加为对话附件。",
-      dragDropActiveHint: isEnglish
-        ? `Release to attach up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} images.`
-        : `松开即可添加，单次最多 ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} 张。`,
-      previewImage: isEnglish ? "Preview image" : "预览图片",
-      exportImage: isEnglish ? "Export image" : "导出图片",
-      editImage: isEnglish ? "Open refine editor" : "打开精修",
-      addAsAttachment: isEnglish ? "Add as attachment" : "添加为附件",
-      addCurrentCanvas: isEnglish ? "Add current image to attachments" : "将当前图片添加为附件",
-      clickImageToPreview: isEnglish ? "Click the image to preview it." : "点击图片仅预览。",
-      candidateActionsHint: isEnglish
-        ? "Preview on image click. Use the actions below for export, refine, or attach."
-        : "点击图片仅预览，下方按钮可导出、精修或添加为附件。",
+      uploadLimit: `Up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} reference images can be attached in one request.`,
+      uploadOptimization: "Large PNG/WEBP files are transport-optimized losslessly on-device before upload.",
+      optimizedBadge: "Lossless optimized",
+      generateMode: "Text-to-image",
+      editMode: "Image-guided edit",
+      waitingReply: "Waiting for image response...",
+      cancelledReply: "This request was cancelled before completion.",
+      cancelWaiting: "Cancel wait",
+      skillBadge: "Skill",
+      toolsBadge: "Tools",
+      turnBadge: "Turn",
+      additionalNotes: "Additional notes",
+      additionalNotesPlaceholder: "Optional details: brand keywords, must-keep elements, text-safe areas, material cues...",
+      missingBriefPrefix: "Still need: ",
+      pendingImagesLabel: "Attached references",
+      attachmentLimitReached: `You can attach up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} images in one request.`,
+      dragDropHint: "Drop images here to attach them to the conversation.",
+      dragDropActiveHint: `Release to attach up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} images.`,
+      previewImage: "Preview image",
+      exportImage: "Export image",
+      editImage: "Open refine editor",
+      addAsAttachment: "Add as attachment",
+      addCurrentCanvas: "Add current image to attachments",
+      clickImageToPreview: "Click the image to preview it.",
+      candidateActionsHint: "Preview on image click. Use the actions below for export, refine, or attach.",
     }),
-    [isEnglish],
+    [],
   )
   const chatComposerCopy = useMemo(
     () => ({
-      dialogueGuidance: isEnglish
-        ? "Describe what you want in chat. The assistant will collect the remaining design requirements through follow-up questions before generating."
-        : "直接通过对话描述你的设计目标即可，助手会通过追问补齐需求，再开始生图或改图。",
-      imageOnlyPromptFallback: isEnglish
-        ? "Use the uploaded reference images and ask the next design question."
-        : "请基于已上传的参考图继续，并追问下一步设计需求。",
+      dialogueGuidance:
+        "Describe what you want in chat. The assistant will collect the remaining design requirements through follow-up questions before generating.",
+      imageOnlyPromptFallback: "Use the uploaded reference images and ask the next design question.",
     }),
-    [isEnglish],
+    [],
   )
   const promptPresets = useMemo(() => [...imageCopy.promptPresets] as PromptPreset[], [imageCopy.promptPresets])
   const [availability, setAvailability] = useState<Availability | null>(null)
@@ -1557,6 +1533,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [canvasTool, setCanvasTool] = useState<CanvasTool>("select")
   const [paintPreview, setPaintPreview] = useState<PaintPreview | null>(null)
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null)
+  const [editingTextLayerId, setEditingTextLayerId] = useState<string | null>(null)
+  const [editingTextValue, setEditingTextValue] = useState("")
   const [brushColor, setBrushColor] = useState("#2563eb")
   const [prompt, setPrompt] = useState("")
   const [sizePreset, setSizePreset] = useState<ImageAssistantSizePreset>("4:5")
@@ -1592,6 +1570,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const canvasStageRef = useRef<HTMLDivElement | null>(null)
   const paintStrokeRef = useRef<PaintPreview | null>(null)
   const layerDragRef = useRef<LayerDragState | null>(null)
+  const layerResizeRef = useRef<LayerResizeState | null>(null)
   const creatingSessionRef = useRef<Promise<string> | null>(null)
   const detailRequestIdRef = useRef(0)
   const modeRef = useRef(mode)
@@ -1807,12 +1786,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     if (!latestAssistantMessage || !latestAssistantPromptQuestionId) return null
     return latestAssistantMessage.id
   }, [latestAssistantMessage, latestAssistantPromptQuestionId])
-  const currentUsageDisplay = latestOrchestration?.brief.usage_label || (isEnglish ? "Use + ratio pending" : "待确认用途 + 比例")
+  const currentUsageDisplay = latestOrchestration?.brief.usage_label || "Use + ratio pending"
   const currentOrientationDisplay = latestOrchestration?.brief.orientation
     ? latestOrchestration.brief.orientation === "landscape"
-      ? isEnglish ? "Landscape" : "横版画面"
-      : isEnglish ? "Portrait" : "竖版画面"
-    : isEnglish ? "Direction pending" : "待确认方向"
+      ? "Landscape"
+      : "Portrait"
+    : "Direction pending"
   const currentResolutionDisplay = latestOrchestration?.brief.resolution
     ? isEnglish
       ? RESOLUTION_DISPLAY[latestOrchestration.brief.resolution].en
@@ -1824,6 +1803,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     () => getClarificationCarryoverReferenceAssetIds(detail?.messages || []),
     [detail?.messages],
   )
+  const latestPromptReferenceAssetIds = useMemo(
+    () => getLatestPromptReferenceAssetIds(detail?.messages || []),
+    [detail?.messages],
+  )
   const versionById = useMemo(
     () => new Map((detail?.versions || []).map((version) => [version.id, version])),
     [detail?.versions],
@@ -1832,10 +1815,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const currentVersion = useMemo(
     () => detail?.versions.find((item) => item.id === selectedVersionId) || detail?.versions[0] || null,
     [detail?.versions, selectedVersionId],
-  )
-  const currentVersionIndex = useMemo(
-    () => (currentVersion ? detail?.versions.findIndex((item) => item.id === currentVersion.id) ?? -1 : -1),
-    [currentVersion, detail?.versions],
   )
   const implicitVersionReferenceAssetIds = useMemo(
     () =>
@@ -1848,12 +1827,25 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
   const carryoverReferenceAssetIds = useMemo(
     () =>
-      (
-        clarificationCarryoverReferenceAssetIds.length
-          ? clarificationCarryoverReferenceAssetIds
-          : implicitVersionReferenceAssetIds
+      mergeReferenceAssetIds(
+        clarificationCarryoverReferenceAssetIds,
+        latestPromptReferenceAssetIds,
+        implicitVersionReferenceAssetIds,
       ).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
-    [clarificationCarryoverReferenceAssetIds, implicitVersionReferenceAssetIds],
+    [clarificationCarryoverReferenceAssetIds, implicitVersionReferenceAssetIds, latestPromptReferenceAssetIds],
+  )
+  const resolveCarryoverReferenceAssetIds = useCallback(
+    (targetSessionId?: string | null) => {
+      const effectiveSessionId = targetSessionId || sessionId
+      const cache = getImageAssistantSessionContentCache(effectiveSessionId)
+      const cachedIds = cache ? getLatestPromptReferenceAssetIds(cache.detail.messages || []) : []
+      return mergeReferenceAssetIds(
+        carryoverReferenceAssetIds,
+        getLatestPromptReferenceAssetIds(detailRef.current?.messages || []),
+        cachedIds,
+      ).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
+    },
+    [carryoverReferenceAssetIds, sessionId],
   )
 
   const hasMoreMessages = Boolean(detail?.meta.messages_has_more)
@@ -1863,28 +1855,34 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     () => canvas?.layers.find((layer) => layer.id === selectedLayerId) || null,
     [canvas?.layers, selectedLayerId],
   )
-  const selectedLayerTypeLabel = useMemo(
-    () => getLayerTypeLabel(selectedLayer?.layer_type, imageCopy),
-    [imageCopy, selectedLayer?.layer_type],
-  )
-  const activeToolLabel = useMemo(() => getCanvasToolLabel(canvasTool, imageCopy), [canvasTool, imageCopy])
-  const currentVersionKindLabel = useMemo(
-    () => getVersionKindLabel(currentVersion?.version_kind, imageCopy),
-    [currentVersion?.version_kind, imageCopy],
-  )
-  const editorUpdatedAtLabel = useMemo(() => {
-    const timestamp = canvas?.updated_at || currentVersion?.created_at || null
-    if (!timestamp) return "—"
-    return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(timestamp * 1000))
-  }, [canvas?.updated_at, currentVersion?.created_at, locale])
-  const selectedLayerSummary = selectedLayer
-    ? `${selectedLayer.name} · ${selectedLayerTypeLabel}`
-    : imageCopy.noLayerSelected
+
+  useEffect(() => {
+    if (!editingTextLayerId) return
+    const editingLayer = canvas?.layers.find((layer) => layer.id === editingTextLayerId) || null
+    if (!editingLayer || editingLayer.layer_type !== "text" || selectedLayerId !== editingTextLayerId) {
+      setEditingTextLayerId(null)
+      setEditingTextValue("")
+      return
+    }
+    setEditingTextValue(editingLayer.content?.text || "")
+  }, [canvas?.layers, editingTextLayerId, selectedLayerId])
+
+  useEffect(() => {
+    if (!editingTextLayerId) return
+    const raf = window.requestAnimationFrame(() => {
+      const target = canvasStageRef.current?.querySelector(`[data-text-layer-editor="${editingTextLayerId}"]`) as HTMLDivElement | null
+      if (!target) return
+      target.focus()
+      const selection = window.getSelection()
+      if (!selection) return
+      const range = document.createRange()
+      range.selectNodeContents(target)
+      range.collapse(false)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [editingTextLayerId])
 
   const touchCandidatePreviewComposeCache = useCallback((cacheKey: string, value: Promise<string | null>) => {
     const cache = candidatePreviewComposeCacheRef.current
@@ -2368,6 +2366,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setCanvas(null)
       setSelectedVersionId(null)
       setSelectedLayerId(null)
+      setEditingTextLayerId(null)
+      setEditingTextValue("")
       setIsLoadingSession(false)
       setIsHydratingSession(false)
       setMessageLimit(INITIAL_MESSAGE_LIMIT)
@@ -2391,6 +2391,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
 
     let cancelled = false
+    const pollStartedAt = Date.now()
+    let consecutivePollFailures = 0
     setIsBusy(true)
     setPendingTurn((current) =>
       current || {
@@ -2404,15 +2406,33 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
     const poll = async () => {
       while (!cancelled) {
+        if (Date.now() - pollStartedAt > IMAGE_ASSISTANT_TASK_POLL_MAX_DURATION_MS) {
+          if (deferredRouteSessionIdRef.current === targetSessionId) {
+            syncSessionRoute(targetSessionId)
+            deferredRouteSessionIdRef.current = null
+          }
+          removePendingAssistantTask(pendingTask.taskId)
+          if (!cancelled) {
+            setJobError(formatImageAssistantErrorMessage("image_assistant_task_poll_timeout", imageCopy))
+            setPendingTurn(null)
+            setIsBusy(false)
+          }
+          return
+        }
+
         try {
           const response = await fetch(`/api/tasks/${pendingTask.taskId}`)
+          if (!response.ok) {
+            throw new Error(`task_status_http_${response.status}`)
+          }
           const payload = (await response.json().catch(() => null)) as {
             data?: { status?: string; result?: { error?: string; outcome?: string } | null }
           } | null
           const status = payload?.data?.status
           const outcome = payload?.data?.result?.outcome
+          consecutivePollFailures = 0
 
-          if (status === "success") {
+          if (status === "success" || status === "approved") {
             shouldScrollMessagesToBottomRef.current = true
             if (outcome !== "needs_clarification") {
               await invalidateImageAssistantSessionQueries(queryClient, targetSessionId)
@@ -2439,14 +2459,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             return
           }
 
-          if (status === "failed") {
+          if (status === "failed" || status === "cancelled" || status === "rejected") {
             if (deferredRouteSessionIdRef.current === targetSessionId) {
               syncSessionRoute(targetSessionId)
               deferredRouteSessionIdRef.current = null
             }
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
-              setJobError(formatImageAssistantErrorMessage(payload?.data?.result?.error || "image_generation_failed", imageCopy))
+              setJobError(formatImageAssistantErrorMessage(payload?.data?.result?.error || status || "image_generation_failed", imageCopy))
               setPendingTurn(null)
               setIsBusy(false)
             }
@@ -2454,6 +2474,20 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           }
         } catch (error) {
           console.error("image-assistant.pending-task.poll-failed", error)
+          consecutivePollFailures += 1
+          if (consecutivePollFailures >= IMAGE_ASSISTANT_TASK_POLL_MAX_FAILURES) {
+            if (deferredRouteSessionIdRef.current === targetSessionId) {
+              syncSessionRoute(targetSessionId)
+              deferredRouteSessionIdRef.current = null
+            }
+            removePendingAssistantTask(pendingTask.taskId)
+            if (!cancelled) {
+              setJobError(formatImageAssistantErrorMessage("image_assistant_task_status_unavailable", imageCopy))
+              setPendingTurn(null)
+              setIsBusy(false)
+            }
+            return
+          }
         }
 
         await wait(IMAGE_ASSISTANT_TASK_POLL_INTERVAL_MS)
@@ -2557,7 +2591,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       `Requested mode: ${composerModeLabel}`,
       effectiveBrief.usage_label ? `Usage: ${effectiveBrief.usage_label}` : null,
       effectiveBrief.orientation
-        ? `Orientation: ${effectiveBrief.orientation === "landscape" ? (isEnglish ? "Landscape" : "横版画面") : isEnglish ? "Portrait" : "竖版画面"}`
+        ? `Orientation: ${effectiveBrief.orientation === "landscape" ? "Landscape" : "Portrait"}`
         : null,
       effectiveBrief.size_preset
         ? `Ratio: ${effectiveBrief.usage_label ? `${effectiveBrief.usage_label}` : effectiveBrief.size_preset}`
@@ -2914,7 +2948,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     })
     if (!optimisticPrompt) return
     const currentAttachments = [...pendingAttachments]
-    const fallbackReferenceAssetIds = currentAttachments.length ? [] : carryoverReferenceAssetIds
+    const fallbackReferenceAssetIds = currentAttachments.length ? [] : resolveCarryoverReferenceAssetIds(sessionId)
     const shouldPromoteToEdit = shouldUseImplicitEditMode({
       requestedKind: kind,
       prompt: submissionPrompt,
@@ -2951,7 +2985,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         )
         : []
       const uploadedAssetIds = uploadedAssets.map((item) => item.assetId)
-      const nextReferenceAssetIds = (currentAttachments.length ? uploadedAssetIds : fallbackReferenceAssetIds).slice(
+      const runtimeFallbackReferenceAssetIds = currentAttachments.length ? [] : resolveCarryoverReferenceAssetIds(nextSessionId)
+      const nextReferenceAssetIds = (currentAttachments.length ? uploadedAssetIds : runtimeFallbackReferenceAssetIds).slice(
         -IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS,
       )
       const canvasAttachmentIndex = currentAttachments.findIndex((attachment) => attachment.source === "canvas")
@@ -3261,6 +3296,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       canvasRef.current = nextCanvas
       setCanvas(nextCanvas)
       setSelectedLayerId(null)
+      setEditingTextLayerId(null)
+      setEditingTextValue("")
       setPaintPreview(null)
       setCanvasTool("select")
       setZoomLevel("fit")
@@ -3638,6 +3675,53 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   useEffect(() => {
     const handlePointerMove = (event: MouseEvent) => {
+      const activeResize = layerResizeRef.current
+      if (activeResize && canvasRef.current) {
+        const point = getCanvasPointFromClient(event.clientX, event.clientY)
+        if (!point) return
+
+        const deltaX = point.x - activeResize.startPoint.x
+        const deltaY = point.y - activeResize.startPoint.y
+
+        setCanvas((current) => {
+          if (!current) return current
+          const nextCanvas = {
+            ...current,
+            layers: current.layers.map((layer) => {
+              if (layer.id !== activeResize.layerId) return layer
+
+              const minHeight =
+                layer.layer_type === "shape" && layer.content?.shapeType === "line"
+                  ? MIN_LINE_LAYER_HEIGHT
+                  : MIN_LAYER_SIZE
+              const maxWidth = Math.max(MIN_LAYER_SIZE, current.width - activeResize.startTransform.x)
+              const maxHeight = Math.max(minHeight, current.height - activeResize.startTransform.y)
+              const nextWidth = clamp(activeResize.startTransform.width + deltaX, MIN_LAYER_SIZE, maxWidth)
+              const nextHeight = clamp(activeResize.startTransform.height + deltaY, minHeight, maxHeight)
+
+              if (nextWidth === layer.transform.width && nextHeight === layer.transform.height) {
+                return layer
+              }
+
+              activeResize.changed = true
+              return {
+                ...layer,
+                transform: {
+                  ...layer.transform,
+                  width: nextWidth,
+                  height: nextHeight,
+                },
+              }
+            }),
+          }
+          canvasRef.current = nextCanvas
+          return nextCanvas
+        })
+
+        setDirtyCanvas(true)
+        return
+      }
+
       const activeDrag = layerDragRef.current
       if (!activeDrag || !canvasRef.current) return
 
@@ -3681,7 +3765,16 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setDirtyCanvas(true)
     }
 
-    const finishLayerDrag = () => {
+    const finishLayerManipulation = () => {
+      const activeResize = layerResizeRef.current
+      if (activeResize) {
+        if (activeResize.changed) {
+          setUndoStack((current) => [...current.slice(-39), activeResize.beforeResize])
+          setRedoStack([])
+        }
+        layerResizeRef.current = null
+      }
+
       const activeDrag = layerDragRef.current
       if (!activeDrag) return
 
@@ -3694,10 +3787,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
 
     window.addEventListener("mousemove", handlePointerMove)
-    window.addEventListener("mouseup", finishLayerDrag)
+    window.addEventListener("mouseup", finishLayerManipulation)
     return () => {
       window.removeEventListener("mousemove", handlePointerMove)
-      window.removeEventListener("mouseup", finishLayerDrag)
+      window.removeEventListener("mouseup", finishLayerManipulation)
     }
   }, [getCanvasPointFromClient])
 
@@ -3820,6 +3913,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   const startLayerDrag = (event: ReactMouseEvent<HTMLDivElement>, layer: ImageAssistantLayer) => {
     if (!canvas || canvasTool !== "select" || !isEditableLayer(layer)) return
+    if (editingTextLayerId && editingTextLayerId === layer.id) return
     const point = getCanvasPointFromClient(event.clientX, event.clientY)
     if (!point) return
 
@@ -3835,6 +3929,27 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
   }
 
+  const startLayerResize = (event: ReactMouseEvent<HTMLDivElement>, layer: ImageAssistantLayer) => {
+    if (!canvas || canvasTool !== "select" || !isEditableLayer(layer)) return
+    const point = getCanvasPointFromClient(event.clientX, event.clientY)
+    if (!point) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    setSelectedLayerId(layer.id)
+    if (layer.layer_type !== "text") {
+      setEditingTextLayerId(null)
+      setEditingTextValue("")
+    }
+    layerResizeRef.current = {
+      layerId: layer.id,
+      startPoint: point,
+      startTransform: { ...layer.transform },
+      beforeResize: cloneCanvasDocument(canvas),
+      changed: false,
+    }
+  }
+
   const addShapeToCanvas = (shapeType: "rect" | "line") => {
     if (!canvas) return
     const nextLayer = createShapeLayer(canvas, brushColor, shapeType, imageCopy)
@@ -3843,6 +3958,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       layers: [...current.layers, { ...nextLayer, z_index: getNextLayerZIndex(current.layers) }],
     }))
     setSelectedLayerId(nextLayer.id)
+    stopTextLayerEditing()
   }
 
   const addTextToCanvas = () => {
@@ -3853,6 +3969,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       layers: [...current.layers, { ...nextLayer, z_index: getNextLayerZIndex(current.layers) }],
     }))
     setSelectedLayerId(nextLayer.id)
+    setEditingTextLayerId(nextLayer.id)
+    setEditingTextValue(nextLayer.content?.text || "")
   }
 
   const removeSelectedLayer = () => {
@@ -3862,6 +3980,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       layers: current.layers.filter((layer) => layer.id !== selectedLayerId),
     }))
     setSelectedLayerId(null)
+    if (editingTextLayerId === selectedLayerId) {
+      setEditingTextLayerId(null)
+      setEditingTextValue("")
+    }
   }
 
   const updateSelectedLayerColor = (color: string) => {
@@ -3890,19 +4012,32 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     )
   }
 
-  const updateSelectedText = (value: string) => {
-    if (!selectedLayerId || !canvas) return
+  const updateTextLayer = (layerId: string, value: string) => {
+    if (!canvas) return
     applyCanvasChange(
       (current) => ({
         ...current,
         layers: current.layers.map((layer) =>
-          layer.id === selectedLayerId && layer.layer_type === "text"
+          layer.id === layerId && layer.layer_type === "text"
             ? { ...layer, content: { ...(layer.content || {}), text: value } }
             : layer,
         ),
       }),
       { recordHistory: false },
     )
+  }
+
+  const beginTextLayerEditing = (layer: ImageAssistantLayer) => {
+    if (layer.layer_type !== "text") return
+    setSelectedLayerId(layer.id)
+    setCanvasTool("select")
+    setEditingTextLayerId(layer.id)
+    setEditingTextValue(layer.content?.text || "")
+  }
+
+  const stopTextLayerEditing = () => {
+    setEditingTextLayerId(null)
+    setEditingTextValue("")
   }
 
   const handleCloseEditor = () => {
@@ -3938,6 +4073,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     const width = layer.transform.width * scale
     const height = layer.transform.height * scale
     const isSelected = selectedLayerId === layer.id
+    const isEditingText = layer.layer_type === "text" && editingTextLayerId === layer.id
     const canSelect = layer.layer_type === "text" || layer.layer_type === "shape" || layer.layer_type === "image"
     const commonStyle = {
       left,
@@ -3956,16 +4092,40 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       event.stopPropagation()
       setSelectedLayerId(layer.id)
       setCanvasTool("select")
+      if (layer.layer_type !== "text") {
+        stopTextLayerEditing()
+      }
     }
     const handlePointerDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (isEditingText) {
+        event.stopPropagation()
+        return
+      }
+      if (layer.layer_type === "text" && selectedLayerId === layer.id && canvasTool === "select") {
+        event.preventDefault()
+        event.stopPropagation()
+        beginTextLayerEditing(layer)
+        return
+      }
       handleSelect(event)
       startLayerDrag(event, layer)
     }
+    const resizeHandle =
+      isSelected && canSelect && canvasTool === "select" ? (
+        <button
+          type="button"
+          data-testid={`image-layer-resize-${layer.id}`}
+          onMouseDown={(event) => startLayerResize(event, layer)}
+          className="absolute bottom-0 right-0 z-30 h-4 w-4 translate-x-1/2 translate-y-1/2 cursor-se-resize rounded-full border-2 border-primary bg-background shadow"
+          aria-label="Resize layer"
+        />
+      ) : null
 
     if (layer.layer_type === "background" || layer.layer_type === "image" || layer.layer_type === "paint") {
       return (
         <div key={layer.id} className="absolute overflow-hidden" style={{ ...commonStyle, ...selectionStyle }} onMouseDown={handlePointerDown}>
           {layer.asset_url ? <img src={layer.asset_url} alt="" className="h-full w-full object-cover" /> : null}
+          {resizeHandle}
         </div>
       )
     }
@@ -3975,10 +4135,41 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         <div
           key={layer.id}
           className={cn(
-            "absolute flex items-start whitespace-pre-wrap rounded-2xl px-2 py-1 font-black",
-            canvasTool === "select" ? "cursor-move" : "cursor-pointer",
+            "absolute flex min-h-[1.5rem] items-start whitespace-pre-wrap rounded-2xl px-2 py-1 font-black outline-none",
+            isEditingText ? "cursor-text" : canvasTool === "select" ? "cursor-move" : "cursor-pointer",
           )}
-          onMouseDown={handlePointerDown}
+          onMouseDown={(event) => {
+            if (isEditingText) {
+              event.stopPropagation()
+              return
+            }
+            handlePointerDown(event)
+          }}
+          data-testid={`image-text-layer-${layer.id}`}
+          data-text-layer-editor={isEditingText ? layer.id : undefined}
+          contentEditable={isEditingText}
+          suppressContentEditableWarning
+          onInput={(event) => {
+            if (!isEditingText) return
+            const nextText = event.currentTarget.textContent || ""
+            setEditingTextValue(nextText)
+            updateTextLayer(layer.id, nextText)
+          }}
+          onBlur={() => {
+            if (!isEditingText) return
+            stopTextLayerEditing()
+          }}
+          onKeyDown={(event) => {
+            if (!isEditingText) return
+            if (event.key === "Escape") {
+              event.preventDefault()
+              stopTextLayerEditing()
+            }
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault()
+              ;(event.currentTarget as HTMLDivElement).blur()
+            }
+          }}
           style={{
             ...commonStyle,
             ...selectionStyle,
@@ -3986,7 +4177,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             fontSize: (layer.style?.fontSize || 42) * scale,
           }}
         >
-          {layer.content?.text || imageCopy.textFallback}
+          {isEditingText ? editingTextValue : layer.content?.text || imageCopy.textFallback}
+          {resizeHandle}
         </div>
       )
     }
@@ -4005,7 +4197,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             border: `${(layer.style?.strokeWidth || 2) * scale}px solid ${layer.style?.stroke || "#111827"}`,
             borderRadius: "9999px",
           }}
-        />
+        >
+          {resizeHandle}
+        </div>
       )
     }
 
@@ -4021,6 +4215,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           {shapeType === "arrow" ? (
             <div className="absolute right-0 top-1/2 h-0 w-0 -translate-y-1/2 border-b-[8px] border-l-[14px] border-t-[8px] border-b-transparent border-t-transparent" style={{ borderLeftColor: layer.style?.stroke || "#2563eb" }} />
           ) : null}
+          {resizeHandle}
         </div>
       )
     }
@@ -4036,7 +4231,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           background: layer.style?.fill || "#f97316",
           border: `${(layer.style?.strokeWidth || 2) * scale}px solid ${layer.style?.stroke || "#111827"}`,
         }}
-      />
+      >
+        {resizeHandle}
+      </div>
     )
   }
 
@@ -4071,7 +4268,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           <p className="mt-3 text-sm text-muted-foreground">
             {imageCopy.unavailableReasonPrefix}
             {availability.reason || imageCopy.unavailableReasonFallback}
-            。{imageCopy.unavailableHint}
+            . {imageCopy.unavailableHint}
           </p>
         </div>
       </div>
@@ -4342,7 +4539,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                     if (!messageVersion?.candidates.length) return null
 
                                     return (
-                                      <WorkspaceSectionCard title="候选结果" description={extraCopy.candidateActionsHint}>
+                                      <WorkspaceSectionCard title="Candidate results" description={extraCopy.candidateActionsHint}>
                                         <div className={cn("grid gap-3", messageVersion.candidates.length > 1 ? "sm:grid-cols-2" : "max-w-md")}>
                                           {messageVersion.candidates.map((candidate) => (
                                             <div
@@ -4671,102 +4868,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           <div className="relative grid h-full w-full grid-cols-[minmax(0,1fr)_116px] items-stretch gap-4 overflow-hidden rounded-[32px] border-2 border-border bg-muted/30 p-4 md:gap-5 md:p-5 lg:gap-6 lg:p-6">
 
             <div className="relative z-10 col-start-1 row-start-1 min-w-0 overflow-hidden rounded-[28px] border-2 border-border bg-card">
-              <div className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-32px))] rounded-[24px] border-2 border-border bg-card p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
-                    {dirtyCanvas ? imageCopy.unsaved : imageCopy.synced}
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
-                    {currentVersionKindLabel}
-                  </Badge>
-                </div>
-                <div className="mt-3">
-                  <p className="text-[10px] font-medium tracking-[0.24em] text-muted-foreground uppercase">
-                    {imageCopy.editorWorkspace}
-                  </p>
-                  <div className="mt-1 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate text-base font-semibold text-foreground">
-                        {currentVersion
-                          ? `${imageCopy.currentVersionLabel} V${currentVersionIndex >= 0 ? currentVersionIndex + 1 : 1}`
-                          : imageCopy.editorTitle}
-                      </h3>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-muted-foreground">
-                        {currentVersion?.prompt_text?.trim() || imageCopy.autoSaveHint}
-                      </p>
-                    </div>
-                    {detail?.versions?.length ? (
-                      <Badge variant="outline" className="shrink-0 rounded-full px-2.5 py-1 text-[10px]">
-                        {Math.max(currentVersionIndex + 1, 1)}/{detail.versions.length}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2.5">
-                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
-                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                      {imageCopy.canvasSizeLabel}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">
-                      {canvas ? `${canvas.width} × ${canvas.height}` : "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
-                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                      {imageCopy.layersLabel}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">{canvas?.layers.length ?? 0}</p>
-                  </div>
-                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
-                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                      {imageCopy.activeToolLabel}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">{activeToolLabel}</p>
-                  </div>
-                  <div className="rounded-[18px] border-2 border-border bg-background p-3">
-                    <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                      {imageCopy.zoomLabel}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">{zoomLabel}</p>
-                  </div>
-                </div>
-                <div className="mt-3 rounded-[18px] border-2 border-border bg-background p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                        {imageCopy.selectedLayerLabel}
-                      </p>
-                      <p className="mt-1 truncate text-sm font-semibold text-foreground">{selectedLayerSummary}</p>
-                      {selectedLayer ? (
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {Math.round(selectedLayer.transform.width)} × {Math.round(selectedLayer.transform.height)}
-                        </p>
-                      ) : null}
-                    </div>
-                    {selectedLayer ? (
-                      <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
-                        {selectedLayerTypeLabel}
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
-                    <span>{imageCopy.updatedAtLabel}</span>
-                    <span className="text-right text-foreground/80">{editorUpdatedAtLabel}</span>
-                  </div>
-                </div>
-              </div>
-
-              {selectedLayer?.layer_type === "text" ? (
-                <div className="absolute right-4 bottom-24 z-20 w-[min(560px,calc(100%-32px))] rounded-[18px] border-2 border-border bg-card p-3">
-                  <p className="mb-2 text-[11px] font-medium text-foreground">{imageCopy.textLabel}</p>
-                  <Input
-                    value={selectedLayer.content?.text || ""}
-                    onChange={(event) => updateSelectedText(event.target.value)}
-                    className="h-10 rounded-xl border-2 border-border bg-background"
-                    placeholder={imageCopy.editTextPlaceholder}
-                  />
-                </div>
-              ) : null}
 
               <div
                 ref={canvasViewportRef}
@@ -4781,6 +4882,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                     onMouseDown={(event) => {
                       if (event.target === event.currentTarget) {
                         setSelectedLayerId(null)
+                        stopTextLayerEditing()
                       }
                     }}
                   >
@@ -4862,10 +4964,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   <Button data-testid="image-select-tool" size="icon" variant={canvasTool === "select" ? "default" : "outline"} onClick={() => { setCanvasTool("select"); setPaintPreview(null) }} title={imageCopy.selectTool} className="h-11 w-11 rounded-full">
                     <MousePointer2 className="h-4.5 w-4.5" />
                   </Button>
-                  <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => setCanvasTool((current) => (current === "brush" ? "select" : "brush"))} title={imageCopy.brushTool} className="h-11 w-11 rounded-full">
+                  <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setCanvasTool((current) => (current === "brush" ? "select" : "brush")) }} title={imageCopy.brushTool} className="h-11 w-11 rounded-full">
                     <Pencil className="h-4.5 w-4.5" />
                   </Button>
-                  <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => setCanvasTool((current) => (current === "eraser" ? "select" : "eraser"))} title={imageCopy.eraserTool} className="h-11 w-11 rounded-full">
+                  <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setCanvasTool((current) => (current === "eraser" ? "select" : "eraser")) }} title={imageCopy.eraserTool} className="h-11 w-11 rounded-full">
                     <Eraser className="h-4.5 w-4.5" />
                   </Button>
                   <div className="flex flex-col items-center gap-2 rounded-[22px] border-2 border-border bg-background px-2 py-2">
@@ -4884,10 +4986,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
                     {imageCopy.insertGroupLabel}
                   </p>
-                  <Button size="icon" variant="outline" onClick={() => addShapeToCanvas("rect")} title={imageCopy.shapeTool} className="h-11 w-11 rounded-full">
+                  <Button data-testid="image-shape-tool" size="icon" variant="outline" onClick={() => addShapeToCanvas("rect")} title={imageCopy.shapeTool} className="h-11 w-11 rounded-full">
                     <Square className="h-4.5 w-4.5" />
                   </Button>
-                  <Button size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-11 w-11 rounded-full">
+                  <Button data-testid="image-text-tool" size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-11 w-11 rounded-full">
                     <Type className="h-4.5 w-4.5" />
                   </Button>
                 </div>
@@ -4964,3 +5066,4 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     </>
   )
 }
+

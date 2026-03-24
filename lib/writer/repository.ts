@@ -390,6 +390,45 @@ export async function getWriterConversation(userId: number, conversationId: stri
   return row satisfies WriterConversationRow
 }
 
+export async function createWriterConversation(params: {
+  userId: number
+  title?: string | null
+  platform?: WriterPlatform | null
+  mode?: WriterMode | null
+  language?: WriterLanguage | null
+  status?: WriterConversationStatus
+  imagesRequested?: boolean
+}) {
+  await ensureWriterTables()
+
+  const platform = normalizeWriterPlatform(params.platform)
+  const mode = normalizeWriterMode(platform, params.mode)
+  const language = normalizeWriterLanguage(params.language)
+  const [created] = await withDbRetry("create-writer-conversation", () =>
+    db
+      .insert(writerConversations)
+      .values({
+        userId: params.userId,
+        title: buildConversationTitleSafe(params.title || "New article"),
+        platform,
+        mode,
+        language,
+        status: params.status || "drafting",
+        imagesRequested: Boolean(params.imagesRequested),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning({ id: writerConversations.id }),
+  )
+
+  const conversation = await getWriterConversation(params.userId, String(created.id))
+  if (!conversation) {
+    throw new Error("writer_conversation_create_failed")
+  }
+
+  return mapConversation(conversation)
+}
+
 export async function appendWriterConversation({
   userId,
   conversationId,

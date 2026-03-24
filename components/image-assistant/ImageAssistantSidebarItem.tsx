@@ -67,6 +67,7 @@ export function ImageAssistantSidebarItem({
   const [editingSessionName, setEditingSessionName] = useState("")
   const [pendingDeleteSession, setPendingDeleteSession] = useState<ImageAssistantConversationSummary | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
 
   const isImageAssistantRoute = pathname.startsWith("/dashboard/image-assistant")
   const isExpanded = isOpen
@@ -217,6 +218,40 @@ export function ImageAssistantSidebarItem({
     }
   }
 
+  const handleCreateSession = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (isCreatingSession) return
+
+    setIsCreatingSession(true)
+    try {
+      const response = await fetch("/api/image-assistant/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: messages.sidebar.newDesignFallback }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : `HTTP ${response.status}`)
+      }
+
+      const created = payload?.data as ImageAssistantConversationSummary | undefined
+      if (!created?.id) {
+        throw new Error("image_session_create_missing_id")
+      }
+
+      updateList((current) => mergeSessions([created], current))
+      void fetchSessions().catch(() => {})
+      void warmSessionDetail(created.id).catch(() => {})
+      router.push(`/dashboard/image-assistant/${created.id}`)
+    } catch (error) {
+      console.error("Failed to create image assistant session", error)
+      router.push("/dashboard/image-assistant")
+    } finally {
+      setIsCreatingSession(false)
+    }
+  }
+
   return (
     <>
       <div className="mb-2 w-full min-w-0">
@@ -224,7 +259,14 @@ export function ImageAssistantSidebarItem({
 
         {isExpanded ? (
           <SidebarSectionBody>
-            <SidebarCreateLink href="/dashboard/image-assistant" label={messages.sidebar.newDesign} />
+            <SidebarCreateLink
+              href="/dashboard/image-assistant"
+              label={messages.sidebar.newDesign}
+              testId="image-assistant-new-design-button"
+              loading={isCreatingSession}
+              disabled={isCreatingSession}
+              onClick={(event) => void handleCreateSession(event)}
+            />
 
             {isLoading && sessions.length === 0 ? (
               <SidebarListState loading label={messages.sidebar.loading} />

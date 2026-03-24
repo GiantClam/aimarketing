@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 import Link from "next/link"
 import { ChevronDown, ChevronRight, Loader2, Plus } from "lucide-react"
@@ -48,21 +48,30 @@ type SidebarCreateLinkProps = {
   href: string
   label: string
   testId?: string
+  loading?: boolean
+  disabled?: boolean
+  onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void
 }
 
-export function SidebarCreateLink({ href, label, testId }: SidebarCreateLinkProps) {
-  return (
-    <Link href={href}>
-      <Button
-        variant="ghost"
-        className="box-border h-9 w-full min-w-0 justify-start overflow-hidden rounded-[18px] border-0 bg-sidebar-accent px-3 text-xs font-medium text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
-        data-testid={testId}
-      >
-        <Plus className="mr-2 h-3 w-3" />
-        {label}
-      </Button>
-    </Link>
+export function SidebarCreateLink({ href, label, testId, loading, disabled, onClick }: SidebarCreateLinkProps) {
+  const button = (
+    <Button
+      variant="ghost"
+      className="box-border h-9 w-full min-w-0 justify-start overflow-hidden rounded-[18px] border-0 bg-sidebar-accent px-3 text-xs font-medium text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+      data-testid={testId}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {loading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Plus className="mr-2 h-3 w-3" />}
+      {label}
+    </Button>
   )
+
+  if (onClick) {
+    return button
+  }
+
+  return <Link href={href}>{button}</Link>
 }
 
 export function SidebarListState({

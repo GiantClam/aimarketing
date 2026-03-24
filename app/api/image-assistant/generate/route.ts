@@ -145,9 +145,9 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Prefer direct execution by default for low-latency UX.
-    // Async mode remains as an explicit fallback for long-running scenarios.
-    const shouldRunDirectConversationTurn = body?.preferAsync !== true
+    // Default to async queue execution for production stability.
+    // Direct execution is opt-in by explicitly passing preferAsync=false.
+    const shouldRunDirectConversationTurn = body?.preferAsync === false
 
     if (shouldRunDirectConversationTurn) {
       const directResult = await runImageAssistantConversationTurn({

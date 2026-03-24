@@ -75,6 +75,7 @@ export function AdvisorSidebarItem({
   const [editingConvName, setEditingConvName] = useState("")
   const [pendingDeleteConversation, setPendingDeleteConversation] = useState<Conversation | null>(null)
   const [deletingConvId, setDeletingConvId] = useState<string | null>(null)
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false)
 
   const pathname = usePathname()
   const router = useRouter()
@@ -234,6 +235,48 @@ export function AdvisorSidebarItem({
     setEditingConvId(null)
   }
 
+  const handleCreateConversation = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (isCreatingConversation) return
+
+    setIsCreatingConversation(true)
+    try {
+      if (advisorType !== "lead-hunter") {
+        router.push(`/dashboard/advisor/${advisorType}/new`)
+        return
+      }
+
+      const response = await fetch("/api/dify/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          advisorType,
+          name: messages.sidebar.newChatFallback,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : `HTTP ${response.status}`)
+      }
+
+      const created = payload?.data as Conversation | undefined
+      if (!created?.id) {
+        throw new Error("advisor_conversation_create_missing_id")
+      }
+
+      updateList((current) => mergeConversations([created], current))
+      void fetchConversations().catch(() => {})
+      void warmConversation(created.id).catch(() => {})
+      router.push(`/dashboard/advisor/${advisorType}/${created.id}`)
+    } catch (error) {
+      console.error("Failed to create advisor conversation", error)
+      router.push(`/dashboard/advisor/${advisorType}/new`)
+    } finally {
+      setIsCreatingConversation(false)
+    }
+  }
+
   return (
     <>
       <div className="mb-2 w-full min-w-0">
@@ -241,7 +284,13 @@ export function AdvisorSidebarItem({
 
         {isOpen && (
           <SidebarSectionBody>
-            <SidebarCreateLink href={`/dashboard/advisor/${advisorType}/new`} label={messages.sidebar.newSession} />
+            <SidebarCreateLink
+              href={`/dashboard/advisor/${advisorType}/new`}
+              label={messages.sidebar.newSession}
+              loading={isCreatingConversation}
+              disabled={isCreatingConversation}
+              onClick={(event) => void handleCreateConversation(event)}
+            />
 
             {isLoading && conversations.length === 0 ? (
               <SidebarListState loading label={messages.sidebar.loading} />

@@ -4,6 +4,69 @@ export interface DifyConfig {
 }
 
 const DIFY_FETCH_RETRY_DELAYS_MS = [500, 1500];
+const DIFY_AUTH_BLOCK_WINDOW_MS = Number.parseInt(process.env.DIFY_AUTH_BLOCK_WINDOW_MS || "", 10) || 15 * 60 * 1000;
+const DIFY_AUTH_BLOCK_STORE_KEY = "__aimarketingDifyAuthBlockedUntil__";
+
+type DifyAuthBlockStore = Map<string, number>;
+
+function getDifyAuthBlockStore(): DifyAuthBlockStore {
+    const globalScope = globalThis as typeof globalThis & {
+        [DIFY_AUTH_BLOCK_STORE_KEY]?: DifyAuthBlockStore;
+    };
+    if (!globalScope[DIFY_AUTH_BLOCK_STORE_KEY]) {
+        globalScope[DIFY_AUTH_BLOCK_STORE_KEY] = new Map<string, number>();
+    }
+    return globalScope[DIFY_AUTH_BLOCK_STORE_KEY]!;
+}
+
+function normalizeHeaderValue(headers: RequestInit["headers"], key: string) {
+    if (!headers) return null;
+    const normalized = new Headers(headers);
+    const value = normalized.get(key);
+    return value && value.trim() ? value.trim() : null;
+}
+
+function getAuthFingerprint(init: RequestInit) {
+    const authorization = normalizeHeaderValue(init.headers, "authorization");
+    if (!authorization) return null;
+    return authorization;
+}
+
+function markAuthTemporarilyBlocked(authFingerprint: string, context: { url: string; reason: string }) {
+    const blockedUntil = Date.now() + DIFY_AUTH_BLOCK_WINDOW_MS;
+    getDifyAuthBlockStore().set(authFingerprint, blockedUntil);
+    console.warn("dify.auth.temporarily_blocked", {
+        url: context.url,
+        reason: context.reason,
+        blockedUntil,
+    });
+}
+
+function isAuthTemporarilyBlocked(authFingerprint: string) {
+    const blockedUntil = getDifyAuthBlockStore().get(authFingerprint);
+    if (!blockedUntil) return false;
+    if (blockedUntil <= Date.now()) {
+        getDifyAuthBlockStore().delete(authFingerprint);
+        return false;
+    }
+    return true;
+}
+
+function createAuthBlockedResponse() {
+    return new Response(
+        JSON.stringify({
+            code: "upstream_credential_temporarily_blocked",
+            message: "Upstream credential temporarily blocked after unauthorized response",
+            status: 503,
+        }),
+        {
+            status: 503,
+            headers: {
+                "Content-Type": "application/json",
+            },
+        },
+    );
+}
 
 function getHeaders(config: DifyConfig) {
     if (!config.apiKey) {
@@ -46,9 +109,21 @@ function isRetryableDifyFetchError(error: unknown) {
 }
 
 async function fetchWithRetry(input: string, init: RequestInit) {
+    const authFingerprint = getAuthFingerprint(init);
+    if (authFingerprint && isAuthTemporarilyBlocked(authFingerprint)) {
+        return createAuthBlockedResponse();
+    }
+
     for (let attempt = 0; attempt <= DIFY_FETCH_RETRY_DELAYS_MS.length; attempt += 1) {
         try {
-            return await fetch(input, init);
+            const response = await fetch(input, init);
+            if (response.status === 401 && authFingerprint) {
+                markAuthTemporarilyBlocked(authFingerprint, {
+                    url: input,
+                    reason: "unauthorized",
+                });
+            }
+            return response;
         } catch (error) {
             if (init.signal?.aborted || !isRetryableDifyFetchError(error) || attempt === DIFY_FETCH_RETRY_DELAYS_MS.length) {
                 throw error;
@@ -67,7 +142,19 @@ async function fetchWithRetry(input: string, init: RequestInit) {
 }
 
 async function fetchWithoutRetry(input: string, init: RequestInit) {
-    return fetch(input, init);
+    const authFingerprint = getAuthFingerprint(init);
+    if (authFingerprint && isAuthTemporarilyBlocked(authFingerprint)) {
+        return createAuthBlockedResponse();
+    }
+
+    const response = await fetch(input, init);
+    if (response.status === 401 && authFingerprint) {
+        markAuthTemporarilyBlocked(authFingerprint, {
+            url: input,
+            reason: "unauthorized",
+        });
+    }
+    return response;
 }
 
 export async function sendMessage(config: DifyConfig, payload: any, init?: RequestInit) {

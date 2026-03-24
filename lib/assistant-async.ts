@@ -529,14 +529,32 @@ function launchClaimedTask(taskId: number, workerId: string) {
       }
     })
     .catch(async (error) => {
-      const rawTask = await getTaskById(taskId)
-      const task = parseTask(rawTask)
-      if (task?.parsedPayload?.kind === "writer_turn") {
-        await updateWriterLatestAssistantMessage(task.userId, task.parsedPayload.conversationId, `请求失败：${error instanceof Error ? error.message : "unknown_error"}`, {
-          status: "failed",
-          imagesRequested: false,
-        }).catch(() => null)
+      const primaryErrorMessage = error instanceof Error ? error.message : String(error)
+      let task: ParsedTaskRow | null = null
+
+      try {
+        const rawTask = await getTaskById(taskId)
+        task = parseTask(rawTask)
+      } catch (taskReadError) {
+        console.error("assistant.task.load_failed_after_run_error", {
+          taskId,
+          runError: primaryErrorMessage,
+          message: taskReadError instanceof Error ? taskReadError.message : String(taskReadError),
+        })
       }
+
+      if (task?.parsedPayload?.kind === "writer_turn") {
+        await updateWriterLatestAssistantMessage(
+          task.userId,
+          task.parsedPayload.conversationId,
+          `请求失败：${primaryErrorMessage || "unknown_error"}`,
+          {
+            status: "failed",
+            imagesRequested: false,
+          },
+        ).catch(() => null)
+      }
+
       const imageTaskError = task?.parsedPayload?.kind === "image_turn" ? toSafeImageAssistantTaskErrorMessage(error) : null
       if (task?.parsedPayload?.kind === "image_turn") {
         await createImageAssistantMessage({
@@ -547,13 +565,20 @@ function launchClaimedTask(taskId: number, workerId: string) {
           taskType: task.parsedPayload.taskType,
         }).catch(() => null)
       }
+
       await updateTaskStatus(taskId, {
         status: "failed",
         result: {
           ...(task?.parsedResult || {}),
-          error: imageTaskError || (error instanceof Error ? error.message : "assistant_task_failed"),
+          error: imageTaskError || primaryErrorMessage || "assistant_task_failed",
         },
-      }).catch(() => null)
+      }).catch((statusError) => {
+        console.error("assistant.task.status_update_failed", {
+          taskId,
+          runError: primaryErrorMessage,
+          message: statusError instanceof Error ? statusError.message : String(statusError),
+        })
+      })
     })
     .finally(() => {
       runningTasks.delete(taskId)

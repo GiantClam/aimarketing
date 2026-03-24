@@ -130,6 +130,22 @@ test.after(() => {
   nodeModule._load = originalLoad
 })
 
+test("generate route defaults to async queue execution when preferAsync is omitted", async () => {
+  const response = await POST({
+    json: async () => ({
+      prompt: "Generate a product hero image with orange gradient lighting",
+      sessionId: "s-1",
+      candidateCount: 1,
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(runTurnCalls.length, 0)
+  assert.equal(enqueueCalls, 1)
+  assert.equal(response.body?.data?.accepted, true)
+  assert.equal(typeof response.body?.data?.task_id, "string")
+})
+
 test("generate route promotes explicit reference upscale prompt to edit mode", async () => {
   const response = await POST({
     json: async () => ({

@@ -153,13 +153,24 @@ function isRetryableSessionDbError(error: unknown) {
   return (
     combined.includes("error connecting to database") ||
     combined.includes("fetch failed") ||
+    combined.includes("connection timeout") ||
     combined.includes("connect timeout") ||
+    combined.includes("timeout exceeded when trying to connect") ||
     combined.includes("econnreset") ||
     combined.includes("und_err_connect_timeout") ||
     combined.includes("connection terminated unexpectedly") ||
+    combined.includes("connection terminated due to connection timeout") ||
     combined.includes("terminating connection") ||
     combined.includes("quota")
   )
+}
+
+export function isSessionDbUnavailableError(error: unknown) {
+  const message = getErrorMessage(error)
+  const causeMessage =
+    error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
+  const combined = `${message} ${causeMessage}`.toLowerCase()
+  return combined.includes("failed query:") || isRetryableSessionDbError(error)
 }
 
 export async function withSessionDbRetry<T>(label: string, operation: () => Promise<T>) {

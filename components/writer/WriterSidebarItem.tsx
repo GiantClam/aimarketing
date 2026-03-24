@@ -86,6 +86,7 @@ export function WriterSidebarItem({
   const [editingConvName, setEditingConvName] = useState("")
   const [pendingDeleteConversation, setPendingDeleteConversation] = useState<WriterConversationSummary | null>(null)
   const [deletingConvId, setDeletingConvId] = useState<string | null>(null)
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false)
 
   const isWriterRoute = pathname.startsWith("/dashboard/writer")
   const isExpanded = isOpen
@@ -295,6 +296,42 @@ export function WriterSidebarItem({
     setEditingConvName("")
   }
 
+  const handleCreateConversation = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (isCreatingConversation) return
+
+    setIsCreatingConversation(true)
+    try {
+      const response = await fetch("/api/writer/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: messages.sidebar.newArticle,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : `HTTP ${response.status}`)
+      }
+
+      const created = payload?.data as WriterConversationSummary | undefined
+      if (!created?.id) {
+        throw new Error("writer_conversation_create_missing_id")
+      }
+
+      upsertConversation(created)
+      void fetchConversations().catch(() => {})
+      void warmConversation(created.id).catch(() => {})
+      router.push(`/dashboard/writer/${created.id}`)
+    } catch (error) {
+      console.error("Failed to create writer conversation", error)
+      router.push("/dashboard/writer")
+    } finally {
+      setIsCreatingConversation(false)
+    }
+  }
+
   return (
     <>
       <div className="mb-2 w-full min-w-0">
@@ -302,7 +339,14 @@ export function WriterSidebarItem({
 
         {isExpanded && (
           <SidebarSectionBody>
-            <SidebarCreateLink href="/dashboard/writer" label={messages.sidebar.newSession} testId="writer-new-session-button" />
+            <SidebarCreateLink
+              href="/dashboard/writer"
+              label={messages.sidebar.newSession}
+              testId="writer-new-session-button"
+              loading={isCreatingConversation}
+              disabled={isCreatingConversation}
+              onClick={(event) => void handleCreateConversation(event)}
+            />
 
             {isLoading && conversations.length === 0 ? (
               <SidebarListState loading label={messages.sidebar.loading} />

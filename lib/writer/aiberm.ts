@@ -13,11 +13,14 @@ const OPENROUTER_API_BASE = (process.env.OPENROUTER_BASE_URL || "https://openrou
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ""
 const OPENROUTER_TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-3-flash-preview"
 const OPENROUTER_IMAGE_MODEL = process.env.OPENROUTER_IMAGE_MODEL || "google/gemini-3.1-flash-image-preview"
+const OPENROUTER_AUTH_BLOCK_WINDOW_MS =
+  Number.parseInt(process.env.OPENROUTER_AUTH_BLOCK_WINDOW_MS || "", 10) || 15 * 60 * 1000
 const OPENROUTER_APP_URL =
   process.env.OPENROUTER_APP_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "")
 const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || "AI Marketing"
+const OPENROUTER_AUTH_BLOCKED_UNTIL_KEY = "__aimarketingOpenRouterAuthBlockedUntil__"
 
 type OpenAICompatibleMessage = {
   role: "system" | "user" | "assistant"
@@ -41,6 +44,47 @@ export type OpenRouterInlineReferenceImage = {
   base64Data: string
 }
 
+function getOpenRouterAuthBlockedUntil() {
+  const globalScope = globalThis as typeof globalThis & {
+    [OPENROUTER_AUTH_BLOCKED_UNTIL_KEY]?: number
+  }
+  return globalScope[OPENROUTER_AUTH_BLOCKED_UNTIL_KEY] || 0
+}
+
+function setOpenRouterAuthBlockedUntil(blockedUntil: number) {
+  const globalScope = globalThis as typeof globalThis & {
+    [OPENROUTER_AUTH_BLOCKED_UNTIL_KEY]?: number
+  }
+  globalScope[OPENROUTER_AUTH_BLOCKED_UNTIL_KEY] = blockedUntil
+}
+
+function isOpenRouterAuthBlocked() {
+  const blockedUntil = getOpenRouterAuthBlockedUntil()
+  if (!blockedUntil) return false
+  if (blockedUntil <= Date.now()) {
+    setOpenRouterAuthBlockedUntil(0)
+    return false
+  }
+  return true
+}
+
+function markOpenRouterAuthBlocked(message: string) {
+  const blockedUntil = Date.now() + OPENROUTER_AUTH_BLOCK_WINDOW_MS
+  setOpenRouterAuthBlockedUntil(blockedUntil)
+  console.warn("writer.openrouter.auth_temporarily_blocked", {
+    message,
+    blockedUntil,
+  })
+}
+
+function toOpenRouterHttpError(status: number, data: any, fallbackMessage: string) {
+  const message = data?.error?.message || fallbackMessage
+  if (status === 401 || /user not found|unauthorized|invalid token|access token/i.test(String(message))) {
+    markOpenRouterAuthBlocked(String(message))
+  }
+  return new Error(message)
+}
+
 function buildAibermHeaders() {
   if (!AIBERM_API_KEY) {
     throw new Error("aiberm_api_key_missing")
@@ -57,7 +101,7 @@ export function hasAibermApiKey() {
 }
 
 export function hasOpenRouterApiKey() {
-  return Boolean(OPENROUTER_API_KEY)
+  return Boolean(OPENROUTER_API_KEY) && !isOpenRouterAuthBlocked()
 }
 
 export function hasWriterTextProvider() {
@@ -154,6 +198,9 @@ function buildOpenRouterHeaders() {
   if (!OPENROUTER_API_KEY) {
     throw new Error("openrouter_api_key_missing")
   }
+  if (isOpenRouterAuthBlocked()) {
+    throw new Error("openrouter_credential_temporarily_blocked")
+  }
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${OPENROUTER_API_KEY}`,
@@ -234,7 +281,7 @@ export async function generateTextWithOpenRouter(
 
   if (!response.ok) {
     const data = response.data as any
-    throw new Error(data?.error?.message || `openrouter_text_http_${response.status}`)
+    throw toOpenRouterHttpError(response.status, data, `openrouter_text_http_${response.status}`)
   }
 
   return extractTextFromOpenAICompatibleResponse(response.data)
@@ -361,7 +408,7 @@ async function generateStructuredObjectWithOpenRouter(params: WriterStructuredOb
 
   if (!response.ok) {
     const data = response.data as any
-    throw new Error(data?.error?.message || `openrouter_structured_http_${response.status}`)
+    throw toOpenRouterHttpError(response.status, data, `openrouter_structured_http_${response.status}`)
   }
 
   return extractToolCallArgumentsFromOpenAICompatibleResponse(response.data, params.toolName)
@@ -523,7 +570,7 @@ export async function generateImagesWithOpenRouter(
 
   if (!response.ok) {
     const data = response.data as any
-    throw new Error(data?.error?.message || `openrouter_image_http_${response.status}`)
+    throw toOpenRouterHttpError(response.status, data, `openrouter_image_http_${response.status}`)
   }
 
   const textSummary = (() => {
