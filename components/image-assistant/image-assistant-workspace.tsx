@@ -83,7 +83,7 @@ type Availability = {
   provider: string
 }
 
-type CanvasTool = "select" | "brush" | "eraser"
+type CanvasTool = "select" | "brush" | "eraser" | "shape"
 type PaintTool = "brush" | "eraser"
 
 type PaintPreview = {
@@ -92,6 +92,11 @@ type PaintPreview = {
   points: Array<{ x: number; y: number }>
   strokeWidth: number
   color: string
+}
+
+type ShapeDraft = {
+  start: { x: number; y: number }
+  current: { x: number; y: number }
 }
 
 type PromptPreset = {
@@ -1544,7 +1549,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const [paintPreview, setPaintPreview] = useState<PaintPreview | null>(null)
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null)
   const [editingTextLayerId, setEditingTextLayerId] = useState<string | null>(null)
-  const [editingTextValue, setEditingTextValue] = useState("")
+  const [shapeDraft, setShapeDraft] = useState<ShapeDraft | null>(null)
   const [brushColor, setBrushColor] = useState("#2563eb")
   const [prompt, setPrompt] = useState("")
   const [sizePreset, setSizePreset] = useState<ImageAssistantSizePreset>("4:5")
@@ -1579,6 +1584,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const canvasViewportRef = useRef<HTMLDivElement | null>(null)
   const canvasStageRef = useRef<HTMLDivElement | null>(null)
   const paintStrokeRef = useRef<PaintPreview | null>(null)
+  const shapeDraftRef = useRef<ShapeDraft | null>(null)
   const layerDragRef = useRef<LayerDragState | null>(null)
   const layerResizeRef = useRef<LayerResizeState | null>(null)
   const creatingSessionRef = useRef<Promise<string> | null>(null)
@@ -1593,6 +1599,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const pointerMoveRafRef = useRef<number | null>(null)
   const pendingPointerClientRef = useRef<{ x: number; y: number } | null>(null)
   const paintPreviewRafRef = useRef<number | null>(null)
+  const pendingTextCaretClientRef = useRef<{ x: number; y: number } | null>(null)
   const attachmentPreviewUrlsRef = useRef<Set<string>>(new Set())
   const attachmentUploadPromisesRef = useRef<Map<string, Promise<{ assetId: string; maskAssetId: string | null }>>>(new Map())
   const composerDragDepthRef = useRef(0)
@@ -1877,16 +1884,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     () => canvas?.layers.find((layer) => layer.id === selectedLayerId) || null,
     [canvas?.layers, selectedLayerId],
   )
+  const canAdjustSelectedLayerColor = Boolean(selectedLayer && isEditableLayer(selectedLayer))
 
   useEffect(() => {
     if (!editingTextLayerId) return
     const editingLayer = canvas?.layers.find((layer) => layer.id === editingTextLayerId) || null
     if (!editingLayer || editingLayer.layer_type !== "text" || selectedLayerId !== editingTextLayerId) {
       setEditingTextLayerId(null)
-      setEditingTextValue("")
-      return
     }
-    setEditingTextValue(editingLayer.content?.text || "")
   }, [canvas?.layers, editingTextLayerId, selectedLayerId])
 
   useEffect(() => {
@@ -1897,11 +1902,42 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       target.focus()
       const selection = window.getSelection()
       if (!selection) return
-      const range = document.createRange()
-      range.selectNodeContents(target)
-      range.collapse(false)
+
+      const pendingCaret = pendingTextCaretClientRef.current
+      pendingTextCaretClientRef.current = null
+      if (pendingCaret) {
+        const docAny = document as Document & {
+          caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+          caretRangeFromPoint?: (x: number, y: number) => Range | null
+        }
+
+        if (typeof docAny.caretPositionFromPoint === "function") {
+          const caretPos = docAny.caretPositionFromPoint(pendingCaret.x, pendingCaret.y)
+          if (caretPos && target.contains(caretPos.offsetNode)) {
+            const range = document.createRange()
+            range.setStart(caretPos.offsetNode, caretPos.offset)
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+            return
+          }
+        }
+
+        if (typeof docAny.caretRangeFromPoint === "function") {
+          const range = docAny.caretRangeFromPoint(pendingCaret.x, pendingCaret.y)
+          if (range && target.contains(range.startContainer)) {
+            selection.removeAllRanges()
+            selection.addRange(range)
+            return
+          }
+        }
+      }
+
+      const fallbackRange = document.createRange()
+      fallbackRange.selectNodeContents(target)
+      fallbackRange.collapse(false)
       selection.removeAllRanges()
-      selection.addRange(range)
+      selection.addRange(fallbackRange)
     })
     return () => window.cancelAnimationFrame(raf)
   }, [editingTextLayerId])
@@ -2401,7 +2437,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setSelectedVersionId(null)
       setSelectedLayerId(null)
       setEditingTextLayerId(null)
-      setEditingTextValue("")
       setIsLoadingSession(false)
       setIsHydratingSession(false)
       setMessageLimit(INITIAL_MESSAGE_LIMIT)
@@ -3333,7 +3368,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setCanvas(nextCanvas)
       setSelectedLayerId(null)
       setEditingTextLayerId(null)
-      setEditingTextValue("")
       setPaintPreview(null)
       setCanvasTool("select")
       setZoomLevel("fit")
@@ -4056,6 +4090,67 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setPaintPreview(null)
   }
 
+  const startShapeDraft = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!canvas || canvasTool !== "shape") return
+    const point = getCanvasPoint(event)
+    if (!point) return
+    event.preventDefault()
+    event.stopPropagation()
+    stopTextLayerEditing()
+    const draft: ShapeDraft = { start: point, current: point }
+    shapeDraftRef.current = draft
+    setShapeDraft(draft)
+  }
+
+  const updateShapeDraft = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const activeDraft = shapeDraftRef.current
+    if (!activeDraft) return
+    const point = getCanvasPoint(event)
+    if (!point) return
+    const nextDraft: ShapeDraft = { ...activeDraft, current: point }
+    shapeDraftRef.current = nextDraft
+    setShapeDraft(nextDraft)
+  }
+
+  const finishShapeDraft = () => {
+    const activeDraft = shapeDraftRef.current
+    shapeDraftRef.current = null
+    setShapeDraft(null)
+    if (!canvas || !activeDraft) return
+
+    const minX = Math.min(activeDraft.start.x, activeDraft.current.x)
+    const minY = Math.min(activeDraft.start.y, activeDraft.current.y)
+    const maxX = Math.max(activeDraft.start.x, activeDraft.current.x)
+    const maxY = Math.max(activeDraft.start.y, activeDraft.current.y)
+    const rawWidth = maxX - minX
+    const rawHeight = maxY - minY
+    if (rawWidth < 2 || rawHeight < 2) {
+      return
+    }
+
+    const clampedX = clamp(minX, 0, Math.max(0, canvas.width - MIN_LAYER_SIZE))
+    const clampedY = clamp(minY, 0, Math.max(0, canvas.height - MIN_LAYER_SIZE))
+    const maxWidth = Math.max(MIN_LAYER_SIZE, canvas.width - clampedX)
+    const maxHeight = Math.max(MIN_LAYER_SIZE, canvas.height - clampedY)
+    const width = clamp(rawWidth, MIN_LAYER_SIZE, maxWidth)
+    const height = clamp(rawHeight, MIN_LAYER_SIZE, maxHeight)
+    const nextLayer = createShapeLayer(canvas, brushColor, "rect", imageCopy)
+    nextLayer.transform = {
+      ...nextLayer.transform,
+      x: clampedX,
+      y: clampedY,
+      width,
+      height,
+    }
+
+    applyCanvasChange((current) => ({
+      ...current,
+      layers: [...current.layers, { ...nextLayer, z_index: getNextLayerZIndex(current.layers) }],
+    }))
+    setSelectedLayerId(nextLayer.id)
+    setCanvasTool("select")
+  }
+
   const startLayerDrag = (event: ReactMouseEvent<HTMLElement>, layer: ImageAssistantLayer) => {
     if (!canvas || canvasTool !== "select" || !isEditableLayer(layer)) return
     if (editingTextLayerId && editingTextLayerId === layer.id) return
@@ -4084,7 +4179,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setSelectedLayerId(layer.id)
     if (layer.layer_type !== "text") {
       setEditingTextLayerId(null)
-      setEditingTextValue("")
     }
     layerResizeRef.current = {
       layerId: layer.id,
@@ -4095,15 +4189,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
   }
 
-  const addShapeToCanvas = (shapeType: "rect" | "line") => {
-    if (!canvas) return
-    const nextLayer = createShapeLayer(canvas, brushColor, shapeType, imageCopy)
-    applyCanvasChange((current) => ({
-      ...current,
-      layers: [...current.layers, { ...nextLayer, z_index: getNextLayerZIndex(current.layers) }],
-    }))
-    setSelectedLayerId(nextLayer.id)
+  const toggleShapeTool = () => {
     stopTextLayerEditing()
+    setShapeDraft(null)
+    shapeDraftRef.current = null
+    setCanvasTool((current) => (current === "shape" ? "select" : "shape"))
   }
 
   const addTextToCanvas = () => {
@@ -4114,8 +4204,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       layers: [...current.layers, { ...nextLayer, z_index: getNextLayerZIndex(current.layers) }],
     }))
     setSelectedLayerId(nextLayer.id)
+    setShapeDraft(null)
+    shapeDraftRef.current = null
+    setCanvasTool("select")
     setEditingTextLayerId(nextLayer.id)
-    setEditingTextValue(nextLayer.content?.text || "")
   }
 
   const removeSelectedLayer = () => {
@@ -4127,13 +4219,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setSelectedLayerId(null)
     if (editingTextLayerId === selectedLayerId) {
       setEditingTextLayerId(null)
-      setEditingTextValue("")
     }
   }
 
   const updateSelectedLayerColor = (color: string) => {
+    if (!selectedLayerId || !canvas || !canAdjustSelectedLayerColor) return
     setBrushColor(color)
-    if (!selectedLayerId || !canvas) return
 
     applyCanvasChange(
       (current) => ({
@@ -4159,17 +4250,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   const updateTextLayer = (layerId: string, value: string) => {
     if (!canvas) return
-    applyCanvasChange(
-      (current) => ({
-        ...current,
-        layers: current.layers.map((layer) =>
-          layer.id === layerId && layer.layer_type === "text"
-            ? { ...layer, content: { ...(layer.content || {}), text: value } }
-            : layer,
-        ),
-      }),
-      { recordHistory: false },
-    )
+    applyCanvasChange((current) => ({
+      ...current,
+      layers: current.layers.map((layer) =>
+        layer.id === layerId && layer.layer_type === "text"
+          ? { ...layer, content: { ...(layer.content || {}), text: value } }
+          : layer,
+      ),
+    }))
   }
 
   const beginTextLayerEditing = (layer: ImageAssistantLayer) => {
@@ -4177,37 +4265,27 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setSelectedLayerId(layer.id)
     setCanvasTool("select")
     setEditingTextLayerId(layer.id)
-    setEditingTextValue(layer.content?.text || "")
   }
 
   const stopTextLayerEditing = () => {
     setEditingTextLayerId(null)
-    setEditingTextValue("")
+    pendingTextCaretClientRef.current = null
   }
 
   const handleCloseEditor = () => {
     if (isClosingEditorRef.current) return
     isClosingEditorRef.current = true
-    void (async () => {
-      try {
-        const hadPendingPaintStroke = Boolean(paintStrokeRef.current)
-        if (paintStrokeRef.current) {
-          await finishPaintStroke()
-        }
-
-        const latestCanvas = canvasRef.current
-        if (latestCanvas && (dirtyCanvas || hadPendingPaintStroke)) {
-          await persistCurrentCanvas(latestCanvas)
-        }
-      } catch (error) {
-        console.error("image-assistant.close-editor-persist-failed", error)
-      } finally {
-        setMode("chat")
-        isClosingEditorRef.current = false
-      }
-    })().catch((error) => {
-      console.error("image-assistant.close-editor-failed", error)
-    })
+    paintStrokeRef.current = null
+    setPaintPreview(null)
+    setShapeDraft(null)
+    shapeDraftRef.current = null
+    setSelectedLayerId(null)
+    stopTextLayerEditing()
+    setCanvasTool("select")
+    setMode("chat")
+    window.setTimeout(() => {
+      isClosingEditorRef.current = false
+    }, 0)
   }
 
   const renderCanvasLayer = (layer: ImageAssistantLayer) => {
@@ -4244,12 +4322,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     const handlePointerDown = (event: ReactMouseEvent<HTMLDivElement>) => {
       if (isEditingText) {
         event.stopPropagation()
-        return
-      }
-      if (layer.layer_type === "text" && selectedLayerId === layer.id && canvasTool === "select") {
-        event.preventDefault()
-        event.stopPropagation()
-        beginTextLayerEditing(layer)
         return
       }
       handleSelect(event)
@@ -4290,18 +4362,20 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             }
             handlePointerDown(event)
           }}
+          onDoubleClick={(event) => {
+            if (canvasTool !== "select") return
+            event.preventDefault()
+            event.stopPropagation()
+            pendingTextCaretClientRef.current = { x: event.clientX, y: event.clientY }
+            beginTextLayerEditing(layer)
+          }}
           data-testid={`image-text-layer-${layer.id}`}
           data-text-layer-editor={isEditingText ? layer.id : undefined}
           contentEditable={isEditingText}
           suppressContentEditableWarning
-          onInput={(event) => {
+          onBlur={(event) => {
             if (!isEditingText) return
-            const nextText = event.currentTarget.textContent || ""
-            setEditingTextValue(nextText)
-            updateTextLayer(layer.id, nextText)
-          }}
-          onBlur={() => {
-            if (!isEditingText) return
+            updateTextLayer(layer.id, event.currentTarget.textContent || "")
             stopTextLayerEditing()
           }}
           onKeyDown={(event) => {
@@ -4322,7 +4396,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             fontSize: (layer.style?.fontSize || 42) * scale,
           }}
         >
-          {isEditingText ? editingTextValue : layer.content?.text || imageCopy.textFallback}
+          {layer.content?.text || (isEditingText ? "" : imageCopy.textFallback)}
           {resizeHandle}
         </div>
       )
@@ -5008,10 +5082,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         </div>
       </div>
 
-      <Dialog open={mode === "canvas"} onOpenChange={(open) => { if (!open) handleCloseEditor() }}>
+      <Dialog
+        open={mode === "canvas"}
+        modal
+        onOpenChange={(open) => {
+          if (!open) handleCloseEditor()
+        }}
+      >
         <DialogContent
           showCloseButton={false}
-          onInteractOutside={(event) => event.preventDefault()}
           onEscapeKeyDown={(event) => event.preventDefault()}
           className="h-[min(92vh,1040px)] w-[min(96vw,1680px)] max-w-[min(96vw,1680px)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,1680px)]"
         >
@@ -5019,7 +5098,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           <DialogDescription className="sr-only">
             {`${imageCopy.editorTitle}. ${imageCopy.autoSaveHint}`}
           </DialogDescription>
-          <div className="relative grid h-full w-full grid-cols-[minmax(0,1fr)_116px] items-stretch gap-4 overflow-hidden rounded-[32px] border-2 border-border bg-muted/30 p-4 md:gap-5 md:p-5 lg:gap-6 lg:p-6">
+          <div className="relative grid h-full w-full grid-cols-[minmax(0,1fr)_104px] items-stretch gap-4 overflow-hidden rounded-[32px] border-2 border-border bg-muted/30 p-4 md:gap-5 md:p-5 lg:gap-6 lg:p-6">
 
             <div className="relative z-10 col-start-1 row-start-1 min-w-0 overflow-hidden rounded-[28px] border-2 border-border bg-card">
 
@@ -5041,6 +5120,17 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                     }}
                   >
                     {sortedCanvasLayers.map(renderCanvasLayer)}
+                    {canvasTool === "shape" && shapeDraft ? (
+                      <div
+                        className="pointer-events-none absolute rounded-lg border-2 border-primary/85 bg-primary/12"
+                        style={{
+                          left: Math.min(shapeDraft.start.x, shapeDraft.current.x) * scale,
+                          top: Math.min(shapeDraft.start.y, shapeDraft.current.y) * scale,
+                          width: Math.abs(shapeDraft.current.x - shapeDraft.start.x) * scale,
+                          height: Math.abs(shapeDraft.current.y - shapeDraft.start.y) * scale,
+                        }}
+                      />
+                    ) : null}
                     {canvasTool === "brush" || canvasTool === "eraser" ? (
                       <div
                         data-testid="image-paint-overlay"
@@ -5065,6 +5155,16 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           </svg>
                         ) : null}
                       </div>
+                    ) : null}
+                    {canvasTool === "shape" ? (
+                      <div
+                        data-testid="image-shape-overlay"
+                        className="absolute inset-0 cursor-crosshair"
+                        onMouseDown={startShapeDraft}
+                        onMouseMove={updateShapeDraft}
+                        onMouseUp={finishShapeDraft}
+                        onMouseLeave={finishShapeDraft}
+                      />
                     ) : null}
                   </div>
                 ) : (
@@ -5100,91 +5200,91 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             </div>
 
             <div className="relative z-20 col-start-2 row-start-1 flex h-full items-center justify-center">
-              <div className="pointer-events-auto flex h-fit w-[116px] flex-col items-center gap-3 rounded-[28px] border-2 border-border bg-card px-2.5 py-3.5">
-                <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
-                  {dirtyCanvas ? imageCopy.unsaved : imageCopy.synced}
-                </Badge>
-                <div className="flex w-full flex-col items-center gap-2">
-                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                    {imageCopy.toolGroupLabel}
-                  </p>
-                  <Button data-testid="image-select-tool" size="icon" variant={canvasTool === "select" ? "default" : "outline"} onClick={() => { setCanvasTool("select"); setPaintPreview(null) }} title={imageCopy.selectTool} className="h-11 w-11 rounded-full">
-                    <MousePointer2 className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setCanvasTool((current) => (current === "brush" ? "select" : "brush")) }} title={imageCopy.brushTool} className="h-11 w-11 rounded-full">
-                    <Pencil className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setCanvasTool((current) => (current === "eraser" ? "select" : "eraser")) }} title={imageCopy.eraserTool} className="h-11 w-11 rounded-full">
-                    <Eraser className="h-4.5 w-4.5" />
-                  </Button>
-                  <div className="flex flex-col items-center gap-2 rounded-[22px] border-2 border-border bg-background px-2 py-2">
-                    <Palette className="h-3.5 w-3.5 text-primary" />
-                    <input
-                      aria-label={imageCopy.brushColor}
-                      type="color"
-                      value={brushColor}
-                      onChange={(event) => updateSelectedLayerColor(event.target.value)}
-                      className="h-10 w-10 cursor-pointer rounded-full border border-border bg-transparent p-1"
-                    />
+              <div className="pointer-events-auto flex h-full max-h-full w-[104px] flex-col rounded-[24px] border-2 border-border bg-card px-2 py-2.5">
+                <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <Badge variant="outline" className="rounded-full px-2 py-1 text-[10px]">
+                    {dirtyCanvas ? imageCopy.unsaved : imageCopy.synced}
+                  </Badge>
+                  <div className="flex w-full flex-col items-center gap-1.5">
+                    <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                      {imageCopy.toolGroupLabel}
+                    </p>
+                    <Button data-testid="image-select-tool" size="icon" variant={canvasTool === "select" ? "default" : "outline"} onClick={() => { setCanvasTool("select"); setPaintPreview(null); setShapeDraft(null); shapeDraftRef.current = null }} title={imageCopy.selectTool} className="h-10 w-10 rounded-full">
+                      <MousePointer2 className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setShapeDraft(null); shapeDraftRef.current = null; setCanvasTool((current) => (current === "brush" ? "select" : "brush")) }} title={imageCopy.brushTool} className="h-10 w-10 rounded-full">
+                      <Pencil className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setShapeDraft(null); shapeDraftRef.current = null; setCanvasTool((current) => (current === "eraser" ? "select" : "eraser")) }} title={imageCopy.eraserTool} className="h-10 w-10 rounded-full">
+                      <Eraser className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button data-testid="image-shape-tool" size="icon" variant={canvasTool === "shape" ? "default" : "outline"} onClick={toggleShapeTool} title={imageCopy.shapeTool} className="h-10 w-10 rounded-full">
+                      <Square className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button data-testid="image-text-tool" size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-10 w-10 rounded-full">
+                      <Type className="h-4.5 w-4.5" />
+                    </Button>
+                    <div className="flex flex-col items-center gap-1.5 rounded-[18px] border-2 border-border bg-background px-1.5 py-1.5">
+                      <Palette className="h-3.5 w-3.5 text-primary" />
+                      <input
+                        aria-label={imageCopy.brushColor}
+                        type="color"
+                        value={brushColor}
+                        onChange={(event) => updateSelectedLayerColor(event.target.value)}
+                        disabled={!canAdjustSelectedLayerColor}
+                        className={cn(
+                          "h-8 w-8 rounded-full border border-border bg-transparent p-0.5",
+                          canAdjustSelectedLayerColor ? "cursor-pointer" : "cursor-not-allowed opacity-50",
+                        )}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="h-px w-10 bg-border" />
-                <div className="flex w-full flex-col items-center gap-2">
-                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                    {imageCopy.insertGroupLabel}
-                  </p>
-                  <Button data-testid="image-shape-tool" size="icon" variant="outline" onClick={() => addShapeToCanvas("rect")} title={imageCopy.shapeTool} className="h-11 w-11 rounded-full">
-                    <Square className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button data-testid="image-text-tool" size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-11 w-11 rounded-full">
-                    <Type className="h-4.5 w-4.5" />
-                  </Button>
-                </div>
-                <div className="h-px w-10 bg-border" />
-                <div className="flex w-full flex-col items-center gap-2">
-                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                    {imageCopy.historyGroupLabel}
-                  </p>
-                  <Button variant="outline" size="icon" data-testid="image-canvas-undo-button" onClick={undoCanvasChange} disabled={!undoStack.length} title={imageCopy.undo} className="h-11 w-11 rounded-full">
-                    <Undo2 className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button variant="outline" size="icon" data-testid="image-canvas-redo-button" onClick={redoCanvasChange} disabled={!redoStack.length} title={imageCopy.redo} className="h-11 w-11 rounded-full">
-                    <Redo2 className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={removeSelectedLayer} disabled={!selectedLayerId || !selectedLayer || !isEditableLayer(selectedLayer)} title={imageCopy.delete} className="h-11 w-11 rounded-full">
-                    <Trash2 className="h-4.5 w-4.5" />
-                  </Button>
-                </div>
-                <div className="h-px w-10 bg-border" />
-                <div className="flex w-full flex-col items-center gap-2">
-                  <p className="text-[10px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                    {imageCopy.outputGroupLabel}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    data-testid="image-canvas-attach-button"
-                    className="h-11 w-11 rounded-full"
-                    disabled={!canvas}
-                    onClick={() => void handleAttachCurrentCanvas()}
-                    title={extraCopy.addCurrentCanvas}
-                    aria-label={extraCopy.addCurrentCanvas}
-                  >
-                    <Plus className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    data-testid="image-canvas-export-button"
-                    className="h-11 w-11 rounded-full"
-                    onClick={() => void exportCurrent("png")}
-                    title={imageCopy.export}
-                  >
-                    <Download className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" data-testid="image-canvas-close-button" onClick={handleCloseEditor} title={imageCopy.close} className="h-11 w-11 rounded-full">
-                    <X className="h-4.5 w-4.5" />
-                  </Button>
+                  <div className="h-px w-9 bg-border" />
+                  <div className="flex w-full flex-col items-center gap-1.5">
+                    <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                      {imageCopy.historyGroupLabel}
+                    </p>
+                    <Button variant="outline" size="icon" data-testid="image-canvas-undo-button" onClick={undoCanvasChange} disabled={!undoStack.length} title={imageCopy.undo} className="h-10 w-10 rounded-full">
+                      <Undo2 className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button variant="outline" size="icon" data-testid="image-canvas-redo-button" onClick={redoCanvasChange} disabled={!redoStack.length} title={imageCopy.redo} className="h-10 w-10 rounded-full">
+                      <Redo2 className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={removeSelectedLayer} disabled={!selectedLayerId || !selectedLayer || !isEditableLayer(selectedLayer)} title={imageCopy.delete} className="h-10 w-10 rounded-full">
+                      <Trash2 className="h-4.5 w-4.5" />
+                    </Button>
+                  </div>
+                  <div className="h-px w-9 bg-border" />
+                  <div className="flex w-full flex-col items-center gap-1.5 pb-0.5">
+                    <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                      {imageCopy.outputGroupLabel}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      data-testid="image-canvas-attach-button"
+                      className="h-10 w-10 rounded-full"
+                      disabled={!canvas}
+                      onClick={() => void handleAttachCurrentCanvas()}
+                      title={extraCopy.addCurrentCanvas}
+                      aria-label={extraCopy.addCurrentCanvas}
+                    >
+                      <Plus className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      data-testid="image-canvas-export-button"
+                      className="h-10 w-10 rounded-full"
+                      onClick={() => void exportCurrent("png")}
+                      title={imageCopy.export}
+                    >
+                      <Download className="h-4.5 w-4.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" data-testid="image-canvas-close-button" onClick={handleCloseEditor} title={imageCopy.close} className="h-10 w-10 rounded-full">
+                      <X className="h-4.5 w-4.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

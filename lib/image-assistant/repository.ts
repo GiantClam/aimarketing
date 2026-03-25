@@ -10,6 +10,7 @@ import {
   imageDesignVersionCandidates,
   imageDesignVersions,
 } from "@/lib/db/schema-image-assistant"
+import { users } from "@/lib/db/schema"
 import type {
   ImageAssistantAsset,
   ImageAssistantAssetType,
@@ -75,6 +76,11 @@ function sleep(ms: number) {
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message
   return String(error)
+}
+
+type ImageSessionAccessScope = {
+  enterpriseId: number | null
+  isEnterpriseAdmin: boolean
 }
 
 function getCombinedErrorMessage(error: unknown) {
@@ -191,6 +197,35 @@ function toStoredSessionTitle(title: string) {
 function parseDatabaseId(value: string | null | undefined) {
   const parsed = Number.parseInt(String(value || ""), 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+async function resolveImageSessionAccessScope(userId: number): Promise<ImageSessionAccessScope> {
+  const [row] = await withDbRetry("resolve-image-session-access-scope", () =>
+    db
+      .select({
+        enterpriseId: users.enterpriseId,
+        enterpriseRole: users.enterpriseRole,
+        enterpriseStatus: users.enterpriseStatus,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+  )
+
+  const enterpriseId =
+    typeof row?.enterpriseId === "number" && Number.isFinite(row.enterpriseId) && row.enterpriseId > 0
+      ? row.enterpriseId
+      : null
+  const isEnterpriseAdmin = row?.enterpriseRole === "admin" && row?.enterpriseStatus === "active"
+
+  return {
+    enterpriseId,
+    isEnterpriseAdmin: Boolean(isEnterpriseAdmin),
+  }
+}
+
+function buildEnterpriseFilter(column: typeof imageDesignSessions.enterpriseId, enterpriseId: number | null) {
+  return enterpriseId ? eq(column, enterpriseId) : sql`${column} IS NULL`
 }
 
 function parseCursor(value: string | null | undefined): CursorParts | null {
@@ -400,6 +435,7 @@ export async function listImageAssistantSessions(
   limit = 30,
   cursor?: string | null,
 ): Promise<ImageAssistantConversationPage> {
+  const accessScope = await resolveImageSessionAccessScope(userId)
   const safeLimit = Math.max(1, Math.min(limit, 50))
   const parsedCursor = cursor ? /^(\d+):(\d+)$/u.exec(cursor.trim()) : null
   const cursorTimestamp = parsedCursor ? new Date(Number(parsedCursor[1]) * 1000) : null
@@ -411,11 +447,11 @@ export async function listImageAssistantSessions(
           OR (${imageDesignSessions.updatedAt} = ${cursorTimestamp} AND ${imageDesignSessions.id} < ${cursorId})
         )`
       : undefined
-  const baseWhere = and(
-    eq(imageDesignSessions.userId, userId),
-    sql`${imageDesignSessions.title} LIKE ${`${SESSION_PREFIX}%`}`,
-    cursorFilter,
-  )
+  const visibilityFilter =
+    accessScope.isEnterpriseAdmin && accessScope.enterpriseId
+      ? buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId)
+      : and(eq(imageDesignSessions.userId, userId), buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId))
+  const baseWhere = and(visibilityFilter, sql`${imageDesignSessions.title} LIKE ${`${SESSION_PREFIX}%`}`, cursorFilter)
 
   let rows: Array<Record<string, unknown>>
   try {
@@ -479,6 +515,15 @@ export async function listImageAssistantSessions(
 export async function getImageAssistantSession(userId: number, sessionId: string) {
   const parsedId = parseDatabaseId(sessionId)
   if (!parsedId) return null
+  const accessScope = await resolveImageSessionAccessScope(userId)
+  const sessionAccessFilter =
+    accessScope.isEnterpriseAdmin && accessScope.enterpriseId
+      ? and(eq(imageDesignSessions.id, parsedId), buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId))
+      : and(
+          eq(imageDesignSessions.id, parsedId),
+          eq(imageDesignSessions.userId, userId),
+          buildEnterpriseFilter(imageDesignSessions.enterpriseId, accessScope.enterpriseId),
+        )
 
   let rows: Array<Record<string, unknown>>
   try {
@@ -498,7 +543,7 @@ export async function getImageAssistantSession(userId: number, sessionId: string
         })
         .from(imageDesignSessions)
         .leftJoin(imageDesignAssets, eq(imageDesignSessions.coverAssetId, imageDesignAssets.id))
-        .where(and(eq(imageDesignSessions.id, parsedId), eq(imageDesignSessions.userId, userId)))
+        .where(sessionAccessFilter)
         .limit(1),
     )
   } catch (error) {
@@ -521,7 +566,7 @@ export async function getImageAssistantSession(userId: number, sessionId: string
           updatedAt: imageDesignSessions.updatedAt,
         })
         .from(imageDesignSessions)
-        .where(and(eq(imageDesignSessions.id, parsedId), eq(imageDesignSessions.userId, userId)))
+        .where(sessionAccessFilter)
         .limit(1),
     )
   }

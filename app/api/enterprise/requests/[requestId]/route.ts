@@ -86,13 +86,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
       .where(eq(enterpriseJoinRequests.id, requestId))
 
-    await db
-      .update(users)
-      .set({
-        enterpriseStatus: action === "approve" ? "active" : "rejected",
-        updatedAt: new Date(),
+    const targetUserRows = await db
+      .select({
+        enterpriseId: users.enterpriseId,
+        enterpriseStatus: users.enterpriseStatus,
       })
-      .where(and(eq(users.id, joinRequest.userId), eq(users.enterpriseId, joinRequest.enterpriseId)))
+      .from(users)
+      .where(eq(users.id, joinRequest.userId))
+      .limit(1)
+
+    const targetUser = targetUserRows[0]
+    if (!targetUser) {
+      return NextResponse.json({ error: "target user not found" }, { status: 404 })
+    }
+
+    if (action === "approve") {
+      await db
+        .update(users)
+        .set({
+          enterpriseId: joinRequest.enterpriseId,
+          enterpriseRole: "member",
+          enterpriseStatus: "active",
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, joinRequest.userId))
+    } else if (targetUser.enterpriseId === joinRequest.enterpriseId) {
+      await db
+        .update(users)
+        .set({
+          enterpriseStatus: "rejected",
+          updatedAt: new Date(),
+        })
+        .where(and(eq(users.id, joinRequest.userId), eq(users.enterpriseId, joinRequest.enterpriseId)))
+    }
 
     if (action === "approve") {
       const targetPermissions = {
@@ -100,7 +126,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         ...(permissions || {}),
       }
       await upsertPermissions(joinRequest.userId, targetPermissions)
-    } else {
+    } else if (targetUser.enterpriseId === joinRequest.enterpriseId) {
       await upsertPermissions(joinRequest.userId, buildPermissionMap(false))
     }
 

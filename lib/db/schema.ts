@@ -123,6 +123,7 @@ export const writerConversations = pgTable(withPrefix("writer_conversations"), {
   userId: integer("user_id")
     .notNull()
     .references(() => users.id),
+  enterpriseId: integer("enterprise_id").references(() => enterprises.id),
   title: varchar("title", { length: 255 }).notNull(),
   platform: varchar("platform", { length: 32 }).default("wechat").notNull(),
   mode: varchar("mode", { length: 32 }).default("article").notNull(),

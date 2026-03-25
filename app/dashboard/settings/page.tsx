@@ -81,6 +81,16 @@ function formatEnterpriseDifyMessage(error: unknown, fallback: string) {
   return message || fallback
 }
 
+function formatEnterpriseSwitchMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : ""
+  if (message === "enterprise_admin_cannot_switch") return "企业管理员不支持在此处更换绑定企业。"
+  if (message === "enterprise_not_bound") return "当前账号尚未绑定企业，无法执行更换。"
+  if (message === "enterprise_code_required") return "请输入目标企业 ID。"
+  if (message === "enterprise_not_found") return "未找到该企业 ID，请检查后重试。"
+  if (message === "enterprise_already_bound") return "当前账号已绑定该企业，无需重复提交。"
+  return message || fallback
+}
+
 type OverviewMetricProps = {
   icon: LucideIcon
   label: string
@@ -120,6 +130,9 @@ export default function SettingsPage() {
   const [name, setName] = useState("")
   const [saveMessage, setSaveMessage] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+  const [switchEnterpriseCode, setSwitchEnterpriseCode] = useState("")
+  const [switchEnterpriseMessage, setSwitchEnterpriseMessage] = useState("")
+  const [isSwitchingEnterprise, setIsSwitchingEnterprise] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [requests, setRequests] = useState<PendingRequest[]>([])
   const [members, setMembers] = useState<Member[]>([])
@@ -282,6 +295,36 @@ export default function SettingsPage() {
       router.replace("/login")
     } finally {
       setIsLoggingOut(false)
+    }
+  }
+
+  const handleSwitchEnterprise = async () => {
+    const nextCode = switchEnterpriseCode.trim().toLowerCase()
+    if (!nextCode) {
+      setSwitchEnterpriseMessage("请输入目标企业 ID。")
+      return
+    }
+
+    setIsSwitchingEnterprise(true)
+    setSwitchEnterpriseMessage("")
+    try {
+      const response = await fetch("/api/enterprise/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enterpriseCode: nextCode }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(json?.error || "enterprise_switch_failed")
+      }
+
+      await refreshProfile()
+      setSwitchEnterpriseCode("")
+      setSwitchEnterpriseMessage("已提交更换企业申请。审核通过后才会切换企业绑定。")
+    } catch (error) {
+      setSwitchEnterpriseMessage(formatEnterpriseSwitchMessage(error, "提交更换企业申请失败"))
+    } finally {
+      setIsSwitchingEnterprise(false)
     }
   }
 
@@ -560,6 +603,37 @@ export default function SettingsPage() {
                     <div className="grid gap-2"><Label>企业角色</Label><Input value={user?.enterpriseRole || "未知"} disabled /></div>
                     <div className="grid gap-2"><Label>账号状态</Label><Input value={statusText} disabled /></div>
                   </div>
+
+                  {Boolean(user?.enterpriseId) && !isEnterpriseAdmin ? (
+                    <div className="rounded-[20px] border border-border/70 bg-background/70 p-4">
+                      <p className="text-sm font-medium text-foreground">更换企业绑定</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        输入目标企业 ID 后将发起换绑申请。审核通过前，当前企业绑定保持不变。
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-end gap-3">
+                        <div className="grid min-w-[220px] flex-1 gap-2">
+                          <Label htmlFor="switch-enterprise-code">目标企业 ID</Label>
+                          <Input
+                            id="switch-enterprise-code"
+                            value={switchEnterpriseCode}
+                            onChange={(event) => setSwitchEnterpriseCode(event.target.value)}
+                            placeholder="请输入企业 ID"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={handleSwitchEnterprise}
+                          disabled={isSwitchingEnterprise || !switchEnterpriseCode.trim()}
+                          className="rounded-full px-5"
+                        >
+                          {isSwitchingEnterprise ? "提交中..." : "提交更换申请"}
+                        </Button>
+                      </div>
+                      {switchEnterpriseMessage ? (
+                        <p className="mt-3 text-xs text-muted-foreground">{switchEnterpriseMessage}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-wrap items-center gap-3">
                     <Button onClick={handleSaveProfile} disabled={isSaving} className="rounded-full px-5"><Save className="mr-2 h-4 w-4" />{isSaving ? "保存中..." : "保存设置"}</Button>

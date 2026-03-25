@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { writerConversations, writerMessages } from "@/lib/db/schema"
+import { users, writerConversations, writerMessages } from "@/lib/db/schema"
 import {
   normalizeWriterLanguage,
   normalizeWriterMode,
@@ -24,11 +24,13 @@ const DB_RETRY_DELAYS_MS = [250, 750]
 const WRITER_CONVERSATIONS_TABLE = "AI_MARKETING_writer_conversations"
 const WRITER_MESSAGES_TABLE = "AI_MARKETING_writer_messages"
 const WRITER_CONVERSATIONS_UPDATED_INDEX = "AI_MARKETING_writer_conversations_user_updated_idx"
+const WRITER_CONVERSATIONS_ENTERPRISE_UPDATED_INDEX = "AI_MARKETING_writer_conversations_enterprise_updated_idx"
 const WRITER_MESSAGES_ROLE_ID_INDEX = "AI_MARKETING_writer_messages_conversation_role_id_desc_idx"
 
 type WriterConversationRow = {
   id: number
   userId: number
+  enterpriseId: number | null
   title: string
   platform: string
   mode: string
@@ -51,7 +53,9 @@ type WriterSchemaStatus = {
   conversationsTableExists: boolean
   messagesTableExists: boolean
   conversationsUpdatedIndexExists: boolean
+  conversationsEnterpriseUpdatedIndexExists: boolean
   messagesRoleIdIndexExists: boolean
+  hasEnterpriseIdColumn: boolean
   hasPlatformColumn: boolean
   hasModeColumn: boolean
   hasLanguageColumn: boolean
@@ -98,6 +102,11 @@ function toEpochSeconds(value: Date | string | number | null | undefined, fallba
   }
 
   return fallbackSeconds
+}
+
+type WriterAccessScope = {
+  enterpriseId: number | null
+  isEnterpriseAdmin: boolean
 }
 
 function parseTimestampCursor(rawValue: string | null | undefined) {
@@ -152,7 +161,14 @@ async function readWriterSchemaStatus(): Promise<WriterSchemaStatus> {
       to_regclass(${`"${WRITER_CONVERSATIONS_TABLE}"`}) IS NOT NULL AS conversations_table_exists,
       to_regclass(${`"${WRITER_MESSAGES_TABLE}"`}) IS NOT NULL AS messages_table_exists,
       to_regclass(${`"${WRITER_CONVERSATIONS_UPDATED_INDEX}"`}) IS NOT NULL AS conversations_updated_index_exists,
+      to_regclass(${`"${WRITER_CONVERSATIONS_ENTERPRISE_UPDATED_INDEX}"`}) IS NOT NULL AS conversations_enterprise_updated_index_exists,
       to_regclass(${`"${WRITER_MESSAGES_ROLE_ID_INDEX}"`}) IS NOT NULL AS messages_role_id_index_exists,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = ${WRITER_CONVERSATIONS_TABLE}
+          AND column_name = 'enterprise_id'
+      ) AS has_enterprise_id_column,
       EXISTS (
         SELECT 1
         FROM information_schema.columns
@@ -198,7 +214,9 @@ async function readWriterSchemaStatus(): Promise<WriterSchemaStatus> {
     conversationsTableExists: Boolean(row.conversations_table_exists),
     messagesTableExists: Boolean(row.messages_table_exists),
     conversationsUpdatedIndexExists: Boolean(row.conversations_updated_index_exists),
+    conversationsEnterpriseUpdatedIndexExists: Boolean(row.conversations_enterprise_updated_index_exists),
     messagesRoleIdIndexExists: Boolean(row.messages_role_id_index_exists),
+    hasEnterpriseIdColumn: Boolean(row.has_enterprise_id_column),
     hasPlatformColumn: Boolean(row.has_platform_column),
     hasModeColumn: Boolean(row.has_mode_column),
     hasLanguageColumn: Boolean(row.has_language_column),
@@ -213,7 +231,9 @@ function isWriterSchemaReady(status: WriterSchemaStatus) {
     status.conversationsTableExists &&
     status.messagesTableExists &&
     status.conversationsUpdatedIndexExists &&
+    status.conversationsEnterpriseUpdatedIndexExists &&
     status.messagesRoleIdIndexExists &&
+    status.hasEnterpriseIdColumn &&
     status.hasPlatformColumn &&
     status.hasModeColumn &&
     status.hasLanguageColumn &&
@@ -229,6 +249,7 @@ async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
       CREATE TABLE IF NOT EXISTS "AI_MARKETING_writer_conversations" (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+        enterprise_id INTEGER REFERENCES "AI_MARKETING_enterprises"(id) ON DELETE SET NULL,
         title VARCHAR(255) NOT NULL,
         platform VARCHAR(32) NOT NULL DEFAULT 'wechat',
         mode VARCHAR(32) NOT NULL DEFAULT 'article',
@@ -240,6 +261,11 @@ async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
       )
     `)
   } else {
+    if (!status.hasEnterpriseIdColumn) {
+      await db.execute(
+        sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS enterprise_id INTEGER REFERENCES "AI_MARKETING_enterprises"(id) ON DELETE SET NULL`,
+      )
+    }
     if (!status.hasPlatformColumn) {
       await db.execute(sql`ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS platform VARCHAR(32) NOT NULL DEFAULT 'wechat'`)
     }
@@ -261,6 +287,13 @@ async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
     await db.execute(sql`
       CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_conversations_user_updated_idx"
       ON "AI_MARKETING_writer_conversations" (user_id, updated_at DESC, id DESC)
+    `)
+  }
+
+  if (!status.conversationsEnterpriseUpdatedIndexExists) {
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_conversations_enterprise_updated_idx"
+      ON "AI_MARKETING_writer_conversations" (enterprise_id, updated_at DESC, id DESC)
     `)
   }
 
@@ -305,6 +338,36 @@ async function ensureWriterTables() {
   }
 
   await writerTablesReadyPromise
+}
+
+async function resolveWriterAccessScope(userId: number): Promise<WriterAccessScope> {
+  const rows = await withDbRetry("resolve-writer-access-scope", () =>
+    db
+      .select({
+        enterpriseId: users.enterpriseId,
+        enterpriseRole: users.enterpriseRole,
+        enterpriseStatus: users.enterpriseStatus,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+  )
+
+  const row = rows[0]
+  const enterpriseId =
+    typeof row?.enterpriseId === "number" && Number.isFinite(row.enterpriseId) && row.enterpriseId > 0
+      ? row.enterpriseId
+      : null
+  const isEnterpriseAdmin = row?.enterpriseRole === "admin" && row?.enterpriseStatus === "active"
+
+  return {
+    enterpriseId,
+    isEnterpriseAdmin: Boolean(isEnterpriseAdmin),
+  }
+}
+
+function buildWriterEnterpriseFilter(column: typeof writerConversations.enterpriseId, enterpriseId: number | null) {
+  return enterpriseId ? eq(column, enterpriseId) : sql`${column} IS NULL`
 }
 
 function normalizeTitle(title: string) {
@@ -355,19 +418,33 @@ function mapConversation(row: WriterConversationRow): WriterConversationSummary 
   }
 }
 
-export async function getWriterConversation(userId: number, conversationId: string) {
+export async function getWriterConversation(
+  userId: number,
+  conversationId: string,
+  options?: { allowEnterpriseAdminRead?: boolean },
+) {
   await ensureWriterTables()
+  const accessScope = await resolveWriterAccessScope(userId)
 
   const parsedConversationId = Number.parseInt(conversationId, 10)
   if (!Number.isFinite(parsedConversationId) || parsedConversationId <= 0) {
     return null
   }
 
+  const visibilityFilter =
+    options?.allowEnterpriseAdminRead && accessScope.isEnterpriseAdmin && accessScope.enterpriseId
+      ? buildWriterEnterpriseFilter(writerConversations.enterpriseId, accessScope.enterpriseId)
+      : and(
+          eq(writerConversations.userId, userId),
+          buildWriterEnterpriseFilter(writerConversations.enterpriseId, accessScope.enterpriseId),
+        )
+
   const rows = await withDbRetry("require-writer-conversation", () =>
     db
       .select({
         id: writerConversations.id,
         userId: writerConversations.userId,
+        enterpriseId: writerConversations.enterpriseId,
         title: writerConversations.title,
         platform: writerConversations.platform,
         mode: writerConversations.mode,
@@ -378,7 +455,7 @@ export async function getWriterConversation(userId: number, conversationId: stri
         updatedAt: writerConversations.updatedAt,
       })
       .from(writerConversations)
-      .where(and(eq(writerConversations.id, parsedConversationId), eq(writerConversations.userId, userId)))
+      .where(and(eq(writerConversations.id, parsedConversationId), visibilityFilter))
       .limit(1),
   )
 
@@ -400,6 +477,7 @@ export async function createWriterConversation(params: {
   imagesRequested?: boolean
 }) {
   await ensureWriterTables()
+  const accessScope = await resolveWriterAccessScope(params.userId)
 
   const platform = normalizeWriterPlatform(params.platform)
   const mode = normalizeWriterMode(platform, params.mode)
@@ -409,6 +487,7 @@ export async function createWriterConversation(params: {
       .insert(writerConversations)
       .values({
         userId: params.userId,
+        enterpriseId: accessScope.enterpriseId,
         title: buildConversationTitleSafe(params.title || "New article"),
         platform,
         mode,
@@ -453,6 +532,7 @@ export async function appendWriterConversation({
   imagesRequested?: boolean
 }) {
   await ensureWriterTables()
+  const accessScope = await resolveWriterAccessScope(userId)
 
   let targetConversationId = conversationId ?? null
 
@@ -469,6 +549,7 @@ export async function appendWriterConversation({
         .insert(writerConversations)
         .values({
           userId,
+          enterpriseId: accessScope.enterpriseId,
           title: buildConversationTitleSafe(query),
           platform,
           mode,
@@ -548,13 +629,23 @@ export async function listWriterConversations(
   cursor?: string | null,
 ): Promise<WriterConversationPage> {
   await ensureWriterTables()
+  const accessScope = await resolveWriterAccessScope(userId)
 
   const safeLimit = Math.max(1, Math.min(limit, 100))
   const parsedCursor = parseTimestampCursor(cursor)
+  const visibilityFilter =
+    accessScope.isEnterpriseAdmin && accessScope.enterpriseId
+      ? buildWriterEnterpriseFilter(writerConversations.enterpriseId, accessScope.enterpriseId)
+      : and(
+          eq(writerConversations.userId, userId),
+          buildWriterEnterpriseFilter(writerConversations.enterpriseId, accessScope.enterpriseId),
+        )
   const limitedRows = await withDbRetry("list-writer-conversations", () =>
     db
       .select({
         id: writerConversations.id,
+        userId: writerConversations.userId,
+        enterpriseId: writerConversations.enterpriseId,
         title: writerConversations.title,
         platform: writerConversations.platform,
         mode: writerConversations.mode,
@@ -567,7 +658,7 @@ export async function listWriterConversations(
       .from(writerConversations)
       .where(
         and(
-          eq(writerConversations.userId, userId),
+          visibilityFilter,
           sql`${writerConversations.title} LIKE ${`${WRITER_TITLE_PREFIX}%`}`,
           parsedCursor
             ? sql`(
@@ -582,7 +673,7 @@ export async function listWriterConversations(
   )
 
   const visibleRows = limitedRows.slice(0, safeLimit)
-  const data = visibleRows.map((row) => mapConversation({ ...row, userId }))
+  const data = visibleRows.map((row) => mapConversation(row))
   const lastVisibleRow = visibleRows.at(-1)
   const nextCursor =
     limitedRows.length > safeLimit && lastVisibleRow?.updatedAt
@@ -600,7 +691,7 @@ export async function listWriterMessages(
 ): Promise<WriterMessagePage> {
   await ensureWriterTables()
 
-  const conversation = await getWriterConversation(userId, conversationId)
+  const conversation = await getWriterConversation(userId, conversationId, { allowEnterpriseAdminRead: true })
   if (!conversation) {
     return { data: [], limit, has_more: false, next_cursor: null, conversation: null }
   }
