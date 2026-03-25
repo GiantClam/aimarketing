@@ -30,6 +30,12 @@ import type {
   ImageAssistantUsagePresetId,
 } from "@/lib/image-assistant/types"
 
+function parseTimeoutFromEnv(rawValue: string | undefined, fallbackMs: number, minMs = 1_000, maxMs = 120_000) {
+  const parsed = Number.parseInt(rawValue || "", 10)
+  const effective = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs
+  return Math.max(minMs, Math.min(maxMs, effective))
+}
+
 const REQUIRED_BRIEF_FIELDS: ImageAssistantBriefField[] = [
   "usage",
   "orientation",
@@ -42,8 +48,13 @@ const REQUIRED_BRIEF_FIELDS: ImageAssistantBriefField[] = [
 const GUIDED_BRIEF_FIELDS = new Set<ImageAssistantBriefField>(["usage", "orientation", "resolution", "ratio"])
 const BRIEF_PLANNER_MAX_TOKENS = 900
 const BRIEF_PLANNER_GUIDED_MAX_TOKENS = 160
-const BRIEF_PLANNER_TIMEOUT_MS = 10_000
-const BRIEF_PLANNER_GUIDED_TIMEOUT_MS = Number.parseInt(process.env.IMAGE_ASSISTANT_GUIDED_PLANNER_TIMEOUT_MS || "", 10) || 2_500
+const BRIEF_PLANNER_TIMEOUT_MS = parseTimeoutFromEnv(process.env.IMAGE_ASSISTANT_PLANNER_TIMEOUT_MS, 10_000)
+const BRIEF_PLANNER_GUIDED_TIMEOUT_MS = parseTimeoutFromEnv(process.env.IMAGE_ASSISTANT_GUIDED_PLANNER_TIMEOUT_MS, 10_000)
+const BRIEF_PLANNER_PROVIDER_TIMEOUT_MS = parseTimeoutFromEnv(process.env.IMAGE_ASSISTANT_PLANNER_PROVIDER_TIMEOUT_MS, 6_000)
+const BRIEF_PLANNER_GUIDED_PROVIDER_TIMEOUT_MS = parseTimeoutFromEnv(
+  process.env.IMAGE_ASSISTANT_GUIDED_PLANNER_PROVIDER_TIMEOUT_MS,
+  5_000,
+)
 const BRIEF_PLANNER_MAX_MODEL_ATTEMPTS =
   Number.parseInt(process.env.IMAGE_ASSISTANT_PLANNER_MAX_MODEL_ATTEMPTS || "", 10) || 3
 const BRIEF_EXTRACT_SCHEMA_VERSION = "image_assistant_brief_extract.v1"
@@ -259,7 +270,15 @@ function shouldRetryPlannerWithAnotherModel(error: unknown) {
     message.includes("429") ||
     message.includes("model not found") ||
     message.includes("no available distributor") ||
-    message.includes("无可用渠道")
+    message.includes("无可用渠道") ||
+    message.includes("writer_request_timeout") ||
+    message.includes("request_aborted") ||
+    message.includes("etimedout") ||
+    message.includes("timed out") ||
+    message.includes("timeout") ||
+    message.includes("fetch failed") ||
+    message.includes("socket hang up") ||
+    message.includes("econnreset")
   )
 }
 
@@ -1032,91 +1051,102 @@ async function extractBriefWithSchema(input: {
     : IMAGE_ASSISTANT_TEXT_MODEL || IMAGE_ASSISTANT_SKILL_MODEL
   const plannerModels = buildPlannerModelCandidates(plannerPrimaryModel)
   const plannerTimeoutMs = useGuidedPlannerPrompt ? BRIEF_PLANNER_GUIDED_TIMEOUT_MS : BRIEF_PLANNER_TIMEOUT_MS
+  const plannerProviderTimeoutMs = useGuidedPlannerPrompt
+    ? BRIEF_PLANNER_GUIDED_PROVIDER_TIMEOUT_MS
+    : BRIEF_PLANNER_PROVIDER_TIMEOUT_MS
+  const plannerDeadlineAt = Date.now() + plannerTimeoutMs
+  const getRemainingPlannerBudgetMs = () => Math.max(0, plannerDeadlineAt - Date.now())
 
   try {
-    const plannerAbortController = new AbortController()
-    let plannerTimedOut = false
-    const timeoutId = setTimeout(() => {
-      plannerTimedOut = true
-      plannerAbortController.abort()
-    }, plannerTimeoutMs)
     let raw = ""
     let parsed: unknown = null
     let lastPlannerError: unknown = null
-    try {
-      for (let attemptIndex = 0; attemptIndex < plannerModels.length; attemptIndex += 1) {
-        const plannerModel = plannerModels[attemptIndex]
-        parsed = null
-        raw = ""
+    for (let attemptIndex = 0; attemptIndex < plannerModels.length; attemptIndex += 1) {
+      const plannerModel = plannerModels[attemptIndex]
+      parsed = null
+      raw = ""
 
+      const remainingBeforeAttemptMs = getRemainingPlannerBudgetMs()
+      if (remainingBeforeAttemptMs <= 0) {
+        throw new Error("image_assistant_planner_timeout")
+      }
+      const plannerAttemptTimeoutMs = Math.max(1_000, Math.min(plannerProviderTimeoutMs, remainingBeforeAttemptMs))
+
+      try {
         try {
-          try {
-            parsed = await generateStructuredObjectWithWriterModel({
-              systemPrompt,
-              userPrompt,
-              model: plannerModel,
-              toolName: "extract_brief_state",
-              toolDescription: "Extract structured brief delta, missing fields, conflicts, confidence, and readiness.",
-              jsonSchema: BRIEF_EXTRACTION_JSON_SCHEMA,
-              options: {
-                ...textGenerationOptions,
-                signal: plannerAbortController.signal,
-                timeoutMs: plannerTimeoutMs,
-              },
-            })
-          } catch (structuredError) {
-            const shouldFallback = shouldFallbackToTextFromStructuredError(structuredError)
-            console.warn(
-              shouldFallback
-                ? "image-assistant.structured-extract.fallback"
-                : "image-assistant.structured-extract.failed",
-              {
-                model: plannerModel,
-                guided: useGuidedPlannerPrompt,
-                message: structuredError instanceof Error ? structuredError.message : String(structuredError),
-              },
-            )
-            if (!shouldFallback) {
-              throw structuredError
-            }
-            raw = await generateTextWithWriterModel(systemPrompt, userPrompt, plannerModel, {
+          parsed = await generateStructuredObjectWithWriterModel({
+            systemPrompt,
+            userPrompt,
+            model: plannerModel,
+            toolName: "extract_brief_state",
+            toolDescription: "Extract structured brief delta, missing fields, conflicts, confidence, and readiness.",
+            jsonSchema: BRIEF_EXTRACTION_JSON_SCHEMA,
+            options: {
               ...textGenerationOptions,
-              signal: plannerAbortController.signal,
-            })
-            parsed = extractJsonObject(raw)
+              timeoutMs: plannerAttemptTimeoutMs,
+              totalTimeoutMs: remainingBeforeAttemptMs,
+              providerTimeoutMs: plannerAttemptTimeoutMs,
+            },
+          })
+        } catch (structuredError) {
+          const shouldFallback = shouldFallbackToTextFromStructuredError(structuredError)
+          console.warn(
+            shouldFallback
+              ? "image-assistant.structured-extract.fallback"
+              : "image-assistant.structured-extract.failed",
+            {
+              model: plannerModel,
+              guided: useGuidedPlannerPrompt,
+              message: structuredError instanceof Error ? structuredError.message : String(structuredError),
+            },
+          )
+          if (!shouldFallback) {
+            throw structuredError
           }
-        } catch (error) {
-          if (plannerTimedOut) {
+
+          const remainingBeforeTextFallbackMs = getRemainingPlannerBudgetMs()
+          if (remainingBeforeTextFallbackMs <= 0) {
             throw new Error("image_assistant_planner_timeout")
           }
+          const textFallbackTimeoutMs = Math.max(1_000, Math.min(plannerAttemptTimeoutMs, remainingBeforeTextFallbackMs))
 
-          lastPlannerError = error
-          const nextModel = plannerModels[attemptIndex + 1] || null
-          const canRetryWithAnotherModel = Boolean(nextModel && shouldRetryPlannerWithAnotherModel(error))
-
-          if (canRetryWithAnotherModel) {
-            console.warn("image-assistant.text-planner.model-retry", {
-              fromModel: plannerModel,
-              toModel: nextModel,
-              guided: useGuidedPlannerPrompt,
-              message: error instanceof Error ? error.message : String(error),
-            })
-            continue
-          }
-
-          throw error
+          raw = await generateTextWithWriterModel(systemPrompt, userPrompt, plannerModel, {
+            ...textGenerationOptions,
+            timeoutMs: textFallbackTimeoutMs,
+            totalTimeoutMs: remainingBeforeTextFallbackMs,
+            providerTimeoutMs: textFallbackTimeoutMs,
+          })
+          parsed = extractJsonObject(raw)
+        }
+      } catch (error) {
+        if (getRemainingPlannerBudgetMs() <= 0) {
+          throw new Error("image_assistant_planner_timeout")
         }
 
-        if (parsed && typeof parsed === "object") {
-          break
+        lastPlannerError = error
+        const nextModel = plannerModels[attemptIndex + 1] || null
+        const canRetryWithAnotherModel = Boolean(nextModel && shouldRetryPlannerWithAnotherModel(error))
+
+        if (canRetryWithAnotherModel) {
+          console.warn("image-assistant.text-planner.model-retry", {
+            fromModel: plannerModel,
+            toModel: nextModel,
+            guided: useGuidedPlannerPrompt,
+            message: error instanceof Error ? error.message : String(error),
+          })
+          continue
         }
+
+        throw error
       }
 
-      if ((!parsed || typeof parsed !== "object") && lastPlannerError) {
-        throw lastPlannerError
+      if (parsed && typeof parsed === "object") {
+        break
       }
-    } finally {
-      clearTimeout(timeoutId)
+    }
+
+    if ((!parsed || typeof parsed !== "object") && lastPlannerError) {
+      throw lastPlannerError
     }
     if (!parsed || typeof parsed !== "object") return null
     const validation = BriefExtractionOutputSchema.safeParse(parsed)

@@ -1,4 +1,11 @@
-import { claimTaskExecution, createTask, getTaskById, renewTaskLease, updateTaskStatus } from "@/lib/services/tasks"
+import {
+  claimTaskExecution,
+  createTask,
+  getTaskById,
+  listRecoverableTaskIds,
+  renewTaskLease,
+  updateTaskStatus,
+} from "@/lib/services/tasks"
 import { getMessages, sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import {
@@ -74,12 +81,23 @@ const taskRunnerState = globalThis as typeof globalThis & {
 const runningTasks = taskRunnerState.__assistantTaskPromises__ || new Map<number, Promise<void>>()
 taskRunnerState.__assistantTaskPromises__ = runningTasks
 
-const WRITER_TASK_TIMEOUT_MS = 180_000
+function parseTimeoutMs(raw: string | undefined, fallbackMs: number, minMs = 5_000, maxMs = 600_000) {
+  const parsed = Number.parseInt(raw || "", 10)
+  const value = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs
+  return Math.max(minMs, Math.min(maxMs, value))
+}
+
+const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 180_000)
+const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 210_000)
 const ADVISOR_TASK_TIMEOUT_MS = 120_000
 const ASSISTANT_STALE_TASK_MS = 45_000
 const ADVISOR_RECOVERY_CHECK_MS = 12_000
 const ASSISTANT_TASK_LEASE_MS = 30_000
 const ASSISTANT_TASK_HEARTBEAT_MS = 10_000
+const ASSISTANT_TASK_RECOVERY_BATCH_LIMIT = Math.max(
+  1,
+  Math.min(30, Number.parseInt(process.env.ASSISTANT_TASK_RECOVERY_BATCH_LIMIT || "", 10) || 6),
+)
 
 function safeJsonParse(value: string | null | undefined) {
   if (!value) return null
@@ -269,25 +287,29 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
     sizePreset: payload.sizePreset,
     resolution: payload.resolution,
   })
-  const result = await runImageAssistantConversationTurn({
-    userId: payload.userId,
-    enterpriseId: payload.enterpriseId,
-    requestIp: payload.requestIp,
-    sessionId: payload.sessionId,
-    prompt: payload.prompt,
-    brief: payload.brief,
-    taskType: payload.taskType,
-    referenceAssetIds: payload.referenceAssetIds,
-    candidateCount: payload.candidateCount,
-    sizePreset: payload.sizePreset,
-    resolution: payload.resolution,
-    parentVersionId: payload.parentVersionId,
-    extraInstructions: payload.extraInstructions,
-    snapshotAssetId: payload.snapshotAssetId,
-    maskAssetId: payload.maskAssetId,
-    versionMeta: payload.versionMeta,
-    guidedSelection: payload.guidedSelection,
-  })
+  const result = await withTaskTimeout(
+    runImageAssistantConversationTurn({
+      userId: payload.userId,
+      enterpriseId: payload.enterpriseId,
+      requestIp: payload.requestIp,
+      sessionId: payload.sessionId,
+      prompt: payload.prompt,
+      brief: payload.brief,
+      taskType: payload.taskType,
+      referenceAssetIds: payload.referenceAssetIds,
+      candidateCount: payload.candidateCount,
+      sizePreset: payload.sizePreset,
+      resolution: payload.resolution,
+      parentVersionId: payload.parentVersionId,
+      extraInstructions: payload.extraInstructions,
+      snapshotAssetId: payload.snapshotAssetId,
+      maskAssetId: payload.maskAssetId,
+      versionMeta: payload.versionMeta,
+      guidedSelection: payload.guidedSelection,
+    }),
+    IMAGE_ASSISTANT_TASK_TIMEOUT_MS,
+    "image_assistant_task_timeout",
+  )
 
   await updateTaskStatus(taskId, {
     status: "success",
@@ -687,7 +709,42 @@ async function recoverAssistantTask(task: ParsedTaskRow | null) {
 
 export async function getAssistantTask(taskId: number, userId?: number) {
   const task = await getTaskById(taskId, userId)
-  return recoverAssistantTask(parseTask(task))
+  return parseTask(task)
+}
+
+export async function runAssistantTaskRecoveryPass(input: { limit?: number } = {}) {
+  const limit = Math.max(1, Math.min(30, Number.parseInt(String(input.limit || ASSISTANT_TASK_RECOVERY_BATCH_LIMIT), 10) || 1))
+  const candidateIds = await listRecoverableTaskIds(limit, ADVISOR_RECOVERY_CHECK_MS)
+  let launched = 0
+  let inspected = 0
+  let failed = 0
+
+  for (const taskId of candidateIds) {
+    inspected += 1
+    const wasRunningLocally = runningTasks.has(taskId)
+
+    try {
+      const task = parseTask(await getTaskById(taskId))
+      await recoverAssistantTask(task)
+      if (!wasRunningLocally && runningTasks.has(taskId)) {
+        launched += 1
+      }
+    } catch (error) {
+      failed += 1
+      console.error("assistant.task.recovery.failed", {
+        taskId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  return {
+    limit,
+    inspected,
+    launched,
+    failed,
+    candidateIds,
+  }
 }
 
 export async function ensureImageAssistantSessionForTask(params: {

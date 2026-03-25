@@ -28,6 +28,14 @@ const AIBERM_API_BASE = (
 ).replace(/\/$/, "")
 const AIBERM_API_KEY = process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || ""
 const DEFAULT_IMAGE_RESOLUTION: ImageAssistantResolution = "2K"
+const IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS = Math.max(
+  30_000,
+  Number.parseInt(process.env.IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS || "", 10) || 180_000,
+)
+const IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS = Math.max(
+  5_000,
+  Number.parseInt(process.env.IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS || "", 10) || 90_000,
+)
 
 function parseModelList(...values: Array<string | null | undefined>) {
   const result: string[] = []
@@ -132,6 +140,48 @@ export function shouldUseImageAssistantFixtures() {
 
 export function hasImageAssistantAibermKey() {
   return Boolean(AIBERM_API_KEY)
+}
+
+function isAbortLikeError(error: unknown) {
+  return error instanceof Error && (error.name === "AbortError" || error.message === "request_aborted")
+}
+
+function createProviderScopedAbortSignal(parentSignal?: AbortSignal, timeoutMs?: number | null) {
+  const controller = new AbortController()
+  let timedOut = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  const onParentAbort = () => {
+    controller.abort()
+  }
+
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      controller.abort()
+    } else {
+      parentSignal.addEventListener("abort", onParentAbort, { once: true })
+    }
+  }
+
+  if (timeoutMs && timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
+  }
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (parentSignal) {
+        parentSignal.removeEventListener("abort", onParentAbort)
+      }
+    },
+  }
 }
 
 export function getImageAssistantModel(_resolution: ImageAssistantResolution) {
@@ -326,6 +376,8 @@ export async function generateOrEditImages(params: {
 }) {
   const candidateCount = Math.max(1, Math.min(params.candidateCount || 1, 4))
   const aspectRatio = normalizeAspectRatio(params.sizePreset)
+  const providerDeadlineAt = Date.now() + IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS
+  const getRemainingProviderBudgetMs = () => Math.max(0, providerDeadlineAt - Date.now())
 
   if (shouldUseImageAssistantFixtures()) {
     return {
@@ -343,39 +395,73 @@ export async function generateOrEditImages(params: {
     (image): image is InlineReferenceImage => image.kind === "inline",
   )
   const providerPlan = getProviderExecutionPlan({ referenceImages: params.referenceImages })
+
+  async function runProviderWithBudget<T>(
+    provider: Exclude<ImageGenerationProvider, "fixture">,
+    run: (signal: AbortSignal) => Promise<T>,
+  ) {
+    const remainingBudgetMs = getRemainingProviderBudgetMs()
+    if (remainingBudgetMs <= 0) {
+      throw new Error("image_assistant_provider_timeout")
+    }
+
+    const providerTimeoutMs = Math.max(1_000, Math.min(IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS, remainingBudgetMs))
+    const scopedAbort = createProviderScopedAbortSignal(params.signal, providerTimeoutMs)
+
+    try {
+      return await run(scopedAbort.signal)
+    } catch (error) {
+      if (params.signal?.aborted) {
+        throw error
+      }
+      if (scopedAbort.didTimeout() || (isAbortLikeError(error) && !params.signal?.aborted)) {
+        throw new Error(`image_assistant_${provider}_timeout`)
+      }
+      throw error
+    } finally {
+      scopedAbort.cleanup()
+    }
+  }
+
   const { provider: resolvedProvider, result } = await executeImageProviderPlan({
     providerPlan,
     signal: params.signal,
     handlers: {
       gemini: () =>
-        generateOrEditImagesWithGoogle({
-          prompt: params.prompt,
-          resolution: params.resolution,
-          sizePreset: params.sizePreset,
-          referenceImages: fileReferenceImages,
-          signal: params.signal,
-        }),
+        runProviderWithBudget("gemini", (providerSignal) =>
+          generateOrEditImagesWithGoogle({
+            prompt: params.prompt,
+            resolution: params.resolution,
+            sizePreset: params.sizePreset,
+            referenceImages: fileReferenceImages,
+            signal: providerSignal,
+          }),
+        ),
       aiberm: () =>
-        requestImages({
-          prompt: params.prompt,
-          resolution: params.resolution,
-          sizePreset: params.sizePreset,
-          referenceImages: inlineReferenceImages,
-          signal: params.signal,
+        runProviderWithBudget("aiberm", (providerSignal) =>
+          requestImages({
+            prompt: params.prompt,
+            resolution: params.resolution,
+            sizePreset: params.sizePreset,
+            referenceImages: inlineReferenceImages,
+            signal: providerSignal,
+          }),
+        ),
+      openrouter: () =>
+        runProviderWithBudget("openrouter", async (providerSignal) => {
+          const openRouterResult = await generateImagesWithOpenRouter(
+            params.prompt,
+            getOpenRouterImageModel(),
+            aspectRatio,
+            inlineReferenceImages as OpenRouterInlineReferenceImage[],
+            { signal: providerSignal, timeoutMs: Math.max(1_000, getRemainingProviderBudgetMs()) },
+          )
+          return {
+            model: getOpenRouterImageModel(),
+            images: openRouterResult.images,
+            textSummary: openRouterResult.textSummary,
+          }
         }),
-      openrouter: async () => {
-        const openRouterResult = await generateImagesWithOpenRouter(
-          params.prompt,
-          getOpenRouterImageModel(),
-          aspectRatio,
-          inlineReferenceImages as OpenRouterInlineReferenceImage[],
-        )
-        return {
-          model: getOpenRouterImageModel(),
-          images: openRouterResult.images,
-          textSummary: openRouterResult.textSummary,
-        }
-      },
     },
     onProviderFailure: ({ provider, nextProvider, error }) => {
       console.warn(`image-assistant.${provider}.generate.failed`, {

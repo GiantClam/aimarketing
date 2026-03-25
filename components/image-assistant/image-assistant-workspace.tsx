@@ -322,7 +322,11 @@ const IMAGE_ASSISTANT_UPLOAD_ROUTE_MAX_BYTES = 10 * 1024 * 1024
 const IMAGE_ASSISTANT_ACCEPTED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp"])
 const IMAGE_ASSISTANT_CANDIDATE_PREVIEW_CACHE_LIMIT = 24
 const IMAGE_ASSISTANT_TASK_POLL_INTERVAL_MS = 450
-const IMAGE_ASSISTANT_TASK_POLL_MAX_DURATION_MS = 180_000
+const IMAGE_ASSISTANT_TASK_POLL_MAX_DURATION_MS = (() => {
+  const parsed = Number.parseInt(process.env.NEXT_PUBLIC_IMAGE_ASSISTANT_TASK_POLL_MAX_DURATION_MS || "", 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 240_000
+  return Math.max(60_000, Math.min(600_000, parsed))
+})()
 const IMAGE_ASSISTANT_TASK_POLL_MAX_FAILURES = 8
 const MIN_LAYER_SIZE = 18
 const MIN_LINE_LAYER_HEIGHT = 8
@@ -1387,6 +1391,9 @@ function formatImageAssistantErrorMessage(message: string, copy: ImageAssistantC
   }
   if (message === "image_assistant_task_status_unavailable") {
     return "Task status is temporarily unavailable. Please refresh and try again."
+  }
+  if (message === "image_assistant_task_timeout") {
+    return "Image generation task timed out on the server. Please retry with fewer or smaller reference images."
   }
   if (message === "cancelled" || message === "rejected") {
     return "Task was cancelled before completion."
@@ -4303,12 +4310,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       top,
       width,
       height,
+      zIndex: layer.z_index,
       opacity: layer.style?.opacity ?? 1,
       borderRadius: (layer.style?.borderRadius || 0) * scale,
       transform: `rotate(${layer.transform.rotation || 0}deg)`,
     }
     const selectionStyle = isSelected
-      ? { boxShadow: "0 0 0 2px hsl(var(--primary)), 0 0 0 8px hsl(var(--primary) / 0.16)" }
+      ? { boxShadow: "0 0 0 2px rgba(59, 130, 246, 0.95), 0 0 0 8px rgba(59, 130, 246, 0.2)" }
       : undefined
     const handleSelect = (event: ReactMouseEvent<HTMLDivElement>) => {
       if (!canSelect) return
@@ -4320,6 +4328,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       }
     }
     const handlePointerDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (!canSelect) {
+        return
+      }
       if (isEditingText) {
         event.stopPropagation()
         return
@@ -4340,7 +4351,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
     if (layer.layer_type === "background" || layer.layer_type === "image" || layer.layer_type === "paint") {
       return (
-        <div key={layer.id} className="absolute overflow-hidden" style={{ ...commonStyle, ...selectionStyle }} onMouseDown={handlePointerDown}>
+        <div
+          key={layer.id}
+          className="absolute overflow-hidden"
+          style={{ ...commonStyle, ...selectionStyle, pointerEvents: canSelect ? "auto" : "none" }}
+          onMouseDown={handlePointerDown}
+        >
           {layer.asset_url ? <img src={layer.asset_url} alt="" className="h-full w-full object-cover" /> : null}
           {resizeHandle}
         </div>
@@ -4348,6 +4364,18 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
 
     if (layer.layer_type === "text") {
+      const textBoundsStyle = isEditingText
+        ? {
+          border: "2px dashed rgba(59, 130, 246, 0.95)",
+          backgroundColor: "rgba(59, 130, 246, 0.12)",
+        }
+        : isSelected
+          ? {
+            border: "2px solid rgba(59, 130, 246, 0.72)",
+            backgroundColor: "rgba(59, 130, 246, 0.08)",
+          }
+          : undefined
+
       return (
         <div
           key={layer.id}
@@ -4392,6 +4420,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           style={{
             ...commonStyle,
             ...selectionStyle,
+            ...textBoundsStyle,
             color: layer.style?.color || layer.style?.fill || "#111827",
             fontSize: (layer.style?.fontSize || 42) * scale,
           }}

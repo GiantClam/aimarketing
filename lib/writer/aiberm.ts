@@ -123,6 +123,9 @@ export function getOpenRouterImageModel() {
 type AibermTextGenerationOptions = {
   temperature?: number
   maxTokens?: number
+  timeoutMs?: number
+  totalTimeoutMs?: number
+  providerTimeoutMs?: number
   signal?: AbortSignal
 }
 
@@ -130,6 +133,8 @@ type WriterStructuredObjectOptions = {
   temperature?: number
   maxTokens?: number
   timeoutMs?: number
+  totalTimeoutMs?: number
+  providerTimeoutMs?: number
   signal?: AbortSignal
 }
 
@@ -225,6 +230,85 @@ function isAbortLikeError(error: unknown) {
   return error instanceof Error && (error.name === "AbortError" || error.message === "request_aborted")
 }
 
+function isTimeoutLikeError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  const cause = error.cause as { code?: string } | undefined
+  return (
+    message.includes("writer_request_timeout") ||
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("etimedout") ||
+    message.includes("socket hang up") ||
+    cause?.code === "ETIMEDOUT" ||
+    cause?.code === "UND_ERR_CONNECT_TIMEOUT" ||
+    cause?.code === "UND_ERR_SOCKET"
+  )
+}
+
+function toPositiveTimeoutMs(value: unknown) {
+  const parsed = Number.parseInt(String(value ?? ""), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function getRemainingBudgetMs(deadlineAt: number | null) {
+  if (!deadlineAt) return null
+  return Math.max(0, deadlineAt - Date.now())
+}
+
+function resolveProviderCallTimeoutMs(input: {
+  remainingBudgetMs: number | null
+  requestTimeoutMs: number | null
+  providerTimeoutMs: number | null
+}) {
+  const candidates = [input.remainingBudgetMs, input.providerTimeoutMs, input.requestTimeoutMs].filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0,
+  )
+  if (!candidates.length) return null
+  return Math.max(1, Math.min(...candidates))
+}
+
+function createProviderScopedAbortSignal(parentSignal?: AbortSignal, timeoutMs?: number | null) {
+  const controller = new AbortController()
+  let timedOut = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  const onParentAbort = () => {
+    controller.abort()
+  }
+
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      controller.abort()
+    } else {
+      parentSignal.addEventListener("abort", onParentAbort, { once: true })
+    }
+  }
+
+  if (timeoutMs && timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
+  }
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (parentSignal) {
+        parentSignal.removeEventListener("abort", onParentAbort)
+      }
+    },
+  }
+}
+
 export async function generateTextWithAiberm(
   systemPrompt: string,
   userPrompt: string,
@@ -247,7 +331,7 @@ export async function generateTextWithAiberm(
         max_tokens: options.maxTokens ?? 4096,
       }),
     },
-    { attempts: 2, timeoutMs: 90_000 },
+    { attempts: 2, timeoutMs: options.timeoutMs ?? 90_000 },
   )
 
   if (!response.ok) {
@@ -280,7 +364,7 @@ export async function generateTextWithOpenRouter(
         max_tokens: options.maxTokens ?? 4096,
       }),
     },
-    { attempts: 2, timeoutMs: 90_000 },
+    { attempts: 2, timeoutMs: options.timeoutMs ?? 90_000 },
   )
 
   if (!response.ok) {
@@ -297,13 +381,52 @@ export async function generateTextWithWriterModel(
   model: string,
   options: AibermTextGenerationOptions = {},
 ) {
+  const deadlineAt = (() => {
+    const timeoutMs = toPositiveTimeoutMs(options.totalTimeoutMs ?? options.timeoutMs)
+    return timeoutMs ? Date.now() + timeoutMs : null
+  })()
+  const requestTimeoutMs = toPositiveTimeoutMs(options.timeoutMs)
+  const providerTimeoutMs = toPositiveTimeoutMs(options.providerTimeoutMs)
+
+  async function runTextCallWithBudget(run: (scoped: AibermTextGenerationOptions) => Promise<string>) {
+    const remainingBudgetMs = getRemainingBudgetMs(deadlineAt)
+    if (remainingBudgetMs !== null && remainingBudgetMs <= 0) {
+      throw new Error("writer_request_timeout")
+    }
+
+    const callTimeoutMs = resolveProviderCallTimeoutMs({
+      remainingBudgetMs,
+      requestTimeoutMs,
+      providerTimeoutMs,
+    })
+    const scopedAbort = createProviderScopedAbortSignal(options.signal, callTimeoutMs)
+
+    try {
+      return await run({
+        ...options,
+        signal: scopedAbort.signal,
+        ...(callTimeoutMs ? { timeoutMs: callTimeoutMs } : {}),
+      })
+    } catch (error) {
+      if (options.signal?.aborted) {
+        throw error
+      }
+      if (scopedAbort.didTimeout() || isTimeoutLikeError(error)) {
+        throw new Error("writer_request_timeout")
+      }
+      throw error
+    } finally {
+      scopedAbort.cleanup()
+    }
+  }
+
   let lastError: unknown = null
 
   if (hasAibermApiKey()) {
     try {
-      return await generateTextWithAiberm(systemPrompt, userPrompt, model, options)
+      return await runTextCallWithBudget((scoped) => generateTextWithAiberm(systemPrompt, userPrompt, model, scoped))
     } catch (error) {
-      if (isAbortLikeError(error)) {
+      if (options.signal?.aborted && isAbortLikeError(error)) {
         throw error
       }
       lastError = error
@@ -316,9 +439,11 @@ export async function generateTextWithWriterModel(
 
   if (hasOpenRouterApiKey()) {
     try {
-      return await generateTextWithOpenRouter(systemPrompt, userPrompt, model || OPENROUTER_TEXT_MODEL, options)
+      return await runTextCallWithBudget((scoped) =>
+        generateTextWithOpenRouter(systemPrompt, userPrompt, model || OPENROUTER_TEXT_MODEL, scoped),
+      )
     } catch (error) {
-      if (isAbortLikeError(error)) {
+      if (options.signal?.aborted && isAbortLikeError(error)) {
         throw error
       }
       lastError = error
@@ -419,13 +544,55 @@ async function generateStructuredObjectWithOpenRouter(params: WriterStructuredOb
 }
 
 export async function generateStructuredObjectWithWriterModel(params: WriterStructuredObjectParams) {
+  const deadlineAt = (() => {
+    const timeoutMs = toPositiveTimeoutMs(params.options?.totalTimeoutMs ?? params.options?.timeoutMs)
+    return timeoutMs ? Date.now() + timeoutMs : null
+  })()
+  const requestTimeoutMs = toPositiveTimeoutMs(params.options?.timeoutMs)
+  const providerTimeoutMs = toPositiveTimeoutMs(params.options?.providerTimeoutMs)
+
+  async function runStructuredCallWithBudget(run: (scoped: WriterStructuredObjectParams) => Promise<unknown>) {
+    const remainingBudgetMs = getRemainingBudgetMs(deadlineAt)
+    if (remainingBudgetMs !== null && remainingBudgetMs <= 0) {
+      throw new Error("writer_request_timeout")
+    }
+
+    const callTimeoutMs = resolveProviderCallTimeoutMs({
+      remainingBudgetMs,
+      requestTimeoutMs,
+      providerTimeoutMs,
+    })
+    const scopedAbort = createProviderScopedAbortSignal(params.options?.signal, callTimeoutMs)
+
+    try {
+      return await run({
+        ...params,
+        options: {
+          ...(params.options || {}),
+          signal: scopedAbort.signal,
+          ...(callTimeoutMs ? { timeoutMs: callTimeoutMs } : {}),
+        },
+      })
+    } catch (error) {
+      if (params.options?.signal?.aborted) {
+        throw error
+      }
+      if (scopedAbort.didTimeout() || isTimeoutLikeError(error)) {
+        throw new Error("writer_request_timeout")
+      }
+      throw error
+    } finally {
+      scopedAbort.cleanup()
+    }
+  }
+
   let lastError: unknown = null
 
   if (hasAibermApiKey()) {
     try {
-      return await generateStructuredObjectWithAiberm(params)
+      return await runStructuredCallWithBudget(generateStructuredObjectWithAiberm)
     } catch (error) {
-      if (isAbortLikeError(error)) {
+      if (params.options?.signal?.aborted && isAbortLikeError(error)) {
         throw error
       }
       lastError = error
@@ -438,12 +605,14 @@ export async function generateStructuredObjectWithWriterModel(params: WriterStru
 
   if (hasOpenRouterApiKey()) {
     try {
-      return await generateStructuredObjectWithOpenRouter({
-        ...params,
-        model: params.model || OPENROUTER_TEXT_MODEL,
-      })
+      return await runStructuredCallWithBudget((scoped) =>
+        generateStructuredObjectWithOpenRouter({
+          ...scoped,
+          model: scoped.model || OPENROUTER_TEXT_MODEL,
+        }),
+      )
     } catch (error) {
-      if (isAbortLikeError(error)) {
+      if (params.options?.signal?.aborted && isAbortLikeError(error)) {
         throw error
       }
       lastError = error
@@ -536,6 +705,7 @@ export async function generateImagesWithOpenRouter(
   model = OPENROUTER_IMAGE_MODEL,
   aspectRatio = "16:9",
   referenceImages: OpenRouterInlineReferenceImage[] = [],
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ) {
   const content: OpenRouterMessageContentPart[] = [
     {
@@ -555,6 +725,7 @@ export async function generateImagesWithOpenRouter(
     {
       method: "POST",
       headers: buildOpenRouterHeaders(),
+      signal: options.signal,
       body: JSON.stringify({
         model,
         modalities: ["image", "text"],
@@ -569,7 +740,7 @@ export async function generateImagesWithOpenRouter(
         },
       }),
     },
-    { attempts: 2, timeoutMs: 180_000 },
+    { attempts: 2, timeoutMs: options.timeoutMs ?? 180_000 },
   )
 
   if (!response.ok) {

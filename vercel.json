@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/assistant-task-runner",
+      "schedule": "* * * * *"
+    }
+  ]
+}

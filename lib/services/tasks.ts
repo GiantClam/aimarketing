@@ -196,6 +196,34 @@ export async function getTaskById(taskId: number, userId?: number) {
   return rows[0] || null
 }
 
+export async function listRecoverableTaskIds(limit = 6, staleAfterMs = 45_000) {
+  const normalizedLimit = Math.max(1, Math.min(limit, 50))
+  const normalizedStaleAfterMs = Math.max(1_000, staleAfterMs)
+  const result = await withTaskDbRetry("list-recoverable-task-ids", () =>
+    db.execute(sql`
+      SELECT id
+      FROM "AI_MARKETING_tasks"
+      WHERE status = 'pending'
+         OR (
+           status = 'running'
+           AND (
+             lease_expires_at IS NULL
+             OR lease_expires_at <= NOW()
+             OR updated_at <= NOW() - ${msToPostgresInterval(normalizedStaleAfterMs)}
+           )
+         )
+      ORDER BY
+        CASE WHEN status = 'pending' THEN 0 ELSE 1 END ASC,
+        updated_at ASC
+      LIMIT ${normalizedLimit}
+    `),
+  )
+
+  return result.rows
+    .map((row) => Number((row as { id?: unknown }).id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+}
+
 export async function getConnectionById(connectionId: number, userId?: number) {
   const rows = await withTaskDbRetry("get-connection-by-id", () =>
     db

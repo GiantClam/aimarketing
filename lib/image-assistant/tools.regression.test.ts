@@ -18,6 +18,7 @@ let structuredCalls = 0
 let textCalls = 0
 let structuredShouldThrow = false
 let structuredFailFirstCallWithUserNotFound = false
+let structuredFailFirstCallWithTimeout = false
 let plannerModelHistory: string[] = []
 let mockedPlannerResponse = JSON.stringify({
   brief_delta: {
@@ -46,6 +47,9 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         plannerModelHistory.push(`structured:${params?.model || ""}`)
         if (structuredFailFirstCallWithUserNotFound && structuredCalls === 1) {
           throw new Error("User not found.")
+        }
+        if (structuredFailFirstCallWithTimeout && structuredCalls === 1) {
+          throw new Error("writer_request_timeout")
         }
         if (structuredShouldThrow) {
           throw new Error("tool not supported")
@@ -84,6 +88,7 @@ test.beforeEach(() => {
   textCalls = 0
   structuredShouldThrow = false
   structuredFailFirstCallWithUserNotFound = false
+  structuredFailFirstCallWithTimeout = false
   plannerModelHistory = []
   mockedPlannerResponse = JSON.stringify({
     brief_delta: {
@@ -172,6 +177,34 @@ test("falls back to text JSON extraction when structured tool-call is unsupporte
 
 test("planner retries with another model when first planner model returns user not found", async () => {
   structuredFailFirstCallWithUserNotFound = true
+  const result = await planImageAssistantTurn({
+    prompt: "Create a website homepage image for an AI workflow launch",
+    currentBrief: {
+      usage_preset: "website_banner",
+      usage_label: "Website banner",
+      orientation: "landscape",
+      resolution: "2K",
+      size_preset: "16:9",
+      ratio_confirmed: true,
+    },
+    previousState: null,
+    taskType: "generate",
+    sizePreset: "16:9",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  const structuredModels = plannerModelHistory
+    .filter((entry) => entry.startsWith("structured:"))
+    .map((entry) => entry.replace("structured:", ""))
+  assert.ok(structuredCalls >= 2)
+  assert.ok(new Set(structuredModels).size >= 2)
+  assert.equal(result.orchestration.planner_strategy, "text_model")
+  assert.equal(result.orchestration.ready_for_generation, true)
+})
+
+test("planner retries with another model when first planner model times out", async () => {
+  structuredFailFirstCallWithTimeout = true
   const result = await planImageAssistantTurn({
     prompt: "Create a website homepage image for an AI workflow launch",
     currentBrief: {
