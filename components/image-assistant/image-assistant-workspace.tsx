@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useQueryClient } from "@tanstack/react-query"
 import {
   Download,
-  Eye,
   Eraser,
   ImageIcon,
+  Link2,
   Loader2,
   MousePointer2,
   Palette,
@@ -110,7 +110,7 @@ type PendingAttachment = {
   originalFileSize: number
   uploadFileSize: number
   transportOptimized: boolean
-  source: "upload" | "canvas"
+  source: "upload" | "canvas" | "generated"
   referenceRole: "subject"
   assetId?: string | null
   assetType?: "reference" | "canvas_snapshot"
@@ -1347,6 +1347,12 @@ function formatPendingAttachmentLabel(attachment: PendingAttachment, copy: Image
   return attachment.source === "canvas" ? copy.canvasResult : copy.pendingReference
 }
 
+function releaseAttachmentPreviewUrl(url: string) {
+  if (url.startsWith("blob:")) {
+    URL.revokeObjectURL(url)
+  }
+}
+
 function isAbortError(error: unknown) {
   return error instanceof DOMException
     ? error.name === "AbortError"
@@ -1506,15 +1512,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       attachmentLimitReached: `You can attach up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} images in one request.`,
       dragDropHint: "Drop images here to attach them to the conversation.",
       dragDropActiveHint: `Release to attach up to ${IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS} images.`,
-      previewImage: "Preview image",
-      exportImage: "Export image",
-      editImage: "Open refine editor",
-      addAsAttachment: "Add as attachment",
+      previewImage: isEnglish ? "Preview image" : "预览图片",
+      exportImage: isEnglish ? "Export image" : "导出图片",
+      editImage: isEnglish ? "Open refine editor" : "打开精修编辑器",
+      exportAction: isEnglish ? "Export" : "导出",
+      editAction: isEnglish ? "Refine" : "精修",
+      addAsAttachment: isEnglish ? "Reference" : "引用",
       addCurrentCanvas: "Add current image to attachments",
-      clickImageToPreview: "Click the image to preview it.",
-      candidateActionsHint: "Preview on image click. Use the actions below for export, refine, or attach.",
+      clickImageToPreview: isEnglish ? "Click the image to preview it." : "点击图片仅预览。",
+      candidateActionsHint: isEnglish
+        ? "Preview by clicking the image. The right-side actions are export, refine, and reference."
+        : "点击图片可预览，右侧按钮用于导出、精修和引用。",
     }),
-    [],
+    [isEnglish],
   )
   const chatComposerCopy = useMemo(
     () => ({
@@ -2670,7 +2680,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setPendingAttachments((current) => {
       const target = current.find((attachment) => attachment.id === attachmentId)
       if (target) {
-        URL.revokeObjectURL(target.previewUrl)
+        releaseAttachmentPreviewUrl(target.previewUrl)
         attachmentPreviewUrlsRef.current.delete(target.previewUrl)
       }
       attachmentUploadPromisesRef.current.delete(attachmentId)
@@ -2681,7 +2691,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const _clearPendingAttachments = useCallback(() => {
     setPendingAttachments((current) => {
       current.forEach((attachment) => {
-        URL.revokeObjectURL(attachment.previewUrl)
+        releaseAttachmentPreviewUrl(attachment.previewUrl)
         attachmentPreviewUrlsRef.current.delete(attachment.previewUrl)
         attachmentUploadPromisesRef.current.delete(attachment.id)
       })
@@ -2702,7 +2712,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   const releasePendingAttachmentPreviews = useCallback((attachments: PendingAttachment[]) => {
     attachments.forEach((attachment) => {
-      URL.revokeObjectURL(attachment.previewUrl)
+      releaseAttachmentPreviewUrl(attachment.previewUrl)
       attachmentPreviewUrlsRef.current.delete(attachment.previewUrl)
       attachmentUploadPromisesRef.current.delete(attachment.id)
     })
@@ -2730,7 +2740,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       current
         .filter((item) => item.source === "canvas")
         .forEach((item) => {
-          URL.revokeObjectURL(item.previewUrl)
+          releaseAttachmentPreviewUrl(item.previewUrl)
           attachmentPreviewUrlsRef.current.delete(item.previewUrl)
           attachmentUploadPromisesRef.current.delete(item.id)
         })
@@ -3500,9 +3510,53 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
 
   const addImageSourceToComposer = useCallback(
-    async (src: string, fileStem: string, mimeType?: string | null) => {
+    async (
+      src: string,
+      fileStem: string,
+      mimeType?: string | null,
+      options?: {
+        existingAssetId?: string | null
+        width?: number | null
+        height?: number | null
+        fileSize?: number | null
+      },
+    ) => {
       if (pendingAttachments.length >= IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS) {
         setJobError(extraCopy.attachmentLimitReached)
+        return
+      }
+
+      const extension = guessImageFileExtension(mimeType, src)
+      const timestamp = Date.now()
+      if (options?.existingAssetId) {
+        const previewImageAsset = await loadImageForCanvas(src).catch(() => null)
+        const width = options.width || previewImageAsset?.naturalWidth || previewImageAsset?.width || 0
+        const height = options.height || previewImageAsset?.naturalHeight || previewImageAsset?.height || 0
+        const knownFileSize = Math.max(0, Number(options.fileSize || 0))
+        const referenceStub = new File([], `${fileStem}-${timestamp}.${extension}`, {
+          type: mimeType || "image/png",
+        })
+
+        setPendingAttachments((current) => [
+          ...current,
+          {
+            id: `pending-${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+            file: referenceStub,
+            previewUrl: src,
+            previewWidth: width || undefined,
+            previewHeight: height || undefined,
+            width: width || 0,
+            height: height || 0,
+            originalFileSize: knownFileSize,
+            uploadFileSize: knownFileSize,
+            transportOptimized: false,
+            source: "generated",
+            referenceRole: "subject",
+            assetId: options.existingAssetId,
+            assetType: "reference",
+          } satisfies PendingAttachment,
+        ].slice(0, IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS))
+        setJobError(null)
         return
       }
 
@@ -3515,11 +3569,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       }
 
       const blob = await response.blob()
-      const extension = guessImageFileExtension(blob.type || mimeType, src)
-      const nextFile = new File([blob], `${fileStem}-${Date.now()}.${extension}`, {
+      const nextFile = new File([blob], `${fileStem}-${timestamp}.${extension}`, {
         type: blob.type || mimeType || "image/png",
       })
-      const previewUrl = URL.createObjectURL(nextFile)
+      const optimized = await losslessOptimizeUploadFile(nextFile)
+      const previewUrl = URL.createObjectURL(optimized.file)
       attachmentPreviewUrlsRef.current.add(previewUrl)
 
       const previewImageAsset = await loadImageForCanvas(previewUrl).catch(() => null)
@@ -3529,16 +3583,16 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setPendingAttachments((current) => [
         ...current,
         {
-          id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          file: nextFile,
+          id: `pending-${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+          file: optimized.file,
           previewUrl,
           previewWidth: width || undefined,
           previewHeight: height || undefined,
           width: width || 0,
           height: height || 0,
-          originalFileSize: nextFile.size,
-          uploadFileSize: nextFile.size,
-          transportOptimized: false,
+          originalFileSize: optimized.originalFileSize,
+          uploadFileSize: optimized.uploadFileSize,
+          transportOptimized: optimized.transportOptimized,
           source: "upload",
           referenceRole: "subject",
           assetType: "reference",
@@ -4672,67 +4726,75 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                     </div>
                                                   </button>
                                                   <div className="space-y-2 px-3 py-3">
-                                                    <p className="text-[11px] text-muted-foreground">{extraCopy.clickImageToPreview}</p>
-                                                    <div className="flex items-center gap-1.5">
-                                                      <Button
-                                                        size="icon"
-                                                        type="button"
-                                                        variant="outline"
-                                                        data-testid={`image-export-candidate-${candidate.id}`}
-                                                        className="h-8 w-8 rounded-full"
-                                                        title={extraCopy.exportImage}
-                                                        aria-label={extraCopy.exportImage}
-                                                        onClick={() => {
-                                                          void (async () => {
-                                                            const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
-                                                            if (!previewSrc) return
-                                                            await exportImageSource(previewSrc, "image-design-candidate")
-                                                          })().catch((error) => {
-                                                            console.error("image-assistant.candidate-export-failed", error)
-                                                            const nextMessage = error instanceof Error ? error.message : ""
-                                                            setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
-                                                          })
-                                                        }}
-                                                      >
-                                                        <Download className="h-3.5 w-3.5" />
-                                                      </Button>
-                                                      <Button
-                                                        size="icon"
-                                                        type="button"
-                                                        variant="outline"
-                                                        data-testid={`image-open-canvas-${candidate.id}`}
-                                                        className="h-8 w-8 rounded-full"
-                                                        title={extraCopy.editImage}
-                                                        aria-label={extraCopy.editImage}
-                                                        onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
-                                                      >
-                                                        <Pencil className="h-3.5 w-3.5" />
-                                                      </Button>
-                                                      <Button
-                                                        size="icon"
-                                                        type="button"
-                                                        variant="outline"
-                                                        data-testid={`image-attach-candidate-${candidate.id}`}
-                                                        className="h-8 w-8 rounded-full"
-                                                        title={extraCopy.addAsAttachment}
-                                                        aria-label={extraCopy.addAsAttachment}
-                                                        onClick={() => {
-                                                          void (async () => {
-                                                            const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
-                                                            if (!previewSrc) return
-                                                            await addImageSourceToComposer(previewSrc, "image-design-attachment")
-                                                          })().catch((error) => {
-                                                            console.error("image-assistant.candidate-attach-failed", error)
-                                                            const nextMessage = error instanceof Error ? error.message : ""
-                                                            setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
-                                                          })
-                                                        }}
-                                                      >
-                                                        <Plus className="h-3.5 w-3.5" />
-                                                      </Button>
-                                                      <div className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 px-2 py-1 text-[10px] text-muted-foreground">
-                                                        <Eye className="h-3 w-3" />
-                                                        {extraCopy.previewImage}
+                                                    <div className="flex items-center justify-between gap-2">
+                                                      <p className="min-w-0 flex-1 text-[11px] text-muted-foreground">{extraCopy.clickImageToPreview}</p>
+                                                      <div className="ml-auto flex items-center gap-1.5">
+                                                        <Button
+                                                          size="sm"
+                                                          type="button"
+                                                          variant="outline"
+                                                          data-testid={`image-export-candidate-${candidate.id}`}
+                                                          className="h-8 rounded-full px-2.5"
+                                                          title={extraCopy.exportImage}
+                                                          aria-label={extraCopy.exportImage}
+                                                          onClick={() => {
+                                                            void (async () => {
+                                                              const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                              if (!previewSrc) return
+                                                              await exportImageSource(previewSrc, "image-design-candidate")
+                                                            })().catch((error) => {
+                                                              console.error("image-assistant.candidate-export-failed", error)
+                                                              const nextMessage = error instanceof Error ? error.message : ""
+                                                              setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
+                                                            })
+                                                          }}
+                                                        >
+                                                          <Download className="mr-1 h-3.5 w-3.5" />
+                                                          <span className="text-[11px]">{extraCopy.exportAction}</span>
+                                                        </Button>
+                                                        <Button
+                                                          size="sm"
+                                                          type="button"
+                                                          variant="outline"
+                                                          data-testid={`image-open-canvas-${candidate.id}`}
+                                                          className="h-8 rounded-full px-2.5"
+                                                          title={extraCopy.editImage}
+                                                          aria-label={extraCopy.editImage}
+                                                          onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
+                                                        >
+                                                          <Pencil className="mr-1 h-3.5 w-3.5" />
+                                                          <span className="text-[11px]">{extraCopy.editAction}</span>
+                                                        </Button>
+                                                        <Button
+                                                          size="sm"
+                                                          type="button"
+                                                          variant="outline"
+                                                          data-testid={`image-attach-candidate-${candidate.id}`}
+                                                          className="h-8 rounded-full px-2.5"
+                                                          title={extraCopy.addAsAttachment}
+                                                          aria-label={extraCopy.addAsAttachment}
+                                                          onClick={() => {
+                                                            void (async () => {
+                                                              const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                              if (!previewSrc) return
+                                                              const candidateAsset =
+                                                                detail?.assets.find((asset) => asset.id === candidate.asset_id) || null
+                                                              await addImageSourceToComposer(previewSrc, "image-design-attachment", candidateAsset?.mime_type || null, {
+                                                                existingAssetId: candidate.asset_id,
+                                                                width: candidateAsset?.width || null,
+                                                                height: candidateAsset?.height || null,
+                                                                fileSize: candidateAsset?.file_size || null,
+                                                              })
+                                                            })().catch((error) => {
+                                                              console.error("image-assistant.candidate-attach-failed", error)
+                                                              const nextMessage = error instanceof Error ? error.message : ""
+                                                              setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
+                                                            })
+                                                          }}
+                                                        >
+                                                          <Link2 className="mr-1 h-3.5 w-3.5" />
+                                                          <span className="text-[11px]">{extraCopy.addAsAttachment}</span>
+                                                        </Button>
                                                       </div>
                                                     </div>
                                                   </div>
