@@ -182,3 +182,88 @@ test("managed slot-only markdown still resolves into placeholder image lines", (
   assert.equal(extracted[0]?.id, "cover")
   assert.equal(extracted[0]?.status, "loading")
 })
+
+test("managed blocks with existing image URLs are replaced by placeholders during pending regeneration", () => {
+  const markdownWithExistingImages = [
+    "<!-- writer-asset-slot:start:cover -->",
+    "![Cover](https://cdn.example.com/cover-old.png)",
+    "<!-- writer-asset-slot:end:cover -->",
+    "",
+    "## Section",
+    "",
+    "Body paragraph.",
+    "",
+    "<!-- writer-asset-slot:start:inline-1 -->",
+    "![Inline Image 1](https://cdn.example.com/inline-1-old.png)",
+    "<!-- writer-asset-slot:end:inline-1 -->",
+  ].join("\n")
+
+  const pendingAssets: WriterAsset[] = [
+    {
+      id: "cover",
+      label: "Cover",
+      title: "Cover image",
+      prompt: "cover prompt",
+      url: "",
+      status: "loading",
+      provider: "loading",
+    },
+    {
+      id: "inline-1",
+      label: "Inline Image 1",
+      title: "Inline image 1",
+      prompt: "inline prompt",
+      url: "",
+      status: "loading",
+      provider: "loading",
+    },
+  ]
+
+  const resolved = resolveWriterAssetMarkdown(markdownWithExistingImages, pendingAssets, "wechat", "article")
+  const extracted = extractWriterAssetsFromMarkdown(resolved, "wechat", "article")
+
+  assert.match(resolved, /!\[Cover\]\(writer-asset:\/\/cover\)/)
+  assert.match(resolved, /!\[Inline Image 1\]\(writer-asset:\/\/inline-1\)/)
+  assert.doesNotMatch(resolved, /https:\/\/cdn\.example\.com\/cover-old\.png/)
+  assert.doesNotMatch(resolved, /https:\/\/cdn\.example\.com\/inline-1-old\.png/)
+  assert.deepEqual(
+    extracted.map((asset) => ({ id: asset.id, status: asset.status, url: asset.url })),
+    pendingAssets.map((asset) => ({ id: asset.id, status: "loading", url: "" })),
+  )
+})
+
+test("extra generated assets are not appended to article tail when no slot exists", () => {
+  const markdown = [
+    "# Growth memo",
+    "",
+    "Short introduction paragraph for a concise draft.",
+    "",
+    "Another short paragraph.",
+  ].join("\n")
+  const assets: WriterAsset[] = [
+    {
+      id: "cover",
+      label: "Cover",
+      title: "Cover image",
+      prompt: "cover prompt",
+      url: "https://cdn.example.com/cover.png",
+      status: "ready",
+      provider: "gemini",
+    },
+    {
+      id: "inline-1",
+      label: "Inline Image 1",
+      title: "Inline image 1",
+      prompt: "inline prompt",
+      url: "https://cdn.example.com/inline-1.png",
+      status: "ready",
+      provider: "gemini",
+    },
+  ]
+
+  const resolved = resolveWriterAssetMarkdown(markdown, assets, "wechat", "article")
+  assert.match(resolved, /writer-asset-slot:start:cover/)
+  assert.match(resolved, /https:\/\/cdn\.example\.com\/cover\.png/)
+  assert.doesNotMatch(resolved, /writer-asset-slot:start:inline-1/)
+  assert.doesNotMatch(resolved, /https:\/\/cdn\.example\.com\/inline-1\.png/)
+})

@@ -9,6 +9,10 @@ const AIBERM_IMAGE_API_BASE = (
 const AIBERM_API_KEY = process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || ""
 const AIBERM_IMAGE_SYSTEM_INSTRUCTION = process.env.AIBERM_IMAGE_SYSTEM_INSTRUCTION || "You are a helpful assistant."
 const AIBERM_IMAGE_SIZE = process.env.AIBERM_IMAGE_SIZE || "2K"
+const AIBERM_IMAGE_TIMEOUT_MS = Math.min(
+  300_000,
+  Math.max(60_000, Number.parseInt(process.env.WRITER_AIBERM_IMAGE_TIMEOUT_MS || "180000", 10) || 180_000),
+)
 const OPENROUTER_API_BASE = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "")
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ""
 const OPENROUTER_TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-3-flash-preview"
@@ -516,7 +520,7 @@ export async function generateImageWithAiberm(prompt: string, model: string, asp
         },
       }),
     },
-    { attempts: 1, timeoutMs: 120_000 },
+    { attempts: 1, timeoutMs: AIBERM_IMAGE_TIMEOUT_MS },
   )
 
   if (!response.ok) {

@@ -36,6 +36,36 @@ const WRITER_PROMPT_SIMILARITY_MAX = Math.max(
   Math.min(1, Number.parseFloat(process.env.WRITER_PROMPT_SIMILARITY_MAX || "0.82") || 0.82),
 )
 const WRITER_ENFORCE_PROMPT_DIVERSITY = process.env.WRITER_ENFORCE_PROMPT_DIVERSITY !== "false"
+type WriterImageProvider = "aiberm" | "gemini" | "openrouter"
+
+function buildWriterImageProviderPlan() {
+  const plan: WriterImageProvider[] = []
+  if (hasAibermApiKey()) {
+    plan.push("aiberm")
+  }
+  if (hasOpenRouterApiKey()) {
+    plan.push("openrouter")
+  }
+  if (GOOGLE_IMAGE_API_KEY) {
+    plan.push("gemini")
+  }
+  return plan
+}
+
+function isTemporaryProviderError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("fetch failed") ||
+    message.includes("econnreset") ||
+    message.includes("resource exhausted") ||
+    message.includes("temporarily unavailable") ||
+    message.includes("_http_429") ||
+    message.includes("_http_5")
+  )
+}
 
 function escapeSvgText(value: string) {
   return value
@@ -159,7 +189,18 @@ async function generateGeminiImage(prompt: string, aspectRatio: string) {
   return dataUrl
 }
 
-async function generateWriterImage(prompt: string, aspectRatio: string) {
+async function generateWriterImage(
+  prompt: string,
+  aspectRatio: string,
+  options?: {
+    providerPlan?: WriterImageProvider[]
+    onProviderFailure?: (input: {
+      provider: WriterImageProvider
+      nextProvider: WriterImageProvider | null
+      error: unknown
+    }) => void
+  },
+) {
   if (shouldUseWriterE2EFixtures()) {
     return {
       dataUrl: createFixtureImageDataUrl(prompt, aspectRatio),
@@ -168,16 +209,11 @@ async function generateWriterImage(prompt: string, aspectRatio: string) {
     }
   }
 
-  const providerPlan: ImageGenerationProvider[] = []
-  if (hasAibermApiKey()) {
-    providerPlan.push("aiberm")
-  }
-  if (hasOpenRouterApiKey()) {
-    providerPlan.push("openrouter")
-  }
-  if (GOOGLE_IMAGE_API_KEY) {
-    providerPlan.push("gemini")
-  }
+  const providerPlan = (
+    options?.providerPlan && options.providerPlan.length > 0
+      ? options.providerPlan
+      : buildWriterImageProviderPlan()
+  ) as ImageGenerationProvider[]
 
   console.log("writer.assets.provider_plan", { providerPlan, aspectRatio })
 
@@ -202,6 +238,11 @@ async function generateWriterImage(prompt: string, aspectRatio: string) {
         message: error instanceof Error ? error.message : `${provider}_image_failed`,
         nextProvider,
       })
+      options?.onProviderFailure?.({
+        provider: provider as WriterImageProvider,
+        nextProvider: (nextProvider as WriterImageProvider | null) || null,
+        error,
+      })
     },
   })
 
@@ -212,8 +253,9 @@ async function generateWriterImage(prompt: string, aspectRatio: string) {
 }
 
 function getPreferredWriterImageProvider() {
-  if (hasAibermApiKey()) return "aiberm" as const
-  if (GOOGLE_IMAGE_API_KEY) return "gemini" as const
+  const plan = buildWriterImageProviderPlan()
+  if (plan.includes("aiberm")) return "aiberm" as const
+  if (plan.includes("gemini")) return "gemini" as const
   return "openrouter" as const
 }
 
@@ -283,6 +325,7 @@ export async function POST(request: NextRequest) {
     const mode = normalizeWriterMode(platform, body?.mode)
     const conversationId = typeof body?.conversationId === "string" ? body.conversationId : null
     const plannedAssets = buildPendingWriterAssets(markdown, platform, mode)
+    const baseProviderPlan = buildWriterImageProviderPlan()
 
     if (conversationId) {
       try {
@@ -295,7 +338,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!hasAibermApiKey() && !GOOGLE_IMAGE_API_KEY && !hasOpenRouterApiKey()) {
+    if (baseProviderPlan.length === 0) {
       if (conversationId) {
         try {
           await updateWriterConversationMeta(auth.user.id, conversationId, {
@@ -355,6 +398,7 @@ export async function POST(request: NextRequest) {
       error?: string
     }>
     const acceptedPromptFocuses: Array<{ assetId: string; focus: string }> = []
+    const temporarilyDegradedProviders = new Set<WriterImageProvider>()
 
     for (const asset of plannedAssets) {
       try {
@@ -383,7 +427,21 @@ export async function POST(request: NextRequest) {
           })
         }
         console.log("writer.assets.generating", { assetId: asset.id, platform, aspectRatio: WRITER_PLATFORM_CONFIG[platform].imageAspectRatio })
-        const generated = await generateWriterImage(promptGuard.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio)
+        const preferredProviderPlan = baseProviderPlan.filter((provider) => !temporarilyDegradedProviders.has(provider))
+        const effectiveProviderPlan = preferredProviderPlan.length > 0 ? preferredProviderPlan : baseProviderPlan
+        const generated = await generateWriterImage(promptGuard.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio, {
+          providerPlan: effectiveProviderPlan,
+          onProviderFailure: ({ provider, error, nextProvider }) => {
+            if (provider === "aiberm" && isTemporaryProviderError(error)) {
+              temporarilyDegradedProviders.add("aiberm")
+              console.warn("writer.assets.provider_temporarily_degraded", {
+                provider,
+                nextProvider,
+                message: error instanceof Error ? error.message : String(error),
+              })
+            }
+          },
+        })
         console.log("writer.assets.generated", {
           assetId: asset.id,
           provider: generated.provider,

@@ -119,6 +119,16 @@ type WriterPreviewContext = {
   isLatest: boolean
 }
 
+function isAbortLikeError(error: unknown) {
+  if (!error) return false
+  if (error instanceof DOMException && error.name === "AbortError") return true
+  if (error instanceof Error && error.name === "AbortError") return true
+  if (typeof error === "object" && "name" in error) {
+    return String((error as { name?: unknown }).name) === "AbortError"
+  }
+  return false
+}
+
 const WRITER_INITIAL_TURN_LIMIT = 8
 const WRITER_HISTORY_PAGE_SIZE = 10
 const EMPTY_VERSION_ASSET_STATE: WriterVersionAssetState = { assets: [], loading: false, error: null }
@@ -527,7 +537,7 @@ function PlatformPreview({
             <span>{estimateReadingTime(markdown, copy)}</span>
           </div>
         </div>
-        <div className="mx-auto mt-10 max-w-[640px]">
+        <div className="mx-auto mt-10 max-w-[640px]" data-writer-copy-root="true">
           {renderArticleBody(
             markdown,
             "prose-p:text-black prose-li:text-black prose-strong:text-black prose-blockquote:bg-emerald-50/70 prose-blockquote:px-5 prose-blockquote:py-3 prose-blockquote:not-italic",
@@ -547,7 +557,7 @@ function PlatformPreview({
               <span className="text-[11px] text-slate-400">{copy.xiaohongshuBadge}</span>
             </div>
           </div>
-          <div className="px-5 py-5">
+          <div className="px-5 py-5" data-writer-copy-root="true">
             {renderArticleBody(
               markdown,
               "prose-p:text-black prose-li:text-black prose-strong:text-rose-700 prose-h1:text-center prose-h2:border-0 prose-h2:pt-0 prose-blockquote:bg-rose-50 prose-blockquote:px-4 prose-blockquote:py-3 prose-blockquote:not-italic",
@@ -575,7 +585,7 @@ function PlatformPreview({
                   <p className="text-xs text-slate-500">{mode === "thread" ? `Thread ${index + 1}` : platform === "weibo" ? "Weibo" : "Just now"}</p>
                 </div>
                 {mode === "article" && index === 0 ? <p className="mt-2 text-xs text-slate-500">{lead}</p> : null}
-                <div className="mt-4">
+                <div className="mt-4" data-writer-copy-root="true">
                   {editable && onEditChange && onEditCommit ? (
                     <InlineMarkdownCanvas
                       copy={copy}
@@ -618,10 +628,12 @@ function PlatformPreview({
             <span>{platform === "generic" ? "Document" : "Script"}</span>
           </div>
         </div>
-        {renderArticleBody(
-          markdown,
-          "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h2:border-0 prose-h2:pt-0",
-        )}
+        <div data-writer-copy-root="true">
+          {renderArticleBody(
+            markdown,
+            "prose-p:text-black prose-li:text-black prose-strong:text-black prose-h1:text-left prose-h2:border-0 prose-h2:pt-0",
+          )}
+        </div>
       </div>
     )
   }
@@ -641,7 +653,7 @@ function PlatformPreview({
                 <p className="text-xs text-slate-500">{mode === "thread" ? `Post ${index + 1}` : estimateReadingTime(post, copy)}</p>
               </div>
               <p className="mt-1 text-xs text-slate-500">{index === 0 ? lead : copy.multiPostPreview}</p>
-              <div className="mt-4">
+              <div className="mt-4" data-writer-copy-root="true">
                 {editable && onEditChange && onEditCommit ? (
                   <InlineMarkdownCanvas
                     copy={copy}
@@ -768,24 +780,75 @@ const COPYABLE_STYLE_PROPS = [
 ] as const
 
 function buildClipboardHtmlFromPreview(node: HTMLElement) {
-  const clone = node.cloneNode(true) as HTMLElement
-  const originalElements = [node, ...Array.from(node.querySelectorAll<HTMLElement>("*"))]
-  const clonedElements = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))]
+  const normalizeClipboardNode = (root: HTMLElement) => {
+    const figures = Array.from(root.querySelectorAll<HTMLElement>("figure"))
+    for (const figure of figures) {
+      const image = figure.querySelector("img")
+      if (!image) {
+        figure.remove()
+        continue
+      }
 
-  originalElements.forEach((original, index) => {
-    const target = clonedElements[index]
-    if (!target) return
+      const imageParagraph = document.createElement("p")
+      imageParagraph.setAttribute("style", "margin:0;padding:0;line-height:1.2;")
+      const normalizedImage = image.cloneNode(true) as HTMLImageElement
+      normalizedImage.removeAttribute("class")
+      normalizedImage.setAttribute("style", "display:block;max-width:100%;height:auto;margin:0 auto;")
+      imageParagraph.appendChild(normalizedImage)
+      figure.replaceWith(imageParagraph)
+    }
 
-    const computed = window.getComputedStyle(original)
-    const style = COPYABLE_STYLE_PROPS.map((prop) => `${prop}:${computed.getPropertyValue(prop)};`).join("")
-    target.setAttribute("style", style)
-    target.removeAttribute("class")
-  })
+    const paragraphs = Array.from(root.querySelectorAll<HTMLParagraphElement>("p"))
+    for (const paragraph of paragraphs) {
+      const text = (paragraph.textContent || "").replace(/\u00a0/g, " ").trim()
+      const childElements = Array.from(paragraph.children)
+      const nonBreakChildren = childElements.filter((child) => child.tagName !== "BR")
+      const imageOnlyParagraph = text.length === 0 && nonBreakChildren.length === 1 && nonBreakChildren[0]?.tagName === "IMG"
+
+      if (imageOnlyParagraph) {
+        paragraph.setAttribute("style", "margin:0;padding:0;line-height:1.2;")
+        continue
+      }
+
+      const isEmptyParagraph = text.length === 0 && nonBreakChildren.length === 0
+      if (isEmptyParagraph) {
+        paragraph.remove()
+      }
+    }
+  }
+
+  const cloneWithInlineStyles = (source: HTMLElement) => {
+    const clone = source.cloneNode(true) as HTMLElement
+    const originalElements = [source, ...Array.from(source.querySelectorAll<HTMLElement>("*"))]
+    const clonedElements = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))]
+
+    originalElements.forEach((original, index) => {
+      const target = clonedElements[index]
+      if (!target) return
+
+      const computed = window.getComputedStyle(original)
+      const style = COPYABLE_STYLE_PROPS.map((prop) => `${prop}:${computed.getPropertyValue(prop)};`).join("")
+      target.setAttribute("style", style)
+      target.removeAttribute("class")
+      target.removeAttribute("data-writer-copy-root")
+    })
+
+    normalizeClipboardNode(clone)
+    return clone
+  }
+
+  const copyRootSelector = "[data-writer-copy-root]"
+  const copyRootCandidates = Array.from(node.querySelectorAll<HTMLElement>(copyRootSelector))
+  const copyRoots = copyRootCandidates.filter((candidate) => !candidate.parentElement?.closest(copyRootSelector))
+  const htmlContent =
+    (copyRoots.length > 0 ? copyRoots : [node])
+      .map((root) => cloneWithInlineStyles(root).outerHTML)
+      .join("\n") || cloneWithInlineStyles(node).outerHTML
 
   return `
     <html>
       <body style="margin:0;padding:24px;background:#ffffff;">
-        ${clone.outerHTML}
+        ${htmlContent}
       </body>
     </html>
   `.trim()
@@ -1004,17 +1067,22 @@ export function WriterWorkspace({
         if (!cancelled) router.replace(user ? "/dashboard" : "/login")
       } catch (error) {
         if (controller.signal.aborted) return
-        if (error instanceof Error && error.name === "AbortError") return
+        if (isAbortLikeError(error)) return
         if (!cancelled) router.replace(user ? "/dashboard" : "/login")
       } finally {
         if (!cancelled) setAvailabilityLoading(false)
       }
     }
 
-    void verify()
+    void verify().catch((error) => {
+      if (controller.signal.aborted || isAbortLikeError(error)) return
+      if (!cancelled) router.replace(user ? "/dashboard" : "/login")
+    })
     return () => {
       cancelled = true
-      controller.abort()
+      if (!controller.signal.aborted) {
+        controller.abort(new DOMException("writer_workspace_availability_cleanup", "AbortError"))
+      }
     }
   }, [router, user])
 

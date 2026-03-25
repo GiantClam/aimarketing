@@ -699,6 +699,7 @@ export async function runImageAssistantConversationTurn(params: {
     referenceAssetCount: referencedAssets.length,
     elapsedMs: Date.now() - startedAt,
   })
+  const isFirstUserTurn = !messages.some((message) => message.role === "user")
 
   const previousState = extractLatestImageAssistantOrchestration(messages)
   const latestPromptQuestionContext = getLatestPromptQuestionContext(messages)
@@ -765,6 +766,7 @@ export async function runImageAssistantConversationTurn(params: {
     plannerStrategy: plan.orchestration.planner_strategy || null,
     elapsedMs: Date.now() - startedAt,
   })
+  const firstTurnTitle = plan.orchestration.brief.goal?.trim() || params.prompt.trim() || ""
 
   const requestPayload = {
     workflow: "skills_tools",
@@ -809,7 +811,7 @@ export async function runImageAssistantConversationTurn(params: {
       userId: params.userId,
       sessionId,
       currentMode: "chat",
-      title: plan.orchestration.brief.goal || undefined,
+      title: isFirstUserTurn ? firstTurnTitle || undefined : undefined,
     })
 
     return {
@@ -823,6 +825,14 @@ export async function runImageAssistantConversationTurn(params: {
       orchestration: plan.orchestration,
       max_reference_attachments: IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS,
     } satisfies ImageAssistantGenerateResult
+  }
+
+  if (isFirstUserTurn && firstTurnTitle) {
+    await updateImageAssistantSession({
+      userId: params.userId,
+      sessionId,
+      title: firstTurnTitle,
+    })
   }
 
   return runImageAssistantJob({

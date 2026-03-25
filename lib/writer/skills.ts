@@ -20,7 +20,7 @@ import {
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
-import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
+import { writerRequestJson } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
 import { buildWriterRoutingDecision, describeWriterRoute } from "@/lib/writer/routing"
 import { listWriterPlatformSkills } from "@/lib/writer/skill-catalog"
@@ -42,9 +42,9 @@ import type {
   WriterTurnDiagnostics,
 } from "@/lib/writer/types"
 
-const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY || ""
-const GOOGLE_SEARCH_ENGINE_ID = process.env.GOOGLE_SEARCH_ENGINE_ID || ""
-const JINA_API_KEY = process.env.JINA_API_KEY || ""
+const SERPER_API_KEY = process.env.SERPER_API_KEY || ""
+const SERPER_API_BASE = (process.env.SERPER_API_BASE || "https://google.serper.dev").replace(/\/+$/, "")
+const SERPER_SCRAPE_API_BASE = (process.env.SERPER_SCRAPE_API_BASE || "https://scrape.serper.dev").replace(/\/+$/, "")
 
 const WRITER_TEXT_MODEL = process.env.WRITER_TEXT_MODEL || "google/gemini-3-flash"
 const WRITER_SKILL_MODEL = process.env.WRITER_SKILL_MODEL || "gpt-5.3-codex"
@@ -68,7 +68,11 @@ const WRITER_SEARCH_RESULT_LIMIT = Math.min(
 )
 const WRITER_SEARCH_EXTRACT_LIMIT = Math.min(
   3,
-  Math.max(1, Number.parseInt(process.env.WRITER_SEARCH_EXTRACT_LIMIT || "1", 10) || 1),
+  Math.max(1, Number.parseInt(process.env.WRITER_SEARCH_EXTRACT_LIMIT || "2", 10) || 2),
+)
+const WRITER_RESEARCH_EXTRACT_MAX_CHARS = Math.min(
+  8_000,
+  Math.max(1_600, Number.parseInt(process.env.WRITER_RESEARCH_EXTRACT_MAX_CHARS || "3600", 10) || 3_600),
 )
 const WRITER_ENTERPRISE_QUERY_MAX_CHARS = Math.min(
   240,
@@ -562,7 +566,11 @@ function detectExplicitEnterpriseKnowledgeRequestNormalized(text: string) {
 
 function detectFreshResearchNeedConservative(query: string, brief: WriterConversationBrief) {
   const haystack = [query, brief.topic, brief.objective].filter(Boolean).join("\n")
-  return WRITER_FRESH_RESEARCH_SIGNAL_RE.test(haystack)
+  if (collectWriterSourceUrls({ query, brief }).length > 0) {
+    return true
+  }
+
+  return WRITER_FRESH_RESEARCH_SIGNAL_RE.test(haystack) || WRITER_SOURCE_REFERENCE_SIGNAL_RE.test(haystack)
 }
 
 function inferWriterRetrievalHintsFromSignals(query: string, brief: WriterConversationBrief): WriterRetrievalHints {
@@ -571,6 +579,15 @@ function inferWriterRetrievalHintsFromSignals(query: string, brief: WriterConver
   const explicitEnterpriseReference = detectExplicitEnterpriseReference(haystack)
   const enterpriseFactSignals = detectEnterpriseGroundingNeedSafe(query, brief)
   const freshResearchSignals = detectFreshResearchNeedConservative(query, brief)
+  const hasSourceUrls = collectWriterSourceUrls({ query, brief }).length > 0
+
+  if (hasSourceUrls) {
+    return createWriterRetrievalHints({
+      freshResearchNeeded: true,
+      confidence: 0.99,
+      reason: "source_url_reference",
+    })
+  }
 
   if (detectRewriteOnlyIntentSafe(query)) {
     return createWriterRetrievalHints({ confidence: 0.98, reason: "rewrite_only" })
@@ -620,11 +637,17 @@ function inferWriterRetrievalHintsFromSignals(query: string, brief: WriterConver
 function decideWriterRetrievalStrategy(params: {
   query: string
   brief: WriterConversationBrief
+  history?: WriterHistoryEntry[]
   enterpriseId?: number | null
   retrievalHints?: WriterRetrievalHints | null
 }): WriterRetrievalStrategy {
   const confirmationReply = safeIsWriterConfirmationReply(params.query)
   const rewriteOnly = detectRewriteOnlyIntentSafe(params.query)
+  const hasSourceUrls = collectWriterSourceUrls({
+    query: params.query,
+    brief: params.brief,
+    history: params.history,
+  }).length > 0
   const fallbackHints = inferWriterRetrievalHintsFromSignals(params.query, params.brief)
   const structuredHints = params.retrievalHints
   const useStructuredHints = Boolean(structuredHints && structuredHints.confidence >= 0.7)
@@ -634,12 +657,20 @@ function decideWriterRetrievalStrategy(params: {
   )
   const enterpriseContinuation = Boolean(params.enterpriseId) && detectEnterpriseBriefFactSignals(params.brief)
   const freshResearchNeeded = Boolean(
+    hasSourceUrls ||
     fallbackHints.freshResearchNeeded ||
       (useStructuredHints &&
         structuredHints?.freshResearchNeeded &&
         structuredHints.confidence >= 0.88 &&
         !genericWritingOnly),
   )
+
+  if (hasSourceUrls) {
+    if (enterpriseNeeded || enterpriseContinuation) {
+      return "hybrid_grounded"
+    }
+    return "fresh_external"
+  }
 
   if (rewriteOnly && !enterpriseNeeded && !freshResearchNeeded) {
     return "rewrite_only"
@@ -868,11 +899,17 @@ function buildWriterGroundingQuery(
       .map((entry) => normalizeBriefValue(entry.query || entry.inputs?.contents || ""))
       .reverse()
       .find((query) => query && !safeIsWriterConfirmationReply(query)) || ""
+  const sourceUrls = collectWriterSourceUrls({
+    query: fallbackQuery,
+    brief,
+    history,
+  })
   const sections = [
     brief.topic ? `Topic: ${brief.topic}` : "",
     brief.audience ? `Audience: ${brief.audience}` : "",
     brief.objective ? `Objective: ${brief.objective}` : "",
     brief.constraints ? `Constraints: ${brief.constraints}` : "",
+    sourceUrls.length > 0 ? `Source URLs: ${sourceUrls.join(" ")}` : "",
     lastSubstantiveUserQuery ? `Original request: ${lastSubstantiveUserQuery}` : "",
   ].filter(Boolean)
 
@@ -1769,6 +1806,7 @@ function buildWriterBriefExtractionPrompt(params: {
     "- userWantsDirectOutput should be true if the latest user turn asks to start writing immediately.",
     "- retrievalHints.enterpriseKnowledgeNeeded should be true only when accurate first-party enterprise facts, products, certifications, factory details, case studies, or brand positioning are materially needed for a good answer.",
     "- retrievalHints.freshResearchNeeded should be true only when the user explicitly asks for latest/current/trend/report/news/benchmark style information.",
+    "- If the user provides one or more http/https URLs or asks to base the draft on linked sources, retrievalHints.freshResearchNeeded must be true.",
     '- For rewrite, polish, translate, shorten, title-only, structure-only, or generic writing requests, set retrievalHints.enterpriseKnowledgeNeeded to false unless the user explicitly asks to ground the answer in enterprise facts.',
   ].join("\n")
 
@@ -1783,6 +1821,66 @@ const WRITER_AUDIENCE_SIGNAL_RE =
 
 const WRITER_FRESH_RESEARCH_SIGNAL_RE =
   /(?:最新|趋势|报告|调研|数据|统计|行业洞察|市场规模|竞品|新闻|今年|明年|202[4-9]|\b(?:latest|trend(?:s)?|report(?:s)?|research|benchmark|news|forecast|survey)\b|\bmarket(?:\s+(?:size|trend|report|share|analysis|outlook))?\b)/iu
+
+const WRITER_SOURCE_URL_RE = /https?:\/\/[^\s<>"'`)\]，。；！？、：）】》」』]+/giu
+const WRITER_SOURCE_URL_BREAK_RE = /[，。；！？、：）】》」』]/u
+const WRITER_SOURCE_REFERENCE_SIGNAL_RE =
+  /(?:参考|參考|引用|链接|連結|网址|網址|基于链接|根據連結|read the link|read this url|based on (?:the )?(?:link|url|source)|according to (?:the )?(?:link|url|source)|crawl|scrape)/iu
+
+function normalizeResearchUrl(raw: string) {
+  let candidate = raw.trim()
+  const breakIndex = candidate.search(WRITER_SOURCE_URL_BREAK_RE)
+  if (breakIndex > 0) {
+    candidate = candidate.slice(0, breakIndex)
+  }
+  candidate = candidate.replace(/[),.;!?，。；！？、：）】》」』]+$/u, "")
+  if (!candidate) return ""
+
+  try {
+    const parsed = new URL(candidate)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return ""
+    return parsed.toString()
+  } catch {
+    return ""
+  }
+}
+
+function extractUrlsFromText(text: string) {
+  if (!text) return []
+
+  const urls = new Set<string>()
+  for (const match of text.matchAll(WRITER_SOURCE_URL_RE)) {
+    const normalized = normalizeResearchUrl(match[0] || "")
+    if (!normalized) continue
+    urls.add(normalized)
+  }
+
+  return [...urls].slice(0, 5)
+}
+
+function collectWriterSourceUrls(params: {
+  query: string
+  brief?: WriterConversationBrief | null
+  history?: WriterHistoryEntry[]
+}) {
+  const urls = new Set<string>()
+  const register = (value: string) => {
+    for (const url of extractUrlsFromText(value)) {
+      urls.add(url)
+    }
+  }
+
+  register(params.query)
+  register(params.brief?.topic || "")
+  register(params.brief?.constraints || "")
+  register(params.brief?.objective || "")
+  for (const entry of params.history || []) {
+    register(entry.query || "")
+    register(entry.inputs?.contents || "")
+  }
+
+  return [...urls].slice(0, 5)
+}
 
 function inferWriterBriefFromPromptedReply(
   query: string,
@@ -2383,7 +2481,11 @@ function shouldUseWriterE2EFixtures() {
 }
 
 function hasWriterResearchConfig() {
-  return Boolean(GOOGLE_SEARCH_API_KEY && GOOGLE_SEARCH_ENGINE_ID && JINA_API_KEY)
+  return Boolean(SERPER_API_KEY)
+}
+
+function hasWriterDirectReadConfig() {
+  return Boolean(SERPER_API_KEY)
 }
 
 function createEmptyResearchResult(status: WriterResearchResult["status"]): WriterResearchResult {
@@ -3239,19 +3341,152 @@ function safeStripWechatMetaSections(markdown: string) {
 }
 
 function safeNormalizeWechatTitle(markdown: string, languageLabel: string) {
+  type KeywordSignal = { value: string; confidence: "high" | "low" }
+  const normalizeTitleCandidate = (value: string, fallback: string) => {
+    const cleaned = value
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+      .replace(/writer-asset:\/\/[^\s)]+/g, " ")
+      .replace(/`{1,3}/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+    return cleaned || fallback
+  }
+  const normalizeKeywordCandidate = (value: string) => {
+    const trimPunctuationRe =
+      /^[\s|\uFF5C:\uFF1A;\uFF1B,\uFF0C.\u3002!?\uFF01\uFF1F\-\u2013\u2014]+|[\s|\uFF5C:\uFF1A;\uFF1B,\uFF0C.\u3002!?\uFF01\uFF1F\-\u2013\u2014]+$/g
+    const cleaned = value
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+      .replace(/[#`*_]/g, " ")
+      .replace(trimPunctuationRe, "")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (!cleaned || cleaned.length < 2 || cleaned.length > 32) return ""
+    if (/^https?:\/\//i.test(cleaned) || cleaned.startsWith("writer-asset://")) return ""
+    return cleaned
+  }
+  const keywordInTitle = (title: string, keyword: string) => {
+    if (!title || !keyword) return false
+    if (/[A-Za-z]/.test(keyword)) {
+      return title.toLowerCase().includes(keyword.toLowerCase())
+    }
+    return title.includes(keyword)
+  }
+  const extractKeywordFromMarkdown = (value: string): KeywordSignal | null => {
+    const explicitCandidates: string[] = []
+    for (const match of value.matchAll(/\*\*([^*\n]{2,36})\*\*/g)) {
+      explicitCandidates.push(match[1] || "")
+    }
+    for (const match of value.matchAll(/`([^`\n]{2,36})`/g)) {
+      explicitCandidates.push(match[1] || "")
+    }
+    const explicitKeyword = explicitCandidates.map((item) => normalizeKeywordCandidate(item)).find(Boolean)
+    if (explicitKeyword) return { value: explicitKeyword, confidence: "high" }
+
+    const cleanedBody = value
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+      .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
+      .replace(/[`*_>#]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+
+    const englishStopwords = new Set([
+      "about",
+      "after",
+      "also",
+      "and",
+      "article",
+      "because",
+      "before",
+      "but",
+      "from",
+      "have",
+      "into",
+      "just",
+      "more",
+      "only",
+      "project",
+      "that",
+      "their",
+      "there",
+      "these",
+      "this",
+      "those",
+      "using",
+      "with",
+      "what",
+      "when",
+      "where",
+      "which",
+      "will",
+      "your",
+    ])
+    const tokenCounts = new Map<string, { token: string; count: number; firstIndex: number }>()
+    let matchIndex = 0
+    for (const match of cleanedBody.matchAll(/\b[A-Za-z][A-Za-z0-9.+_-]{2,24}\b/g)) {
+      const token = (match[0] || "").trim()
+      if (!token) continue
+      const lower = token.toLowerCase()
+      if (englishStopwords.has(lower)) continue
+      const previous = tokenCounts.get(lower)
+      tokenCounts.set(lower, {
+        token,
+        count: (previous?.count || 0) + 1,
+        firstIndex: previous?.firstIndex ?? matchIndex,
+      })
+      matchIndex += 1
+    }
+
+    const ranked = [...tokenCounts.values()].sort((left, right) => {
+      if (right.count !== left.count) return right.count - left.count
+      if (left.firstIndex !== right.firstIndex) return left.firstIndex - right.firstIndex
+      return left.token.length - right.token.length
+    })
+    const top = ranked[0]
+    if (!top || top.count < 2 || top.token.length < 4) return null
+    const normalizedTop = normalizeKeywordCandidate(top.token)
+    if (!normalizedTop) return null
+    return { value: normalizedTop, confidence: "low" }
+  }
+  const isGenericTitle = (title: string) => {
+    const normalized = title.trim().toLowerCase()
+    return /^(?:untitled(?: article)?|new article|draft|article|post|thread)$/i.test(normalized) || /^(?:未命名文章|新建文章|文章|标题)$/.test(title.trim())
+  }
+  const toCompellingTitle = (baseTitle: string, keywordSignal: KeywordSignal | null) => {
+    const normalizedBaseTitle = normalizeTitleCandidate(baseTitle, fallbackTitle)
+    const chineseContext = languageLabel === "Chinese" || /[\u4e00-\u9fff]/u.test(normalizedBaseTitle)
+    const separator = chineseContext ? "\uFF5C" : ": "
+    let nextTitle = normalizedBaseTitle
+    if (keywordSignal?.value && !keywordInTitle(nextTitle, keywordSignal.value)) {
+      const shouldPrefix = keywordSignal.confidence === "high" || isGenericTitle(normalizedBaseTitle)
+      if (shouldPrefix) {
+        nextTitle = `${keywordSignal.value}${separator}${normalizedBaseTitle}`
+      }
+    }
+    const maxLength = chineseContext ? 38 : 110
+    if (nextTitle.length > maxLength) {
+      nextTitle = `${nextTitle.slice(0, maxLength).trim()}...`
+    }
+    return nextTitle.trim() || fallbackTitle
+  }
+
   const fallbackTitle = languageLabel === "Chinese" ? "\u672a\u547d\u540d\u6587\u7ae0" : "Untitled Article"
   const lines = markdown.split("\n")
   const titleIndex = lines.findIndex((line) => /^#\s+/.test(line))
   if (titleIndex >= 0) {
     const title = lines[titleIndex].replace(/^#\s+/, "").trim()
     const rest = lines.filter((_, index) => index !== titleIndex && !/^#\s+/.test(lines[index]))
-    return [`# ${title || fallbackTitle}`, ...rest].join("\n").trim()
+    const keywordSignal = extractKeywordFromMarkdown(rest.join("\n"))
+    return [`# ${toCompellingTitle(title || fallbackTitle, keywordSignal)}`, ...rest].join("\n").trim()
   }
   const firstContentIndex = lines.findIndex((line) => line.trim())
   if (firstContentIndex < 0) return `# ${fallbackTitle}`
   const title = lines[firstContentIndex].replace(/^#+\s*/, "").trim() || fallbackTitle
   const rest = lines.filter((_, index) => index !== firstContentIndex)
-  return [`# ${title}`, ...rest].join("\n").trim()
+  const keywordSignal = extractKeywordFromMarkdown(rest.join("\n"))
+  return [`# ${toCompellingTitle(title, keywordSignal)}`, ...rest].join("\n").trim()
 }
 
 function compactText(text: string, maxLength: number) {
@@ -3259,25 +3494,33 @@ function compactText(text: string, maxLength: number) {
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength)}...`
 }
 
-async function googleSearch(query: string, num = 5): Promise<SearchItem[]> {
-  if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_ENGINE_ID) {
+async function serperSearch(query: string, num = 5): Promise<SearchItem[]> {
+  if (!SERPER_API_KEY) {
     throw new Error("writer_search_config_missing")
   }
 
-  const url = new URL("https://www.googleapis.com/customsearch/v1")
-  url.searchParams.set("key", GOOGLE_SEARCH_API_KEY)
-  url.searchParams.set("cx", GOOGLE_SEARCH_ENGINE_ID)
-  url.searchParams.set("q", query)
-  url.searchParams.set("num", String(Math.min(Math.max(num, 1), 10)))
-
-  const response = await writerRequestJson(url.toString(), {}, { attempts: 2, timeoutMs: 60_000 })
+  const response = await writerRequestJson(
+    `${SERPER_API_BASE}/search`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": SERPER_API_KEY,
+      },
+      body: JSON.stringify({
+        q: query,
+        num: Math.min(Math.max(num, 1), 10),
+      }),
+    },
+    { attempts: 2, timeoutMs: 60_000 },
+  )
   if (!response.ok) {
-    throw new Error(`google_search_http_${response.status}`)
+    throw new Error(`serper_search_http_${response.status}`)
   }
 
   const data = response.data as any
-  return Array.isArray(data?.items)
-    ? data.items.map((item: any) => ({
+  return Array.isArray(data?.organic)
+    ? data.organic.map((item: any) => ({
         title: item?.title || "",
         snippet: item?.snippet || "",
         link: item?.link || "",
@@ -3285,34 +3528,99 @@ async function googleSearch(query: string, num = 5): Promise<SearchItem[]> {
     : []
 }
 
-async function readWithJina(url: string) {
-  if (!JINA_API_KEY) {
-    throw new Error("writer_jina_config_missing")
+function extractSerperScrapeText(data: any) {
+  const textCandidates = [
+    data?.text,
+    data?.markdown,
+    data?.content,
+    data?.article?.text,
+    data?.article?.content,
+    data?.data?.text,
+    data?.data?.content,
+  ]
+
+  for (const candidate of textCandidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate
+    }
+  }
+
+  if (Array.isArray(data?.paragraphs) && data.paragraphs.length > 0) {
+    return data.paragraphs.filter((item: unknown) => typeof item === "string").join("\n")
+  }
+
+  return ""
+}
+
+async function readWithSerper(url: string) {
+  if (!SERPER_API_KEY) {
+    throw new Error("writer_search_config_missing")
+  }
+
+  const scrapeEndpoints = [`${SERPER_SCRAPE_API_BASE}/scrape`]
+  const fallbackEndpoint = `${SERPER_API_BASE}/scrape`
+  if (!scrapeEndpoints.includes(fallbackEndpoint)) {
+    scrapeEndpoints.push(fallbackEndpoint)
   }
 
   const headers: Record<string, string> = {
-    Accept: "text/markdown",
-    Authorization: `Bearer ${JINA_API_KEY}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    "X-API-KEY": SERPER_API_KEY,
   }
 
-  const response = await writerRequestText(`https://r.jina.ai/${url}`, { headers }, { attempts: 2, timeoutMs: 90_000 })
-  if (!response.ok) {
-    throw new Error(`jina_http_${response.status}`)
+  let lastError: Error | null = null
+  for (const endpoint of scrapeEndpoints) {
+    try {
+      const response = await writerRequestJson(
+        endpoint,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ url }),
+        },
+        { attempts: 2, timeoutMs: 90_000 },
+      )
+
+      if (!response.ok) {
+        lastError = new Error(`serper_scrape_http_${response.status}`)
+        continue
+      }
+
+      const content = extractSerperScrapeText(response.data)
+      if (content.trim()) {
+        return content
+      }
+      lastError = new Error("serper_scrape_empty")
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("serper_scrape_failed")
+    }
   }
 
-  return response.text
+  throw lastError || new Error("serper_scrape_failed")
 }
 
-async function buildResearchContext(query: string, options?: { skip?: boolean }): Promise<WriterResearchResult> {
-  if (options?.skip) {
+async function buildResearchContext(
+  query: string,
+  options?: { skip?: boolean; sourceUrls?: string[] },
+): Promise<WriterResearchResult> {
+  const sourceUrls = [
+    ...new Set((options?.sourceUrls?.length ? options.sourceUrls : extractUrlsFromText(query)).map(normalizeResearchUrl).filter(Boolean)),
+  ].slice(0, 5)
+
+  if (options?.skip && sourceUrls.length === 0) {
     return createEmptyResearchResult("skipped")
   }
 
-  if (!WRITER_ENABLE_WEB_RESEARCH) {
+  if (!WRITER_ENABLE_WEB_RESEARCH && sourceUrls.length === 0) {
     return createEmptyResearchResult("disabled")
   }
 
-  if (!hasWriterResearchConfig()) {
+  if (sourceUrls.length > 0 && !hasWriterDirectReadConfig()) {
+    throw new Error("writer_search_config_missing")
+  }
+
+  if (sourceUrls.length === 0 && !hasWriterResearchConfig()) {
     if (WRITER_REQUIRE_WEB_RESEARCH) {
       throw new Error("writer_search_config_missing")
     }
@@ -3320,14 +3628,14 @@ async function buildResearchContext(query: string, options?: { skip?: boolean })
     return createEmptyResearchResult("unavailable")
   }
 
-  const cacheKey = query.trim().toLowerCase()
+  const cacheKey = `${query.trim().toLowerCase()}::${sourceUrls.join("|")}`
   const cached = writerResearchCache.get(cacheKey)
   const now = Date.now()
   if (cached && cached.expiresAt > now) {
     return cached.value
   }
 
-  const nextValue = withTimeout(buildResearchContextFresh(query), WRITER_RESEARCH_BUDGET_MS, () =>
+  const nextValue = withTimeout(buildResearchContextFresh(query, sourceUrls), WRITER_RESEARCH_BUDGET_MS, () =>
     createEmptyResearchResult("timed_out"),
   )
   writerResearchCache.set(cacheKey, {
@@ -3343,8 +3651,43 @@ async function buildResearchContext(query: string, options?: { skip?: boolean })
   }
 }
 
-async function buildResearchContextFresh(query: string): Promise<WriterResearchResult> {
-  const items = await googleSearch(`${query} latest trends case study`, WRITER_SEARCH_RESULT_LIMIT)
+async function buildResearchContextFresh(query: string, sourceUrls: string[] = []): Promise<WriterResearchResult> {
+  if (sourceUrls.length > 0) {
+    const extracts = (
+      await Promise.all(
+        sourceUrls.map(async (url) => {
+          try {
+            const content = await readWithSerper(url)
+            if (!content.trim()) return null
+            return {
+              url,
+              content: compactText(content, WRITER_RESEARCH_EXTRACT_MAX_CHARS),
+            }
+          } catch {
+            return null
+          }
+        }),
+      )
+    ).filter((item): item is WriterResearchResult["extracts"][number] => Boolean(item))
+
+    if (!extracts.length) {
+      throw new Error("writer_source_url_fetch_failed")
+    }
+
+    const items: SearchItem[] = extracts.map((extract, index) => ({
+      title: `User-provided source ${index + 1}`,
+      snippet: compactText(extract.content, 260),
+      link: extract.url,
+    }))
+
+    return {
+      items,
+      extracts,
+      status: "ready",
+    }
+  }
+
+  const items = await serperSearch(`${query} latest trends case study`, WRITER_SEARCH_RESULT_LIMIT)
   if (items.length === 0) {
     return createEmptyResearchResult("unavailable")
   }
@@ -3355,12 +3698,12 @@ async function buildResearchContextFresh(query: string): Promise<WriterResearchR
         if (!item.link) return null
 
         try {
-          const content = await readWithJina(item.link)
+          const content = await readWithSerper(item.link)
           if (!content.trim()) return null
 
           return {
             url: item.link,
-            content: compactText(content, 2400),
+            content: compactText(content, WRITER_RESEARCH_EXTRACT_MAX_CHARS),
           }
         } catch {
           return null
@@ -3424,6 +3767,12 @@ async function buildSystemPrompt(
       : research.status === "skipped"
         ? "Live web research was intentionally skipped for this request. Do not imply that outside research was performed."
         : "External research may be partial or unavailable. If so, rely on enterprise knowledge and broadly known information, and avoid precise unsupported claims.",
+    !transformMode && research.extracts.length > 0
+      ? "Depth requirement: each substantive section should contain source-grounded specifics such as mechanisms, trade-offs, named entities, or verifiable facts."
+      : null,
+    !transformMode && research.extracts.length === 0
+      ? "Depth requirement: avoid generic filler and explain concrete mechanisms, trade-offs, and practical implications."
+      : null,
     "Do not reveal chain-of-thought, hidden reasoning, or internal analysis.",
     transformMode
       ? "Preserve the source text's structure and scope. Do not add titles, headings, markdown sections, or image placeholders unless the user explicitly asks for them or they already exist in the source text."
@@ -3518,6 +3867,11 @@ async function buildUserPrompt(
     "- Output only the final draft. Do not explain the process.",
     "- Use enterprise knowledge first when it directly answers the topic.",
     "- Use the source material for trends, external facts, and cases. Do not invent specific data.",
+    transformMode
+      ? ""
+      : research.extracts.length > 0
+        ? "- Depth requirement: keep the draft insight-dense; each major section should include concrete source-grounded details and explain why they matter."
+        : "- Depth requirement: keep the draft insight-dense with concrete mechanisms, trade-offs, and practical implications.",
     "- The result must be clean Markdown suitable for continued editing and publishing.",
     "- Keep the structure native to the selected scenario, platform, and output form.",
     "- If the length target is numeric, do not exceed it.",
@@ -3588,15 +3942,19 @@ export async function generateWriterDraftWithSkills(
     retrievalStrategy?: WriterRetrievalStrategy
     enterpriseQueryVariants?: string[]
     preferredEnterpriseScopes?: EnterpriseKnowledgeScope[]
+    sourceUrls?: string[]
   },
 ): Promise<WriterDraftGenerationResult> {
   const contextQuery = options?.researchQuery?.trim() || query
   const retrievalStrategy = options?.retrievalStrategy || "no_retrieval"
+  const sourceUrls = [
+    ...new Set((options?.sourceUrls || []).map(normalizeResearchUrl).filter(Boolean)),
+  ].slice(0, 5)
   const shouldUseEnterpriseKnowledge =
     Boolean(options?.enterpriseId) &&
     (retrievalStrategy === "enterprise_grounded" || retrievalStrategy === "hybrid_grounded")
   const shouldUseWebResearch =
-    retrievalStrategy === "fresh_external" || retrievalStrategy === "hybrid_grounded"
+    retrievalStrategy === "fresh_external" || retrievalStrategy === "hybrid_grounded" || sourceUrls.length > 0
 
   const enterpriseKnowledgePromise = shouldUseEnterpriseKnowledge
     ? withTimeout(
@@ -3628,7 +3986,10 @@ export async function generateWriterDraftWithSkills(
   }
 
   const language = safeDetectRequestedLanguage(query, preferredLanguage)
-  const researchPromise = buildResearchContext(contextQuery, { skip: !shouldUseWebResearch })
+  const researchPromise = buildResearchContext(contextQuery, {
+    skip: !shouldUseWebResearch,
+    sourceUrls,
+  })
   const [enterpriseKnowledge, research] = await Promise.all([enterpriseKnowledgePromise, researchPromise])
   const [systemPrompt, userPrompt] = await Promise.all([
     buildSystemPrompt(query, routing, language.instruction, research, enterpriseKnowledge),
@@ -3814,6 +4175,7 @@ export async function runWriterSkillsTurnWithRuntime(
   const retrievalStrategy = decideWriterRetrievalStrategy({
     query: params.query,
     brief: mergedBrief,
+    history: contextHistory,
     enterpriseId: params.enterpriseId,
     retrievalHints: structuredExtraction?.retrievalHints,
   })
@@ -3974,11 +4336,17 @@ export async function runWriterSkillsTurnWithRuntime(
   const groundingQuery = clipWriterEnterpriseRetrievalQuery(
     buildWriterGroundingQuery(mergedBrief, params.query, contextHistory),
   )
+  const sourceUrls = collectWriterSourceUrls({
+    query: params.query,
+    brief: mergedBrief,
+    history: contextHistory,
+  })
   const preferredEnterpriseScopes = getPreferredEnterpriseScopesSafe(params.query, mergedBrief, retrievalStrategy)
   const draftResult = await runtime.generateDraft(compiledPrompt, routing, preferredLanguage, {
     enterpriseId: params.enterpriseId,
     researchQuery: groundingQuery,
     retrievalStrategy,
+    sourceUrls,
     enterpriseQueryVariants: normalizeWriterEnterpriseQueryVariants(
       buildRuntimeEnterpriseQueryVariants(groundingQuery, preferredEnterpriseScopes),
     ),

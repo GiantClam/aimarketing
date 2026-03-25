@@ -135,20 +135,20 @@ export function hasImageAssistantAibermKey() {
 }
 
 export function getImageAssistantModel(_resolution: ImageAssistantResolution) {
-  if (hasImageAssistantGoogleKey()) {
-    return getImageAssistantGoogleModel()
-  }
   if (hasImageAssistantAibermKey()) {
     return IMAGE_ASSISTANT_AIBERM_MODELS[0]
+  }
+  if (hasImageAssistantGoogleKey()) {
+    return getImageAssistantGoogleModel()
   }
   return getOpenRouterImageModel()
 }
 
 export function getImageAssistantAvailability() {
-  const preferredProvider = hasImageAssistantGoogleKey()
-    ? "gemini"
-    : hasImageAssistantAibermKey()
-      ? "aiberm"
+  const preferredProvider = hasImageAssistantAibermKey()
+    ? "aiberm"
+    : hasImageAssistantGoogleKey()
+      ? "gemini"
       : hasOpenRouterApiKey()
         ? "openrouter"
         : "unavailable"
@@ -300,11 +300,11 @@ function getProviderExecutionPlan(params: { referenceImages?: ReferenceImageInpu
   const hasFileReferences = (params.referenceImages || []).some((image) => image.kind === "file")
   const plan: ImageGenerationProvider[] = []
 
-  if (hasImageAssistantGoogleKey() && (hasFileReferences || !hasImageAssistantAibermKey())) {
-    plan.push("gemini")
-  }
   if (hasImageAssistantAibermKey()) {
     plan.push("aiberm")
+  }
+  if (hasImageAssistantGoogleKey() && (hasFileReferences || !hasImageAssistantAibermKey())) {
+    plan.push("gemini")
   }
   if (hasOpenRouterApiKey()) {
     plan.push("openrouter")

@@ -485,16 +485,39 @@ function chooseWriterImageCount(
 function selectDistinctSections(sections: WriterSection[], count: number) {
   if (count <= 0) return []
 
-  const sorted = [...sections].sort((left, right) => right.score - left.score)
-  const selected: WriterSection[] = []
-  const seen = new Set<string>()
-
-  for (const section of sorted) {
+  const dedupedByKey = new Map<string, WriterSection>()
+  for (const section of sections) {
     const key = buildNormalizedKey(`${section.heading} ${section.summary}`)
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    selected.push(section)
-    if (selected.length >= count) break
+    if (!key) continue
+    const existing = dedupedByKey.get(key)
+    if (!existing || section.score > existing.score) {
+      dedupedByKey.set(key, section)
+    }
+  }
+
+  const uniqueSections = [...dedupedByKey.values()].sort((left, right) => left.insertionLine - right.insertionLine)
+  if (uniqueSections.length <= count) return uniqueSections
+
+  // Keep visual slots distributed across the article timeline instead of clustering at the ending.
+  const selected: WriterSection[] = []
+  for (let index = 0; index < count; index += 1) {
+    const start = Math.floor((index * uniqueSections.length) / count)
+    const end = Math.max(start + 1, Math.floor(((index + 1) * uniqueSections.length) / count))
+    const bucket = uniqueSections.slice(start, end)
+    if (bucket.length === 0) continue
+    const bestInBucket = [...bucket].sort((left, right) => right.score - left.score)[0]
+    if (bestInBucket) selected.push(bestInBucket)
+  }
+
+  if (selected.length < count) {
+    const selectedKeys = new Set(selected.map((section) => buildNormalizedKey(`${section.heading} ${section.summary}`)))
+    for (const section of uniqueSections) {
+      const key = buildNormalizedKey(`${section.heading} ${section.summary}`)
+      if (!key || selectedKeys.has(key)) continue
+      selected.push(section)
+      selectedKeys.add(key)
+      if (selected.length >= count) break
+    }
   }
 
   return selected.sort((left, right) => left.insertionLine - right.insertionLine)
@@ -629,9 +652,14 @@ function rebuildManagedAssetBlocks(markdown: string, assets: WriterAsset[]) {
   const assetById = new Map(assets.map((asset) => [asset.id, asset]))
   const resolveBlock = (id: string, label: string, rawUrl: string) => {
     const asset = assetById.get(id)
+    const hasAssetOverride = Boolean(asset)
     const normalizedUrl = normalizeMarkdownImageUrl(rawUrl)
     const resolvedLabel = asset?.label || label || inferWriterAssetLabelFromId(id)
-    const resolvedUrl = asset?.url || (normalizedUrl && !normalizedUrl.startsWith("writer-asset://") ? normalizedUrl : "")
+    const resolvedUrl = hasAssetOverride
+      ? asset?.url || ""
+      : normalizedUrl && !normalizedUrl.startsWith("writer-asset://")
+        ? normalizedUrl
+        : ""
     return buildManagedAssetBlock({ id, label: resolvedLabel, url: resolvedUrl })
   }
 
@@ -644,7 +672,24 @@ function rebuildManagedAssetBlocks(markdown: string, assets: WriterAsset[]) {
   )
 }
 
+function collectExplicitAssetInsertionLines(markdown: string) {
+  const lines = markdown.split(/\r?\n/)
+  const insertionLines = new Map<string, number>()
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] || ""
+    for (const match of line.matchAll(/writer-asset:\/\/([a-z0-9-]+)/giu)) {
+      const id = (match[1] || "").toLowerCase()
+      if (!id || insertionLines.has(id)) continue
+      insertionLines.set(id, index)
+    }
+  }
+
+  return insertionLines
+}
+
 function insertManagedAssetBlocks(markdown: string, assets: WriterAsset[], platform: WriterPlatform, mode: WriterMode) {
+  const explicitAssetInsertionLines = collectExplicitAssetInsertionLines(markdown)
   const baseMarkdown = buildWriterAssetInsertionBase(markdown)
   const blueprints = buildWriterAssetBlueprints(baseMarkdown, platform, mode)
   if (blueprints.length === 0 && assets.length > 0) {
@@ -667,13 +712,14 @@ function insertManagedAssetBlocks(markdown: string, assets: WriterAsset[], platf
     insertions.set(insertionLine, currentBlocks)
   }
 
-  const trailingAssets = assets
-    .filter((asset) => !plannedAssetIds.has(asset.id))
+  const explicitAssets = assets
+    .filter((asset) => !plannedAssetIds.has(asset.id) && explicitAssetInsertionLines.has(asset.id))
     .sort((left, right) => normalizeAssetIdOrder(left.id) - normalizeAssetIdOrder(right.id))
-  if (trailingAssets.length > 0) {
-    const insertionLine = lines.length
+  for (const asset of explicitAssets) {
+    const rawInsertionLine = explicitAssetInsertionLines.get(asset.id) ?? lines.length
+    const insertionLine = Math.max(0, Math.min(lines.length, rawInsertionLine))
     const currentBlocks = insertions.get(insertionLine) || []
-    currentBlocks.push(...trailingAssets.map((asset) => buildManagedAssetBlock(asset)))
+    currentBlocks.push(buildManagedAssetBlock(asset))
     insertions.set(insertionLine, currentBlocks)
   }
 

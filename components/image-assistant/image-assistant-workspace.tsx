@@ -771,16 +771,16 @@ function hasBriefPatchInput(brief?: Partial<ImageAssistantBrief> | null) {
 
   return Boolean(
     brief.usage_preset ||
-      brief.usage_label ||
-      brief.orientation ||
-      brief.resolution ||
-      brief.size_preset ||
-      brief.ratio_confirmed ||
-      brief.goal ||
-      brief.subject ||
-      brief.style ||
-      brief.composition ||
-      brief.constraints,
+    brief.usage_label ||
+    brief.orientation ||
+    brief.resolution ||
+    brief.size_preset ||
+    brief.ratio_confirmed ||
+    brief.goal ||
+    brief.subject ||
+    brief.style ||
+    brief.composition ||
+    brief.constraints,
   )
 }
 
@@ -1579,6 +1579,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const versionLimitRef = useRef(versionLimit)
   const isClosingEditorRef = useRef(false)
   const canvasRef = useRef(canvas)
+  const scaleRef = useRef(1)
+  const pointerMoveRafRef = useRef<number | null>(null)
+  const pendingPointerClientRef = useRef<{ x: number; y: number } | null>(null)
+  const paintPreviewRafRef = useRef<number | null>(null)
   const attachmentPreviewUrlsRef = useRef<Set<string>>(new Set())
   const attachmentUploadPromisesRef = useRef<Map<string, Promise<{ assetId: string; maskAssetId: string | null }>>>(new Map())
   const composerDragDepthRef = useRef(0)
@@ -1671,8 +1675,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         const nextDetail = shouldForceFetch
           ? await fetchWorkspaceQueryData(queryClient, queryOptions)
           : options?.background
-          ? await fetchWorkspaceQueryData(queryClient, queryOptions)
-          : await ensureWorkspaceQueryData(queryClient, queryOptions)
+            ? await fetchWorkspaceQueryData(queryClient, queryOptions)
+            : await ensureWorkspaceQueryData(queryClient, queryOptions)
         const shouldPreserveCanvas = Boolean(options?.preserveCanvas && canvasRef.current)
 
         if (requestId !== detailRequestIdRef.current) {
@@ -1752,10 +1756,18 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [canvas, fitScale, zoomLevel])
 
   const zoomLabel = useMemo(() => `${Math.round(scale * 100)}%`, [scale])
+  const sortedCanvasLayers = useMemo(
+    () => (canvas ? [...canvas.layers].sort((a, b) => a.z_index - b.z_index) : []),
+    [canvas],
+  )
+  const paintPreviewPoints = useMemo(
+    () => (paintPreview ? paintPreview.points.map((point) => `${point.x},${point.y}`).join(" ") : ""),
+    [paintPreview],
+  )
 
   const composerAttachmentCount = pendingAttachments.length
   const hasCanvasEditAttachment = pendingAttachments.some((attachment) => attachment.source === "canvas")
-  const primaryRunKind: ImageAssistantRunKind = hasCanvasEditAttachment ? "edit" : "generate"
+  const primaryRunKind: ImageAssistantRunKind = composerAttachmentCount > 0 ? "edit" : "generate"
   const composerModeLabel = getRunKindLabel(primaryRunKind, extraCopy)
   const latestOrchestration = useMemo(() => {
     const messages = detail?.messages || []
@@ -2161,9 +2173,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
       const patchEdit =
         requestPayload.versionMeta &&
-        typeof requestPayload.versionMeta === "object" &&
-        (requestPayload.versionMeta as Record<string, unknown>).patch_edit &&
-        isCanvasPatchEditMeta((requestPayload.versionMeta as Record<string, unknown>).patch_edit)
+          typeof requestPayload.versionMeta === "object" &&
+          (requestPayload.versionMeta as Record<string, unknown>).patch_edit &&
+          isCanvasPatchEditMeta((requestPayload.versionMeta as Record<string, unknown>).patch_edit)
           ? ((requestPayload.versionMeta as Record<string, unknown>).patch_edit as CanvasPatchEditMeta)
           : null
       const snapshotAssetId = typeof requestPayload.snapshotAssetId === "string" ? requestPayload.snapshotAssetId : null
@@ -2262,6 +2274,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [canvas, detail, mode])
 
   useEffect(() => {
+    scaleRef.current = scale
+  }, [scale])
+
+  useEffect(() => {
     messageLimitRef.current = messageLimit
     versionLimitRef.current = versionLimit
   }, [messageLimit, versionLimit])
@@ -2277,6 +2293,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     const previewUrls = attachmentPreviewUrlsRef.current
     return () => {
       activeJobAbortRef.current?.abort()
+      if (pointerMoveRafRef.current !== null) {
+        window.cancelAnimationFrame(pointerMoveRafRef.current)
+        pointerMoveRafRef.current = null
+      }
+      if (paintPreviewRafRef.current !== null) {
+        window.cancelAnimationFrame(paintPreviewRafRef.current)
+        paintPreviewRafRef.current = null
+      }
       previewUrls.forEach((url) => URL.revokeObjectURL(url))
       previewUrls.clear()
     }
@@ -2781,11 +2805,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       const rawAnnotationMetadata = await deriveCanvasAnnotationMetadata(sourceCanvas)
       const annotationMetadata = rawAnnotationMetadata
         ? {
-            selectionBounds: rawAnnotationMetadata.selectionBounds,
-            annotationNotes: rawAnnotationMetadata.annotationNotes,
-            patchBounds: null,
-            baseAssetId: rawAnnotationMetadata.baseAssetId,
-          }
+          selectionBounds: rawAnnotationMetadata.selectionBounds,
+          annotationNotes: rawAnnotationMetadata.annotationNotes,
+          patchBounds: null,
+          baseAssetId: rawAnnotationMetadata.baseAssetId,
+        }
         : null
       const snapshot = await getCanvasSnapshot(sourceCanvas)
       const maskDataUrl = annotationMetadata ? await createCanvasMaskDataUrl(sourceCanvas) : null
@@ -2948,7 +2972,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     })
     if (!optimisticPrompt) return
     const currentAttachments = [...pendingAttachments]
-    const fallbackReferenceAssetIds = currentAttachments.length ? [] : resolveCarryoverReferenceAssetIds(sessionId)
+    const disableReferenceCarryover = kind === "edit" || currentAttachments.length > 0
+    const fallbackReferenceAssetIds = disableReferenceCarryover ? [] : resolveCarryoverReferenceAssetIds(sessionId)
     const shouldPromoteToEdit = shouldUseImplicitEditMode({
       requestedKind: kind,
       prompt: submissionPrompt,
@@ -2985,7 +3010,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         )
         : []
       const uploadedAssetIds = uploadedAssets.map((item) => item.assetId)
-      const runtimeFallbackReferenceAssetIds = currentAttachments.length ? [] : resolveCarryoverReferenceAssetIds(nextSessionId)
+      const runtimeFallbackReferenceAssetIds = disableReferenceCarryover ? [] : resolveCarryoverReferenceAssetIds(nextSessionId)
       const nextReferenceAssetIds = (currentAttachments.length ? uploadedAssetIds : runtimeFallbackReferenceAssetIds).slice(
         -IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS,
       )
@@ -3005,9 +3030,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         )
       const canvasPatchSizePreset = shouldUseCanvasSnapshotEdit
         ? getNearestSizePresetForDimensions(
-            canvasAttachment?.previewWidth || canvasAttachment?.width || null,
-            canvasAttachment?.previewHeight || canvasAttachment?.height || null,
-          )
+          canvasAttachment?.previewWidth || canvasAttachment?.width || null,
+          canvasAttachment?.previewHeight || canvasAttachment?.height || null,
+        )
         : submissionSizePreset
       const response = await requestJson(
         shouldUseCanvasSnapshotEdit ? "/api/image-assistant/canvas-snapshot-edit" : `/api/image-assistant/${effectiveKind}`,
@@ -3020,6 +3045,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             prompt: submissionPrompt,
             brief: submissionBrief,
             referenceAssetIds: nextReferenceAssetIds,
+            disableReferenceCarryover,
             snapshotAssetId: shouldUseCanvasSnapshotEdit ? canvasSnapshotAssetId : null,
             maskAssetId: shouldUseCanvasSnapshotEdit ? canvasMaskAssetId : null,
             baseAssetId: null,
@@ -3284,11 +3310,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       const resolvedAsset = await ensureAssetDimensions(
         previewUrl
           ? {
-              ...localAsset,
-              url: previewUrl,
-              width: baseAsset?.width || localAsset.width,
-              height: baseAsset?.height || localAsset.height,
-            }
+            ...localAsset,
+            url: previewUrl,
+            width: baseAsset?.width || localAsset.width,
+            height: baseAsset?.height || localAsset.height,
+          }
           : localAsset,
       )
       const nextCanvas = createCanvasFromAsset(resolvedAsset, imageCopy)
@@ -3320,15 +3346,15 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       const [messagePage, versionPage] = await Promise.all([
         hasMoreMessages && detail?.meta.messages_next_cursor
           ? fetchWorkspaceQueryData(queryClient, {
-              queryKey: getImageAssistantMessagesQueryKey(sessionId, MESSAGE_PAGE_SIZE, detail.meta.messages_next_cursor),
-              queryFn: () => getImageAssistantMessagesPage(sessionId, MESSAGE_PAGE_SIZE, detail.meta.messages_next_cursor),
-            })
+            queryKey: getImageAssistantMessagesQueryKey(sessionId, MESSAGE_PAGE_SIZE, detail.meta.messages_next_cursor),
+            queryFn: () => getImageAssistantMessagesPage(sessionId, MESSAGE_PAGE_SIZE, detail.meta.messages_next_cursor),
+          })
           : Promise.resolve(null),
         hasMoreVersions && detail?.meta.versions_next_cursor
           ? fetchWorkspaceQueryData(queryClient, {
-              queryKey: getImageAssistantVersionsQueryKey(sessionId, VERSION_PAGE_SIZE, detail.meta.versions_next_cursor),
-              queryFn: () => getImageAssistantVersionsPage(sessionId, VERSION_PAGE_SIZE, detail.meta.versions_next_cursor),
-            })
+            queryKey: getImageAssistantVersionsQueryKey(sessionId, VERSION_PAGE_SIZE, detail.meta.versions_next_cursor),
+            queryFn: () => getImageAssistantVersionsPage(sessionId, VERSION_PAGE_SIZE, detail.meta.versions_next_cursor),
+          })
           : Promise.resolve(null),
       ])
 
@@ -3525,6 +3551,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   const handleAttachCurrentCanvas = async () => {
     try {
+      const hasExistingCanvasAttachment = pendingAttachments.some((attachment) => attachment.source === "canvas")
+      if (!hasExistingCanvasAttachment && pendingAttachments.length >= IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS) {
+        setJobError(extraCopy.attachmentLimitReached)
+        return
+      }
+
       const hadPendingPaintStroke = Boolean(paintStrokeRef.current)
       if (paintStrokeRef.current) {
         await finishPaintStroke()
@@ -3537,6 +3569,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       if (dirtyCanvas || hadPendingPaintStroke) {
         await persistCurrentCanvas(latestCanvas)
       }
+      setMode("chat")
     } catch (error) {
       console.error("image-assistant.canvas-attach-failed", error)
       const nextMessage = error instanceof Error ? error.message : ""
@@ -3649,35 +3682,38 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return createPaintLayer(workingCanvas.width, workingCanvas.height, imageCopy)
   }, [canvas, imageCopy])
 
-  const getCanvasPoint = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!canvas) return null
+  const getCanvasPoint = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+      const activeCanvas = canvasRef.current
+      if (!activeCanvas) return null
+      const activeScale = scaleRef.current || 1
       const rect = event.currentTarget.getBoundingClientRect()
       return {
-        x: clamp((event.clientX - rect.left) / scale, 0, canvas.width),
-        y: clamp((event.clientY - rect.top) / scale, 0, canvas.height),
+        x: clamp((event.clientX - rect.left) / activeScale, 0, activeCanvas.width),
+        y: clamp((event.clientY - rect.top) / activeScale, 0, activeCanvas.height),
       }
     },
-    [canvas, scale],
+    [],
   )
 
   const getCanvasPointFromClient = useCallback(
     (clientX: number, clientY: number) => {
-      if (!canvas || !canvasStageRef.current) return null
+      const activeCanvas = canvasRef.current
+      if (!activeCanvas || !canvasStageRef.current) return null
+      const activeScale = scaleRef.current || 1
       const rect = canvasStageRef.current.getBoundingClientRect()
       return {
-        x: clamp((clientX - rect.left) / scale, 0, canvas.width),
-        y: clamp((clientY - rect.top) / scale, 0, canvas.height),
+        x: clamp((clientX - rect.left) / activeScale, 0, activeCanvas.width),
+        y: clamp((clientY - rect.top) / activeScale, 0, activeCanvas.height),
       }
     },
-    [canvas, scale],
+    [],
   )
 
   useEffect(() => {
-    const handlePointerMove = (event: MouseEvent) => {
+    const applyPointerMove = (clientX: number, clientY: number) => {
       const activeResize = layerResizeRef.current
       if (activeResize && canvasRef.current) {
-        const point = getCanvasPointFromClient(event.clientX, event.clientY)
+        const point = getCanvasPointFromClient(clientX, clientY)
         if (!point) return
 
         const deltaX = point.x - activeResize.startPoint.x
@@ -3685,9 +3721,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
         setCanvas((current) => {
           if (!current) return current
-          const nextCanvas = {
-            ...current,
-            layers: current.layers.map((layer) => {
+          let changed = false
+          const nextLayers = current.layers.map((layer) => {
               if (layer.id !== activeResize.layerId) return layer
 
               const minHeight =
@@ -3703,6 +3738,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                 return layer
               }
 
+              changed = true
               activeResize.changed = true
               return {
                 ...layer,
@@ -3712,8 +3748,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   height: nextHeight,
                 },
               }
-            }),
+            })
+          if (!changed) {
+            return current
           }
+          const nextCanvas = { ...current, layers: nextLayers }
           canvasRef.current = nextCanvas
           return nextCanvas
         })
@@ -3725,7 +3764,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       const activeDrag = layerDragRef.current
       if (!activeDrag || !canvasRef.current) return
 
-      const point = getCanvasPointFromClient(event.clientX, event.clientY)
+      const point = getCanvasPointFromClient(clientX, clientY)
       if (!point) return
 
       const deltaX = point.x - activeDrag.startPoint.x
@@ -3733,9 +3772,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
       setCanvas((current) => {
         if (!current) return current
-        const nextCanvas = {
-          ...current,
-          layers: current.layers.map((layer) => {
+        let changed = false
+        const nextLayers = current.layers.map((layer) => {
             if (layer.id !== activeDrag.layerId) return layer
 
             const maxX = Math.max(0, current.width - layer.transform.width)
@@ -3747,6 +3785,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
               return layer
             }
 
+            changed = true
             activeDrag.changed = true
             return {
               ...layer,
@@ -3756,8 +3795,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                 y: nextY,
               },
             }
-          }),
+          })
+        if (!changed) {
+          return current
         }
+        const nextCanvas = { ...current, layers: nextLayers }
         canvasRef.current = nextCanvas
         return nextCanvas
       })
@@ -3765,7 +3807,32 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setDirtyCanvas(true)
     }
 
+    const flushPointerMove = () => {
+      pointerMoveRafRef.current = null
+      const pendingPoint = pendingPointerClientRef.current
+      if (!pendingPoint) return
+      pendingPointerClientRef.current = null
+      applyPointerMove(pendingPoint.x, pendingPoint.y)
+    }
+
+    const handlePointerMove = (event: MouseEvent) => {
+      if (!layerResizeRef.current && !layerDragRef.current) return
+      pendingPointerClientRef.current = { x: event.clientX, y: event.clientY }
+      if (pointerMoveRafRef.current !== null) return
+      pointerMoveRafRef.current = window.requestAnimationFrame(flushPointerMove)
+    }
+
     const finishLayerManipulation = () => {
+      if (pointerMoveRafRef.current !== null) {
+        window.cancelAnimationFrame(pointerMoveRafRef.current)
+        pointerMoveRafRef.current = null
+      }
+      const pendingPoint = pendingPointerClientRef.current
+      pendingPointerClientRef.current = null
+      if (pendingPoint) {
+        applyPointerMove(pendingPoint.x, pendingPoint.y)
+      }
+
       const activeResize = layerResizeRef.current
       if (activeResize) {
         if (activeResize.changed) {
@@ -3789,10 +3856,28 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     window.addEventListener("mousemove", handlePointerMove)
     window.addEventListener("mouseup", finishLayerManipulation)
     return () => {
+      if (pointerMoveRafRef.current !== null) {
+        window.cancelAnimationFrame(pointerMoveRafRef.current)
+        pointerMoveRafRef.current = null
+      }
+      pendingPointerClientRef.current = null
       window.removeEventListener("mousemove", handlePointerMove)
       window.removeEventListener("mouseup", finishLayerManipulation)
     }
   }, [getCanvasPointFromClient])
+
+  const schedulePaintPreviewUpdate = useCallback(() => {
+    if (paintPreviewRafRef.current !== null) return
+    paintPreviewRafRef.current = window.requestAnimationFrame(() => {
+      paintPreviewRafRef.current = null
+      const activeStroke = paintStrokeRef.current
+      if (!activeStroke) return
+      setPaintPreview({
+        ...activeStroke,
+        points: [...activeStroke.points],
+      })
+    })
+  }, [])
 
   const startPaintStroke = (event: ReactMouseEvent<HTMLDivElement>, tool: PaintTool) => {
     const point = getCanvasPoint(event)
@@ -3817,13 +3902,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
     const point = getCanvasPoint(event)
     if (!point) return
-
-    const nextStroke = { ...activeStroke, points: [...activeStroke.points, point] }
-    paintStrokeRef.current = nextStroke
-    setPaintPreview(nextStroke)
+    const lastPoint = activeStroke.points[activeStroke.points.length - 1]
+    if (lastPoint && Math.abs(lastPoint.x - point.x) < 0.7 && Math.abs(lastPoint.y - point.y) < 0.7) {
+      return
+    }
+    activeStroke.points.push(point)
+    schedulePaintPreviewUpdate()
   }
 
   const finishPaintStroke = async () => {
+    if (paintPreviewRafRef.current !== null) {
+      window.cancelAnimationFrame(paintPreviewRafRef.current)
+      paintPreviewRafRef.current = null
+    }
     const activeStroke = paintStrokeRef.current
     paintStrokeRef.current = null
 
@@ -3911,7 +4002,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     setPaintPreview(null)
   }
 
-  const startLayerDrag = (event: ReactMouseEvent<HTMLDivElement>, layer: ImageAssistantLayer) => {
+  const startLayerDrag = (event: ReactMouseEvent<HTMLElement>, layer: ImageAssistantLayer) => {
     if (!canvas || canvasTool !== "select" || !isEditableLayer(layer)) return
     if (editingTextLayerId && editingTextLayerId === layer.id) return
     const point = getCanvasPointFromClient(event.clientX, event.clientY)
@@ -3929,7 +4020,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     }
   }
 
-  const startLayerResize = (event: ReactMouseEvent<HTMLDivElement>, layer: ImageAssistantLayer) => {
+  const startLayerResize = (event: ReactMouseEvent<HTMLElement>, layer: ImageAssistantLayer) => {
     if (!canvas || canvasTool !== "select" || !isEditableLayer(layer)) return
     const point = getCanvasPointFromClient(event.clientX, event.clientY)
     if (!point) return
@@ -4167,7 +4258,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault()
-              ;(event.currentTarget as HTMLDivElement).blur()
+                ; (event.currentTarget as HTMLDivElement).blur()
             }
           }}
           style={{
@@ -4283,397 +4374,402 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
               <div className="flex min-h-0 flex-1 bg-[#f7f7f7] px-0">
                 <div className="flex min-w-0 flex-1 flex-col">
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  <ScrollArea className="h-full" ref={messageViewportRef}>
-                    <div className="space-y-0">
-                    {displayMessages.length ? (
-                      <>
-                        {hasMoreMessages ? (
-                          <div className="flex justify-center px-3 py-3">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-full px-3 text-[11px]"
-                              onClick={() => void loadMoreMessages()}
-                              disabled={isLoadingMoreMessages}
-                            >
-                              {isLoadingMoreMessages ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                              {imageCopy.loadOlderMessages}
-                            </Button>
-                          </div>
-                        ) : null}
-                        {displayMessages.map((message, index) => {
-                          const optimisticUserMessageId = pendingTurn ? `${pendingTurn.id}:user` : null
-                          const optimisticAssistantMessageId = pendingTurn ? `${pendingTurn.id}:assistant` : null
-                          const optimisticAttachments =
-                            optimisticUserMessageId && message.id === optimisticUserMessageId ? pendingTurn?.attachments || [] : []
-                          const persistedAttachments =
-                            message.role === "user" && (!optimisticUserMessageId || message.id !== optimisticUserMessageId)
-                              ? getPersistedMessageAttachments(message)
-                              : []
-                          const messageOrchestration = getMessageOrchestration(message)
-                          const promptQuestions =
-                            message.role === "assistant" ? messageOrchestration?.prompt_questions || [] : []
-                          const isPromptQuestionMessageInteractive =
-                            message.role === "assistant" &&
-                            Boolean(promptQuestions.length) &&
-                            latestPromptQuestionMessageId === message.id
-                          const parsedContent = parseMessageBubbleContent(message.content)
-                          const hasBubbleMeta = parsedContent.meta.length > 0
-                          const bubbleAttachmentCount = optimisticAttachments.length || persistedAttachments.length
-                          return (
-                            <WorkspaceMessageFrame
-                              key={message.id}
-                              role={message.role === "user" ? "user" : "assistant"}
-                              className={cn(index === 0 && "border-b border-border/40 bg-transparent pt-5 lg:pt-6")}
-                              label={formatMessageRoleLabel(message.role, imageCopy)}
-                              icon={message.role !== "user" ? <Sparkles className="h-3.5 w-3.5" /> : null}
-                              action={
-                                optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
-                                  <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px]">
-                                    {getRunKindLabel(pendingTurn.kind, extraCopy)}
-                                  </Badge>
-                                ) : null
-                              }
-                              bodyClassName="space-y-3"
-                            >
-                                <div
-                                  className={cn(
-                                    "rounded-[24px] border-2 p-4 selection:bg-[#E8E8E8]",
-                                    message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background",
-                                  )}
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <ScrollArea className="h-full" ref={messageViewportRef}>
+                      <div className="space-y-0">
+                        {mode !== "canvas" ? (
+                          <>
+                            {displayMessages.length ? (
+                              <>
+                                {hasMoreMessages ? (
+                                  <div className="flex justify-center px-3 py-3">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 rounded-full px-3 text-[11px]"
+                                      onClick={() => void loadMoreMessages()}
+                                      disabled={isLoadingMoreMessages}
+                                    >
+                                      {isLoadingMoreMessages ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                                      {imageCopy.loadOlderMessages}
+                                    </Button>
+                                  </div>
+                                ) : null}
+                                {displayMessages.map((message, index) => {
+                              const optimisticUserMessageId = pendingTurn ? `${pendingTurn.id}:user` : null
+                              const optimisticAssistantMessageId = pendingTurn ? `${pendingTurn.id}:assistant` : null
+                              const optimisticAttachments =
+                                optimisticUserMessageId && message.id === optimisticUserMessageId ? pendingTurn?.attachments || [] : []
+                              const persistedAttachments =
+                                message.role === "user" && (!optimisticUserMessageId || message.id !== optimisticUserMessageId)
+                                  ? getPersistedMessageAttachments(message)
+                                  : []
+                              const messageOrchestration = getMessageOrchestration(message)
+                              const promptQuestions =
+                                message.role === "assistant" ? messageOrchestration?.prompt_questions || [] : []
+                              const isPromptQuestionMessageInteractive =
+                                message.role === "assistant" &&
+                                Boolean(promptQuestions.length) &&
+                                latestPromptQuestionMessageId === message.id
+                              const parsedContent = parseMessageBubbleContent(message.content)
+                              const hasBubbleMeta = parsedContent.meta.length > 0
+                              const bubbleAttachmentCount = optimisticAttachments.length || persistedAttachments.length
+                              return (
+                                <WorkspaceMessageFrame
+                                  key={message.id}
+                                  role={message.role === "user" ? "user" : "assistant"}
+                                  className={cn(index === 0 && "border-b border-border/40 bg-transparent pt-5 lg:pt-6")}
+                                  label={formatMessageRoleLabel(message.role, imageCopy)}
+                                  icon={message.role !== "user" ? <Sparkles className="h-3.5 w-3.5" /> : null}
+                                  action={
+                                    optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
+                                      <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px]">
+                                        {getRunKindLabel(pendingTurn.kind, extraCopy)}
+                                      </Badge>
+                                    ) : null
+                                  }
+                                  bodyClassName="space-y-3"
                                 >
-                                {hasBubbleMeta ? (
-                                  <div className="flex flex-col gap-2.5">
-                                    {parsedContent.body ? (
-                                      <p className="whitespace-pre-wrap text-[14px] leading-6">{parsedContent.body}</p>
-                                    ) : null}
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {parsedContent.meta.map((item) => (
-                                        <span
-                                          key={`${message.id}:${item.label}`}
-                                          className={cn(
-                                            "inline-flex items-center gap-1 rounded-full border-2 px-2.5 py-1 text-[10px] font-medium",
-                                            message.role === "user"
-                                              ? "border-white/20 bg-primary text-primary-foreground"
-                                              : "border-border bg-card text-muted-foreground",
-                                          )}
-                                        >
-                                          <span className="opacity-70">{item.label}</span>
-                                          <span>{item.value}</span>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <p className="whitespace-pre-wrap text-[14px] leading-6">{message.content}</p>
-                                )}
-                                {bubbleAttachmentCount ? (
-                                  <div className="mt-3 space-y-2.5">
-                                    <div className="flex items-center gap-2 text-[10px] font-medium opacity-80">
-                                      <span>{extraCopy.pendingImagesLabel}</span>
-                                      <span
-                                        className={cn(
-                                          "rounded-full border-2 px-2 py-0.5 text-[9px]",
-                                          message.role === "user" ? "border-white/20 bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground",
-                                        )}
-                                      >
-                                        {bubbleAttachmentCount}
-                                      </span>
-                                    </div>
-                                    <div className={cn("grid gap-2", getBubbleAttachmentGridClass(bubbleAttachmentCount))}>
-                                      {optimisticAttachments.length
-                                        ? optimisticAttachments.map((attachment) => {
-                                            const previewWidth = attachment.previewWidth ?? attachment.width
-                                            const previewHeight = attachment.previewHeight ?? attachment.height
-                                            const aspectRatio =
-                                              previewWidth > 0 && previewHeight > 0
-                                                ? `${previewWidth} / ${previewHeight}`
-                                                : bubbleAttachmentCount <= 2
-                                                  ? "4 / 5"
-                                                  : "1 / 1"
-
-                                            return (
-                                              <div
-                                                key={attachment.id}
-                                                className={cn(
-                                                  "group overflow-hidden rounded-[20px] border-2",
-                                                  message.role === "user"
-                                                    ? "border-white/20 bg-primary"
-                                                    : "border-border bg-card",
-                                                )}
-                                              >
-                                                <div
-                                                  className={cn(
-                                                    "relative overflow-hidden",
-                                                    getBubbleAttachmentFigureClass(bubbleAttachmentCount),
-                                                  )}
-                                                  style={{ aspectRatio }}
-                                                >
-                                                  <img
-                                                    src={attachment.previewUrl}
-                                                    alt=""
-                                                    loading="lazy"
-                                                    decoding="async"
-                                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                                                  />
-                                                </div>
-                                              </div>
-                                            )
-                                          })
-                                        : persistedAttachments.map((attachment) => {
-                                            const previewWidth = attachment.width || 0
-                                            const previewHeight = attachment.height || 0
-                                            const aspectRatio =
-                                              previewWidth > 0 && previewHeight > 0
-                                                ? `${previewWidth} / ${previewHeight}`
-                                                : bubbleAttachmentCount <= 2
-                                                  ? "4 / 5"
-                                                  : "1 / 1"
-
-                                            return (
-                                              <div
-                                                key={attachment.id}
-                                                className={cn(
-                                                  "group overflow-hidden rounded-[20px] border-2",
-                                                  message.role === "user"
-                                                    ? "border-white/20 bg-primary"
-                                                    : "border-border bg-card",
-                                                )}
-                                              >
-                                                <div
-                                                  className={cn(
-                                                    "relative overflow-hidden",
-                                                    getBubbleAttachmentFigureClass(bubbleAttachmentCount),
-                                                  )}
-                                                  style={{ aspectRatio }}
-                                                >
-                                                  <CandidatePreviewImage
-                                                    candidateId={attachment.id}
-                                                    fallbackSrc={attachment.src}
-                                                    resolvedSrc={messageAttachmentPreviewUrls[attachment.id] || null}
-                                                    loadPreview={() => composeMessageAttachmentPreview(message.id, attachment)}
-                                                    onResolved={(nextSrc) =>
-                                                      nextSrc !== attachment.src
-                                                        ? setMessageAttachmentPreviewUrls((current) =>
-                                                            current[attachment.id] ? current : { ...current, [attachment.id]: nextSrc },
-                                                          )
-                                                        : undefined
-                                                    }
-                                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                                                  />
-                                                </div>
-                                              </div>
-                                            )
-                                          })}
-                                    </div>
-                                  </div>
-                                ) : null}
-                                {optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
-                                  <WorkspaceLoadingMessage
-                                    className="rounded-[20px] border-2 border-border bg-card px-3 py-3"
-                                    label={
-                                      <>
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        {extraCopy.waitingReply}
-                                      </>
-                                    }
-                                  />
-                                ) : null}
-                                {message.role === "assistant" && promptQuestions.length && isPromptQuestionMessageInteractive ? (
-                                  <div className="mt-3 space-y-3">
-                                    {promptQuestions.map((question) => (
-                                      <div
-                                        key={`${message.id}:${question.id}`}
-                                        data-testid={`image-prompt-question-${question.id}`}
-                                        className="rounded-[20px] border-2 border-border bg-card p-3"
-                                      >
-                                        <div className="mb-3">
-                                          <p className="text-[12px] font-semibold text-foreground">{question.title}</p>
-                                          {question.description ? (
-                                            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{question.description}</p>
-                                          ) : null}
-                                        </div>
-                                        <div
-                                          className={cn(
-                                            "gap-2",
-                                            question.display === "cards" ? "grid sm:grid-cols-2" : "flex flex-wrap",
-                                          )}
-                                        >
-                                          {question.options.map((option) => (
-                                            <button
-                                              key={`${question.id}:${option.id}`}
-                                              type="button"
-                                              data-testid={`image-prompt-option-${question.id}-${option.id}`}
-                                              onClick={() =>
-                                                void submitPromptQuestionOption(option, {
-                                                  sourceMessageId: message.id,
-                                                  questionId: question.id,
-                                                })
-                                              }
-                                              disabled={isBusy || isPendingTurnRunning || !isPromptQuestionMessageInteractive}
+                                  <div
+                                    className={cn(
+                                      "rounded-[24px] border-2 p-4 selection:bg-[#E8E8E8]",
+                                      message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background",
+                                    )}
+                                  >
+                                    {hasBubbleMeta ? (
+                                      <div className="flex flex-col gap-2.5">
+                                        {parsedContent.body ? (
+                                          <p className="whitespace-pre-wrap text-[14px] leading-6">{parsedContent.body}</p>
+                                        ) : null}
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {parsedContent.meta.map((item) => (
+                                            <span
+                                              key={`${message.id}:${item.label}`}
                                               className={cn(
-                                                "rounded-[18px] border-2 border-border text-left transition",
-                                                isPromptQuestionMessageInteractive
-                                                  ? "hover:border-primary"
-                                                  : "cursor-not-allowed opacity-55",
-                                                question.display === "cards"
-                                                  ? "bg-background px-4 py-3"
-                                                  : "bg-background px-3 py-2 text-[11px]",
+                                                "inline-flex items-center gap-1 rounded-full border-2 px-2.5 py-1 text-[10px] font-medium",
+                                                message.role === "user"
+                                                  ? "border-white/20 bg-primary text-primary-foreground"
+                                                  : "border-border bg-card text-muted-foreground",
                                               )}
                                             >
-                                              <div className="font-medium text-foreground">{option.label}</div>
-                                              {option.description && question.display === "cards" ? (
-                                                <div className="mt-1 text-[11px] leading-5 text-muted-foreground">{option.description}</div>
-                                              ) : null}
-                                            </button>
+                                              <span className="opacity-70">{item.label}</span>
+                                              <span>{item.value}</span>
+                                            </span>
                                           ))}
                                         </div>
                                       </div>
-                                    ))}
-                                  </div>
-                                ) : null}
-                                {message.role === "assistant" && message.created_version_id
-                                  ? (() => {
-                                    const messageVersion = versionById.get(message.created_version_id)
-                                    if (!messageVersion?.candidates.length) return null
+                                    ) : (
+                                      <p className="whitespace-pre-wrap text-[14px] leading-6">{message.content}</p>
+                                    )}
+                                    {bubbleAttachmentCount ? (
+                                      <div className="mt-3 space-y-2.5">
+                                        <div className="flex items-center gap-2 text-[10px] font-medium opacity-80">
+                                          <span>{extraCopy.pendingImagesLabel}</span>
+                                          <span
+                                            className={cn(
+                                              "rounded-full border-2 px-2 py-0.5 text-[9px]",
+                                              message.role === "user" ? "border-white/20 bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground",
+                                            )}
+                                          >
+                                            {bubbleAttachmentCount}
+                                          </span>
+                                        </div>
+                                        <div className={cn("grid gap-2", getBubbleAttachmentGridClass(bubbleAttachmentCount))}>
+                                          {optimisticAttachments.length
+                                            ? optimisticAttachments.map((attachment) => {
+                                              const previewWidth = attachment.previewWidth ?? attachment.width
+                                              const previewHeight = attachment.previewHeight ?? attachment.height
+                                              const aspectRatio =
+                                                previewWidth > 0 && previewHeight > 0
+                                                  ? `${previewWidth} / ${previewHeight}`
+                                                  : bubbleAttachmentCount <= 2
+                                                    ? "4 / 5"
+                                                    : "1 / 1"
 
-                                    return (
-                                      <WorkspaceSectionCard title="Candidate results" description={extraCopy.candidateActionsHint}>
-                                        <div className={cn("grid gap-3", messageVersion.candidates.length > 1 ? "sm:grid-cols-2" : "max-w-md")}>
-                                          {messageVersion.candidates.map((candidate) => (
-                                            <div
-                                              key={candidate.id}
-                                              className="overflow-hidden rounded-[20px] border-2 border-border bg-card"
-                                            >
-                                              <button
-                                                type="button"
-                                                className="block w-full text-left transition hover:bg-muted/20"
-                                                title={extraCopy.previewImage}
-                                                aria-label={extraCopy.previewImage}
-                                                onClick={() => {
-                                                  void (async () => {
-                                                    const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
-                                                    if (!previewSrc) return
-                                                    openPreviewImage(previewSrc, extraCopy.previewImage)
-                                                  })().catch((error) => {
-                                                    console.error("image-assistant.candidate-preview-open-failed", error)
-                                                  })
-                                                }}
-                                              >
-                                                <div className="aspect-[4/5] bg-muted/30">
-                                                  <CandidatePreviewImage
-                                                    candidateId={candidate.id}
-                                                    fallbackSrc={candidate.url}
-                                                    resolvedSrc={candidatePreviewUrls[candidate.id] || null}
-                                                    loadPreview={() => composeCandidatePreview(messageVersion, candidate.id)}
-                                                    onResolved={(nextSrc) =>
-                                                      nextSrc !== candidate.url
-                                                        ? setCandidatePreviewUrls((current) =>
-                                                            current[candidate.id] ? current : { ...current, [candidate.id]: nextSrc },
-                                                          )
-                                                        : undefined
-                                                    }
-                                                    className="h-full w-full object-cover"
-                                                  />
-                                                </div>
-                                              </button>
-                                              <div className="space-y-2 px-3 py-3">
-                                                <p className="text-[11px] text-muted-foreground">{extraCopy.clickImageToPreview}</p>
-                                                <div className="flex items-center gap-1.5">
-                                                  <Button
-                                                    size="icon"
-                                                    type="button"
-                                                    variant="outline"
-                                                    data-testid={`image-export-candidate-${candidate.id}`}
-                                                    className="h-8 w-8 rounded-full"
-                                                    title={extraCopy.exportImage}
-                                                    aria-label={extraCopy.exportImage}
-                                                    onClick={() => {
-                                                      void (async () => {
-                                                        const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
-                                                        if (!previewSrc) return
-                                                        await exportImageSource(previewSrc, "image-design-candidate")
-                                                      })().catch((error) => {
-                                                        console.error("image-assistant.candidate-export-failed", error)
-                                                        const nextMessage = error instanceof Error ? error.message : ""
-                                                        setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
-                                                      })
-                                                    }}
+                                              return (
+                                                <div
+                                                  key={attachment.id}
+                                                  className={cn(
+                                                    "group overflow-hidden rounded-[20px] border-2",
+                                                    message.role === "user"
+                                                      ? "border-white/20 bg-primary"
+                                                      : "border-border bg-card",
+                                                  )}
+                                                >
+                                                  <div
+                                                    className={cn(
+                                                      "relative overflow-hidden",
+                                                      getBubbleAttachmentFigureClass(bubbleAttachmentCount),
+                                                    )}
+                                                    style={{ aspectRatio }}
                                                   >
-                                                    <Download className="h-3.5 w-3.5" />
-                                                  </Button>
-                                                  <Button
-                                                    size="icon"
-                                                    type="button"
-                                                    variant="outline"
-                                                    data-testid={`image-open-canvas-${candidate.id}`}
-                                                    className="h-8 w-8 rounded-full"
-                                                    title={extraCopy.editImage}
-                                                    aria-label={extraCopy.editImage}
-                                                    onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
-                                                  >
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                  </Button>
-                                                  <Button
-                                                    size="icon"
-                                                    type="button"
-                                                    variant="outline"
-                                                    data-testid={`image-attach-candidate-${candidate.id}`}
-                                                    className="h-8 w-8 rounded-full"
-                                                    title={extraCopy.addAsAttachment}
-                                                    aria-label={extraCopy.addAsAttachment}
-                                                    onClick={() => {
-                                                      void (async () => {
-                                                        const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
-                                                        if (!previewSrc) return
-                                                        await addImageSourceToComposer(previewSrc, "image-design-attachment")
-                                                      })().catch((error) => {
-                                                        console.error("image-assistant.candidate-attach-failed", error)
-                                                        const nextMessage = error instanceof Error ? error.message : ""
-                                                        setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
-                                                      })
-                                                    }}
-                                                  >
-                                                    <Plus className="h-3.5 w-3.5" />
-                                                  </Button>
-                                                  <div className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 px-2 py-1 text-[10px] text-muted-foreground">
-                                                    <Eye className="h-3 w-3" />
-                                                    {extraCopy.previewImage}
+                                                    <img
+                                                      src={attachment.previewUrl}
+                                                      alt=""
+                                                      loading="lazy"
+                                                      decoding="async"
+                                                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                                                    />
                                                   </div>
                                                 </div>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </WorkspaceSectionCard>
-                                    )
-                                  })()
-                                  : null}
-                                </div>
-                            </WorkspaceMessageFrame>
-                          )
-                        })}
-                      </>
-                    ) : (
-                      <div className="px-3 py-3">
-                        <WorkspacePromptGrid
-                          eyebrow={imageCopy.quickStart}
-                          prompts={imageCopy.starterPrompts}
-                          onSelect={(item) => setPrompt(item)}
-                          gridClassName="lg:grid-cols-3"
-                        />
-                      </div>
-                    )}
+                                              )
+                                            })
+                                            : persistedAttachments.map((attachment) => {
+                                              const previewWidth = attachment.width || 0
+                                              const previewHeight = attachment.height || 0
+                                              const aspectRatio =
+                                                previewWidth > 0 && previewHeight > 0
+                                                  ? `${previewWidth} / ${previewHeight}`
+                                                  : bubbleAttachmentCount <= 2
+                                                    ? "4 / 5"
+                                                    : "1 / 1"
 
-                    {isBusy && !pendingTurn ? (
-                      <WorkspaceMessageFrame role="assistant" label={imageCopy.assistantName} icon={<Sparkles className="h-3.5 w-3.5" />}>
-                        <WorkspaceLoadingMessage label={<span className="animate-pulse">{imageCopy.generatingCandidates}</span>} />
-                      </WorkspaceMessageFrame>
-                    ) : null}
-                    </div>
-                  </ScrollArea>
-                </div>
+                                              return (
+                                                <div
+                                                  key={attachment.id}
+                                                  className={cn(
+                                                    "group overflow-hidden rounded-[20px] border-2",
+                                                    message.role === "user"
+                                                      ? "border-white/20 bg-primary"
+                                                      : "border-border bg-card",
+                                                  )}
+                                                >
+                                                  <div
+                                                    className={cn(
+                                                      "relative overflow-hidden",
+                                                      getBubbleAttachmentFigureClass(bubbleAttachmentCount),
+                                                    )}
+                                                    style={{ aspectRatio }}
+                                                  >
+                                                    <CandidatePreviewImage
+                                                      candidateId={attachment.id}
+                                                      fallbackSrc={attachment.src}
+                                                      resolvedSrc={messageAttachmentPreviewUrls[attachment.id] || null}
+                                                      loadPreview={() => composeMessageAttachmentPreview(message.id, attachment)}
+                                                      onResolved={(nextSrc) =>
+                                                        nextSrc !== attachment.src
+                                                          ? setMessageAttachmentPreviewUrls((current) =>
+                                                            current[attachment.id] ? current : { ...current, [attachment.id]: nextSrc },
+                                                          )
+                                                          : undefined
+                                                      }
+                                                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                                                    />
+                                                  </div>
+                                                </div>
+                                              )
+                                            })}
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                    {optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
+                                      <WorkspaceLoadingMessage
+                                        className="rounded-[20px] border-2 border-border bg-card px-3 py-3"
+                                        label={
+                                          <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            {extraCopy.waitingReply}
+                                          </>
+                                        }
+                                      />
+                                    ) : null}
+                                    {message.role === "assistant" && promptQuestions.length && isPromptQuestionMessageInteractive ? (
+                                      <div className="mt-3 space-y-3">
+                                        {promptQuestions.map((question) => (
+                                          <div
+                                            key={`${message.id}:${question.id}`}
+                                            data-testid={`image-prompt-question-${question.id}`}
+                                            className="rounded-[20px] border-2 border-border bg-card p-3"
+                                          >
+                                            <div className="mb-3">
+                                              <p className="text-[12px] font-semibold text-foreground">{question.title}</p>
+                                              {question.description ? (
+                                                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{question.description}</p>
+                                              ) : null}
+                                            </div>
+                                            <div
+                                              className={cn(
+                                                "gap-2",
+                                                question.display === "cards" ? "grid sm:grid-cols-2" : "flex flex-wrap",
+                                              )}
+                                            >
+                                              {question.options.map((option) => (
+                                                <button
+                                                  key={`${question.id}:${option.id}`}
+                                                  type="button"
+                                                  data-testid={`image-prompt-option-${question.id}-${option.id}`}
+                                                  onClick={() =>
+                                                    void submitPromptQuestionOption(option, {
+                                                      sourceMessageId: message.id,
+                                                      questionId: question.id,
+                                                    })
+                                                  }
+                                                  disabled={isBusy || isPendingTurnRunning || !isPromptQuestionMessageInteractive}
+                                                  className={cn(
+                                                    "rounded-[18px] border-2 border-border text-left transition",
+                                                    isPromptQuestionMessageInteractive
+                                                      ? "hover:border-primary"
+                                                      : "cursor-not-allowed opacity-55",
+                                                    question.display === "cards"
+                                                      ? "bg-background px-4 py-3"
+                                                      : "bg-background px-3 py-2 text-[11px]",
+                                                  )}
+                                                >
+                                                  <div className="font-medium text-foreground">{option.label}</div>
+                                                  {option.description && question.display === "cards" ? (
+                                                    <div className="mt-1 text-[11px] leading-5 text-muted-foreground">{option.description}</div>
+                                                  ) : null}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                    {message.role === "assistant" && message.created_version_id
+                                      ? (() => {
+                                        const messageVersion = versionById.get(message.created_version_id)
+                                        if (!messageVersion?.candidates.length) return null
+
+                                        return (
+                                          <WorkspaceSectionCard title="Candidate results" description={extraCopy.candidateActionsHint}>
+                                            <div className={cn("grid gap-3", messageVersion.candidates.length > 1 ? "sm:grid-cols-2" : "max-w-md")}>
+                                              {messageVersion.candidates.map((candidate) => (
+                                                <div
+                                                  key={candidate.id}
+                                                  className="overflow-hidden rounded-[20px] border-2 border-border bg-card"
+                                                >
+                                                  <button
+                                                    type="button"
+                                                    className="block w-full text-left transition hover:bg-muted/20"
+                                                    title={extraCopy.previewImage}
+                                                    aria-label={extraCopy.previewImage}
+                                                    onClick={() => {
+                                                      void (async () => {
+                                                        const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                        if (!previewSrc) return
+                                                        openPreviewImage(previewSrc, extraCopy.previewImage)
+                                                      })().catch((error) => {
+                                                        console.error("image-assistant.candidate-preview-open-failed", error)
+                                                      })
+                                                    }}
+                                                  >
+                                                    <div className="aspect-[4/5] bg-muted/30">
+                                                      <CandidatePreviewImage
+                                                        candidateId={candidate.id}
+                                                        fallbackSrc={candidate.url}
+                                                        resolvedSrc={candidatePreviewUrls[candidate.id] || null}
+                                                        loadPreview={() => composeCandidatePreview(messageVersion, candidate.id)}
+                                                        onResolved={(nextSrc) =>
+                                                          nextSrc !== candidate.url
+                                                            ? setCandidatePreviewUrls((current) =>
+                                                              current[candidate.id] ? current : { ...current, [candidate.id]: nextSrc },
+                                                            )
+                                                            : undefined
+                                                        }
+                                                        className="h-full w-full object-cover"
+                                                      />
+                                                    </div>
+                                                  </button>
+                                                  <div className="space-y-2 px-3 py-3">
+                                                    <p className="text-[11px] text-muted-foreground">{extraCopy.clickImageToPreview}</p>
+                                                    <div className="flex items-center gap-1.5">
+                                                      <Button
+                                                        size="icon"
+                                                        type="button"
+                                                        variant="outline"
+                                                        data-testid={`image-export-candidate-${candidate.id}`}
+                                                        className="h-8 w-8 rounded-full"
+                                                        title={extraCopy.exportImage}
+                                                        aria-label={extraCopy.exportImage}
+                                                        onClick={() => {
+                                                          void (async () => {
+                                                            const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                            if (!previewSrc) return
+                                                            await exportImageSource(previewSrc, "image-design-candidate")
+                                                          })().catch((error) => {
+                                                            console.error("image-assistant.candidate-export-failed", error)
+                                                            const nextMessage = error instanceof Error ? error.message : ""
+                                                            setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
+                                                          })
+                                                        }}
+                                                      >
+                                                        <Download className="h-3.5 w-3.5" />
+                                                      </Button>
+                                                      <Button
+                                                        size="icon"
+                                                        type="button"
+                                                        variant="outline"
+                                                        data-testid={`image-open-canvas-${candidate.id}`}
+                                                        className="h-8 w-8 rounded-full"
+                                                        title={extraCopy.editImage}
+                                                        aria-label={extraCopy.editImage}
+                                                        onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
+                                                      >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                      </Button>
+                                                      <Button
+                                                        size="icon"
+                                                        type="button"
+                                                        variant="outline"
+                                                        data-testid={`image-attach-candidate-${candidate.id}`}
+                                                        className="h-8 w-8 rounded-full"
+                                                        title={extraCopy.addAsAttachment}
+                                                        aria-label={extraCopy.addAsAttachment}
+                                                        onClick={() => {
+                                                          void (async () => {
+                                                            const previewSrc = await resolveCandidateDisplaySource(messageVersion, candidate)
+                                                            if (!previewSrc) return
+                                                            await addImageSourceToComposer(previewSrc, "image-design-attachment")
+                                                          })().catch((error) => {
+                                                            console.error("image-assistant.candidate-attach-failed", error)
+                                                            const nextMessage = error instanceof Error ? error.message : ""
+                                                            setJobError(formatImageAssistantErrorMessage(nextMessage, imageCopy))
+                                                          })
+                                                        }}
+                                                      >
+                                                        <Plus className="h-3.5 w-3.5" />
+                                                      </Button>
+                                                      <div className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 px-2 py-1 text-[10px] text-muted-foreground">
+                                                        <Eye className="h-3 w-3" />
+                                                        {extraCopy.previewImage}
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </WorkspaceSectionCard>
+                                        )
+                                      })()
+                                      : null}
+                                  </div>
+                                </WorkspaceMessageFrame>
+                              )
+                                })}
+                              </>
+                            ) : (
+                              <div className="px-3 py-3">
+                                <WorkspacePromptGrid
+                                  eyebrow={imageCopy.quickStart}
+                                  prompts={imageCopy.starterPrompts}
+                                  onSelect={(item) => setPrompt(item)}
+                                  gridClassName="lg:grid-cols-3"
+                                />
+                              </div>
+                            )}
+
+                            {isBusy && !pendingTurn ? (
+                              <WorkspaceMessageFrame role="assistant" label={imageCopy.assistantName} icon={<Sparkles className="h-3.5 w-3.5" />}>
+                                <WorkspaceLoadingMessage label={<span className="animate-pulse">{imageCopy.generatingCandidates}</span>} />
+                              </WorkspaceMessageFrame>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  {mode !== "canvas" ? (
                   <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
                     <WorkspaceComposerPanel
                       data-testid="image-composer-dropzone"
@@ -4684,43 +4780,33 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       toolbarClassName="items-center"
                       toolbar={
                         <>
-                    <Badge variant="outline" className="h-9 rounded-full px-3 text-[11px]">
-                      {currentUsageDisplay}
-                    </Badge>
-                    <Badge variant="outline" className="h-9 rounded-full px-3 text-[11px]">
-                      {currentOrientationDisplay}
-                    </Badge>
-                    <Badge variant="outline" className="h-9 rounded-full px-3 text-[11px]">
-                      {currentResolutionDisplay}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 rounded-full"
-                      data-testid="image-reference-upload-button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                    >
-                      {isUploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="mr-1.5 h-3.5 w-3.5" />}
-                      {imageCopy.addImage}
-                    </Button>
-                    <input
-                      ref={fileInputRef}
-                      data-testid="image-reference-file-input"
-                      className="hidden"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      multiple
-                      onChange={(event) => void uploadFiles(event.target.files)}
-                    />
-                    <WorkspacePromptChips
-                      prompts={(promptPresets.length ? promptPresets : PROMPT_PRESETS).map((item) => item.label)}
-                      onSelect={(label) => {
-                        const matchedPreset = (promptPresets.length ? promptPresets : PROMPT_PRESETS).find((item) => item.label === label)
-                        if (matchedPreset) setPrompt(matchedPreset.prompt)
-                      }}
-                      className="ml-auto"
-                    />
+                          <WorkspacePromptChips
+                            prompts={(promptPresets.length ? promptPresets : PROMPT_PRESETS).map((item) => item.label)}
+                            onSelect={(label) => {
+                              const matchedPreset = (promptPresets.length ? promptPresets : PROMPT_PRESETS).find((item) => item.label === label)
+                              if (matchedPreset) setPrompt(matchedPreset.prompt)
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="ml-auto h-9 rounded-full"
+                            data-testid="image-reference-upload-button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                          >
+                            {isUploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="mr-1.5 h-3.5 w-3.5" />}
+                            {imageCopy.addImage}
+                          </Button>
+                          <input
+                            ref={fileInputRef}
+                            data-testid="image-reference-file-input"
+                            className="hidden"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            multiple
+                            onChange={(event) => void uploadFiles(event.target.files)}
+                          />
                         </>
                       }
                       bodyClassName="px-0"
@@ -4852,6 +4938,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       </div>
                     </WorkspaceComposerPanel>
                   </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -4860,7 +4947,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       </div>
 
       <Dialog open={mode === "canvas"} onOpenChange={(open) => { if (!open) handleCloseEditor() }}>
-        <DialogContent showCloseButton={false} className="h-[min(92vh,1040px)] w-[min(96vw,1680px)] max-w-[min(96vw,1680px)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,1680px)]">
+        <DialogContent
+          showCloseButton={false}
+          onInteractOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          className="h-[min(92vh,1040px)] w-[min(96vw,1680px)] max-w-[min(96vw,1680px)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,1680px)]"
+        >
           <DialogTitle className="sr-only">{imageCopy.editorTitle}</DialogTitle>
           <DialogDescription className="sr-only">
             {`${imageCopy.editorTitle}. ${imageCopy.autoSaveHint}`}
@@ -4886,7 +4978,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       }
                     }}
                   >
-                    {[...canvas.layers].sort((a, b) => a.z_index - b.z_index).map(renderCanvasLayer)}
+                    {sortedCanvasLayers.map(renderCanvasLayer)}
                     {canvasTool === "brush" || canvasTool === "eraser" ? (
                       <div
                         data-testid="image-paint-overlay"
@@ -4900,7 +4992,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${canvas.width} ${canvas.height}`} preserveAspectRatio="none">
                             <polyline
                               fill="none"
-                              points={paintPreview.points.map((point) => `${point.x},${point.y}`).join(" ")}
+                              points={paintPreviewPoints}
                               stroke={paintPreview.tool === "eraser" ? "rgba(148,163,184,0.9)" : paintPreview.color}
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -4942,13 +5034,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                 >
                   + {imageCopy.zoomIn}
                 </Button>
-              </div>
-
-              <div className="absolute bottom-16 left-[calc(50%-46px)] z-20 flex max-w-[min(680px,calc(100%-140px))] -translate-x-1/2 items-center gap-2 rounded-full border-2 border-border bg-card px-3 py-2">
-                <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[10px]">
-                  {imageCopy.attachOnClose}
-                </Badge>
-                <p className="text-[11px] text-muted-foreground">{imageCopy.autoSaveHint}</p>
               </div>
             </div>
 

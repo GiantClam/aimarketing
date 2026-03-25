@@ -1007,6 +1007,30 @@ test("retrieval strategy matrix covers broader writer intents", async () => {
       expected: "fresh_external",
     },
     {
+      name: "source URL prompt always forces external retrieval",
+      input: {
+        query:
+          "Read https://example.com/ai-agent-architecture and write a WeChat article based on that source only.",
+        enterpriseId: 45,
+      },
+      extraction: createBriefExtraction({
+        resolvedBrief: {
+          topic: "ai agent architecture",
+          audience: "developers",
+          objective: "introduce the project accurately",
+          tone: "clear and practical",
+          constraints: "must stay grounded in the linked source",
+        },
+        retrievalHints: {
+          enterpriseKnowledgeNeeded: false,
+          freshResearchNeeded: false,
+          confidence: 0.91,
+          reason: "generic_writing",
+        },
+      }),
+      expected: "hybrid_grounded",
+    },
+    {
       name: "explicit knowledge-base wording forces enterprise grounding",
       input: {
         query: "Write a company overview based on our knowledge base and official company info.",
@@ -1106,6 +1130,96 @@ test("retrieval strategy matrix covers broader writer intents", async () => {
     assert.equal(result.outcome, "draft_ready", scenario.name)
     assert.equal(generationOptions?.retrievalStrategy, scenario.expected, scenario.name)
   }
+})
+
+test("history URL keeps retrieval in fresh_external mode for follow-up drafting", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "Go ahead and write the full draft now.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "drafting",
+      history: [
+        createHistoryEntry(
+          1,
+          "Read https://example.com/ai-agent-architecture and prepare a WeChat article based on that source.",
+          "Who is your target audience and what should the article achieve?",
+        ),
+      ],
+      enterpriseId: 45,
+    },
+    createRuntime({
+      extractBrief: async () =>
+        createBriefExtraction({
+          resolvedBrief: {
+            topic: "ai agent architecture",
+            audience: "developers",
+            objective: "introduce the project",
+            tone: "concise",
+            constraints: "",
+          },
+          userWantsDirectOutput: true,
+          briefSufficient: true,
+          retrievalHints: {
+            enterpriseKnowledgeNeeded: false,
+            freshResearchNeeded: false,
+            confidence: 0.9,
+            reason: "generic_writing",
+          },
+        }),
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(generationOptions?.retrievalStrategy, "fresh_external")
+})
+
+test("history URL extraction trims full-width punctuation suffix from chinese sentence", async () => {
+  let generationOptions: any = null
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "Please regenerate the previous draft.",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "en",
+      conversationStatus: "text_ready",
+      history: [
+        createHistoryEntry(
+          1,
+          "Use this source for drafting: https://example.com/agent-report\uFF0C and keep it factual.",
+          "Initial draft generated.",
+        ),
+      ],
+    },
+    createRuntime({
+      extractBrief: async () =>
+        createBriefExtraction({
+          resolvedBrief: {
+            topic: "agent report",
+            audience: "tech decision makers",
+            objective: "summarize the source accurately",
+            tone: "professional",
+            constraints: "",
+          },
+          userWantsDirectOutput: true,
+          briefSufficient: true,
+        }),
+      onGenerate: (_prompt, options) => {
+        generationOptions = options
+      },
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(generationOptions?.retrievalStrategy, "fresh_external")
+  assert.deepEqual(generationOptions?.sourceUrls, ["https://example.com/agent-report"])
 })
 
 test("english Topic/Audience labels are enough to draft immediately without model extraction", async () => {

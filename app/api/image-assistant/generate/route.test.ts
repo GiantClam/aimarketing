@@ -30,6 +30,7 @@ type ConversationTurnParams = {
 let runTurnCalls: ConversationTurnParams[] = []
 let enqueueCalls = 0
 let shouldFailSessionDetail = false
+let listVersionsCalls = 0
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -75,7 +76,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
   if (request === "@/lib/image-assistant/repository") {
     return {
-      listImageAssistantVersions: async () => [],
+      listImageAssistantVersions: async () => {
+        listVersionsCalls += 1
+        return []
+      },
       getImageAssistantSessionDetail: async () => {
         if (shouldFailSessionDetail) {
           throw new Error("Failed query: timeout exceeded when trying to connect")
@@ -124,6 +128,7 @@ test.beforeEach(() => {
   runTurnCalls = []
   enqueueCalls = 0
   shouldFailSessionDetail = false
+  listVersionsCalls = 0
 })
 
 test.after(() => {
@@ -200,5 +205,23 @@ test("generate route keeps direct success when detail read is temporarily unavai
   assert.equal(response.body?.data?.accepted, true)
   assert.equal(response.body?.data?.direct, true)
   assert.equal(response.body?.data?.detail_snapshot, null)
+  assert.equal(enqueueCalls, 0)
+})
+
+test("generate route skips implicit history references when disableReferenceCarryover is true", async () => {
+  const response = await POST({
+    json: async () => ({
+      prompt: "upscale this image to 4k",
+      sessionId: "s-1",
+      disableReferenceCarryover: true,
+      preferAsync: false,
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(runTurnCalls.length, 1)
+  assert.equal(runTurnCalls[0].taskType, "generate")
+  assert.deepEqual(runTurnCalls[0].referenceAssetIds || [], [])
+  assert.equal(listVersionsCalls, 0)
   assert.equal(enqueueCalls, 0)
 })

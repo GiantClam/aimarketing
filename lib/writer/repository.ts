@@ -484,10 +484,23 @@ export async function appendWriterConversation({
     targetConversationId = String(createdConversation[0].id)
   } else {
     const existingConversationId = Number.parseInt(targetConversationId, 10)
+    const messageCountRows = await withDbRetry("count-writer-conversation-messages", () =>
+      db
+        .select({
+          count: sql<number>`count(*)`,
+        })
+        .from(writerMessages)
+        .where(eq(writerMessages.conversationId, existingConversationId))
+        .limit(1),
+    )
+    const existingMessageCount = Number(messageCountRows[0]?.count || 0)
+    const shouldRetitleFromFirstQuery = existingMessageCount === 0
+
     await withDbRetry("touch-writer-conversation", () =>
       db
         .update(writerConversations)
         .set({
+          ...(shouldRetitleFromFirstQuery ? { title: buildConversationTitleSafe(query) } : {}),
           platform,
           mode,
           language,

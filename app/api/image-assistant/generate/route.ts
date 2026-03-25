@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
     const guidedSelection = normalizeGuidedSelection(body?.guidedSelection)
     const parentVersionId = typeof body?.parentVersionId === "string" ? body.parentVersionId : null
     const explicitReferenceAssetIds = normalizeReferenceAssetIds(body?.referenceAssetIds)
+    const disableReferenceCarryover = body?.disableReferenceCarryover === true
     const sessionCurrentVersionId = normalizeSessionCurrentVersionId(session)
     const isLikelyReferenceEditPrompt = looksLikeReferenceEditIntent({
       prompt,
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
       referenceCount: explicitReferenceAssetIds.length || undefined,
     })
     const implicitReferenceAssetIds =
-      !explicitReferenceAssetIds.length && isLikelyReferenceEditPrompt
+      !explicitReferenceAssetIds.length && !disableReferenceCarryover && isLikelyReferenceEditPrompt
           ? await resolveImplicitReferenceAssetIds({
               userId: auth.user.id,
               sessionId,
