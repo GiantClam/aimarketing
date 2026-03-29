@@ -15,6 +15,7 @@ import {
 } from "@/lib/image-assistant/repository"
 import { appendLeadHunterMessage } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
+import { getLeadHunterAgentName, normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import { runWriterSkillsTurn } from "@/lib/writer/skills"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
@@ -328,6 +329,11 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
 }
 
 async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayload, config: { baseUrl: string; apiKey: string }, difyUser: string) {
+  const normalizedAdvisorType = normalizeLeadHunterAdvisorType(payload.advisorType)
+  if (!normalizedAdvisorType) {
+    throw new Error("invalid_lead_hunter_advisor_type")
+  }
+
   if (!payload.conversationId) {
     throw new Error("lead_hunter_conversation_missing")
   }
@@ -338,6 +344,7 @@ async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayl
       query: payload.query,
       responseMode: "streaming",
       user: difyUser,
+      advisorType: normalizedAdvisorType,
     }),
   )
 
@@ -392,14 +399,20 @@ async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayl
 
   const answer = sanitizeAssistantContent(formatLeadHunterChatOutput(accumulated))
 
-  await appendLeadHunterMessage(payload.userId, payload.conversationId, payload.query, answer || "No lead data returned.")
+  await appendLeadHunterMessage(
+    payload.userId,
+    normalizedAdvisorType,
+    payload.conversationId,
+    payload.query,
+    answer || "No lead data returned.",
+  )
 
   await updateTaskStatus(taskId, {
     status: "success",
     result: {
       conversation_id: payload.conversationId,
       answer: answer || "No lead data returned.",
-      agent_name: "Lead Hunter",
+      agent_name: getLeadHunterAgentName(normalizedAdvisorType),
     },
   })
 }
@@ -415,7 +428,7 @@ async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload
     throw new Error("advisor_config_missing")
   }
 
-  if (payload.advisorType === "lead-hunter") {
+  if (normalizeLeadHunterAdvisorType(payload.advisorType)) {
     await handleLeadHunterTurn(taskId, payload, config, difyUser)
     return
   }
@@ -656,7 +669,7 @@ async function recoverAssistantTask(task: ParsedTaskRow | null) {
 
   const ageMs = getTaskAgeMs(task)
   const recoveryThresholdMs =
-    task.parsedPayload.kind === "advisor_turn" && task.parsedPayload.advisorType !== "lead-hunter"
+    task.parsedPayload.kind === "advisor_turn" && !normalizeLeadHunterAdvisorType(task.parsedPayload.advisorType)
       ? ADVISOR_RECOVERY_CHECK_MS
       : ASSISTANT_STALE_TASK_MS
 
@@ -669,7 +682,7 @@ async function recoverAssistantTask(task: ParsedTaskRow | null) {
     return task
   }
 
-  if (task.parsedPayload.kind === "advisor_turn" && task.parsedPayload.advisorType !== "lead-hunter") {
+  if (task.parsedPayload.kind === "advisor_turn" && !normalizeLeadHunterAdvisorType(task.parsedPayload.advisorType)) {
     const difyUser = buildDifyUserIdentity(task.parsedPayload.userEmail, task.parsedPayload.advisorType)
     const config = await getDifyConfigByAdvisorType(task.parsedPayload.advisorType, {
       userId: task.parsedPayload.userId,

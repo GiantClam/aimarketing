@@ -40,7 +40,7 @@ type EnterpriseDifyDataset = {
   enabled: boolean
 }
 
-type EnterpriseAdvisorType = "brand-strategy" | "growth" | "lead-hunter"
+type EnterpriseAdvisorType = "brand-strategy" | "growth" | "company-search" | "contact-mining"
 
 type AdvisorWorkflowSummary = {
   configured: boolean
@@ -51,7 +51,8 @@ type AdvisorDefaultsSummary = {
   baseUrl: string | null
   brandStrategy: AdvisorWorkflowSummary
   growth: AdvisorWorkflowSummary
-  leadHunter: AdvisorWorkflowSummary
+  companySearch: AdvisorWorkflowSummary
+  contactMining: AdvisorWorkflowSummary
 }
 
 type AdvisorOverrideSummary = {
@@ -237,7 +238,8 @@ export default function SettingsPage() {
         if (
           override?.advisorType === "brand-strategy" ||
           override?.advisorType === "growth" ||
-          override?.advisorType === "lead-hunter"
+          override?.advisorType === "company-search" ||
+          override?.advisorType === "contact-mining"
         ) {
           const advisorType = override.advisorType as EnterpriseAdvisorType
           nextOverrides[advisorType] = {
@@ -453,12 +455,21 @@ export default function SettingsPage() {
       title: "增长顾问",
       description: "优先读取企业数据库中的 workflow；未配置企业专属 workflow 时回退到系统默认 workflow。",
     },
-    ...(advisorOverrides["lead-hunter"]
+    ...(advisorOverrides["company-search"]
       ? [
         {
-          advisorType: "lead-hunter" as const,
-          title: "海外猎客",
-          description: "仅当前企业在数据库中配置了 lead hunter workflow 时展示；每次只触发当前搜索条件对应的 workflow。",
+          advisorType: "company-search" as const,
+          title: "公司搜索（Company Search）",
+          description: "仅当前企业在数据库中配置了 company search workflow 时展示；每次只触发当前搜索条件对应的 workflow。",
+        },
+      ]
+      : []),
+    ...(advisorOverrides["contact-mining"]
+      ? [
+        {
+          advisorType: "contact-mining" as const,
+          title: "联系人挖掘（Contact Mining）",
+          description: "仅当前企业在数据库中配置了 contact mining workflow 时展示；每次只触发当前搜索条件对应的 workflow。",
         },
       ]
       : []),
@@ -678,7 +689,7 @@ export default function SettingsPage() {
                 <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />成员功能权限</CardTitle>
-                    <CardDescription>配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问与增长顾问；企业管理员始终可见。</CardDescription>
+                    <CardDescription>配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问、增长顾问和海外猎客入口；企业管理员始终可见。</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
               {members.length === 0 && !loadingAdminData ? (
@@ -860,25 +871,29 @@ export default function SettingsPage() {
                 {isEnterpriseAdmin && (
                   <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />专家顾问 Dify Workflow 配置</CardTitle>
-                      <CardDescription>设置页只展示当前工作流信息。企业数据库中的 workflow 优先级高于系统默认 workflow；只有当前企业已配置 lead hunter 时才展示该项。</CardDescription>
+                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />专家顾问与海外猎客 Dify Workflow 配置</CardTitle>
+                      <CardDescription>设置页只展示当前工作流信息。企业数据库中的 workflow 优先级高于系统默认 workflow；Company Search 与 Contact Mining 仅在企业数据库已配置时展示。</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
               {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">正在读取顾问配置...</p>}
               <div className="grid gap-4">
                 {advisorCards.map((card) => {
                   const override = advisorOverrides[card.advisorType]
+                  const isLeadHunterWorkflow =
+                    card.advisorType === "company-search" || card.advisorType === "contact-mining"
                   const defaultInfo =
                     card.advisorType === "brand-strategy"
                       ? advisorDefaults?.brandStrategy
                       : card.advisorType === "growth"
                         ? advisorDefaults?.growth
-                        : advisorDefaults?.leadHunter
+                        : card.advisorType === "company-search"
+                          ? advisorDefaults?.companySearch
+                          : advisorDefaults?.contactMining
                   const hasEnterpriseWorkflow = Boolean(override?.baseUrl && override?.hasApiKey)
                   const enterpriseEnabled = Boolean(hasEnterpriseWorkflow && override?.enabled)
                   const hasSystemDefault = Boolean(defaultInfo?.configured)
                   const statusLabel =
-                    card.advisorType === "lead-hunter"
+                    isLeadHunterWorkflow
                       ? enterpriseEnabled
                         ? "当前生效：企业数据库"
                         : "当前状态：未启用"
@@ -900,9 +915,9 @@ export default function SettingsPage() {
                       </div>
 
                       <div className="grid gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 text-sm">
-                        {card.advisorType === "lead-hunter" ? (
+                        {isLeadHunterWorkflow ? (
                           <p className="text-xs leading-6 text-muted-foreground">
-                            海外猎客没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示该入口。
+                            海外猎客（Company Search / Contact Mining）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。
                           </p>
                         ) : (
                           <div className="grid gap-3 md:grid-cols-2">

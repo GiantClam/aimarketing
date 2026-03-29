@@ -4,6 +4,7 @@ import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { getConversations } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { createLeadHunterConversation, listLeadHunterConversations } from "@/lib/lead-hunter/repository"
+import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -12,18 +13,20 @@ export async function GET(req: NextRequest) {
 
   try {
     const advisorType = searchParams.get("advisorType")
+    const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(advisorType)
+    const resolvedAdvisorType = normalizedLeadHunterType || advisorType
     const auth = await requireAdvisorAccess(req, advisorType)
     if ("response" in auth) {
       return auth.response
     }
 
-    if (advisorType === "lead-hunter") {
-      const data = await listLeadHunterConversations(auth.user.id, lastId, limit)
+    if (normalizedLeadHunterType) {
+      const data = await listLeadHunterConversations(auth.user.id, normalizedLeadHunterType, lastId, limit)
       return NextResponse.json(data)
     }
 
-    const difyUser = buildDifyUserIdentity(auth.user.email, advisorType)
-    const config = await getDifyConfigByAdvisorType(advisorType, {
+    const difyUser = buildDifyUserIdentity(auth.user.email, resolvedAdvisorType)
+    const config = await getDifyConfigByAdvisorType(resolvedAdvisorType, {
       userId: auth.user.id,
       userEmail: auth.user.email,
     })
@@ -62,12 +65,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
     const advisorType = body?.advisorType
+    const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(advisorType)
     const auth = await requireAdvisorAccess(req, advisorType)
     if ("response" in auth) {
       return auth.response
     }
 
-    if (advisorType !== "lead-hunter") {
+    if (!normalizedLeadHunterType) {
       return NextResponse.json(
         { error: "advisor_session_creation_requires_first_message" },
         { status: 409 },
@@ -75,7 +79,7 @@ export async function POST(req: NextRequest) {
     }
 
     const title = typeof body?.name === "string" && body.name.trim() ? body.name.trim() : "新建会话"
-    const conversation = await createLeadHunterConversation(auth.user.id, title)
+    const conversation = await createLeadHunterConversation(auth.user.id, normalizedLeadHunterType, title)
 
     return NextResponse.json({
       data: {

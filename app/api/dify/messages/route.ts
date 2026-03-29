@@ -4,6 +4,7 @@ import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { getMessages } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { listLeadHunterMessages } from "@/lib/lead-hunter/repository"
+import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -17,21 +18,23 @@ export async function GET(req: NextRequest) {
 
   try {
     const advisorType = searchParams.get("advisorType")
+    const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(advisorType)
+    const resolvedAdvisorType = normalizedLeadHunterType || advisorType
     const auth = await requireAdvisorAccess(req, advisorType)
     if ("response" in auth) {
       return auth.response
     }
 
-    if (advisorType === "lead-hunter") {
-      const data = await listLeadHunterMessages(auth.user.id, conversationId, firstId, limit)
+    if (normalizedLeadHunterType) {
+      const data = await listLeadHunterMessages(auth.user.id, normalizedLeadHunterType, conversationId, firstId, limit)
       if (!data) {
         return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
       }
       return NextResponse.json(data)
     }
 
-    const difyUser = buildDifyUserIdentity(auth.user.email, advisorType)
-    const config = await getDifyConfigByAdvisorType(advisorType, {
+    const difyUser = buildDifyUserIdentity(auth.user.email, resolvedAdvisorType)
+    const config = await getDifyConfigByAdvisorType(resolvedAdvisorType, {
       userId: auth.user.id,
       userEmail: auth.user.email,
     })

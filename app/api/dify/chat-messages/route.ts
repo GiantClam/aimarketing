@@ -6,34 +6,37 @@ import { sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { ensureLeadHunterConversation } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
+import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(body?.advisorType)
+    const resolvedAdvisorType = normalizedLeadHunterType || body?.advisorType
     const auth = await requireAdvisorAccess(req, body?.advisorType)
     if ("response" in auth) {
       return auth.response
     }
 
     const rateLimit = await checkRateLimit({
-      key: `dify:chat:${auth.user.id}:${getRequestIp(req)}:${body.advisorType}`,
+      key: `dify:chat:${auth.user.id}:${getRequestIp(req)}:${resolvedAdvisorType}`,
       limit: 30,
       windowMs: 60_000,
     })
     if (!rateLimit.ok) {
-      logAuditEvent(req, "advisor.chat.rate_limited", { userId: auth.user.id, advisorType: body?.advisorType })
+      logAuditEvent(req, "advisor.chat.rate_limited", { userId: auth.user.id, advisorType: resolvedAdvisorType })
       return createRateLimitResponse("Too many advisor requests", rateLimit)
     }
 
-    const difyUser = buildDifyUserIdentity(auth.user.email, body.advisorType)
-    const config = await getDifyConfigByAdvisorType(body.advisorType, {
+    const difyUser = buildDifyUserIdentity(auth.user.email, resolvedAdvisorType)
+    const config = await getDifyConfigByAdvisorType(resolvedAdvisorType, {
       userId: auth.user.id,
       userEmail: auth.user.email,
     })
     if (!config) {
-      logAuditEvent(req, "advisor.chat.config_missing", { userId: auth.user.id, advisorType: body?.advisorType })
+      logAuditEvent(req, "advisor.chat.config_missing", { userId: auth.user.id, advisorType: resolvedAdvisorType })
       return NextResponse.json({ error: "No Dify connection configured" }, { status: 500 })
     }
 
@@ -44,9 +47,10 @@ export async function POST(req: NextRequest) {
       }
 
       const conversation =
-        body?.advisorType === "lead-hunter"
+        normalizedLeadHunterType
           ? await ensureLeadHunterConversation(
               auth.user.id,
+              normalizedLeadHunterType,
               typeof body?.conversation_id === "string" ? body.conversation_id : null,
               query,
             )
@@ -59,10 +63,10 @@ export async function POST(req: NextRequest) {
           kind: "advisor_turn",
           userId: auth.user.id,
           userEmail: auth.user.email,
-          advisorType: body.advisorType,
+          advisorType: resolvedAdvisorType,
           query,
           conversationId:
-            body?.advisorType === "lead-hunter"
+            normalizedLeadHunterType
               ? String(conversation?.id || "")
               : typeof body?.conversation_id === "string"
                 ? body.conversation_id
@@ -74,7 +78,7 @@ export async function POST(req: NextRequest) {
         accepted: true,
         task_id: String(task.id),
         conversation_id:
-          body?.advisorType === "lead-hunter"
+          normalizedLeadHunterType
             ? String(conversation?.id || "")
             : typeof body?.conversation_id === "string"
               ? body.conversation_id
@@ -82,7 +86,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (body?.advisorType === "lead-hunter") {
+    if (normalizedLeadHunterType) {
       const query = typeof body?.query === "string" ? body.query : typeof body?.inputs?.contents === "string" ? body.inputs.contents : ""
       if (!query.trim()) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
@@ -94,6 +98,7 @@ export async function POST(req: NextRequest) {
           query,
           responseMode: body?.response_mode === "streaming" ? "streaming" : "blocking",
           user: difyUser,
+          advisorType: normalizedLeadHunterType,
         }),
       )
 
@@ -139,7 +144,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await difyRes.json()
-    logAuditEvent(req, "advisor.chat.success", { userId: auth.user.id, advisorType: body?.advisorType })
+    logAuditEvent(req, "advisor.chat.success", { userId: auth.user.id, advisorType: resolvedAdvisorType })
     return NextResponse.json(data)
   } catch (error: any) {
     logAuditEvent(req, "advisor.chat.error", { message: error?.message || "unknown" })

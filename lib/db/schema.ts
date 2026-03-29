@@ -151,6 +151,7 @@ export const leadHunterConversations = pgTable(withPrefix("lead_hunter_conversat
   userId: integer("user_id")
     .notNull()
     .references(() => users.id),
+  advisorType: varchar("advisor_type", { length: 32 }).default("company-search").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

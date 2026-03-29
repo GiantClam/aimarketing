@@ -2,6 +2,47 @@ type LeadHunterChatPayload = {
   query: string
   responseMode: "blocking" | "streaming"
   user: string
+  advisorType?: string | null
+}
+
+function extractCompanyName(query: string) {
+  const normalized = query.replace(/\s+/g, " ").trim()
+  if (!normalized) return ""
+
+  const explicitMatch =
+    normalized.match(/(?:company_name|company\s*name)\s*[:=]\s*([^;,\n]+)/i) ||
+    normalized.match(/公司名\s*[:：]\s*([^;，,\n]+)/)
+  if (explicitMatch?.[1]) {
+    return explicitMatch[1].trim()
+  }
+
+  return normalized.slice(0, 120)
+}
+
+function normalizeWebsite(raw: string) {
+  const trimmed = raw.trim()
+  if (!trimmed) return ""
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+  return `https://${trimmed}`
+}
+
+function buildWebsiteFromCompanyName(companyName: string) {
+  const token = companyName.toLowerCase().replace(/[^a-z0-9]+/g, "")
+  if (!token) return "https://example.com"
+  return `https://www.${token}.com`
+}
+
+function extractWebsite(query: string, companyName: string) {
+  const normalized = query.replace(/\s+/g, " ").trim()
+  const explicitMatch =
+    normalized.match(/(?:website|url|domain)\s*[:=]\s*([^;,\n]+)/i) ||
+    normalized.match(/网站\s*[:：]\s*([^;，,\n]+)/)
+  if (explicitMatch?.[1]) {
+    return normalizeWebsite(explicitMatch[1])
+  }
+  return buildWebsiteFromCompanyName(companyName)
 }
 
 function toReadableLabel(key: string) {
@@ -57,13 +98,24 @@ function formatObjectList(items: Array<Record<string, unknown>>) {
     .join("\n\n")
 }
 
-export function buildLeadHunterChatPayload({ query, responseMode, user }: LeadHunterChatPayload) {
+export function buildLeadHunterChatPayload({ query, responseMode, user, advisorType }: LeadHunterChatPayload) {
+  const companyName = extractCompanyName(query)
+  const website = extractWebsite(query, companyName)
+  const contactMiningInputs =
+    advisorType === "contact-mining" && companyName
+      ? {
+          company_name: companyName,
+          website,
+        }
+      : {}
+
   return {
     inputs: {
       contents: query,
       user_query: query,
       search_query: query,
       search_conditions: query,
+      ...contactMiningInputs,
     },
     query,
     response_mode: responseMode,

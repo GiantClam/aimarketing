@@ -12,10 +12,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PenSquare,
-  Radar,
+  Search,
   Settings,
   Target,
   TrendingUp,
+  Users,
   Video,
   X,
 } from "lucide-react"
@@ -78,7 +79,12 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   const showAdvisorSection = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
-    return hasAdvisorFeature && (advisor.brandStrategy || advisor.growth || advisor.leadHunter)
+    return hasAdvisorFeature && (advisor.brandStrategy || advisor.growth)
+  }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature])
+
+  const showLeadHunterSection = useMemo(() => {
+    if (enterprisePending || enterpriseRejected) return false
+    return hasAdvisorFeature && (advisor.companySearch || advisor.contactMining)
   }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature])
 
   const showWriterEntry = useMemo(() => {
@@ -178,15 +184,36 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         <AdvisorSidebarItem title={messages.dashboardLayout.growthAdvisor} advisorType="growth" userEmail={userEmail} icon={TrendingUp} />
                       )
                     )}
-                    {hasAdvisorFeature && advisor.leadHunter && userEmail && (
+                  </div>
+                )}
+
+                {showLeadHunterSection && (
+                  <div>
+                    {!sidebarCollapsed && (
+                      <h3 className="mb-2 font-sans text-[11px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/65">
+                        {messages.dashboardLayout.leadHunterSection}
+                      </h3>
+                    )}
+                    {hasAdvisorFeature && advisor.companySearch && userEmail && (
                       sidebarCollapsed ? (
-                        <Link href="/dashboard/advisor/lead-hunter/new">
-                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.leadHunter}>
-                            <Radar className="h-4 w-4" />
+                        <Link href="/dashboard/advisor/company-search/new">
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.companySearch}>
+                            <Search className="h-4 w-4" />
                           </Button>
                         </Link>
                       ) : (
-                        <AdvisorSidebarItem title={messages.dashboardLayout.leadHunter} advisorType="lead-hunter" userEmail={userEmail} icon={Radar} />
+                        <AdvisorSidebarItem title={messages.dashboardLayout.companySearch} advisorType="company-search" userEmail={userEmail} icon={Search} />
+                      )
+                    )}
+                    {hasAdvisorFeature && advisor.contactMining && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/contact-mining/new">
+                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.contactMining}>
+                            <Users className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.contactMining} advisorType="contact-mining" userEmail={userEmail} icon={Users} />
                       )
                     )}
                   </div>

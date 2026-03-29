@@ -116,6 +116,16 @@ const WORKSPACE_META: Record<string, WorkspaceMeta> = {
   },
 };
 
+WORKSPACE_META["company-search"] = {
+  ...WORKSPACE_META["lead-hunter"],
+  title: "公司搜索 | Company Search",
+}
+
+WORKSPACE_META["contact-mining"] = {
+  ...WORKSPACE_META["lead-hunter"],
+  title: "联系人挖掘 | Contact Mining",
+}
+
 const ADVISOR_INITIAL_MESSAGE_LIMIT = 20;
 const ADVISOR_HISTORY_PAGE_SIZE = 20;
 

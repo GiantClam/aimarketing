@@ -4,6 +4,7 @@ import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { renameConversation } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { renameLeadHunterConversation } from "@/lib/lead-hunter/repository"
+import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 export async function POST(
     req: NextRequest,
@@ -12,6 +13,8 @@ export async function POST(
   try {
     const resolved = await params
     const body = await req.json()
+    const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(body?.advisorType)
+    const resolvedAdvisorType = normalizedLeadHunterType || body?.advisorType
     const auth = await requireAdvisorAccess(req, body?.advisorType)
     if ("response" in auth) {
       return auth.response
@@ -21,8 +24,8 @@ export async function POST(
       return NextResponse.json({ error: "name is required" }, { status: 400 })
     }
 
-    if (body?.advisorType === "lead-hunter") {
-      const data = await renameLeadHunterConversation(auth.user.id, resolved.conversationId, body.name)
+    if (normalizedLeadHunterType) {
+      const data = await renameLeadHunterConversation(auth.user.id, normalizedLeadHunterType, resolved.conversationId, body.name)
       if (!data) {
         return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
       }
@@ -33,8 +36,8 @@ export async function POST(
       })
     }
 
-    const difyUser = buildDifyUserIdentity(auth.user.email, body.advisorType)
-    const config = await getDifyConfigByAdvisorType(body.advisorType, {
+    const difyUser = buildDifyUserIdentity(auth.user.email, resolvedAdvisorType)
+    const config = await getDifyConfigByAdvisorType(resolvedAdvisorType, {
       userId: auth.user.id,
       userEmail: auth.user.email,
     })

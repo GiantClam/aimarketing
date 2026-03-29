@@ -218,7 +218,7 @@ def run_stage(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
-    parser.add_argument("--advisor-type", default="lead-hunter")
+    parser.add_argument("--advisor-type", default="company-search")
     parser.add_argument("--session-cookie")
     parser.add_argument("--email")
     parser.add_argument("--password")

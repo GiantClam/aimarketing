@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { stopMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 export async function POST(
     req: NextRequest,
@@ -11,17 +12,19 @@ export async function POST(
   try {
     const resolved = await params
     const body = await req.json()
+    const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(body?.advisorType)
+    const resolvedAdvisorType = normalizedLeadHunterType || body?.advisorType
     const auth = await requireAdvisorAccess(req, body?.advisorType)
     if ("response" in auth) {
       return auth.response
     }
 
-    if (body?.advisorType === "lead-hunter") {
+    if (normalizedLeadHunterType) {
       return NextResponse.json({ error: "lead_hunter_stop_not_supported" }, { status: 409 })
     }
 
-    const difyUser = buildDifyUserIdentity(auth.user.email, body.advisorType)
-    const config = await getDifyConfigByAdvisorType(body.advisorType, {
+    const difyUser = buildDifyUserIdentity(auth.user.email, resolvedAdvisorType)
+    const config = await getDifyConfigByAdvisorType(resolvedAdvisorType, {
       userId: auth.user.id,
       userEmail: auth.user.email,
     })

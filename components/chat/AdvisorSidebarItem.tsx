@@ -32,6 +32,7 @@ import {
 } from "@/lib/query/workspace-cache"
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
 import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
+import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 
 interface Conversation {
@@ -242,7 +243,7 @@ export function AdvisorSidebarItem({
 
     setIsCreatingConversation(true)
     try {
-      if (advisorType !== "lead-hunter") {
+      if (!normalizeLeadHunterAdvisorType(advisorType)) {
         router.push(`/dashboard/advisor/${advisorType}/new`)
         return
       }

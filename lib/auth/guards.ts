@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getSessionUser, isSessionDbUnavailableError } from "@/lib/auth/session"
 import type { FeatureKey } from "@/lib/enterprise/constants"
 import type { AuthUserPayload } from "@/lib/enterprise/server"
+import { isLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
 
 export function hasFeatureAccess(user: AuthUserPayload, feature?: FeatureKey) {
@@ -15,7 +16,7 @@ export function hasFeatureAccess(user: AuthUserPayload, feature?: FeatureKey) {
 
 export function getAdvisorFeature(advisorType: string | null | undefined): FeatureKey | null {
   if (advisorType === "copywriting") return "copywriting_generation"
-  if (advisorType === "brand-strategy" || advisorType === "growth" || advisorType === "lead-hunter") return "expert_advisor"
+  if (advisorType === "brand-strategy" || advisorType === "growth" || isLeadHunterAdvisorType(advisorType)) return "expert_advisor"
   return null
 }
 

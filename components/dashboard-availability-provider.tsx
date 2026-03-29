@@ -7,7 +7,8 @@ import { useAuth } from "@/components/auth-provider"
 type DashboardAdvisorAvailability = {
   brandStrategy: boolean
   growth: boolean
-  leadHunter: boolean
+  companySearch: boolean
+  contactMining: boolean
   copywriting: boolean
   hasAny: boolean
 }
@@ -32,7 +33,8 @@ const DEFAULT_AVAILABILITY: DashboardAvailabilityState = {
   advisor: {
     brandStrategy: false,
     growth: false,
-    leadHunter: false,
+    companySearch: false,
+    contactMining: false,
     copywriting: false,
     hasAny: false,
   },
@@ -90,7 +92,8 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
           advisor: {
             brandStrategy: Boolean(json?.data?.advisor?.brandStrategy),
             growth: Boolean(json?.data?.advisor?.growth),
-            leadHunter: Boolean(json?.data?.advisor?.leadHunter),
+            companySearch: Boolean(json?.data?.advisor?.companySearch),
+            contactMining: Boolean(json?.data?.advisor?.contactMining),
             copywriting: Boolean(json?.data?.advisor?.copywriting),
             hasAny: Boolean(json?.data?.advisor?.hasAny),
           },

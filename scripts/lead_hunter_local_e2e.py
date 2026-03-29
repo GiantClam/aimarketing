@@ -116,11 +116,11 @@ def main():
         if "/login" in page.url:
             raise RuntimeError("session cookie was not accepted; redirected to login")
 
-        lead_hunter_link = page.locator("a[href='/dashboard/advisor/lead-hunter/new']").first
+        lead_hunter_link = page.locator("a[href='/dashboard/advisor/company-search/new']").first
         lead_hunter_link.wait_for(timeout=20000)
         lead_hunter_link.click()
         page.wait_for_load_state("networkidle")
-        page.wait_for_url(re.compile(r".*/dashboard/advisor/lead-hunter/(new|[A-Za-z0-9_-]+)$"), timeout=20000)
+        page.wait_for_url(re.compile(r".*/dashboard/advisor/company-search/(new|[A-Za-z0-9_-]+)$"), timeout=20000)
         page.screenshot(path=str(out_dir / "lead-hunter-entry.png"), full_page=True)
 
         chat_input = page.locator("input").last
@@ -146,7 +146,7 @@ def main():
 
         poll_task(args.base_url, task_id, session_cookie, args.timeout_seconds)
 
-        page.wait_for_url(re.compile(r".*/dashboard/advisor/lead-hunter/[A-Za-z0-9_-]+$"), timeout=20000)
+        page.wait_for_url(re.compile(r".*/dashboard/advisor/company-search/[A-Za-z0-9_-]+$"), timeout=20000)
         page.reload(wait_until="networkidle")
         page.wait_for_timeout(5000)
         bubbles = page.locator("div.break-words")

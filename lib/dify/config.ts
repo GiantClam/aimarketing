@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { isDemoLoginEnabled } from "@/lib/auth/session"
 import { db } from "@/lib/db"
 import { difyConnections, enterpriseDifyAdvisorConfigs, users } from "@/lib/db/schema"
+import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 type DifyLookupOptions = {
   userId?: number | null
@@ -20,7 +21,7 @@ type DifyConfig = {
   apiKey: string
 }
 
-type AdvisorType = "brand-strategy" | "growth" | "copywriting" | "lead-hunter"
+type AdvisorType = "brand-strategy" | "growth" | "copywriting" | "company-search" | "contact-mining"
 const DEMO_USER_EMAIL = "demo@example.com"
 const DIFY_DB_RETRY_DELAYS_MS = [250, 750]
 
@@ -91,12 +92,11 @@ function isStatelessDemoLookup(options?: DifyLookupOptions) {
 function getAdvisorEnvPrefix(advisorType: AdvisorType) {
   if (advisorType === "brand-strategy") return "BRAND"
   if (advisorType === "growth") return "GROWTH"
-  if (advisorType === "lead-hunter") return "LEAD_HUNTER"
   return "COPYWRITING"
 }
 
 function getSystemDefaultAdvisorConfig(advisorType: AdvisorType): DifyConfig | null {
-  if (advisorType === "lead-hunter") {
+  if (advisorType === "company-search" || advisorType === "contact-mining") {
     return null
   }
 
@@ -129,11 +129,28 @@ export function getSystemDefaultAdvisorSummary() {
       configured: Boolean(growth),
       baseUrl: growth?.baseUrl || null,
     },
-    leadHunter: {
+    companySearch: {
+      configured: false,
+      baseUrl: null,
+    },
+    contactMining: {
       configured: false,
       baseUrl: null,
     },
   }
+}
+
+function normalizeAdvisorType(advisorType: string | null | undefined): AdvisorType | null {
+  if (advisorType === "brand-strategy" || advisorType === "growth" || advisorType === "copywriting") {
+    return advisorType
+  }
+
+  const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(advisorType)
+  if (normalizedLeadHunterType) {
+    return normalizedLeadHunterType
+  }
+
+  return null
 }
 
 export function buildDifyUserIdentity(userEmail: string, advisorType?: string | null) {
@@ -400,7 +417,17 @@ export async function getEnterpriseAdvisorOverride(
       .limit(1),
   )
 
-  const row = rows[0]
+  let row = rows[0]
+  if (!row && advisorType === "company-search") {
+    const legacyRows = await withDifyDbRetry("enterprise-advisor-override.select-legacy", async () =>
+      db
+        .select()
+        .from(enterpriseDifyAdvisorConfigs)
+        .where(and(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId), eq(enterpriseDifyAdvisorConfigs.advisorType, "lead-hunter")))
+        .limit(1),
+    )
+    row = legacyRows[0]
+  }
   if (!row) return null
 
   return {
@@ -517,7 +544,7 @@ async function getAdvisorConfig(
     }
   }
 
-  if (advisorType === "lead-hunter") {
+  if (advisorType === "company-search" || advisorType === "contact-mining") {
     return null
   }
 
@@ -535,7 +562,10 @@ async function getAdvisorConfig(
     }
   }
 
-  const legacyName = advisorType === "brand-strategy" ? "品牌战略顾问" : "增长顾问"
+  const legacyName = advisorType === "brand-strategy" ? "品牌战略顾问" : advisorType === "growth" ? "增长顾问" : null
+  if (!legacyName) {
+    return null
+  }
   const legacyConfig = await getLegacyDifyConfigByNameWithContext(legacyName, context || resolvedContext, options, false)
   if (legacyConfig) {
     return {
@@ -551,11 +581,12 @@ async function getAdvisorConfig(
 
 export async function getAdvisorAvailability(options?: DifyLookupOptions) {
   const context = await resolveUserContext(options)
-  const [brandConfig, growthConfig, leadHunterConfig, copywritingNamedConfig, defaultConfig, writerMockAvailable] =
+  const [brandConfig, growthConfig, companySearchConfig, contactMiningConfig, copywritingNamedConfig, defaultConfig, writerMockAvailable] =
     await Promise.all([
       getAdvisorConfig("brand-strategy", options, context),
       getAdvisorConfig("growth", options, context),
-      getAdvisorConfig("lead-hunter", options, context, { includeSystemDefault: false }),
+      getAdvisorConfig("company-search", options, context, { includeSystemDefault: false }),
+      getAdvisorConfig("contact-mining", options, context, { includeSystemDefault: false }),
       hasDifyConfigByName("文案写作专家", options),
       getLegacyDefaultDifyConfigWithContext(context, options),
       isWriterMockAvailableWithContext(context, options),
@@ -565,30 +596,42 @@ export async function getAdvisorAvailability(options?: DifyLookupOptions) {
   return {
     brandStrategy: Boolean(brandConfig),
     growth: Boolean(growthConfig),
-    leadHunter: Boolean(leadHunterConfig),
+    companySearch: Boolean(companySearchConfig),
+    contactMining: Boolean(contactMiningConfig),
     copywriting,
-    hasAny: Boolean(brandConfig) || Boolean(growthConfig) || Boolean(leadHunterConfig) || copywriting,
+    hasAny:
+      Boolean(brandConfig) ||
+      Boolean(growthConfig) ||
+      Boolean(companySearchConfig) ||
+      Boolean(contactMiningConfig) ||
+      copywriting,
   }
 }
 
 export async function getDifyConfigByAdvisorType(advisorType?: string | null, options?: DifyLookupOptions) {
   const context = await resolveUserContext(options)
-  if (advisorType === "brand-strategy") {
+  const normalizedAdvisorType = normalizeAdvisorType(advisorType)
+  if (normalizedAdvisorType === "brand-strategy") {
     const config = await getAdvisorConfig("brand-strategy", options, context)
     return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
   }
 
-  if (advisorType === "growth") {
+  if (normalizedAdvisorType === "growth") {
     const config = await getAdvisorConfig("growth", options, context)
     return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
   }
 
-  if (advisorType === "lead-hunter") {
-    const config = await getAdvisorConfig("lead-hunter", options, context)
+  if (normalizedAdvisorType === "company-search") {
+    const config = await getAdvisorConfig("company-search", options, context)
     return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
   }
 
-  if (advisorType === "copywriting") {
+  if (normalizedAdvisorType === "contact-mining") {
+    const config = await getAdvisorConfig("contact-mining", options, context)
+    return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
+  }
+
+  if (normalizedAdvisorType === "copywriting") {
     return getLegacyDifyConfigByName("文案写作专家", options, true)
   }
 

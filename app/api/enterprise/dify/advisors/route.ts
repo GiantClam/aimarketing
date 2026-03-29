@@ -11,7 +11,7 @@ import {
 } from "@/lib/dify/config"
 import { isEnterpriseAdmin } from "@/lib/enterprise/server"
 
-type EnterpriseAdvisorType = "brand-strategy" | "growth" | "lead-hunter"
+type EnterpriseAdvisorType = "brand-strategy" | "growth" | "company-search" | "contact-mining"
 
 async function getAdminEnterpriseId(userId: number) {
   const allowed = await isEnterpriseAdmin(userId)
@@ -46,10 +46,13 @@ function serializeOverride(override: {
   apiKey: string
   enabled: boolean
 }) {
+  const normalizedAdvisorType =
+    override.advisorType === "lead-hunter" ? "company-search" : override.advisorType
+
   return {
     id: override.id,
     enterpriseId: override.enterpriseId,
-    advisorType: override.advisorType as EnterpriseAdvisorType,
+    advisorType: normalizedAdvisorType as EnterpriseAdvisorType,
     baseUrl: override.baseUrl,
     enabled: override.enabled,
     hasApiKey: Boolean(override.apiKey.trim()),
@@ -103,8 +106,12 @@ export async function PUT(request: NextRequest) {
         ? "growth"
         : body?.advisorType === "brand-strategy"
           ? "brand-strategy"
-          : body?.advisorType === "lead-hunter"
-            ? "lead-hunter"
+          : body?.advisorType === "company-search"
+            ? "company-search"
+            : body?.advisorType === "lead-hunter"
+              ? "company-search"
+            : body?.advisorType === "contact-mining"
+              ? "contact-mining"
             : null
     if (!advisorType) {
       return NextResponse.json({ error: "advisor_type_required" }, { status: 400 })

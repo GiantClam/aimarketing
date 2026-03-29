@@ -13,7 +13,14 @@ export async function GET(req: NextRequest) {
     if (!currentUser) {
       return NextResponse.json({
         data: {
-          advisor: { brandStrategy: false, growth: false, leadHunter: false, copywriting: false, hasAny: false },
+          advisor: {
+            brandStrategy: false,
+            growth: false,
+            companySearch: false,
+            contactMining: false,
+            copywriting: false,
+            hasAny: false,
+          },
           writer: { enabled: false, provider: "unavailable", reason: "unauthenticated", knowledge: null },
           imageAssistant: { enabled: false, provider: "unavailable", reason: "unauthenticated" },
         },
@@ -38,10 +45,15 @@ export async function GET(req: NextRequest) {
     const advisor = {
       brandStrategy: hasAdvisorAccess && advisorAvailability.brandStrategy,
       growth: hasAdvisorAccess && advisorAvailability.growth,
-      leadHunter: hasAdvisorAccess && advisorAvailability.leadHunter,
+      companySearch: hasAdvisorAccess && advisorAvailability.companySearch,
+      contactMining: hasAdvisorAccess && advisorAvailability.contactMining,
       copywriting: hasCopywritingAccess && advisorAvailability.copywriting,
       hasAny:
-        (hasAdvisorAccess && (advisorAvailability.brandStrategy || advisorAvailability.growth || advisorAvailability.leadHunter)) ||
+        (hasAdvisorAccess &&
+          (advisorAvailability.brandStrategy ||
+            advisorAvailability.growth ||
+            advisorAvailability.companySearch ||
+            advisorAvailability.contactMining)) ||
         (hasCopywritingAccess && advisorAvailability.copywriting),
     }
 

@@ -27,6 +27,8 @@
     "test:e2e:image-assistant:canvas-reference-regression": "python scripts/run_image_assistant_canvas_reference_regression_e2e_with_server.py",
     "test:image-assistant:patch-composite": "python scripts/validate_image_patch_composite_math.py",
     "test:perf:lead-hunter": "python scripts/lead_hunter_load_test.py",
+    "test:e2e:lead-hunter:workflows": "python scripts/lead_hunter_workflows_e2e.py",
+    "test:e2e:lead-hunter:workflows:with-server": "python scripts/run_lead_hunter_workflows_e2e_with_server.py",
     "test:e2e:deployed": "python tests/deployed-e2e.py",
     "test:e2e:deployed:dify": "python tests/dify-deployed-check.py"
   },

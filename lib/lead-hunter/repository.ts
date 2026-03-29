@@ -2,6 +2,7 @@ import { and, desc, eq, lt, or } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { leadHunterConversations, leadHunterMessages } from "@/lib/db/schema"
+import { normalizeLeadHunterAdvisorType, type LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 const DEFAULT_CONVERSATION_TITLE = "海外猎客搜索"
 
@@ -34,7 +35,20 @@ function buildConversationTitle(query: string) {
   return normalized.slice(0, 80)
 }
 
-export async function getLeadHunterConversation(userId: number, conversationId: string | number | null | undefined) {
+function resolveAdvisorType(advisorType: string | null | undefined): LeadHunterAdvisorType {
+  const normalized = normalizeLeadHunterAdvisorType(advisorType)
+  if (!normalized) {
+    throw new Error("invalid_lead_hunter_advisor_type")
+  }
+  return normalized
+}
+
+export async function getLeadHunterConversation(
+  userId: number,
+  advisorType: string | null | undefined,
+  conversationId: string | number | null | undefined,
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
   const parsedConversationId = parsePositiveInt(conversationId)
   if (!parsedConversationId) {
     return null
@@ -43,17 +57,26 @@ export async function getLeadHunterConversation(userId: number, conversationId: 
   const rows = await db
     .select()
     .from(leadHunterConversations)
-    .where(and(eq(leadHunterConversations.id, parsedConversationId), eq(leadHunterConversations.userId, userId)))
+    .where(
+      and(
+        eq(leadHunterConversations.id, parsedConversationId),
+        eq(leadHunterConversations.userId, userId),
+        eq(leadHunterConversations.advisorType, normalizedType),
+      ),
+    )
     .limit(1)
 
   return rows[0] || null
 }
 
-export async function createLeadHunterConversation(userId: number, query: string) {
+export async function createLeadHunterConversation(userId: number, advisorType: string | null | undefined, query: string) {
+  const normalizedType = resolveAdvisorType(advisorType)
+
   const [row] = await db
     .insert(leadHunterConversations)
     .values({
       userId,
+      advisorType: normalizedType,
       title: buildConversationTitle(query),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -63,8 +86,14 @@ export async function createLeadHunterConversation(userId: number, query: string
   return row
 }
 
-export async function renameLeadHunterConversation(userId: number, conversationId: string, name: string) {
-  const conversation = await getLeadHunterConversation(userId, conversationId)
+export async function renameLeadHunterConversation(
+  userId: number,
+  advisorType: string | null | undefined,
+  conversationId: string,
+  name: string,
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
+  const conversation = await getLeadHunterConversation(userId, normalizedType, conversationId)
   if (!conversation) {
     return null
   }
@@ -77,11 +106,16 @@ export async function renameLeadHunterConversation(userId: number, conversationI
     })
     .where(eq(leadHunterConversations.id, conversation.id))
 
-  return getLeadHunterConversation(userId, conversation.id)
+  return getLeadHunterConversation(userId, normalizedType, conversation.id)
 }
 
-export async function deleteLeadHunterConversation(userId: number, conversationId: string) {
-  const conversation = await getLeadHunterConversation(userId, conversationId)
+export async function deleteLeadHunterConversation(
+  userId: number,
+  advisorType: string | null | undefined,
+  conversationId: string,
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
+  const conversation = await getLeadHunterConversation(userId, normalizedType, conversationId)
   if (!conversation) {
     return false
   }
@@ -91,9 +125,15 @@ export async function deleteLeadHunterConversation(userId: number, conversationI
   return true
 }
 
-export async function listLeadHunterConversations(userId: number, lastId?: string | null, limit = 20) {
+export async function listLeadHunterConversations(
+  userId: number,
+  advisorType: string | null | undefined,
+  lastId?: string | null,
+  limit = 20,
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
   const cappedLimit = Math.max(1, Math.min(limit, 50))
-  const cursorConversation = lastId ? await getLeadHunterConversation(userId, lastId) : null
+  const cursorConversation = lastId ? await getLeadHunterConversation(userId, normalizedType, lastId) : null
 
   const rows = await db
     .select({
@@ -107,6 +147,7 @@ export async function listLeadHunterConversations(userId: number, lastId?: strin
       cursorConversation
         ? and(
             eq(leadHunterConversations.userId, userId),
+            eq(leadHunterConversations.advisorType, normalizedType),
             or(
               lt(leadHunterConversations.updatedAt, cursorConversation.updatedAt ?? new Date()),
               and(
@@ -115,7 +156,7 @@ export async function listLeadHunterConversations(userId: number, lastId?: strin
               ),
             ),
           )
-        : eq(leadHunterConversations.userId, userId),
+        : and(eq(leadHunterConversations.userId, userId), eq(leadHunterConversations.advisorType, normalizedType)),
     )
     .orderBy(desc(leadHunterConversations.updatedAt), desc(leadHunterConversations.id))
     .limit(cappedLimit + 1)
@@ -135,8 +176,15 @@ export async function listLeadHunterConversations(userId: number, lastId?: strin
   }
 }
 
-export async function listLeadHunterMessages(userId: number, conversationId: string, firstId?: string | null, limit = 20) {
-  const conversation = await getLeadHunterConversation(userId, conversationId)
+export async function listLeadHunterMessages(
+  userId: number,
+  advisorType: string | null | undefined,
+  conversationId: string,
+  firstId?: string | null,
+  limit = 20,
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
+  const conversation = await getLeadHunterConversation(userId, normalizedType, conversationId)
   if (!conversation) {
     return null
   }
@@ -178,8 +226,15 @@ export async function listLeadHunterMessages(userId: number, conversationId: str
   }
 }
 
-export async function appendLeadHunterMessage(userId: number, conversationId: string, query: string, answer: string) {
-  const conversation = await getLeadHunterConversation(userId, conversationId)
+export async function appendLeadHunterMessage(
+  userId: number,
+  advisorType: string | null | undefined,
+  conversationId: string,
+  query: string,
+  answer: string,
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
+  const conversation = await getLeadHunterConversation(userId, normalizedType, conversationId)
   if (!conversation) {
     return null
   }
@@ -211,11 +266,17 @@ export async function appendLeadHunterMessage(userId: number, conversationId: st
   }
 }
 
-export async function ensureLeadHunterConversation(userId: number, conversationId: string | null | undefined, query: string) {
-  const existing = await getLeadHunterConversation(userId, conversationId)
+export async function ensureLeadHunterConversation(
+  userId: number,
+  advisorType: string | null | undefined,
+  conversationId: string | null | undefined,
+  query: string,
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
+  const existing = await getLeadHunterConversation(userId, normalizedType, conversationId)
   if (existing) {
     return existing
   }
 
-  return createLeadHunterConversation(userId, query)
+  return createLeadHunterConversation(userId, normalizedType, query)
 }

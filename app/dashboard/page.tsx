@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import Link from "next/link"
-import { ArrowRight, ImageIcon, PenSquare, Radar, Settings, Sparkles, Target, TrendingUp } from "lucide-react"
+import { ArrowRight, ImageIcon, PenSquare, Search, Settings, Sparkles, Target, TrendingUp, Users } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
 import { useDashboardAvailability } from "@/components/dashboard-availability-provider"
@@ -14,7 +14,7 @@ type QuickLinkItem = {
   label: string
   description: string
   icon: any
-  category: "advisor" | "creative" | "admin"
+  category: "advisor" | "leadHunter" | "creative" | "admin"
   accentClassName: string
   badge: string
 }
@@ -61,14 +61,26 @@ export default function DashboardPage() {
       })
     }
 
-    if (hasFeature("expert_advisor") && advisor.leadHunter) {
+    if (hasFeature("expert_advisor") && advisor.companySearch) {
       items.push({
-        href: "/dashboard/advisor/lead-hunter/new",
-        label: messages.dashboardPage.leadHunter.label,
-        icon: Radar,
-        description: messages.dashboardPage.leadHunter.description,
-        category: "advisor",
+        href: "/dashboard/advisor/company-search/new",
+        label: messages.dashboardPage.companySearch.label,
+        icon: Search,
+        description: messages.dashboardPage.companySearch.description,
+        category: "leadHunter",
         accentClassName: "from-sky-600 via-cyan-500 to-teal-300 text-white",
+        badge: "Signal",
+      })
+    }
+
+    if (hasFeature("expert_advisor") && advisor.contactMining) {
+      items.push({
+        href: "/dashboard/advisor/contact-mining/new",
+        label: messages.dashboardPage.contactMining.label,
+        icon: Users,
+        description: messages.dashboardPage.contactMining.description,
+        category: "leadHunter",
+        accentClassName: "from-indigo-600 via-blue-500 to-cyan-300 text-white",
         badge: "Signal",
       })
     }
@@ -105,7 +117,12 @@ export default function DashboardPage() {
       {
         key: "advisor",
         title: "策略与增长",
-        description: "把复杂问题拆成可执行判断，适合品牌、增长和客户搜索任务。",
+        description: "把复杂问题拆成可执行判断，适合品牌定位和增长策略任务。",
+      },
+      {
+        key: "leadHunter",
+        title: "海外猎客",
+        description: "围绕公司搜索和联系人挖掘，按当前条件触发 workflow 获取线索。",
       },
       {
         key: "creative",
@@ -129,11 +146,13 @@ export default function DashboardPage() {
 
   const workspaceStats = useMemo(() => {
     const advisorCount = quickLinks.filter((item) => item.category === "advisor").length
+    const leadHunterCount = quickLinks.filter((item) => item.category === "leadHunter").length
     const creativeCount = quickLinks.filter((item) => item.category === "creative").length
 
     return [
       { label: "可用入口", value: String(quickLinks.length) },
       { label: "顾问工作台", value: String(advisorCount) },
+      { label: "海外猎客", value: String(leadHunterCount) },
       { label: "创意模块", value: String(creativeCount) },
     ]
   }, [quickLinks])
