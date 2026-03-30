@@ -211,9 +211,11 @@ export async function listLeadHunterMessages(
 
   const hasMore = rows.length > cappedLimit
   const pageRows = hasMore ? rows.slice(0, cappedLimit) : rows
+  // Keep pagination query stable with DESC reads, but return timeline in chronological order.
+  const chronologicalRows = [...pageRows].reverse()
 
   return {
-    data: pageRows.map((row) => ({
+    data: chronologicalRows.map((row) => ({
       id: String(row.id),
       conversation_id: String(row.conversationId),
       query: row.query,
