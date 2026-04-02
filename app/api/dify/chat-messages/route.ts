@@ -4,11 +4,134 @@ import { enqueueAssistantTask } from "@/lib/assistant-async"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
-import { ensureLeadHunterConversation } from "@/lib/lead-hunter/repository"
+import { appendLeadHunterMessage, ensureLeadHunterConversation } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
+
+function sanitizeAssistantContent(raw: string) {
+  return raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+}
+
+function extractSseBlocks(buffer: string) {
+  const parts = buffer.split(/\r?\n\r?\n/)
+  return { blocks: parts.slice(0, -1), rest: parts.at(-1) ?? "" }
+}
+
+function getSseDataFromBlock(block: string) {
+  const raw = block
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n")
+    .trim()
+
+  if (!raw || raw === "[DONE]") return null
+
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function extractText(value: unknown): string {
+  if (typeof value === "string") return value
+  if (Array.isArray(value)) {
+    return value.map(extractText).find((item) => item.length > 0) || ""
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).map(extractText).find((item) => item.length > 0) || ""
+  }
+  return ""
+}
+
+function getObjectRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+async function persistLeadHunterStreamingMessage(input: {
+  stream: ReadableStream<Uint8Array>
+  userId: number
+  advisorType: string
+  conversationId: string
+  query: string
+}) {
+  const reader = input.stream.getReader()
+  const decoder = new TextDecoder("utf-8")
+  let buffer = ""
+  let accumulated = ""
+  let workflowOutput: unknown = null
+
+  const consumeBlocks = (blocks: string[]) => {
+    let terminalEventSeen = false
+    for (const block of blocks) {
+      const data = getSseDataFromBlock(block)
+      if (!data) continue
+
+      const event = typeof data.event === "string" ? data.event : ""
+      const payloadData = getObjectRecord(data.data)
+      if (["message", "agent_message", "text_chunk"].includes(event)) {
+        const chunk =
+          extractText((data as { answer?: unknown }).answer) ||
+          extractText(payloadData?.text)
+        if (chunk.trim()) {
+          accumulated += chunk.trim()
+        }
+      }
+
+      if (event === "workflow_finished") {
+        workflowOutput =
+          payloadData?.outputs ||
+          payloadData?.output ||
+          payloadData?.result ||
+          (data as { output?: unknown }).output ||
+          (data as { result?: unknown }).result ||
+          workflowOutput
+      }
+
+      if (event === "message_end") {
+        terminalEventSeen = true
+      }
+    }
+    return terminalEventSeen
+  }
+
+  let streamTerminalEventSeen = false
+  while (!streamTerminalEventSeen) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parsed = extractSseBlocks(buffer)
+    buffer = parsed.rest
+    if (consumeBlocks(parsed.blocks)) {
+      streamTerminalEventSeen = true
+      break
+    }
+  }
+
+  if (!streamTerminalEventSeen) {
+    buffer += decoder.decode()
+    if (buffer.trim()) {
+      const parsed = extractSseBlocks(`${buffer}\n\n`)
+      consumeBlocks(parsed.blocks)
+    }
+  }
+  void reader.cancel().catch(() => null)
+
+  const rawResult = accumulated.trim() ? accumulated : workflowOutput
+  const answer = sanitizeAssistantContent(formatLeadHunterChatOutput(rawResult))
+  await appendLeadHunterMessage(
+    input.userId,
+    input.advisorType,
+    input.conversationId,
+    input.query,
+    answer || "No lead data returned.",
+  )
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -91,12 +214,21 @@ export async function POST(req: NextRequest) {
       if (!query.trim()) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
       }
+      const isStreaming = body?.response_mode === "streaming"
+      const streamingConversation = isStreaming
+        ? await ensureLeadHunterConversation(
+            auth.user.id,
+            normalizedLeadHunterType,
+            typeof body?.conversation_id === "string" ? body.conversation_id : null,
+            query,
+          )
+        : null
 
       const chatRes = await sendMessage(
         config,
         buildLeadHunterChatPayload({
           query,
-          responseMode: body?.response_mode === "streaming" ? "streaming" : "blocking",
+          responseMode: isStreaming ? "streaming" : "blocking",
           user: difyUser,
           advisorType: normalizedLeadHunterType,
         }),
@@ -107,12 +239,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Dify Chat Error", details: chatError }, { status: chatRes.status })
       }
 
-      if (body?.response_mode === "streaming" && chatRes.body) {
-        return new Response(chatRes.body, {
+      if (isStreaming && chatRes.body) {
+        const [clientStream, persistStream] = chatRes.body.tee()
+        if (streamingConversation?.id) {
+          void persistLeadHunterStreamingMessage({
+            stream: persistStream,
+            userId: auth.user.id,
+            advisorType: normalizedLeadHunterType,
+            conversationId: String(streamingConversation.id),
+            query,
+          }).catch((error) => {
+            console.error("lead_hunter.stream.persist_failed", {
+              userId: auth.user.id,
+              conversationId: String(streamingConversation.id),
+              message: error instanceof Error ? error.message : String(error),
+            })
+          })
+        } else {
+          void persistStream.cancel().catch(() => null)
+        }
+        return new Response(clientStream, {
           headers: {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             Connection: "keep-alive",
+            ...(streamingConversation?.id ? { "X-Conversation-Id": String(streamingConversation.id) } : {}),
           },
         })
       }
