@@ -19,6 +19,11 @@ export type WriterTurnDiagnostics = {
   webResearchUsed: boolean
   webResearchStatus: "ready" | "disabled" | "timed_out" | "unavailable" | "skipped"
   webSourceCount: number
+  memoryRetrievedCount: number
+  memoryAppliedIds: string[]
+  soulCardVersion: string | null
+  soulCardConfidence: number | null
+  memoryScope: string | null
   routing?: WriterRoutingDecision | null
 }
 

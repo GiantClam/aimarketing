@@ -20,9 +20,9 @@ import {
   type WriterMode,
   type WriterPlatform,
 } from "@/lib/writer/config"
-import { writerRequestJson } from "@/lib/writer/network"
+import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
-import { buildWriterRoutingDecision, describeWriterRoute } from "@/lib/writer/routing"
+import { buildWriterRoutingDecision, describeWriterRoute, hasWriterXPlatformSignal } from "@/lib/writer/routing"
 import { listWriterPlatformSkills } from "@/lib/writer/skill-catalog"
 import {
   getWriterBriefingSkillDocument,
@@ -61,6 +61,25 @@ const WRITER_RESEARCH_BUDGET_MS = Math.max(
 const WRITER_ENTERPRISE_KNOWLEDGE_BUDGET_MS = Math.max(
   0,
   Number.parseInt(process.env.WRITER_ENTERPRISE_KNOWLEDGE_BUDGET_MS || "6000", 10) || 6_000,
+)
+const WRITER_BRIEF_EXTRACTION_TIMEOUT_MS = Math.min(
+  120_000,
+  Math.max(10_000, Number.parseInt(process.env.WRITER_BRIEF_EXTRACTION_TIMEOUT_MS || "35000", 10) || 35_000),
+)
+const WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS = Math.min(
+  WRITER_BRIEF_EXTRACTION_TIMEOUT_MS,
+  Math.max(
+    8_000,
+    Number.parseInt(process.env.WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS || "25000", 10) || 25_000,
+  ),
+)
+const WRITER_DRAFT_GENERATION_TIMEOUT_MS = Math.min(
+  300_000,
+  Math.max(20_000, Number.parseInt(process.env.WRITER_DRAFT_GENERATION_TIMEOUT_MS || "120000", 10) || 120_000),
+)
+const WRITER_DRAFT_PROVIDER_TIMEOUT_MS = Math.min(
+  WRITER_DRAFT_GENERATION_TIMEOUT_MS,
+  Math.max(15_000, Number.parseInt(process.env.WRITER_DRAFT_PROVIDER_TIMEOUT_MS || "75000", 10) || 75_000),
 )
 const WRITER_SEARCH_RESULT_LIMIT = Math.min(
   10,
@@ -482,6 +501,11 @@ function createEmptyWriterDiagnostics(
     webResearchUsed: false,
     webResearchStatus: "skipped",
     webSourceCount: 0,
+    memoryRetrievedCount: 0,
+    memoryAppliedIds: [],
+    soulCardVersion: null,
+    soulCardConfidence: null,
+    memoryScope: null,
     routing: null,
   }
 }
@@ -966,6 +990,11 @@ function buildWriterTurnDiagnostics(params: {
   enterpriseKnowledgeEnabled: boolean
   research: WriterResearchResult
   routing?: WriterRoutingDecision | null
+  memoryRetrievedCount?: number
+  memoryAppliedIds?: string[]
+  soulCardVersion?: string | null
+  soulCardConfidence?: number | null
+  memoryScope?: string | null
 }): WriterTurnDiagnostics {
   const enterpriseTitles = [
     ...new Set((params.enterpriseKnowledge?.snippets || []).map((snippet) => snippet.title).filter(Boolean)),
@@ -984,6 +1013,11 @@ function buildWriterTurnDiagnostics(params: {
     webResearchUsed: params.research.status === "ready" && params.research.items.length > 0,
     webResearchStatus: params.research.status,
     webSourceCount: params.research.items.length,
+    memoryRetrievedCount: Math.max(0, params.memoryRetrievedCount || 0),
+    memoryAppliedIds: params.memoryAppliedIds || [],
+    soulCardVersion: params.soulCardVersion ?? null,
+    soulCardConfidence: params.soulCardConfidence ?? null,
+    memoryScope: params.memoryScope ?? null,
     routing: params.routing || null,
   }
 }
@@ -1526,8 +1560,10 @@ function hasExplicitWriterLengthTarget(query: string) {
 }
 
 function hasExplicitWriterPlatformTarget(query: string) {
-  return /(wechat|公众号|小红书|xiaohongshu|rednote|weibo|douyin|linkedin|twitter|x thread|x post|instagram|facebook|tiktok|\b发x\b|\bto x\b)/iu.test(
-    query,
+  return (
+    /(wechat|鍏紬鍙穦灏忕孩涔xiaohongshu|rednote|weibo|douyin|linkedin|twitter|x thread|x post|instagram|facebook|tiktok|\b鍙憍\b|\bto x\b)/iu.test(
+      query,
+    ) || hasWriterXPlatformSignal(query)
   )
 }
 
@@ -1610,14 +1646,19 @@ function resolveWriterRoutingFromSignals(params: {
     Boolean(currentRouting.targetPlatform) &&
     currentRouting.targetPlatform !== params.priorRouting.targetPlatform
   const explicitRouteShift = explicitScenarioShift || explicitPlatformShift
+  const shouldInheritPriorLongformRouting =
+    Boolean(params.priorRouting.contentType) &&
+    currentRouting.contentType === "longform" &&
+    !hasExplicitWriterPlatformTarget(params.query) &&
+    !detectStandaloneWriterRequest(params.query)
   const effectiveContentType =
     params.structuredRouting?.contentType ||
-    (params.priorRouting.contentType && currentRouting.contentType === "longform"
+    (shouldInheritPriorLongformRouting
       ? params.priorRouting.contentType
       : currentRouting.contentType)
   const effectiveTargetPlatform =
     params.structuredRouting?.targetPlatform ||
-    (((params.priorRouting.contentType && currentRouting.contentType === "longform") ||
+    ((shouldInheritPriorLongformRouting ||
       (preservePriorRouting &&
         !explicitRouteShift &&
         params.priorRouting.targetPlatform &&
@@ -2070,6 +2111,9 @@ async function extractWriterBriefWithModel(params: {
     const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_SKILL_MODEL, {
       temperature: 0,
       maxTokens: 900,
+      timeoutMs: WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS,
+      totalTimeoutMs: WRITER_BRIEF_EXTRACTION_TIMEOUT_MS,
+      providerTimeoutMs: WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS,
     })
     const parsed = WRITER_BRIEF_EXTRACTION_SCHEMA.safeParse(JSON.parse(extractJsonObjectFromText(raw)))
     if (!parsed.success) {
@@ -2485,7 +2529,7 @@ function hasWriterResearchConfig() {
 }
 
 function hasWriterDirectReadConfig() {
-  return Boolean(SERPER_API_KEY)
+  return true
 }
 
 function createEmptyResearchResult(status: WriterResearchResult["status"]): WriterResearchResult {
@@ -3494,6 +3538,65 @@ function compactText(text: string, maxLength: number) {
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength)}...`
 }
 
+function decodeBasicHtmlEntities(input: string) {
+  return input
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#x27;/gi, "'")
+}
+
+function extractReadableTextFromHtml(input: string) {
+  const normalized = input
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/?(?:h[1-6]|p|div|section|article|li|ul|ol|br|tr|td|th|blockquote)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+  return decodeBasicHtmlEntities(normalized)
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim()
+}
+
+function normalizeReadableWebContent(input: string) {
+  const trimmed = input.trim()
+  if (!trimmed) return ""
+  const looksLikeHtml = /<html\b|<body\b|<article\b|<main\b|<\/[a-z]+>/i.test(trimmed)
+  const text = looksLikeHtml ? extractReadableTextFromHtml(trimmed) : trimmed
+  return text.replace(/\s+/g, " ").trim()
+}
+
+async function readWithDirectFetch(url: string) {
+  const response = await writerRequestText(
+    url,
+    {
+      method: "GET",
+      headers: {
+        Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; AIMarketingWriter/1.0; +https://www.aimarketingsite.com/)",
+      },
+    },
+    { attempts: 2, timeoutMs: 90_000 },
+  )
+
+  if (!response.ok) {
+    throw new Error(`direct_read_http_${response.status}`)
+  }
+
+  const content = normalizeReadableWebContent(response.text || "")
+  if (!content) {
+    throw new Error("direct_read_empty")
+  }
+
+  return content
+}
+
 async function serperSearch(query: string, num = 5): Promise<SearchItem[]> {
   if (!SERPER_API_KEY) {
     throw new Error("writer_search_config_missing")
@@ -3554,7 +3657,7 @@ function extractSerperScrapeText(data: any) {
 
 async function readWithSerper(url: string) {
   if (!SERPER_API_KEY) {
-    throw new Error("writer_search_config_missing")
+    return readWithDirectFetch(url)
   }
 
   const scrapeEndpoints = [`${SERPER_SCRAPE_API_BASE}/scrape`]
@@ -3597,7 +3700,11 @@ async function readWithSerper(url: string) {
     }
   }
 
-  throw lastError || new Error("serper_scrape_failed")
+  try {
+    return await readWithDirectFetch(url)
+  } catch {
+    throw lastError || new Error("serper_scrape_failed")
+  }
 }
 
 async function buildResearchContext(
@@ -3767,6 +3874,12 @@ async function buildSystemPrompt(
       : research.status === "skipped"
         ? "Live web research was intentionally skipped for this request. Do not imply that outside research was performed."
         : "External research may be partial or unavailable. If so, rely on enterprise knowledge and broadly known information, and avoid precise unsupported claims.",
+    routing.contentType === "email"
+      ? "Email style rule: write in plain conversational language with short, simple sentences; avoid abstract framing and unnecessary jargon."
+      : null,
+    routing.contentType === "email"
+      ? "Email style rule: stay brand-first by foregrounding relevant brand positioning, core offer, differentiators, and proof before broad industry commentary."
+      : null,
     !transformMode && research.extracts.length > 0
       ? "Depth requirement: each substantive section should contain source-grounded specifics such as mechanisms, trade-offs, named entities, or verifiable facts."
       : null,
@@ -3867,6 +3980,12 @@ async function buildUserPrompt(
     "- Output only the final draft. Do not explain the process.",
     "- Use enterprise knowledge first when it directly answers the topic.",
     "- Use the source material for trends, external facts, and cases. Do not invent specific data.",
+    routing.contentType === "email"
+      ? "- Email style rule: use conversational wording, short sentence structure, and concrete language that non-experts can understand quickly."
+      : "",
+    routing.contentType === "email"
+      ? "- Email style rule: make the brand priorities explicit by tying the message to the brand's strongest value points, proof, and a single clear CTA."
+      : "",
     transformMode
       ? ""
       : research.extracts.length > 0
@@ -3995,7 +4114,11 @@ export async function generateWriterDraftWithSkills(
     buildSystemPrompt(query, routing, language.instruction, research, enterpriseKnowledge),
     buildUserPrompt(query, routing, research, language.instruction, enterpriseKnowledge),
   ])
-  const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL)
+  const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL, {
+    timeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
+    totalTimeoutMs: WRITER_DRAFT_GENERATION_TIMEOUT_MS,
+    providerTimeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
+  })
 
   return {
     answer: enforceWriterHardLengthTarget(
@@ -4383,4 +4506,9 @@ export async function runWriterSkillsTurn(params: {
   enterpriseId?: number | null
 }): Promise<WriterSkillsTurnResult> {
   return runWriterSkillsTurnWithRuntime(params, defaultWriterSkillsRuntime)
+}
+
+export const __writerTestHooks = {
+  normalizeReadableWebContent,
+  buildResearchContext,
 }

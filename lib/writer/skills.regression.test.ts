@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createServer } from "node:http"
 import { createRequire } from "node:module"
 import test from "node:test"
 
@@ -18,9 +19,20 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 }
 
 let runWriterSkillsTurnWithRuntime: (...args: any[]) => Promise<any>
+let writerTestHooks: {
+  normalizeReadableWebContent: (input: string) => string
+  buildResearchContext: (
+    query: string,
+    options?: { skip?: boolean; sourceUrls?: string[] },
+  ) => Promise<{
+    items: Array<{ title: string; snippet: string; link: string }>
+    extracts: Array<{ url: string; content: string }>
+    status: "ready" | "disabled" | "timed_out" | "unavailable" | "skipped"
+  }>
+}
 
 test.before(async () => {
-  ;({ runWriterSkillsTurnWithRuntime } = await import("./skills"))
+  ;({ runWriterSkillsTurnWithRuntime, __writerTestHooks: writerTestHooks } = await import("./skills"))
 })
 
 const baseDiagnostics: WriterTurnDiagnostics = {
@@ -34,6 +46,11 @@ const baseDiagnostics: WriterTurnDiagnostics = {
   webResearchUsed: false,
   webResearchStatus: "skipped",
   webSourceCount: 0,
+  memoryRetrievedCount: 0,
+  memoryAppliedIds: [],
+  soulCardVersion: null,
+  soulCardConfidence: null,
+  memoryScope: null,
   routing: null,
 }
 
@@ -1222,6 +1239,81 @@ test("history URL extraction trims full-width punctuation suffix from chinese se
   assert.deepEqual(generationOptions?.sourceUrls, ["https://example.com/agent-report"])
 })
 
+test("source URL research falls back to direct fetch and avoids search-config hard failure", async () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/source") {
+      res.statusCode = 200
+      res.setHeader("Content-Type", "text/html; charset=utf-8")
+      res.end(`<!doctype html>
+<html>
+  <head>
+    <title>Cascade Source</title>
+    <style>.hidden { display: none; }</style>
+    <script>console.log("ignore this script")</script>
+  </head>
+  <body>
+    <article>
+      <h1>Cascade Designs LLC</h1>
+      <p>Product focus includes hydration, shelter, and sleep systems.</p>
+    </article>
+  </body>
+</html>`)
+      return
+    }
+
+    res.statusCode = 404
+    res.end("not found")
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address()
+  assert.ok(address && typeof address !== "string")
+  const sourceUrl = `http://127.0.0.1:${address.port}/source`
+
+  try {
+    const research = await writerTestHooks.buildResearchContext("Read the provided source URL", {
+      sourceUrls: [sourceUrl],
+    })
+
+    assert.equal(research.status, "ready")
+    assert.equal(research.items.length, 1)
+    assert.equal(research.extracts.length, 1)
+    assert.equal(research.extracts[0]?.url, sourceUrl)
+    assert.match(research.extracts[0]?.content || "", /Cascade Designs LLC/i)
+    assert.match(research.extracts[0]?.content || "", /hydration, shelter, and sleep systems/i)
+    assert.doesNotMatch(research.extracts[0]?.content || "", /ignore this script/i)
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve()
+      })
+    })
+  }
+})
+
+test("html normalization strips script/style and preserves readable body text", () => {
+  const normalized = writerTestHooks.normalizeReadableWebContent(`<!doctype html>
+<html>
+  <head>
+    <style>.x{color:red}</style>
+    <script>window.bad = "drop me"</script>
+  </head>
+  <body>
+    <h1>Product Overview</h1>
+    <p>Outdoor gear designed for reliability.</p>
+  </body>
+</html>`)
+
+  assert.match(normalized, /Product Overview/)
+  assert.match(normalized, /Outdoor gear designed for reliability/)
+  assert.doesNotMatch(normalized, /window\.bad/)
+  assert.doesNotMatch(normalized, /color:red/)
+})
+
 test("english Topic/Audience labels are enough to draft immediately without model extraction", async () => {
   let compiledPrompt = ""
   let generationOptions: any = null
@@ -1433,4 +1525,40 @@ test("explicit platform switch in a rewrite request does not inherit the prior X
   assert.equal(result.routing.renderPlatform, "xiaohongshu")
   assert.equal(result.routing.outputForm, "Xiaohongshu native post")
   assert.equal(generationOptions?.retrievalStrategy, "rewrite_only")
+})
+
+test("standalone Chinese X-post request should not inherit prior WeChat routing", async () => {
+  const priorDiagnostics: WriterTurnDiagnostics = {
+    ...baseDiagnostics,
+    routing: createRouting({
+      contentType: "social_cn",
+      targetPlatform: "WeChat Official Account",
+      outputForm: "WeChat Official Account native post",
+      lengthTarget: "platform-native medium length",
+      renderPlatform: "wechat",
+      renderMode: "article",
+      selectedSkillId: "social_cn",
+      selectedSkillLabel: "Chinese social",
+    }),
+  }
+
+  const result = await runWriterSkillsTurnWithRuntime(
+    {
+      query: "写一篇X的贴文，100字左右，介绍灵创智能公司",
+      platform: "wechat",
+      mode: "article",
+      preferredLanguage: "auto",
+      conversationStatus: "text_ready",
+      history: [createHistoryEntry(1, "写一篇公众号文章介绍公司", "已生成公众号文章", priorDiagnostics)],
+    },
+    createRuntime({
+      extractBrief: async () => null,
+    }),
+  )
+
+  assert.equal(result.outcome, "draft_ready")
+  assert.equal(result.routing.contentType, "social_global")
+  assert.equal(result.routing.targetPlatform, "X")
+  assert.equal(result.routing.renderPlatform, "x")
+  assert.equal(result.routing.outputForm, "X native post")
 })
