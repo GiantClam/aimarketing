@@ -27,6 +27,11 @@ import {
   extractLatestImageAssistantOrchestration,
   planImageAssistantTurn,
 } from "@/lib/image-assistant/tools"
+import {
+  mergeImageAssistantExtraInstructions,
+  resolveImageAssistantMemoryBridge,
+  type ImageAssistantMemoryBridgeResult,
+} from "@/lib/image-assistant/memory-bridge"
 import type {
   ImageAssistantAsset,
   ImageAssistantBrief,
@@ -657,9 +662,21 @@ export async function runImageAssistantConversationTurn(params: {
   maskAssetId?: string | null
   versionMeta?: Record<string, unknown> | null
   guidedSelection?: ImageAssistantGuidedSelection | null
+  memoryBridge?: ImageAssistantMemoryBridgeResult | null
   signal?: AbortSignal
 }) {
   const startedAt = Date.now()
+  const memoryBridge =
+    params.memoryBridge ||
+    (await resolveImageAssistantMemoryBridge({
+      userId: params.userId,
+      prompt: params.prompt,
+    }))
+  const effectiveExtraInstructions = mergeImageAssistantExtraInstructions({
+    extraInstructions: params.extraInstructions,
+    memoryContext: memoryBridge.memoryContext,
+    soulCard: memoryBridge.soulCard,
+  })
   const userTurnContent = buildImageAssistantTurnContent({
     prompt: params.prompt,
     brief: params.brief,
@@ -681,6 +698,7 @@ export async function runImageAssistantConversationTurn(params: {
     referenceAssetCount: params.referenceAssetIds?.length || 0,
     sizePreset: params.sizePreset,
     resolution: params.resolution,
+    memoryAppliedCount: memoryBridge.memoryAppliedIds.length,
   })
 
   const [messages, { referencedAssets }] = await Promise.all([
@@ -755,7 +773,7 @@ export async function runImageAssistantConversationTurn(params: {
     sizePreset: normalizeSizePreset(params.sizePreset),
     resolution: normalizeResolution(params.resolution),
     referenceCount: referencedAssets.length,
-    extraInstructions: params.extraInstructions,
+    extraInstructions: effectiveExtraInstructions,
   })
   throwIfAborted(params.signal)
   logImageAssistantStage("conversation.plan.completed", {
@@ -778,6 +796,7 @@ export async function runImageAssistantConversationTurn(params: {
     maskAssetId: params.maskAssetId || null,
     versionMeta: params.versionMeta || null,
     orchestration: plan.orchestration,
+    memoryAppliedIds: memoryBridge.memoryAppliedIds,
   }
 
   const requestMessage = await createImageAssistantMessage({

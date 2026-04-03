@@ -24,6 +24,11 @@ import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
 import { buildWriterRoutingDecision, describeWriterRoute, hasWriterXPlatformSignal } from "@/lib/writer/routing"
 import { listWriterPlatformSkills } from "@/lib/writer/skill-catalog"
+import { getWriterSoulProfile, listWriterMemories } from "@/lib/writer/memory/repository"
+import { rankWriterMemories } from "@/lib/writer/memory/retrieval"
+import { composeWriterSoulCard, renderSoulCardForPrompt } from "@/lib/writer/memory/soul-card"
+import { emitWriterMemoryTelemetry } from "@/lib/writer/memory/telemetry"
+import type { WriterAgentType } from "@/lib/writer/memory/types"
 import {
   getWriterBriefingSkillDocument,
   getWriterContentSkillDocument,
@@ -96,6 +101,16 @@ const WRITER_RESEARCH_EXTRACT_MAX_CHARS = Math.min(
 const WRITER_ENTERPRISE_QUERY_MAX_CHARS = Math.min(
   240,
   Math.max(120, Number.parseInt(process.env.WRITER_ENTERPRISE_QUERY_MAX_CHARS || "220", 10) || 220),
+)
+const WRITER_MEMORY_ENABLED = process.env.WRITER_MEMORY_ENABLED === "true"
+const WRITER_SOUL_ENABLED = process.env.WRITER_SOUL_ENABLED === "true"
+const WRITER_MEMORY_MAX_ITEMS_PER_USER_AGENT = Math.max(
+  20,
+  Math.min(500, Number.parseInt(process.env.WRITER_MEMORY_MAX_ITEMS_PER_USER_AGENT || "200", 10) || 200),
+)
+const WRITER_MEMORY_RETRIEVAL_TIMEOUT_MS = Math.max(
+  20,
+  Math.min(500, Number.parseInt(process.env.WRITER_MEMORY_RETRIEVAL_TIMEOUT_MS || "80", 10) || 80),
 )
 
 const writerResearchCache = new Map<string, { expiresAt: number; value: Promise<WriterResearchResult> }>()
@@ -3838,6 +3853,7 @@ async function buildSystemPrompt(
   languageInstruction: string,
   research: WriterResearchResult,
   enterpriseKnowledge?: EnterpriseKnowledgeContext | null,
+  personalizationBlock?: string | null,
 ) {
   const transformMode = detectWriterTransformModeFromPrompt(query)
   const [guide, contentGuide, styleGuide] = await Promise.all([
@@ -3863,6 +3879,11 @@ async function buildSystemPrompt(
     styleGuide?.guidance ? "Style-specific guidance:" : null,
     styleGuide?.guidance || null,
     languageInstruction,
+    personalizationBlock ? "Personalization guidance:" : null,
+    personalizationBlock || null,
+    personalizationBlock
+      ? "If personalization conflicts with factual accuracy, compliance, or safety policy, prioritize accuracy/compliance/safety."
+      : null,
     enterpriseKnowledge?.snippets?.length
       ? "Enterprise knowledge is provided separately. Treat it as first-party brand truth and prefer it over generic assumptions."
       : "No enterprise knowledge is attached for this request.",
@@ -4062,6 +4083,12 @@ export async function generateWriterDraftWithSkills(
     enterpriseQueryVariants?: string[]
     preferredEnterpriseScopes?: EnterpriseKnowledgeScope[]
     sourceUrls?: string[]
+    personalizationBlock?: string | null
+    memoryRetrievedCount?: number
+    memoryAppliedIds?: string[]
+    soulCardVersion?: string | null
+    soulCardConfidence?: number | null
+    memoryScope?: string | null
   },
 ): Promise<WriterDraftGenerationResult> {
   const contextQuery = options?.researchQuery?.trim() || query
@@ -4099,6 +4126,11 @@ export async function generateWriterDraftWithSkills(
         enterpriseKnowledge,
         enterpriseKnowledgeEnabled: shouldUseEnterpriseKnowledge,
         research: createEmptyResearchResult(shouldUseWebResearch ? "unavailable" : "skipped"),
+        memoryRetrievedCount: options?.memoryRetrievedCount,
+        memoryAppliedIds: options?.memoryAppliedIds,
+        soulCardVersion: options?.soulCardVersion,
+        soulCardConfidence: options?.soulCardConfidence,
+        memoryScope: options?.memoryScope,
         routing,
       }),
     }
@@ -4111,7 +4143,7 @@ export async function generateWriterDraftWithSkills(
   })
   const [enterpriseKnowledge, research] = await Promise.all([enterpriseKnowledgePromise, researchPromise])
   const [systemPrompt, userPrompt] = await Promise.all([
-    buildSystemPrompt(query, routing, language.instruction, research, enterpriseKnowledge),
+    buildSystemPrompt(query, routing, language.instruction, research, enterpriseKnowledge, options?.personalizationBlock),
     buildUserPrompt(query, routing, research, language.instruction, enterpriseKnowledge),
   ])
   const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL, {
@@ -4130,6 +4162,11 @@ export async function generateWriterDraftWithSkills(
       enterpriseKnowledge,
       enterpriseKnowledgeEnabled: shouldUseEnterpriseKnowledge,
       research,
+      memoryRetrievedCount: options?.memoryRetrievedCount,
+      memoryAppliedIds: options?.memoryAppliedIds,
+      soulCardVersion: options?.soulCardVersion,
+      soulCardConfidence: options?.soulCardConfidence,
+      memoryScope: options?.memoryScope,
       routing,
     }),
   }
@@ -4247,6 +4284,9 @@ export async function runWriterSkillsTurnWithRuntime(
   params: {
     query: string
     preloadedBrief?: WriterPreloadedBrief | null
+    userId?: number
+    conversationId?: string | null
+    agentType?: WriterAgentType
     platform: WriterPlatform
     mode: WriterMode
     preferredLanguage?: WriterLanguage
@@ -4450,6 +4490,64 @@ export async function runWriterSkillsTurnWithRuntime(
     }
   }
 
+  const agentType = params.agentType || "writer"
+  const memoryScope = params.userId ? `${params.userId}:${agentType}` : null
+  let memoryRetrievedCount = 0
+  let memoryAppliedIds: string[] = []
+  let soulCardConfidence: number | null = null
+  let soulCardVersion: string | null = null
+  let personalizationBlock: string | null = null
+
+  if (params.userId && WRITER_MEMORY_ENABLED) {
+    const retrievalSeedQuery = [params.query, mergedBrief.topic, mergedBrief.objective, mergedBrief.tone]
+      .filter(Boolean)
+      .join("\n")
+    const memoryContext = await withTimeout<
+      [Awaited<ReturnType<typeof getWriterSoulProfile>>, Awaited<ReturnType<typeof listWriterMemories>>]
+    >(
+      Promise.all([
+        getWriterSoulProfile(params.userId, agentType).catch(() => null),
+        listWriterMemories({
+          userId: params.userId,
+          agentType,
+          limit: WRITER_MEMORY_MAX_ITEMS_PER_USER_AGENT,
+        }).catch(() => []),
+      ]),
+      WRITER_MEMORY_RETRIEVAL_TIMEOUT_MS,
+      () => [null, []],
+    )
+
+    const [soulProfile, memoryItems] = memoryContext
+    const rankedMemories = rankWriterMemories(retrievalSeedQuery, memoryItems, {
+      userId: params.userId,
+      agentType,
+      limit: 5,
+    })
+
+    memoryRetrievedCount = rankedMemories.length
+    memoryAppliedIds = rankedMemories.map((item) => String(item.id))
+    if (memoryRetrievedCount > 0) {
+      emitWriterMemoryTelemetry("writer.memory.retrieve.hit", {
+        agentType,
+      })
+    }
+
+    if (WRITER_SOUL_ENABLED) {
+      const soulCard = composeWriterSoulCard({
+        agentType,
+        profile: soulProfile,
+        memories: rankedMemories,
+        recentAcceptedSamples: [],
+      })
+      soulCardConfidence = soulCard.confidence
+      soulCardVersion = soulProfile?.version || "v1"
+      personalizationBlock = renderSoulCardForPrompt(soulCard)
+      emitWriterMemoryTelemetry("writer.soul.apply", {
+        agentType,
+      })
+    }
+  }
+
   const compiledPrompt = buildWriterBriefPrompt(params.query, mergedBrief, routing, {
     history: contextHistory,
     latestDraft: (params.conversationStatus || "drafting") !== "drafting" ? latestDraft : null,
@@ -4474,6 +4572,12 @@ export async function runWriterSkillsTurnWithRuntime(
       buildRuntimeEnterpriseQueryVariants(groundingQuery, preferredEnterpriseScopes),
     ),
     preferredEnterpriseScopes,
+    personalizationBlock,
+    memoryRetrievedCount,
+    memoryAppliedIds,
+    soulCardVersion,
+    soulCardConfidence,
+    memoryScope,
   })
   const finalAnswer = enforceWriterHardLengthTarget(draftResult.answer, routing)
 
@@ -4498,6 +4602,9 @@ export async function runWriterSkillsTurnWithRuntime(
 export async function runWriterSkillsTurn(params: {
   query: string
   preloadedBrief?: WriterPreloadedBrief | null
+  userId?: number
+  conversationId?: string | null
+  agentType?: WriterAgentType
   platform: WriterPlatform
   mode: WriterMode
   preferredLanguage?: WriterLanguage
@@ -4511,4 +4618,5 @@ export async function runWriterSkillsTurn(params: {
 export const __writerTestHooks = {
   normalizeReadableWebContent,
   buildResearchContext,
+  buildSystemPrompt,
 }

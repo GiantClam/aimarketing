@@ -4,6 +4,7 @@ import { enqueueAssistantTask } from "@/lib/assistant-async"
 import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { buildDifyMemoryBridge, mergeDifyInputsWithMemoryBridge } from "@/lib/dify/memory-bridge"
 import { appendLeadHunterMessage, ensureLeadHunterConversation } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
@@ -51,6 +52,16 @@ function getObjectRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
+}
+
+function extractAdvisorQuery(body: unknown) {
+  if (!body || typeof body !== "object") return ""
+  const candidate = body as Record<string, unknown>
+  if (typeof candidate.query === "string") {
+    return candidate.query
+  }
+  const inputs = getObjectRecord(candidate.inputs)
+  return typeof inputs?.contents === "string" ? inputs.contents : ""
 }
 
 async function persistLeadHunterStreamingMessage(input: {
@@ -164,10 +175,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (body?.response_mode === "async") {
-      const query = typeof body?.query === "string" ? body.query : typeof body?.inputs?.contents === "string" ? body.inputs.contents : ""
+      const query = extractAdvisorQuery(body)
       if (!query.trim()) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
       }
+      const memoryBridge = await buildDifyMemoryBridge({
+        userId: auth.user.id,
+        advisorType: resolvedAdvisorType,
+        query,
+      })
 
       const conversation =
         normalizedLeadHunterType
@@ -194,6 +210,9 @@ export async function POST(req: NextRequest) {
               : typeof body?.conversation_id === "string"
                 ? body.conversation_id
                 : null,
+          memoryContext: memoryBridge.memoryContext,
+          soulCard: memoryBridge.soulCard,
+          memoryAppliedIds: memoryBridge.memoryAppliedIds,
         },
       })
 
@@ -210,10 +229,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (normalizedLeadHunterType) {
-      const query = typeof body?.query === "string" ? body.query : typeof body?.inputs?.contents === "string" ? body.inputs.contents : ""
+      const query = extractAdvisorQuery(body)
       if (!query.trim()) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
       }
+      const memoryBridge = await buildDifyMemoryBridge({
+        userId: auth.user.id,
+        advisorType: resolvedAdvisorType,
+        query,
+      })
+      const memoryInputs = mergeDifyInputsWithMemoryBridge({}, memoryBridge)
       const isStreaming = body?.response_mode === "streaming"
       const streamingConversation = isStreaming
         ? await ensureLeadHunterConversation(
@@ -231,6 +256,7 @@ export async function POST(req: NextRequest) {
           responseMode: isStreaming ? "streaming" : "blocking",
           user: difyUser,
           advisorType: normalizedLeadHunterType,
+          extraInputs: memoryInputs,
         }),
       )
 
@@ -277,7 +303,17 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const difyRes = await sendMessage(config, { ...body, user: difyUser })
+    const query = extractAdvisorQuery(body)
+    const memoryBridge = await buildDifyMemoryBridge({
+      userId: auth.user.id,
+      advisorType: resolvedAdvisorType,
+      query,
+    })
+    const mergedInputs = mergeDifyInputsWithMemoryBridge(
+      body?.inputs && typeof body.inputs === "object" ? (body.inputs as Record<string, unknown>) : null,
+      memoryBridge,
+    )
+    const difyRes = await sendMessage(config, { ...body, inputs: mergedInputs, user: difyUser })
 
     if (!difyRes.ok) {
       const errorData = await difyRes.text()

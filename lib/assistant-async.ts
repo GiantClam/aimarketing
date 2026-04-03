@@ -8,6 +8,7 @@ import {
 } from "@/lib/services/tasks"
 import { getMessages, sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
+import { buildDifyMemoryBridge, mergeDifyInputsWithMemoryBridge } from "@/lib/dify/memory-bridge"
 import {
   createImageAssistantSession,
   createImageAssistantMessage,
@@ -17,19 +18,32 @@ import { appendLeadHunterMessage } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { getLeadHunterAgentName, normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
+import { resolveImageAssistantMemoryBridge } from "@/lib/image-assistant/memory-bridge"
 import { runWriterSkillsTurn } from "@/lib/writer/skills"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
+import { persistWriterImplicitMemoryFromTurn } from "@/lib/writer/memory/extractor"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 import type { WriterConversationStatus, WriterHistoryEntry, WriterPreloadedBrief } from "@/lib/writer/types"
+import type { WriterAgentType } from "@/lib/writer/memory/types"
 import type { ImageAssistantBrief, ImageAssistantGuidedSelection, ImageAssistantTaskType } from "@/lib/image-assistant/types"
 
 type AssistantTaskStatus = "pending" | "running" | "success" | "failed"
+type AssistantTaskProgressStatus = "running" | "completed" | "failed" | "info"
+
+type AssistantTaskProgressEvent = {
+  type: string
+  label: string
+  detail?: string
+  status: AssistantTaskProgressStatus
+  at: number
+}
 
 type WriterTurnTaskPayload = {
   kind: "writer_turn"
   enterpriseId?: number | null
   conversationId: string
   query: string
+  agentType?: WriterAgentType
   brief?: WriterPreloadedBrief | null
   platform: WriterPlatform
   mode: WriterMode
@@ -66,6 +80,9 @@ type AdvisorTurnTaskPayload = {
   advisorType: string
   query: string
   conversationId?: string | null
+  memoryContext?: string | null
+  soulCard?: string | null
+  memoryAppliedIds?: number[]
 }
 
 export type AssistantTaskPayload = WriterTurnTaskPayload | ImageTurnTaskPayload | AdvisorTurnTaskPayload
@@ -89,12 +106,15 @@ function parseTimeoutMs(raw: string | undefined, fallbackMs: number, minMs = 5_0
 }
 
 const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 180_000)
+const WRITER_MEMORY_EXTRACT_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_MEMORY_EXTRACT_TIMEOUT_MS, 2_000, 100, 10_000)
 const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 210_000)
 const ADVISOR_TASK_TIMEOUT_MS = 120_000
 const ASSISTANT_STALE_TASK_MS = 45_000
 const ADVISOR_RECOVERY_CHECK_MS = 12_000
 const ASSISTANT_TASK_LEASE_MS = 30_000
 const ASSISTANT_TASK_HEARTBEAT_MS = 10_000
+const ASSISTANT_TASK_PROGRESS_LIMIT = 40
+const ASSISTANT_TASK_PROGRESS_PERSIST_INTERVAL_MS = 900
 const ASSISTANT_TASK_RECOVERY_BATCH_LIMIT = Math.max(
   1,
   Math.min(30, Number.parseInt(process.env.ASSISTANT_TASK_RECOVERY_BATCH_LIMIT || "", 10) || 6),
@@ -155,11 +175,174 @@ function extractText(value: unknown): string {
   return ""
 }
 
+function getObjectRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function pickFirstNonEmptyText(...values: unknown[]) {
+  for (const value of values) {
+    const text = extractText(value).trim()
+    if (text) return text
+  }
+  return ""
+}
+
+function truncateText(value: string, max = 160) {
+  return value.length > max ? `${value.slice(0, max - 3)}...` : value
+}
+
+function pushTaskProgressEvent(events: AssistantTaskProgressEvent[], input: AssistantTaskProgressEvent) {
+  const last = events.at(-1)
+  if (last && last.type === input.type && last.label === input.label && last.detail === input.detail) {
+    return
+  }
+  events.push(input)
+  if (events.length > ASSISTANT_TASK_PROGRESS_LIMIT) {
+    events.splice(0, events.length - ASSISTANT_TASK_PROGRESS_LIMIT)
+  }
+}
+
+function mapDifySseEventToTaskProgress(payload: Record<string, unknown>): AssistantTaskProgressEvent | null {
+  const event = typeof payload.event === "string" ? payload.event : ""
+  if (!event || event === "ping" || event === "message" || event === "agent_message" || event === "text_chunk") {
+    return null
+  }
+
+  const data = getObjectRecord(payload.data)
+  const nodeTitle = pickFirstNonEmptyText(
+    data?.title,
+    data?.node_name,
+    data?.node_title,
+    data?.node_id,
+    data?.node_type,
+  )
+  const dataStatus = pickFirstNonEmptyText(data?.status).toLowerCase()
+  const now = Date.now()
+
+  if (event === "workflow_started") {
+    return { type: event, label: "Workflow started", status: "running", at: now }
+  }
+
+  if (event === "workflow_finished") {
+    const workflowError = pickFirstNonEmptyText(data?.error, payload.error)
+    const failed = dataStatus === "failed" || Boolean(workflowError)
+    return {
+      type: event,
+      label: failed ? "Workflow failed" : "Workflow completed",
+      detail: workflowError ? truncateText(workflowError) : undefined,
+      status: failed ? "failed" : "completed",
+      at: now,
+    }
+  }
+
+  if (event === "node_started") {
+    return {
+      type: event,
+      label: nodeTitle ? `Node started: ${nodeTitle}` : "Node started",
+      status: "running",
+      at: now,
+    }
+  }
+
+  if (event === "node_finished") {
+    const nodeError = pickFirstNonEmptyText(data?.error, payload.error)
+    const failed = dataStatus === "failed" || Boolean(nodeError)
+    return {
+      type: event,
+      label: failed
+        ? nodeTitle
+          ? `Node failed: ${nodeTitle}`
+          : "Node failed"
+        : nodeTitle
+          ? `Node completed: ${nodeTitle}`
+          : "Node completed",
+      detail: nodeError ? truncateText(nodeError) : undefined,
+      status: failed ? "failed" : "completed",
+      at: now,
+    }
+  }
+
+  if (event === "message_end") {
+    return { type: event, label: "Text generation completed", status: "completed", at: now }
+  }
+
+  if (event === "message_file") {
+    return { type: event, label: "Result file detected", status: "info", at: now }
+  }
+
+  if (event === "tts_message") {
+    return { type: event, label: "Generating speech segment", status: "running", at: now }
+  }
+
+  if (event === "tts_message_end") {
+    return { type: event, label: "Speech generation completed", status: "completed", at: now }
+  }
+
+  if (event === "error") {
+    const errorText = pickFirstNonEmptyText(payload.error, data?.error, payload.message)
+    return {
+      type: event,
+      label: "Workflow returned an error",
+      detail: errorText ? truncateText(errorText) : undefined,
+      status: "failed",
+      at: now,
+    }
+  }
+
+  if (event === "agent_thought") {
+    const thoughtText = pickFirstNonEmptyText(data?.thought, payload.thought, data?.observation, payload.observation)
+    return {
+      type: event,
+      label: "Model thinking",
+      detail: thoughtText ? truncateText(thoughtText) : undefined,
+      status: "info",
+      at: now,
+    }
+  }
+
+  const genericDetail = pickFirstNonEmptyText(data?.message, payload.message, data?.error, payload.error)
+  return {
+    type: event,
+    label: `Event: ${event}`,
+    detail: genericDetail ? truncateText(genericDetail) : undefined,
+    status: "info",
+    at: now,
+  }
+}
+
 function getTaskAgeMs(task: ParsedTaskRow | null) {
   if (!task?.updatedAt) return Number.POSITIVE_INFINITY
   const updatedAt = task.updatedAt instanceof Date ? task.updatedAt.getTime() : new Date(task.updatedAt).getTime()
   if (!Number.isFinite(updatedAt)) return Number.POSITIVE_INFINITY
   return Math.max(0, Date.now() - updatedAt)
+}
+
+async function waitForRunningTask(taskId: number, timeoutMs?: number) {
+  const taskPromise = runningTasks.get(taskId)
+  if (!taskPromise) {
+    return { waited: false, timedOut: false }
+  }
+
+  if (!timeoutMs || timeoutMs <= 0) {
+    await taskPromise
+    return { waited: true, timedOut: false }
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  const timedOut = await Promise.race([
+    taskPromise.then(() => false),
+    new Promise<boolean>((resolve) => {
+      timeoutId = setTimeout(() => resolve(true), timeoutMs)
+    }),
+  ])
+
+  if (timeoutId) {
+    clearTimeout(timeoutId)
+  }
+
+  return { waited: true, timedOut }
 }
 
 function createTaskWorkerId(taskId: number) {
@@ -246,10 +429,56 @@ async function tryRecoverAdvisorAnswer(params: {
 }
 
 async function handleWriterTurn(taskId: number, userId: number, payload: WriterTurnTaskPayload) {
+  const progressEvents: AssistantTaskProgressEvent[] = []
+  pushTaskProgressEvent(progressEvents, {
+    type: "request_submitted",
+    label: "Writer request submitted, preparing task",
+    status: "running",
+    at: Date.now(),
+  })
+  await updateTaskStatus(taskId, {
+    status: "running",
+    result: {
+      conversation_id: payload.conversationId,
+      events: progressEvents,
+    },
+  })
+
+  pushTaskProgressEvent(progressEvents, {
+    type: "brief_analyzing",
+    label: "Analyzing requirements and context",
+    status: "running",
+    at: Date.now(),
+  })
+  await updateTaskStatus(taskId, {
+    status: "running",
+    result: {
+      conversation_id: payload.conversationId,
+      events: progressEvents,
+    },
+  })
+
+  pushTaskProgressEvent(progressEvents, {
+    type: "draft_generating",
+    label: "Generating draft",
+    status: "running",
+    at: Date.now(),
+  })
+  await updateTaskStatus(taskId, {
+    status: "running",
+    result: {
+      conversation_id: payload.conversationId,
+      events: progressEvents,
+    },
+  })
+
   const turnResult = await withTaskTimeout(
     runWriterSkillsTurn({
       query: payload.query,
       preloadedBrief: payload.brief,
+      userId,
+      conversationId: payload.conversationId,
+      agentType: payload.agentType || "writer",
       platform: payload.platform,
       mode: payload.mode,
       preferredLanguage: payload.language,
@@ -270,11 +499,40 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
     diagnostics: turnResult.diagnostics,
   })
 
+  if (turnResult.outcome === "draft_ready") {
+    await withTaskTimeout(
+      persistWriterImplicitMemoryFromTurn({
+        query: payload.query,
+        answer: turnResult.answer,
+        userId,
+        agentType: payload.agentType || "writer",
+        conversationId: Number.parseInt(payload.conversationId, 10) || null,
+        outcome: turnResult.outcome,
+      }),
+      WRITER_MEMORY_EXTRACT_TIMEOUT_MS,
+      "writer_memory_extract_timeout",
+    ).catch((error) => {
+      console.warn("writer.memory.extract.skipped", {
+        taskId,
+        conversationId: payload.conversationId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  pushTaskProgressEvent(progressEvents, {
+    type: "draft_ready",
+    label: turnResult.outcome === "needs_clarification" ? "Clarification ready" : "Draft ready",
+    status: "completed",
+    at: Date.now(),
+  })
+
   await updateTaskStatus(taskId, {
     status: "success",
     result: {
       conversation_id: payload.conversationId,
       outcome: turnResult.outcome,
+      events: progressEvents,
     },
   })
 }
@@ -288,6 +546,11 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
     sizePreset: payload.sizePreset,
     resolution: payload.resolution,
   })
+  const memoryBridge = await resolveImageAssistantMemoryBridge({
+    userId: payload.userId,
+    prompt: payload.prompt,
+  }).catch(() => null)
+
   const result = await withTaskTimeout(
     runImageAssistantConversationTurn({
       userId: payload.userId,
@@ -307,6 +570,7 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
       maskAssetId: payload.maskAssetId,
       versionMeta: payload.versionMeta,
       guidedSelection: payload.guidedSelection,
+      memoryBridge,
     }),
     IMAGE_ASSISTANT_TASK_TIMEOUT_MS,
     "image_assistant_task_timeout",
@@ -316,8 +580,10 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
     status: "success",
     result: {
       session_id: payload.sessionId,
+      message_id: result.message_id,
       outcome: result.outcome,
       version_id: result.version_id,
+      follow_up_message_id: result.follow_up_message_id,
     },
   })
   console.info("image-assistant.task.image.success", {
@@ -328,7 +594,13 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
   })
 }
 
-async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayload, config: { baseUrl: string; apiKey: string }, difyUser: string) {
+async function handleLeadHunterTurn(
+  taskId: number,
+  payload: AdvisorTurnTaskPayload,
+  config: { baseUrl: string; apiKey: string },
+  difyUser: string,
+  memoryInputs: Record<string, unknown>,
+) {
   const normalizedAdvisorType = normalizeLeadHunterAdvisorType(payload.advisorType)
   if (!normalizedAdvisorType) {
     throw new Error("invalid_lead_hunter_advisor_type")
@@ -345,6 +617,7 @@ async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayl
       responseMode: "streaming",
       user: difyUser,
       advisorType: normalizedAdvisorType,
+      extraInputs: memoryInputs,
     }),
   )
 
@@ -357,6 +630,76 @@ async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayl
   const decoder = new TextDecoder("utf-8")
   let buffer = ""
   let accumulated = ""
+  let streamedChars = 0
+  let streamingEventIndex = -1
+  let lastProgressPersistAt = 0
+  const progressEvents: AssistantTaskProgressEvent[] = []
+
+  const persistTaskProgress = async (force = false) => {
+    const now = Date.now()
+    if (!force && now - lastProgressPersistAt < ASSISTANT_TASK_PROGRESS_PERSIST_INTERVAL_MS) {
+      return
+    }
+    lastProgressPersistAt = now
+    await updateTaskStatus(taskId, {
+      status: "running",
+      result: {
+        conversation_id: payload.conversationId,
+        events: progressEvents,
+        streamed_chars: streamedChars,
+      },
+    })
+  }
+
+  pushTaskProgressEvent(progressEvents, {
+    type: "request_submitted",
+    label: "Request submitted, waiting for workflow response",
+    status: "running",
+    at: Date.now(),
+  })
+  await persistTaskProgress(true)
+
+  const consumeSseBlocks = async (blocks: string[]) => {
+    for (const block of blocks) {
+      const data = getSseDataFromBlock(block)
+      if (!data) continue
+      const event = typeof data.event === "string" ? data.event : ""
+      if (["message", "agent_message", "text_chunk"].includes(event)) {
+        const chunk =
+          extractText((data as { answer?: unknown }).answer) ||
+          extractText((data.data as { text?: unknown } | undefined)?.text)
+        if (chunk) {
+          accumulated += chunk
+          streamedChars += chunk.length
+          if (streamingEventIndex < 0) {
+            pushTaskProgressEvent(progressEvents, {
+              type: "response_streaming",
+              label: "Generating response",
+              detail: `${streamedChars} chars received`,
+              status: "running",
+              at: Date.now(),
+            })
+            streamingEventIndex = progressEvents.length - 1
+          } else {
+            const target = progressEvents[streamingEventIndex]
+            if (target) {
+              progressEvents[streamingEventIndex] = {
+                ...target,
+                detail: `${streamedChars} chars received`,
+                at: Date.now(),
+              }
+            }
+          }
+          await persistTaskProgress()
+        }
+      }
+
+      const mappedEvent = mapDifySseEventToTaskProgress(data)
+      if (!mappedEvent) continue
+      pushTaskProgressEvent(progressEvents, mappedEvent)
+      await persistTaskProgress(true)
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read()
@@ -364,40 +707,22 @@ async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayl
     buffer += decoder.decode(value, { stream: true })
     const parsed = extractSseBlocks(buffer)
     buffer = parsed.rest
-    for (const block of parsed.blocks) {
-      const data = getSseDataFromBlock(block)
-      if (!data) continue
-      const event = typeof data.event === "string" ? data.event : ""
-      if (["message", "agent_message", "text_chunk"].includes(event)) {
-        const chunk =
-          extractText((data as { answer?: unknown }).answer) ||
-          extractText((data.data as { text?: unknown } | undefined)?.text)
-        if (chunk) {
-          accumulated += chunk
-        }
-      }
-    }
+    await consumeSseBlocks(parsed.blocks)
   }
 
   buffer += decoder.decode()
   if (buffer.trim()) {
     const parsed = extractSseBlocks(`${buffer}\n\n`)
-    for (const block of parsed.blocks) {
-      const data = getSseDataFromBlock(block)
-      if (!data) continue
-      const event = typeof data.event === "string" ? data.event : ""
-      if (["message", "agent_message", "text_chunk"].includes(event)) {
-        const chunk =
-          extractText((data as { answer?: unknown }).answer) ||
-          extractText((data.data as { text?: unknown } | undefined)?.text)
-        if (chunk) {
-          accumulated += chunk
-        }
-      }
-    }
+    await consumeSseBlocks(parsed.blocks)
   }
 
   const answer = sanitizeAssistantContent(formatLeadHunterChatOutput(accumulated))
+  pushTaskProgressEvent(progressEvents, {
+    type: "response_ready",
+    label: "Response ready",
+    status: "completed",
+    at: Date.now(),
+  })
 
   await appendLeadHunterMessage(
     payload.userId,
@@ -413,6 +738,8 @@ async function handleLeadHunterTurn(taskId: number, payload: AdvisorTurnTaskPayl
       conversation_id: payload.conversationId,
       answer: answer || "No lead data returned.",
       agent_name: getLeadHunterAgentName(normalizedAdvisorType),
+      events: progressEvents,
+      streamed_chars: streamedChars,
     },
   })
 }
@@ -428,8 +755,29 @@ async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload
     throw new Error("advisor_config_missing")
   }
 
+  const fallbackBridge = await buildDifyMemoryBridge({
+    userId: payload.userId,
+    advisorType: payload.advisorType,
+    query: payload.query,
+  }).catch(() => ({
+    agentType: null,
+    memoryContext: null,
+    soulCard: null,
+    memoryAppliedIds: [],
+  }))
+
+  const memoryBridge = {
+    ...fallbackBridge,
+    ...(payload.memoryContext ? { memoryContext: payload.memoryContext } : {}),
+    ...(payload.soulCard ? { soulCard: payload.soulCard } : {}),
+    ...(Array.isArray(payload.memoryAppliedIds) && payload.memoryAppliedIds.length
+      ? { memoryAppliedIds: payload.memoryAppliedIds }
+      : {}),
+  }
+  const memoryInputs = mergeDifyInputsWithMemoryBridge({}, memoryBridge)
+
   if (normalizeLeadHunterAdvisorType(payload.advisorType)) {
-    await handleLeadHunterTurn(taskId, payload, config, difyUser)
+    await handleLeadHunterTurn(taskId, payload, config, difyUser, memoryInputs)
     return
   }
 
@@ -444,7 +792,7 @@ async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload
     const upstream = await sendMessage(
       config,
       {
-        inputs: { contents: payload.query },
+        inputs: mergeDifyInputsWithMemoryBridge({ contents: payload.query }, memoryBridge),
         query: payload.query,
         response_mode: "blocking",
         user: difyUser,
@@ -582,7 +930,7 @@ function launchClaimedTask(taskId: number, workerId: string) {
         await updateWriterLatestAssistantMessage(
           task.userId,
           task.parsedPayload.conversationId,
-          `请求失败：${primaryErrorMessage || "unknown_error"}`,
+          `Request failed: ${primaryErrorMessage || "unknown_error"}`,
           {
             status: "failed",
             imagesRequested: false,
@@ -620,6 +968,7 @@ function launchClaimedTask(taskId: number, workerId: string) {
     })
 
   runningTasks.set(taskId, next)
+  return next
 }
 
 async function kickTaskExecution(taskId: number) {
@@ -649,22 +998,33 @@ export async function enqueueAssistantTask(input: { userId: number; workflowName
   return task
 }
 
-async function recoverAssistantTask(task: ParsedTaskRow | null) {
+async function recoverAssistantTask(
+  task: ParsedTaskRow | null,
+  options: { waitForCompletion?: boolean; completionTimeoutMs?: number } = {},
+) {
   if (!task?.parsedPayload) {
-    return task
+    return { task, launched: false, waited: false, timedOut: false }
   }
 
   if (!["pending", "running"].includes(task.status || "")) {
-    return task
+    return { task, launched: false, waited: false, timedOut: false }
   }
 
   if (runningTasks.has(task.id)) {
-    return task
+    if (!options.waitForCompletion) {
+      return { task, launched: false, waited: false, timedOut: false }
+    }
+    const waitResult = await waitForRunningTask(task.id, options.completionTimeoutMs)
+    return { task, launched: false, waited: waitResult.waited, timedOut: waitResult.timedOut }
   }
 
   if (task.status === "pending") {
-    void kickTaskExecution(task.id).catch(() => null)
-    return task
+    const launched = await kickTaskExecution(task.id)
+    if (!launched || !options.waitForCompletion) {
+      return { task, launched, waited: false, timedOut: false }
+    }
+    const waitResult = await waitForRunningTask(task.id, options.completionTimeoutMs)
+    return { task, launched, waited: waitResult.waited, timedOut: waitResult.timedOut }
   }
 
   const ageMs = getTaskAgeMs(task)
@@ -674,12 +1034,16 @@ async function recoverAssistantTask(task: ParsedTaskRow | null) {
       : ASSISTANT_STALE_TASK_MS
 
   if (ageMs < recoveryThresholdMs) {
-    return task
+    return { task, launched: false, waited: false, timedOut: false }
   }
 
   const claimed = await kickTaskExecution(task.id)
   if (claimed) {
-    return task
+    if (!options.waitForCompletion) {
+      return { task, launched: true, waited: false, timedOut: false }
+    }
+    const waitResult = await waitForRunningTask(task.id, options.completionTimeoutMs)
+    return { task, launched: true, waited: waitResult.waited, timedOut: waitResult.timedOut }
   }
 
   if (task.parsedPayload.kind === "advisor_turn" && !normalizeLeadHunterAdvisorType(task.parsedPayload.advisorType)) {
@@ -714,10 +1078,10 @@ async function recoverAssistantTask(task: ParsedTaskRow | null) {
     }
 
     const refreshed = await getTaskById(task.id)
-    return parseTask(refreshed)
+    return { task: parseTask(refreshed), launched: false, waited: false, timedOut: false }
   }
 
-  return task
+  return { task, launched: false, waited: false, timedOut: false }
 }
 
 export async function getAssistantTask(taskId: number, userId?: number) {
@@ -725,12 +1089,20 @@ export async function getAssistantTask(taskId: number, userId?: number) {
   return parseTask(task)
 }
 
-export async function runAssistantTaskRecoveryPass(input: { limit?: number } = {}) {
+export async function runAssistantTaskRecoveryPass(
+  input: {
+    limit?: number
+    waitForCompletion?: boolean
+    completionTimeoutMs?: number
+  } = {},
+) {
   const limit = Math.max(1, Math.min(30, Number.parseInt(String(input.limit || ASSISTANT_TASK_RECOVERY_BATCH_LIMIT), 10) || 1))
   const candidateIds = await listRecoverableTaskIds(limit, ADVISOR_RECOVERY_CHECK_MS)
   let launched = 0
   let inspected = 0
   let failed = 0
+  let waited = 0
+  let timedOut = 0
 
   for (const taskId of candidateIds) {
     inspected += 1
@@ -738,8 +1110,17 @@ export async function runAssistantTaskRecoveryPass(input: { limit?: number } = {
 
     try {
       const task = parseTask(await getTaskById(taskId))
-      await recoverAssistantTask(task)
-      if (!wasRunningLocally && runningTasks.has(taskId)) {
+      const recovery = await recoverAssistantTask(task, {
+        waitForCompletion: input.waitForCompletion,
+        completionTimeoutMs: input.completionTimeoutMs,
+      })
+      if (recovery.waited) {
+        waited += 1
+      }
+      if (recovery.timedOut) {
+        timedOut += 1
+      }
+      if (recovery.launched || (!wasRunningLocally && runningTasks.has(taskId))) {
         launched += 1
       }
     } catch (error) {
@@ -756,6 +1137,8 @@ export async function runAssistantTaskRecoveryPass(input: { limit?: number } = {
     inspected,
     launched,
     failed,
+    waited,
+    timedOut,
     candidateIds,
   }
 }

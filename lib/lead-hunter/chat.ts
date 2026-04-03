@@ -3,6 +3,7 @@ type LeadHunterChatPayload = {
   responseMode: "blocking" | "streaming"
   user: string
   advisorType?: string | null
+  extraInputs?: Record<string, unknown> | null
 }
 
 function extractCompanyName(query: string) {
@@ -98,7 +99,7 @@ function formatObjectList(items: Array<Record<string, unknown>>) {
     .join("\n\n")
 }
 
-export function buildLeadHunterChatPayload({ query, responseMode, user, advisorType }: LeadHunterChatPayload) {
+export function buildLeadHunterChatPayload({ query, responseMode, user, advisorType, extraInputs }: LeadHunterChatPayload) {
   const companyName = extractCompanyName(query)
   const website = extractWebsite(query, companyName)
   const contactMiningInputs =
@@ -116,6 +117,7 @@ export function buildLeadHunterChatPayload({ query, responseMode, user, advisorT
       search_query: query,
       search_conditions: query,
       ...contactMiningInputs,
+      ...(extraInputs || {}),
     },
     query,
     response_mode: responseMode,
