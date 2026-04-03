@@ -30,6 +30,7 @@ STRATEGY_LABELS = {
 }
 VALID_RETRIEVAL_STRATEGIES = set(STRATEGY_LABELS)
 VALID_WEB_RESEARCH_STATUSES = {"ready", "disabled", "timed_out", "unavailable", "skipped"}
+WRITER_MEMORY_ENABLED = os.environ.get("WRITER_MEMORY_ENABLED", "").strip().lower() == "true"
 
 
 def expect(condition: bool, message: str):
@@ -97,6 +98,29 @@ def fetch_json(page, path: str):
         }""",
         {"baseUrl": BASE_URL, "path": path},
     )
+
+
+def create_writer_memory_item(page, *, agent_type: str = "writer") -> bool:
+    payload = page.evaluate(
+        """async ({ baseUrl, agentType }) => {
+            const response = await fetch(`${baseUrl}/api/writer/memory/items`, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                agentType,
+                type: "feedback",
+                source: "explicit_user",
+                title: "E2E tone preference",
+                content: "保持克制语气，避免夸张描述"
+              }),
+            })
+            const data = await response.json().catch(() => null)
+            return { ok: response.ok, status: response.status, data }
+        }""",
+        {"baseUrl": BASE_URL, "agentType": agent_type},
+    )
+    return bool(payload.get("ok"))
 
 
 def get_conversation_id_from_url(page) -> str:
@@ -439,6 +463,7 @@ def run_fixture_enabled(page):
 
     availability = assert_availability(page, enabled=True, provider="aiberm", reason="ok")
     result["availability"] = availability
+    result["memorySeeded"] = create_writer_memory_item(page, agent_type="writer")
 
     wait_for_locator_count(page, 'a[href="/dashboard/writer"]')
     save_debug(page, "00-dashboard")
@@ -537,6 +562,13 @@ def run_fixture_enabled(page):
     expect(diagnostics.get("retrievalStrategy") in VALID_RETRIEVAL_STRATEGIES, f"unexpected retrieval strategy: {diagnostics}")
     expect(diagnostics.get("retrievalStrategy") != "rewrite_only", f"draft generation should not use rewrite-only strategy: {diagnostics}")
     expect(diagnostics.get("webResearchStatus") in VALID_WEB_RESEARCH_STATUSES, f"unexpected web research status: {diagnostics}")
+    expect("memoryRetrievedCount" in diagnostics, f"memory diagnostics field missing: {diagnostics}")
+    expect("memoryAppliedIds" in diagnostics, f"memory diagnostics field missing: {diagnostics}")
+    if WRITER_MEMORY_ENABLED and result.get("memorySeeded"):
+        expect(
+            int(diagnostics.get("memoryRetrievedCount") or 0) > 0,
+            f"expected memory retrieval hits when memory is enabled: {diagnostics}",
+        )
     close_preview_if_open(page)
     assert_grounding_summary_visible(page, diagnostics)
     result["diagnostics"] = diagnostics
