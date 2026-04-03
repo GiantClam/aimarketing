@@ -1,0 +1,81 @@
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_writer_soul_profiles" (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+  agent_type VARCHAR(32) NOT NULL,
+  tone TEXT NOT NULL DEFAULT '',
+  sentence_style TEXT NOT NULL DEFAULT '',
+  taboo_list JSONB NOT NULL DEFAULT '[]'::jsonb,
+  lexical_hints JSONB NOT NULL DEFAULT '[]'::jsonb,
+  confidence REAL NOT NULL DEFAULT 0.5,
+  version VARCHAR(32) NOT NULL DEFAULT 'v1',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS tone TEXT NOT NULL DEFAULT '';
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS sentence_style TEXT NOT NULL DEFAULT '';
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS taboo_list JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS lexical_hints JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS confidence REAL NOT NULL DEFAULT 0.5;
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS version VARCHAR(32) NOT NULL DEFAULT 'v1';
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "AI_MARKETING_writer_soul_profiles" ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_writer_soul_profiles_user_agent_type_idx"
+ON "AI_MARKETING_writer_soul_profiles"(user_id, agent_type);
+
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_writer_memory_items" (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+  agent_type VARCHAR(32) NOT NULL,
+  conversation_id INTEGER REFERENCES "AI_MARKETING_writer_conversations"(id) ON DELETE SET NULL,
+  type VARCHAR(24) NOT NULL,
+  title VARCHAR(160) NOT NULL,
+  content TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0.5,
+  source VARCHAR(32) NOT NULL,
+  dedup_fingerprint VARCHAR(128),
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  last_used_at TIMESTAMP,
+  deleted_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES "AI_MARKETING_writer_conversations"(id) ON DELETE SET NULL;
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS type VARCHAR(24) NOT NULL DEFAULT 'user';
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS title VARCHAR(160) NOT NULL DEFAULT '';
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS content TEXT NOT NULL DEFAULT '';
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS confidence REAL NOT NULL DEFAULT 0.5;
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'manual_edit';
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS dedup_fingerprint VARCHAR(128);
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP;
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "AI_MARKETING_writer_memory_items" ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_memory_items_user_agent_updated_idx"
+ON "AI_MARKETING_writer_memory_items"(user_id, agent_type, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_memory_items_user_agent_type_dedup_idx"
+ON "AI_MARKETING_writer_memory_items"(user_id, agent_type, type, dedup_fingerprint);
+
+CREATE TABLE IF NOT EXISTS "AI_MARKETING_writer_memory_events" (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+  agent_type VARCHAR(32) NOT NULL,
+  memory_item_id INTEGER REFERENCES "AI_MARKETING_writer_memory_items"(id) ON DELETE SET NULL,
+  event_type VARCHAR(32) NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE "AI_MARKETING_writer_memory_events" ADD COLUMN IF NOT EXISTS memory_item_id INTEGER REFERENCES "AI_MARKETING_writer_memory_items"(id) ON DELETE SET NULL;
+ALTER TABLE "AI_MARKETING_writer_memory_events" ADD COLUMN IF NOT EXISTS event_type VARCHAR(32) NOT NULL DEFAULT 'upsert';
+ALTER TABLE "AI_MARKETING_writer_memory_events" ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE "AI_MARKETING_writer_memory_events" ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_memory_events_user_agent_created_idx"
+ON "AI_MARKETING_writer_memory_events"(user_id, agent_type, created_at DESC);
+

@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, text, timestamp, boolean, uniqueIndex, jsonb } from "drizzle-orm/pg-core"
+import { pgTable, serial, integer, varchar, text, timestamp, boolean, uniqueIndex, jsonb, real, index } from "drizzle-orm/pg-core"
 
 const withPrefix = (name: string) => `AI_MARKETING_${name}`
 
@@ -145,6 +145,89 @@ export const writerMessages = pgTable(withPrefix("writer_messages"), {
   diagnostics: jsonb("diagnostics"),
   createdAt: timestamp("created_at").defaultNow(),
 })
+
+export const writerSoulProfiles = pgTable(
+  withPrefix("writer_soul_profiles"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    agentType: varchar("agent_type", { length: 32 }).notNull(),
+    tone: text("tone").default("").notNull(),
+    sentenceStyle: text("sentence_style").default("").notNull(),
+    tabooList: jsonb("taboo_list").$type<string[]>().default([]).notNull(),
+    lexicalHints: jsonb("lexical_hints").$type<string[]>().default([]).notNull(),
+    confidence: real("confidence").default(0.5).notNull(),
+    version: varchar("version", { length: 32 }).default("v1").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    userAgentTypeUnique: uniqueIndex(withPrefix("writer_soul_profiles_user_agent_type_idx")).on(
+      table.userId,
+      table.agentType,
+    ),
+  }),
+)
+
+export const writerMemoryItems = pgTable(
+  withPrefix("writer_memory_items"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    agentType: varchar("agent_type", { length: 32 }).notNull(),
+    conversationId: integer("conversation_id").references(() => writerConversations.id),
+    type: varchar("type", { length: 24 }).notNull(),
+    title: varchar("title", { length: 160 }).notNull(),
+    content: text("content").notNull(),
+    confidence: real("confidence").default(0.5).notNull(),
+    source: varchar("source", { length: 32 }).notNull(),
+    dedupFingerprint: varchar("dedup_fingerprint", { length: 128 }),
+    isDeleted: boolean("is_deleted").default(false).notNull(),
+    lastUsedAt: timestamp("last_used_at"),
+    deletedAt: timestamp("deleted_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    userAgentUpdatedIdx: index(withPrefix("writer_memory_items_user_agent_updated_idx")).on(
+      table.userId,
+      table.agentType,
+      table.updatedAt,
+    ),
+    userAgentTypeDedupIdx: index(withPrefix("writer_memory_items_user_agent_type_dedup_idx")).on(
+      table.userId,
+      table.agentType,
+      table.type,
+      table.dedupFingerprint,
+    ),
+  }),
+)
+
+export const writerMemoryEvents = pgTable(
+  withPrefix("writer_memory_events"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    agentType: varchar("agent_type", { length: 32 }).notNull(),
+    memoryItemId: integer("memory_item_id").references(() => writerMemoryItems.id),
+    eventType: varchar("event_type", { length: 32 }).notNull(),
+    payload: jsonb("payload"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    userAgentCreatedIdx: index(withPrefix("writer_memory_events_user_agent_created_idx")).on(
+      table.userId,
+      table.agentType,
+      table.createdAt,
+    ),
+  }),
+)
 
 export const leadHunterConversations = pgTable(withPrefix("lead_hunter_conversations"), {
   id: serial("id").primaryKey(),

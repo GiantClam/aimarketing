@@ -29,6 +29,18 @@ let writerTestHooks: {
     extracts: Array<{ url: string; content: string }>
     status: "ready" | "disabled" | "timed_out" | "unavailable" | "skipped"
   }>
+  buildSystemPrompt: (
+    query: string,
+    routing: NonNullable<WriterTurnDiagnostics["routing"]>,
+    languageInstruction: string,
+    research: {
+      items: Array<{ title: string; snippet: string; link: string }>
+      extracts: Array<{ url: string; content: string }>
+      status: "ready" | "disabled" | "timed_out" | "unavailable" | "skipped"
+    },
+    enterpriseKnowledge?: any,
+    personalizationBlock?: string | null,
+  ) => Promise<string>
 }
 
 test.before(async () => {
@@ -1312,6 +1324,25 @@ test("html normalization strips script/style and preserves readable body text", 
   assert.match(normalized, /Outdoor gear designed for reliability/)
   assert.doesNotMatch(normalized, /window\.bad/)
   assert.doesNotMatch(normalized, /color:red/)
+})
+
+test("compiled writer prompt includes soul card hints when available", async () => {
+  const systemPrompt = await writerTestHooks.buildSystemPrompt(
+    "Write a WeChat post",
+    createRouting(),
+    "Write in English.",
+    {
+      items: [],
+      extracts: [],
+      status: "skipped",
+    },
+    null,
+    "Soul Card:\n- Tone: professional and restrained\n- Avoid: exaggerated claims",
+  )
+
+  assert.match(systemPrompt, /Personalization guidance:/i)
+  assert.match(systemPrompt, /Soul Card:/i)
+  assert.match(systemPrompt, /factual accuracy, compliance, or safety/i)
 })
 
 test("english Topic/Audience labels are enough to draft immediately without model extraction", async () => {

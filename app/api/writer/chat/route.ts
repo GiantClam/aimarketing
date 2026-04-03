@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
       workflowName: "writer_turn",
       payload: {
         kind: "writer_turn",
+        agentType: "writer",
         enterpriseId: auth.user.enterpriseId,
         conversationId: persisted.conversationId,
         query: userQuery,
