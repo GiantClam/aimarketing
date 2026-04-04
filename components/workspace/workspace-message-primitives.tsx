@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react"
 
+import { TypingIndicator } from "@/components/ui/typing-indicator"
+import type { PendingTaskEvent } from "@/lib/assistant-task-events"
 import { cn } from "@/lib/utils"
 
 type WorkspaceMessageRole = "assistant" | "user" | "system"
@@ -64,18 +66,65 @@ export function WorkspaceMessageFrame({
 export function WorkspaceLoadingMessage({
   label,
   className,
+  showTypingIndicator = true,
 }: {
   label: ReactNode
   className?: string
+  showTypingIndicator?: boolean
 }) {
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">{label}</div>
-      <div className="space-y-2">
-        <div className="h-3 w-11/12 rounded-full bg-muted/70" />
-        <div className="h-3 w-9/12 rounded-full bg-muted/60" />
-        <div className="h-3 w-7/12 rounded-full bg-muted/50" />
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        {showTypingIndicator ? <TypingIndicator /> : null}
+        {label}
       </div>
+      <div className="space-y-2">
+        <div className="h-2.5 w-11/12 rounded-full bg-muted/70" />
+        <div className="h-2.5 w-9/12 rounded-full bg-muted/60" />
+        <div className="h-2.5 w-7/12 rounded-full bg-muted/50" />
+      </div>
+    </div>
+  )
+}
+
+export function WorkspaceTaskEvents({
+  events,
+  limit = 4,
+  className,
+}: {
+  events: PendingTaskEvent[]
+  limit?: number
+  className?: string
+}) {
+  const recentEvents = events.slice(-Math.max(1, limit))
+  if (recentEvents.length === 0) return null
+
+  return (
+    <div className={cn("space-y-1.5 pl-6 text-xs", className)} data-testid="workspace-task-events">
+      {recentEvents.map((event, eventIndex) => (
+        <div
+          key={`${event.type}-${event.at}-${eventIndex}`}
+          className="flex items-start gap-2"
+          data-testid={`workspace-task-event-${event.type}`}
+        >
+          <span
+            className={cn(
+              "mt-1.5 h-1.5 w-1.5 rounded-full",
+              event.status === "failed"
+                ? "bg-destructive"
+                : event.status === "completed"
+                  ? "bg-emerald-500"
+                  : event.status === "running"
+                    ? "bg-primary"
+                    : "bg-muted-foreground",
+            )}
+          />
+          <span>
+            {event.label}
+            {event.detail ? <span className="ml-1 text-muted-foreground/80">{event.detail}</span> : null}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
