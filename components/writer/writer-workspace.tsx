@@ -1,12 +1,15 @@
-"use client"
+﻿"use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import {
+  AlertTriangle,
   BookText,
   Bookmark,
+  CheckCircle2,
   ChevronLeft,
+  Clock3,
   Copy,
   Eye,
   Heart,
@@ -26,20 +29,27 @@ import { useI18n } from "@/components/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ScrollToBottomButton } from "@/components/ui/scroll-to-bottom-button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
+import { TextMorph } from "@/components/ui/text-morph"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { TypingIndicator } from "@/components/ui/typing-indicator"
 import { WorkspaceComposerPanel, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
   WorkspaceConversationSkeleton,
   WorkspaceLoadingMessage,
   WorkspaceMessageFrame,
+  WorkspaceTaskEvents,
 } from "@/components/workspace/workspace-message-primitives"
 import {
   findWriterPendingTask,
   removePendingAssistantTask,
   savePendingAssistantTask,
 } from "@/lib/assistant-task-store"
+import { arePendingTaskEventsEqual, normalizePendingTaskEvents, type PendingTaskEvent } from "@/lib/assistant-task-events"
+import { useSessionRecoveryBootstrap } from "@/lib/hooks/use-session-recovery-bootstrap"
 import type { AppMessages } from "@/lib/i18n/messages"
 import {
   ensureWorkspaceQueryData,
@@ -51,6 +61,7 @@ import {
 import {
   buildPendingWriterAssets,
   buildWriterAssetBlueprints,
+  ensureWriterAssetOrder,
   extractWriterAssetsFromMarkdown,
   markWriterAssetsFailed,
   resolveWriterAssetMarkdown,
@@ -70,10 +81,17 @@ import {
   type WriterPlatform,
 } from "@/lib/writer/config"
 import {
+  WRITER_PROGRESS_EVENT_LIMIT,
+  WRITER_PROGRESS_PHASE_ORDER,
+  buildWriterProgressLabelMap,
+  localizeWriterProgressDetail,
+  resolveWriterProgressLocale,
+  type WriterProgressLocale,
+} from "@/lib/writer/progress-events"
+import {
   emitWriterRefresh,
   getWriterConversationCache,
   getWriterSessionMeta,
-  isWriterConversationCacheFresh,
   saveWriterConversationCache,
   saveWriterSessionMeta,
 } from "@/lib/writer/session-store"
@@ -101,6 +119,7 @@ type WriterVersionAssetState = {
   assets: WriterAsset[]
   loading: boolean
   error: string | null
+  loadingStartedAt?: number | null
 }
 
 type WriterPreviewContext = {
@@ -119,6 +138,44 @@ type WriterPreviewContext = {
   isLatest: boolean
 }
 
+function getWriterAssetSortOrder(id: string) {
+  if (id === "cover") return 0
+  const inlineMatch = /^inline-(\d+)$/iu.exec(id)
+  if (inlineMatch) return 100 + Number.parseInt(inlineMatch[1], 10)
+  return 1_000
+}
+
+function mergeWriterAssetProgress(
+  current: WriterAsset[],
+  incoming: WriterAsset,
+  platform: WriterPlatform,
+  mode: WriterMode,
+) {
+  const merged = [...current]
+  const existingIndex = merged.findIndex((asset) => asset.id === incoming.id)
+  if (existingIndex >= 0) {
+    merged[existingIndex] = {
+      ...merged[existingIndex],
+      ...incoming,
+    }
+  } else {
+    merged.push(incoming)
+  }
+
+  return ensureWriterAssetOrder(merged, platform, mode)
+}
+
+function formatEtaDuration(durationMs: number, locale: string) {
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  const isZh = locale === "zh"
+
+  if (minutes <= 0) return `${totalSeconds}s`
+  if (seconds <= 0) return isZh ? `${minutes}分` : `${minutes}m`
+  return isZh ? `${minutes}分${seconds}秒` : `${minutes}m ${seconds}s`
+}
+
 function isAbortLikeError(error: unknown) {
   if (!error) return false
   if (error instanceof DOMException && error.name === "AbortError") return true
@@ -129,9 +186,157 @@ function isAbortLikeError(error: unknown) {
   return false
 }
 
+type WriterChatStreamOutcome = "needs_clarification" | "draft_ready"
+
+type WriterChatStreamEvent = {
+  event?: "conversation_init" | "progress" | "message" | "message_end" | "error"
+  conversation_id?: string
+  conversation?: WriterConversationSummary
+  answer?: string
+  type?: string
+  label?: string
+  detail?: string
+  status?: PendingTaskEvent["status"]
+  at?: number
+  diagnostics?: WriterTurnDiagnostics | null
+  outcome?: WriterChatStreamOutcome
+  error?: string
+}
+
+type WriterAssetGenerationStreamEvent = {
+  event?: "start" | "asset" | "done" | "error"
+  index?: number
+  total?: number
+  asset?: WriterAsset
+  assets?: WriterAsset[]
+  ok?: boolean
+  error?: string
+  data?: {
+    provider?: string
+    model?: string
+    assets?: WriterAsset[]
+  }
+}
+
+const WRITER_STREAM_UNSUPPORTED_ERROR = "writer_stream_not_supported"
+type WriterProgressPhaseType = (typeof WRITER_PROGRESS_PHASE_ORDER)[number]
+type WriterTaskLocale = WriterProgressLocale
+type WriterProgressLabelMap = Record<string, string>
+
+function consumeWriterSseBuffer<T extends object = WriterChatStreamEvent>(buffer: string) {
+  const blocks = buffer.split(/\r?\n\r?\n/)
+  const rest = blocks.pop() ?? ""
+  const events: T[] = []
+
+  for (const block of blocks) {
+    const payload = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n")
+      .trim()
+
+    if (!payload || payload === "[DONE]") continue
+
+    try {
+      events.push(JSON.parse(payload) as T)
+    } catch {
+      continue
+    }
+  }
+
+  return { events, rest }
+}
+
+function createWriterStreamUnsupportedError() {
+  return new Error(WRITER_STREAM_UNSUPPORTED_ERROR)
+}
+
+function isWriterStreamUnsupportedError(error: unknown) {
+  return error instanceof Error && error.message === WRITER_STREAM_UNSUPPORTED_ERROR
+}
+
+
+function formatWriterDuration(durationMs: number, durationPrefix: string) {
+  const seconds = (Math.max(0, durationMs) / 1000).toFixed(1)
+  return `${durationPrefix}${seconds}s`
+}
+
+
+function localizeWriterTaskEvent(
+  event: PendingTaskEvent,
+  taskLocale: WriterTaskLocale,
+  progressLabelMap: WriterProgressLabelMap,
+): PendingTaskEvent {
+  const localizedLabel = progressLabelMap[event.type] || event.label
+  return {
+    ...event,
+    label: localizedLabel,
+    detail: localizeWriterProgressDetail(event.detail, taskLocale),
+  }
+}
+
+function upsertWriterTaskEvent(
+  current: PendingTaskEvent[],
+  incoming: PendingTaskEvent,
+  taskLocale: WriterTaskLocale,
+  progressLabelMap: WriterProgressLabelMap,
+  durationPrefix: string,
+) {
+  const localizedIncoming = localizeWriterTaskEvent(incoming, taskLocale, progressLabelMap)
+  const previous = current.at(-1)
+  if (
+    previous &&
+    previous.type === localizedIncoming.type &&
+    previous.label === localizedIncoming.label &&
+    previous.detail === localizedIncoming.detail &&
+    previous.status === localizedIncoming.status
+  ) {
+    return current
+  }
+
+  let replaceIndex = -1
+  for (let index = current.length - 1; index >= 0; index -= 1) {
+    if (current[index]?.type === localizedIncoming.type) {
+      replaceIndex = index
+      break
+    }
+  }
+
+  const shouldReplace = replaceIndex >= 0 && (localizedIncoming.status === "completed" || localizedIncoming.status === "failed")
+  const next = shouldReplace ? [...current] : [...current, localizedIncoming]
+  if (shouldReplace) {
+    const before = current[replaceIndex]
+    const durationMs = localizedIncoming.at - before.at
+    const durationSuffix = durationMs > 0 ? formatWriterDuration(durationMs, durationPrefix) : ""
+    const detail = [localizedIncoming.detail, durationSuffix].filter(Boolean).join(" · ")
+    next[replaceIndex] = {
+      ...localizedIncoming,
+      detail: detail || undefined,
+    }
+  }
+
+  return next.length > WRITER_PROGRESS_EVENT_LIMIT ? next.slice(next.length - WRITER_PROGRESS_EVENT_LIMIT) : next
+}
+
+function localizeWriterTaskEvents(
+  events: PendingTaskEvent[],
+  taskLocale: WriterTaskLocale,
+  progressLabelMap: WriterProgressLabelMap,
+) {
+  return events
+    .map((event) => localizeWriterTaskEvent(event, taskLocale, progressLabelMap))
+    .slice(-WRITER_PROGRESS_EVENT_LIMIT)
+}
+
 const WRITER_INITIAL_TURN_LIMIT = 8
 const WRITER_HISTORY_PAGE_SIZE = 10
-const EMPTY_VERSION_ASSET_STATE: WriterVersionAssetState = { assets: [], loading: false, error: null }
+const EMPTY_VERSION_ASSET_STATE: WriterVersionAssetState = {
+  assets: [],
+  loading: false,
+  error: null,
+  loadingStartedAt: null,
+}
 
 type KnowledgeScope = "general" | "brand" | "product" | "case-study" | "compliance" | "campaign"
 
@@ -180,7 +385,7 @@ const inferDraft = (messages: WriterMessage[]) =>
 const inferFinalDraft = (messages: WriterMessage[], status: WriterConversationStatus) =>
   status === "drafting" ? "" : inferDraft(messages)
 const THREAD_SEGMENT_LABEL_RE =
-  /^(?:(?:segment|part|thread|post)\s*\d+|第\s*\d+\s*(?:段|条|帖|部分))(?:\s*[:：-])?(?:\r?\n+|$)/i
+  /^(?:(?:segment|part|thread|post)\s*\d+|绗琝s*\d+\s*(?:娈祙鏉甯東閮ㄥ垎))(?:\s*[:锛?])?(?:\r?\n+|$)/i
 const stripThreadSegmentLabel = (segment: string) => segment.replace(THREAD_SEGMENT_LABEL_RE, "").trim()
 const parseThread = (markdown: string) =>
   markdown
@@ -383,6 +588,151 @@ function WriterAssetPlaceholder({
   )
 }
 
+function WriterAssetProgressPanel({
+  assets,
+  assetsLoading,
+  assetsLoadingStartedAt,
+  assetsError,
+  nowMs,
+  locale,
+  copy,
+}: {
+  assets: WriterAsset[]
+  assetsLoading: boolean
+  assetsLoadingStartedAt: number | null
+  assetsError: string | null
+  nowMs: number
+  locale: string
+  copy: WriterCopy
+}) {
+  const orderedAssets = [...assets].sort((left, right) => {
+    return getWriterAssetSortOrder(left.id) - getWriterAssetSortOrder(right.id)
+  })
+  const totalCount = orderedAssets.length
+  const readyCount = orderedAssets.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length
+  const failedCount = orderedAssets.filter((asset) => asset.status === "failed").length
+  const processedCount = readyCount + failedCount
+  const loadingCount = orderedAssets.filter((asset) => asset.status === "loading").length
+  const shouldRender = totalCount > 0 || assetsLoading || Boolean(assetsError)
+
+  if (!shouldRender) return null
+
+  const summaryLabel = assetsLoading
+    ? copy.generatingImages
+    : failedCount > 0
+      ? `${failedCount}/${Math.max(totalCount, failedCount)}`
+      : `${readyCount}/${Math.max(totalCount, readyCount)}`
+  const remainingCount = Math.max(totalCount - processedCount, 0)
+  const etaLabel =
+    assetsLoading && remainingCount > 0
+      ? assetsLoadingStartedAt && processedCount > 0
+        ? `${locale === "zh" ? "预计剩余" : "ETA"} ${formatEtaDuration(
+            (Math.max(1000, nowMs - assetsLoadingStartedAt) / Math.max(1, processedCount)) * remainingCount,
+            locale,
+          )}`
+        : locale === "zh"
+          ? "预计剩余 计算中..."
+          : "ETA calculating..."
+      : null
+
+  return (
+    <div className="rounded-2xl border-2 border-border bg-background/80 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-950">{copy.imageActionsTitle}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            {assetsLoading ? copy.imageGenerationMerging : copy.imageActionsDescription}
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className={cn(
+            "rounded-full border px-2.5 py-1 text-[10px] font-medium",
+            assetsLoading
+              ? "border-sky-300 bg-sky-50 text-sky-700"
+              : failedCount > 0
+                ? "border-destructive/40 bg-destructive/10 text-destructive"
+                : "border-emerald-300 bg-emerald-50 text-emerald-700",
+          )}
+        >
+          {assetsLoading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+          {summaryLabel}
+        </Badge>
+      </div>
+
+      {assetsError ? (
+        <div className="mt-3 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <p className="font-medium">{copy.imageGenerationFailed}</p>
+          <p className="mt-1 break-words">
+            {copy.imageGenerationFailedPrefix}
+            {assetsError}
+          </p>
+        </div>
+      ) : null}
+
+      {totalCount > 0 ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {orderedAssets.map((asset) => {
+            const isReady = asset.status === "ready" && Boolean(asset.url)
+            const isFailed = asset.status === "failed"
+            const isLoading = !isReady && !isFailed && (assetsLoading || asset.status === "loading")
+            const statusLabel = isReady ? copy.done : isFailed ? copy.imageUnavailable : isLoading ? copy.imageGenerating : copy.waitingImage
+
+            return (
+              <div
+                key={asset.id}
+                className={cn(
+                  "rounded-xl border px-3 py-2.5",
+                  isReady
+                    ? "border-emerald-200 bg-emerald-50/60"
+                    : isFailed
+                      ? "border-destructive/30 bg-destructive/5"
+                      : "border-slate-200 bg-slate-50/70",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-xs font-medium text-slate-900">{asset.label}</p>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      isReady
+                        ? "bg-emerald-100 text-emerald-700"
+                        : isFailed
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-slate-200 text-slate-700",
+                    )}
+                  >
+                    {isReady ? (
+                      <CheckCircle2 className="h-3 w-3" />
+                    ) : isFailed ? (
+                      <AlertTriangle className="h-3 w-3" />
+                    ) : isLoading ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Clock3 className="h-3 w-3" />
+                    )}
+                    {statusLabel}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-600">{asset.title}</p>
+                {isFailed && asset.error ? <p className="mt-1 line-clamp-2 text-[11px] text-destructive">{asset.error}</p> : null}
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {assetsLoading && loadingCount > 0 ? (
+        <p className="mt-2 text-[11px] text-slate-500">
+          {locale === "zh" ? "已完成" : "Processed"}
+          {`: ${processedCount}/${totalCount}`}
+          {etaLabel ? ` · ${etaLabel}` : ""}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function renderMarkdown(content: string, assets: WriterAsset[], className?: string, copy?: WriterCopy) {
   const normalizedContent = stripManagedWriterAssetCommentLines(content)
   return (
@@ -533,7 +883,7 @@ function PlatformPreview({
           <p className="text-xs uppercase tracking-[0.28em] text-emerald-700">{copy.wechatPreview}</p>
           <div className="mt-4 flex items-center justify-center gap-3 text-xs text-slate-400">
             <span>AI Marketing Weekly</span>
-            <span>·</span>
+            <span>路</span>
             <span>{estimateReadingTime(markdown, copy)}</span>
           </div>
         </div>
@@ -581,7 +931,7 @@ function PlatformPreview({
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-black">AI Marketing Site</p>
                   <p className="text-xs text-slate-500">{platform === "weibo" ? "@aimarketing" : "@aimarketingsite"}</p>
-                  <span className="text-slate-300">·</span>
+                  <span className="text-slate-300">路</span>
                   <p className="text-xs text-slate-500">{mode === "thread" ? `Thread ${index + 1}` : platform === "weibo" ? "Weibo" : "Just now"}</p>
                 </div>
                 {mode === "article" && index === 0 ? <p className="mt-2 text-xs text-slate-500">{lead}</p> : null}
@@ -649,7 +999,7 @@ function PlatformPreview({
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-black">AI Marketing Site</p>
                 <p className="text-xs text-slate-500">Follow</p>
-                <span className="text-slate-300">·</span>
+                <span className="text-slate-300">路</span>
                 <p className="text-xs text-slate-500">{mode === "thread" ? `Post ${index + 1}` : estimateReadingTime(post, copy)}</p>
               </div>
               <p className="mt-1 text-xs text-slate-500">{index === 0 ? lead : copy.multiPostPreview}</p>
@@ -981,8 +1331,16 @@ export function WriterWorkspace({
   const router = useRouter()
   const queryClient = useQueryClient()
   const { user, loading } = useAuth()
-  const { messages: i18n } = useI18n()
+  const { messages: i18n, locale } = useI18n()
+  const taskLocale = resolveWriterProgressLocale(locale)
   const writerCopy = i18n.writer
+  const progressCurrentStageLabel = taskLocale === "zh" ? "\u5f53\u524d\u9636\u6bb5\uff1a" : "Current stage: "
+  const progressDurationPrefix = taskLocale === "zh" ? "\u8017\u65f6 " : "Duration "
+  const recentExecutionTraceLabel = taskLocale === "zh" ? "\u6700\u8fd1\u6267\u884c\u8f68\u8ff9" : "Recent execution trace"
+  const progressLabelMap = useMemo<WriterProgressLabelMap>(() => buildWriterProgressLabelMap(taskLocale), [taskLocale])
+  const copiedLabel = locale === "zh" ? "\u5df2\u590d\u5236" : "Copied"
+  const copiedToClipboardLabel = locale === "zh" ? "\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f" : "Copied to clipboard"
+  const scrollToLatestLabel = locale === "zh" ? "\u6eda\u52a8\u5230\u6700\u65b0\u6d88\u606f" : "Scroll to latest message"
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const previewContentRef = useRef<HTMLDivElement | null>(null)
@@ -990,6 +1348,16 @@ export function WriterWorkspace({
   const shouldScrollToBottomRef = useRef(false)
   const historyEntriesRef = useRef<WriterHistoryEntry[]>([])
   const messagesRef = useRef<WriterMessage[]>([])
+  const writerRequestInFlightRef = useRef(false)
+  const recentTaskEventsClearTimerRef = useRef<number | null>(null)
+  const runSessionRecoveryBootstrap = useSessionRecoveryBootstrap()
+  const getViewport = useCallback(
+    () =>
+      viewportRef.current?.querySelector(
+        "[data-slot='scroll-area-viewport'], [data-radix-scroll-area-viewport]",
+      ) as HTMLElement | null,
+    [],
+  )
 
   const [availabilityLoading, setAvailabilityLoading] = useState(true)
   const [availabilityReady, setAvailabilityReady] = useState(false)
@@ -1011,6 +1379,7 @@ export function WriterWorkspace({
     ),
   )
   const [assetsLoading, setAssetsLoading] = useState(false)
+  const [assetsLoadingStartedAt, setAssetsLoadingStartedAt] = useState<number | null>(null)
   const [assetsError, setAssetsError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
@@ -1025,6 +1394,11 @@ export function WriterWorkspace({
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0)
+  const [pendingTaskEvents, setPendingTaskEvents] = useState<PendingTaskEvent[]>([])
+  const [recentTaskEvents, setRecentTaskEvents] = useState<PendingTaskEvent[]>([])
+  const [isNearBottom, setIsNearBottom] = useState(true)
+  const [assetProgressNow, setAssetProgressNow] = useState(() => Date.now())
+  const [copyFeedback, setCopyFeedback] = useState<"rich" | "markdown" | null>(null)
   const [conversationStatus, setConversationStatus] = useState<
     "drafting" | "text_ready" | "image_generating" | "ready" | "failed"
   >("drafting")
@@ -1039,10 +1413,53 @@ export function WriterWorkspace({
   }, [initialConversationId])
 
   useEffect(() => {
+    setPendingTaskEvents((current) => localizeWriterTaskEvents(current, taskLocale, progressLabelMap))
+  }, [progressLabelMap, taskLocale])
+
+  useEffect(() => {
     setPreviewMessageId(null)
     setVersionAssetState({})
     setPendingRichCopyMessageId(null)
+    setAssetsLoadingStartedAt(null)
+    if (!writerRequestInFlightRef.current) {
+      setPendingTaskEvents([])
+      setRecentTaskEvents([])
+    }
   }, [conversationId])
+
+  useEffect(() => {
+    if (!isLoading) {
+      writerRequestInFlightRef.current = false
+    }
+  }, [isLoading])
+
+  useEffect(() => {
+    if (!assetsLoading) return
+    const timer = window.setInterval(() => {
+      setAssetProgressNow(Date.now())
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [assetsLoading])
+
+  useEffect(() => {
+    if (isLoading || pendingTaskEvents.length === 0) return
+    setRecentTaskEvents(pendingTaskEvents)
+    if (recentTaskEventsClearTimerRef.current) {
+      window.clearTimeout(recentTaskEventsClearTimerRef.current)
+    }
+    recentTaskEventsClearTimerRef.current = window.setTimeout(() => {
+      setRecentTaskEvents([])
+      recentTaskEventsClearTimerRef.current = null
+    }, 12_000)
+  }, [isLoading, pendingTaskEvents])
+
+  useEffect(() => {
+    return () => {
+      if (recentTaskEventsClearTimerRef.current) {
+        window.clearTimeout(recentTaskEventsClearTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const nextPlatform = normalizeWriterPlatform(initialPlatform)
@@ -1153,6 +1570,7 @@ export function WriterWorkspace({
       routing: previewRouting,
       assets: scopedAssets,
       assetsLoading: isLatest ? assetsLoading : scopedAssetState?.loading ?? false,
+      assetsLoadingStartedAt: isLatest ? assetsLoadingStartedAt : scopedAssetState?.loadingStartedAt ?? null,
       assetsError: isLatest ? assetsError : scopedAssetState?.error ?? null,
       hasDraft: Boolean(sourceMarkdown.trim()),
       hasGeneratedImages,
@@ -1188,6 +1606,38 @@ export function WriterWorkspace({
       routing.lengthTarget,
     ].filter(Boolean)
   }, [latestDiagnostics])
+  const loadingProgress = useMemo(() => {
+    const phaseEvents = pendingTaskEvents.filter((event): event is PendingTaskEvent & { type: WriterProgressPhaseType } =>
+      (WRITER_PROGRESS_PHASE_ORDER as readonly string[]).includes(event.type),
+    )
+    if (phaseEvents.length === 0) return null
+
+    const latestByType = new Map<string, PendingTaskEvent>()
+    for (const event of phaseEvents) {
+      latestByType.set(event.type, event)
+    }
+
+    const observedTypes = WRITER_PROGRESS_PHASE_ORDER.filter((type) => latestByType.has(type))
+    if (observedTypes.length === 0) return null
+
+    const finishedCount = observedTypes.filter((type) => {
+      const status = latestByType.get(type)?.status
+      return status === "completed" || status === "failed" || status === "info"
+    }).length
+
+    const runningType = observedTypes.find((type) => latestByType.get(type)?.status === "running") || null
+    const currentType = runningType || observedTypes[observedTypes.length - 1] || null
+    const currentStage = currentType ? latestByType.get(currentType) || null : null
+    const totalCount = observedTypes.length
+    const progressPercent = totalCount > 0 ? Math.round((finishedCount / totalCount) * 100) : 0
+
+    return {
+      currentLabel: currentStage?.label || writerCopy.generatingDraft,
+      finishedCount,
+      totalCount,
+      progressPercent,
+    }
+  }, [pendingTaskEvents, writerCopy.generatingDraft])
 
   useEffect(() => {
     messagesRef.current = messages
@@ -1343,9 +1793,12 @@ export function WriterWorkspace({
           queryKey: getWriterMessagesQueryKey(conversationId, turnLimit),
           queryFn: () => getWriterMessagesPage(conversationId, turnLimit),
         }
-        const data = options?.background || options?.forceRefresh
-          ? await fetchWorkspaceQueryData(queryClient, queryOptions)
-          : await ensureWorkspaceQueryData(queryClient, queryOptions)
+        const shouldForceFetch = Boolean(options?.forceRefresh)
+        const data = shouldForceFetch
+          ? await queryClient.fetchQuery({ ...queryOptions, staleTime: 0 })
+          : options?.background
+            ? await fetchWorkspaceQueryData(queryClient, queryOptions)
+            : await ensureWorkspaceQueryData(queryClient, queryOptions)
         if (cancelled) return
         applyConversationPayload(data, { reset: true, background: options?.background })
       } catch {
@@ -1364,31 +1817,41 @@ export function WriterWorkspace({
       }
     }
 
-    const hasCache = applyCachedConversation()
-    if (hasCache && cachedConversation) {
-      void load({
-        background: true,
-        forceRefresh: true,
-      })
-    } else if (keepOptimisticMessagesVisible) {
-      shouldScrollToBottomRef.current = true
-      setIsConversationLoading(false)
-      void load({
-        background: true,
-        forceRefresh: true,
-      })
-    } else if (!cachedConversation || !isWriterConversationCacheFresh(cachedConversation)) {
-      void load()
-    }
+    const stopRecovery = runSessionRecoveryBootstrap({
+      entityId: conversationId,
+      cacheSnapshot: cachedConversation,
+      hasVisibleContent: Boolean(cachedConversation?.entries.length),
+      restoreCache: () => {
+        applyCachedConversation()
+      },
+      reconcile: async (recovery) => {
+        if (keepOptimisticMessagesVisible) {
+          shouldScrollToBottomRef.current = true
+          setIsConversationLoading(false)
+          await load({
+            background: true,
+            forceRefresh: true,
+          })
+          return
+        }
+
+        await load({
+          background: recovery.background,
+          forceRefresh: recovery.forceRefresh,
+        })
+      },
+    })
+
     return () => {
       cancelled = true
+      stopRecovery()
     }
-  }, [conversationId, queryClient, writerCopy.assistantName, writerCopy.conversationLoadFailed])
+  }, [conversationId, queryClient, runSessionRecoveryBootstrap, writerCopy.assistantName, writerCopy.conversationLoadFailed])
 
   const loadOlderMessages = async () => {
     if (!conversationId || !historyCursor || isHistoryLoading) return
 
-    const viewport = viewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
+    const viewport = getViewport()
     if (viewport) {
       historyRestoreRef.current = {
         height: viewport.scrollHeight,
@@ -1440,7 +1903,12 @@ export function WriterWorkspace({
 
   useEffect(() => {
     const pendingTask = findWriterPendingTask(conversationId)
-    if (!conversationId || !pendingTask) return
+    if (!conversationId || !pendingTask) {
+      if (!writerRequestInFlightRef.current) {
+        setPendingTaskEvents([])
+      }
+      return
+    }
 
     let cancelled = false
     setIsLoading(true)
@@ -1508,9 +1976,19 @@ export function WriterWorkspace({
         try {
           const response = await fetch(`/api/tasks/${pendingTask.taskId}`)
           const payload = (await response.json().catch(() => null)) as {
-            data?: { status?: string }
+            data?: {
+              status?: string
+              result?: {
+                events?: unknown
+              } | null
+            }
           } | null
           const status = payload?.data?.status
+          const normalizedEvents = normalizePendingTaskEvents(payload?.data?.result?.events)
+          if (normalizedEvents.length > 0) {
+            const localizedEvents = localizeWriterTaskEvents(normalizedEvents, taskLocale, progressLabelMap)
+            setPendingTaskEvents((current) => (arePendingTaskEventsEqual(current, localizedEvents) ? current : localizedEvents))
+          }
 
           if (status === "success") {
             const conversationStatusAfterRefresh = await refreshConversation()
@@ -1522,6 +2000,7 @@ export function WriterWorkspace({
               }
               setIsLoading(false)
             }
+            setPendingTaskEvents([])
             return
           }
 
@@ -1532,6 +2011,7 @@ export function WriterWorkspace({
               setConversationStatus("failed")
               setIsLoading(false)
             }
+            setPendingTaskEvents([])
             return
           }
         } catch (error) {
@@ -1546,10 +2026,10 @@ export function WriterWorkspace({
     return () => {
       cancelled = true
     }
-  }, [conversationId, pendingTaskRefreshKey, queryClient, writerCopy.assistantName])
+  }, [conversationId, pendingTaskRefreshKey, progressLabelMap, queryClient, taskLocale, writerCopy.assistantName])
 
   useEffect(() => {
-    const viewport = viewportRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
+    const viewport = getViewport()
     if (!viewport) return
 
     if (historyRestoreRef.current) {
@@ -1559,11 +2039,25 @@ export function WriterWorkspace({
       return
     }
 
-    if (shouldScrollToBottomRef.current || isLoading) {
+    if (shouldScrollToBottomRef.current || isLoading || isNearBottom) {
       viewport.scrollTop = viewport.scrollHeight
       shouldScrollToBottomRef.current = false
     }
-  }, [isLoading, messages])
+  }, [getViewport, isLoading, isNearBottom, messages])
+
+  useEffect(() => {
+    const viewport = getViewport()
+    if (!viewport) return
+
+    const updateNearBottom = () => {
+      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      setIsNearBottom(distanceFromBottom <= 120)
+    }
+
+    updateNearBottom()
+    viewport.addEventListener("scroll", updateNearBottom, { passive: true })
+    return () => viewport.removeEventListener("scroll", updateNearBottom)
+  }, [getViewport, messages.length])
 
   useEffect(() => {
     const element = composerRef.current
@@ -1576,6 +2070,7 @@ export function WriterWorkspace({
     if (!baseDraft.trim()) {
       setAssets([])
       setAssetsLoading(false)
+      setAssetsLoadingStartedAt(null)
       setImagesRequested(false)
       return
     }
@@ -1584,18 +2079,21 @@ export function WriterWorkspace({
     if (extractedAssets.some((asset) => asset.url)) {
       setAssets(extractedAssets)
       setAssetsLoading(false)
+      setAssetsLoadingStartedAt(null)
       return
     }
 
     if (!imagesRequested) {
       setAssets([])
       setAssetsLoading(false)
+      setAssetsLoadingStartedAt(null)
       setAssetsError(null)
       return
     }
 
     setAssets(buildPendingWriterAssets(baseDraft, platform, mode))
     setAssetsLoading(false)
+    setAssetsLoadingStartedAt(null)
   }, [baseDraft, imagesRequested, mode, platform])
 
   const patchAssistantMessage = (id: string, content: string) => {
@@ -1657,6 +2155,67 @@ export function WriterWorkspace({
     })
   }
 
+  const refreshConversationSnapshot = useCallback(
+    async (targetConversationId: string) => {
+      const cachedConversation = getWriterConversationCache(targetConversationId)
+      const turnLimit = Math.max(WRITER_INITIAL_TURN_LIMIT, cachedConversation?.loadedTurnCount || 0)
+      await invalidateWriterConversationQueries(queryClient, targetConversationId)
+      const data = await fetchWorkspaceQueryData(queryClient, {
+        queryKey: getWriterMessagesQueryKey(targetConversationId, turnLimit),
+        queryFn: () => getWriterMessagesPage(targetConversationId, turnLimit),
+      })
+
+      const nextMessages = mapHistoryEntriesToMessages(data.data || [], writerCopy.assistantName)
+      const nextDiagnostics = getLatestHistoryDiagnostics(data.data || [])
+      historyEntriesRef.current = data.data || []
+      setMessages(nextMessages)
+      setLatestDiagnostics(nextDiagnostics)
+      setHistoryCursor(data.next_cursor || null)
+      setHasMoreHistory(Boolean(data.has_more))
+      shouldScrollToBottomRef.current = true
+
+      if (data.conversation) {
+        const nextPlatform = normalizeWriterPlatform(data.conversation.platform)
+        const nextMode = normalizeWriterMode(nextPlatform, data.conversation.mode)
+        const nextLanguage = normalizeWriterLanguage(data.conversation.language)
+        const nextStatus = data.conversation.status || "drafting"
+        const nextDraft = inferFinalDraft(nextMessages, nextStatus)
+        setDraft(nextDraft)
+        setPlatform(nextPlatform)
+        setMode(nextMode)
+        setLanguage(nextLanguage)
+        setImagesRequested(Boolean(data.conversation.images_requested))
+        setConversationStatus(nextStatus)
+        saveWriterSessionMeta(targetConversationId, {
+          platform: nextPlatform,
+          mode: nextMode,
+          language: nextLanguage,
+          draft: nextDraft,
+          imagesRequested: Boolean(data.conversation.images_requested),
+          status: nextStatus,
+          diagnostics: nextDiagnostics,
+          updatedAt: Date.now(),
+        })
+        emitWriterRefresh({
+          action: "upsert",
+          conversation: data.conversation,
+        })
+      }
+
+      saveWriterConversationCache(targetConversationId, {
+        entries: historyEntriesRef.current,
+        conversation: data.conversation,
+        historyCursor: data.next_cursor || null,
+        hasMoreHistory: Boolean(data.has_more),
+        loadedTurnCount: historyEntriesRef.current.length,
+        updatedAt: Date.now(),
+      })
+
+      return data.conversation?.status || "drafting"
+    },
+    [queryClient, writerCopy.assistantName],
+  )
+
   const openPreviewForMessage = (messageId: string | null) => {
     setPreviewMessageId(messageId)
     setPreviewOpen(true)
@@ -1680,6 +2239,8 @@ export function WriterWorkspace({
     setPreviewOpen(false)
     setAssetsError(null)
     setAssets([])
+    setAssetsLoading(false)
+    setAssetsLoadingStartedAt(null)
     setImagesRequested(false)
     setPreviewMessageId(null)
     setVersionAssetState({})
@@ -1693,13 +2254,24 @@ export function WriterWorkspace({
     if (!inputValue.trim() || isLoading) return
 
     const query = inputValue.trim()
+    const requestBody = {
+      query,
+      inputs: { contents: query },
+      conversation_id: conversationId,
+      platform,
+      mode,
+      language,
+    }
     const optimisticCreatedAt = Math.floor(Date.now() / 1000)
     const userMessageId = `writer_user_${Date.now()}`
     const assistantId = `writer_assistant_${Date.now()}`
     const pendingHistoryEntryId = `pending_${assistantId}`
     let taskAccepted = false
     setInputValue("")
+    writerRequestInFlightRef.current = true
     setIsLoading(true)
+    setPendingTaskEvents([])
+    setRecentTaskEvents([])
     setImagesRequested(false)
     setConversationStatus("drafting")
     setLatestDiagnostics(null)
@@ -1742,18 +2314,256 @@ export function WriterWorkspace({
       })
     }
 
+    const syncOptimisticHistoryEntry = (params: {
+      targetConversationId: string
+      answer: string
+      diagnostics?: WriterTurnDiagnostics | null
+      conversation?: WriterConversationSummary | null
+    }) => {
+      const nextEntries = historyEntriesRef.current.some((entry) => entry.id === pendingHistoryEntryId)
+        ? historyEntriesRef.current.map((entry) =>
+            entry.id === pendingHistoryEntryId
+              ? {
+                  ...entry,
+                  conversation_id: params.targetConversationId,
+                  answer: params.answer,
+                  diagnostics: params.diagnostics ?? null,
+                }
+              : entry,
+          )
+        : [
+            ...historyEntriesRef.current,
+            buildOptimisticWriterHistoryEntry(
+              pendingHistoryEntryId,
+              params.targetConversationId,
+              query,
+              params.answer,
+              optimisticCreatedAt,
+            ),
+          ]
+
+      historyEntriesRef.current = nextEntries
+      saveWriterConversationCache(params.targetConversationId, {
+        entries: nextEntries,
+        conversation: params.conversation || getWriterConversationCache(params.targetConversationId)?.conversation || null,
+        historyCursor,
+        hasMoreHistory,
+        loadedTurnCount: nextEntries.length,
+        updatedAt: Date.now(),
+      })
+    }
+
     try {
+      try {
+        const streamResponse = await fetch("/api/writer/chat/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify(requestBody),
+        })
+
+        if (streamResponse.status === 404 || streamResponse.status === 405) {
+          throw createWriterStreamUnsupportedError()
+        }
+
+        if (!streamResponse.ok || !streamResponse.body) {
+          const payload = (await streamResponse.json().catch(() => null)) as { error?: string } | null
+          throw new Error(payload?.error || `HTTP ${streamResponse.status}`)
+        }
+
+        const reader = streamResponse.body.getReader()
+        const decoder = new TextDecoder("utf-8")
+        let buffer = ""
+        let streamedAnswer = ""
+        let streamNeedsClarification = false
+        let streamDiagnostics: WriterTurnDiagnostics | null = null
+        let resolvedConversationId = conversationId
+        let resolvedConversation: WriterConversationSummary | null = null
+        let streamedProgressEvents: PendingTaskEvent[] = []
+
+        const applyStreamEvent = (event: WriterChatStreamEvent) => {
+          if (!event || typeof event !== "object") return
+
+          if (event.event === "error") {
+            throw new Error(event.error || "writer_stream_failed")
+          }
+
+          if (event.event === "progress" && typeof event.type === "string" && typeof event.label === "string") {
+            const nextEvent: PendingTaskEvent = {
+              type: event.type,
+              label: event.label,
+              detail: typeof event.detail === "string" ? event.detail : undefined,
+              status:
+                event.status === "running" ||
+                event.status === "completed" ||
+                event.status === "failed" ||
+                event.status === "info"
+                  ? event.status
+                  : "info",
+              at: typeof event.at === "number" && Number.isFinite(event.at) ? event.at : Date.now(),
+            }
+            streamedProgressEvents = upsertWriterTaskEvent(
+              streamedProgressEvents,
+              nextEvent,
+              taskLocale,
+              progressLabelMap,
+              progressDurationPrefix,
+            )
+            setPendingTaskEvents(streamedProgressEvents)
+          }
+
+          if (event.conversation && typeof event.conversation.id === "string") {
+            resolvedConversation = event.conversation
+          }
+
+          const eventConversationId =
+            typeof event.conversation_id === "string"
+              ? event.conversation_id
+              : typeof event.conversation?.id === "string"
+                ? event.conversation.id
+                : null
+
+          if (eventConversationId) {
+            resolvedConversationId = eventConversationId
+            setConversationId(eventConversationId)
+            setMessages((current) =>
+              current.map((message) =>
+                message.conversation_id
+                  ? message
+                  : {
+                      ...message,
+                      conversation_id: eventConversationId,
+                    },
+              ),
+            )
+            if (!conversationId) {
+              replaceWriterUrl(`/dashboard/writer/${eventConversationId}`)
+            }
+          }
+
+          if (event.event === "message" && typeof event.answer === "string") {
+            streamedAnswer += event.answer
+            patchAssistantMessage(assistantId, streamedAnswer)
+            if (resolvedConversationId) {
+              syncOptimisticHistoryEntry({
+                targetConversationId: resolvedConversationId,
+                answer: streamedAnswer,
+                diagnostics: streamDiagnostics,
+                conversation: resolvedConversation,
+              })
+            }
+          }
+
+          if (event.event === "message_end") {
+            if (typeof event.answer === "string" && event.answer.trim()) {
+              streamedAnswer = event.answer
+            }
+            if (event.outcome === "needs_clarification") {
+              streamNeedsClarification = true
+            } else if (event.outcome === "draft_ready") {
+              streamNeedsClarification = false
+            }
+            if (event.diagnostics) {
+              streamDiagnostics = event.diagnostics
+            }
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parsed = consumeWriterSseBuffer(buffer)
+          buffer = parsed.rest
+          for (const event of parsed.events) {
+            applyStreamEvent(event)
+          }
+        }
+
+        const flushed = consumeWriterSseBuffer(`${buffer}\n\n`)
+        for (const event of flushed.events) {
+          applyStreamEvent(event)
+        }
+
+        if (!resolvedConversationId) {
+          throw new Error("writer_stream_missing_conversation_id")
+        }
+
+        const finalAnswer = sanitize(streamedAnswer)
+        if (!finalAnswer) {
+          throw new Error("writer_stream_empty_answer")
+        }
+        const finalStatus = streamNeedsClarification ? "drafting" : "text_ready"
+        patchAssistantMessage(assistantId, finalAnswer)
+        setConversationStatus(finalStatus)
+        setDraft(finalStatus === "drafting" ? "" : finalAnswer)
+        setLatestDiagnostics(streamDiagnostics)
+
+        syncOptimisticHistoryEntry({
+          targetConversationId: resolvedConversationId,
+          answer: finalAnswer,
+          diagnostics: streamDiagnostics,
+          conversation: resolvedConversation,
+        })
+
+        const fallbackConversation = getWriterConversationCache(resolvedConversationId)?.conversation || null
+        const conversationSnapshot = resolvedConversation || fallbackConversation
+        const snapshotPlatform = conversationSnapshot
+          ? normalizeWriterPlatform(conversationSnapshot.platform)
+          : platform
+        const snapshotMode = conversationSnapshot ? normalizeWriterMode(snapshotPlatform, conversationSnapshot.mode) : mode
+        const snapshotLanguage = conversationSnapshot ? normalizeWriterLanguage(conversationSnapshot.language) : language
+        saveWriterSessionMeta(resolvedConversationId, {
+          platform: snapshotPlatform,
+          mode: snapshotMode,
+          language: snapshotLanguage,
+          draft: finalStatus === "drafting" ? "" : finalAnswer,
+          imagesRequested: false,
+          status: finalStatus,
+          diagnostics: streamDiagnostics,
+          updatedAt: Date.now(),
+        })
+
+        if (conversationSnapshot) {
+          emitWriterRefresh({
+            action: "upsert",
+            conversation: {
+              ...conversationSnapshot,
+              status: finalStatus,
+            },
+          })
+        }
+
+        let statusAfterRefresh = finalStatus
+        try {
+          statusAfterRefresh = await refreshConversationSnapshot(resolvedConversationId)
+        } catch (refreshError) {
+          console.error("writer.stream.refresh-failed", refreshError)
+        }
+
+        taskAccepted = true
+        if (streamedProgressEvents.length > 0) {
+          setPendingTaskEvents(streamedProgressEvents)
+          setRecentTaskEvents(streamedProgressEvents)
+        }
+        setIsLoading(false)
+        if (statusAfterRefresh !== "drafting") {
+          setPreviewMessageId(null)
+          setPreviewOpen(true)
+        }
+        return
+      } catch (streamError) {
+        if (!isWriterStreamUnsupportedError(streamError)) {
+          throw streamError
+        }
+      }
+
       const response = await fetch("/api/writer/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query,
-          inputs: { contents: query },
-          conversation_id: conversationId,
-          platform,
-          mode,
-          language,
-        }),
+        body: JSON.stringify(requestBody),
       })
       const payload = (await response.json().catch(() => null)) as {
         task_id?: string
@@ -1865,6 +2675,13 @@ export function WriterWorkspace({
     }
   }
 
+  const handleScrollToBottom = () => {
+    const viewport = getViewport()
+    if (!viewport) return
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })
+    setIsNearBottom(true)
+  }
+
   const writePreviewContentToClipboard = async (markdown: string) => {
     if (!markdown.trim()) return
 
@@ -1887,10 +2704,16 @@ export function WriterWorkspace({
 
   const handleCopyText = async () => {
     await writePreviewContentToClipboard(activePreview.previewMarkdown)
+    setCopyFeedback("rich")
+    window.setTimeout(() => setCopyFeedback((current) => (current === "rich" ? null : current)), 1200)
   }
 
   const handleCopyMarkdown = async (markdown = activePreview.previewMarkdown) => {
-    if (markdown.trim()) await navigator.clipboard.writeText(markdown)
+    if (markdown.trim()) {
+      await navigator.clipboard.writeText(markdown)
+      setCopyFeedback("markdown")
+      window.setTimeout(() => setCopyFeedback((current) => (current === "markdown" ? null : current)), 1200)
+    }
   }
 
   const handleDraftChange = (nextDraft: string) => {
@@ -1908,7 +2731,7 @@ export function WriterWorkspace({
       body: JSON.stringify({ conversation_id: conversationId, content: draft, status: imagesRequested ? "ready" : "text_ready", imagesRequested }),
     })
       .then((response) => {
-        if (!response.ok) throw new Error("save failed")
+        if (!response.ok) throw new Error(writerCopy.saveFailed)
         void invalidateWriterConversationQueries(queryClient, conversationId)
         setDraftSaveState("saved")
       })
@@ -1922,6 +2745,7 @@ export function WriterWorkspace({
 
     const generationPlatform = target.platform
     const generationMode = target.mode
+    const generationStartedAt = Date.now()
     let pendingAssets = buildPendingWriterAssets(target.sourceMarkdown, generationPlatform, generationMode)
     if (pendingAssets.length === 0) {
       const extracted = extractWriterAssetsFromMarkdown(target.sourceMarkdown, generationPlatform, generationMode)
@@ -1946,6 +2770,7 @@ export function WriterWorkspace({
       setConversationStatus("image_generating")
       setAssetsError(null)
       setAssetsLoading(true)
+      setAssetsLoadingStartedAt(generationStartedAt)
       setAssets(pendingAssets)
       if (pendingMarkdown && pendingMarkdown !== target.sourceMarkdown) {
         setDraft(pendingMarkdown)
@@ -1957,6 +2782,7 @@ export function WriterWorkspace({
           assets: pendingAssets,
           loading: true,
           error: null,
+          loadingStartedAt: generationStartedAt,
         },
       }))
     }
@@ -2005,18 +2831,104 @@ export function WriterWorkspace({
           platform: generationPlatform,
           mode: generationMode,
           conversationId: target.isLatest ? conversationId : null,
+          stream: true,
         }),
       })
-      const data = await response.json().catch(() => null)
-      console.log("writer.client.generate_assets_response", { status: response.status, ok: response.ok, error: data?.error, assetCount: data?.data?.assets?.length })
-      const nextAssets = Array.isArray(data?.data?.assets) ? (data.data.assets as WriterAsset[]) : []
+      const responseType = response.headers.get("content-type") || ""
+      let nextAssets: WriterAsset[] = []
+      let generationError: string | null = null
 
-      if (!response.ok) {
-        throw new Error(data?.error || `HTTP ${response.status}`)
+      if (responseType.includes("text/event-stream") && response.body) {
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let sseBuffer = ""
+        let streamedAssets = [...pendingAssets]
+        let doneEvent: WriterAssetGenerationStreamEvent | null = null
+
+        const applyAssetProgress = (assetsSnapshot: WriterAsset[]) => {
+          const ordered = ensureWriterAssetOrder(assetsSnapshot, generationPlatform, generationMode)
+          if (target.isLatest) {
+            setAssets(ordered)
+          } else {
+            setVersionAssetState((current) => ({
+              ...current,
+              [target.messageId!]: {
+                assets: ordered,
+                loading: true,
+                error: null,
+                loadingStartedAt: current[target.messageId!]?.loadingStartedAt ?? generationStartedAt,
+              },
+            }))
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          sseBuffer += decoder.decode(value, { stream: true })
+          const parsed = consumeWriterSseBuffer<WriterAssetGenerationStreamEvent>(sseBuffer)
+          sseBuffer = parsed.rest
+
+          for (const event of parsed.events) {
+            if (event.event === "asset" && event.asset) {
+              streamedAssets = mergeWriterAssetProgress(streamedAssets, event.asset, generationPlatform, generationMode)
+              applyAssetProgress(streamedAssets)
+            }
+            if (event.event === "done") {
+              doneEvent = event
+            }
+            if (event.event === "error" && event.error) {
+              generationError = event.error
+            }
+          }
+        }
+
+        const flushed = consumeWriterSseBuffer<WriterAssetGenerationStreamEvent>(`${sseBuffer}\n\n`)
+        for (const event of flushed.events) {
+          if (event.event === "asset" && event.asset) {
+            streamedAssets = mergeWriterAssetProgress(streamedAssets, event.asset, generationPlatform, generationMode)
+            applyAssetProgress(streamedAssets)
+          }
+          if (event.event === "done") {
+            doneEvent = event
+          }
+          if (event.event === "error" && event.error) {
+            generationError = event.error
+          }
+        }
+
+        nextAssets = Array.isArray(doneEvent?.data?.assets)
+          ? ensureWriterAssetOrder(doneEvent?.data?.assets || [], generationPlatform, generationMode)
+          : ensureWriterAssetOrder(streamedAssets, generationPlatform, generationMode)
+
+        generationError = generationError || doneEvent?.error || (!doneEvent?.ok ? writerCopy.imageGenerationFailed : null)
+        console.log("writer.client.generate_assets_stream_done", {
+          status: response.status,
+          ok: doneEvent?.ok ?? response.ok,
+          error: generationError,
+          assetCount: nextAssets.length,
+        })
+      } else {
+        const data = await response.json().catch(() => null)
+        console.log("writer.client.generate_assets_response", {
+          status: response.status,
+          ok: response.ok,
+          error: data?.error,
+          assetCount: data?.data?.assets?.length,
+        })
+        nextAssets = Array.isArray(data?.data?.assets) ? (data.data.assets as WriterAsset[]) : []
+        if (!response.ok) {
+          throw new Error(data?.error || `HTTP ${response.status}`)
+        }
       }
 
       if (nextAssets.length === 0) {
-        throw new Error(writerCopy.emptyImageResult)
+        throw new Error(generationError || writerCopy.emptyImageResult)
+      }
+
+      const successCount = nextAssets.filter((asset) => asset.status === "ready" && Boolean(asset.url)).length
+      if (successCount === 0) {
+        throw new Error(generationError || writerCopy.imageGenerationFailed)
       }
 
       if (target.isLatest) {
@@ -2029,6 +2941,7 @@ export function WriterWorkspace({
             assets: nextAssets,
             loading: false,
             error: null,
+            loadingStartedAt: null,
           },
         }))
       }
@@ -2079,12 +2992,14 @@ export function WriterWorkspace({
             assets: markWriterAssetsFailed(pendingAssets, message),
             loading: false,
             error: message,
+            loadingStartedAt: null,
           },
         }))
       }
     } finally {
       if (target.isLatest) {
         setAssetsLoading(false)
+        setAssetsLoadingStartedAt(null)
       } else {
         setVersionAssetState((current) => ({
           ...current,
@@ -2092,6 +3007,7 @@ export function WriterWorkspace({
             assets: current[target.messageId!]?.assets ?? pendingAssets,
             loading: false,
             error: current[target.messageId!]?.error ?? null,
+            loadingStartedAt: null,
           },
         }))
       }
@@ -2148,7 +3064,7 @@ export function WriterWorkspace({
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
           <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
-              <div className="min-h-0 flex-1 bg-[#f7f7f7]">
+              <div className="relative min-h-0 flex-1 bg-[#f7f7f7]">
                 <ScrollArea className="h-full" ref={viewportRef}>
                 <div className="space-y-0">
                   {hasMoreHistory ? (
@@ -2251,24 +3167,38 @@ export function WriterWorkspace({
                                     ? writerCopy.regenerateImages
                                     : writerCopy.generateImages}
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
-                                onClick={() => requestRichTextCopyForMessage(message.id)}
-                              >
-                                <BookText className="mr-1.5 h-3.5 w-3.5" />
-                                {writerCopy.copyRichText}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
-                                onClick={() => void handleCopyMarkdown(messagePreview.previewMarkdown)}
-                              >
-                                <Copy className="mr-1.5 h-3.5 w-3.5" />
-                                {writerCopy.copyMarkdown}
-                              </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                                      onClick={() => requestRichTextCopyForMessage(message.id)}
+                                    >
+                                      <BookText className="mr-1.5 h-3.5 w-3.5" />
+                                      {writerCopy.copyRichText}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{writerCopy.copyRichText}</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                                      onClick={() => void handleCopyMarkdown(messagePreview.previewMarkdown)}
+                                    >
+                                      <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                      <TextMorph text={copyFeedback === "markdown" ? copiedLabel : writerCopy.copyMarkdown} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{copyFeedback === "markdown" ? copiedToClipboardLabel : writerCopy.copyMarkdown}</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </WorkspaceActionRow>
                           ) : null}
                         </div>
@@ -2282,11 +3212,61 @@ export function WriterWorkspace({
                       label={writerCopy.assistantName}
                       icon={<Sparkles className="h-3.5 w-3.5" />}
                     >
-                      <WorkspaceLoadingMessage label={<span className="animate-pulse">{writerCopy.generatingDraft}</span>} />
+                      <WorkspaceLoadingMessage
+                        showTypingIndicator={false}
+                        label={
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-2">
+                              <TypingIndicator />
+                              {writerCopy.generatingDraft}
+                            </span>
+                            {loadingProgress ? (
+                              <div
+                                className="rounded-lg border border-border/70 bg-background/70 px-2.5 py-2"
+                                data-testid="writer-progress-stage"
+                              >
+                                <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                                  <span className="truncate">
+                                    {progressCurrentStageLabel}
+                                    {loadingProgress.currentLabel}
+                                  </span>
+                                  <span>{`${loadingProgress.finishedCount}/${loadingProgress.totalCount}`}</span>
+                                </div>
+                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-all duration-300"
+                                    style={{ width: `${Math.min(100, Math.max(0, loadingProgress.progressPercent))}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+                            <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} />
+                          </div>
+                        }
+                      />
+                    </WorkspaceMessageFrame>
+                  ) : null}
+                  {!isLoading && recentTaskEvents.length > 0 ? (
+                    <WorkspaceMessageFrame
+                      role="assistant"
+                      label={recentExecutionTraceLabel}
+                      icon={<Sparkles className="h-3.5 w-3.5" />}
+                    >
+                      <div className="space-y-2 text-sm text-muted-foreground" data-testid="writer-recent-progress-trace">
+                        <WorkspaceTaskEvents events={recentTaskEvents} limit={8} className="pl-0" />
+                      </div>
                     </WorkspaceMessageFrame>
                   ) : null}
                 </div>
                 </ScrollArea>
+                <div className="pointer-events-none absolute bottom-4 right-4 z-20">
+                  <ScrollToBottomButton
+                    visible={!isNearBottom && messages.length > 0}
+                    onClick={handleScrollToBottom}
+                    className="pointer-events-auto"
+                    ariaLabel={scrollToLatestLabel}
+                  />
+                </div>
               </div>
 
               <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
@@ -2478,28 +3458,51 @@ export function WriterWorkspace({
                                 : writerCopy.editable}
                         </Badge>
                       ) : null}
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="h-8 rounded-full border-2 border-primary bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
-                        onClick={() => void handleCopyText()}
-                        disabled={!activePreview.hasDraft}
-                      >
-                        <BookText className="mr-1.5 h-3.5 w-3.5" />
-                        {writerCopy.copyRichText}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] font-medium text-slate-950 hover:bg-muted"
-                        onClick={() => void handleCopyMarkdown()}
-                        disabled={!activePreview.hasDraft}
-                      >
-                        <Copy className="mr-1.5 h-3.5 w-3.5" />
-                        {writerCopy.copyMarkdown}
-                      </Button>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-8 rounded-full border-2 border-primary bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+                              onClick={() => void handleCopyText()}
+                              disabled={!activePreview.hasDraft}
+                            >
+                              <BookText className="mr-1.5 h-3.5 w-3.5" />
+                              <TextMorph text={copyFeedback === "rich" ? copiedLabel : writerCopy.copyRichText} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{copyFeedback === "rich" ? copiedToClipboardLabel : writerCopy.copyRichText}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] font-medium text-slate-950 hover:bg-muted"
+                              onClick={() => void handleCopyMarkdown()}
+                              disabled={!activePreview.hasDraft}
+                            >
+                              <Copy className="mr-1.5 h-3.5 w-3.5" />
+                              <TextMorph text={copyFeedback === "markdown" ? copiedLabel : writerCopy.copyMarkdown} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{copyFeedback === "markdown" ? copiedToClipboardLabel : writerCopy.copyMarkdown}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                   </div>
+                  <WriterAssetProgressPanel
+                    assets={activePreview.assets}
+                    assetsLoading={activePreview.assetsLoading}
+                    assetsLoadingStartedAt={activePreview.assetsLoadingStartedAt}
+                    assetsError={activePreview.assetsError}
+                    nowMs={assetProgressNow}
+                    locale={locale}
+                    copy={writerCopy}
+                  />
                   <div className="overflow-hidden rounded-[28px] border-2 border-border bg-card">
                     <div ref={previewContentRef} className="p-6 selection:bg-[#E8E8E8]">
                       <PlatformPreview

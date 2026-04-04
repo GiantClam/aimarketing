@@ -27,6 +27,10 @@ const GOOGLE_IMAGE_API_KEY =
 const WRITER_AIBERM_IMAGE_MODEL = process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 const WRITER_GEMINI_IMAGE_MODEL = process.env.WRITER_GEMINI_IMAGE_MODEL || process.env.WRITER_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
 const WRITER_OPENROUTER_IMAGE_MODEL = getOpenRouterImageModel()
+const WRITER_GEMINI_IMAGE_TIMEOUT_MS = Math.min(
+  300_000,
+  Math.max(30_000, Number.parseInt(process.env.WRITER_GEMINI_IMAGE_TIMEOUT_MS || "90000", 10) || 90_000),
+)
 const WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS = Math.max(
   1,
   Number.parseInt(process.env.WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS || "3", 10) || 3,
@@ -37,6 +41,15 @@ const WRITER_PROMPT_SIMILARITY_MAX = Math.max(
 )
 const WRITER_ENFORCE_PROMPT_DIVERSITY = process.env.WRITER_ENFORCE_PROMPT_DIVERSITY !== "false"
 type WriterImageProvider = "aiberm" | "gemini" | "openrouter"
+type WriterPlannedAsset = ReturnType<typeof buildPendingWriterAssets>[number]
+type WriterGeneratedAsset = WriterPlannedAsset & {
+  url: string
+  status: "ready" | "failed"
+  provider: "aiberm" | "gemini" | "openrouter" | "error"
+  storageKey?: string
+  contentType?: string
+  error?: string
+}
 
 function buildWriterImageProviderPlan() {
   const plan: WriterImageProvider[] = []
@@ -170,7 +183,7 @@ async function generateGeminiImage(prompt: string, aspectRatio: string) {
         ],
       }),
     },
-    { attempts: 4, timeoutMs: 180_000 },
+    { attempts: 4, timeoutMs: WRITER_GEMINI_IMAGE_TIMEOUT_MS },
   )
 
   if (!response.ok) {
@@ -312,6 +325,160 @@ function resolveWriterImageProvider(
   return successfulAsset?.provider || getPreferredWriterImageProvider()
 }
 
+function createWriterAssetSseResponse(
+  run: (emit: (event: Record<string, unknown>) => void) => Promise<void>,
+) {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit = (event: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+      }
+
+      try {
+        await run(emit)
+      } catch (error) {
+        emit({
+          event: "error",
+          error: error instanceof Error ? error.message : "writer_assets_failed",
+        })
+      } finally {
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+        controller.close()
+      }
+    },
+  })
+
+  return new NextResponse(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  })
+}
+
+async function generateWriterAssetsBatch(input: {
+  plannedAssets: WriterPlannedAsset[]
+  platform: ReturnType<typeof normalizeWriterPlatform>
+  conversationId: string | null
+  userId: number
+  providerPlan: WriterImageProvider[]
+  onAsset?: (event: { index: number; total: number; asset: WriterGeneratedAsset; assets: WriterGeneratedAsset[] }) => void
+}) {
+  const assets: WriterGeneratedAsset[] = []
+  const acceptedPromptFocuses: Array<{ assetId: string; focus: string }> = []
+  const temporarilyDegradedProviders = new Set<WriterImageProvider>()
+  const total = input.plannedAssets.length
+
+  for (const asset of input.plannedAssets) {
+    try {
+      const promptGuard = WRITER_ENFORCE_PROMPT_DIVERSITY
+        ? ensureWriterPromptDiversity({
+            assetId: asset.id,
+            prompt: asset.prompt,
+            existing: acceptedPromptFocuses,
+            maxAttempts: WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS,
+            similarityMax: WRITER_PROMPT_SIMILARITY_MAX,
+          })
+        : {
+            prompt: asset.prompt,
+            focus: extractWriterPromptFocus(asset.prompt),
+            attempt: 1,
+            similarTo: null as string | null,
+            similarity: null as number | null,
+          }
+      if (promptGuard.attempt > 1) {
+        console.warn("writer.assets.prompt_diversity_retry", {
+          assetId: asset.id,
+          attempt: promptGuard.attempt,
+          similarTo: promptGuard.similarTo,
+          similarity: promptGuard.similarity,
+          threshold: WRITER_PROMPT_SIMILARITY_MAX,
+        })
+      }
+      console.log("writer.assets.generating", {
+        assetId: asset.id,
+        platform: input.platform,
+        aspectRatio: WRITER_PLATFORM_CONFIG[input.platform].imageAspectRatio,
+      })
+      const preferredProviderPlan = input.providerPlan.filter((provider) => !temporarilyDegradedProviders.has(provider))
+      const effectiveProviderPlan = preferredProviderPlan.length > 0 ? preferredProviderPlan : input.providerPlan
+      const generated = await generateWriterImage(promptGuard.prompt, WRITER_PLATFORM_CONFIG[input.platform].imageAspectRatio, {
+        providerPlan: effectiveProviderPlan,
+        onProviderFailure: ({ provider, error, nextProvider }) => {
+          if (provider === "aiberm" && isTemporaryProviderError(error)) {
+            temporarilyDegradedProviders.add("aiberm")
+            console.warn("writer.assets.provider_temporarily_degraded", {
+              provider,
+              nextProvider,
+              message: error instanceof Error ? error.message : String(error),
+            })
+          }
+        },
+      })
+      console.log("writer.assets.generated", {
+        assetId: asset.id,
+        provider: generated.provider,
+        dataUrlLength: generated.dataUrl.length,
+        promptAttempt: promptGuard.attempt,
+      })
+      let uploaded
+      try {
+        uploaded = await uploadWriterImageToR2({
+          userId: input.userId,
+          conversationId: input.conversationId,
+          assetId: asset.id,
+          dataUrl: generated.dataUrl,
+        })
+      } catch (error) {
+        const summary = summarizeWriterAssetError(error)
+        console.error("writer.assets.upload_failed", {
+          assetId: asset.id,
+          provider: generated.provider,
+          ...summary,
+        })
+        throw error
+      }
+
+      const nextAsset: WriterGeneratedAsset = {
+        ...asset,
+        url: uploaded.url,
+        storageKey: uploaded.storageKey,
+        contentType: uploaded.contentType,
+        status: "ready",
+        provider: generated.provider,
+      }
+      assets.push(nextAsset)
+      acceptedPromptFocuses.push({
+        assetId: asset.id,
+        focus: promptGuard.focus,
+      })
+      input.onAsset?.({ index: assets.length, total, asset: nextAsset, assets: [...assets] })
+    } catch (error: unknown) {
+      const summary = summarizeWriterAssetError(error)
+      console.error("writer.assets.asset_failed", {
+        assetId: asset.id,
+        prompt: asset.prompt.slice(0, 100),
+        ...summary,
+      })
+
+      const failedAsset: WriterGeneratedAsset = {
+        ...asset,
+        url: "",
+        status: "failed",
+        provider: "error",
+        error: summary.message,
+      }
+      assets.push(failedAsset)
+      input.onAsset?.({ index: assets.length, total, asset: failedAsset, assets: [...assets] })
+    }
+  }
+
+  return assets
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireSessionUser(request, "copywriting_generation")
@@ -320,6 +487,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    const streamMode = body?.stream === true || body?.stream === "true"
     const markdown = typeof body?.markdown === "string" ? body.markdown : ""
     const platform = normalizeWriterPlatform(body?.platform)
     const mode = normalizeWriterMode(platform, body?.mode)
@@ -339,6 +507,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (baseProviderPlan.length === 0) {
+      const errorMessage = "AIBERM_API_KEY, GOOGLE_AI_API_KEY, or OPENROUTER_API_KEY is required for writer image generation"
+      const failedAssets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, errorMessage), platform, mode)
       if (conversationId) {
         try {
           await updateWriterConversationMeta(auth.user.id, conversationId, {
@@ -347,27 +517,41 @@ export async function POST(request: NextRequest) {
           })
         } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
       }
+      if (streamMode) {
+        return createWriterAssetSseResponse(async (emit) => {
+          emit({ event: "start", total: failedAssets.length })
+          for (let index = 0; index < failedAssets.length; index += 1) {
+            emit({ event: "asset", index: index + 1, total: failedAssets.length, asset: failedAssets[index], assets: failedAssets.slice(0, index + 1) })
+          }
+          emit({
+            event: "done",
+            ok: false,
+            error: errorMessage,
+            data: {
+              provider: getPreferredWriterImageProvider(),
+              model: getPreferredWriterImageModel(),
+              assets: failedAssets,
+            },
+          })
+        })
+      }
+
       return NextResponse.json(
         {
           data: {
             provider: getPreferredWriterImageProvider(),
             model: getPreferredWriterImageModel(),
-            assets: ensureWriterAssetOrder(
-              markWriterAssetsFailed(
-                plannedAssets,
-                "AIBERM_API_KEY, GOOGLE_AI_API_KEY, or OPENROUTER_API_KEY is required for writer image generation",
-              ),
-              platform,
-              mode,
-            ),
+            assets: failedAssets,
           },
-          error: "AIBERM_API_KEY, GOOGLE_AI_API_KEY, or OPENROUTER_API_KEY is required for writer image generation",
+          error: errorMessage,
         },
         { status: 503 },
       )
     }
 
     if (!isWriterR2Available()) {
+      const errorMessage = "writer_r2_config_missing"
+      const failedAssets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, errorMessage), platform, mode)
       if (conversationId) {
         try {
           await updateWriterConversationMeta(auth.user.id, conversationId, {
@@ -376,128 +560,101 @@ export async function POST(request: NextRequest) {
           })
         } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
       }
+      if (streamMode) {
+        return createWriterAssetSseResponse(async (emit) => {
+          emit({ event: "start", total: failedAssets.length })
+          for (let index = 0; index < failedAssets.length; index += 1) {
+            emit({ event: "asset", index: index + 1, total: failedAssets.length, asset: failedAssets[index], assets: failedAssets.slice(0, index + 1) })
+          }
+          emit({
+            event: "done",
+            ok: false,
+            error: errorMessage,
+            data: {
+              provider: getPreferredWriterImageProvider(),
+              model: getPreferredWriterImageModel(),
+              assets: failedAssets,
+            },
+          })
+        })
+      }
+
       return NextResponse.json(
         {
           data: {
             provider: getPreferredWriterImageProvider(),
             model: getPreferredWriterImageModel(),
-            assets: ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, "writer_r2_config_missing"), platform, mode),
+            assets: failedAssets,
           },
-          error: "writer_r2_config_missing",
+          error: errorMessage,
         },
         { status: 503 },
       )
     }
 
-    const assets = [] as Array<(typeof plannedAssets)[number] & {
-      url: string
-      status: "ready" | "failed"
-      provider: "aiberm" | "gemini" | "openrouter" | "error"
-      storageKey?: string
-      contentType?: string
-      error?: string
-    }>
-    const acceptedPromptFocuses: Array<{ assetId: string; focus: string }> = []
-    const temporarilyDegradedProviders = new Set<WriterImageProvider>()
-
-    for (const asset of plannedAssets) {
-      try {
-        const promptGuard = WRITER_ENFORCE_PROMPT_DIVERSITY
-          ? ensureWriterPromptDiversity({
-              assetId: asset.id,
-              prompt: asset.prompt,
-              existing: acceptedPromptFocuses,
-              maxAttempts: WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS,
-              similarityMax: WRITER_PROMPT_SIMILARITY_MAX,
+    if (streamMode) {
+      return createWriterAssetSseResponse(async (emit) => {
+        emit({ event: "start", total: plannedAssets.length })
+        const generatedAssets = await generateWriterAssetsBatch({
+          plannedAssets,
+          platform,
+          conversationId,
+          userId: auth.user.id,
+          providerPlan: baseProviderPlan,
+          onAsset: ({ index, total, asset, assets }) => {
+            emit({
+              event: "asset",
+              index,
+              total,
+              asset,
+              assets: ensureWriterAssetOrder(assets, platform, mode),
             })
-          : {
-              prompt: asset.prompt,
-              focus: extractWriterPromptFocus(asset.prompt),
-              attempt: 1,
-              similarTo: null as string | null,
-              similarity: null as number | null,
-            }
-        if (promptGuard.attempt > 1) {
-          console.warn("writer.assets.prompt_diversity_retry", {
-            assetId: asset.id,
-            attempt: promptGuard.attempt,
-            similarTo: promptGuard.similarTo,
-            similarity: promptGuard.similarity,
-            threshold: WRITER_PROMPT_SIMILARITY_MAX,
-          })
-        }
-        console.log("writer.assets.generating", { assetId: asset.id, platform, aspectRatio: WRITER_PLATFORM_CONFIG[platform].imageAspectRatio })
-        const preferredProviderPlan = baseProviderPlan.filter((provider) => !temporarilyDegradedProviders.has(provider))
-        const effectiveProviderPlan = preferredProviderPlan.length > 0 ? preferredProviderPlan : baseProviderPlan
-        const generated = await generateWriterImage(promptGuard.prompt, WRITER_PLATFORM_CONFIG[platform].imageAspectRatio, {
-          providerPlan: effectiveProviderPlan,
-          onProviderFailure: ({ provider, error, nextProvider }) => {
-            if (provider === "aiberm" && isTemporaryProviderError(error)) {
-              temporarilyDegradedProviders.add("aiberm")
-              console.warn("writer.assets.provider_temporarily_degraded", {
-                provider,
-                nextProvider,
-                message: error instanceof Error ? error.message : String(error),
-              })
-            }
           },
         })
-        console.log("writer.assets.generated", {
-          assetId: asset.id,
-          provider: generated.provider,
-          dataUrlLength: generated.dataUrl.length,
-          promptAttempt: promptGuard.attempt,
-        })
-        let uploaded
-        try {
-          uploaded = await uploadWriterImageToR2({
-            userId: auth.user.id,
-            conversationId,
-            assetId: asset.id,
-            dataUrl: generated.dataUrl,
-          })
-        } catch (error) {
-          const summary = summarizeWriterAssetError(error)
-          console.error("writer.assets.upload_failed", {
-            assetId: asset.id,
-            provider: generated.provider,
-            ...summary,
-          })
-          throw error
+
+        const orderedAssets = ensureWriterAssetOrder(generatedAssets, platform, mode)
+        const successCount = orderedAssets.filter((asset) => asset.status === "ready" && asset.url).length
+        const resolvedProvider = resolveWriterImageProvider(orderedAssets)
+        const donePayload = {
+          provider: resolvedProvider,
+          model: getWriterImageModelForProvider(resolvedProvider),
+          assets: orderedAssets,
         }
 
-        assets.push({
-          ...asset,
-          url: uploaded.url,
-          storageKey: uploaded.storageKey,
-          contentType: uploaded.contentType,
-          status: "ready",
-          provider: generated.provider,
-        })
-        acceptedPromptFocuses.push({
-          assetId: asset.id,
-          focus: promptGuard.focus,
-        })
-      } catch (error: any) {
-        const summary = summarizeWriterAssetError(error)
-        console.error("writer.assets.asset_failed", {
-          assetId: asset.id,
-          prompt: asset.prompt.slice(0, 100),
-          ...summary,
-        })
+        if (conversationId) {
+          try {
+            await updateWriterConversationMeta(auth.user.id, conversationId, {
+              status: successCount > 0 ? "ready" : "failed",
+              imagesRequested: true,
+            })
+          } catch (dbError) {
+            console.warn("writer.assets.db_update_after_stream_failed", {
+              conversationId,
+              error: dbError instanceof Error ? dbError.message : String(dbError),
+            })
+          }
+        }
 
-        assets.push({
-          ...asset,
-          url: "",
-          status: "failed",
-          provider: "error",
-          error: summary.message,
+        emit({
+          event: "done",
+          ok: successCount > 0,
+          ...(successCount > 0 ? {} : { error: "writer_assets_failed" }),
+          data: donePayload,
         })
-      }
+      })
     }
 
-    const successCount = assets.filter((asset) => asset.status === "ready" && asset.url).length
-    const resolvedProvider = resolveWriterImageProvider(assets)
+    const generatedAssets = await generateWriterAssetsBatch({
+      plannedAssets,
+      platform,
+      conversationId,
+      userId: auth.user.id,
+      providerPlan: baseProviderPlan,
+    })
+    const orderedAssets = ensureWriterAssetOrder(generatedAssets, platform, mode)
+    const successCount = orderedAssets.filter((asset) => asset.status === "ready" && asset.url).length
+    const resolvedProvider = resolveWriterImageProvider(orderedAssets)
+
     if (successCount === 0) {
       if (conversationId) {
         try {
@@ -505,14 +662,17 @@ export async function POST(request: NextRequest) {
             status: "failed",
             imagesRequested: true,
           })
-        } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
+        } catch (dbError) {
+          console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError))
+        }
       }
+
       return NextResponse.json(
         {
           data: {
             provider: resolvedProvider,
             model: getWriterImageModelForProvider(resolvedProvider),
-            assets: ensureWriterAssetOrder(assets, platform, mode),
+            assets: orderedAssets,
           },
           error: "writer_assets_failed",
         },
@@ -527,7 +687,10 @@ export async function POST(request: NextRequest) {
           imagesRequested: true,
         })
       } catch (dbError) {
-        console.warn("writer.assets.db_update_ready_failed", { conversationId, error: dbError instanceof Error ? dbError.message : String(dbError) })
+        console.warn("writer.assets.db_update_ready_failed", {
+          conversationId,
+          error: dbError instanceof Error ? dbError.message : String(dbError),
+        })
       }
     }
 
@@ -535,7 +698,7 @@ export async function POST(request: NextRequest) {
       data: {
         provider: resolvedProvider,
         model: getWriterImageModelForProvider(resolvedProvider),
-        assets: ensureWriterAssetOrder(assets, platform, mode),
+        assets: orderedAssets,
       },
     })
   } catch (error: any) {
