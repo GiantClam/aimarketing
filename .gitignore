@@ -68,6 +68,7 @@ logs/
 # Local tool state and scratch files
 .agent/
 .agents/
+.omx/
 .opencode/
 nextjs-nodejs/
 auth_cookies.txt
