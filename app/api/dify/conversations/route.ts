@@ -5,6 +5,7 @@ import { getConversations } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { createLeadHunterConversation, listLeadHunterConversations } from "@/lib/lead-hunter/repository"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
+import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams
@@ -78,7 +79,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const title = typeof body?.name === "string" && body.name.trim() ? body.name.trim() : "新建会话"
+    const locale = resolveRequestLocale(req.cookies.get(LOCALE_COOKIE_NAME)?.value, req.headers.get("accept-language"))
+    const title = typeof body?.name === "string" && body.name.trim()
+      ? body.name.trim()
+      : locale === "zh"
+        ? "新建会话"
+        : "New conversation"
     const conversation = await createLeadHunterConversation(auth.user.id, normalizedLeadHunterType, title)
 
     return NextResponse.json({

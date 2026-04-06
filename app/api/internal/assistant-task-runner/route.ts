@@ -5,7 +5,7 @@ import { runAssistantTaskRecoveryPass } from "@/lib/assistant-async"
 import { db } from "@/lib/db"
 
 export const runtime = "nodejs"
-export const maxDuration = 60
+export const maxDuration = 300
 
 const RUNNER_SECRET = process.env.ASSISTANT_TASK_RUNNER_SECRET || process.env.CRON_SECRET || ""
 const RUNNER_CIRCUIT_KEY = "assistant_task_runner:circuit"
@@ -25,6 +25,15 @@ const RUNNER_CIRCUIT_COOLDOWN_MS = Math.max(
 const RUNNER_COUNT_ALL_FAILED_PASS =
   process.env.ASSISTANT_TASK_RUNNER_BREAKER_COUNT_ALL_FAILED_PASS === "false" ? false : true
 const RUNNER_CIRCUIT_FALLBACK_STATE_KEY = "__assistantTaskRunnerCircuitState__"
+const RUNNER_WAIT_FOR_COMPLETION = process.env.ASSISTANT_TASK_RUNNER_WAIT_FOR_COMPLETION === "false" ? false : true
+const RUNNER_COMPLETION_TIMEOUT_MS = Math.max(
+  5_000,
+  Math.min(280_000, Number.parseInt(process.env.ASSISTANT_TASK_RUNNER_COMPLETION_TIMEOUT_MS || "", 10) || 240_000),
+)
+const RUNNER_INLINE_DEFAULT_LIMIT = Math.max(
+  1,
+  Math.min(10, Number.parseInt(process.env.ASSISTANT_TASK_RUNNER_INLINE_LIMIT || "", 10) || 1),
+)
 
 type RunnerCircuitState = {
   count: number
@@ -80,6 +89,18 @@ function parseLimit(request: NextRequest) {
 function parseBooleanQueryValue(value: string | null) {
   if (!value) return false
   return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes"
+}
+
+function parseOptionalBooleanQueryValue(value: string | null): boolean | undefined {
+  if (!value) return undefined
+  const normalized = value.toLowerCase()
+  if (normalized === "1" || normalized === "true" || normalized === "yes") {
+    return true
+  }
+  if (normalized === "0" || normalized === "false" || normalized === "no") {
+    return false
+  }
+  return undefined
 }
 
 function getRetryAfterSeconds(resetAtMs: number) {
@@ -211,8 +232,12 @@ async function handleRunnerRequest(request: NextRequest) {
 
   const startedAt = Date.now()
   try {
+    const waitForCompletion = parseOptionalBooleanQueryValue(request.nextUrl.searchParams.get("wait")) ?? RUNNER_WAIT_FOR_COMPLETION
+    const limit = parseLimit(request) ?? (waitForCompletion ? RUNNER_INLINE_DEFAULT_LIMIT : undefined)
     const result = await runAssistantTaskRecoveryPass({
-      limit: parseLimit(request),
+      limit,
+      waitForCompletion,
+      completionTimeoutMs: waitForCompletion ? RUNNER_COMPLETION_TIMEOUT_MS : undefined,
     })
 
     const passAllFailed = result.inspected > 0 && result.failed > 0 && result.failed === result.inspected
@@ -228,6 +253,7 @@ async function handleRunnerRequest(request: NextRequest) {
       return NextResponse.json({
         data: {
           ...result,
+          waitForCompletion,
           elapsedMs: Date.now() - startedAt,
           warning: "assistant_task_runner_pass_all_failed",
           circuit: {
@@ -245,6 +271,7 @@ async function handleRunnerRequest(request: NextRequest) {
     return NextResponse.json({
       data: {
         ...result,
+        waitForCompletion,
         elapsedMs: Date.now() - startedAt,
         circuit: {
           state: "closed",

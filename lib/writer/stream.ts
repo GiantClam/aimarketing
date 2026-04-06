@@ -1,8 +1,25 @@
-import type { WriterConversationSummary } from "@/lib/writer/types"
-import type { WriterTurnDiagnostics } from "@/lib/writer/types"
+import type { WriterConversationSummary, WriterTurnDiagnostics } from "@/lib/writer/types"
+
+const WRITER_STREAM_CHUNK_SIZE = 120
+const WRITER_STREAM_CHUNK_DELAY_MS = 16
 
 function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
+}
+
+function splitAnswerIntoChunks(answer: string) {
+  const normalized = answer.trim()
+  if (!normalized) return []
+
+  const chunks: string[] = []
+  for (let index = 0; index < normalized.length; index += WRITER_STREAM_CHUNK_SIZE) {
+    chunks.push(normalized.slice(index, index + WRITER_STREAM_CHUNK_SIZE))
+  }
+  return chunks
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function createWriterSseStream({
@@ -19,11 +36,10 @@ export function createWriterSseStream({
   diagnostics?: WriterTurnDiagnostics
 }) {
   const encoder = new TextEncoder()
-  const splitIndex = Math.max(1, Math.floor(answer.length * 0.55))
-  const chunks = [answer.slice(0, splitIndex), answer.slice(splitIndex)].filter(Boolean)
+  const chunks = splitAnswerIntoChunks(answer)
 
   return new ReadableStream({
-    start(controller) {
+    async start(controller) {
       controller.enqueue(
         encoder.encode(
           buildSseEvent({
@@ -46,6 +62,7 @@ export function createWriterSseStream({
             }),
           ),
         )
+        await sleep(WRITER_STREAM_CHUNK_DELAY_MS)
       }
 
       controller.enqueue(
@@ -54,6 +71,7 @@ export function createWriterSseStream({
             event: "message_end",
             task_id: taskId,
             conversation_id: conversation.id,
+            answer,
             conversation,
             outcome,
             diagnostics,

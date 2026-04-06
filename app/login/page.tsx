@@ -15,9 +15,11 @@ import { Separator } from "@/components/ui/separator"
 
 export default function LoginPage() {
   const { login, devLogin, loading } = useAuth()
-  const { messages } = useI18n()
+  const { messages, locale } = useI18n()
   const router = useRouter()
   const [error, setError] = useState("")
+  const isZh = locale === "zh"
+  const t = (zh: string, en: string) => (isZh ? zh : en)
 
   const allowDemoLogin =
     process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true" ||
@@ -65,27 +67,38 @@ export default function LoginPage() {
         <div className="grid gap-8 lg:grid-cols-[0.95fr_0.85fr]">
           <section className="rounded-[32px] border-2 border-border bg-card p-8 lg:p-10">
             <div className="inline-flex rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground">
-              login
+              {t("登录", "login")}
             </div>
-            <h1 className="mt-6 text-5xl font-semibold leading-tight text-foreground">
-              {messages.login.title}
-            </h1>
-            <p className="mt-4 max-w-xl text-lg leading-8 text-muted-foreground">
-              {messages.login.description}
-            </p>
+            <h1 className="mt-6 text-5xl font-semibold leading-tight text-foreground">{messages.login.title}</h1>
+            <p className="mt-4 max-w-xl text-lg leading-8 text-muted-foreground">{messages.login.description}</p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
               <div className="rounded-[22px] border-2 border-border bg-background p-4">
-                <div className="text-sm font-medium text-foreground">workspace</div>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">进入统一 AI 工作台，继续顾问、内容和设计任务。</p>
+                <div className="text-sm font-medium text-foreground">{t("工作台", "Workspace")}</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {t(
+                    "进入统一 AI 工作台，继续顾问、内容和设计任务。",
+                    "Enter one unified AI workspace for advisor, content, and design tasks.",
+                  )}
+                </p>
               </div>
               <div className="rounded-[22px] border-2 border-border bg-background p-4">
-                <div className="text-sm font-medium text-foreground">sessions</div>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">保留历史会话与线程状态，不需要从头开始。</p>
+                <div className="text-sm font-medium text-foreground">{t("会话", "Sessions")}</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {t(
+                    "保留历史会话与线程状态，不需要从头开始。",
+                    "Keep historical conversations and thread states without restarting from scratch.",
+                  )}
+                </p>
               </div>
               <div className="rounded-[22px] border-2 border-border bg-background p-4">
-                <div className="text-sm font-medium text-foreground">governance</div>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">企业权限、知识资源与顾问配置集中管理。</p>
+                <div className="text-sm font-medium text-foreground">{t("治理", "Governance")}</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {t(
+                    "企业权限、知识资源与顾问配置集中管理。",
+                    "Manage enterprise permissions, knowledge assets, and advisor setup in one place.",
+                  )}
+                </p>
               </div>
             </div>
           </section>
@@ -105,7 +118,12 @@ export default function LoginPage() {
               <div className="mb-6 rounded-[24px] border-2 border-border bg-background p-4">
                 <div className="text-sm font-medium text-foreground">{messages.login.demoTitle}</div>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">{messages.login.demoDescription}</p>
-                <Button onClick={handleDemoLogin} disabled={loading} variant="outline" className="mt-4 w-full rounded-full border-2 border-border bg-card">
+                <Button
+                  onClick={handleDemoLogin}
+                  disabled={loading}
+                  variant="outline"
+                  className="mt-4 w-full rounded-full border-2 border-border bg-card"
+                >
                   {loading ? messages.login.loggingIn : messages.login.demoLogin}
                 </Button>
               </div>
@@ -122,7 +140,14 @@ export default function LoginPage() {
                 <Label htmlFor="email">{messages.login.email}</Label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-4 h-4 w-4 text-muted-foreground" />
-                  <Input id="email" name="email" type="email" placeholder={messages.login.emailPlaceholder} className="h-14 rounded-[20px] border-2 border-border bg-background pl-11" required />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder={messages.login.emailPlaceholder}
+                    className="h-14 rounded-[20px] border-2 border-border bg-background pl-11"
+                    required
+                  />
                 </div>
               </div>
 
@@ -130,7 +155,14 @@ export default function LoginPage() {
                 <Label htmlFor="password">{messages.login.password}</Label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-4 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" name="password" type="password" placeholder={messages.login.passwordPlaceholder} className="h-14 rounded-[20px] border-2 border-border bg-background pl-11" required />
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    placeholder={messages.login.passwordPlaceholder}
+                    className="h-14 rounded-[20px] border-2 border-border bg-background pl-11"
+                    required
+                  />
                 </div>
               </div>
 
@@ -139,10 +171,12 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="my-6 relative">
+            <div className="relative my-6">
               <Separator />
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="bg-card px-3 text-xs uppercase tracking-[0.22em] text-muted-foreground">{messages.login.or}</span>
+                <span className="bg-card px-3 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                  {messages.login.or}
+                </span>
               </div>
             </div>
 

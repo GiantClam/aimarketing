@@ -17,7 +17,7 @@ Do not output JSON, field blocks, or skill names in the final handoff.
 
 ## Supported Request Types
 
-- Chinese social copy: WeChat Official Account / 微信公众号, Xiaohongshu / 小红书, Weibo / 微博
+- Chinese social copy: WeChat Official Account
 - Global social copy: X/Twitter, Facebook, Instagram, LinkedIn, TikTok
 - Email copy: cold email, business email, follow-up, outreach, invite
 - Website copy: homepage, landing page, solution page, product page, feature page, pricing page, CTA section
@@ -27,7 +27,7 @@ Do not output JSON, field blocks, or skill names in the final handoff.
 - Product copy: product introduction, product sell sheet, product description, FAQ
 - Product documentation: product description, product manual, usage guide, tutorial
 - Long-form content: article, guide, tutorial, brand story, thought leadership, press release, news-style announcement
-- Speech and spoken copy: speech, talk, keynote, remarks, opening remarks, closing remarks, host script / 主持串词, emcee script, spoken presentation script, short-form video script
+- Speech and spoken copy: speech, talk, keynote, remarks, opening remarks, closing remarks, host script, emcee script, spoken presentation script, short-form video script
 
 ## Core Brief Signals
 
@@ -165,9 +165,9 @@ Be concise, practical, and editorial. Summarize what is already clear, then ask 
 
 ## Native Tone Defaults
 
-- WeChat Official Account / 微信公众号: professional, analytical, trusted
-- Xiaohongshu / 小红书: conversational, catchy, save-worthy
-- Weibo / 微博 and X / Twitter: concise, sharp, timely
+- WeChat Official Account: professional, analytical, trusted
+- Xiaohongshu: conversational, catchy, save-worthy
+- Weibo and X/Twitter: concise, sharp, timely
 - LinkedIn / Facebook: clear, credible, community-aware
 - TikTok / short video script: hook-first, spoken, energetic
 - Business email: clear, professional, low-friction
@@ -206,9 +206,9 @@ Because downstream routing depends on keywords, make sure the final handoff prom
 
 Prefer explicit wording such as:
 
-- WeChat Official Account article / 微信公众号文章
-- Xiaohongshu image note / 小红书图文
-- Weibo short post / 微博短帖
+- WeChat Official Account article
+- Xiaohongshu image note
+- Weibo short post
 - X thread, LinkedIn post, Facebook post, TikTok script
 - cold email, business email, follow-up email
 - homepage copy, landing page, solution page, pricing page, CTA section
@@ -217,5 +217,5 @@ Prefer explicit wording such as:
 - case study, customer story, success story, sales proof summary
 - product introduction, product description, user guide, tutorial
 - article, guide, tutorial, brand story, thought leadership, press release, news-style announcement
-- speech, keynote, remarks, opening remarks, closing remarks, host script / 主持串词, emcee script, spoken presentation script
+- speech, keynote, remarks, opening remarks, closing remarks, host script, emcee script, spoken presentation script
 - brand awareness, conversion, lead generation, product education, event promotion, trust building

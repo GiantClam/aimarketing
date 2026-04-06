@@ -34,6 +34,23 @@ function matchesAny(query: string, patterns: RegExp[]) {
   return patterns.some((pattern) => pattern.test(query))
 }
 
+export function hasWriterXPlatformSignal(query: string) {
+  if (/\btwitter\b/i.test(query)) {
+    return true
+  }
+
+  if (/(?:^|[^a-z0-9])x\s*(?:thread|post)(?:[^a-z0-9]|$)/i.test(query)) {
+    return true
+  }
+
+  const hasStandaloneX = /(?:^|[^a-z0-9])x(?:[^a-z0-9]|$)/i.test(query)
+  if (!hasStandaloneX) {
+    return false
+  }
+
+  return /(?:post|thread|\u8d34\u6587|\u5e16\u5b50|\u63a8\u6587|\u53d1\u6587|\u5e73\u53f0|\u52a8\u6001)/iu.test(query)
+}
+
 export function inferWriterContentType(query: string): WriterContentType {
   if (
     matchesAny(query, [
@@ -171,7 +188,7 @@ export function inferWriterContentType(query: string): WriterContentType {
     return "social_cn"
   }
 
-  if (matchesAny(query, [/(linkedin|twitter|x thread|x post|instagram|facebook|tiktok)/i])) {
+  if (matchesAny(query, [/(linkedin|twitter|x thread|x post|instagram|facebook|tiktok)/i]) || hasWriterXPlatformSignal(query)) {
     return "social_global"
   }
 
@@ -186,7 +203,7 @@ export function inferWriterTargetPlatform(query: string, contentType: WriterCont
   if (/微博/i.test(query)) return "Weibo"
   if (/抖音/i.test(query)) return "Douyin"
   if (/\blinkedin\b/i.test(query)) return "LinkedIn"
-  if (/(^|[^a-z])x( thread| post)?([^a-z]|$)|twitter/i.test(query.toLowerCase())) return "X"
+  if (hasWriterXPlatformSignal(query)) return "X"
   if (/\binstagram\b/i.test(query)) return "Instagram"
   if (/\btiktok\b/i.test(query)) return "TikTok"
   if (/\bfacebook\b/i.test(query)) return "Facebook"

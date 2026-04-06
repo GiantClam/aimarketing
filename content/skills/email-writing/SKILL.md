@@ -2,7 +2,7 @@
 name: email-writing
 description: Write professional emails across cold outreach, business communication, replies, follow-ups, meeting requests, status updates, and sensitive messages. Use when the user wants to write a cold email, outbound email, prospecting email, follow-up sequence, professional email, reply, meeting request, internal update, difficult message, or business correspondence. Covers both single emails and cold outreach sequences, but not newsletters, lifecycle campaigns, or non-email sales collateral.
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Email Writing
@@ -47,6 +47,37 @@ Use when:
 - Tone control matters as much as content
 
 If the mode is unclear, infer the most likely one from the request and ask only the minimum clarifying questions needed.
+
+## Brand-First Plain-Language Rules (Always On)
+
+Apply these rules in every mode unless the user explicitly asks for a different style.
+
+### 1. Lead with brand priorities
+
+Before drafting, identify and prioritize:
+
+1. Brand positioning in one line
+2. Core offer (product or service) and strongest value
+3. Key differentiators versus alternatives
+4. Proof points (results, clients, certifications, case evidence)
+5. The single action the recipient should take next
+
+If brand context is incomplete, use known context first and ask only one short clarifying question if required.
+
+### 2. Write in spoken, everyday language
+
+- Use natural conversational phrasing, as if talking to a client directly
+- Prefer short sentences and one idea per sentence
+- Use common words before technical or abstract wording
+- Avoid jargon, buzzwords, and layered conceptual framing
+- If a technical term is necessary, explain it in plain language immediately
+
+### 3. Keep structure simple
+
+- Open with why this email matters to the recipient now
+- Then connect that to the brand's strongest relevant value
+- End with one clear, low-friction next step
+- Remove decorative lines that do not help understanding or response
 
 ## Before Writing
 
@@ -208,6 +239,9 @@ Before presenting the draft, check:
 - Is the selected mode correct?
 - Does the tone match the relationship and stakes?
 - Is the ask clear?
+- Is the language conversational and easy to understand on first read?
+- Are sentence structures simple, with minimal jargon and abstract concepts?
+- Does the draft clearly reflect the brand's key priorities and differentiators?
 - Does the email sound human?
 - For cold outreach, is the personalization real and connected to the problem?
 - For business email, does it avoid unnecessary sales tactics?
@@ -221,4 +255,3 @@ Do not treat these as the main job of this skill:
 - Lifecycle email programs
 - Full marketing campaign strategy
 - Non-email sales collateral
-

@@ -11,7 +11,11 @@ const AIBERM_IMAGE_SYSTEM_INSTRUCTION = process.env.AIBERM_IMAGE_SYSTEM_INSTRUCT
 const AIBERM_IMAGE_SIZE = process.env.AIBERM_IMAGE_SIZE || "2K"
 const AIBERM_IMAGE_TIMEOUT_MS = Math.min(
   300_000,
-  Math.max(60_000, Number.parseInt(process.env.WRITER_AIBERM_IMAGE_TIMEOUT_MS || "180000", 10) || 180_000),
+  Math.max(30_000, Number.parseInt(process.env.WRITER_AIBERM_IMAGE_TIMEOUT_MS || "90000", 10) || 90_000),
+)
+const OPENROUTER_IMAGE_TIMEOUT_MS = Math.min(
+  300_000,
+  Math.max(30_000, Number.parseInt(process.env.WRITER_OPENROUTER_IMAGE_TIMEOUT_MS || "90000", 10) || 90_000),
 )
 const OPENROUTER_API_BASE = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "")
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ""
@@ -740,7 +744,7 @@ export async function generateImagesWithOpenRouter(
         },
       }),
     },
-    { attempts: 2, timeoutMs: options.timeoutMs ?? 180_000 },
+    { attempts: 2, timeoutMs: options.timeoutMs ?? OPENROUTER_IMAGE_TIMEOUT_MS },
   )
 
   if (!response.ok) {

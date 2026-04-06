@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/components/auth-provider"
 import { DifyChatArea } from "@/components/chat/DifyChatArea"
+import { useI18n } from "@/components/locale-provider"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { WorkspaceConversationSkeleton } from "@/components/workspace/workspace-message-primitives"
 
 export default function AdvisorPage({ params }: { params: Promise<{ type: string; id?: string[] }> }) {
   const { user, isDemoMode, hasFeature, loading } = useAuth()
+  const { locale } = useI18n()
   const router = useRouter()
   const resolvedParams = use(params)
+  const isZh = locale === "zh"
 
   const advisorType = resolvedParams.type
   const pathId = resolvedParams.id?.[0]
@@ -90,7 +93,7 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
   if (advisorType === "copywriting") {
     return (
       <div className="flex h-full min-h-0 w-full items-center justify-center text-sm text-muted-foreground">
-        正在跳转到文章写作工作台...
+        {isZh ? "正在跳转到文章写作工作台..." : "Redirecting to the writer workspace..."}
       </div>
     )
   }
@@ -103,7 +106,10 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
             <section className="flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
               <div className="min-h-0 flex-1 bg-[#f7f7f7]">
                 <ScrollArea className="h-full" viewportClassName="px-3 pb-3 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
-                  <WorkspaceConversationSkeleton rows={3} loadingLabel="正在加载顾问会话..." />
+                  <WorkspaceConversationSkeleton
+                    rows={3}
+                    loadingLabel={isZh ? "正在加载顾问会话..." : "Loading advisor conversation..."}
+                  />
                 </ScrollArea>
               </div>
               <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
@@ -125,7 +131,7 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
           user={difyUser}
           advisorType={advisorType}
           initialConversationId={conversationId}
-          key={`${advisorType}-${conversationId || "new"}`}
+          key={advisorType}
         />
       </main>
     </div>

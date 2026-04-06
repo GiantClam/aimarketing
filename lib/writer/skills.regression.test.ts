@@ -41,6 +41,12 @@ let writerTestHooks: {
     enterpriseKnowledge?: any,
     personalizationBlock?: string | null,
   ) => Promise<string>
+  postProcessWriterDraft: (
+    platform: "wechat" | "xiaohongshu" | "x" | "facebook" | "weibo" | "linkedin" | "generic",
+    mode: "article" | "thread",
+    markdown: string,
+    languageLabel: string,
+  ) => string
 }
 
 test.before(async () => {
@@ -1343,6 +1349,37 @@ test("compiled writer prompt includes soul card hints when available", async () 
   assert.match(systemPrompt, /Personalization guidance:/i)
   assert.match(systemPrompt, /Soul Card:/i)
   assert.match(systemPrompt, /factual accuracy, compliance, or safety/i)
+})
+
+test("compiled wechat prompt enforces viral title and retention structure guidance", async () => {
+  const systemPrompt = await writerTestHooks.buildSystemPrompt(
+    "Write a WeChat article about AI outbound.",
+    createRouting({
+      renderPlatform: "wechat",
+      renderMode: "article",
+    }),
+    "Write in Chinese.",
+    {
+      items: [],
+      extracts: [],
+      status: "skipped",
+    },
+  )
+
+  assert.match(systemPrompt, /H1 must be specific and share-worthy/i)
+  assert.match(systemPrompt, /retention-oriented flow/i)
+})
+
+test("wechat title post-process upgrades flat titles to structured viral titles", () => {
+  const processed = writerTestHooks.postProcessWriterDraft(
+    "wechat",
+    "article",
+    "# AI Agent\n\n## 概览\n\n这是一篇普通文章正文。",
+    "Chinese",
+  )
+
+  assert.match(processed, /^# .+/)
+  assert.match(processed.split("\n")[0] || "", /(怎么做|关键方法|避坑点|关键步骤)/u)
 })
 
 test("english Topic/Audience labels are enough to draft immediately without model extraction", async () => {

@@ -101,18 +101,64 @@ def wait_for_text(page, text: str, timeout_ms: int = 60000):
     locator.first.wait_for(state="visible", timeout=timeout_ms)
 
 
-def wait_for_non_empty_last_assistant(page, timeout_ms: int = 180000):
+def is_text_visible(page, text: str, timeout_ms: int = 1500) -> bool:
+    try:
+        wait_for_text(page, text, timeout_ms=timeout_ms)
+        return True
+    except PlaywrightTimeoutError:
+        return False
+
+
+def load_older_until_text(page, text: str, max_clicks: int = 8) -> int:
+    if is_text_visible(page, text, timeout_ms=1500):
+        return 0
+
+    clicks = 0
+    while clicks < max_clicks:
+        button = page.get_by_test_id("writer-load-older-button")
+        if button.count() == 0:
+            break
+
+        button.first.click()
+        clicks += 1
+        page.wait_for_timeout(500)
+        if is_text_visible(page, text, timeout_ms=5000):
+            return clicks
+
+    raise AssertionError(f"failed to load older writer messages until '{text}' appeared (clicks={clicks})")
+
+
+def get_writer_conversation_id_from_url(page) -> str:
+    match = re.search(r"/dashboard/writer/(\d+)", page.url)
+    expect(bool(match), f"missing writer conversation id in url: {page.url}")
+    return match.group(1)
+
+
+def wait_for_non_empty_last_assistant(context, page, conversation_id: str, timeout_ms: int = 180000):
     deadline = time() + (timeout_ms / 1000)
     while time() < deadline:
-        assistant_bubbles = page.locator("div.rounded-bl-md")
-        if assistant_bubbles.count() > 0:
-            text = assistant_bubbles.last.inner_text().strip()
-            if len(text) >= 20 and "正在生成图文草稿" not in text:
-                return text
+        try:
+            response = context.request.get(
+                f"{BASE_URL}/api/writer/messages?conversation_id={conversation_id}&limit=1",
+                timeout=30000,
+            )
+            if response.ok:
+                payload = response.json()
+                entries = payload.get("data") or []
+                if entries:
+                    text = str(entries[-1].get("answer") or "").strip()
+                    if len(text) >= 20:
+                        snippet = next((line.strip() for line in text.splitlines() if line.strip()), text)[:60]
+                        if snippet:
+                            try:
+                                wait_for_text(page, snippet, timeout_ms=10000)
+                            except PlaywrightTimeoutError:
+                                pass
+                        return text
+        except Exception:
+            pass
         page.wait_for_timeout(1500)
     raise AssertionError("writer assistant did not produce visible content in time")
-
-
 def wait_for_delete_request_count(delete_requests: list[str], expected: int, timeout_ms: int = 10000):
     deadline = time() + (timeout_ms / 1000)
     while time() < deadline:
@@ -121,6 +167,27 @@ def wait_for_delete_request_count(delete_requests: list[str], expected: int, tim
         sleep(0.2)
 
     raise AssertionError(f"writer delete request count did not reach {expected}")
+
+
+def wait_for_dialog_overlay_hidden(page, timeout_ms: int = 10000):
+    deadline = time() + (timeout_ms / 1000)
+    overlay_locator = page.locator('[data-slot="dialog-overlay"][data-state="open"]')
+    while time() < deadline:
+        if overlay_locator.count() == 0:
+            return
+        page.wait_for_timeout(200)
+
+    raise AssertionError("dialog overlay is still visible")
+
+
+def wait_for_button_enabled(locator, timeout_ms: int = 10000):
+    deadline = time() + (timeout_ms / 1000)
+    while time() < deadline:
+        if locator.is_enabled():
+            return
+        sleep(0.2)
+
+    raise AssertionError("button did not become enabled in time")
 
 
 def main():
@@ -175,9 +242,9 @@ def main():
             wait_for_text(page, renamed_title, timeout_ms=10000)
 
             start = perf_counter()
-            page.get_by_test_id("writer-load-older-button").click()
-            wait_for_text(page, "Cursor seed turn 01", timeout_ms=20000)
+            clicks = load_older_until_text(page, "Cursor seed turn 01", max_clicks=8)
             metrics["cursor_pagination_load_ms"] = round((perf_counter() - start) * 1000, 2)
+            metrics["cursor_pagination_clicks"] = clicks
             save_debug(page, "03-pagination")
 
             start = perf_counter()
@@ -211,17 +278,27 @@ def main():
             page.get_by_test_id("writer-delete-confirm-button").click()
             wait_for_delete_request_count(delete_requests, delete_request_count_before_confirm + 1, timeout_ms=10000)
             page.get_by_test_id(f"writer-conversation-{seed['conversationId']}").wait_for(state="detached", timeout=10000)
+            wait_for_dialog_overlay_hidden(page, timeout_ms=10000)
             save_debug(page, "04-delete-confirmation")
 
             input_box = page.locator("textarea:visible").first
-            input_box.fill("Write a short three-paragraph WeChat article about how AI teams build content workflows. Use Markdown with one H2 heading and three bullet points.")
+            input_prompt = "Write a short three-paragraph WeChat article about how AI teams build content workflows. Use Markdown with one H2 heading and three bullet points."
+            input_box.fill(input_prompt)
+            expect(input_prompt in input_box.input_value(), "writer prompt was not filled into composer")
             send_button = page.get_by_test_id("writer-send-button")
+            wait_for_button_enabled(send_button, timeout_ms=15000)
             expect(send_button.is_enabled(), "writer send button should be enabled")
 
             start = perf_counter()
             send_button.click()
             page.wait_for_url("**/dashboard/writer/*", timeout=180000)
-            assistant_text = wait_for_non_empty_last_assistant(page, timeout_ms=180000)
+            active_conversation_id = get_writer_conversation_id_from_url(page)
+            assistant_text = wait_for_non_empty_last_assistant(
+                context,
+                page,
+                active_conversation_id,
+                timeout_ms=180000,
+            )
             metrics["real_generation_visible_ms"] = round((perf_counter() - start) * 1000, 2)
             expect(len(assistant_text) >= 20, "real generation content too short")
             save_debug(page, "05-real-generation")

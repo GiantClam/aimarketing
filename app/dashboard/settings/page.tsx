@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation"
 import { AlertTriangle, Bot, Building2, Check, Clock3, Database, LogOut, Save, Shield, Sparkles, User, Users, Workflow, X, type LucideIcon } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
+import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FEATURE_KEYS, FEATURE_LABELS, buildPermissionMap, type PermissionMap } from "@/lib/enterprise/constants"
+import { WriterMemorySettingsSection } from "@/components/settings/writer-memory-settings-section"
+import { FEATURE_KEYS, buildPermissionMap, type PermissionMap } from "@/lib/enterprise/constants"
+import type { AppLocale } from "@/lib/i18n/config"
 import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
 import { cn } from "@/lib/utils"
 
@@ -64,31 +67,24 @@ type AdvisorOverrideSummary = {
   enabled: boolean
 }
 
-const KNOWLEDGE_SCOPE_OPTIONS = [
-  { value: "general", label: "综合资料" },
-  { value: "brand", label: "品牌资料" },
-  { value: "product", label: "产品资料" },
-  { value: "case-study", label: "案例资料" },
-  { value: "compliance", label: "合规资料" },
-  { value: "campaign", label: "活动资料" },
-] as const
-
-function formatEnterpriseDifyMessage(error: unknown, fallback: string) {
+function formatEnterpriseDifyMessage(error: unknown, fallback: string, locale: AppLocale) {
+  const isZh = locale === "zh"
   const message = error instanceof Error ? error.message : ""
-  if (message === "base_url_required") return "请填写 Dify API Base URL。"
-  if (message === "api_key_required_when_enabled") return "启用企业知识检索前，请先填写 Dify API Key。"
-  if (message === "datasets_required_when_enabled") return "启用企业知识检索前，请至少启用一个知识库。"
-  if (message === "dify_config_incomplete") return "请先填写完整的 Dify API Base URL 和 API Key。"
+  if (message === "base_url_required") return isZh ? "请填写 Dify API Base URL。" : "Please provide Dify API Base URL."
+  if (message === "api_key_required_when_enabled") return isZh ? "启用企业知识检索前，请先填写 Dify API Key。" : "Please provide Dify API Key before enabling enterprise knowledge retrieval."
+  if (message === "datasets_required_when_enabled") return isZh ? "启用企业知识检索前，请至少启用一个知识库。" : "Enable at least one dataset before enabling enterprise knowledge retrieval."
+  if (message === "dify_config_incomplete") return isZh ? "请先填写完整的 Dify API Base URL 和 API Key。" : "Please complete Dify API Base URL and API Key first."
   return message || fallback
 }
 
-function formatEnterpriseSwitchMessage(error: unknown, fallback: string) {
+function formatEnterpriseSwitchMessage(error: unknown, fallback: string, locale: AppLocale) {
+  const isZh = locale === "zh"
   const message = error instanceof Error ? error.message : ""
-  if (message === "enterprise_admin_cannot_switch") return "企业管理员不支持在此处更换绑定企业。"
-  if (message === "enterprise_not_bound") return "当前账号尚未绑定企业，无法执行更换。"
-  if (message === "enterprise_code_required") return "请输入目标企业 ID。"
-  if (message === "enterprise_not_found") return "未找到该企业 ID，请检查后重试。"
-  if (message === "enterprise_already_bound") return "当前账号已绑定该企业，无需重复提交。"
+  if (message === "enterprise_admin_cannot_switch") return isZh ? "企业管理员不支持在此处更换绑定企业。" : "Company admins cannot switch bound enterprise here."
+  if (message === "enterprise_not_bound") return isZh ? "当前账号尚未绑定企业，无法执行更换。" : "This account is not bound to an enterprise yet."
+  if (message === "enterprise_code_required") return isZh ? "请输入目标企业 ID。" : "Please enter target company ID."
+  if (message === "enterprise_not_found") return isZh ? "未找到该企业 ID，请检查后重试。" : "Target company ID was not found. Please check and retry."
+  if (message === "enterprise_already_bound") return isZh ? "当前账号已绑定该企业，无需重复提交。" : "This account is already bound to the target company."
   return message || fallback
 }
 
@@ -126,7 +122,32 @@ function OverviewMetric({ icon: Icon, label, value, hint, tone = "warm" }: Overv
 
 export default function SettingsPage() {
   const router = useRouter()
+  const { locale } = useI18n()
+  const isZh = locale === "zh"
+  const t = useCallback((zh: string, en: string) => (isZh ? zh : en), [isZh])
   const { user, isDemoMode, isEnterpriseAdmin, updateProfile, refreshProfile, logout } = useAuth()
+
+  const knowledgeScopeOptions = useMemo(
+    () => [
+      { value: "general", label: t("综合资料", "General") },
+      { value: "brand", label: t("品牌资料", "Brand") },
+      { value: "product", label: t("产品资料", "Product") },
+      { value: "case-study", label: t("案例资料", "Case study") },
+      { value: "compliance", label: t("合规资料", "Compliance") },
+      { value: "campaign", label: t("活动资料", "Campaign") },
+    ],
+    [t],
+  )
+  const featureLabels = useMemo(
+    () => ({
+      expert_advisor: t("专家顾问", "Expert advisor"),
+      website_generation: t("网站生成", "Website generation"),
+      video_generation: t("视频生成", "Video generation"),
+      copywriting_generation: t("文案生成", "Copywriting generation"),
+      image_design_generation: t("图片设计", "Image design"),
+    }),
+    [t],
+  )
 
   const [name, setName] = useState("")
   const [saveMessage, setSaveMessage] = useState("")
@@ -274,7 +295,7 @@ export default function SettingsPage() {
   const handleSaveProfile = async () => {
     const nextName = name.trim()
     if (!nextName) {
-      setSaveMessage("显示名称不能为空")
+      setSaveMessage(t("显示名称不能为空", "Display name cannot be empty."))
       return
     }
 
@@ -282,9 +303,9 @@ export default function SettingsPage() {
     try {
       await updateProfile({ name: nextName })
       await refreshProfile()
-      setSaveMessage("保存成功")
+      setSaveMessage(t("保存成功", "Saved successfully."))
     } catch (err) {
-      setSaveMessage(err instanceof Error ? err.message : "保存失败")
+      setSaveMessage(err instanceof Error ? err.message : t("保存失败", "Save failed."))
     } finally {
       setIsSaving(false)
     }
@@ -303,7 +324,7 @@ export default function SettingsPage() {
   const handleSwitchEnterprise = async () => {
     const nextCode = switchEnterpriseCode.trim().toLowerCase()
     if (!nextCode) {
-      setSwitchEnterpriseMessage("请输入目标企业 ID。")
+      setSwitchEnterpriseMessage(t("请输入目标企业 ID。", "Please enter target company ID."))
       return
     }
 
@@ -322,9 +343,9 @@ export default function SettingsPage() {
 
       await refreshProfile()
       setSwitchEnterpriseCode("")
-      setSwitchEnterpriseMessage("已提交更换企业申请。审核通过后才会切换企业绑定。")
+      setSwitchEnterpriseMessage(t("已提交更换企业申请。审核通过后才会切换企业绑定。", "Switch request submitted. Binding will change after approval."))
     } catch (error) {
-      setSwitchEnterpriseMessage(formatEnterpriseSwitchMessage(error, "提交更换企业申请失败"))
+      setSwitchEnterpriseMessage(formatEnterpriseSwitchMessage(error, t("提交更换企业申请失败", "Failed to submit switch request."), locale))
     } finally {
       setIsSwitchingEnterprise(false)
     }
@@ -339,7 +360,7 @@ export default function SettingsPage() {
 
     const json = await res.json()
     if (!res.ok) {
-      window.alert(json.error || "审核失败")
+      window.alert(json.error || t("审核失败", "Review failed."))
       return
     }
 
@@ -357,7 +378,7 @@ export default function SettingsPage() {
 
     const json = await res.json()
     if (!res.ok) {
-      window.alert(json.error || "权限保存失败")
+      window.alert(json.error || t("权限保存失败", "Permission save failed."))
       return
     }
 
@@ -372,15 +393,15 @@ export default function SettingsPage() {
 
     const previousEnabled = difyEnabled
     if (nextEnabled && !difyBaseUrl.trim()) {
-      setDifyMessage("启用企业知识检索前，请先在数据库中配置 Dify API Base URL。")
+      setDifyMessage(t("启用企业知识检索前，请先在数据库中配置 Dify API Base URL。", "Configure Dify API Base URL before enabling enterprise knowledge retrieval."))
       return
     }
     if (nextEnabled && !difyHasApiKey) {
-      setDifyMessage("启用企业知识检索前，请先在数据库中配置 Dify API Key。")
+      setDifyMessage(t("启用企业知识检索前，请先在数据库中配置 Dify API Key。", "Configure Dify API Key before enabling enterprise knowledge retrieval."))
       return
     }
     if (nextEnabled && enabledDifyDatasetCount === 0) {
-      setDifyMessage("启用企业知识检索前，请至少在数据库中启用一个知识库。")
+      setDifyMessage(t("启用企业知识检索前，请至少在数据库中启用一个知识库。", "Enable at least one dataset before enabling enterprise knowledge retrieval."))
       return
     }
 
@@ -396,7 +417,7 @@ export default function SettingsPage() {
 
       const json = await response.json().catch(() => null)
       if (!response.ok) {
-        throw new Error(json?.error || "Dify 配置保存失败")
+        throw new Error(json?.error || t("Dify 配置保存失败", "Failed to save Dify config."))
       }
 
       const binding = json?.data?.binding
@@ -415,22 +436,22 @@ export default function SettingsPage() {
           }))
           : [],
       )
-      setDifyMessage(nextEnabled ? "企业知识库已启用。" : "企业知识库已停用。")
+      setDifyMessage(nextEnabled ? t("企业知识库已启用。", "Enterprise knowledge base enabled.") : t("企业知识库已停用。", "Enterprise knowledge base disabled."))
     } catch (error) {
       setDifyEnabled(previousEnabled)
-      setDifyMessage(formatEnterpriseDifyMessage(error, "Dify 配置保存失败"))
+      setDifyMessage(formatEnterpriseDifyMessage(error, t("Dify 配置保存失败", "Failed to save Dify config."), locale))
     } finally {
       setSavingDifyConfig(false)
     }
   }
 
   const statusText = useMemo(() => {
-    if (!user?.enterpriseStatus) return "未知"
-    if (user.enterpriseStatus === "pending") return "待审核"
-    if (user.enterpriseStatus === "active") return "已激活"
-    if (user.enterpriseStatus === "rejected") return "已拒绝"
+    if (!user?.enterpriseStatus) return t("未知", "Unknown")
+    if (user.enterpriseStatus === "pending") return t("待审核", "Pending")
+    if (user.enterpriseStatus === "active") return t("已激活", "Active")
+    if (user.enterpriseStatus === "rejected") return t("已拒绝", "Rejected")
     return user.enterpriseStatus
-  }, [user?.enterpriseStatus])
+  }, [t, user?.enterpriseStatus])
 
   const configurableFeatureKeys = useMemo(
     () => FEATURE_KEYS.filter((feature) => isFeatureRuntimeEnabled(feature)),
@@ -447,20 +468,20 @@ export default function SettingsPage() {
   const advisorCards: Array<{ advisorType: EnterpriseAdvisorType; title: string; description: string }> = [
     {
       advisorType: "brand-strategy",
-      title: "品牌顾问",
-      description: "优先读取企业数据库中的 workflow；未配置企业专属 workflow 时回退到系统默认 workflow。",
+      title: t("品牌顾问", "Brand advisor"),
+      description: t("优先读取企业数据库中的 workflow；未配置企业专属 workflow 时回退到系统默认 workflow。", "Prefer enterprise workflow from database; fallback to system default workflow when enterprise override is not configured."),
     },
     {
       advisorType: "growth",
-      title: "增长顾问",
-      description: "优先读取企业数据库中的 workflow；未配置企业专属 workflow 时回退到系统默认 workflow。",
+      title: t("增长顾问", "Growth advisor"),
+      description: t("优先读取企业数据库中的 workflow；未配置企业专属 workflow 时回退到系统默认 workflow。", "Prefer enterprise workflow from database; fallback to system default workflow when enterprise override is not configured."),
     },
     ...(advisorOverrides["company-search"]
       ? [
         {
           advisorType: "company-search" as const,
-          title: "公司搜索（Company Search）",
-          description: "仅当前企业在数据库中配置了 company search workflow 时展示；每次只触发当前搜索条件对应的 workflow。",
+          title: t("公司搜索（Company Search）", "Company Search"),
+          description: t("仅当前企业在数据库中配置了 company search workflow 时展示；每次只触发当前搜索条件对应的 workflow。", "Shown only when company-search workflow is configured in enterprise database; each run triggers only the workflow for current criteria."),
         },
       ]
       : []),
@@ -468,8 +489,8 @@ export default function SettingsPage() {
       ? [
         {
           advisorType: "contact-mining" as const,
-          title: "联系人挖掘（Contact Mining）",
-          description: "仅当前企业在数据库中配置了 contact mining workflow 时展示；每次只触发当前搜索条件对应的 workflow。",
+          title: t("联系人挖掘（Contact Mining）", "Contact Mining"),
+          description: t("仅当前企业在数据库中配置了 contact mining workflow 时展示；每次只触发当前搜索条件对应的 workflow。", "Shown only when contact-mining workflow is configured in enterprise database; each run triggers only the workflow for current criteria."),
         },
       ]
       : []),
@@ -478,30 +499,30 @@ export default function SettingsPage() {
     () => [
       {
         icon: User,
-        label: "账号状态",
+        label: t("账号状态", "Account status"),
         value: statusText,
-        hint: user?.enterpriseName ? `${user.enterpriseName} / ${user.enterpriseRole || "member"}` : "当前账号尚未绑定企业。",
+        hint: user?.enterpriseName ? `${user.enterpriseName} / ${user.enterpriseRole || "member"}` : t("当前账号尚未绑定企业。", "This account is not bound to a company yet."),
         tone: "warm" as const,
       },
       {
         icon: Users,
-        label: "企业治理",
-        value: isEnterpriseAdmin ? `${members.length}` : "只读",
-        hint: isEnterpriseAdmin ? `成员 ${members.length} 人，待审核 ${requests.length} 项。` : "仅企业管理员可处理成员与权限配置。",
+        label: t("企业治理", "Company governance"),
+        value: isEnterpriseAdmin ? `${members.length}` : t("只读", "Read only"),
+        hint: isEnterpriseAdmin ? t(`成员 ${members.length} 人，待审核 ${requests.length} 项。`, `${members.length} members, ${requests.length} pending requests.`) : t("仅企业管理员可处理成员与权限配置。", "Only enterprise admins can manage members and permissions."),
         tone: "teal" as const,
       },
       {
         icon: Database,
-        label: "知识资源",
+        label: t("知识资源", "Knowledge resources"),
         value: `${enabledDifyDatasetCount}/${difyDatasets.length}`,
-        hint: canViewEnterpriseDify ? "显示已启用知识库数量 / 已绑定知识库总数。" : "企业激活后可查看企业知识检索配置。",
+        hint: canViewEnterpriseDify ? t("显示已启用知识库数量 / 已绑定知识库总数。", "Shows enabled datasets / total bound datasets.") : t("企业激活后可查看企业知识检索配置。", "Available after enterprise activation."),
         tone: "ink" as const,
       },
       {
         icon: Bot,
-        label: "顾问工作流",
+        label: t("顾问工作流", "Advisor workflows"),
         value: `${advisorCards.length}`,
-        hint: isEnterpriseAdmin ? "展示当前可见的顾问 workflow 条目。" : "顾问 workflow 详情仅向企业管理员开放。",
+        hint: isEnterpriseAdmin ? t("展示当前可见的顾问 workflow 条目。", "Shows visible advisor workflow entries.") : t("顾问 workflow 详情仅向企业管理员开放。", "Advisor workflow details are available to enterprise admins only."),
         tone: "warm" as const,
       },
     ],
@@ -514,6 +535,7 @@ export default function SettingsPage() {
       members.length,
       requests.length,
       statusText,
+      t,
       user?.enterpriseName,
       user?.enterpriseRole,
     ],
@@ -527,42 +549,42 @@ export default function SettingsPage() {
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary-foreground">
                 <Sparkles className="h-3.5 w-3.5" />
-                Settings Console
+                {t("设置控制台", "Settings Console")}
               </div>
               <div className="max-w-3xl space-y-4">
-                <h1 className="text-4xl font-semibold tracking-tight text-foreground lg:text-5xl">用户设置</h1>
+                <h1 className="text-4xl font-semibold tracking-tight text-foreground lg:text-5xl">{t("用户设置", "User settings")}</h1>
                 <p className="max-w-2xl text-base leading-8 text-muted-foreground lg:text-lg">
-                  将账号资料、企业治理和 AI 资源配置放进同一个工作台，减少切页和状态判断。
+                  {t("将账号资料、企业治理和 AI 资源配置放进同一个工作台，减少切页和状态判断。", "Keep profile, enterprise governance, and AI resources in one workspace to reduce context switching.")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <div className="rounded-full border-2 border-border bg-background px-4 py-2 text-sm font-medium text-foreground">
-                  企业状态: {statusText}
+                  {t("企业状态", "Enterprise status")}: {statusText}
                 </div>
                 <div className="rounded-full border-2 border-border bg-background px-4 py-2 text-sm font-medium text-foreground">
-                  成员角色: {user?.enterpriseRole || "未绑定"}
+                  {t("成员角色", "Member role")}: {user?.enterpriseRole || t("未绑定", "Unbound")}
                 </div>
               </div>
             </div>
 
             <div className="rounded-[28px] border-2 border-border bg-background p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Identity Brief</p>
-              <h2 className="mt-2 text-xl font-semibold text-foreground">{user?.name || "未命名成员"}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{user?.email || "未绑定邮箱"}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">{t("身份摘要", "Identity Brief")}</p>
+              <h2 className="mt-2 text-xl font-semibold text-foreground">{user?.name || t("未命名成员", "Unnamed member")}</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{user?.email || t("未绑定邮箱", "No email bound")}</p>
 
               <div className="mt-5 space-y-3">
                 <div className="rounded-[22px] border-2 border-border bg-card px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Enterprise</p>
-                  <p className="mt-2 text-sm text-foreground">{user?.enterpriseName || "尚未绑定企业"}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{user?.enterpriseCode || "No enterprise code"}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t("企业信息", "Enterprise")}</p>
+                  <p className="mt-2 text-sm text-foreground">{user?.enterpriseName || t("尚未绑定企业", "No enterprise bound")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{user?.enterpriseCode || t("无企业 ID", "No enterprise code")}</p>
                 </div>
                 <div className="rounded-[22px] border-2 border-border bg-card px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Configuration</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t("配置状态", "Configuration")}</p>
                   <p className="mt-2 text-sm text-foreground">
-                    {canViewEnterpriseDify ? "已连接企业知识资源" : "等待企业激活或配置"}
+                    {canViewEnterpriseDify ? t("已连接企业知识资源", "Enterprise knowledge connected") : t("等待企业激活或配置", "Waiting for enterprise activation/configuration")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {isEnterpriseAdmin ? "你可以管理成员权限和顾问配置。" : "你当前拥有只读或有限配置权限。"}
+                    {isEnterpriseAdmin ? t("你可以管理成员权限和顾问配置。", "You can manage member permissions and advisor config.") : t("你当前拥有只读或有限配置权限。", "You currently have read-only or limited configuration permission.")}
                   </p>
                 </div>
               </div>
@@ -575,8 +597,8 @@ export default function SettingsPage() {
             <div className="flex items-start gap-3">
               <Clock3 className="mt-0.5 h-5 w-5 text-amber-700" />
               <div>
-                <p className="font-sans text-lg font-semibold text-amber-900">加入企业待审核</p>
-                <p className="mt-1 text-sm leading-6 text-amber-800/85">企业管理员审核通过后，企业功能权限与知识资源才会对当前账号生效。</p>
+                <p className="font-sans text-lg font-semibold text-amber-900">{t("加入企业待审核", "Enterprise join request pending")}</p>
+                <p className="mt-1 text-sm leading-6 text-amber-800/85">{t("企业管理员审核通过后，企业功能权限与知识资源才会对当前账号生效。", "Enterprise permissions and knowledge resources will be enabled after admin approval.")}</p>
               </div>
             </div>
           </div>
@@ -586,49 +608,49 @@ export default function SettingsPage() {
           <div className="space-y-8">
             <section className="space-y-4">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">个人设置</p>
-                <h2 className="font-sans text-2xl font-semibold text-foreground">账号与企业身份</h2>
-                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">优先保证账号基础资料、企业归属和身份状态清晰，避免后续工作台入口与权限判断出现偏差。</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("个人设置", "Personal settings")}</p>
+                <h2 className="font-sans text-2xl font-semibold text-foreground">{t("账号与企业身份", "Account and enterprise identity")}</h2>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("优先保证账号基础资料、企业归属和身份状态清晰，避免后续工作台入口与权限判断出现偏差。", "Keep account basics, enterprise ownership, and identity status clear to avoid later access confusion.")}</p>
               </div>
 
               <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 font-sans text-xl"><User className="h-5 w-5 text-primary" />账号信息</CardTitle>
-                  <CardDescription>可修改显示名称。企业信息由企业管理员维护。</CardDescription>
+                  <CardTitle className="flex items-center gap-2 font-sans text-xl"><User className="h-5 w-5 text-primary" />{t("账号信息", "Account profile")}</CardTitle>
+                  <CardDescription>{t("可修改显示名称。企业信息由企业管理员维护。", "You can edit display name. Enterprise info is managed by company admins.")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="grid gap-2">
-                      <Label htmlFor="display-name">显示名称</Label>
-                      <Input id="display-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="请输入显示名称" />
+                      <Label htmlFor="display-name">{t("显示名称", "Display name")}</Label>
+                      <Input id="display-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("请输入显示名称", "Enter display name")} />
                     </div>
                     <div className="grid gap-2">
-                      <Label>邮箱</Label>
+                      <Label>{t("邮箱", "Email")}</Label>
                       <Input value={user?.email || ""} disabled />
                     </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="grid gap-2"><Label>企业 ID</Label><Input value={user?.enterpriseCode || "未绑定"} disabled /></div>
-                    <div className="grid gap-2"><Label>企业名称</Label><Input value={user?.enterpriseName || "未绑定"} disabled /></div>
-                    <div className="grid gap-2"><Label>企业角色</Label><Input value={user?.enterpriseRole || "未知"} disabled /></div>
-                    <div className="grid gap-2"><Label>账号状态</Label><Input value={statusText} disabled /></div>
+                    <div className="grid gap-2"><Label>{t("企业 ID", "Company ID")}</Label><Input value={user?.enterpriseCode || t("未绑定", "Unbound")} disabled /></div>
+                    <div className="grid gap-2"><Label>{t("企业名称", "Company name")}</Label><Input value={user?.enterpriseName || t("未绑定", "Unbound")} disabled /></div>
+                    <div className="grid gap-2"><Label>{t("企业角色", "Company role")}</Label><Input value={user?.enterpriseRole || t("未知", "Unknown")} disabled /></div>
+                    <div className="grid gap-2"><Label>{t("账号状态", "Account status")}</Label><Input value={statusText} disabled /></div>
                   </div>
 
                   {Boolean(user?.enterpriseId) && !isEnterpriseAdmin ? (
                     <div className="rounded-[20px] border border-border/70 bg-background/70 p-4">
-                      <p className="text-sm font-medium text-foreground">更换企业绑定</p>
+                      <p className="text-sm font-medium text-foreground">{t("更换企业绑定", "Switch company binding")}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        输入目标企业 ID 后将发起换绑申请。审核通过前，当前企业绑定保持不变。
+                        {t("输入目标企业 ID 后将发起换绑申请。审核通过前，当前企业绑定保持不变。", "Submit target company ID to request binding switch. Current binding remains unchanged until approval.")}
                       </p>
                       <div className="mt-3 flex flex-wrap items-end gap-3">
                         <div className="grid min-w-[220px] flex-1 gap-2">
-                          <Label htmlFor="switch-enterprise-code">目标企业 ID</Label>
+                          <Label htmlFor="switch-enterprise-code">{t("目标企业 ID", "Target company ID")}</Label>
                           <Input
                             id="switch-enterprise-code"
                             value={switchEnterpriseCode}
                             onChange={(event) => setSwitchEnterpriseCode(event.target.value)}
-                            placeholder="请输入企业 ID"
+                            placeholder={t("请输入企业 ID", "Enter company ID")}
                           />
                         </div>
                         <Button
@@ -637,7 +659,7 @@ export default function SettingsPage() {
                           disabled={isSwitchingEnterprise || !switchEnterpriseCode.trim()}
                           className="rounded-full px-5"
                         >
-                          {isSwitchingEnterprise ? "提交中..." : "提交更换申请"}
+                          {isSwitchingEnterprise ? t("提交中...", "Submitting...") : t("提交更换申请", "Submit switch request")}
                         </Button>
                       </div>
                       {switchEnterpriseMessage ? (
@@ -647,7 +669,7 @@ export default function SettingsPage() {
                   ) : null}
 
                   <div className="flex flex-wrap items-center gap-3">
-                    <Button onClick={handleSaveProfile} disabled={isSaving} className="rounded-full px-5"><Save className="mr-2 h-4 w-4" />{isSaving ? "保存中..." : "保存设置"}</Button>
+                    <Button onClick={handleSaveProfile} disabled={isSaving} className="rounded-full px-5"><Save className="mr-2 h-4 w-4" />{isSaving ? t("保存中...", "Saving...") : t("保存设置", "Save settings")}</Button>
                     {saveMessage && <span className="text-sm text-muted-foreground">{saveMessage}</span>}
                   </div>
                 </CardContent>
@@ -657,29 +679,29 @@ export default function SettingsPage() {
             {isEnterpriseAdmin && (
               <section className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">企业治理</p>
-                  <h2 className="font-sans text-2xl font-semibold text-foreground">成员审核与权限分配</h2>
-                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground">把待审核申请和成员权限放在同一段，先处理准入，再决定每个成员可进入哪些工作台。</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("企业治理", "Enterprise governance")}</p>
+                  <h2 className="font-sans text-2xl font-semibold text-foreground">{t("成员审核与权限分配", "Member reviews and permissions")}</h2>
+                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("把待审核申请和成员权限放在同一段，先处理准入，再决定每个成员可进入哪些工作台。", "Handle access reviews and permission allocation in one place.")}</p>
                 </div>
 
                 <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-sans text-xl"><Building2 className="h-5 w-5 text-primary" />企业成员申请审核</CardTitle>
-                    <CardDescription>审核待加入企业的成员申请。</CardDescription>
+                    <CardTitle className="flex items-center gap-2 font-sans text-xl"><Building2 className="h-5 w-5 text-primary" />{t("企业成员申请审核", "Enterprise member request review")}</CardTitle>
+                    <CardDescription>{t("审核待加入企业的成员申请。", "Review pending requests to join the enterprise.")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-              {loadingAdminData && <p className="text-sm text-muted-foreground">加载中...</p>}
-              {!loadingAdminData && requests.length === 0 && <p className="text-sm text-muted-foreground">暂无待审核申请。</p>}
+              {loadingAdminData && <p className="text-sm text-muted-foreground">{t("加载中...", "Loading...")}</p>}
+              {!loadingAdminData && requests.length === 0 && <p className="text-sm text-muted-foreground">{t("暂无待审核申请。", "No pending requests.")}</p>}
               {requests.map((request) => (
                 <div key={request.requestId} className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">{request.userName}（{request.userEmail}）</p>
-                    <p className="mt-1 text-xs text-muted-foreground">申请时间：{new Date(request.createdAt).toLocaleString()}</p>
-                    {request.note && <p className="mt-1 text-xs text-muted-foreground">说明：{request.note}</p>}
+                    <p className="mt-1 text-xs text-muted-foreground">{t("申请时间：", "Requested at: ")}{new Date(request.createdAt).toLocaleString()}</p>
+                    {request.note && <p className="mt-1 text-xs text-muted-foreground">{t("说明：", "Note: ")}{request.note}</p>}
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => reviewRequest(request.requestId, "reject")} className="rounded-full"><X className="mr-1 h-4 w-4" />拒绝</Button>
-                    <Button size="sm" onClick={() => reviewRequest(request.requestId, "approve")} className="rounded-full"><Check className="mr-1 h-4 w-4" />通过</Button>
+                    <Button size="sm" variant="outline" onClick={() => reviewRequest(request.requestId, "reject")} className="rounded-full"><X className="mr-1 h-4 w-4" />{t("拒绝", "Reject")}</Button>
+                    <Button size="sm" onClick={() => reviewRequest(request.requestId, "approve")} className="rounded-full"><Check className="mr-1 h-4 w-4" />{t("通过", "Approve")}</Button>
                   </div>
                 </div>
               ))}
@@ -688,12 +710,12 @@ export default function SettingsPage() {
 
                 <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />成员功能权限</CardTitle>
-                    <CardDescription>配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问、增长顾问和海外猎客入口；企业管理员始终可见。</CardDescription>
+                    <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />{t("成员功能权限", "Member feature permissions")}</CardTitle>
+                    <CardDescription>{t("配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问、增长顾问和海外猎客入口；企业管理员始终可见。", "Configure feature access for members. After enabling Expert Advisor, members can see Brand/Growth/Lead Hunter entries; enterprise admins always can.")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
               {members.length === 0 && !loadingAdminData ? (
-                <p className="text-sm text-muted-foreground">当前没有可配置权限的企业成员。</p>
+                <p className="text-sm text-muted-foreground">{t("当前没有可配置权限的企业成员。", "No enterprise members available for permission configuration.")}</p>
               ) : null}
               {members.map((member) => {
                 const draft = permissionDrafts[member.id] || buildPermissionMap(false)
@@ -702,9 +724,9 @@ export default function SettingsPage() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
                         <p className="text-sm font-medium text-foreground">{member.name}（{member.email}）</p>
-                        <p className="mt-1 text-xs text-muted-foreground">角色：{member.enterpriseRole || "member"} / 状态：{member.enterpriseStatus || "unknown"}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{t("角色：", "Role: ")}{member.enterpriseRole || "member"} / {t("状态：", "Status: ")}{member.enterpriseStatus || "unknown"}</p>
                       </div>
-                      <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={member.enterpriseStatus !== "active"} className="rounded-full">保存权限</Button>
+                      <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={member.enterpriseStatus !== "active"} className="rounded-full">{t("保存权限", "Save permissions")}</Button>
                     </div>
 
                     <div className="grid gap-2 md:grid-cols-2">
@@ -725,7 +747,7 @@ export default function SettingsPage() {
                               }))
                             }}
                           />
-                          <span>{FEATURE_LABELS[feature]}</span>
+                          <span>{featureLabels[feature]}</span>
                         </label>
                       ))}
                     </div>
@@ -740,19 +762,19 @@ export default function SettingsPage() {
             {(canViewEnterpriseDify || isEnterpriseAdmin) && (
               <section className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">AI 资源配置</p>
-                  <h2 className="font-sans text-2xl font-semibold text-foreground">企业知识库与顾问工作流</h2>
-                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground">把知识检索和顾问 workflow 放在同一层，便于判断当前企业到底拥有哪些 AI 能力，以及哪些只是系统默认兜底。</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("AI 资源配置", "AI resource configuration")}</p>
+                  <h2 className="font-sans text-2xl font-semibold text-foreground">{t("企业知识库与顾问工作流", "Enterprise knowledge and advisor workflows")}</h2>
+                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("把知识检索和顾问 workflow 放在同一层，便于判断当前企业到底拥有哪些 AI 能力，以及哪些只是系统默认兜底。", "View knowledge retrieval and advisor workflows in one place to separate enterprise capabilities from system defaults.")}</p>
                 </div>
 
                 {canViewEnterpriseDify && (
                   <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Database className="h-5 w-5 text-primary" />Dify 企业知识库</CardTitle>
+                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Database className="h-5 w-5 text-primary" />{t("Dify 企业知识库", "Dify enterprise knowledge")}</CardTitle>
                       <CardDescription>
                 {hasEnterpriseKnowledgeBinding
-                  ? "当前企业已配置专属 Dify 知识库。设置页展示数据库中的绑定信息；只有企业管理员可启用或停用企业知识库。"
-                  : "当前企业还没有配置 Dify 企业知识库。"}
+                  ? t("当前企业已配置专属 Dify 知识库。设置页展示数据库中的绑定信息；只有企业管理员可启用或停用企业知识库。", "Enterprise-specific Dify knowledge is configured. This page shows database bindings; only enterprise admins can toggle it.")
+                  : t("当前企业还没有配置 Dify 企业知识库。", "No enterprise Dify knowledge is configured yet.")}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-5">
@@ -760,8 +782,8 @@ export default function SettingsPage() {
                 <>
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
                     <div className="space-y-1">
-                      <p className="font-medium text-foreground">当前企业已配置知识库</p>
-                      <p>已读取数据库中的 Dify Base URL、脱敏 API Key 和 dataset 绑定信息。</p>
+                      <p className="font-medium text-foreground">{t("当前企业已配置知识库", "Knowledge base configured for current enterprise")}</p>
+                      <p>{t("已读取数据库中的 Dify Base URL、脱敏 API Key 和 dataset 绑定信息。", "Loaded Dify Base URL, masked API key, and dataset bindings from database.")}</p>
                     </div>
                   </div>
 
@@ -770,20 +792,20 @@ export default function SettingsPage() {
                       <Label htmlFor="dify-base-url">Dify API Base URL</Label>
                       <Input
                         id="dify-base-url"
-                        value={difyBaseUrl || "未在数据库中配置"}
+                        value={difyBaseUrl || t("未在数据库中配置", "Not configured in database")}
                         disabled
                       />
-                      <p className="text-xs text-muted-foreground">只读展示当前数据库中的企业 Dify Base URL；如需修改，请直接更新数据库。</p>
+                      <p className="text-xs text-muted-foreground">{t("只读展示当前数据库中的企业 Dify Base URL；如需修改，请直接更新数据库。", "Read-only display of enterprise Dify Base URL from database. Update database directly to change it.")}</p>
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="dify-api-key">Dify API Key</Label>
                       <Input
                         id="dify-api-key"
-                        value={difyHasApiKey ? difyApiKeyMasked : "未在数据库中配置"}
+                        value={difyHasApiKey ? difyApiKeyMasked : t("未在数据库中配置", "Not configured in database")}
                         disabled
                       />
                       <p className="text-xs text-muted-foreground">
-                        API Key 已做脱敏展示，不会在页面明文返回。当前已启用 {enabledDifyDatasetCount} 个知识库。
+                        {t("API Key 已做脱敏展示，不会在页面明文返回。当前已启用 ", "API key is masked and never returned in plain text. Currently enabled ")}{enabledDifyDatasetCount}{t(" 个知识库。", " dataset(s).")}
                       </p>
                     </div>
                   </div>
@@ -796,31 +818,31 @@ export default function SettingsPage() {
                       disabled={!canManageEnterpriseDify || savingDifyConfig}
                       onChange={(event) => void updateEnterpriseDifyEnabled(event.target.checked)}
                     />
-                    <span>启用企业统一知识检索{!canManageEnterpriseDify ? "（仅企业管理员可修改）" : ""}</span>
+                    <span>{t("启用企业统一知识检索", "Enable enterprise knowledge retrieval")}{!canManageEnterpriseDify ? t("（仅企业管理员可修改）", " (admins only)") : ""}</span>
                   </label>
 
                   <div className="flex flex-wrap items-center gap-3">
-                    {loadingDifyConfig && <span className="text-sm text-muted-foreground">正在读取已保存配置...</span>}
-                    {savingDifyConfig && <span className="text-sm text-muted-foreground">正在更新企业知识库状态...</span>}
+                    {loadingDifyConfig && <span className="text-sm text-muted-foreground">{t("正在读取已保存配置...", "Loading saved configuration...")}</span>}
+                    {savingDifyConfig && <span className="text-sm text-muted-foreground">{t("正在更新企业知识库状态...", "Updating enterprise knowledge status...")}</span>}
                     {difyMessage && <span className="text-sm text-muted-foreground">{difyMessage}</span>}
                   </div>
 
                   <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <p className="text-sm font-medium text-foreground">知识库绑定与检索用途</p>
+                        <p className="text-sm font-medium text-foreground">{t("知识库绑定与检索用途", "Dataset bindings and retrieval use")}</p>
                         <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                          企业知识库绑定仅支持数据库配置。设置页只展示当前已保存的 dataset 绑定，不提供远端拉取和页面内编辑，避免共享 Dify 时误拉到其他企业知识库。
+                          {t("企业知识库绑定仅支持数据库配置。设置页只展示当前已保存的 dataset 绑定，不提供远端拉取和页面内编辑，避免共享 Dify 时误拉到其他企业知识库。", "Bindings are managed in database only. This page is read-only for saved dataset bindings to avoid pulling wrong enterprise datasets in shared Dify scenarios.")}
                         </p>
-                        <p className="text-xs leading-6 text-muted-foreground">优先级数字越小越靠前；当前单次检索最多使用前 4 个符合用途的知识库。</p>
+                        <p className="text-xs leading-6 text-muted-foreground">{t("优先级数字越小越靠前；当前单次检索最多使用前 4 个符合用途的知识库。", "Lower priority number means earlier usage. A single retrieval uses up to 4 matching datasets.")}</p>
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        数据库已配置 {difyDatasets.length} 个 / 已启用 {enabledDifyDatasetCount} 个
+                        {t("数据库已配置 ", "Configured ")}{difyDatasets.length}{t(" 个 / 已启用 ", " / Enabled ")}{enabledDifyDatasetCount}{t(" 个", "")}
                       </span>
                     </div>
 
                     {difyDatasets.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">当前没有已保存的 dataset 绑定。请直接在数据库中维护 `enterprise_dify_datasets`。</p>
+                      <p className="text-sm text-muted-foreground">{t("当前没有已保存的 dataset 绑定。请直接在数据库中维护 `enterprise_dify_datasets`。", "No saved dataset bindings. Maintain `enterprise_dify_datasets` in database directly.")}</p>
                     ) : (
                       <div className="space-y-3">
                         {difyDatasets.map((dataset) => (
@@ -832,19 +854,19 @@ export default function SettingsPage() {
                               </div>
                               <div className="grid min-w-[220px] gap-3 sm:grid-cols-3">
                                 <div className="grid gap-1 text-xs text-muted-foreground">
-                                  <span>状态</span>
+                                  <span>{t("状态", "Status")}</span>
                                   <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
-                                    {dataset.enabled ? "已启用" : "已停用"}
+                                    {dataset.enabled ? t("已启用", "Enabled") : t("已停用", "Disabled")}
                                   </span>
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
-                                  <span>检索用途</span>
+                                  <span>{t("检索用途", "Scope")}</span>
                                   <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
-                                    {KNOWLEDGE_SCOPE_OPTIONS.find((option) => option.value === dataset.scope)?.label || dataset.scope}
+                                    {knowledgeScopeOptions.find((option) => option.value === dataset.scope)?.label || dataset.scope}
                                   </span>
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
-                                  <span>优先级</span>
+                                  <span>{t("优先级", "Priority")}</span>
                                   <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
                                     {dataset.priority}
                                   </span>
@@ -860,7 +882,7 @@ export default function SettingsPage() {
               ) : (
                 <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
                   <div className="space-y-1">
-                    <p className="font-medium text-foreground">当前企业未配置知识库</p>
+                    <p className="font-medium text-foreground">{t("当前企业未配置知识库", "No knowledge base configured for current enterprise")}</p>
                   </div>
                 </div>
               )}
@@ -871,11 +893,11 @@ export default function SettingsPage() {
                 {isEnterpriseAdmin && (
                   <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />专家顾问与海外猎客 Dify Workflow 配置</CardTitle>
-                      <CardDescription>设置页只展示当前工作流信息。企业数据库中的 workflow 优先级高于系统默认 workflow；Company Search 与 Contact Mining 仅在企业数据库已配置时展示。</CardDescription>
+                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />{t("专家顾问与海外猎客 Dify Workflow 配置", "Advisor and Lead Hunter Dify workflow config")}</CardTitle>
+                      <CardDescription>{t("设置页只展示当前工作流信息。企业数据库中的 workflow 优先级高于系统默认 workflow；Company Search 与 Contact Mining 仅在企业数据库已配置时展示。", "This page is display-only for workflow info. Enterprise workflow overrides system defaults; Company Search and Contact Mining are shown only when configured in enterprise database.")}</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-              {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">正在读取顾问配置...</p>}
+              {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">{t("正在读取顾问配置...", "Loading advisor config...")}</p>}
               <div className="grid gap-4">
                 {advisorCards.map((card) => {
                   const override = advisorOverrides[card.advisorType]
@@ -894,14 +916,14 @@ export default function SettingsPage() {
                   const hasSystemDefault = Boolean(defaultInfo?.configured)
                   const statusLabel =
                     isLeadHunterWorkflow
-                      ? enterpriseEnabled
-                        ? "当前生效：企业数据库"
-                        : "当前状态：未启用"
+                          ? enterpriseEnabled
+                        ? t("当前生效：企业数据库", "Current source: enterprise database")
+                        : t("当前状态：未启用", "Current status: disabled")
                       : enterpriseEnabled
-                        ? "当前生效：企业数据库"
+                        ? t("当前生效：企业数据库", "Current source: enterprise database")
                         : hasSystemDefault
-                          ? "当前生效：系统默认"
-                          : "当前生效：未配置"
+                          ? t("当前生效：系统默认", "Current source: system default")
+                          : t("当前生效：未配置", "Current source: not configured")
                   return (
                     <div key={card.advisorType} className="space-y-4 rounded-2xl border border-border/70 bg-background/70 p-4">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -916,21 +938,21 @@ export default function SettingsPage() {
 
                       <div className="grid gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 text-sm">
                         {isLeadHunterWorkflow ? (
-                          <p className="text-xs leading-6 text-muted-foreground">
-                            海外猎客（Company Search / Contact Mining）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。
+                            <p className="text-xs leading-6 text-muted-foreground">
+                            {t("海外猎客（Company Search / Contact Mining）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。", "Lead Hunter (Company Search / Contact Mining) has no system-default workflow. Entry appears only when enterprise database configuration is available.")}
                           </p>
                         ) : (
                           <div className="grid gap-3 md:grid-cols-2">
                             <div className="grid gap-1">
-                              <span className="text-xs text-muted-foreground">系统默认 Base URL</span>
+                              <span className="text-xs text-muted-foreground">{t("系统默认 Base URL", "System default Base URL")}</span>
                               <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-foreground">
-                                {defaultInfo?.baseUrl || advisorDefaults?.baseUrl || "未配置"}
+                                {defaultInfo?.baseUrl || advisorDefaults?.baseUrl || t("未配置", "Not configured")}
                               </span>
                             </div>
                             <div className="grid gap-1">
-                              <span className="text-xs text-muted-foreground">系统默认 API Key</span>
+                              <span className="text-xs text-muted-foreground">{t("系统默认 API Key", "System default API key")}</span>
                               <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-foreground">
-                                {defaultInfo?.configured ? "已配置" : "未配置"}
+                                {defaultInfo?.configured ? t("已配置", "Configured") : t("未配置", "Not configured")}
                               </span>
                             </div>
                           </div>
@@ -948,19 +970,28 @@ export default function SettingsPage() {
 
             <section className="space-y-4">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">危险操作</p>
-                <h2 className="font-sans text-2xl font-semibold text-foreground">会话与退出</h2>
-                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">单独放出退出操作，避免与普通配置动作并排出现导致误触。</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("个性化记忆", "Personalization memory")}</p>
+                <h2 className="font-sans text-2xl font-semibold text-foreground">{t("写作记忆与风格", "Writer memory and style")}</h2>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("仅在 Settings 提供管理入口。该区块当前展示 writer 作用域下的跨会话记忆。", "Management entry exists only in Settings. This section currently shows cross-session memory in writer scope.")}</p>
+              </div>
+              <WriterMemorySettingsSection agentType="writer" />
+            </section>
+
+            <section className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("危险操作", "Danger zone")}</p>
+                <h2 className="font-sans text-2xl font-semibold text-foreground">{t("会话与退出", "Session and logout")}</h2>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("单独放出退出操作，避免与普通配置动作并排出现导致误触。", "Keep logout separate from normal configuration actions to avoid accidental clicks.")}</p>
               </div>
 
               <Card className="rounded-[1.75rem] border-destructive/30 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 font-sans text-xl text-destructive"><AlertTriangle className="h-5 w-5" />会话管理</CardTitle>
-                  <CardDescription>退出登录会清除当前服务端会话，并返回登录页。</CardDescription>
+                  <CardTitle className="flex items-center gap-2 font-sans text-xl text-destructive"><AlertTriangle className="h-5 w-5" />{t("会话管理", "Session management")}</CardTitle>
+                  <CardDescription>{t("退出登录会清除当前服务端会话，并返回登录页。", "Logging out clears current server session and returns to login page.")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut} className="rounded-full px-5"><LogOut className="mr-2 h-4 w-4" />{isLoggingOut ? "退出中..." : "退出登录"}</Button>
-                  {isDemoMode && <p className="text-xs text-muted-foreground">当前为体验账号。</p>}
+                  <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut} className="rounded-full px-5"><LogOut className="mr-2 h-4 w-4" />{isLoggingOut ? t("退出中...", "Logging out...") : t("退出登录", "Log out")}</Button>
+                  {isDemoMode && <p className="text-xs text-muted-foreground">{t("当前为体验账号。", "Current account is in demo mode.")}</p>}
                 </CardContent>
               </Card>
             </section>
@@ -968,9 +999,9 @@ export default function SettingsPage() {
 
           <aside className="space-y-4 xl:sticky xl:top-8 xl:self-start">
             <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-48px_rgba(31,41,55,0.5)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Management Brief</p>
-              <h2 className="mt-2 font-sans text-xl font-semibold text-foreground">当前配置摘要</h2>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">右侧摘要不承载操作，只帮助管理员快速确认企业状态、资源规模和治理负载。</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">{t("管理摘要", "Management brief")}</p>
+              <h2 className="mt-2 font-sans text-xl font-semibold text-foreground">{t("当前配置摘要", "Current configuration summary")}</h2>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground">{t("右侧摘要不承载操作，只帮助管理员快速确认企业状态、资源规模和治理负载。", "The side summary is read-only and helps admins quickly verify enterprise status, resource scale, and governance workload.")}</p>
             </div>
 
             {overviewMetrics.map((metric) => (
@@ -980,12 +1011,12 @@ export default function SettingsPage() {
             <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-48px_rgba(31,41,55,0.5)]">
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Workflow className="h-4 w-4 text-primary" />
-                优化原则
+                {t("优化原则", "Optimization principles")}
               </div>
               <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-                <p>先确认身份和企业状态，再处理成员准入和权限，最后才是知识库与顾问资源。</p>
-                <p>知识库与 workflow 分开展示来源，但在同一个版块内查看，减少“为什么看得到入口却用不了”的理解成本。</p>
-                <p>危险操作单独成段，和保存类动作分离，避免误触。</p>
+                <p>{t("先确认身份和企业状态，再处理成员准入和权限，最后才是知识库与顾问资源。", "Confirm identity and enterprise status first, then handle member access and permissions, then tune knowledge/advisor resources.")}</p>
+                <p>{t("知识库与 workflow 分开展示来源，但在同一个版块内查看，减少“为什么看得到入口却用不了”的理解成本。", "Show dataset and workflow sources separately but in one section to reduce confusion about unavailable entries.")}</p>
+                <p>{t("危险操作单独成段，和保存类动作分离，避免误触。", "Keep dangerous actions isolated from save actions to avoid accidental operations.")}</p>
               </div>
             </div>
           </aside>

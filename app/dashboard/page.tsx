@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import Link from "next/link"
 import { ArrowRight, ImageIcon, PenSquare, Search, Settings, Sparkles, Target, TrendingUp, Users } from "lucide-react"
 
@@ -21,8 +21,10 @@ type QuickLinkItem = {
 
 export default function DashboardPage() {
   const { user, hasFeature } = useAuth()
-  const { messages } = useI18n()
+  const { messages, locale } = useI18n()
   const { advisor, writer, imageAssistant } = useDashboardAvailability()
+  const isZh = locale === "zh"
+  const t = useCallback((zh: string, en: string) => (isZh ? zh : en), [isZh])
 
   const quickLinks = useMemo(() => {
     const items: QuickLinkItem[] = [
@@ -33,7 +35,7 @@ export default function DashboardPage() {
         description: messages.dashboardPage.settings.description,
         category: "admin",
         accentClassName: "from-slate-900 via-slate-800 to-slate-700 text-white",
-        badge: "Control",
+        badge: t("控制台", "Control"),
       },
     ]
 
@@ -45,7 +47,7 @@ export default function DashboardPage() {
         description: messages.dashboardPage.brandAdvisor.description,
         category: "advisor",
         accentClassName: "from-orange-500 via-orange-400 to-amber-300 text-white",
-        badge: "Advisor",
+        badge: t("顾问", "Advisor"),
       })
     }
 
@@ -57,7 +59,7 @@ export default function DashboardPage() {
         description: messages.dashboardPage.growthAdvisor.description,
         category: "advisor",
         accentClassName: "from-emerald-600 via-teal-500 to-cyan-400 text-white",
-        badge: "Advisor",
+        badge: t("顾问", "Advisor"),
       })
     }
 
@@ -69,7 +71,7 @@ export default function DashboardPage() {
         description: messages.dashboardPage.companySearch.description,
         category: "leadHunter",
         accentClassName: "from-sky-600 via-cyan-500 to-teal-300 text-white",
-        badge: "Signal",
+        badge: t("线索", "Signal"),
       })
     }
 
@@ -81,7 +83,7 @@ export default function DashboardPage() {
         description: messages.dashboardPage.contactMining.description,
         category: "leadHunter",
         accentClassName: "from-indigo-600 via-blue-500 to-cyan-300 text-white",
-        badge: "Signal",
+        badge: t("线索", "Signal"),
       })
     }
 
@@ -93,7 +95,7 @@ export default function DashboardPage() {
         description: messages.dashboardPage.writer.description,
         category: "creative",
         accentClassName: "from-rose-500 via-orange-400 to-amber-200 text-white",
-        badge: "Create",
+        badge: t("创作", "Create"),
       })
     }
 
@@ -105,34 +107,46 @@ export default function DashboardPage() {
         description: messages.dashboardPage.imageAssistant.description,
         category: "creative",
         accentClassName: "from-violet-600 via-fuchsia-500 to-pink-300 text-white",
-        badge: "Studio",
+        badge: t("设计", "Studio"),
       })
     }
 
     return items
-  }, [advisor, hasFeature, imageAssistant.enabled, messages, writer.enabled])
+  }, [advisor, hasFeature, imageAssistant.enabled, messages, t, writer.enabled])
 
   const groupedLinks = useMemo(() => {
     const sections = [
       {
         key: "advisor",
-        title: "策略与增长",
-        description: "把复杂问题拆成可执行判断，适合品牌定位和增长策略任务。",
+        title: t("策略与增长", "Strategy & Growth"),
+        description: t(
+          "将复杂营销问题拆成可执行动作，适合品牌定位与增长策略任务。",
+          "Break complex marketing questions into actionable plans for brand and growth work.",
+        ),
       },
       {
         key: "leadHunter",
-        title: "海外猎客",
-        description: "围绕公司搜索和联系人挖掘，按当前条件触发 workflow 获取线索。",
+        title: t("海外猎客", "Lead Hunter"),
+        description: t(
+          "围绕公司搜索与联系人挖掘，按条件触发 workflow 获取线索。",
+          "Run company search and contact mining workflows to collect qualified leads.",
+        ),
       },
       {
         key: "creative",
-        title: "内容与设计",
-        description: "围绕创意生产闭环组织写作和图像工作流。",
+        title: t("内容与设计", "Content & Design"),
+        description: t(
+          "将写作与图片设计整合到同一创意生产链路。",
+          "Unify writing and image design into a single creative production flow.",
+        ),
       },
       {
         key: "admin",
-        title: "治理与配置",
-        description: "集中维护身份、权限和企业级 AI 资源。",
+        title: t("治理与配置", "Governance & Setup"),
+        description: t(
+          "集中维护身份、权限和企业级 AI 资源。",
+          "Manage identity, permissions, and enterprise AI resources in one place.",
+        ),
       },
     ] as const
 
@@ -142,7 +156,7 @@ export default function DashboardPage() {
         items: quickLinks.filter((item) => item.category === section.key),
       }))
       .filter((section) => section.items.length > 0)
-  }, [quickLinks])
+  }, [quickLinks, t])
 
   const workspaceStats = useMemo(() => {
     const advisorCount = quickLinks.filter((item) => item.category === "advisor").length
@@ -150,12 +164,21 @@ export default function DashboardPage() {
     const creativeCount = quickLinks.filter((item) => item.category === "creative").length
 
     return [
-      { label: "可用入口", value: String(quickLinks.length) },
-      { label: "顾问工作台", value: String(advisorCount) },
-      { label: "海外猎客", value: String(leadHunterCount) },
-      { label: "创意模块", value: String(creativeCount) },
+      { label: t("可用入口", "Available entries"), value: String(quickLinks.length) },
+      { label: t("顾问工作台", "Advisor workspaces"), value: String(advisorCount) },
+      { label: t("海外猎客", "Lead hunter tools"), value: String(leadHunterCount) },
+      { label: t("创意模块", "Creative modules"), value: String(creativeCount) },
     ]
-  }, [quickLinks])
+  }, [quickLinks, t])
+
+  const enterpriseStatusLabel =
+    user?.enterpriseStatus === "active"
+      ? t("已激活", "Active")
+      : user?.enterpriseStatus === "pending"
+        ? t("待审核", "Pending")
+        : user?.enterpriseStatus === "rejected"
+          ? t("已拒绝", "Rejected")
+          : user?.enterpriseStatus || t("独立空间", "Standalone")
 
   return (
     <div className="h-full overflow-y-auto px-6 py-6 lg:px-8 lg:py-8">
@@ -192,13 +215,15 @@ export default function DashboardPage() {
             <div className="rounded-[28px] border-2 border-border bg-background p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Workspace Brief</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    {t("工作台概览", "Workspace brief")}
+                  </p>
                   <h2 className="mt-2 text-xl font-semibold text-foreground">
-                    {user?.enterpriseName || "Personal Workspace"}
+                    {user?.enterpriseName || t("个人工作台", "Personal workspace")}
                   </h2>
                 </div>
                 <div className="rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-foreground">
-                  {user?.enterpriseStatus === "active" ? "Active" : user?.enterpriseStatus || "Standalone"}
+                  {enterpriseStatusLabel}
                 </div>
               </div>
 
@@ -212,7 +237,10 @@ export default function DashboardPage() {
               </div>
 
               <div className="mt-5 rounded-[22px] border-2 border-dashed border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
-                先完成身份与资源配置，再进入顾问或创意工作台，能明显减少首次使用中的空页面和权限误判。
+                {t(
+                  "先完成身份与资源配置，再进入顾问或创意工作台，可显著减少首轮使用时的空页面与权限误判。",
+                  "Complete identity and resource setup first, then enter advisor or creative workspaces to avoid empty states and permission mismatches.",
+                )}
               </div>
             </div>
           </div>

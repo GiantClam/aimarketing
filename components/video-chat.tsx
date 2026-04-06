@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useI18n } from "@/components/locale-provider"
 import { WorkspaceComposerPanel, WorkspacePromptChips } from "@/components/workspace/workspace-primitives"
 import {
   WorkspaceActionRow,
@@ -103,6 +104,29 @@ type EditingScene = {
 }
 
 export function VideoChat() {
+  const { locale } = useI18n()
+  const isZh = locale === "zh"
+  const t = useCallback((zh: string, en: string) => (isZh ? zh : en), [isZh])
+  const formatError = useCallback(
+    (value?: string) => `${t("错误", "Error")}: ${value || t("未知错误", "Unknown error")}`,
+    [t],
+  )
+  const agentUnavailableMessage = t(
+    "当前视频 Agent 暂时不可用，请稍后重试或联系管理员检查服务配置。",
+    "Video agent is temporarily unavailable. Please try again later or contact your admin.",
+  )
+  const finalVideoMessage = t(
+    "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。",
+    "Your multi-agent marketing video is ready. You can now play, download, or share it.",
+  )
+  const conversationStatusLabel = {
+    idle: t("待命", "Idle"),
+    collecting: t("信息收集中", "Collecting"),
+    generating: t("生成中", "Generating"),
+    completed: t("已完成", "Completed"),
+    error: t("错误", "Error"),
+  } as const
+
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -239,14 +263,14 @@ export function VideoChat() {
               }))
             } else if (event.type === "generating") {
               setConversationState((prev) => ({ ...prev, status: "generating" }))
-              addMessage("system", "信息收集完成，开始生成视频...")
+              addMessage("system", t("信息收集完成，开始生成视频...", "Information collected. Starting video generation..."))
             } else if (event.type === "error") {
               setConversationState((prev) => ({ ...prev, status: "error" }))
               setLoading(false)
-              addMessage("assistant", `错误：${event.delta || event.content || "未知错误"}`)
+              addMessage("assistant", formatError(event.delta || event.content))
             }
           } catch (parseError) {
-            console.error("解析初始化事件失败:", parseError)
+            console.error("Failed to parse initialization event:", parseError)
           }
         }
       }
@@ -254,9 +278,9 @@ export function VideoChat() {
       setConversationState((prev) => ({ ...prev, status: "error" }))
       setAgentAvailable(false)
       setLoading(false)
-      addMessage("assistant", "当前视频 Agent 暂时不可用，请稍后重试或联系管理员检查服务配置。")
+      addMessage("assistant", agentUnavailableMessage)
     }
-  }, [conversationState.runId, loading, addMessage])
+  }, [agentUnavailableMessage, conversationState.runId, formatError, loading, addMessage, t])
 
   useEffect(() => {
     if (hasInitialized.current) return
@@ -266,7 +290,10 @@ export function VideoChat() {
     const welcomeMessage: Message = {
       id: `msg_${Date.now()}`,
       role: "assistant",
-      content: "欢迎！我是您的视频制作助手。我将通过几个问题帮您收集视频制作所需的信息。让我们开始吧！",
+      content: t(
+        "欢迎！我是您的视频制作助手。我将通过几个问题帮您收集视频制作所需的信息。让我们开始吧！",
+        "Welcome! I am your video creation assistant. I will ask a few questions to gather what we need. Let's begin.",
+      ),
       timestamp: Date.now(),
     }
     setMessages([welcomeMessage])
@@ -283,7 +310,7 @@ export function VideoChat() {
           {
             id: `msg_${Date.now()}_${Math.random()}`,
             role: "assistant",
-            content: "当前视频 Agent 暂时不可用，请稍后重试或联系管理员检查服务配置。",
+            content: agentUnavailableMessage,
             timestamp: Date.now(),
           },
         ])
@@ -300,7 +327,7 @@ export function VideoChat() {
     return () => {
       cancelled = true
     }
-  }, [messages.length, conversationState.status, checkVideoAgentAvailability, initializeConversation])
+  }, [messages.length, conversationState.status, checkVideoAgentAvailability, initializeConversation, agentUnavailableMessage, t])
 
   const startCrewStatusPolling = useCallback((runId: string) => {
     if (pollingRef.current) return
@@ -313,10 +340,10 @@ export function VideoChat() {
         if (data && data.status === "completed" && data.result) {
           clearInterval(pollingRef.current as NodeJS.Timeout)
           pollingRef.current = null
-          setConversationState((prev) => ({ ...prev, status: "completed" }))
-          addMessage(
-            "assistant",
-            "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。",
+      setConversationState((prev) => ({ ...prev, status: "completed" }))
+      addMessage(
+        "assistant",
+            finalVideoMessage,
             undefined,
             undefined,
             undefined,
@@ -330,7 +357,7 @@ export function VideoChat() {
         // Ignore polling errors and retry on the next interval tick.
       }
     }, 5000)
-  }, [addMessage])
+  }, [addMessage, finalVideoMessage])
 
   const handleEvent = useCallback((event: any) => {
     if (event.type === "message") {
@@ -350,12 +377,12 @@ export function VideoChat() {
       }))
     } else if (event.type === "generating") {
       setConversationState((prev) => ({ ...prev, status: "generating" }))
-      addMessage("system", "信息收集完成，开始生成视频...")
+      addMessage("system", t("信息收集完成，开始生成视频...", "Information collected. Starting video generation..."))
     } else if (event.type === "storyboard") {
       // 收到故事板数据（旧格式，兼容）
       const storyboard = event.payload?.storyboard
       if (storyboard) {
-        addMessage("system", event.delta || "故事板已生成", undefined, storyboard)
+        addMessage("system", event.delta || t("故事板已生成", "Storyboard generated"), undefined, storyboard)
         setLoading(false)
       }
     } else if (event.type === "storyboard_pending") {
@@ -363,7 +390,7 @@ export function VideoChat() {
       const storyboard = event.payload?.storyboard
       const runId = event.payload?.run_id || event.run_id || conversationState.runId
       if (storyboard) {
-        addMessage("system", event.delta || "故事板已生成，请审核并确认", undefined, {
+        addMessage("system", event.delta || t("故事板已生成，请审核并确认", "Storyboard generated. Please review and confirm."), undefined, {
           scenes: storyboard.scenes || storyboard,
           requiresConfirmation: true,
           runId: runId,
@@ -425,7 +452,7 @@ export function VideoChat() {
       // 收到需要确认的视频片段数据
       const clips = event.payload?.clips || []
       if (clips.length > 0) {
-        addMessage("system", event.delta || "所有视频片段已生成，请审核并确认", undefined, undefined, {
+        addMessage("system", event.delta || t("所有视频片段已生成，请审核并确认", "All clips generated. Please review and confirm."), undefined, undefined, {
           clips: clips,
           requiresConfirmation: true,
         })
@@ -433,24 +460,24 @@ export function VideoChat() {
       }
     } else if (event.type === "completed") {
       setConversationState((prev) => ({ ...prev, status: "completed" }))
-      addMessage("system", "视频生成完成！")
+      addMessage("system", t("视频生成完成！", "Video generation completed."))
     } else if (event.type === "run_finished") {
       const code = event.payload?.code
       const status = event.payload?.status
       const runId = event.payload?.run_id || event.run_id || conversationState.runId
       if (code === "confirmation_required") {
-        addMessage("system", event.delta || "等待您的确认…")
+        addMessage("system", event.delta || t("等待您的确认…", "Waiting for your confirmation..."))
       } else if (status === "processing") {
-        addMessage("system", event.delta || "任务已提交，后台处理中…")
+        addMessage("system", event.delta || t("任务已提交，后台处理中…", "Task submitted. Processing in the background..."))
         if (runId) {
           startCrewStatusPolling(runId)
         }
       }
     } else if (event.type === "error") {
       setLoading(false)
-      addMessage("assistant", `错误：${event.delta || event.content || "未知错误"}`)
+      addMessage("assistant", formatError(event.delta || event.content))
     }
-  }, [addMessage, conversationState.runId, startCrewStatusPolling])
+  }, [addMessage, conversationState.runId, formatError, startCrewStatusPolling, t])
 
   const startConversation = useCallback(async () => {
     // 防止重复调用
@@ -480,7 +507,7 @@ export function VideoChat() {
       })
 
       if (!res.ok || !res.body) {
-        throw new Error("请求失败")
+        throw new Error(t("请求失败", "Request failed"))
       }
 
       const reader = res.body.getReader()
@@ -504,16 +531,16 @@ export function VideoChat() {
             console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
-            console.error("解析事件失败:", e)
+            console.error("Failed to parse event:", e)
           }
         }
       }
     } catch (error) {
-      console.warn("视频 Agent 当前不可用:", error)
+      console.warn("Video agent unavailable:", error)
       setLoading(false)
-      addMessage("assistant", "当前视频 Agent 暂时不可用，请稍后重试或联系管理员检查服务配置。")
+      addMessage("assistant", agentUnavailableMessage)
     }
-  }, [conversationState.runId, loading, handleEvent, addMessage])
+  }, [agentUnavailableMessage, conversationState.runId, handleEvent, loading, addMessage, t])
 
   // 初始化对话
   useEffect(() => {
@@ -523,7 +550,10 @@ export function VideoChat() {
       const welcomeMessage: Message = {
         id: `msg_${Date.now()}`,
         role: "assistant",
-        content: "欢迎！我是您的视频制作助手。我将通过几个问题帮您收集视频制作所需的信息。让我们开始吧！",
+        content: t(
+          "欢迎！我是您的视频制作助手。我将通过几个问题帮您收集视频制作所需的信息。让我们开始吧！",
+          "Welcome! I am your video creation assistant. I will ask a few questions to gather what we need. Let's begin.",
+        ),
         timestamp: Date.now(),
       }
       setMessages([welcomeMessage])
@@ -532,7 +562,7 @@ export function VideoChat() {
         startConversation()
       }, 500)
     }
-  }, [messages.length, conversationState.status, startConversation])
+  }, [messages.length, conversationState.status, startConversation, t])
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || loading || !conversationState.runId) return
@@ -557,7 +587,7 @@ export function VideoChat() {
       })
 
       if (!res.ok || !res.body) {
-        throw new Error("请求失败")
+        throw new Error(t("请求失败", "Request failed"))
       }
 
       const reader = res.body.getReader()
@@ -581,16 +611,16 @@ export function VideoChat() {
             console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
-            console.error("解析事件失败:", e)
+            console.error("Failed to parse event:", e)
           }
         }
       }
     } catch (error) {
-      console.error("发送消息失败:", error)
+      console.error("Failed to send message:", error)
       setLoading(false)
-      addMessage("assistant", "抱歉，发生了错误。请重试。")
+      addMessage("assistant", t("抱歉，发生了错误。请重试。", "Sorry, an error occurred. Please try again."))
     }
-  }, [addMessage, conversationState, handleEvent, input, loading])
+  }, [addMessage, conversationState, handleEvent, input, loading, t])
 
   const handleOptionClick = useCallback(
     async (option: string, messageId: string) => {
@@ -622,7 +652,7 @@ export function VideoChat() {
         })
 
         if (!res.ok || !res.body) {
-          throw new Error("请求失败")
+          throw new Error(t("请求失败", "Request failed"))
         }
 
         const reader = res.body.getReader()
@@ -646,17 +676,17 @@ export function VideoChat() {
               console.log("[SSE/crewai-chat]", event)
               handleEvent(event)
             } catch (e) {
-              console.error("解析事件失败:", e)
+              console.error("Failed to parse event:", e)
             }
           }
         }
       } catch (error) {
-        console.error("发送消息失败:", error)
+        console.error("Failed to send message:", error)
         setLoading(false)
-        addMessage("assistant", "抱歉，发生了错误。请重试。")
+        addMessage("assistant", t("抱歉，发生了错误。请重试。", "Sorry, an error occurred. Please try again."))
       }
     },
-    [loading, conversationState, addMessage, handleEvent]
+    [loading, conversationState, addMessage, handleEvent, t]
   )
 
   // 处理场景重新生成
@@ -675,7 +705,7 @@ export function VideoChat() {
       })
 
       if (!res.ok) {
-        throw new Error("重新生成失败")
+        throw new Error(t("重新生成失败", "Regeneration failed"))
       }
 
       const data = await res.json()
@@ -706,12 +736,12 @@ export function VideoChat() {
         setUploadedImageUrl(data.scene.image_url || null)
       }
     } catch (error) {
-      console.error("重新生成场景失败:", error)
-      addMessage("assistant", "重新生成失败，请重试。")
+      console.error("Failed to regenerate scene:", error)
+      addMessage("assistant", t("重新生成失败，请重试。", "Regeneration failed. Please try again."))
     } finally {
       setIsRegenerating(false)
     }
-  }, [editingScene, isRegenerating, addMessage])
+  }, [editingScene, isRegenerating, addMessage, t])
 
   // 处理图片上传
   const handleUploadImage = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -719,24 +749,24 @@ export function VideoChat() {
     if (!file) return
 
     if (!file.type.startsWith("image/")) {
-      addMessage("assistant", "请上传图片文件")
+      addMessage("assistant", t("请上传图片文件", "Please upload an image file."))
       return
     }
 
     setUploadedImage(file)
     const url = URL.createObjectURL(file)
     setUploadedImageUrl(url)
-  }, [addMessage])
+  }, [addMessage, t])
 
   const handleProductImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith("image/")) {
-      addMessage("assistant", "请上传图片文件")
+      addMessage("assistant", t("请上传图片文件", "Please upload an image file."))
       return
     }
     setProductImageFile(file)
-  }, [addMessage])
+  }, [addMessage, t])
 
   const submitProductImage = useCallback(async (_messageId: string) => {
     if (!productImageFile || !conversationState.runId || productUploading) return
@@ -749,7 +779,7 @@ export function VideoChat() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       const fileName = data.fileName || data.filename || data.key || ""
-      if (!fileName) throw new Error("上传失败")
+      if (!fileName) throw new Error(t("上传失败", "Upload failed"))
       addMessage("user", fileName)
       setProductImageFile(null)
       setProductImageUrl("")
@@ -764,7 +794,7 @@ export function VideoChat() {
           message: fileName,
         }),
       })
-      if (!resp.ok || !resp.body) throw new Error("请求失败")
+      if (!resp.ok || !resp.body) throw new Error(t("请求失败", "Request failed"))
       const reader = resp.body.getReader()
       const decoder = new TextDecoder("utf-8")
       let buffer = ""
@@ -782,18 +812,18 @@ export function VideoChat() {
             console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
-            console.error("解析事件失败:", e)
+            console.error("Failed to parse event:", e)
           }
         }
       }
     } catch (err) {
-      console.error("产品图片上传失败:", err)
-      addMessage("assistant", "上传失败，请重试或粘贴图片URL")
+      console.error("Failed to upload product image:", err)
+      addMessage("assistant", t("上传失败，请重试或粘贴图片URL", "Upload failed. Please try again or paste an image URL."))
     } finally {
       setProductUploading(false)
       setLoading(false)
     }
-  }, [productImageFile, conversationState.threadId, conversationState.runId, productUploading, addMessage, handleEvent])
+  }, [productImageFile, conversationState.threadId, conversationState.runId, productUploading, addMessage, handleEvent, t])
 
   const submitProductImageUrl = useCallback(async (_messageId: string) => {
     const url = productImageUrl.trim()
@@ -812,7 +842,7 @@ export function VideoChat() {
           message: url,
         }),
       })
-      if (!resp.ok || !resp.body) throw new Error("请求失败")
+      if (!resp.ok || !resp.body) throw new Error(t("请求失败", "Request failed"))
       const reader = resp.body.getReader()
       const decoder = new TextDecoder("utf-8")
       let buffer = ""
@@ -830,17 +860,17 @@ export function VideoChat() {
             console.log("[SSE/crewai-chat]", event)
             handleEvent(event)
           } catch (e) {
-            console.error("解析事件失败:", e)
+            console.error("Failed to parse event:", e)
           }
         }
       }
     } catch (err) {
-      console.error("提交图片URL失败:", err)
-      addMessage("assistant", "提交失败，请重试")
+      console.error("Failed to submit image URL:", err)
+      addMessage("assistant", t("提交失败，请重试", "Submission failed. Please try again."))
     } finally {
       setLoading(false)
     }
-  }, [productImageUrl, conversationState.threadId, conversationState.runId, addMessage, handleEvent])
+  }, [productImageUrl, conversationState.threadId, conversationState.runId, addMessage, handleEvent, t])
 
   // 保存场景修改
   const handleSaveScene = useCallback(async () => {
@@ -862,7 +892,7 @@ export function VideoChat() {
       })
 
       if (!res.ok) {
-        throw new Error("保存失败")
+        throw new Error(t("保存失败", "Save failed"))
       }
 
       const data = await res.json()
@@ -890,10 +920,10 @@ export function VideoChat() {
       setUploadedImage(null)
       setUploadedImageUrl(null)
     } catch (error) {
-      console.error("保存场景失败:", error)
-      addMessage("assistant", "保存失败，请重试。")
+      console.error("Failed to save scene:", error)
+      addMessage("assistant", t("保存失败，请重试。", "Save failed. Please try again."))
     }
-  }, [editingScene, editedScript, uploadedImage, addMessage])
+  }, [editingScene, editedScript, uploadedImage, addMessage, t])
 
   // 取消编辑
   const handleCancelEdit = useCallback(() => {
@@ -904,9 +934,18 @@ export function VideoChat() {
   }, [])
 
   const starterPrompts = [
-    "做一个 30 秒品牌介绍视频，风格要专业、简洁、有产品质感。",
-    "围绕新品功能演示生成短视频脚本，突出 3 个核心卖点和结尾 CTA。",
-    "做一个适合社媒投放的竖版广告视频，目标是提高点击和试用转化。",
+    t(
+      "做一个 30 秒品牌介绍视频，风格要专业、简洁、有产品质感。",
+      "Create a 30-second brand intro video with a professional, clean, premium product look.",
+    ),
+    t(
+      "围绕新品功能演示生成短视频脚本，突出 3 个核心卖点和结尾 CTA。",
+      "Generate a short script for new feature demo, highlighting 3 key selling points and a closing CTA.",
+    ),
+    t(
+      "做一个适合社媒投放的竖版广告视频，目标是提高点击和试用转化。",
+      "Create a vertical ad video for social campaigns aimed at higher clicks and trial conversions.",
+    ),
   ]
 
   const handleDownloadVideo = useCallback((videoUrl: string, runId?: string) => {
@@ -918,8 +957,8 @@ export function VideoChat() {
 
   const handleShareVideo = useCallback((videoUrl: string) => {
     navigator.clipboard.writeText(videoUrl)
-    addMessage("system", "视频链接已复制到剪贴板")
-  }, [addMessage])
+    addMessage("system", t("视频链接已复制到剪贴板", "Video link copied to clipboard."))
+  }, [addMessage, t])
 
   return (
     <div className="h-full flex flex-col bg-muted/30">
@@ -945,7 +984,7 @@ export function VideoChat() {
             >
               <WorkspaceMessageFrame
                 role={message.role}
-                label={message.role === "assistant" ? "AI" : message.role === "system" ? "系统" : "你"}
+                label={message.role === "assistant" ? "AI" : message.role === "system" ? t("系统", "System") : t("你", "You")}
                 icon={message.role === "assistant" ? <Send className="h-3.5 w-3.5 text-primary" /> : undefined}
                 bodyClassName="space-y-4"
               >
@@ -953,9 +992,9 @@ export function VideoChat() {
                   <WorkspaceResultCard
                     tone="success"
                     icon={<CheckCircle2 className="h-5 w-5" />}
-                    title="最终视频合成完成"
-                    badge={<Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">完成</Badge>}
-                    description={message.content || "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。"}
+                    title={t("最终视频合成完成", "Final video ready")}
+                    badge={<Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">{t("完成", "Done")}</Badge>}
+                    description={message.content || finalVideoMessage}
                     actions={
                       <>
                         <Button
@@ -965,7 +1004,7 @@ export function VideoChat() {
                           onClick={() => handleDownloadVideo(message.finalVideo?.video_url || "", message.finalVideo?.run_id)}
                         >
                           <Upload className="mr-2 h-4 w-4" />
-                          下载视频
+                          {t("下载视频", "Download video")}
                         </Button>
                         <Button
                           size="sm"
@@ -974,7 +1013,7 @@ export function VideoChat() {
                           onClick={() => handleShareVideo(message.finalVideo?.video_url || "")}
                         >
                           <Send className="mr-2 h-4 w-4" />
-                          分享链接
+                          {t("分享链接", "Share link")}
                         </Button>
                       </>
                     }
@@ -987,7 +1026,7 @@ export function VideoChat() {
                         preload="metadata"
                         playsInline
                       >
-                        您的浏览器不支持视频播放。
+                        {t("您的浏览器不支持视频播放。", "Your browser does not support video playback.")}
                       </video>
                     </div>
                   </WorkspaceResultCard>
@@ -1003,7 +1042,7 @@ export function VideoChat() {
                 ) : null}
 
                 {message.agentOutputs && message.agentOutputs.length > 0 && (
-                  <WorkspaceSectionCard title="智能体执行过程">
+                  <WorkspaceSectionCard title={t("智能体执行过程", "Agent execution trace")}>
                     <div className="max-h-[300px] space-y-2 overflow-y-auto">
                       {message.agentOutputs.map((output, idx) => (
                         <div key={idx} className="space-y-1 text-xs">
@@ -1035,7 +1074,7 @@ export function VideoChat() {
 
                     {/* 视频片段展示 */}
                 {message.videoClips && message.videoClips.clips && message.videoClips.clips.length > 0 && (
-                      <WorkspaceSectionCard title="生成的视频片段">
+                      <WorkspaceSectionCard title={t("生成的视频片段", "Generated video clips")}>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           {message.videoClips.clips.map((clip) => (
                             <Card key={clip.task_idx} className="overflow-hidden rounded-[22px] border-2 border-border shadow-none">
@@ -1049,7 +1088,7 @@ export function VideoChat() {
                                 ) : clip.status === "failed" ? (
                                   <div className="w-full h-full flex items-center justify-center text-destructive">
                                     <div className="text-center">
-                                      <p className="text-sm font-semibold">生成失败</p>
+                                      <p className="text-sm font-semibold">{t("生成失败", "Generation failed")}</p>
                                       {clip.error && <p className="text-xs mt-1">{clip.error}</p>}
                                     </div>
                                   </div>
@@ -1061,9 +1100,9 @@ export function VideoChat() {
                               </div>
                               <CardContent className="p-3">
                                 <div className="flex items-center justify-between mb-2">
-                                  <Badge variant="outline">场景 {clip.task_idx}</Badge>
+                                  <Badge variant="outline">{t("场景", "Scene")} {clip.task_idx}</Badge>
                                   <Badge variant={clip.status === "succeeded" ? "default" : clip.status === "failed" ? "destructive" : "secondary"}>
-                                    {clip.status === "succeeded" ? "已完成" : clip.status === "failed" ? "失败" : "处理中"}
+                                    {clip.status === "succeeded" ? t("已完成", "Done") : clip.status === "failed" ? t("失败", "Failed") : t("处理中", "Processing")}
                                   </Badge>
                                 </div>
                                 <div className="flex gap-2 mt-2">
@@ -1081,7 +1120,7 @@ export function VideoChat() {
                                           if (newWindow) {
                                             newWindow.document.write(`
                                               <html>
-                                                <head><title>场景 ${clip.task_idx} 视频</title></head>
+                                                <head><title>${isZh ? `场景 ${clip.task_idx} 视频` : `Scene ${clip.task_idx} video`}</title></head>
                                                 <body style="margin:0;padding:20px;background:#000;display:flex;justify-content:center;align-items:center;min-height:100vh;">
                                                   <video src="${clip.video_url}" controls autoplay style="max-width:100%;max-height:100vh;"></video>
                                                 </body>
@@ -1091,7 +1130,7 @@ export function VideoChat() {
                                         }}
                                       >
                                         <Send className="w-4 h-4 mr-1" />
-                                        播放
+                                        {t("播放", "Play")}
                                       </Button>
                                       <Button
                                         size="sm"
@@ -1109,11 +1148,14 @@ export function VideoChat() {
                                               }),
                                             })
                                             if (res.ok) {
-                                              addMessage("system", `正在重新生成场景 ${clip.task_idx} 的视频片段...`)
+                                              addMessage(
+                                                "system",
+                                                t(`正在重新生成场景 ${clip.task_idx} 的视频片段...`, `Regenerating clip for scene ${clip.task_idx}...`),
+                                              )
                                             }
                                           } catch (error) {
-                                            console.error("重新生成失败:", error)
-                                            addMessage("assistant", "重新生成失败，请重试。")
+                                            console.error("Clip regeneration failed:", error)
+                                            addMessage("assistant", t("重新生成失败，请重试。", "Regeneration failed. Please try again."))
                                           } finally {
                                             setLoading(false)
                                           }
@@ -1121,7 +1163,7 @@ export function VideoChat() {
                                         disabled={loading}
                                       >
                                         <RefreshCw className="w-4 h-4 mr-1" />
-                                        重新生成
+                                        {t("重新生成", "Regenerate")}
                                       </Button>
                                     </>
                                   )}
@@ -1141,11 +1183,11 @@ export function VideoChat() {
                                 try {
                                   const runId = conversationState.runId
                                   if (!runId) {
-                                    addMessage("system", "错误：缺少 run_id")
+                                    addMessage("system", t("错误：缺少 run_id", "Error: missing run_id"))
                                     return
                                   }
                                   
-                                  addMessage("system", "已确认所有视频片段，开始拼接最终视频...")
+                                  addMessage("system", t("已确认所有视频片段，开始拼接最终视频...", "All clips confirmed. Starting final stitching..."))
                                   
                                   const res = await fetch("/api/crewai/video-clips/confirm", {
                                     method: "POST",
@@ -1164,7 +1206,7 @@ export function VideoChat() {
                                     // 添加最终视频消息，包含视频播放器
                                     addMessage(
                                       "assistant", 
-                                      "恭喜！您的多智能体营销视频已成功生成。现在可以播放、下载或分享了。", 
+                                      finalVideoMessage,
                                       undefined, // options
                                       undefined, // storyboard
                                       undefined, // videoClips
@@ -1174,29 +1216,38 @@ export function VideoChat() {
                                       }
                                     )
                                   } else {
-                                    console.error("[Video Clips Confirm] Error:", data.error || "未知错误")
-                                    addMessage("system", `拼接失败：${data.error || "未知错误"}`)
+                                    console.error("[Video Clips Confirm] Error:", data.error || "Unknown error")
+                                    addMessage(
+                                      "system",
+                                      t(`拼接失败：${data.error || "未知错误"}`, `Stitching failed: ${data.error || "Unknown error"}`),
+                                    )
                                   }
                                 } catch (error) {
-                                  console.error("拼接失败:", error)
-                                  addMessage("system", `拼接失败：${error instanceof Error ? error.message : "未知错误"}`)
+                                  console.error("Stitching failed:", error)
+                                  addMessage(
+                                    "system",
+                                    t(
+                                      `拼接失败：${error instanceof Error ? error.message : "未知错误"}`,
+                                      `Stitching failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+                                    ),
+                                  )
                                 } finally {
                                   setLoading(false)
                                 }
                               }}
                               disabled={loading}
                             >
-                              接受并继续拼接
+                              {t("接受并继续拼接", "Accept and continue stitching")}
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                addMessage("system", "已标记需要修改，请选择要重新生成的片段")
+                                addMessage("system", t("已标记需要修改，请选择要重新生成的片段", "Marked for revision. Choose clips to regenerate."))
                               }}
                               disabled={loading}
                             >
-                              需要修改
+                              {t("需要修改", "Needs changes")}
                             </Button>
                           </WorkspaceActionRow>
                         )}
@@ -1205,7 +1256,7 @@ export function VideoChat() {
 
                     {/* 故事板展示 */}
                 {message.storyboard && message.storyboard.scenes && message.storyboard.scenes.length > 0 && (
-                      <WorkspaceSectionCard title="故事板">
+                      <WorkspaceSectionCard title={t("故事板", "Storyboard")}>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                           {message.storyboard.scenes.map((scene) => (
                             <Card key={scene.scene_idx} className="relative overflow-hidden rounded-[22px] border-2 border-border shadow-none group">
@@ -1213,7 +1264,7 @@ export function VideoChat() {
                                 {scene.image_url ? (
                                   <img
                                     src={scene.image_url}
-                                    alt={`场景 ${scene.scene_idx}`}
+                                    alt={isZh ? `场景 ${scene.scene_idx}` : `Scene ${scene.scene_idx}`}
                                     className="w-full h-full object-cover"
                                   />
                                 ) : (
@@ -1239,7 +1290,7 @@ export function VideoChat() {
                                     disabled={loading}
                                   >
                                     <RefreshCw className="w-4 h-4 mr-1" />
-                                    重新生成
+                                    {t("重新生成", "Regenerate")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1257,13 +1308,13 @@ export function VideoChat() {
                                     disabled={loading}
                                   >
                                     <Upload className="w-4 h-4 mr-1" />
-                                    上传图片
+                                    {t("上传图片", "Upload image")}
                                   </Button>
                                 </div>
                               </div>
                               <CardContent className="p-3">
                                 <div className="flex items-center justify-between mb-2">
-                                  <Badge variant="outline">场景 {scene.scene_idx}</Badge>
+                                  <Badge variant="outline">{t("场景", "Scene")} {scene.scene_idx}</Badge>
                                   <span className="text-xs text-muted-foreground">
                                     {scene.begin_s}s - {scene.end_s}s
                                   </span>
@@ -1300,19 +1351,19 @@ export function VideoChat() {
                                   })
                                   
                                   if (res.ok) {
-                                    addMessage("system", "已确认故事板，后台继续生成视频...")
+                                    addMessage("system", t("已确认故事板，后台继续生成视频...", "Storyboard confirmed. Continuing generation..."))
                                     const rid = runId
                                     if (rid) startCrewStatusPolling(rid)
                                     setLoading(false)
                                   }
                                 } catch (error) {
-                                  console.error("确认失败:", error)
+                                  console.error("Storyboard confirmation failed:", error)
                                   setLoading(false)
                                 }
                               }}
                               disabled={loading}
                             >
-                              接受并继续
+                              {t("接受并继续", "Accept and continue")}
                             </Button>
                             <Button
                               size="sm"
@@ -1329,22 +1380,22 @@ export function VideoChat() {
                                     body: JSON.stringify({
                                       run_id: runId,
                                       confirmed: false,
-                                      feedback: "用户要求重新生成",
+                                      feedback: t("用户要求重新生成", "User requested regeneration"),
                                     }),
                                   })
                                   
                                   if (res.ok) {
-                                    addMessage("system", "已标记为拒绝，正在重新生成故事板...")
+                                    addMessage("system", t("已标记为拒绝，正在重新生成故事板...", "Marked as rejected. Regenerating storyboard..."))
                                     setLoading(false)
                                   }
                                 } catch (error) {
-                                  console.error("拒绝失败:", error)
+                                  console.error("Storyboard rejection failed:", error)
                                   setLoading(false)
                                 }
                               }}
                               disabled={loading}
                             >
-                              重新生成
+                              {t("重新生成", "Regenerate")}
                             </Button>
                           </WorkspaceActionRow>
                         )}
@@ -1372,19 +1423,21 @@ export function VideoChat() {
 
               {message.questionType === "product_image" && (
                 <div className="mt-3 space-y-2">
-                  <div className="text-xs text-muted-foreground">您可以上传图片文件或粘贴图片URL</div>
+                  <div className="text-xs text-muted-foreground">{t("您可以上传图片文件或粘贴图片URL", "You can upload an image file or paste an image URL.")}</div>
                   <div className="flex items-center gap-2">
                     <Input ref={productFileInputRef} id={`product-image-${message.id}`} type="file" accept="image/*" onChange={handleProductImageSelect} className="hidden" />
                     <Button variant="outline" type="button" onClick={() => productFileInputRef.current?.click()}>
-                      <Upload className="w-4 h-4 mr-2" /> 选择文件
+                      <Upload className="w-4 h-4 mr-2" /> {t("选择文件", "Choose file")}
                     </Button>
                     <Button onClick={() => submitProductImage(message.id)} disabled={productUploading || !productImageFile}>
-                      {productUploading ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 上传中...</>) : "上传并回答"}
+                      {productUploading ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t("上传中...", "Uploading...")}</>) : t("上传并回答", "Upload and answer")}
                     </Button>
                   </div>
                   <div className="flex items-center gap-2">
                     <Input placeholder="https://..." value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)} />
-                    <Button variant="outline" onClick={() => submitProductImageUrl(message.id)} disabled={!productImageUrl.trim()}>使用URL回答</Button>
+                    <Button variant="outline" onClick={() => submitProductImageUrl(message.id)} disabled={!productImageUrl.trim()}>
+                      {t("使用URL回答", "Answer with URL")}
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1401,7 +1454,7 @@ export function VideoChat() {
                 label={
                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    正在思考...
+                    {t("正在思考...", "Thinking...")}
                   </span>
                 }
               />
@@ -1427,11 +1480,14 @@ export function VideoChat() {
             footer={
               <>
                 <p className="text-[11px] leading-5 text-muted-foreground">
-                  支持继续回答问题、补充镜头要求或直接调整脚本方向。Enter 发送，Shift + Enter 换行。
+                  {t(
+                    "支持继续回答问题、补充镜头要求或直接调整脚本方向。Enter 发送，Shift + Enter 换行。",
+                    "Continue the conversation, add shot requirements, or adjust script direction. Enter to send, Shift+Enter for newline.",
+                  )}
                 </p>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
-                    {conversationState.status}
+                    {conversationStatusLabel[conversationState.status]}
                   </Badge>
                   <Button
                     onClick={handleSend}
@@ -1440,7 +1496,7 @@ export function VideoChat() {
                     className="h-9 rounded-full px-4 text-[11px]"
                   >
                     <Send className="mr-1.5 h-4 w-4" />
-                    发送
+                    {t("发送", "Send")}
                   </Button>
                 </div>
               </>
@@ -1455,7 +1511,7 @@ export function VideoChat() {
                   handleSend()
                 }
               }}
-              placeholder="输入您的回答或选择上面的选项..."
+              placeholder={t("输入您的回答或选择上面的选项...", "Enter your answer or choose an option above...")}
               className="min-h-[72px] resize-none border-0 bg-transparent px-3 py-2.5 shadow-none focus-visible:ring-0"
               disabled={loading || conversationState.status === "generating" || conversationState.status === "completed"}
             />
@@ -1463,7 +1519,7 @@ export function VideoChat() {
           {conversationState.status === "completed" && (
             <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
               <CheckCircle2 className="w-4 h-4 text-green-600" />
-              <span>视频生成完成，您可以在生成历史中查看</span>
+              <span>{t("视频生成完成，您可以在生成历史中查看", "Video generation completed. You can review it in history.")}</span>
             </div>
           )}
         </div>
@@ -1475,32 +1531,32 @@ export function VideoChat() {
           {editingScene && (
             <>
               <SheetHeader>
-                <SheetTitle>编辑场景 {editingScene.scene.scene_idx}</SheetTitle>
+                <SheetTitle>{t("编辑场景", "Edit scene")} {editingScene.scene.scene_idx}</SheetTitle>
                 <SheetDescription>
-                  修改场景脚本或上传新图片。修改后点击"确认"保存更改。
+                  {t('修改场景脚本或上传新图片。修改后点击"确认"保存更改。', 'Edit scene script or upload a new image. Click "Confirm" to save.')}
                 </SheetDescription>
               </SheetHeader>
 
               <div className="mt-6 space-y-6">
                 {/* 场景预览图片 */}
                 <div className="space-y-2">
-                  <Label>场景预览</Label>
+                  <Label>{t("场景预览", "Scene preview")}</Label>
                   <div className="aspect-video bg-muted rounded-lg overflow-hidden relative">
                     {uploadedImageUrl ? (
                       <img
                         src={uploadedImageUrl}
-                        alt={`场景 ${editingScene.scene.scene_idx}`}
+                        alt={isZh ? `场景 ${editingScene.scene.scene_idx}` : `Scene ${editingScene.scene.scene_idx}`}
                         className="w-full h-full object-cover"
                       />
                     ) : editingScene.scene.image_url ? (
                       <img
                         src={editingScene.scene.image_url}
-                        alt={`场景 ${editingScene.scene.scene_idx}`}
+                        alt={isZh ? `场景 ${editingScene.scene.scene_idx}` : `Scene ${editingScene.scene.scene_idx}`}
                         className="w-full h-full object-cover"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <span>暂无图片</span>
+                        <span>{t("暂无图片", "No image yet")}</span>
                       </div>
                     )}
                   </div>
@@ -1508,15 +1564,15 @@ export function VideoChat() {
 
                 {/* 场景脚本编辑 */}
                 <div className="space-y-2">
-                  <Label>场景脚本</Label>
+                  <Label>{t("场景脚本", "Scene script")}</Label>
                   <Textarea
                     value={editedScript}
                     onChange={(e) => setEditedScript(e.target.value)}
-                    placeholder="输入场景描述，多个镜头用分号（；）分隔"
+                    placeholder={t("输入场景描述，多个镜头用分号（；）分隔", "Enter scene description. Separate shots with semicolons (;).")}
                     className="min-h-[120px] resize-none"
                   />
                   <p className="text-xs text-muted-foreground">
-                    提示：每个镜头描述用分号（；）分隔
+                    {t("提示：每个镜头描述用分号（；）分隔", "Tip: separate each shot description with semicolons (;).")}
                   </p>
                 </div>
 
@@ -1532,12 +1588,12 @@ export function VideoChat() {
                       {isRegenerating ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          重新生成中...
+                          {t("重新生成中...", "Regenerating...")}
                         </>
                       ) : (
                         <>
                           <RefreshCw className="w-4 h-4 mr-2" />
-                          AI 重新生成
+                          {t("AI 重新生成", "AI regenerate")}
                         </>
                       )}
                     </Button>
@@ -1549,7 +1605,7 @@ export function VideoChat() {
                       >
                         <span>
                           <Upload className="w-4 h-4 mr-2" />
-                          上传图片
+                          {t("上传图片", "Upload image")}
                         </span>
                       </Button>
                       <Input
@@ -1566,15 +1622,15 @@ export function VideoChat() {
                 {/* 场景信息 */}
                 <div className="space-y-2 pt-4 border-t">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">场景时长</span>
+                    <span className="text-muted-foreground">{t("场景时长", "Scene duration")}</span>
                     <span className="font-medium">
                       {editingScene.scene.begin_s}s - {editingScene.scene.end_s}s
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">镜头数量</span>
+                    <span className="text-muted-foreground">{t("镜头数量", "Shot count")}</span>
                     <span className="font-medium">
-                      {editingScene.scene.clips?.length || 0} 个
+                      {editingScene.scene.clips?.length || 0} {t("个", "")}
                     </span>
                   </div>
                 </div>
@@ -1582,10 +1638,10 @@ export function VideoChat() {
 
               <SheetFooter className="mt-6">
                 <Button variant="outline" onClick={handleCancelEdit}>
-                  取消
+                  {t("取消", "Cancel")}
                 </Button>
                 <Button onClick={handleSaveScene} disabled={!editedScript.trim()}>
-                  确认
+                  {t("确认", "Confirm")}
                 </Button>
               </SheetFooter>
             </>

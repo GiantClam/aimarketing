@@ -11,6 +11,10 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 
 
+def get_send_shortcut():
+    return "Meta+Enter" if sys.platform == "darwin" else "Control+Enter"
+
+
 def login_and_get_session_cookie(base_url: str, email: str, password: str):
     deadline = time.time() + 60
     last_error = None
@@ -123,7 +127,7 @@ def main():
         page.wait_for_url(re.compile(r".*/dashboard/advisor/company-search/(new|[A-Za-z0-9_-]+)$"), timeout=20000)
         page.screenshot(path=str(out_dir / "lead-hunter-entry.png"), full_page=True)
 
-        chat_input = page.locator("input").last
+        chat_input = page.locator("textarea:visible").first
         chat_input.wait_for(timeout=20000)
 
         with page.expect_response(
@@ -133,7 +137,7 @@ def main():
             timeout=20000,
         ) as chat_response_info:
             chat_input.fill(args.query)
-            chat_input.press("Enter")
+            chat_input.press(get_send_shortcut())
 
         chat_payload = chat_response_info.value.json()
         task_id = str(chat_payload.get("task_id") or "")

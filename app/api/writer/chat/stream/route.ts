@@ -5,8 +5,7 @@ import { requireSessionUser } from "@/lib/auth/guards"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
 import { getWriterConversation, listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
-import { runWriterSkillsTurn } from "@/lib/writer/skills"
-import { createWriterSseStream } from "@/lib/writer/stream"
+import { runWriterSkillsTurn, type WriterProgressEvent } from "@/lib/writer/skills"
 import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
@@ -17,6 +16,27 @@ const STREAM_HEADERS = {
   "Cache-Control": "no-cache, no-transform",
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
+}
+const WRITER_STREAM_CHUNK_SIZE = 120
+const WRITER_STREAM_CHUNK_DELAY_MS = 16
+
+function buildSseEvent(payload: Record<string, unknown>) {
+  return `data: ${JSON.stringify(payload)}\n\n`
+}
+
+function splitAnswerIntoChunks(answer: string) {
+  const normalized = answer.trim()
+  if (!normalized) return []
+
+  const chunks: string[] = []
+  for (let index = 0; index < normalized.length; index += WRITER_STREAM_CHUNK_SIZE) {
+    chunks.push(normalized.slice(index, index + WRITER_STREAM_CHUNK_SIZE))
+  }
+  return chunks
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function normalizeWriterPreloadedBrief(input: unknown): WriterPreloadedBrief | null {
@@ -36,17 +56,12 @@ function normalizeWriterPreloadedBrief(input: unknown): WriterPreloadedBrief | n
 }
 
 export async function POST(req: NextRequest) {
-  let userId: number | null = null
-  let pendingConversationId: string | null = null
-
   try {
     const body = await req.json()
     const auth = await requireSessionUser(req, "copywriting_generation")
     if ("response" in auth) {
       return auth.response
     }
-    userId = auth.user.id
-
     const platform = normalizeWriterPlatform(body?.platform)
     const mode = normalizeWriterMode(platform, body?.mode)
     const language = normalizeWriterLanguage(body?.language)
@@ -81,59 +96,115 @@ export async function POST(req: NextRequest) {
       mode,
       language,
     })
-    pendingConversationId = pending.conversationId
+    const taskId = `writer_stream_${Date.now()}`
+    const encoder = new TextEncoder()
 
-    const turnResult = await runWriterSkillsTurn({
-      query: userQuery,
-      preloadedBrief,
-      userId: auth.user.id,
-      conversationId: pending.conversationId,
-      agentType: "writer",
-      platform,
-      mode,
-      preferredLanguage: language,
-      history,
-      conversationStatus: existingConversation?.status as WriterConversationStatus | undefined,
-      enterpriseId: auth.user.enterpriseId,
-    })
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (payload: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(buildSseEvent(payload)))
+        }
+        const sendProgressEvent = (event: WriterProgressEvent) => {
+          sendEvent({
+            event: "progress",
+            task_id: taskId,
+            conversation_id: pending.conversationId,
+            type: event.type,
+            label: event.label,
+            detail: event.detail,
+            status: event.status,
+            at: typeof event.at === "number" && Number.isFinite(event.at) ? event.at : Date.now(),
+          })
+        }
 
-    const status = turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready"
+        sendEvent({
+          event: "conversation_init",
+          task_id: taskId,
+          conversation_id: pending.conversationId,
+          conversation: pending.conversation,
+        })
+        sendProgressEvent({
+          type: "request_submitted",
+          label: "Writer request submitted, preparing task",
+          status: "running",
+          at: Date.now(),
+        })
 
-    await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, turnResult.answer, {
-      status,
-      imagesRequested: false,
-      language,
-      platform: turnResult.routing.renderPlatform,
-      mode: turnResult.routing.renderMode,
-      diagnostics: turnResult.diagnostics,
-    })
+        try {
+          const turnResult = await runWriterSkillsTurn({
+            query: userQuery,
+            preloadedBrief,
+            userId: auth.user.id,
+            conversationId: pending.conversationId,
+            agentType: "writer",
+            platform,
+            mode,
+            preferredLanguage: language,
+            history,
+            conversationStatus: existingConversation?.status as WriterConversationStatus | undefined,
+            enterpriseId: auth.user.enterpriseId,
+            onProgress: async (event) => {
+              sendProgressEvent(event)
+            },
+          })
 
-    const updatedConversation = (await listWriterMessages(auth.user.id, pending.conversationId, 1)).conversation
-    if (!updatedConversation) {
-      throw new Error("writer_stream_conversation_missing")
-    }
-    const finalConversation = updatedConversation
+          const status = turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready"
+          await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, turnResult.answer, {
+            status,
+            imagesRequested: false,
+            language,
+            platform: turnResult.routing.renderPlatform,
+            mode: turnResult.routing.renderMode,
+            diagnostics: turnResult.diagnostics,
+          })
 
-    const stream = createWriterSseStream({
-      answer: turnResult.answer,
-      conversation: finalConversation,
-      taskId: `writer_stream_${Date.now()}`,
-      outcome: turnResult.outcome,
-      diagnostics: turnResult.diagnostics,
+          const updatedConversation = (await listWriterMessages(auth.user.id, pending.conversationId, 1)).conversation
+          if (!updatedConversation) {
+            throw new Error("writer_stream_conversation_missing")
+          }
+
+          const chunks = splitAnswerIntoChunks(turnResult.answer)
+          for (const chunk of chunks) {
+            sendEvent({
+              event: "message",
+              task_id: taskId,
+              conversation_id: pending.conversationId,
+              answer: chunk,
+            })
+            await sleep(WRITER_STREAM_CHUNK_DELAY_MS)
+          }
+
+          sendEvent({
+            event: "message_end",
+            task_id: taskId,
+            conversation_id: pending.conversationId,
+            answer: turnResult.answer,
+            conversation: updatedConversation,
+            outcome: turnResult.outcome,
+            diagnostics: turnResult.diagnostics,
+          })
+          controller.close()
+        } catch (error) {
+          console.error("writer.chat.stream.error", error)
+          const failedMessage = `Request failed: ${error instanceof Error ? error.message : "writer_stream_failed"}`
+          await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, failedMessage, {
+            status: "failed",
+            imagesRequested: false,
+          }).catch(() => null)
+
+          sendEvent({
+            event: "error",
+            task_id: taskId,
+            conversation_id: pending.conversationId,
+            error: error instanceof Error ? error.message : "writer_stream_failed",
+          })
+          controller.close()
+        }
+      },
     })
 
     return new Response(stream, { headers: STREAM_HEADERS })
   } catch (error: any) {
-    console.error("writer.chat.stream.error", error)
-
-    if (userId && pendingConversationId) {
-      const failedMessage = `Request failed: ${error instanceof Error ? error.message : "writer_stream_failed"}`
-      await updateWriterLatestAssistantMessage(userId, pendingConversationId, failedMessage, {
-        status: "failed",
-        imagesRequested: false,
-      }).catch(() => null)
-    }
-
     return NextResponse.json({ error: error?.message || "writer_stream_failed" }, { status: 500 })
   }
 }

@@ -148,6 +148,8 @@ const WRITER_PLATFORM_GUIDE: Record<WriterPlatform, WriterPlatformGuide> = {
     promptRules: [
       "Follow a research-first workflow.",
       "Write as a polished article for direct publishing, not as a writing brief.",
+      "Generate one publish-ready H1 title that is specific and click-worthy without being clickbait.",
+      "Prefer title structures such as: problem question + payoff, contrarian claim + explanation, or numbered methods + result.",
       "Use H2 sections when they improve readability, but do not force a rigid intro-body-conclusion template.",
       "Allow the article to open directly with a strong first paragraph when that reads better.",
       "Allow the ending to be a natural closing paragraph or a labeled conclusion only when appropriate.",
@@ -155,6 +157,8 @@ const WRITER_PLATFORM_GUIDE: Record<WriterPlatform, WriterPlatformGuide> = {
     ],
     articleStructureGuidance: [
       "Write as a complete article suitable for WeChat publishing.",
+      "Use a high-retention article flow: hook opening, problem framing, mechanism/method breakdown, evidence/case, common pitfalls, and actionable close.",
+      "The opening should quickly create tension or curiosity and make the reader want the next section.",
       "You may use H2 headings where they improve readability.",
       "Do not force labeled sections such as intro or conclusion unless the topic naturally benefits from them.",
       "When images help readability, place `![Cover](writer-asset://cover)` near the opening and add only the inline image placeholders that the article actually needs, such as `writer-asset://inline-1` or `writer-asset://inline-2`, close to the most visual sections.",
@@ -3513,15 +3517,55 @@ function safeNormalizeWechatTitle(markdown: string, languageLabel: string) {
     const normalized = title.trim().toLowerCase()
     return /^(?:untitled(?: article)?|new article|draft|article|post|thread)$/i.test(normalized) || /^(?:未命名文章|新建文章|文章|标题)$/.test(title.trim())
   }
+  const hasViralSignal = (title: string, chineseContext: boolean) => {
+    if (!title) return false
+    if (chineseContext) {
+      if (/[？?]/u.test(title) && /(怎么|如何|为什么|凭什么|到底|真相|误区|避坑|底层逻辑|关键)/u.test(title)) {
+        return true
+      }
+      if (/\d+\s*(个|条|步|招|点|种|类|大)/u.test(title)) return true
+      if (/(方法|步骤|策略|清单|模板|框架|拆解|复盘|避坑|误区|底层逻辑|别再|不是.*而是)/u.test(title)) {
+        return true
+      }
+      return false
+    }
+    return (
+      (/[?]/.test(title) && /(how|why|what|mistake|avoid|framework|playbook|strategy)/i.test(title)) ||
+      /\b\d+\s*(ways|steps|mistakes|frameworks|rules|tips)\b/i.test(title)
+    )
+  }
+  const buildViralSubject = (title: string, keywordSignal: KeywordSignal | null, chineseContext: boolean) => {
+    const fromKeyword = normalizeKeywordCandidate(keywordSignal?.value || "")
+    if (fromKeyword) return fromKeyword
+    const normalized = normalizeTitleCandidate(title, "")
+      .replace(/[|｜:：\-—].*$/u, "")
+      .replace(/[“”"'《》]/gu, "")
+      .trim()
+    if (!normalized) return chineseContext ? "这个话题" : "this topic"
+    return chineseContext ? normalized.slice(0, 16) : normalized.slice(0, 48)
+  }
   const toCompellingTitle = (baseTitle: string, keywordSignal: KeywordSignal | null) => {
     const normalizedBaseTitle = normalizeTitleCandidate(baseTitle, fallbackTitle)
+    const baseWasGeneric = isGenericTitle(normalizedBaseTitle)
     const chineseContext = languageLabel === "Chinese" || /[\u4e00-\u9fff]/u.test(normalizedBaseTitle)
     const separator = chineseContext ? "\uFF5C" : ": "
     let nextTitle = normalizedBaseTitle
     if (keywordSignal?.value && !keywordInTitle(nextTitle, keywordSignal.value)) {
-      const shouldPrefix = keywordSignal.confidence === "high" || isGenericTitle(normalizedBaseTitle)
+      const shouldPrefix = keywordSignal.confidence === "high" || baseWasGeneric
       if (shouldPrefix) {
         nextTitle = `${keywordSignal.value}${separator}${normalizedBaseTitle}`
+      }
+    }
+    if (!hasViralSignal(nextTitle, chineseContext)) {
+      const subject = buildViralSubject(nextTitle, keywordSignal, chineseContext)
+      if (chineseContext) {
+        nextTitle = baseWasGeneric
+          ? `${subject}怎么做？3个关键步骤讲透`
+          : `${subject}：3个关键方法+3个避坑点`
+      } else {
+        nextTitle = baseWasGeneric
+          ? `${subject}: 3 steps to get results`
+          : `${subject}: 3 practical strategies and key pitfalls`
       }
     }
     const maxLength = chineseContext ? 38 : 110
@@ -3907,6 +3951,12 @@ async function buildSystemPrompt(
     !transformMode && research.extracts.length === 0
       ? "Depth requirement: avoid generic filler and explain concrete mechanisms, trade-offs, and practical implications."
       : null,
+    !transformMode && routing.renderPlatform === "wechat" && routing.renderMode === "article"
+      ? "WeChat headline requirement: the H1 must be specific and share-worthy. Avoid generic titles and empty slogans."
+      : null,
+    !transformMode && routing.renderPlatform === "wechat" && routing.renderMode === "article"
+      ? "WeChat structure requirement: keep a retention-oriented flow (hook -> problem framing -> method breakdown -> evidence/case -> pitfalls -> actionable close)."
+      : null,
     "Do not reveal chain-of-thought, hidden reasoning, or internal analysis.",
     transformMode
       ? "Preserve the source text's structure and scope. Do not add titles, headings, markdown sections, or image placeholders unless the user explicitly asks for them or they already exist in the source text."
@@ -4012,6 +4062,12 @@ async function buildUserPrompt(
       : research.extracts.length > 0
         ? "- Depth requirement: keep the draft insight-dense; each major section should include concrete source-grounded details and explain why they matter."
         : "- Depth requirement: keep the draft insight-dense with concrete mechanisms, trade-offs, and practical implications.",
+    !transformMode && routing.renderPlatform === "wechat" && routing.renderMode === "article"
+      ? "- Title requirement: produce one strong publish-ready H1, not a generic working title."
+      : "",
+    !transformMode && routing.renderPlatform === "wechat" && routing.renderMode === "article"
+      ? "- Structure requirement: use a high-retention WeChat flow (hook opening -> problem framing -> method breakdown -> evidence/case -> pitfalls -> actionable close)."
+      : "",
     "- The result must be clean Markdown suitable for continued editing and publishing.",
     "- Keep the structure native to the selected scenario, platform, and output form.",
     "- If the length target is numeric, do not exceed it.",
@@ -4619,4 +4675,5 @@ export const __writerTestHooks = {
   normalizeReadableWebContent,
   buildResearchContext,
   buildSystemPrompt,
+  postProcessWriterDraft,
 }

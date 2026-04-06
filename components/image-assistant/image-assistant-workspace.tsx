@@ -40,6 +40,7 @@ import {
   removePendingAssistantTask,
   savePendingAssistantTask,
 } from "@/lib/assistant-task-store"
+import { useSessionRecoveryBootstrap } from "@/lib/hooks/use-session-recovery-bootstrap"
 import type { AppMessages } from "@/lib/i18n/messages"
 import { exportImageAssistantDataUrl, loadImageForCanvas, renderImageAssistantLayersToCanvas } from "@/lib/image-assistant/export"
 import {
@@ -55,7 +56,6 @@ import {
 } from "@/lib/query/workspace-cache"
 import {
   getImageAssistantSessionContentCache,
-  isImageAssistantSessionContentCacheFresh,
   saveImageAssistantSessionContentCache,
 } from "@/lib/image-assistant/session-store"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
@@ -157,6 +157,16 @@ type PendingConversationTurn = {
 type PromptQuestionSelectionContext = {
   sourceMessageId: string
   questionId: string
+}
+
+function getPromptQuestionSelectionKey(input: {
+  sourceMessageId?: string | null
+  questionId?: string | null
+}) {
+  const sourceMessageId = typeof input.sourceMessageId === "string" ? input.sourceMessageId.trim() : ""
+  const questionId = typeof input.questionId === "string" ? input.questionId.trim() : ""
+  if (!sourceMessageId || !questionId) return null
+  return `${sourceMessageId}:${questionId}`
 }
 
 type PreviewImageState = {
@@ -1501,6 +1511,7 @@ const PROMPT_PRESETS: PromptPreset[] = [
 
 export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId: string | null }) {
   const queryClient = useQueryClient()
+  const runSessionRecoveryBootstrap = useSessionRecoveryBootstrap()
   const { messages: i18n } = useI18n()
   const imageCopy = i18n.imageAssistant
   const isEnglish = imageCopy.assistantName === "Image design assistant"
@@ -1579,6 +1590,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     getStoredPendingTurn(initialSessionId),
   )
   const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0)
+  const [locallyResolvedPromptQuestionKeys, setLocallyResolvedPromptQuestionKeys] = useState<Record<string, true>>({})
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [zoomLevel, setZoomLevel] = useState<"fit" | number>("fit")
   const [isComposerDragActive, setIsComposerDragActive] = useState(false)
@@ -1627,6 +1639,19 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const deferredRouteSessionIdRef = useRef<string | null>(null)
   const previousPendingTurnIdRef = useRef<string | null>(pendingTurn?.id || null)
   const previousPendingTurnAttachmentsRef = useRef<PendingAttachment[]>(pendingTurn?.attachments || [])
+  const pendingGuidedQuestionKeyRef = useRef<string | null>(null)
+
+  const rollbackPendingGuidedSelection = useCallback(() => {
+    const selectionKey = pendingGuidedQuestionKeyRef.current
+    if (!selectionKey) return
+    pendingGuidedQuestionKeyRef.current = null
+    setLocallyResolvedPromptQuestionKeys((current) => {
+      if (!current[selectionKey]) return current
+      const next = { ...current }
+      delete next[selectionKey]
+      return next
+    })
+  }, [])
 
   const resetCanvasHistory = useCallback(() => {
     setUndoStack([])
@@ -1697,7 +1722,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         }
         const shouldForceFetch = Boolean(options?.force)
         const nextDetail = shouldForceFetch
-          ? await fetchWorkspaceQueryData(queryClient, queryOptions)
+          ? await queryClient.fetchQuery({ ...queryOptions, staleTime: 0 })
           : options?.background
             ? await fetchWorkspaceQueryData(queryClient, queryOptions)
             : await ensureWorkspaceQueryData(queryClient, queryOptions)
@@ -2399,6 +2424,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   useEffect(() => {
     if (sessionId) {
+      pendingGuidedQuestionKeyRef.current = null
+      setLocallyResolvedPromptQuestionKeys({})
       const cachedDetail = getImageAssistantSessionContentCache(sessionId)
       const nextMessageLimit = Math.max(INITIAL_MESSAGE_LIMIT, cachedDetail?.detail.meta.messages_loaded || 0)
       const nextVersionLimit = Math.max(INITIAL_VERSION_LIMIT, cachedDetail?.detail.meta.versions_loaded || 0)
@@ -2408,28 +2435,41 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setVersionLimit(nextVersionLimit)
       shouldScrollMessagesToBottomRef.current = true
 
-      if (cachedDetail) {
-        setDetail(cachedDetail.detail)
-        setSelectedVersionId(
-          cachedDetail.detail.session.current_version_id || cachedDetail.detail.versions[0]?.id || null,
-        )
-      } else {
-        setDetail(null)
-        setSelectedVersionId(null)
-        previousDisplayMessageCountRef.current = 0
-      }
-
-      if (!cachedDetail || !isImageAssistantSessionContentCacheFresh(cachedDetail) || shouldRefreshFromRoute) {
-        void refreshDetail(sessionId, {
-          mode: "content",
-          background: Boolean(cachedDetail),
-          messageLimit: nextMessageLimit,
-          versionLimit: nextVersionLimit,
-        }).catch((error) => {
+      const stopRecovery = runSessionRecoveryBootstrap({
+        entityId: sessionId,
+        cacheSnapshot: cachedDetail,
+        hasVisibleContent: Boolean(cachedDetail?.detail.messages.length || cachedDetail?.detail.versions.length),
+        forceRefresh: shouldRefreshFromRoute,
+        restoreCache: (cache) => {
+          setDetail(cache.detail)
+          setSelectedVersionId(
+            cache.detail.session.current_version_id || cache.detail.versions[0]?.id || null,
+          )
+        },
+        onMissingCache: () => {
+          setDetail(null)
+          setSelectedVersionId(null)
+          previousDisplayMessageCountRef.current = 0
+        },
+        reconcile: async (recovery) => {
+          await refreshDetail(sessionId, {
+            mode: "content",
+            background: recovery.background,
+            force: recovery.forceRefresh,
+            messageLimit: nextMessageLimit,
+            versionLimit: nextVersionLimit,
+          })
+        },
+        onReconcileError: (error) => {
           console.error("image-assistant.session-summary-load-failed", error)
-        })
+        },
+      })
+      return () => {
+        stopRecovery()
       }
     } else {
+      pendingGuidedQuestionKeyRef.current = null
+      setLocallyResolvedPromptQuestionKeys({})
       activeJobAbortRef.current?.abort()
       activeJobAbortRef.current = null
       setPendingTurn(null)
@@ -2449,7 +2489,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       setMessageLimit(INITIAL_MESSAGE_LIMIT)
       setVersionLimit(INITIAL_VERSION_LIMIT)
     }
-  }, [initialSessionId, refreshDetail, resetCanvasHistory, sessionId])
+  }, [initialSessionId, refreshDetail, resetCanvasHistory, runSessionRecoveryBootstrap, sessionId])
 
   useEffect(() => {
     if (!sessionId || !detail) return
@@ -2457,7 +2497,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   }, [detail, sessionId])
 
   useEffect(() => {
-    const pendingTask = findImagePendingTask(sessionId) || (!sessionId ? findLatestImagePendingTask() : null)
+    const pendingTask = findImagePendingTask(sessionId) || findLatestImagePendingTask()
     const targetSessionId = sessionId || pendingTask?.sessionId || null
     if (!pendingTask || !targetSessionId) return
 
@@ -2489,6 +2529,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           }
           removePendingAssistantTask(pendingTask.taskId)
           if (!cancelled) {
+            rollbackPendingGuidedSelection()
             setJobError(formatImageAssistantErrorMessage("image_assistant_task_poll_timeout", imageCopy))
             setPendingTurn(null)
             setIsBusy(false)
@@ -2502,19 +2543,37 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             throw new Error(`task_status_http_${response.status}`)
           }
           const payload = (await response.json().catch(() => null)) as {
-            data?: { status?: string; result?: { error?: string; outcome?: string } | null }
+            data?: {
+              status?: string
+              result?: {
+                error?: string
+                outcome?: string
+                version_id?: string | null
+                follow_up_message_id?: string | null
+              } | null
+            }
           } | null
           const status = payload?.data?.status
           const outcome = payload?.data?.result?.outcome
+          const versionId =
+            typeof payload?.data?.result?.version_id === "string" && payload.data.result.version_id.trim()
+              ? payload.data.result.version_id.trim()
+              : null
+          const followUpMessageId =
+            typeof payload?.data?.result?.follow_up_message_id === "string" &&
+            payload.data.result.follow_up_message_id.trim()
+              ? payload.data.result.follow_up_message_id.trim()
+              : null
           consecutivePollFailures = 0
 
           if (status === "success" || status === "approved") {
             shouldScrollMessagesToBottomRef.current = true
+            const refreshMode: SessionLoadMode = outcome === "needs_clarification" ? "summary" : "content"
             if (outcome !== "needs_clarification") {
               await invalidateImageAssistantSessionQueries(queryClient, targetSessionId)
             }
             const refreshedDetail = await refreshDetail(targetSessionId, {
-              mode: outcome === "needs_clarification" ? "summary" : "content",
+              mode: refreshMode,
               force: true,
             }).catch((error) => {
               console.error("image-assistant.pending-task.refresh-failed", error)
@@ -2523,10 +2582,43 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             if (refreshedDetail) {
               saveImageAssistantSessionContentCache(targetSessionId, refreshedDetail)
             }
+            const shouldSyncTurn = !hasDirectTurnMaterialized({
+              detail: refreshedDetail,
+              outcome,
+              followUpMessageId,
+              versionId,
+            })
+            if (shouldSyncTurn) {
+              for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
+                const retryDetail = await refreshDetail(targetSessionId, {
+                  mode: refreshMode,
+                  force: true,
+                  background: true,
+                }).catch((error) => {
+                  console.error("image-assistant.pending-task.retry-refresh-failed", error)
+                  return null
+                })
+                if (retryDetail) {
+                  saveImageAssistantSessionContentCache(targetSessionId, retryDetail)
+                }
+                if (
+                  hasDirectTurnMaterialized({
+                    detail: retryDetail,
+                    outcome,
+                    followUpMessageId,
+                    versionId,
+                  })
+                ) {
+                  break
+                }
+                await wait(200 + attempt * 180)
+              }
+            }
             if (deferredRouteSessionIdRef.current === targetSessionId) {
               syncSessionRoute(targetSessionId)
               deferredRouteSessionIdRef.current = null
             }
+            pendingGuidedQuestionKeyRef.current = null
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
               setPendingTurn(null)
@@ -2542,6 +2634,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             }
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
+              rollbackPendingGuidedSelection()
               setJobError(formatImageAssistantErrorMessage(payload?.data?.result?.error || status || "image_generation_failed", imageCopy))
               setPendingTurn(null)
               setIsBusy(false)
@@ -2558,6 +2651,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             }
             removePendingAssistantTask(pendingTask.taskId)
             if (!cancelled) {
+              rollbackPendingGuidedSelection()
               setJobError(formatImageAssistantErrorMessage("image_assistant_task_status_unavailable", imageCopy))
               setPendingTurn(null)
               setIsBusy(false)
@@ -2574,7 +2668,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return () => {
       cancelled = true
     }
-  }, [imageCopy, pendingTaskRefreshKey, queryClient, refreshDetail, sessionId, syncSessionRoute])
+  }, [imageCopy, pendingTaskRefreshKey, pendingTurn?.id, queryClient, refreshDetail, rollbackPendingGuidedSelection, sessionId, syncSessionRoute])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -3009,6 +3103,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     const submissionSizePreset = options?.sizePreset || latestOrchestration?.brief.size_preset || sizePreset
     const submissionResolution = options?.resolution || latestOrchestration?.brief.resolution || resolution
     const submissionGuidedSelection = options?.guidedSelection || null
+    const submissionGuidedSelectionKey = getPromptQuestionSelectionKey({
+      sourceMessageId: submissionGuidedSelection?.source_message_id,
+      questionId: submissionGuidedSelection?.question_id,
+    })
     const hasTurnInput = Boolean(submissionPrompt || pendingAttachments.length || hasBriefPatchInput(submissionBrief))
 
     if (!hasTurnInput) {
@@ -3151,6 +3249,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
         if (!options?.preservePrompt) {
           setPrompt("")
         }
+        if (submissionGuidedSelectionKey) {
+          pendingGuidedQuestionKeyRef.current = submissionGuidedSelectionKey
+          setLocallyResolvedPromptQuestionKeys((current) =>
+            current[submissionGuidedSelectionKey] ? current : { ...current, [submissionGuidedSelectionKey]: true },
+          )
+        }
 
         const shouldSyncDirectTurn = !hasDirectTurnMaterialized({
           detail: mergedDirectDetail,
@@ -3207,7 +3311,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       })
       setSessionId(taskData.session_id)
       syncSessionRoute(taskData.session_id)
-      setPendingTaskRefreshKey(Date.now())
+      setPendingTaskRefreshKey((current) => current + 1)
+      if (submissionGuidedSelectionKey) {
+        pendingGuidedQuestionKeyRef.current = submissionGuidedSelectionKey
+        setLocallyResolvedPromptQuestionKeys((current) =>
+          current[submissionGuidedSelectionKey] ? current : { ...current, [submissionGuidedSelectionKey]: true },
+        )
+      }
       if (!options?.preservePrompt) {
         setPrompt("")
       }
@@ -4564,9 +4674,21 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                               const messageOrchestration = getMessageOrchestration(message)
                               const promptQuestions =
                                 message.role === "assistant" ? messageOrchestration?.prompt_questions || [] : []
+                              const visiblePromptQuestions =
+                                message.role === "assistant"
+                                  ? promptQuestions.filter(
+                                      (question) =>
+                                        !locallyResolvedPromptQuestionKeys[
+                                          getPromptQuestionSelectionKey({
+                                            sourceMessageId: message.id,
+                                            questionId: question.id,
+                                          }) || ""
+                                        ],
+                                    )
+                                  : []
                               const isPromptQuestionMessageInteractive =
                                 message.role === "assistant" &&
-                                Boolean(promptQuestions.length) &&
+                                Boolean(visiblePromptQuestions.length) &&
                                 latestPromptQuestionMessageId === message.id
                               const parsedContent = parseMessageBubbleContent(message.content)
                               const hasBubbleMeta = parsedContent.meta.length > 0
@@ -4730,9 +4852,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                         }
                                       />
                                     ) : null}
-                                    {message.role === "assistant" && promptQuestions.length && isPromptQuestionMessageInteractive ? (
+                                    {message.role === "assistant" &&
+                                    visiblePromptQuestions.length &&
+                                    isPromptQuestionMessageInteractive ? (
                                       <div className="mt-3 space-y-3">
-                                        {promptQuestions.map((question) => (
+                                        {visiblePromptQuestions.map((question) => (
                                           <div
                                             key={`${message.id}:${question.id}`}
                                             data-testid={`image-prompt-question-${question.id}`}

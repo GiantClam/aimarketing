@@ -22,10 +22,10 @@ Pick the platform first, then write for that platform's native behavior.
 
 Supported platforms:
 
-- WeChat Official Account / 微信公众号
-- Xiaohongshu / 小红书
-- Weibo / 微博
-- Douyin / 抖音
+- WeChat Official Account
+- Xiaohongshu
+- Weibo
+- Douyin
 
 If the user asks for one idea adapted into multiple China-platform versions, write separate drafts for each requested platform instead of forcing one shared format.
 
@@ -39,7 +39,7 @@ If the user asks for one idea adapted into multiple China-platform versions, wri
 - Keep facts grounded in the provided material. Do not invent precise metrics, customer stories, or unsupported claims.
 - Do not reopen broad discovery if the brief is already usable.
 
-## WeChat Official Account / 微信公众号 Branch
+## WeChat Official Account
 
 Use for:
 
@@ -86,7 +86,7 @@ Avoid:
 - Heavy promotional tone
 - Formulaic article scaffolding
 
-## Xiaohongshu / 小红书 Branch
+## Xiaohongshu
 
 Use for:
 
@@ -133,7 +133,7 @@ Avoid:
 - Broad generic life advice with no scenario anchor
 - Hard-sell copy that feels ad-first
 
-## Weibo / 微博 Branch
+## Weibo
 
 Use for:
 
@@ -177,7 +177,7 @@ Avoid:
 - Too much context before the point
 - Hashtag stuffing
 
-## Douyin / 抖音 Branch
+## Douyin
 
 Use for:
 

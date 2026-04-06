@@ -35,6 +35,30 @@ function buildConversationTitle(query: string) {
   return normalized.slice(0, 80)
 }
 
+function isGenericConversationTitle(title: string | null | undefined) {
+  const normalized = (title || "").replace(/\s+/g, " ").trim()
+  if (!normalized) return true
+
+  const lowered = normalized.toLowerCase()
+  if (
+    lowered === "new chat" ||
+    lowered === "new conversation" ||
+    lowered === "new session" ||
+    lowered === "untitled" ||
+    lowered === "untitled chat" ||
+    lowered === "untitled conversation" ||
+    lowered === "untitled session" ||
+    lowered === "draft" ||
+    lowered === DEFAULT_CONVERSATION_TITLE.toLowerCase() ||
+    lowered === "\u65b0\u4f1a\u8bdd" ||
+    lowered === "\u65b0\u5efa\u4f1a\u8bdd"
+  ) {
+    return true
+  }
+
+  return /^(?:new|untitled)\b/.test(lowered)
+}
+
 function resolveAdvisorType(advisorType: string | null | undefined): LeadHunterAdvisorType {
   const normalized = normalizeLeadHunterAdvisorType(advisorType)
   if (!normalized) {
@@ -255,7 +279,7 @@ export async function appendLeadHunterMessage(
     .update(leadHunterConversations)
     .set({
       updatedAt: new Date(),
-      title: conversation.title || buildConversationTitle(query),
+      title: isGenericConversationTitle(conversation.title) ? buildConversationTitle(query) : conversation.title,
     })
     .where(eq(leadHunterConversations.id, conversation.id))
 

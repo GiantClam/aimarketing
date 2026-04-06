@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
 
 import { useAuth } from "@/components/auth-provider"
+import type { PermissionMap } from "@/lib/enterprise/constants"
 
 type DashboardAdvisorAvailability = {
   brandStrategy: boolean
@@ -51,6 +52,44 @@ const DEFAULT_AVAILABILITY: DashboardAvailabilityState = {
 }
 
 const DashboardAvailabilityContext = createContext<DashboardAvailabilityState>(DEFAULT_AVAILABILITY)
+
+function hasPermission(user: { enterpriseRole?: string | null; enterpriseStatus?: string | null; permissions?: PermissionMap }, key: keyof PermissionMap) {
+  const isEnterpriseAdmin = user.enterpriseRole === "admin" && user.enterpriseStatus === "active"
+  if (isEnterpriseAdmin) return true
+  return Boolean(user.permissions?.[key])
+}
+
+function buildPermissionFallback(user: {
+  enterpriseRole?: string | null
+  enterpriseStatus?: string | null
+  permissions?: PermissionMap
+}): DashboardAvailabilityState {
+  const advisorEnabled = hasPermission(user, "expert_advisor")
+  const writerEnabled = hasPermission(user, "copywriting_generation")
+  const imageEnabled = hasPermission(user, "image_design_generation")
+
+  return {
+    loading: false,
+    advisor: {
+      brandStrategy: advisorEnabled,
+      growth: advisorEnabled,
+      companySearch: advisorEnabled,
+      contactMining: advisorEnabled,
+      copywriting: writerEnabled,
+      hasAny: advisorEnabled || writerEnabled,
+    },
+    writer: {
+      enabled: writerEnabled,
+      provider: null,
+      reason: "availability_fetch_failed",
+    },
+    imageAssistant: {
+      enabled: imageEnabled,
+      provider: null,
+      reason: "availability_fetch_failed",
+    },
+  }
+}
 
 export function DashboardAvailabilityProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth()
@@ -111,7 +150,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
       } catch (error) {
         if (cancelled) return
         console.error("dashboard.availability.load-failed", error)
-        setAvailability({ ...DEFAULT_AVAILABILITY, loading: false })
+        setAvailability(buildPermissionFallback(user))
       }
     }
 

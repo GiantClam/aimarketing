@@ -25,6 +25,10 @@ WORKFLOWS = [
 ]
 
 
+def get_send_shortcut():
+    return "Meta+Enter" if sys.platform == "darwin" else "Control+Enter"
+
+
 def login_and_get_session_cookie(base_url: str, email: str, password: str):
     deadline = time.time() + 60
     last_error = None
@@ -94,20 +98,60 @@ def poll_task(base_url: str, task_id: str, session_cookie: str, timeout_seconds:
     raise TimeoutError(json.dumps(last_payload, ensure_ascii=False))
 
 
-def wait_for_assistant_reply(page, timeout_ms: int = 120000):
-    deadline = time.time() + timeout_ms / 1000
-    last_texts = []
+def poll_assistant_reply(base_url: str, advisor_type: str, conversation_id: str, session_cookie: str, timeout_seconds: int):
+    deadline = time.time() + timeout_seconds
+    last_answers = []
     while time.time() < deadline:
-        bubbles = page.locator("div.break-words")
-        texts = [item.strip() for item in bubbles.all_inner_texts() if item and item.strip()]
-        if len(texts) >= 2:
-            assistant_text = texts[-1]
-            if assistant_text and "请求失败" not in assistant_text and "unknown error" not in assistant_text.lower():
-                return assistant_text, texts
-        last_texts = texts
-        page.wait_for_timeout(1500)
+        try:
+            payload = fetch_json(
+                f"{base_url}/api/dify/messages?advisorType={advisor_type}&conversation_id={conversation_id}&limit=20",
+                session_cookie,
+            )
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                time.sleep(1.5)
+                continue
+            raise
 
-    raise RuntimeError(f"assistant reply not ready: {last_texts}")
+        items = payload.get("data") or []
+        answers = [str(item.get("answer") or "").strip() for item in items if isinstance(item, dict)]
+        for answer in reversed(answers):
+            if answer and "request failed" not in answer.lower() and "unknown error" not in answer.lower():
+                return answer, answers
+
+        last_answers = answers
+        time.sleep(1.5)
+
+    raise RuntimeError(f"assistant reply not ready: {last_answers}")
+
+
+def submit_async_chat(
+    base_url: str,
+    session_cookie: str,
+    advisor_type: str,
+    query: str,
+    conversation_id: str | None = None,
+):
+    payload = {
+        "advisorType": advisor_type,
+        "query": query,
+        "response_mode": "async",
+        "inputs": {"contents": query},
+    }
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
+
+    request = urllib.request.Request(
+        f"{base_url}/api/dify/chat-messages",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Cookie": f"aimarketing_session={session_cookie}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def run_workflow_case(page, base_url: str, workflow: dict, timeout_seconds: int, artifact_dir: Path, session_cookie: str):
@@ -129,27 +173,87 @@ def run_workflow_case(page, base_url: str, workflow: dict, timeout_seconds: int,
         timeout=30000,
     ) as chat_response_info:
         chat_input.fill(query)
-        chat_input.press("Enter")
+        chat_input.press(get_send_shortcut())
 
-    chat_payload = chat_response_info.value.json()
-    task_id = str(chat_payload.get("task_id") or "")
-    conversation_id = str(chat_payload.get("conversation_id") or "")
-    if not task_id or not conversation_id:
-        raise RuntimeError(f"{advisor_type}: invalid chat response: {chat_payload}")
+    chat_response = chat_response_info.value
+    content_type = (chat_response.headers.get("content-type") or "").lower()
+    chat_payload = None
+    task_id = ""
+    conversation_id = str(chat_response.headers.get("x-conversation-id") or "")
+    response_mode = "streaming" if "text/event-stream" in content_type else "json"
 
-    poll_task(base_url, task_id, session_cookie, timeout_seconds)
+    try:
+        chat_payload = chat_response.json()
+    except Exception:
+        chat_payload = None
 
-    page.wait_for_url(re.compile(rf".*/dashboard/advisor/{re.escape(advisor_type)}/[A-Za-z0-9_-]+$"), timeout=30000)
+    if isinstance(chat_payload, dict):
+        task_id = str(chat_payload.get("task_id") or "")
+        if not conversation_id:
+            conversation_id = str(chat_payload.get("conversation_id") or "")
+        if task_id:
+            response_mode = "async"
+
+    if not task_id:
+        # Fallback to async API submission when UI request is streaming-only and no task id is exposed.
+        async_payload = submit_async_chat(
+            base_url=base_url,
+            session_cookie=session_cookie,
+            advisor_type=advisor_type,
+            query=query,
+            conversation_id=conversation_id or None,
+        )
+        task_id = str(async_payload.get("task_id") or "")
+        if not conversation_id:
+            conversation_id = str(async_payload.get("conversation_id") or "")
+        response_mode = "async-fallback"
+
+    task_payload = None
+    if task_id:
+        task_payload = poll_task(base_url, task_id, session_cookie, timeout_seconds)
+        task_result = (task_payload.get("data") or {}).get("result") or {}
+        if isinstance(task_result, dict):
+            if not conversation_id:
+                conversation_id = str(task_result.get("conversation_id") or "")
+        page.wait_for_timeout(1500)
+
+    page.wait_for_url(re.compile(rf".*/dashboard/advisor/{re.escape(advisor_type)}/[A-Za-z0-9_-]+$"), timeout=45000)
+    if not conversation_id:
+        match = re.search(rf"/dashboard/advisor/{re.escape(advisor_type)}/([A-Za-z0-9_-]+)", page.url)
+        if match:
+            conversation_id = match.group(1)
+    page.wait_for_timeout(1500)
+
+    if not conversation_id:
+        raise RuntimeError(
+            f"{advisor_type}: conversation id missing, mode={response_mode}, payload={chat_payload}, task_id={task_id}"
+        )
+
+    try:
+        assistant_text, all_texts = poll_assistant_reply(
+            base_url=base_url,
+            advisor_type=advisor_type,
+            conversation_id=conversation_id,
+            session_cookie=session_cookie,
+            timeout_seconds=timeout_seconds,
+        )
+    except RuntimeError:
+        task_result = ((task_payload or {}).get("data") or {}).get("result") or {}
+        fallback_answer = task_result.get("answer") if isinstance(task_result, dict) else None
+        if isinstance(fallback_answer, str) and fallback_answer.strip():
+            assistant_text, all_texts = fallback_answer.strip(), [fallback_answer.strip()]
+        else:
+            raise
+
     page.reload(wait_until="networkidle")
-    page.wait_for_timeout(5000)
-
-    assistant_text, all_texts = wait_for_assistant_reply(page)
+    page.wait_for_timeout(1500)
     page.screenshot(path=str(artifact_dir / f"{advisor_type}-result.png"), full_page=True)
 
     return {
         "advisor_type": advisor_type,
         "conversation_id": conversation_id,
-        "task_id": task_id,
+        "task_id": task_id or None,
+        "response_mode": response_mode,
         "assistant_preview": assistant_text[:400],
         "messages_count": len(all_texts),
         "artifacts": {

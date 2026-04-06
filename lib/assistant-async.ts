@@ -430,46 +430,22 @@ async function tryRecoverAdvisorAnswer(params: {
 
 async function handleWriterTurn(taskId: number, userId: number, payload: WriterTurnTaskPayload) {
   const progressEvents: AssistantTaskProgressEvent[] = []
-  pushTaskProgressEvent(progressEvents, {
+  const persistProgressEvent = async (event: AssistantTaskProgressEvent) => {
+    pushTaskProgressEvent(progressEvents, event)
+    await updateTaskStatus(taskId, {
+      status: "running",
+      result: {
+        conversation_id: payload.conversationId,
+        events: progressEvents,
+      },
+    })
+  }
+
+  await persistProgressEvent({
     type: "request_submitted",
     label: "Writer request submitted, preparing task",
     status: "running",
     at: Date.now(),
-  })
-  await updateTaskStatus(taskId, {
-    status: "running",
-    result: {
-      conversation_id: payload.conversationId,
-      events: progressEvents,
-    },
-  })
-
-  pushTaskProgressEvent(progressEvents, {
-    type: "brief_analyzing",
-    label: "Analyzing requirements and context",
-    status: "running",
-    at: Date.now(),
-  })
-  await updateTaskStatus(taskId, {
-    status: "running",
-    result: {
-      conversation_id: payload.conversationId,
-      events: progressEvents,
-    },
-  })
-
-  pushTaskProgressEvent(progressEvents, {
-    type: "draft_generating",
-    label: "Generating draft",
-    status: "running",
-    at: Date.now(),
-  })
-  await updateTaskStatus(taskId, {
-    status: "running",
-    result: {
-      conversation_id: payload.conversationId,
-      events: progressEvents,
-    },
   })
 
   const turnResult = await withTaskTimeout(
@@ -485,6 +461,15 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
       history: payload.history,
       conversationStatus: payload.conversationStatus,
       enterpriseId: payload.enterpriseId,
+      onProgress: async (event) => {
+        await persistProgressEvent({
+          type: event.type,
+          label: event.label,
+          detail: event.detail,
+          status: event.status,
+          at: typeof event.at === "number" && Number.isFinite(event.at) ? event.at : Date.now(),
+        })
+      },
     }),
     WRITER_TASK_TIMEOUT_MS,
     "writer_task_timeout",

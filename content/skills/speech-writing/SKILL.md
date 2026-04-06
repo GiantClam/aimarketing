@@ -75,7 +75,7 @@ Primary goal:
 
 - Deliver a clear formal message with the right tone and level of restraint
 
-### Host Script / 主持串词
+### Host Script
 
 Use for:
 
@@ -110,9 +110,7 @@ Support two default output shapes:
 
 Use when the user explicitly asks for:
 
-- 演讲稿
-- 发言稿
-- 串词
+- speech script
 - keynote script
 - full speech
 
@@ -184,7 +182,7 @@ If needed, ask for:
 - Required acknowledgements, names, or mentions
 - Tone and formality level
 
-## Mode 3: Host Script / 主持串词
+## Mode 3: Host Script
 
 ### Core Writing Rules
 

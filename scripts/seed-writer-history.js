@@ -25,6 +25,7 @@ async function ensureWriterTables(pool) {
     CREATE TABLE IF NOT EXISTS "${TABLES.writerConversations}" (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES "${TABLES.users}"(id) ON DELETE CASCADE,
+      enterprise_id INTEGER REFERENCES "${TABLES.enterprises}"(id) ON DELETE SET NULL,
       title VARCHAR(255) NOT NULL,
       platform VARCHAR(32) NOT NULL DEFAULT 'wechat',
       mode VARCHAR(32) NOT NULL DEFAULT 'article',
@@ -45,6 +46,11 @@ async function ensureWriterTables(pool) {
       diagnostics JSONB,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
+  `)
+
+  await pool.query(`
+    ALTER TABLE "${TABLES.writerConversations}"
+    ADD COLUMN IF NOT EXISTS enterprise_id INTEGER REFERENCES "${TABLES.enterprises}"(id) ON DELETE SET NULL
   `)
 }
 
@@ -87,7 +93,10 @@ async function ensureDemoUser(pool) {
     )
   }
 
-  return user.rows[0].id
+  return {
+    userId: user.rows[0].id,
+    enterpriseId,
+  }
 }
 
 async function main() {
@@ -96,7 +105,7 @@ async function main() {
   const pool = new Pool(getMigrationPoolConfig())
   try {
     await ensureWriterTables(pool)
-    const userId = await ensureDemoUser(pool)
+    const { userId, enterpriseId } = await ensureDemoUser(pool)
 
     await pool.query(
       `DELETE FROM "${TABLES.writerConversations}"
@@ -107,10 +116,10 @@ async function main() {
     const title = `${WRITER_TITLE_PREFIX}Cursor Validation Seed ${Date.now()}`
     const insertedConversation = await pool.query(
       `INSERT INTO "${TABLES.writerConversations}" (
-        user_id, title, platform, mode, language, status, images_requested, created_at, updated_at
-      ) VALUES ($1, $2, 'wechat', 'article', 'zh', 'ready', FALSE, NOW(), NOW())
+        user_id, enterprise_id, title, platform, mode, language, status, images_requested, created_at, updated_at
+      ) VALUES ($1, $2, $3, 'wechat', 'article', 'zh', 'ready', FALSE, NOW(), NOW())
       RETURNING id`,
-      [userId, title],
+      [userId, enterpriseId, title],
     )
 
     const conversationId = insertedConversation.rows[0].id

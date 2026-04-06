@@ -27,20 +27,46 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const [advisorAvailability, knowledge, writerSkillsAvailability] = await Promise.all([
-      getAdvisorAvailability({
-        userId: currentUser.id,
-        userEmail: currentUser.email,
-        enterpriseId: currentUser.enterpriseId,
-      }),
-      getEnterpriseDifyKnowledgeStatus(currentUser.enterpriseId),
-      Promise.resolve(getWriterSkillsAvailability()),
-    ])
+    const advisorAvailabilityPromise = getAdvisorAvailability({
+      userId: currentUser.id,
+      userEmail: currentUser.email,
+      enterpriseId: currentUser.enterpriseId,
+    })
+    const knowledgePromise = getEnterpriseDifyKnowledgeStatus(currentUser.enterpriseId)
+    const writerSkillsAvailability = getWriterSkillsAvailability()
 
     const imageAssistantAvailability = getImageAssistantAvailability()
     const hasAdvisorAccess = hasFeatureAccess(currentUser, "expert_advisor")
     const hasCopywritingAccess = hasFeatureAccess(currentUser, "copywriting_generation")
     const hasImageAssistantAccess = hasFeatureAccess(currentUser, "image_design_generation")
+
+    const [advisorAvailabilityResult, knowledgeResult] = await Promise.allSettled([
+      advisorAvailabilityPromise,
+      knowledgePromise,
+    ])
+
+    const advisorAvailability =
+      advisorAvailabilityResult.status === "fulfilled"
+        ? advisorAvailabilityResult.value
+        : {
+            brandStrategy: hasAdvisorAccess,
+            growth: hasAdvisorAccess,
+            companySearch: hasAdvisorAccess,
+            contactMining: hasAdvisorAccess,
+            copywriting: hasCopywritingAccess,
+            hasAny: hasAdvisorAccess || hasCopywritingAccess,
+          }
+
+    if (advisorAvailabilityResult.status === "rejected") {
+      console.error("dashboard.availability.advisor.error", advisorAvailabilityResult.reason)
+    }
+
+    const knowledge =
+      knowledgeResult.status === "fulfilled" ? knowledgeResult.value : { enabled: false, datasetCount: 0 as number }
+
+    if (knowledgeResult.status === "rejected") {
+      console.error("dashboard.availability.knowledge.error", knowledgeResult.reason)
+    }
 
     const advisor = {
       brandStrategy: hasAdvisorAccess && advisorAvailability.brandStrategy,

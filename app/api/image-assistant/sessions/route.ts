@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { createImageAssistantSession, listImageAssistantSessions } from "@/lib/image-assistant/repository"
+import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
 
 function toSafeImageAssistantError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : String(error)
@@ -37,10 +38,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
+    const locale = resolveRequestLocale(req.cookies.get(LOCALE_COOKIE_NAME)?.value, req.headers.get("accept-language"))
     const session = await createImageAssistantSession({
       userId: auth.user.id,
       enterpriseId: auth.user.enterpriseId,
-      title: typeof body?.title === "string" ? body.title : "未命名设计",
+      title: typeof body?.title === "string" ? body.title : locale === "zh" ? "未命名设计" : "Untitled design",
     })
 
     return NextResponse.json({ data: session })
