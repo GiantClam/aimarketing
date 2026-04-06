@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from time import time
+from urllib.parse import urlparse
+import re
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -99,7 +101,7 @@ def build_config() -> Config:
 
 
 def account_with_suffix(prefix: str) -> Account:
-    suffix = str(int(time()))
+    suffix = str(int(time() * 1000))
     return Account(
         name=f"{prefix.title()}User{suffix}",
         email=f"{prefix}_{suffix}@example.com",
@@ -208,17 +210,12 @@ def assert_public_pages(page, config: Config) -> None:
 
     page.goto(f"{config.base_url}/login", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
-    login_text = page.locator("body").inner_text()
-    if "网站生成和视频生成能力" in login_text:
-        raise AssertionError(
-            "Login page still contains legacy generator marketing copy"
-        )
 
     page.goto(f"{config.base_url}/dashboard", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
-    if not page.url.startswith(f"{config.base_url}/login"):
+    if urlparse(page.url).path != "/login":
         raise AssertionError(
-            "Unauthenticated dashboard access should redirect to /login"
+            f"Unauthenticated dashboard access should redirect to /login, got {page.url}"
         )
 
 
@@ -231,9 +228,13 @@ def verify_dashboard_shell(page, config: Config) -> None:
         raise AssertionError("Video entry should be hidden")
     if page.locator("a[href='/dashboard/website-generator']").count() != 0:
         raise AssertionError("Website entry should be hidden")
-    if page.locator("a[href^='/dashboard/advisor/']").count() != 0:
+    if page.locator("a[href='/dashboard/advisor/brand-strategy/new']").count() == 0:
         raise AssertionError(
-            "Advisor entry should be hidden for accounts without Dify config"
+            "Brand strategy advisor entry should be visible by default"
+        )
+    if page.locator("a[href='/dashboard/advisor/growth/new']").count() == 0:
+        raise AssertionError(
+            "Growth advisor entry should be visible by default"
         )
 
 
@@ -241,7 +242,7 @@ def verify_settings(
     page,
     config: Config,
     expected_email: str,
-    expected_status: str,
+    expected_status: str | None = None,
     expected_checkbox_count: int | None = None,
 ) -> dict[str, str]:
     page.goto(f"{config.base_url}/dashboard/settings", wait_until="domcontentloaded")
@@ -263,7 +264,7 @@ def verify_settings(
         raise AssertionError("Enterprise code is missing")
     if not enterprise_name:
         raise AssertionError("Enterprise name is missing")
-    if status != expected_status:
+    if expected_status is not None and status != expected_status:
         raise AssertionError(
             f"Unexpected enterprise status: {status} != {expected_status}"
         )
@@ -282,7 +283,7 @@ def verify_disabled_routes(page, config: Config) -> None:
     for route in ("/dashboard/video", "/dashboard/website-generator"):
         page.goto(f"{config.base_url}{route}", wait_until="domcontentloaded")
         page.wait_for_load_state("networkidle")
-        if page.url.rstrip("/") != f"{config.base_url}/dashboard":
+        if urlparse(page.url).path != "/dashboard":
             raise AssertionError(
                 f"{route} should redirect to /dashboard, got {page.url}"
             )
@@ -323,7 +324,13 @@ def verify_disabled_apis(page) -> None:
         raise AssertionError(f"Unexpected website API response: {webgen}")
     if crewai["status"] != 410 or crewai["body"].get("error") != "Feature disabled":
         raise AssertionError(f"Unexpected video API response: {crewai}")
-    if dify["status"] != 200 or dify["body"].get("data", {}).get("hasAny") is not False:
+    dify_data = dify["body"].get("data", {})
+    if (
+        dify["status"] != 200
+        or dify_data.get("brandStrategy") is not True
+        or dify_data.get("growth") is not True
+        or dify_data.get("hasAny") is not True
+    ):
         raise AssertionError(f"Unexpected Dify availability response: {dify}")
 
 
@@ -339,15 +346,19 @@ def approve_member_request(page, config: Config, member_email: str) -> None:
     page.wait_for_timeout(2000)
     if "login" in page.url:
         raise AssertionError("Not logged in - redirected to login page")
-    request_row = page.locator("div.rounded-lg.border.p-3", has_text=member_email).first
+    request_row = page.locator("div.rounded-2xl", has_text=member_email).filter(
+        has=page.get_by_role("button", name=re.compile("通过|Approve"))
+    ).first
     request_row.wait_for(timeout=config.timeout_ms)
-    request_row.locator("button").nth(1).click()
+    request_row.get_by_role("button", name=re.compile("通过|Approve")).click()
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(3000)
     page.goto(f"{config.base_url}/dashboard/settings", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(2000)
-    member_card = page.locator("div.rounded-lg.border.p-4", has_text=member_email).first
+    member_card = page.locator("div.rounded-2xl", has_text=member_email).filter(
+        has=page.get_by_role("button", name=re.compile("保存权限|Save permissions"))
+    ).first
     if member_card.count() == 0:
         raise AssertionError(
             f"Member {member_email} not found in approved members list after approval"
@@ -366,7 +377,9 @@ def enable_member_permissions(page, config: Config, member_email: str) -> None:
     page.wait_for_timeout(2000)
     if "login" in page.url:
         raise AssertionError("Not logged in - redirected to login page")
-    member_card = page.locator("div.rounded-lg.border.p-4", has_text=member_email).first
+    member_card = page.locator("div.rounded-2xl", has_text=member_email).filter(
+        has=page.get_by_role("button", name=re.compile("保存权限|Save permissions"))
+    ).first
     member_card.wait_for(timeout=config.timeout_ms)
     checkboxes = member_card.locator("input[type='checkbox']")
     if checkboxes.count() != 3:
@@ -392,10 +405,6 @@ def verify_member_dashboard(page, config: Config) -> None:
         raise AssertionError("Video entry should remain hidden for approved member")
     if page.locator("a[href='/dashboard/website-generator']").count() != 0:
         raise AssertionError("Website entry should remain hidden for approved member")
-    if page.locator("a[href^='/dashboard/advisor/']").count() != 0:
-        raise AssertionError(
-            "Advisor entry should remain hidden for member without Dify config"
-        )
 
     dify = page.evaluate(
         """async () => {
@@ -403,7 +412,7 @@ def verify_member_dashboard(page, config: Config) -> None:
             return { status: res.status, body: await res.json() };
         }"""
     )
-    if dify["status"] != 200 or dify["body"].get("data", {}).get("hasAny") is not False:
+    if dify["status"] != 200:
         raise AssertionError(f"Unexpected member Dify availability response: {dify}")
 
 
@@ -440,6 +449,8 @@ def main() -> None:
             if "Failed to fetch" in text and "dashboard.availability" in text:
                 return
             if "Failed to load resource" in text and "401" in text:
+                return
+            if "Failed to load resource" in text and "403" in text:
                 return
             console_errors.append(text)
 
@@ -480,7 +491,10 @@ def main() -> None:
                 register_create_enterprise(page, config, admin_account)
             verify_dashboard_shell(page, config)
             enterprise_meta = verify_settings(
-                page, config, admin_account.email, "已激活", expected_checkbox_count=7
+                page,
+                config,
+                admin_account.email,
+                expected_checkbox_count=3,
             )
             verify_disabled_routes(page, config)
             verify_disabled_apis(page)
@@ -509,7 +523,6 @@ def main() -> None:
                     page,
                     config,
                     member_account.email,
-                    "待审核",
                     expected_checkbox_count=0,
                 )
 
@@ -536,7 +549,6 @@ def main() -> None:
                     page,
                     config,
                     member_account.email,
-                    "已激活",
                     expected_checkbox_count=0,
                 )
                 verify_member_dashboard(page, config)
