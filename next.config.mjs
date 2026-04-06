@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
+const isVercelBuild = process.env.VERCEL === "1" || process.env.VERCEL === "true"
+
 const nextConfig = {
-  distDir: process.env.NEXT_DIST_DIR || (process.env.NODE_ENV === "production" ? ".next-build" : ".next"),
+  // Vercel expects Next build manifests under ".next" unless explicitly configured otherwise.
+  distDir:
+    process.env.NEXT_DIST_DIR ||
+    (isVercelBuild
+      ? ".next"
+      : process.env.NODE_ENV === "production"
+        ? ".next-build"
+        : ".next"),
   eslint: {
     ignoreDuringBuilds: true,
   },
