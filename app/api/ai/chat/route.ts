@@ -32,11 +32,11 @@ import {
   isAiEntryAgentId,
 } from "@/lib/ai-entry/agent-catalog"
 import {
-  buildAiEntryAgentInstruction,
-  buildAiEntryConsultingModeInstruction,
-} from "@/lib/ai-entry/agent-prompts"
+  isExecutiveConsultingAgent,
+  loadExecutiveSkillForAgent,
+} from "@/lib/ai-entry/executive-skill-loader"
+import { routeExecutiveAgentByPrompt } from "@/lib/ai-entry/executive-agent-router"
 import {
-  AI_ENTRY_CONSULTING_AGENT_ID,
   AI_ENTRY_SONNET_46_MODEL_HINT,
   pickSonnet46ModelId,
   shouldLockConsultingAdvisorModel,
@@ -86,6 +86,10 @@ const STREAM_HEADERS = {
   "Cache-Control": "no-cache, no-transform",
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
+}
+
+function createChatTraceId() {
+  return `ai-entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 function buildSseEvent(payload: Record<string, unknown>) {
@@ -327,13 +331,56 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
     entryMode: input?.entryMode,
     agentId: resolvedAgentId,
   })
-  const effectiveAgentId = lockModelToSonnet46
-    ? AI_ENTRY_CONSULTING_AGENT_ID
-    : resolvedAgentId
 
   return {
-    agentId: effectiveAgentId,
+    agentId: resolvedAgentId,
     lockModelToSonnet46,
+  }
+}
+
+function buildProviderMessages(params: {
+  providerId: AiEntryProviderId
+  systemPrompt: string
+  messages: CoreMessage[]
+}) {
+  const { providerId, systemPrompt, messages } = params
+
+  if (providerId !== "aiberm") {
+    return {
+      system: systemPrompt,
+      messages,
+    }
+  }
+
+  const normalizedSystemPrompt = systemPrompt.trim()
+  if (!normalizedSystemPrompt) {
+    return {
+      messages,
+    }
+  }
+
+  const systemAsUserPrefix = `System instruction (must follow):\n${normalizedSystemPrompt}`
+  const first = messages[0]
+  if (first?.role === "user" && typeof first.content === "string") {
+    return {
+      messages: [
+        {
+          role: "user" as const,
+          content: `${systemAsUserPrefix}\n\nUser request:\n${first.content}`,
+        },
+        ...messages.slice(1),
+      ],
+    }
+  }
+
+  return {
+    messages: [
+      {
+        role: "user" as const,
+        content: systemAsUserPrefix,
+      },
+      ...messages,
+    ],
   }
 }
 
@@ -372,6 +419,8 @@ async function persistAiEntryTurnSafe(params: {
 
 export async function POST(request: NextRequest) {
   let closeTools: (() => Promise<void>) | null = null
+  const traceId = createChatTraceId()
+  const startedAtMs = Date.now()
   try {
     const auth = await requireSessionUser(request)
     if ("response" in auth) {
@@ -452,11 +501,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const agentInstruction = await buildAiEntryAgentInstruction(agentConfig.agentId)
-    const modeInstruction = await buildAiEntryConsultingModeInstruction(
-      agentConfig.lockModelToSonnet46,
-    )
-    const resolvedInstruction = agentInstruction || modeInstruction
+    let effectiveAgentId = agentConfig.agentId
+    let routeDecision: ReturnType<typeof routeExecutiveAgentByPrompt> | null = null
+    if (!effectiveAgentId && agentConfig.lockModelToSonnet46) {
+      routeDecision = routeExecutiveAgentByPrompt(latestUserPrompt)
+      effectiveAgentId = routeDecision.agentId
+    }
+
+    if (routeDecision) {
+      console.info("ai-entry.chat.agent.auto-routed", {
+        requestedAgentId: agentConfig.agentId,
+        effectiveAgentId,
+        confidence: routeDecision.confidence,
+        score: routeDecision.score,
+        fallback: routeDecision.fallback,
+        matchedSignals: routeDecision.matchedSignals,
+      })
+    }
+
+    let resolvedInstruction = ""
+    if (effectiveAgentId && isExecutiveConsultingAgent(effectiveAgentId)) {
+      const skillContent = await loadExecutiveSkillForAgent(effectiveAgentId)
+      if (skillContent.trim()) {
+        resolvedInstruction = `# Skill Documents\n\n${skillContent.trim()}`
+      }
+    }
     const skillsEnabled = body.skillConfig?.enabled !== false
     const enabledToolNames = parseEnabledToolNames(body.skillConfig?.enabledToolNames)
 
@@ -501,20 +570,45 @@ export async function POST(request: NextRequest) {
             ? {
                 forceModelAcrossProviders: true,
                 disableSameProviderModelFallback: true,
+                directProviderFailoverOnError: true,
               }
             : {}),
         }
       : undefined
 
+    console.info("ai-entry.chat.request.start", {
+      traceId,
+      userId: currentUser.id,
+      conversationId,
+      stream,
+      scope: conversationScope,
+      lockModel: agentConfig.lockModelToSonnet46,
+      selectedAgentId: effectiveAgentId,
+      modelProviderId: modelConfig?.providerId || null,
+      modelId: modelConfig?.modelId || null,
+    })
+
     if (!stream) {
       const execution = await executeAiEntryWithProviderFailover(
         async (providerRun) => {
+          console.info("ai-entry.chat.provider.attempt", {
+            traceId,
+            conversationId,
+            provider: providerRun.providerId,
+            model: providerRun.model,
+            attempt: providerRun.attempt,
+          })
+          const providerInput = buildProviderMessages({
+            providerId: providerRun.providerId,
+            systemPrompt,
+            messages: normalizedMessages,
+          })
           const result = await generateText({
             // Force OpenAI-compatible chat completions path for proxy providers
             // that do not implement the newer /responses endpoint.
             model: providerRun.provider.chat(providerRun.model),
-            system: systemPrompt,
-            messages: normalizedMessages,
+            ...(providerInput.system ? { system: providerInput.system } : {}),
+            messages: providerInput.messages,
             tools: selectedTools,
             stopWhen,
           })
@@ -538,13 +632,23 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      console.info("ai-entry.chat.request.done", {
+        traceId,
+        conversationId,
+        provider: execution.providerId,
+        model: execution.model,
+        persisted: persistenceEnabled,
+        elapsedMs: Date.now() - startedAtMs,
+      })
+
       return NextResponse.json({
         message: normalizedAssistantMessage,
         conversationId,
         persisted: persistenceEnabled,
         provider: execution.providerId,
         providerModel: execution.model,
-        agentId: agentConfig.agentId,
+        agentId: effectiveAgentId,
+        agentRoute: routeDecision,
         providerOrder: execution.providerOrder,
         toolCalls: execution.result.toolCalls?.map((call: { toolCallId: string; toolName: string }) => ({
           toolCallId: call.toolCallId,
@@ -567,9 +671,23 @@ export async function POST(request: NextRequest) {
             enabled_tools: selectedToolIds,
             skills_enabled: skillsEnabled,
             persisted: persistenceEnabled,
+            agent_id: effectiveAgentId,
+            agent_route: routeDecision,
           })
 
           const execution = await executeAiEntryWithProviderFailover(async (providerRun) => {
+            console.info("ai-entry.chat.provider.attempt", {
+              traceId,
+              conversationId,
+              provider: providerRun.providerId,
+              model: providerRun.model,
+              attempt: providerRun.attempt,
+            })
+            const providerInput = buildProviderMessages({
+              providerId: providerRun.providerId,
+              systemPrompt,
+              messages: normalizedMessages,
+            })
             sendEvent({
               event:
                 providerRun.attempt === 1
@@ -586,8 +704,8 @@ export async function POST(request: NextRequest) {
             const result = streamText({
               // Keep stream mode aligned with non-stream mode on chat/completions.
               model: providerRun.provider.chat(providerRun.model),
-              system: systemPrompt,
-              messages: normalizedMessages,
+              ...(providerInput.system ? { system: providerInput.system } : {}),
+              messages: providerInput.messages,
               tools: selectedTools,
               stopWhen,
             })
@@ -673,7 +791,8 @@ export async function POST(request: NextRequest) {
             answer: normalizedStreamedAnswer,
             provider: execution.providerId,
             provider_model: execution.model,
-            agent_id: agentConfig.agentId,
+            agent_id: effectiveAgentId,
+            agent_route: routeDecision,
             provider_order: execution.providerOrder,
           })
 
@@ -687,7 +806,22 @@ export async function POST(request: NextRequest) {
               scope: conversationScope,
             })
           }
+          console.info("ai-entry.chat.request.done", {
+            traceId,
+            conversationId,
+            provider: execution.providerId,
+            model: execution.model,
+            persisted: persistenceEnabled,
+            streamed: true,
+            elapsedMs: Date.now() - startedAtMs,
+          })
         } catch (error) {
+          console.error("ai-entry.chat.request.failed", {
+            traceId,
+            conversationId,
+            message: extractErrorMessage(error),
+            elapsedMs: Date.now() - startedAtMs,
+          })
           sendEvent({
             event: "error",
             conversation_id: conversationId,
@@ -710,6 +844,11 @@ export async function POST(request: NextRequest) {
     } catch {
       // ignore cleanup error
     }
+    console.error("ai-entry.chat.request.failed", {
+      traceId,
+      message: extractErrorMessage(error),
+      elapsedMs: Date.now() - startedAtMs,
+    })
     return NextResponse.json(
       { error: extractErrorMessage(error) },
       { status: 500 },

@@ -108,8 +108,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
   const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
-  const consultingAdvisorHref =
-    "/dashboard/ai?agent=general&entry=consulting-advisor"
+  const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
 
   return (
     <div className="flex h-screen bg-transparent">
@@ -211,7 +210,6 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                           title={consultingAdvisorLabel}
                           icon={Bot}
                           entryHref={consultingAdvisorHref}
-                          activeAgentId="general"
                         />
                       ))}
                     {hasAdvisorFeature && advisor.brandStrategy && userEmail && (

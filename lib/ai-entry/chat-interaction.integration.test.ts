@@ -90,6 +90,15 @@ function json(res: ServerResponse, statusCode: number, payload: unknown) {
   res.end(JSON.stringify(payload))
 }
 
+function isEquivalentSonnet46Model(modelId: string) {
+  const normalized = modelId.toLowerCase().replace(/[^a-z0-9]+/g, "")
+  return normalized.includes("claudesonnet46")
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 async function withMockOpenAiServer<T>(
   handler: (
     req: IncomingMessage,
@@ -256,6 +265,35 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
         return
       }
 
+      if (req.method === "GET" && req.url.startsWith("/v1/models")) {
+        const authHeader =
+          typeof req.headers.authorization === "string"
+            ? req.headers.authorization
+            : ""
+        const provider = authHeader.includes("aiberm-key")
+          ? "aiberm"
+          : authHeader.includes("crazy-key")
+            ? "crazyroute"
+            : "unknown"
+
+        if (provider === "aiberm") {
+          json(res, 200, {
+            data: [{ id: "claude-sonnet-4-6" }],
+          })
+          return
+        }
+
+        if (provider === "crazyroute") {
+          json(res, 200, {
+            data: [{ id: "anthropic/claude-sonnet-4.6" }],
+          })
+          return
+        }
+
+        json(res, 200, { data: [] })
+        return
+      }
+
       if (req.method === "POST" && req.url.startsWith("/v1/chat/completions")) {
         const body = await helpers.readJsonBody()
         const model = typeof body.model === "string" ? body.model : ""
@@ -281,12 +319,12 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
           return
         }
 
-        if (provider === "crazyroute" && model === lockedModel) {
+        if (provider === "crazyroute" && isEquivalentSonnet46Model(model)) {
           json(res, 200, {
             id: "chatcmpl-test-locked",
             object: "chat.completion",
             created: Math.floor(Date.now() / 1000),
-            model: lockedModel,
+            model,
             choices: [
               {
                 index: 0,
@@ -343,7 +381,7 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
           )
 
           assert.equal(execution.providerId, "crazyroute")
-          assert.equal(execution.model, lockedModel)
+          assert.equal(isEquivalentSonnet46Model(execution.model), true)
           assert.equal(execution.result, "locked sonnet flow passed")
         },
       )
@@ -352,9 +390,156 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
 
   assert.ok(requested.length >= 2)
   assert.equal(requested[0]?.provider, "aiberm")
-  assert.equal(requested[0]?.model, lockedModel)
+  assert.equal(isEquivalentSonnet46Model(requested[0]?.model || ""), true)
   assert.equal(requested.some((item) => item.provider === "crazyroute"), true)
-  assert.equal(requested.every((item) => item.model === lockedModel), true)
+  assert.equal(
+    requested.every((item) => isEquivalentSonnet46Model(item.model)),
+    true,
+  )
+})
+
+test("chat interaction: slow crazyroute response still completes without hanging", async () => {
+  const requested: Array<{ provider: string; model: string }> = []
+  const slowDelayMs = 2500
+
+  await withMockOpenAiServer(
+    async (req, res, helpers) => {
+      if (!req.url) {
+        json(res, 404, { error: { message: "not found" } })
+        return
+      }
+
+      if (req.method === "GET" && req.url.startsWith("/v1/models")) {
+        const authHeader =
+          typeof req.headers.authorization === "string"
+            ? req.headers.authorization
+            : ""
+        const provider = authHeader.includes("aiberm-key")
+          ? "aiberm"
+          : authHeader.includes("crazy-key")
+            ? "crazyroute"
+            : "unknown"
+
+        if (provider === "aiberm") {
+          json(res, 200, {
+            data: [{ id: "anthropic/claude-sonnet-4.6" }],
+          })
+          return
+        }
+
+        if (provider === "crazyroute") {
+          json(res, 200, {
+            data: [{ id: "claude-sonnet-4-6" }],
+          })
+          return
+        }
+
+        json(res, 200, { data: [] })
+        return
+      }
+
+      if (req.method === "POST" && req.url.startsWith("/v1/chat/completions")) {
+        const body = await helpers.readJsonBody()
+        const model = typeof body.model === "string" ? body.model : ""
+        const authHeader =
+          typeof req.headers.authorization === "string"
+            ? req.headers.authorization
+            : ""
+        const provider = authHeader.includes("aiberm-key")
+          ? "aiberm"
+          : authHeader.includes("crazy-key")
+            ? "crazyroute"
+            : "unknown"
+
+        requested.push({ provider, model })
+
+        if (provider === "aiberm") {
+          json(res, 501, {
+            error: {
+              message: "not implemented",
+              type: "not_implemented",
+            },
+          })
+          return
+        }
+
+        if (provider === "crazyroute") {
+          await sleep(slowDelayMs)
+          json(res, 200, {
+            id: "chatcmpl-test-slow-crazyroute",
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1000),
+            model,
+            choices: [
+              {
+                index: 0,
+                finish_reason: "stop",
+                message: {
+                  role: "assistant",
+                  content: "slow fallback passed",
+                },
+              },
+            ],
+          })
+          return
+        }
+
+        json(res, 400, {
+          error: {
+            message: `unexpected provider/model: ${provider}/${model}`,
+          },
+        })
+        return
+      }
+
+      json(res, 404, {
+        error: {
+          message: `${req.method || "GET"} ${req.url}`,
+        },
+      })
+    },
+    async (baseUrl) => {
+      await withProviderEnv(
+        {
+          AI_ENTRY_AIBERM_API_KEY: "aiberm-key",
+          AI_ENTRY_AIBERM_BASE_URL: baseUrl,
+          AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.4",
+          AI_ENTRY_CRAZYROUTE_API_KEY: "crazy-key",
+          AI_ENTRY_CRAZYROUTE_BASE_URL: baseUrl,
+          AI_ENTRY_CRAZYROUTE_MODEL: "openai/gpt-5.3",
+        },
+        async () => {
+          const startedAt = Date.now()
+          const execution = await executeAiEntryWithProviderFailover(
+            async (providerRun) => {
+              const result = await generateText({
+                model: providerRun.provider.chat(providerRun.model),
+                messages: [{ role: "user", content: "Reply with slow fallback passed." }],
+              })
+              return result.text.trim()
+            },
+            {
+              preferredProviderId: "aiberm",
+              preferredModel: "claude-sonnet-4-6",
+              forceModelAcrossProviders: true,
+              disableSameProviderModelFallback: true,
+              directProviderFailoverOnError: true,
+            },
+          )
+          const elapsed = Date.now() - startedAt
+
+          assert.equal(execution.providerId, "crazyroute")
+          assert.equal(execution.result, "slow fallback passed")
+          assert.ok(elapsed >= slowDelayMs)
+          assert.ok(elapsed < 12000)
+        },
+      )
+    },
+  )
+
+  assert.ok(requested.length >= 2)
+  assert.equal(requested[0]?.provider, "aiberm")
+  assert.equal(requested.some((item) => item.provider === "crazyroute"), true)
 })
 
 

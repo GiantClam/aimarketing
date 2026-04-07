@@ -9,10 +9,12 @@ import {
 } from "@/lib/ai-entry/repository"
 import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
 import {
+  AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID,
   AI_ENTRY_SONNET_46_MODEL_HINT,
   pickSonnet46ModelId,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
+import { loadExecutiveSkillForAgent } from "@/lib/ai-entry/executive-skill-loader"
 
 function parseLimit(input: string | null, fallback: number) {
   const parsed = Number.parseInt(input || "", 10)
@@ -123,6 +125,20 @@ export async function POST(request: NextRequest) {
       conversationScope,
       { forceSonnet46: shouldLockModel },
     )
+
+    if (shouldLockModel) {
+      // Warm consulting skill docs when creating a new consulting conversation,
+      // so first message can use cached skill context.
+      try {
+        await loadExecutiveSkillForAgent(AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID)
+      } catch (error) {
+        console.warn("ai-entry.conversation.create.skill-warmup.failed", {
+          agentId: AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
     const data = await createAiEntryConversation(
       auth.user.id,
       rawTitle,

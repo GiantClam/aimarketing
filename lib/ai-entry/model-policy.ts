@@ -1,6 +1,6 @@
-export const AI_ENTRY_CONSULTING_AGENT_ID = "general"
 export const AI_ENTRY_CONSULTING_ENTRY_MODE = "consulting-advisor"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = "sonnet-4.6"
+export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"
 
 export function normalizeModelFingerprint(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "")

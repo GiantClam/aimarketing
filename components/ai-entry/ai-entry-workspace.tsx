@@ -35,7 +35,6 @@ import { TypingIndicator } from "@/components/ui/typing-indicator"
 import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
 import type { PendingTaskEvent } from "@/lib/assistant-task-events"
 import {
-  AI_ENTRY_CONSULTING_AGENT_ID,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
   AI_ENTRY_SONNET_46_MODEL_HINT,
   pickSonnet46ModelId,
@@ -55,13 +54,19 @@ type MessageApiResponse = {
     current_model_id?: string | null
   } | null
 }
-type ChatApiResponse = { message?: string; conversationId?: string; error?: string }
+type ChatApiResponse = {
+  message?: string
+  conversationId?: string
+  agentId?: string | null
+  error?: string
+}
 type ChatStreamApiResponse = {
   event?: string
   conversation_id?: string
   answer?: string
   provider?: string
   provider_model?: string
+  agent_id?: string | null
   error?: string
   data?: {
     toolName?: string
@@ -317,9 +322,15 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
   useEffect(() => {
     if (!agentQueryReady) return
+    const fromRoute = (searchParams.get("agent") || "").trim() || null
+    setSelectedAgentId((current) => (current === fromRoute ? current : fromRoute))
+  }, [agentQueryReady, searchParams])
+
+  useEffect(() => {
+    if (!agentQueryReady) return
     const params = new URLSearchParams(search)
     if (shouldLockModel) {
-      params.set("agent", AI_ENTRY_CONSULTING_AGENT_ID)
+      params.delete("agent")
     } else if (selectedAgentId) {
       params.set("agent", selectedAgentId)
     } else {
@@ -464,20 +475,11 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         if (leftovers.length > 0) groups.push({ id: "other", label: "Other", agents: leftovers })
 
         const validIds = new Set(normalizedAgents.map((item) => item.id))
-        const fallbackDefault = typeof payload?.defaultAgentId === "string" && validIds.has(payload.defaultAgentId)
-          ? payload.defaultAgentId
-          : normalizedAgents[0]?.id || null
         const fromQuery = initialAgentFromQuery && validIds.has(initialAgentFromQuery) ? initialAgentFromQuery : null
 
         setAgents(normalizedAgents)
         setAgentGroups(groups)
-        setSelectedAgentId(
-          shouldLockModel
-            ? (validIds.has(AI_ENTRY_CONSULTING_AGENT_ID)
-                ? AI_ENTRY_CONSULTING_AGENT_ID
-                : fromQuery || fallbackDefault)
-            : fromQuery,
-        )
+        setSelectedAgentId(fromQuery)
       } catch (error) {
         if (cancelled) return
         console.error("ai-entry.agents.load.failed", error)
@@ -600,6 +602,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const handleSend = useCallback(async () => {
     const prompt = input.trim()
     if (!prompt || isLoading || isConversationLoading) return
+    const requestedAgentId =
+      typeof selectedAgentId === "string" && selectedAgentId.trim()
+        ? selectedAgentId.trim()
+        : null
 
     const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: "user", content: prompt }
     const assistantMessageId = `assistant-${Date.now()}`
@@ -638,12 +644,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           agentConfig:
             selectedAgentId || shouldLockModel
               ? {
-                  agentId: shouldLockModel
-                    ? AI_ENTRY_CONSULTING_AGENT_ID
-                    : (selectedAgentId || undefined),
-                  ...(shouldLockModel
-                    ? { entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE }
-                    : {}),
+                  ...(!shouldLockModel && selectedAgentId ? { agentId: selectedAgentId } : {}),
+                  ...(shouldLockModel ? { entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE } : {}),
                 }
               : undefined,
         }),
@@ -685,6 +687,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           if (streamConversationId) setConversationId(streamConversationId)
 
           if (event.event === "conversation_init") {
+            if (!requestedAgentId && event.agent_id && typeof event.agent_id === "string") {
+              setSelectedAgentId(event.agent_id)
+            }
             upsertTaskEvent({
               type: "conversation_init",
               label: "Conversation ready",
@@ -748,6 +753,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             const finalText = typeof event.answer === "string" && event.answer.trim()
               ? event.answer.trim()
               : streamedText.trim()
+
+            if (!requestedAgentId && event.agent_id && typeof event.agent_id === "string") {
+              setSelectedAgentId(event.agent_id)
+            }
 
             if (event.provider_model && models.some((item) => item.id === event.provider_model)) {
               setSelectedModelId(event.provider_model)
@@ -826,6 +835,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         const assistantText = (payload?.message || "").trim()
         setMessages((previous) => previous.map((item) => item.id === assistantMessageId ? { ...item, content: assistantText || copy.unknownError } : item))
         if (typeof payload?.conversationId === "string" && payload.conversationId) setConversationId(payload.conversationId)
+        if (!requestedAgentId && typeof payload?.agentId === "string" && payload.agentId.trim()) {
+          setSelectedAgentId(payload.agentId.trim())
+        }
         setPendingTaskEvents((current) => [
           ...current.filter((event) => event.type !== "request_start"),
           {
@@ -853,7 +865,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     } finally {
       setIsLoading(false)
     }
-  }, [conversationId, copy.errorPrefix, copy.unknownError, input, isConversationLoading, isLoading, isZh, messages, modelProviderId, models, selectedAgentId, selectedModelId, shouldLockModel])
+  }, [conversationId, copy.errorPrefix, copy.unknownError, input, isConversationLoading, isLoading, messages, modelProviderId, models, selectedAgentId, selectedModelId, shouldLockModel])
 
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (
     <div className="flex flex-wrap items-center gap-2 px-1">

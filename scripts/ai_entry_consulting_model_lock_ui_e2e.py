@@ -212,7 +212,7 @@ def run():
 
             # Scenario 1: consulting advisor entry should lock model to sonnet-4-6.
             page.goto(
-                f"{BASE_URL}/dashboard/ai?agent=general&entry=consulting-advisor",
+                f"{BASE_URL}/dashboard/ai?entry=consulting-advisor",
                 timeout=90000,
                 wait_until="domcontentloaded",
             )
@@ -244,8 +244,8 @@ def run():
             expect(isinstance(first_agent_config, dict), "first request missing agentConfig")
             expect(isinstance(first_model_config, dict), "first request missing modelConfig")
             expect(
-                str(first_agent_config.get("agentId") or "").strip() == "general",
-                f"consulting agent id mismatch: {first_agent_config}",
+                not str(first_agent_config.get("agentId") or "").strip(),
+                f"consulting request should not force agentId: {first_agent_config}",
             )
             expect(
                 str(first_agent_config.get("entryMode") or "").strip() == "consulting-advisor",

@@ -105,7 +105,6 @@ export function AiEntrySidebarItem({
 
   const [entryPath, entryQuery = ""] = entryHref.split("?")
   const basePath = entryPath || "/dashboard/ai"
-  const hrefSuffix = entryQuery ? `?${entryQuery}` : ""
   const entryQueryParams = new URLSearchParams(entryQuery)
   const entryModeRaw = entryQueryParams.get("entry")
   const entryAgentIdRaw = entryQueryParams.get("agent")
@@ -118,6 +117,14 @@ export function AiEntrySidebarItem({
       ? entryAgentIdRaw.trim()
       : null
   const currentAgentId = (searchParams.get("agent") || "").trim() || null
+  const effectiveAgentId = isConsultingEntry ? entryAgentId : (entryAgentId || currentAgentId)
+  const hrefQueryParams = new URLSearchParams(entryQuery)
+  if (effectiveAgentId) {
+    hrefQueryParams.set("agent", effectiveAgentId)
+  } else {
+    hrefQueryParams.delete("agent")
+  }
+  const hrefSuffix = hrefQueryParams.toString() ? `?${hrefQueryParams.toString()}` : ""
   const isMatchedAgent = !activeAgentId || currentAgentId === activeAgentId
   const isAiRoute = pathname.startsWith(basePath)
   const routeConversationId = pathname.startsWith(`${basePath}/`)
@@ -190,7 +197,7 @@ export function AiEntrySidebarItem({
               ? { modelId: persistedModelId }
               : {}),
           ...(entryMode ? { entryMode } : {}),
-          ...(entryAgentId ? { agentId: entryAgentId } : {}),
+          ...(effectiveAgentId ? { agentId: effectiveAgentId } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))

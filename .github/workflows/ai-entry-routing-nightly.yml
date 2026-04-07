@@ -1,0 +1,49 @@
+name: AI Entry Routing Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"
+
+jobs:
+  routing-nightly:
+    if: ${{ secrets.DATABASE_URL != '' || secrets.POSTGRES_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run AI entry routing nightly check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          AI_ENTRY_NIGHTLY_SAMPLE_DAYS: "7"
+          AI_ENTRY_NIGHTLY_SAMPLE_SIZE: "80"
+          AI_ENTRY_NIGHTLY_MIN_SAMPLE_FOR_GATE: "20"
+          AI_ENTRY_NIGHTLY_MAX_FALLBACK_RATE: "0.45"
+          AI_ENTRY_NIGHTLY_MAX_LOW_CONFIDENCE_RATE: "0.75"
+        run: pnpm test:ai-entry:routing-nightly
+
+      - name: Upload nightly routing report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-entry-routing-nightly-report
+          path: artifacts/ai-entry/routing-nightly/**
+          if-no-files-found: warn
