@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import { invalidateWriterConversationListCacheByUser } from "@/lib/writer/conversation-list-cache"
 import { renameWriterConversation } from "@/lib/writer/repository"
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ conversationId: string }> }) {
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ con
     }
 
     const renamed = await renameWriterConversation(auth.user.id, resolved.conversationId, body.name)
+    invalidateWriterConversationListCacheByUser(auth.user.id)
     return NextResponse.json({ success: Boolean(renamed), conversation: renamed, name: body.name })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

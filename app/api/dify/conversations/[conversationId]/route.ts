@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireAdvisorAccess } from "@/lib/auth/guards"
+import { invalidateAdvisorConversationListCacheByScope } from "@/lib/advisor/conversation-list-cache"
 import { deleteConversation } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { deleteLeadHunterConversation } from "@/lib/lead-hunter/repository"
@@ -25,6 +26,7 @@ export async function DELETE(
       if (!deleted) {
         return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
       }
+      invalidateAdvisorConversationListCacheByScope(auth.user.id, normalizedLeadHunterType)
       return NextResponse.json({ success: true })
     }
 
@@ -42,6 +44,8 @@ export async function DELETE(
       const errorData = await difyRes.text()
       return NextResponse.json({ error: "Dify API Error", details: errorData }, { status: difyRes.status })
     }
+
+    invalidateAdvisorConversationListCacheByScope(auth.user.id, resolvedAdvisorType)
 
     if (difyRes.status === 204) {
       return NextResponse.json({ success: true })

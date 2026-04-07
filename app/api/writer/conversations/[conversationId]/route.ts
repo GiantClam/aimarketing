@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import { invalidateWriterConversationListCacheByUser } from "@/lib/writer/conversation-list-cache"
 import { deleteWriterConversation } from "@/lib/writer/repository"
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ conversationId: string }> }) {
@@ -12,6 +13,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ c
     }
 
     const deleted = await deleteWriterConversation(auth.user.id, resolved.conversationId)
+    invalidateWriterConversationListCacheByUser(auth.user.id)
     return NextResponse.json({ success: deleted, conversationId: resolved.conversationId })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

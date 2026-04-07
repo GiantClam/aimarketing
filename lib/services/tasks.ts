@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
+import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { n8nConnections, tasks } from "@/lib/db/schema"
 
 export type CreateTaskInput = {
@@ -20,83 +21,19 @@ type TaskStatusUpdate = {
 
 const TERMINAL_TASK_STATUSES = new Set(["success", "failed", "approved", "rejected"])
 const TASK_DB_RETRY_DELAYS_MS = [250, 750]
+const isRetryableTaskDbError = createRetryableDbErrorMatcher()
 
 function msToPostgresInterval(ms: number) {
   return sql`(${Math.max(ms, 0)} / 1000.0) * interval '1 second'`
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-function getCombinedErrorMessage(error: unknown) {
-  const queue: unknown[] = [error]
-  const visited = new Set<unknown>()
-  const segments: string[] = []
-
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current || visited.has(current)) continue
-    visited.add(current)
-    segments.push(getErrorMessage(current))
-
-    if (typeof current === "object" && current) {
-      if ("cause" in current) {
-        queue.push((current as { cause?: unknown }).cause)
-      }
-      if ("errors" in current) {
-        const nested = (current as { errors?: unknown }).errors
-        if (Array.isArray(nested)) {
-          queue.push(...nested)
-        }
-      }
-    }
-  }
-
-  return segments.join(" ").toLowerCase()
-}
-
-function isRetryableDbError(error: unknown) {
-  const message = getCombinedErrorMessage(error)
-  return (
-    message.includes("error connecting to database") ||
-    message.includes("fetch failed") ||
-    message.includes("connect timeout") ||
-    message.includes("connection timeout") ||
-    message.includes("timeout exceeded when trying to connect") ||
-    message.includes("econnreset") ||
-    message.includes("econnrefused") ||
-    message.includes("und_err_connect_timeout") ||
-    message.includes("connection terminated unexpectedly") ||
-    message.includes("terminating connection") ||
-    message.includes("quota")
-  )
-}
-
 async function withTaskDbRetry<T>(label: string, operation: () => Promise<T>) {
-  for (let attempt = 0; attempt <= TASK_DB_RETRY_DELAYS_MS.length; attempt += 1) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (!isRetryableDbError(error) || attempt === TASK_DB_RETRY_DELAYS_MS.length) {
-        throw error
-      }
-
-      console.warn("tasks.db.retry", {
-        label,
-        attempt: attempt + 1,
-        message: getErrorMessage(error),
-      })
-      await sleep(TASK_DB_RETRY_DELAYS_MS[attempt])
-    }
-  }
-
-  throw new Error(`tasks_db_retry_exhausted:${label}`)
+  return withDbRetry(label, operation, {
+    retryDelaysMs: TASK_DB_RETRY_DELAYS_MS,
+    isRetryable: isRetryableTaskDbError,
+    logPrefix: "tasks.db.retry",
+    exhaustedErrorPrefix: "tasks_db_retry_exhausted",
+  })
 }
 
 export async function createTask(input: CreateTaskInput) {

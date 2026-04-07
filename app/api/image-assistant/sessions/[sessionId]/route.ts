@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import { invalidateImageAssistantSessionListCacheByUser } from "@/lib/image-assistant/session-list-cache"
 import {
   deleteImageAssistantSession,
   getImageAssistantSessionDetail,
@@ -93,6 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ se
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
+    invalidateImageAssistantSessionListCacheByUser(auth.user.id)
     return NextResponse.json({ data: updated })
   } catch (error: any) {
     console.error("image-assistant.session-detail.patch.error", error)
@@ -110,6 +112,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ s
 
     const resolved = await params
     const deleted = await deleteImageAssistantSession(auth.user.id, resolved.sessionId)
+    invalidateImageAssistantSessionListCacheByUser(auth.user.id)
     return NextResponse.json({ success: deleted, sessionId: resolved.sessionId })
   } catch (error: any) {
     console.error("image-assistant.session-detail.delete.error", error)

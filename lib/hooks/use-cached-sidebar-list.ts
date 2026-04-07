@@ -173,7 +173,11 @@ export function useCachedSidebarList<TItem>({
     const cached = readCache()
     const isFresh = Boolean(cached && Date.now() - cached.updatedAt < ttlMs)
     const cachedItems = normalizeItems(cached?.items)
-    void fetchItems({ background: Boolean(isFresh && cachedItems.length > 0) }).catch(() => {})
+    if (isFresh && cachedItems.length > 0) {
+      hasLoadedOnceRef.current = true
+      return
+    }
+    void fetchItems().catch(() => {})
   }, [fetchItems, isExpanded, readCache, ttlMs])
 
   useEffect(() => {

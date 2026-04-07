@@ -3,6 +3,12 @@ import { and, eq, gt } from "drizzle-orm"
 import { type NextRequest, NextResponse } from "next/server"
 
 import { db } from "@/lib/db"
+import {
+  createRetryableDbErrorMatcher,
+  getErrorMessage,
+  isDbUnavailableError,
+  withDbRetry,
+} from "@/lib/db/retry"
 import { enterprises, userFeaturePermissions, userSessions, users } from "@/lib/db/schema"
 import { FEATURE_KEYS, buildPermissionMap } from "@/lib/enterprise/constants"
 import { normalizeDisplayText } from "@/lib/text/display-name"
@@ -10,7 +16,7 @@ import { normalizeDisplayText } from "@/lib/text/display-name"
 export const SESSION_COOKIE_NAME = "aimarketing_session"
 export const DEMO_SESSION_COOKIE_NAME = "aimarketing_demo_session"
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30
-const SESSION_DB_RETRY_DELAYS_MS = [250, 750]
+const SESSION_DB_RETRY_DELAYS_MS = [250, 750, 1500]
 const SESSION_TOUCH_INTERVAL_MS = 1000 * 60 * 5
 const DEFAULT_DEMO_SESSION_ID = 1
 
@@ -135,63 +141,19 @@ function getRequestIpAddress(request?: NextRequest) {
   return request?.headers.get("x-real-ip")?.slice(0, 64) || null
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-function isRetryableSessionDbError(error: unknown) {
-  const message = getErrorMessage(error)
-  const causeMessage =
-    error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
-  const combined = `${message} ${causeMessage}`.toLowerCase()
-
-  return (
-    combined.includes("error connecting to database") ||
-    combined.includes("fetch failed") ||
-    combined.includes("connection timeout") ||
-    combined.includes("connect timeout") ||
-    combined.includes("timeout exceeded when trying to connect") ||
-    combined.includes("econnreset") ||
-    combined.includes("und_err_connect_timeout") ||
-    combined.includes("connection terminated unexpectedly") ||
-    combined.includes("connection terminated due to connection timeout") ||
-    combined.includes("terminating connection") ||
-    combined.includes("quota")
-  )
-}
+const isRetryableSessionDbError = createRetryableDbErrorMatcher()
 
 export function isSessionDbUnavailableError(error: unknown) {
-  const message = getErrorMessage(error)
-  const causeMessage =
-    error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
-  const combined = `${message} ${causeMessage}`.toLowerCase()
-  return combined.includes("failed query:") || isRetryableSessionDbError(error)
+  return isDbUnavailableError(error, isRetryableSessionDbError)
 }
 
 export async function withSessionDbRetry<T>(label: string, operation: () => Promise<T>) {
-  for (let attempt = 0; attempt <= SESSION_DB_RETRY_DELAYS_MS.length; attempt += 1) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (!isRetryableSessionDbError(error) || attempt === SESSION_DB_RETRY_DELAYS_MS.length) {
-        throw error
-      }
-
-      console.warn("auth.session.db.retry", {
-        label,
-        attempt: attempt + 1,
-        message: getErrorMessage(error),
-      })
-      await sleep(SESSION_DB_RETRY_DELAYS_MS[attempt])
-    }
-  }
-
-  throw new Error(`auth_session_retry_exhausted:${label}`)
+  return withDbRetry(label, operation, {
+    retryDelaysMs: SESSION_DB_RETRY_DELAYS_MS,
+    isRetryable: isRetryableSessionDbError,
+    logPrefix: "auth.session.db.retry",
+    exhaustedErrorPrefix: "auth_session_retry_exhausted",
+  })
 }
 
 export function isDemoLoginEnabled() {

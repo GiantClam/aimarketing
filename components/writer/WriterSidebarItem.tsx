@@ -53,7 +53,7 @@ function getConversationStatusLabel(status: WriterConversationSummary["status"],
 }
 
 const WRITER_CONVERSATION_CACHE_TTL_MS = 60_000
-const WRITER_SESSION_PREFETCH_LIMIT = 3
+const WRITER_SESSION_PREFETCH_LIMIT = 0
 const WRITER_PREFETCH_TURN_LIMIT = 8
 const WRITER_CONVERSATION_LIST_CACHE_KEY = "writer-conversations-cache-v2"
 

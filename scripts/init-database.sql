@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS "AI_MARKETING_conversations" (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id),
   title VARCHAR(255) NOT NULL,
+  current_model_id VARCHAR(255),
   created_at TIMESTAMP DEFAULT NOW()
 );
 

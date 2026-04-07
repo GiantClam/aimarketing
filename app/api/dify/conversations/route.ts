@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireAdvisorAccess } from "@/lib/auth/guards"
+import {
+  buildAdvisorConversationListCacheKey,
+  getAdvisorConversationListCache,
+  invalidateAdvisorConversationListCacheByScope,
+  setAdvisorConversationListCache,
+} from "@/lib/advisor/conversation-list-cache"
 import { getConversations } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { createLeadHunterConversation, listLeadHunterConversations } from "@/lib/lead-hunter/repository"
@@ -26,12 +32,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data)
     }
 
+    const cacheKey = buildAdvisorConversationListCacheKey({
+      userId: auth.user.id,
+      advisorType: resolvedAdvisorType,
+      lastId,
+      limit,
+    })
+    const freshCache = getAdvisorConversationListCache(cacheKey, "fresh")
+    if (freshCache) {
+      return NextResponse.json(freshCache.payload, {
+        headers: { "X-Advisor-List-Cache": "hit" },
+      })
+    }
+
     const difyUser = buildDifyUserIdentity(auth.user.email, resolvedAdvisorType)
     const config = await getDifyConfigByAdvisorType(resolvedAdvisorType, {
       userId: auth.user.id,
       userEmail: auth.user.email,
     })
     if (!config) {
+      const staleCache = getAdvisorConversationListCache(cacheKey, "stale")
+      if (staleCache) {
+        return NextResponse.json(staleCache.payload, {
+          headers: { "X-Advisor-List-Cache": "stale" },
+        })
+      }
       return NextResponse.json({
         data: [],
         has_more: false,
@@ -40,23 +65,43 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const difyRes = await getConversations(config, difyUser, lastId, limit)
+    try {
+      const difyRes = await getConversations(config, difyUser, lastId, limit)
 
-    if (!difyRes.ok) {
-      if (difyRes.status === 401 || difyRes.status === 503) {
-        return NextResponse.json({
-          data: [],
-          has_more: false,
-          limit,
-          source: "credential_blocked",
+      if (!difyRes.ok) {
+        const staleCache = getAdvisorConversationListCache(cacheKey, "stale")
+        if (staleCache) {
+          return NextResponse.json(staleCache.payload, {
+            headers: { "X-Advisor-List-Cache": "stale" },
+          })
+        }
+
+        if (difyRes.status === 401 || difyRes.status === 503) {
+          return NextResponse.json({
+            data: [],
+            has_more: false,
+            limit,
+            source: "credential_blocked",
+          })
+        }
+        const errorData = await difyRes.text()
+        return NextResponse.json({ error: "Dify API Error", details: errorData }, { status: difyRes.status })
+      }
+
+      const data = await difyRes.json()
+      setAdvisorConversationListCache(cacheKey, data)
+      return NextResponse.json(data, {
+        headers: { "X-Advisor-List-Cache": "miss" },
+      })
+    } catch (error: any) {
+      const staleCache = getAdvisorConversationListCache(cacheKey, "stale")
+      if (staleCache) {
+        return NextResponse.json(staleCache.payload, {
+          headers: { "X-Advisor-List-Cache": "stale" },
         })
       }
-      const errorData = await difyRes.text()
-      return NextResponse.json({ error: "Dify API Error", details: errorData }, { status: difyRes.status })
+      throw error
     }
-
-    const data = await difyRes.json()
-    return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -86,6 +131,7 @@ export async function POST(req: NextRequest) {
         ? "新建会话"
         : "New conversation"
     const conversation = await createLeadHunterConversation(auth.user.id, normalizedLeadHunterType, title)
+    invalidateAdvisorConversationListCacheByScope(auth.user.id, normalizedLeadHunterType)
 
     return NextResponse.json({
       data: {

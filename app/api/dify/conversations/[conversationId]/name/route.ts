@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireAdvisorAccess } from "@/lib/auth/guards"
+import { invalidateAdvisorConversationListCacheByScope } from "@/lib/advisor/conversation-list-cache"
 import { renameConversation } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { renameLeadHunterConversation } from "@/lib/lead-hunter/repository"
@@ -29,6 +30,7 @@ export async function POST(
       if (!data) {
         return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
       }
+      invalidateAdvisorConversationListCacheByScope(auth.user.id, normalizedLeadHunterType)
 
       return NextResponse.json({
         id: String(data.id),
@@ -52,6 +54,7 @@ export async function POST(
     }
 
     const data = await difyRes.json()
+    invalidateAdvisorConversationListCacheByScope(auth.user.id, resolvedAdvisorType)
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -43,7 +43,7 @@ interface Conversation {
 }
 
 const ADVISOR_CONVERSATION_CACHE_TTL_MS = 60_000
-const ADVISOR_SESSION_PREFETCH_LIMIT = 3
+const ADVISOR_SESSION_PREFETCH_LIMIT = 0
 const ADVISOR_CONVERSATION_LIST_CACHE_KEY = "advisor-conversations-cache-v2"
 
 function mergeConversations(current: Conversation[], incoming: Conversation[]) {

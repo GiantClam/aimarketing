@@ -14,21 +14,23 @@ declare global {
 
 const getConnectionString = (): string => {
   const isDevelopment = process.env.NODE_ENV === "development"
-  const dbUrl = isDevelopment
-    ? process.env.AI_MARKETING_DB_POSTGRES_URL ||
-      process.env.DATABASE_URL ||
-      process.env.POSTGRES_URL ||
-      process.env.POSTGRES_PRISMA_URL ||
-      process.env.AI_MARKETING_DB_POSTGRES_URL_NON_POOLING ||
-      process.env.DATABASE_URL_UNPOOLED ||
-      process.env.POSTGRES_URL_NON_POOLING
-    : process.env.AI_MARKETING_DB_POSTGRES_URL ||
-      process.env.DATABASE_URL ||
-      process.env.POSTGRES_URL ||
-      process.env.POSTGRES_PRISMA_URL ||
-      process.env.AI_MARKETING_DB_POSTGRES_URL_NON_POOLING ||
-      process.env.DATABASE_URL_UNPOOLED ||
-      process.env.POSTGRES_URL_NON_POOLING
+  const preferNonPooling = process.env.DB_PREFER_NON_POOLING === "true"
+  const pooledCandidates = [
+    process.env.AI_MARKETING_DB_POSTGRES_URL,
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.POSTGRES_PRISMA_URL,
+  ]
+  const directCandidates = [
+    process.env.AI_MARKETING_DB_POSTGRES_URL_NON_POOLING,
+    process.env.DATABASE_URL_UNPOOLED,
+    process.env.POSTGRES_URL_NON_POOLING,
+  ]
+
+  const orderedCandidates = isDevelopment && preferNonPooling
+    ? [...directCandidates, ...pooledCandidates]
+    : [...pooledCandidates, ...directCandidates]
+  const dbUrl = orderedCandidates.find((value) => typeof value === "string" && value.length > 0)
 
   if (!dbUrl) {
     return PLACEHOLDER_CONNECTION_STRING

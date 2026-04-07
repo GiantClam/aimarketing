@@ -20,6 +20,9 @@ ALTER TABLE "AI_MARKETING_writer_conversations" ADD COLUMN IF NOT EXISTS images_
 CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_conversations_user_created_idx"
 ON "AI_MARKETING_writer_conversations"(user_id, created_at DESC, id DESC);
 
+CREATE INDEX IF NOT EXISTS "AI_MARKETING_writer_conversations_user_updated_idx"
+ON "AI_MARKETING_writer_conversations"(user_id, updated_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS "AI_MARKETING_writer_messages" (
   id SERIAL PRIMARY KEY,
   conversation_id INTEGER NOT NULL REFERENCES "AI_MARKETING_writer_conversations"(id) ON DELETE CASCADE,

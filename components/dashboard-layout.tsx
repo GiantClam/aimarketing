@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
+  Bot,
   Globe,
   ImageIcon,
   LogOut,
@@ -22,8 +23,12 @@ import {
 } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
-import { DashboardAvailabilityProvider, useDashboardAvailability } from "@/components/dashboard-availability-provider"
+import { AiEntrySidebarItem } from "@/components/ai-entry/AiEntrySidebarItem"
 import { AdvisorSidebarItem } from "@/components/chat/AdvisorSidebarItem"
+import {
+  DashboardAvailabilityProvider,
+  useDashboardAvailability,
+} from "@/components/dashboard-availability-provider"
 import { ImageAssistantSidebarItem } from "@/components/image-assistant/ImageAssistantSidebarItem"
 import { useI18n } from "@/components/locale-provider"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -46,7 +51,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
 function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const router = useRouter()
-  const { messages } = useI18n()
+  const { messages, locale } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const { user, isDemoMode, loading, logout, hasFeature } = useAuth()
@@ -96,6 +101,15 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     if (enterprisePending || enterpriseRejected) return false
     return hasImageAssistantFeature && imageAssistant.enabled
   }, [enterprisePending, enterpriseRejected, hasImageAssistantFeature, imageAssistant.enabled])
+
+  const showAiEntry = useMemo(() => {
+    return true
+  }, [])
+
+  const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
+  const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
+  const consultingAdvisorHref =
+    "/dashboard/ai?agent=general&entry=consulting-advisor"
 
   return (
     <div className="flex h-screen bg-transparent">
@@ -155,6 +169,24 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   </div>
                 )}
 
+                {showAiEntry && (
+                  sidebarCollapsed ? (
+                    <Link href="/dashboard/ai">
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-center border border-sidebar-border bg-card"
+                        size="sm"
+                        title={aiEntryLabel}
+                        aria-label={aiEntryLabel}
+                      >
+                        <Bot className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  ) : (
+                    <AiEntrySidebarItem title={aiEntryLabel} icon={Bot} />
+                  )
+                )}
+
                 {showAdvisorSection && (
                   <div>
                     {!sidebarCollapsed && (
@@ -162,6 +194,26 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         {messages.dashboardLayout.advisorSection}
                       </h3>
                     )}
+                    {hasAdvisorFeature &&
+                      (sidebarCollapsed ? (
+                        <Link href={consultingAdvisorHref}>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-center"
+                            size="sm"
+                            title={consultingAdvisorLabel}
+                          >
+                            <Bot className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AiEntrySidebarItem
+                          title={consultingAdvisorLabel}
+                          icon={Bot}
+                          entryHref={consultingAdvisorHref}
+                          activeAgentId="general"
+                        />
+                      ))}
                     {hasAdvisorFeature && advisor.brandStrategy && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/brand-strategy/new">
@@ -350,3 +402,5 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     </div>
   )
 }
+
+

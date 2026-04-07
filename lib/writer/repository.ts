@@ -1,6 +1,10 @@
 import { and, desc, eq, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
+import {
+  createRetryableDbErrorMatcher,
+  withDbRetry as withDbRetryBase,
+} from "@/lib/db/retry"
 import { users, writerConversations, writerMessages } from "@/lib/db/schema"
 import {
   normalizeWriterLanguage,
@@ -26,6 +30,7 @@ const WRITER_MESSAGES_TABLE = "AI_MARKETING_writer_messages"
 const WRITER_CONVERSATIONS_UPDATED_INDEX = "AI_MARKETING_writer_conversations_user_updated_idx"
 const WRITER_CONVERSATIONS_ENTERPRISE_UPDATED_INDEX = "AI_MARKETING_writer_conversations_enterprise_updated_idx"
 const WRITER_MESSAGES_ROLE_ID_INDEX = "AI_MARKETING_writer_messages_conversation_role_id_desc_idx"
+const isRetryableWriterDbError = createRetryableDbErrorMatcher()
 
 type WriterConversationRow = {
   id: number
@@ -65,29 +70,8 @@ type WriterSchemaStatus = {
 }
 
 let writerTablesReadyPromise: Promise<void> | null = null
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-function isRetryableDbError(error: unknown) {
-  const message = getErrorMessage(error)
-  const causeMessage =
-    error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
-  const combined = `${message} ${causeMessage}`.toLowerCase()
-
-  return (
-    combined.includes("error connecting to database") ||
-    combined.includes("fetch failed") ||
-    combined.includes("connect timeout") ||
-    combined.includes("und_err_connect_timeout")
-  )
-}
+const shouldEnsureWriterSchemaAtRuntime =
+  process.env.NODE_ENV !== "production" || process.env.WRITER_RUNTIME_SCHEMA_ENSURE === "1"
 
 function toEpochSeconds(value: Date | string | number | null | undefined, fallbackSeconds: number) {
   if (value instanceof Date) {
@@ -135,24 +119,12 @@ function buildTimestampCursor(value: Date | string | number | null | undefined, 
 }
 
 async function withDbRetry<T>(label: string, operation: () => Promise<T>) {
-  for (let attempt = 0; attempt <= DB_RETRY_DELAYS_MS.length; attempt += 1) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (!isRetryableDbError(error) || attempt === DB_RETRY_DELAYS_MS.length) {
-        throw error
-      }
-
-      console.warn("writer.db.retry", {
-        label,
-        attempt: attempt + 1,
-        message: getErrorMessage(error),
-      })
-      await sleep(DB_RETRY_DELAYS_MS[attempt])
-    }
-  }
-
-  throw new Error(`writer_db_retry_exhausted:${label}`)
+  return withDbRetryBase(label, operation, {
+    retryDelaysMs: DB_RETRY_DELAYS_MS,
+    isRetryable: isRetryableWriterDbError,
+    logPrefix: "writer.db.retry",
+    exhaustedErrorPrefix: "writer_db_retry_exhausted",
+  })
 }
 
 async function readWriterSchemaStatus(): Promise<WriterSchemaStatus> {
@@ -321,6 +293,10 @@ async function applyWriterSchemaChanges(status: WriterSchemaStatus) {
 }
 
 async function ensureWriterTables() {
+  if (!shouldEnsureWriterSchemaAtRuntime) {
+    return
+  }
+
   if (!writerTablesReadyPromise) {
     writerTablesReadyPromise = withDbRetry("ensure-writer-tables", async () => {
       const schemaStatus = await readWriterSchemaStatus()

@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm"
 
 import { isDemoLoginEnabled } from "@/lib/auth/session"
 import { db } from "@/lib/db"
+import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { difyConnections, enterpriseDifyAdvisorConfigs, users } from "@/lib/db/schema"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
@@ -24,6 +25,7 @@ type DifyConfig = {
 type AdvisorType = "brand-strategy" | "growth" | "copywriting" | "company-search" | "contact-mining"
 const DEMO_USER_EMAIL = "demo@example.com"
 const DIFY_DB_RETRY_DELAYS_MS = [250, 750]
+const isRetryableDifyDbError = createRetryableDbErrorMatcher(["timeout exceeded"])
 
 function normalizeOptional(value?: string | null) {
   const trimmed = value?.trim()
@@ -36,53 +38,13 @@ function normalizeBaseUrl(baseUrl?: string | null) {
   return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed.replace(/\/+$/, "")}/v1`
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-function isRetryableDifyDbError(error: unknown) {
-  const message = getErrorMessage(error)
-  const causeMessage =
-    error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
-  const combined = `${message} ${causeMessage}`.toLowerCase()
-
-  return (
-    combined.includes("error connecting to database") ||
-    combined.includes("fetch failed") ||
-    combined.includes("connect timeout") ||
-    combined.includes("econnreset") ||
-    combined.includes("und_err_connect_timeout") ||
-    combined.includes("connection terminated unexpectedly") ||
-    combined.includes("terminating connection") ||
-    combined.includes("too many clients") ||
-    combined.includes("timeout exceeded")
-  )
-}
-
 async function withDifyDbRetry<T>(label: string, operation: () => Promise<T>) {
-  for (let attempt = 0; attempt <= DIFY_DB_RETRY_DELAYS_MS.length; attempt += 1) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (!isRetryableDifyDbError(error) || attempt === DIFY_DB_RETRY_DELAYS_MS.length) {
-        throw error
-      }
-
-      console.warn("dify.db.retry", {
-        label,
-        attempt: attempt + 1,
-        message: getErrorMessage(error),
-      })
-      await sleep(DIFY_DB_RETRY_DELAYS_MS[attempt])
-    }
-  }
-
-  throw new Error(`dify_db_retry_exhausted:${label}`)
+  return withDbRetry(label, operation, {
+    retryDelaysMs: DIFY_DB_RETRY_DELAYS_MS,
+    isRetryable: isRetryableDifyDbError,
+    logPrefix: "dify.db.retry",
+    exhaustedErrorPrefix: "dify_db_retry_exhausted",
+  })
 }
 
 function isStatelessDemoLookup(options?: DifyLookupOptions) {

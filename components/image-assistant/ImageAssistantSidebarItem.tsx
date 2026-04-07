@@ -48,7 +48,7 @@ function mergeSessions(current: ImageAssistantConversationSummary[], incoming: I
 }
 
 const IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS = 60_000
-const IMAGE_ASSISTANT_SESSION_PREFETCH_LIMIT = 3
+const IMAGE_ASSISTANT_SESSION_PREFETCH_LIMIT = 0
 const IMAGE_ASSISTANT_CONVERSATION_LIST_CACHE_KEY = "image-assistant-conversations-cache-v2"
 
 export function ImageAssistantSidebarItem({

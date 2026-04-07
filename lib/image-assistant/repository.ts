@@ -2,6 +2,11 @@
 
 import { db } from "@/lib/db"
 import {
+  createRetryableDbErrorMatcher,
+  getCombinedErrorMessage,
+  withDbRetry as withDbRetryBase,
+} from "@/lib/db/retry"
+import {
   imageDesignAssets,
   imageDesignCanvasDocuments,
   imageDesignCanvasLayers,
@@ -34,6 +39,7 @@ import type {
 
 const DB_RETRY_DELAYS_MS = [250, 750]
 const SESSION_PREFIX = "[image-assistant] "
+const isRetryableImageAssistantDbError = createRetryableDbErrorMatcher()
 
 type CursorParts = {
   timestamp: Date
@@ -69,25 +75,9 @@ type ImageAssistantSessionDetailOptions = {
   assetTypes?: ImageAssistantAssetType[]
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
 type ImageSessionAccessScope = {
   enterpriseId: number | null
   isEnterpriseAdmin: boolean
-}
-
-function getCombinedErrorMessage(error: unknown) {
-  const message = getErrorMessage(error)
-  const causeMessage =
-    error && typeof error === "object" && "cause" in error ? getErrorMessage((error as { cause?: unknown }).cause) : ""
-  return `${message} ${causeMessage}`.toLowerCase()
 }
 
 function isMissingColumnError(error: unknown, columnName: string) {
@@ -130,42 +120,13 @@ function removeMissingSessionPatchFields(error: unknown, patch: Record<string, u
   return { fallbackPatch, removed }
 }
 
-function isRetryableDbError(error: unknown) {
-  const combined = getCombinedErrorMessage(error)
-
-  return (
-    combined.includes("error connecting to database") ||
-    combined.includes("fetch failed") ||
-    combined.includes("connect timeout") ||
-    combined.includes("connection timeout") ||
-    combined.includes("econnreset") ||
-    combined.includes("econnrefused") ||
-    combined.includes("und_err_connect_timeout") ||
-    combined.includes("connection terminated unexpectedly") ||
-    combined.includes("terminating connection") ||
-    combined.includes("quota")
-  )
-}
-
 async function withDbRetry<T>(label: string, operation: () => Promise<T>) {
-  for (let attempt = 0; attempt <= DB_RETRY_DELAYS_MS.length; attempt += 1) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (!isRetryableDbError(error) || attempt === DB_RETRY_DELAYS_MS.length) {
-        throw error
-      }
-
-      console.warn("image-assistant.db.retry", {
-        label,
-        attempt: attempt + 1,
-        message: getErrorMessage(error),
-      })
-      await sleep(DB_RETRY_DELAYS_MS[attempt])
-    }
-  }
-
-  throw new Error(`image_assistant_db_retry_exhausted:${label}`)
+  return withDbRetryBase(label, operation, {
+    retryDelaysMs: DB_RETRY_DELAYS_MS,
+    isRetryable: isRetryableImageAssistantDbError,
+    logPrefix: "image-assistant.db.retry",
+    exhaustedErrorPrefix: "image_assistant_db_retry_exhausted",
+  })
 }
 
 function toEpochSeconds(value: Date | string | number | null | undefined) {
