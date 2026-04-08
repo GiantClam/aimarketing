@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -11,7 +12,7 @@ type MarkdownProps = {
   className?: string
 }
 
-export function Markdown({ children, className }: MarkdownProps) {
+function MarkdownComponent({ children, className }: MarkdownProps) {
   return (
     <div
       className={cn(
@@ -48,3 +49,6 @@ export function Markdown({ children, className }: MarkdownProps) {
     </div>
   )
 }
+
+export const Markdown = memo(MarkdownComponent)
+Markdown.displayName = "Markdown"

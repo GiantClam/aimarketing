@@ -71,6 +71,10 @@ type ChatStreamApiResponse = {
   data?: {
     toolName?: string
     toolCallId?: string
+    status?: "hit" | "miss" | "failed"
+    snippetCount?: number
+    datasetCount?: number
+    message?: string
   } | null
 }
 type ModelApiResponse = {
@@ -243,6 +247,12 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       }),
     [routeEntryMode],
   )
+  const workspaceTitle = shouldLockModel
+    ? (isZh ? "咨询专家" : "Consulting Advisor")
+    : copy.title
+  const workspaceSubtitle = shouldLockModel
+    ? (isZh ? "企业咨询专家对话入口" : "Enterprise consulting advisor entry")
+    : copy.subtitle
   const lockedSonnetModelId = useMemo(
     () => pickSonnet46ModelId(models) || AI_ENTRY_SONNET_46_MODEL_HINT,
     [models],
@@ -525,6 +535,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     if (!initialConversationId) {
       setMessages([])
       setIsConversationLoading(false)
+      if (!shouldLockModel && models.length > 0) {
+        const sonnetDefault = pickSonnet46ModelId(models) || models[0]?.id || null
+        setSelectedModelId(sonnetDefault)
+      }
       return
     }
 
@@ -573,7 +587,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return () => {
       cancelled = true
     }
-  }, [copy.errorPrefix, copy.unknownError, initialConversationId, routeEntryMode, shouldLockModel])
+  }, [copy.errorPrefix, copy.unknownError, initialConversationId, models, routeEntryMode, shouldLockModel])
 
   const renderModelSelectContent = useCallback(() => {
     if (modelsLoading) return <SelectItem value="__loading" disabled>{copy.modelLoading}</SelectItem>
@@ -706,6 +720,42 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               label: "Model routing",
               detail: detail || undefined,
               status: event.event === "provider_fallback" ? "info" : "running",
+              at: now,
+            })
+            return
+          }
+
+          if (event.event === "knowledge_query_start") {
+            upsertTaskEvent({
+              type: "knowledge_query",
+              label: "Query enterprise knowledge",
+              status: "running",
+              at: now,
+            })
+            return
+          }
+
+          if (event.event === "knowledge_query_result") {
+            const status = event.data?.status || "miss"
+            const snippetCount =
+              typeof event.data?.snippetCount === "number" ? event.data.snippetCount : 0
+            const datasetCount =
+              typeof event.data?.datasetCount === "number" ? event.data.datasetCount : 0
+            const detail =
+              status === "failed"
+                ? event.data?.message || "failed"
+                : `${snippetCount} snippets / ${datasetCount} datasets`
+
+            upsertTaskEvent({
+              type: "knowledge_query",
+              label: "Enterprise knowledge queried",
+              detail,
+              status:
+                status === "failed"
+                  ? "failed"
+                  : status === "hit"
+                    ? "completed"
+                    : "info",
               at: now,
             })
             return
@@ -949,7 +999,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       <div className="flex h-full min-h-0 justify-center overflow-y-auto bg-background">
         <section className="w-full max-w-6xl px-4 py-10 lg:px-8">
           <div className="mx-auto max-w-4xl text-center">
-            <h1 className="text-5xl font-semibold tracking-tight text-foreground lg:text-6xl">{copy.title}</h1>
+            <h1 className="text-5xl font-semibold tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
             <p className="mt-4 text-lg text-muted-foreground">{copy.landingHint}</p>
           </div>
 
@@ -995,8 +1045,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     <div className="flex h-full min-h-0 justify-center">
       <section className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] border-x border-b border-border/70 bg-background">
         <header className="border-b border-border/70 bg-card/60 px-4 py-3 backdrop-blur">
-          <h1 className="flex items-center gap-2 text-base font-semibold text-foreground"><Bot className="h-4 w-4" />{copy.title}</h1>
-          <p className="text-xs text-muted-foreground">{copy.subtitle}</p>
+          <h1 className="flex items-center gap-2 text-base font-semibold text-foreground"><Bot className="h-4 w-4" />{workspaceTitle}</h1>
+          <p className="text-xs text-muted-foreground">{workspaceSubtitle}</p>
         </header>
 
         <div className="min-h-0 flex-1">
@@ -1057,8 +1107,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           </ScrollArea>
         </div>
 
-        <div className="border-t border-border/70 bg-card/70 px-3 py-3 lg:px-4">
-          <div className="mx-auto w-full max-w-5xl">
+        <div className="shrink-0 border-t border-border/70 bg-transparent px-3 py-3 lg:px-4">
+          <div className="mx-auto w-full max-w-5xl rounded-2xl bg-background/90 p-2 supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur">
             {!isConversationLoading && messages.length === 0 ? (
               <div className="mb-2">
                 <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{copy.quickStart}</div>

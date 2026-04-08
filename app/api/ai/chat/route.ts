@@ -41,6 +41,7 @@ import {
   pickSonnet46ModelId,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
+import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 
 export const runtime = "nodejs"
 
@@ -139,6 +140,16 @@ function canLoadEnterpriseKnowledgeForUser(user: {
   return user.enterpriseStatus === "active"
 }
 
+type KnowledgeQueryProgress = {
+  event: "knowledge_query_start" | "knowledge_query_result"
+  data?: {
+    status?: "hit" | "miss" | "failed"
+    snippetCount?: number
+    datasetCount?: number
+    message?: string
+  }
+}
+
 function buildEnterpriseKnowledgePromptSection(context: EnterpriseKnowledgeContext) {
   if (!context.snippets.length) return ""
 
@@ -160,11 +171,36 @@ function buildEnterpriseKnowledgePromptSection(context: EnterpriseKnowledgeConte
 function buildAiEntrySystemPrompt(
   enterpriseKnowledge: EnterpriseKnowledgeContext | null,
   agentInstruction: string,
+  latestUserPrompt: string,
+  forcedReplyLanguage: "zh" | "en" | null,
 ) {
+  const normalizedPrompt = latestUserPrompt.trim()
+  const inferredLanguage = /[\u4e00-\u9fff]/.test(normalizedPrompt)
+    ? "Chinese"
+    : normalizedPrompt
+      ? "the user's message language"
+      : "the user's message language"
+  const languageDirectives =
+    forcedReplyLanguage === "en"
+      ? [
+          "Language lock: the user explicitly requested English responses.",
+          "Reply in English for subsequent turns regardless of user input language until the user explicitly asks to switch language.",
+        ]
+      : forcedReplyLanguage === "zh"
+        ? [
+            "Language lock: the user explicitly requested Chinese responses.",
+            "后续回复必须保持中文，不受用户输入语言影响，直到用户再次明确要求切换语言。",
+          ]
+        : [
+            "Language rule: default to the same language as the user's latest input.",
+            "Language rule: only switch languages when the user explicitly asks to do so.",
+            `Language hint: latest user input should be treated as ${inferredLanguage}.`,
+          ]
   const base = [
     "You are a general consulting advisor assistant for enterprise users.",
     "Identity rule: never claim you are Kiro or a software-development-only assistant.",
     "Identity rule: when asked who you are, describe yourself as a general consulting advisor assistant.",
+    ...languageDirectives,
     "Provide concise but actionable answers with structured bullets when useful.",
     "When tools are available, call them only if they materially improve correctness.",
     "Ground answers in the user's question and sound consulting practice; do not invent company-specific facts, figures, or policies unless they come from the user or from retrieved enterprise knowledge below.",
@@ -191,11 +227,20 @@ function isIdentityPrompt(prompt: string) {
   )
 }
 
-function normalizeAiEntryIdentity(text: string, prompt: string) {
+function normalizeAiEntryIdentity(
+  text: string,
+  prompt: string,
+  forcedReplyLanguage: "zh" | "en" | null,
+) {
   const trimmed = text.trim()
   if (!trimmed) return text
   const isIdentityQuery = isIdentityPrompt(prompt)
-  const looksChinese = /[\u4e00-\u9fff]/.test(`${prompt}\n${trimmed}`)
+  const looksChinese =
+    forcedReplyLanguage === "zh"
+      ? true
+      : forcedReplyLanguage === "en"
+        ? false
+        : /[\u4e00-\u9fff]/.test(`${prompt}\n${trimmed}`)
   const replacement = looksChinese
     ? "\u6211\u662f\u901a\u7528\u54a8\u8be2\u987e\u95ee\u52a9\u624b\uff0c\u4e13\u6ce8\u4e8e\u7b56\u7565\u3001\u589e\u957f\u3001\u8fd0\u8425\u4e0e\u6267\u884c\u4f18\u5316\u7b49\u4e1a\u52a1\u95ee\u9898\u3002"
     : "I am a general consulting advisor assistant focused on strategy, growth, operations, and execution optimization."
@@ -442,6 +487,7 @@ export async function POST(request: NextRequest) {
         : ([{ role: "user", content: fallbackPrompt }] as CoreMessage[])
 
     const latestUserPrompt = getLatestUserPrompt(normalizedMessages) || fallbackPrompt
+    const forcedReplyLanguage = resolveForcedReplyLanguage(normalizedMessages)
     const agentConfig = parseAgentConfig(body.agentConfig)
     const conversationScope: AiEntryConversationScope = parseConversationScope(body)
     const modelConfig = await resolveModelConfig(parseModelConfig(body.modelConfig), {
@@ -478,26 +524,53 @@ export async function POST(request: NextRequest) {
     const knowledgeSource =
       body.knowledgeSource === "personal_kb" ? "personal_kb" : "industry_kb"
 
-    let enterpriseKnowledge: EnterpriseKnowledgeContext | null = null
     const enterpriseId = currentUser.enterpriseId
-    if (
+    const canQueryEnterpriseKnowledge =
       canLoadEnterpriseKnowledgeForUser(currentUser) &&
       typeof enterpriseId === "number" &&
       enterpriseId > 0 &&
-      latestUserPrompt.trim()
-    ) {
+      latestUserPrompt.trim().length > 0
+
+    const loadEnterpriseKnowledge = async (
+      notifyProgress?: (progress: KnowledgeQueryProgress) => void,
+    ) => {
+      if (!canQueryEnterpriseKnowledge) return null
+
+      notifyProgress?.({
+        event: "knowledge_query_start",
+      })
       try {
-        enterpriseKnowledge = await loadEnterpriseKnowledgeContext({
+        const enterpriseKnowledge = await loadEnterpriseKnowledgeContext({
           enterpriseId,
           query: latestUserPrompt.trim(),
           platform: "generic",
           mode: "article",
         })
+        notifyProgress?.({
+          event: "knowledge_query_result",
+          data: {
+            status:
+              enterpriseKnowledge && enterpriseKnowledge.snippets.length > 0
+                ? "hit"
+                : "miss",
+            snippetCount: enterpriseKnowledge?.snippets.length || 0,
+            datasetCount: enterpriseKnowledge?.datasetsUsed.length || 0,
+          },
+        })
+        return enterpriseKnowledge
       } catch (error) {
         console.warn("ai-entry.chat.enterprise_knowledge.failed", {
           enterpriseId,
           message: error instanceof Error ? error.message : String(error),
         })
+        notifyProgress?.({
+          event: "knowledge_query_result",
+          data: {
+            status: "failed",
+            message: extractErrorMessage(error),
+          },
+        })
+        return null
       }
     }
 
@@ -558,10 +631,6 @@ export async function POST(request: NextRequest) {
 
     const maxStepCount = selectedToolIds.length > 0 ? 8 : 1
     const stopWhen = stepCountIs(maxStepCount)
-    const systemPrompt = buildAiEntrySystemPrompt(
-      enterpriseKnowledge,
-      resolvedInstruction,
-    )
     const providerOptions = modelConfig
       ? {
           preferredProviderId: modelConfig.providerId || undefined,
@@ -589,6 +658,13 @@ export async function POST(request: NextRequest) {
     })
 
     if (!stream) {
+      const enterpriseKnowledge = await loadEnterpriseKnowledge()
+      const systemPrompt = buildAiEntrySystemPrompt(
+        enterpriseKnowledge,
+        resolvedInstruction,
+        latestUserPrompt,
+        forcedReplyLanguage,
+      )
       const execution = await executeAiEntryWithProviderFailover(
         async (providerRun) => {
           console.info("ai-entry.chat.provider.attempt", {
@@ -619,6 +695,7 @@ export async function POST(request: NextRequest) {
       const normalizedAssistantMessage = normalizeAiEntryIdentity(
         execution.result.text || "",
         latestUserPrompt,
+        forcedReplyLanguage,
       )
 
       if (persistenceEnabled) {
@@ -674,6 +751,19 @@ export async function POST(request: NextRequest) {
             agent_id: effectiveAgentId,
             agent_route: routeDecision,
           })
+          const enterpriseKnowledge = await loadEnterpriseKnowledge((progress) => {
+            sendEvent({
+              event: progress.event,
+              conversation_id: conversationId,
+              data: progress.data || null,
+            })
+          })
+          const systemPrompt = buildAiEntrySystemPrompt(
+            enterpriseKnowledge,
+            resolvedInstruction,
+            latestUserPrompt,
+            forcedReplyLanguage,
+          )
 
           const execution = await executeAiEntryWithProviderFailover(async (providerRun) => {
             console.info("ai-entry.chat.provider.attempt", {
@@ -784,6 +874,7 @@ export async function POST(request: NextRequest) {
           const normalizedStreamedAnswer = normalizeAiEntryIdentity(
             execution.result.accumulated || "",
             latestUserPrompt,
+            forcedReplyLanguage,
           )
           sendEvent({
             event: "message_end",

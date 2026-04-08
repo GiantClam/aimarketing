@@ -44,18 +44,19 @@ async function resolveCreateConversationModelId(
 
   if (requestedModelId) return requestedModelId
 
-  const latestModelId = await getLatestAiEntryConversationModelId(userId, scope)
-  if (latestModelId) return latestModelId
-
   try {
     const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
     const sonnetModelId = pickSonnet46ModelId(catalog.models)
     if (sonnetModelId) return sonnetModelId
+    if (catalog.selectedModelId) return catalog.selectedModelId
   } catch (error) {
     console.warn("ai-entry.conversation.create.default-model.resolve.failed", {
       message: error instanceof Error ? error.message : String(error),
     })
   }
+
+  const latestModelId = await getLatestAiEntryConversationModelId(userId, scope)
+  if (latestModelId) return latestModelId
 
   return AI_ENTRY_SONNET_46_MODEL_HINT
 }
