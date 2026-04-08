@@ -64,6 +64,7 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+.tmp*
 
 # Local tool state and scratch files
 .agent/

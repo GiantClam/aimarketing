@@ -7,6 +7,7 @@ import { conversations, messages } from "@/lib/db/schema"
 const AI_ENTRY_CHAT_TITLE_PREFIX = "[ai-entry] "
 const AI_ENTRY_CONSULTING_TITLE_PREFIX = "[ai-consulting] "
 const AI_ENTRY_DEFAULT_TITLE = "New chat"
+const AI_ENTRY_AUTO_TITLE_MAX_LENGTH = 60
 const DB_RETRY_DELAYS_MS = [250, 750]
 
 export type AiEntryConversationScope = "chat" | "consulting"
@@ -136,7 +137,10 @@ function buildConversationTitleFromPrompt(
   prompt: string,
   scope: AiEntryConversationScope,
 ) {
-  const normalizedPrompt = prompt.replace(/\s+/g, " ").trim().slice(0, 80)
+  const normalizedPrompt = prompt
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, AI_ENTRY_AUTO_TITLE_MAX_LENGTH)
   return buildConversationTitle(normalizedPrompt || AI_ENTRY_DEFAULT_TITLE, scope)
 }
 
@@ -453,13 +457,16 @@ export async function appendAiEntryTurn(params: {
 
   const existingMessageCount = Number(messageCountRows[0]?.count || 0)
   const shouldRetitle = existingMessageCount === 0 || isGenericConversationTitle(conversation.title)
+  const nextTitle = shouldRetitle
+    ? buildConversationTitleFromPrompt(params.userPrompt, scope)
+    : conversation.title
 
   if (shouldRetitle) {
     await withAiEntryDbRetry("retitle-ai-entry-conversation", () =>
       db
         .update(conversations)
         .set({
-          title: buildConversationTitleFromPrompt(params.userPrompt, scope),
+          title: nextTitle,
         })
         .where(eq(conversations.id, conversation.id)),
     )
@@ -476,9 +483,7 @@ export async function appendAiEntryTurn(params: {
 
   return mapConversationSummary({
     id: conversation.id,
-    title: shouldRetitle
-      ? buildConversationTitleFromPrompt(params.userPrompt, scope)
-      : conversation.title,
+    title: nextTitle,
     currentModelId: conversation.currentModelId,
     createdAt: conversation.createdAt,
   })
