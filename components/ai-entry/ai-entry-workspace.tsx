@@ -90,7 +90,6 @@ type AgentApiResponse = {
 }
 
 const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
-const AI_ENTRY_EMPTY_RESPONSE_ERROR = "ai_entry_empty_response"
 
 function readInitialAgentFromLocation() {
   if (typeof window === "undefined") return null
@@ -138,11 +137,10 @@ function consumeSseBuffer<T extends object>(buffer: string) {
 
 function renderAiEntryErrorMessage(
   value: unknown,
-  copy: { unknownError: string; emptyResponseError: string },
+  copy: { unknownError: string },
 ) {
   const raw = typeof value === "string" ? value.trim() : ""
   if (!raw) return copy.unknownError
-  if (raw === AI_ENTRY_EMPTY_RESPONSE_ERROR) return copy.emptyResponseError
   return raw
 }
 
@@ -178,7 +176,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             copyReply: "复制回复",
             copiedReply: "已复制",
             unknownError: "未知错误",
-            emptyResponseError: "模型未返回内容，请稍后重试。",
             errorPrefix: "请求失败：",
           }
         : {
@@ -203,7 +200,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             copyReply: "Copy reply",
             copiedReply: "Copied",
             unknownError: "Unknown error",
-            emptyResponseError: "The model returned no content. Please try again.",
             errorPrefix: "Request failed: ",
           },
     [isZh],

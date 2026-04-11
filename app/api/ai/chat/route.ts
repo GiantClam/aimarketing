@@ -90,6 +90,7 @@ const STREAM_HEADERS = {
   "X-Accel-Buffering": "no",
 }
 const AI_ENTRY_EMPTY_RESPONSE_ERROR = "ai_entry_empty_response"
+const AI_ENTRY_EMPTY_RESPONSE_AUTO_RETRY_LIMIT = 1
 
 function createChatTraceId() {
   return `ai-entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -131,6 +132,39 @@ function toAiEntryExecutionError(error: unknown, retryable: boolean) {
   const normalized = error instanceof Error ? error : new Error(extractErrorMessage(error))
   ;(normalized as Error & { aiEntryRetryable?: boolean }).aiEntryRetryable = retryable
   return normalized
+}
+
+function isAiEntryEmptyResponseError(error: unknown) {
+  return extractErrorMessage(error) === AI_ENTRY_EMPTY_RESPONSE_ERROR
+}
+
+async function executeWithEmptyResponseAutoRetry<T>(params: {
+  traceId: string
+  conversationId: string
+  streamed: boolean
+  run: () => Promise<T>
+}) {
+  let retryAttempt = 0
+  while (true) {
+    try {
+      return await params.run()
+    } catch (error) {
+      if (
+        !isAiEntryEmptyResponseError(error) ||
+        retryAttempt >= AI_ENTRY_EMPTY_RESPONSE_AUTO_RETRY_LIMIT
+      ) {
+        throw error
+      }
+      retryAttempt += 1
+      console.warn("ai-entry.chat.empty_response.retry", {
+        traceId: params.traceId,
+        conversationId: params.conversationId,
+        streamed: params.streamed,
+        retryAttempt,
+        retryLimit: AI_ENTRY_EMPTY_RESPONSE_AUTO_RETRY_LIMIT,
+      })
+    }
+  }
 }
 
 function canLoadEnterpriseKnowledgeForUser(user: {
@@ -707,56 +741,62 @@ export async function POST(request: NextRequest) {
         latestUserPrompt,
         forcedReplyLanguage,
       )
-      const execution = await executeAiEntryWithProviderFailover(
-        async (providerRun) => {
-          console.info("ai-entry.chat.provider.attempt", {
-            traceId,
-            conversationId,
-            provider: providerRun.providerId,
-            model: providerRun.model,
-            attempt: providerRun.attempt,
-          })
-          const providerInput = buildProviderMessages({
-            providerId: providerRun.providerId,
-            systemPrompt,
-            messages: normalizedMessages,
-          })
-          const result = await generateText({
-            // Force OpenAI-compatible chat completions path for proxy providers
-            // that do not implement the newer /responses endpoint.
-            model: providerRun.provider.chat(providerRun.model),
-            ...(providerInput.system ? { system: providerInput.system } : {}),
-            messages: providerInput.messages,
-            tools: selectedTools,
-            stopWhen,
-          })
-          const resolvedText = (result.text || "").trim()
-          if (!resolvedText) {
-            console.warn("ai-entry.chat.provider.empty_response", {
-              traceId,
-              conversationId,
-              provider: providerRun.providerId,
-              model: providerRun.model,
-              attempt: providerRun.attempt,
-            })
-            throw toAiEntryExecutionError(
-              new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
-              true,
-            )
-          }
-          console.info("ai-entry.chat.provider.success", {
-            traceId,
-            conversationId,
-            provider: providerRun.providerId,
-            model: providerRun.model,
-            attempt: providerRun.attempt,
-            outputChars: resolvedText.length,
-            streamed: false,
-          })
-          return result
-        },
-        providerOptions,
-      )
+      const execution = await executeWithEmptyResponseAutoRetry({
+        traceId,
+        conversationId,
+        streamed: false,
+        run: () =>
+          executeAiEntryWithProviderFailover(
+            async (providerRun) => {
+              console.info("ai-entry.chat.provider.attempt", {
+                traceId,
+                conversationId,
+                provider: providerRun.providerId,
+                model: providerRun.model,
+                attempt: providerRun.attempt,
+              })
+              const providerInput = buildProviderMessages({
+                providerId: providerRun.providerId,
+                systemPrompt,
+                messages: normalizedMessages,
+              })
+              const result = await generateText({
+                // Force OpenAI-compatible chat completions path for proxy providers
+                // that do not implement the newer /responses endpoint.
+                model: providerRun.provider.chat(providerRun.model),
+                ...(providerInput.system ? { system: providerInput.system } : {}),
+                messages: providerInput.messages,
+                tools: selectedTools,
+                stopWhen,
+              })
+              const resolvedText = (result.text || "").trim()
+              if (!resolvedText) {
+                console.warn("ai-entry.chat.provider.empty_response", {
+                  traceId,
+                  conversationId,
+                  provider: providerRun.providerId,
+                  model: providerRun.model,
+                  attempt: providerRun.attempt,
+                })
+                throw toAiEntryExecutionError(
+                  new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
+                  true,
+                )
+              }
+              console.info("ai-entry.chat.provider.success", {
+                traceId,
+                conversationId,
+                provider: providerRun.providerId,
+                model: providerRun.model,
+                attempt: providerRun.attempt,
+                outputChars: resolvedText.length,
+                streamed: false,
+              })
+              return result
+            },
+            providerOptions,
+          ),
+      })
       const normalizedAssistantMessage = normalizeAiEntryIdentity(
         execution.result.text || "",
         latestUserPrompt,
@@ -830,134 +870,140 @@ export async function POST(request: NextRequest) {
             forcedReplyLanguage,
           )
 
-          const execution = await executeAiEntryWithProviderFailover(async (providerRun) => {
-            console.info("ai-entry.chat.provider.attempt", {
-              traceId,
-              conversationId,
-              provider: providerRun.providerId,
-              model: providerRun.model,
-              attempt: providerRun.attempt,
-            })
-            const providerInput = buildProviderMessages({
-              providerId: providerRun.providerId,
-              systemPrompt,
-              messages: normalizedMessages,
-            })
-            sendEvent({
-              event:
-                providerRun.attempt === 1
-                  ? "provider_selected"
-                  : "provider_fallback",
-              conversation_id: conversationId,
-              provider: providerRun.providerId,
-              provider_model: providerRun.model,
-              provider_order: providerRun.providerOrder,
-              provider_attempt: providerRun.attempt,
-              provider_upgrade_probe: providerRun.upgradeProbe,
-            })
-
-            const result = streamText({
-              // Keep stream mode aligned with non-stream mode on chat/completions.
-              model: providerRun.provider.chat(providerRun.model),
-              ...(providerInput.system ? { system: providerInput.system } : {}),
-              messages: providerInput.messages,
-              tools: selectedTools,
-              stopWhen,
-            })
-
-            let accumulated = ""
-            let hasStreamOutput = false
-            try {
-              for await (const part of result.fullStream) {
-                const streamPart = part as FullStreamPart
-                const eventType = streamPart.type || ""
-
-                if (eventType === "text-delta") {
-                  const delta = streamPart.textDelta || ""
-                  if (delta) {
-                    accumulated += delta
-                    hasStreamOutput = true
-                    sendEvent({
-                      event: "message",
-                      conversation_id: conversationId,
-                      answer: delta,
-                    })
-                  }
-                  continue
-                }
-
-                if (eventType === "tool-call") {
-                  sendEvent({
-                    event: "tool_call",
-                    conversation_id: conversationId,
-                    data: {
-                      toolName: streamPart.toolName || "",
-                      toolCallId: streamPart.toolCallId || "",
-                      args: streamPart.args ?? streamPart.input ?? null,
-                    },
-                  })
-                  continue
-                }
-
-                if (eventType === "tool-result") {
-                  sendEvent({
-                    event: "tool_result",
-                    conversation_id: conversationId,
-                    data: {
-                      toolName: streamPart.toolName || "",
-                      toolCallId: streamPart.toolCallId || "",
-                      result: streamPart.result ?? null,
-                    },
-                  })
-                  continue
-                }
-
-                if (eventType === "error") {
-                  throw new Error(extractErrorMessage(streamPart.error))
-                }
-              }
-
-              if (!accumulated.trim()) {
-                const fallbackText = (await result.text).trim()
-                if (fallbackText) {
-                  accumulated = fallbackText
-                  hasStreamOutput = true
-                  sendEvent({
-                    event: "message",
-                    conversation_id: conversationId,
-                    answer: fallbackText,
-                  })
-                }
-              }
-              const resolvedText = accumulated.trim()
-              if (!resolvedText) {
-                console.warn("ai-entry.chat.provider.empty_response", {
+          const execution = await executeWithEmptyResponseAutoRetry({
+            traceId,
+            conversationId,
+            streamed: true,
+            run: () =>
+              executeAiEntryWithProviderFailover(async (providerRun) => {
+                console.info("ai-entry.chat.provider.attempt", {
                   traceId,
                   conversationId,
                   provider: providerRun.providerId,
                   model: providerRun.model,
                   attempt: providerRun.attempt,
                 })
-                throw toAiEntryExecutionError(
-                  new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
-                  true,
-                )
-              }
-              console.info("ai-entry.chat.provider.success", {
-                traceId,
-                conversationId,
-                provider: providerRun.providerId,
-                model: providerRun.model,
-                attempt: providerRun.attempt,
-                outputChars: resolvedText.length,
-                streamed: true,
-              })
-            } catch (error) {
-              throw toAiEntryExecutionError(error, !hasStreamOutput)
-            }
+                const providerInput = buildProviderMessages({
+                  providerId: providerRun.providerId,
+                  systemPrompt,
+                  messages: normalizedMessages,
+                })
+                sendEvent({
+                  event:
+                    providerRun.attempt === 1
+                      ? "provider_selected"
+                      : "provider_fallback",
+                  conversation_id: conversationId,
+                  provider: providerRun.providerId,
+                  provider_model: providerRun.model,
+                  provider_order: providerRun.providerOrder,
+                  provider_attempt: providerRun.attempt,
+                  provider_upgrade_probe: providerRun.upgradeProbe,
+                })
 
-            return { accumulated }
-          }, providerOptions)
+                const result = streamText({
+                  // Keep stream mode aligned with non-stream mode on chat/completions.
+                  model: providerRun.provider.chat(providerRun.model),
+                  ...(providerInput.system ? { system: providerInput.system } : {}),
+                  messages: providerInput.messages,
+                  tools: selectedTools,
+                  stopWhen,
+                })
+
+                let accumulated = ""
+                let hasStreamOutput = false
+                try {
+                  for await (const part of result.fullStream) {
+                    const streamPart = part as FullStreamPart
+                    const eventType = streamPart.type || ""
+
+                    if (eventType === "text-delta") {
+                      const delta = streamPart.textDelta || ""
+                      if (delta) {
+                        accumulated += delta
+                        hasStreamOutput = true
+                        sendEvent({
+                          event: "message",
+                          conversation_id: conversationId,
+                          answer: delta,
+                        })
+                      }
+                      continue
+                    }
+
+                    if (eventType === "tool-call") {
+                      sendEvent({
+                        event: "tool_call",
+                        conversation_id: conversationId,
+                        data: {
+                          toolName: streamPart.toolName || "",
+                          toolCallId: streamPart.toolCallId || "",
+                          args: streamPart.args ?? streamPart.input ?? null,
+                        },
+                      })
+                      continue
+                    }
+
+                    if (eventType === "tool-result") {
+                      sendEvent({
+                        event: "tool_result",
+                        conversation_id: conversationId,
+                        data: {
+                          toolName: streamPart.toolName || "",
+                          toolCallId: streamPart.toolCallId || "",
+                          result: streamPart.result ?? null,
+                        },
+                      })
+                      continue
+                    }
+
+                    if (eventType === "error") {
+                      throw new Error(extractErrorMessage(streamPart.error))
+                    }
+                  }
+
+                  if (!accumulated.trim()) {
+                    const fallbackText = (await result.text).trim()
+                    if (fallbackText) {
+                      accumulated = fallbackText
+                      hasStreamOutput = true
+                      sendEvent({
+                        event: "message",
+                        conversation_id: conversationId,
+                        answer: fallbackText,
+                      })
+                    }
+                  }
+                  const resolvedText = accumulated.trim()
+                  if (!resolvedText) {
+                    console.warn("ai-entry.chat.provider.empty_response", {
+                      traceId,
+                      conversationId,
+                      provider: providerRun.providerId,
+                      model: providerRun.model,
+                      attempt: providerRun.attempt,
+                    })
+                    throw toAiEntryExecutionError(
+                      new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
+                      true,
+                    )
+                  }
+                  console.info("ai-entry.chat.provider.success", {
+                    traceId,
+                    conversationId,
+                    provider: providerRun.providerId,
+                    model: providerRun.model,
+                    attempt: providerRun.attempt,
+                    outputChars: resolvedText.length,
+                    streamed: true,
+                  })
+                } catch (error) {
+                  throw toAiEntryExecutionError(error, !hasStreamOutput)
+                }
+
+                return { accumulated }
+              }, providerOptions),
+          })
 
           const normalizedStreamedAnswer = normalizeAiEntryIdentity(
             execution.result.accumulated || "",
