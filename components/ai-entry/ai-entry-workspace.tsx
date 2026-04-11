@@ -90,6 +90,7 @@ type AgentApiResponse = {
 }
 
 const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
+const AI_ENTRY_EMPTY_RESPONSE_ERROR = "ai_entry_empty_response"
 
 function readInitialAgentFromLocation() {
   if (typeof window === "undefined") return null
@@ -135,6 +136,16 @@ function consumeSseBuffer<T extends object>(buffer: string) {
   return { events, rest }
 }
 
+function renderAiEntryErrorMessage(
+  value: unknown,
+  copy: { unknownError: string; emptyResponseError: string },
+) {
+  const raw = typeof value === "string" ? value.trim() : ""
+  if (!raw) return copy.unknownError
+  if (raw === AI_ENTRY_EMPTY_RESPONSE_ERROR) return copy.emptyResponseError
+  return raw
+}
+
 export function AiEntryWorkspace({ initialConversationId }: { initialConversationId: string | null }) {
   const { locale } = useI18n()
   const router = useRouter()
@@ -167,6 +178,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             copyReply: "复制回复",
             copiedReply: "已复制",
             unknownError: "未知错误",
+            emptyResponseError: "模型未返回内容，请稍后重试。",
             errorPrefix: "请求失败：",
           }
         : {
@@ -191,6 +203,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             copyReply: "Copy reply",
             copiedReply: "Copied",
             unknownError: "Unknown error",
+            emptyResponseError: "The model returned no content. Please try again.",
             errorPrefix: "Request failed: ",
           },
     [isZh],
@@ -577,7 +590,12 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       } catch (error) {
         if (cancelled) return
         setMessages([])
-        setErrorMessage(`${copy.errorPrefix}${error instanceof Error ? error.message : copy.unknownError}`)
+        setErrorMessage(
+          `${copy.errorPrefix}${renderAiEntryErrorMessage(
+            error instanceof Error ? error.message : error,
+            copy,
+          )}`,
+        )
       } finally {
         if (!cancelled) setIsConversationLoading(false)
       }
@@ -587,7 +605,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return () => {
       cancelled = true
     }
-  }, [copy.errorPrefix, copy.unknownError, initialConversationId, models, routeEntryMode, shouldLockModel])
+  }, [copy, initialConversationId, models, routeEntryMode, shouldLockModel])
 
   const renderModelSelectContent = useCallback(() => {
     if (modelsLoading) return <SelectItem value="__loading" disabled>{copy.modelLoading}</SelectItem>
@@ -838,10 +856,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           }
 
           if (event.event === "error") {
-            streamError =
-              typeof event.error === "string" && event.error.trim()
-                ? event.error
-                : copy.unknownError
+            streamError = renderAiEntryErrorMessage(event.error, copy)
             upsertTaskEvent({
               type: "request_start",
               label: "Request sent",
@@ -899,23 +914,36 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         ])
       }
     } catch (error) {
-      const renderedError = `${copy.errorPrefix}${error instanceof Error ? error.message : copy.unknownError}`
+      const renderedError = `${copy.errorPrefix}${renderAiEntryErrorMessage(
+        error instanceof Error ? error.message : error,
+        copy,
+      )}`
+      const failedEvent: PendingTaskEvent = {
+        type: "request_failed",
+        label: "Request failed",
+        detail: renderedError,
+        status: "failed",
+        at: Date.now(),
+      }
       setErrorMessage(renderedError)
       setMessages((previous) => previous.map((item) => item.id === assistantMessageId ? { ...item, content: renderedError } : item))
-      setPendingTaskEvents((current) => [
-        ...current,
-        {
-          type: "request_failed",
-          label: "Request failed",
-          detail: renderedError,
-          status: "failed",
-          at: Date.now(),
-        },
-      ].slice(-12))
+      setPendingTaskEvents((current) => [...current, failedEvent].slice(-12))
     } finally {
       setIsLoading(false)
     }
-  }, [conversationId, copy.errorPrefix, copy.unknownError, input, isConversationLoading, isLoading, messages, modelProviderId, models, selectedAgentId, selectedModelId, shouldLockModel])
+  }, [
+    conversationId,
+    copy,
+    input,
+    isConversationLoading,
+    isLoading,
+    messages,
+    modelProviderId,
+    models,
+    selectedAgentId,
+    selectedModelId,
+    shouldLockModel,
+  ])
 
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (
     <div className="flex flex-wrap items-center gap-2 px-1">

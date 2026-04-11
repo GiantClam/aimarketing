@@ -11,6 +11,7 @@ import { requireSessionUser } from "@/lib/auth/guards"
 import { isSessionDbUnavailableError } from "@/lib/auth/session"
 import {
   loadEnterpriseKnowledgeContext,
+  type EnterpriseKnowledgeScope,
   type EnterpriseKnowledgeContext,
 } from "@/lib/dify/enterprise-knowledge"
 import {
@@ -88,6 +89,7 @@ const STREAM_HEADERS = {
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
 }
+const AI_ENTRY_EMPTY_RESPONSE_ERROR = "ai_entry_empty_response"
 
 function createChatTraceId() {
   return `ai-entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -138,6 +140,37 @@ function canLoadEnterpriseKnowledgeForUser(user: {
   const id = user.enterpriseId
   if (typeof id !== "number" || !Number.isFinite(id) || id <= 0) return false
   return user.enterpriseStatus === "active"
+}
+
+function normalizeEnterpriseName(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : ""
+  return normalized
+}
+
+function buildAiEntryKnowledgeQueryVariants(query: string, enterpriseName: string) {
+  const normalizedQuery = query.replace(/\s+/g, " ").trim()
+  const variants = [normalizedQuery]
+  if (enterpriseName) {
+    variants.push(`${enterpriseName} 企业介绍`)
+    variants.push(`${enterpriseName} 核心业务与产品`)
+    variants.push(`${enterpriseName} 目标客户与典型场景`)
+  }
+
+  return [...new Set(variants.map((item) => item.trim()).filter(Boolean))].slice(0, 4)
+}
+
+function inferAiEntryPreferredKnowledgeScopes(query: string): EnterpriseKnowledgeScope[] | undefined {
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) return undefined
+
+  const brandIntroPattern =
+    /品牌|品牌叙事|品牌优化|公司介绍|企业介绍|企业简介|价值主张|定位|about\s+us|company\s+intro|brand|positioning|value\s+proposition/i
+
+  if (brandIntroPattern.test(normalizedQuery)) {
+    return ["brand", "general"]
+  }
+
+  return undefined
 }
 
 type KnowledgeQueryProgress = {
@@ -525,6 +558,13 @@ export async function POST(request: NextRequest) {
       body.knowledgeSource === "personal_kb" ? "personal_kb" : "industry_kb"
 
     const enterpriseId = currentUser.enterpriseId
+    const enterpriseName = normalizeEnterpriseName(currentUser.enterpriseName)
+    const knowledgeQueryVariants = buildAiEntryKnowledgeQueryVariants(
+      latestUserPrompt,
+      enterpriseName,
+    )
+    const preferredKnowledgeScopes =
+      inferAiEntryPreferredKnowledgeScopes(latestUserPrompt)
     const canQueryEnterpriseKnowledge =
       canLoadEnterpriseKnowledgeForUser(currentUser) &&
       typeof enterpriseId === "number" &&
@@ -543,6 +583,8 @@ export async function POST(request: NextRequest) {
         const enterpriseKnowledge = await loadEnterpriseKnowledgeContext({
           enterpriseId,
           query: latestUserPrompt.trim(),
+          queryVariants: knowledgeQueryVariants,
+          preferredScopes: preferredKnowledgeScopes,
           platform: "generic",
           mode: "article",
         })
@@ -687,6 +729,29 @@ export async function POST(request: NextRequest) {
             messages: providerInput.messages,
             tools: selectedTools,
             stopWhen,
+          })
+          const resolvedText = (result.text || "").trim()
+          if (!resolvedText) {
+            console.warn("ai-entry.chat.provider.empty_response", {
+              traceId,
+              conversationId,
+              provider: providerRun.providerId,
+              model: providerRun.model,
+              attempt: providerRun.attempt,
+            })
+            throw toAiEntryExecutionError(
+              new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
+              true,
+            )
+          }
+          console.info("ai-entry.chat.provider.success", {
+            traceId,
+            conversationId,
+            provider: providerRun.providerId,
+            model: providerRun.model,
+            attempt: providerRun.attempt,
+            outputChars: resolvedText.length,
+            streamed: false,
           })
           return result
         },
@@ -864,6 +929,29 @@ export async function POST(request: NextRequest) {
                   })
                 }
               }
+              const resolvedText = accumulated.trim()
+              if (!resolvedText) {
+                console.warn("ai-entry.chat.provider.empty_response", {
+                  traceId,
+                  conversationId,
+                  provider: providerRun.providerId,
+                  model: providerRun.model,
+                  attempt: providerRun.attempt,
+                })
+                throw toAiEntryExecutionError(
+                  new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
+                  true,
+                )
+              }
+              console.info("ai-entry.chat.provider.success", {
+                traceId,
+                conversationId,
+                provider: providerRun.providerId,
+                model: providerRun.model,
+                attempt: providerRun.attempt,
+                outputChars: resolvedText.length,
+                streamed: true,
+              })
             } catch (error) {
               throw toAiEntryExecutionError(error, !hasStreamOutput)
             }

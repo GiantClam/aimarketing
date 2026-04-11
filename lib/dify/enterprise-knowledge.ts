@@ -146,6 +146,19 @@ function normalizeSnippetContent(content: string) {
   return compact.length > 700 ? `${compact.slice(0, 700)}...` : compact
 }
 
+function isLowInformationSnippetContent(content: string) {
+  const normalized = content.replace(/\s+/g, " ").trim()
+  if (!normalized) return true
+
+  const headingOnly = /^#{1,6}\s+/.test(normalized)
+  if (headingOnly && normalized.length < 90) return true
+
+  if (normalized.includes("优先应该召回什么")) return true
+  if (normalized.includes("不应单独作为企业库检索主词")) return true
+
+  return false
+}
+
 function normalizeScope(value: unknown): EnterpriseKnowledgeScope {
   if (
     value === "general" ||
@@ -695,7 +708,7 @@ function parseRetrieveRecords(data: any) {
         score,
       }
     })
-    .filter((row: { content: string }) => row.content)
+    .filter((row: { content: string }) => row.content && !isLowInformationSnippetContent(row.content))
 }
 
 function buildDifyRetrievalBody(query: string, options?: { relaxThreshold?: boolean }) {
