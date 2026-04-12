@@ -108,9 +108,24 @@ function parseTimeoutMs(raw: string | undefined, fallbackMs: number, minMs = 5_0
 const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 180_000)
 const WRITER_MEMORY_EXTRACT_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_MEMORY_EXTRACT_TIMEOUT_MS, 2_000, 100, 10_000)
 const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 210_000)
-const ADVISOR_TASK_TIMEOUT_MS = 120_000
-const ASSISTANT_STALE_TASK_MS = 45_000
-const ADVISOR_RECOVERY_CHECK_MS = 12_000
+const ADVISOR_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.ADVISOR_TASK_TIMEOUT_MS, 240_000, 30_000, 300_000)
+const ASSISTANT_STALE_TASK_MS = parseTimeoutMs(process.env.ASSISTANT_STALE_TASK_MS, 45_000, 10_000, 600_000)
+const ADVISOR_RECOVERY_CHECK_MS = parseTimeoutMs(
+  process.env.ADVISOR_RECOVERY_CHECK_MS,
+  Math.max(ASSISTANT_STALE_TASK_MS, 60_000),
+  10_000,
+  600_000,
+)
+const ADVISOR_UPSTREAM_RETRY_ATTEMPTS = Math.max(
+  1,
+  Math.min(5, Number.parseInt(process.env.ADVISOR_UPSTREAM_RETRY_ATTEMPTS || "", 10) || 2),
+)
+const ADVISOR_UPSTREAM_RETRY_BASE_DELAY_MS = parseTimeoutMs(
+  process.env.ADVISOR_UPSTREAM_RETRY_BASE_DELAY_MS,
+  1_200,
+  200,
+  20_000,
+)
 const ASSISTANT_TASK_LEASE_MS = 30_000
 const ASSISTANT_TASK_HEARTBEAT_MS = 10_000
 const ASSISTANT_TASK_PROGRESS_LIMIT = 40
@@ -191,6 +206,26 @@ function pickFirstNonEmptyText(...values: unknown[]) {
 
 function truncateText(value: string, max = 160) {
   return value.length > max ? `${value.slice(0, max - 3)}...` : value
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function shouldRetryAdvisorUpstreamError(message: string) {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes("sslerror") ||
+    normalized.includes("ssleoferror") ||
+    normalized.includes("unexpected_eof_while_reading") ||
+    normalized.includes("httpsconnectionpool") ||
+    normalized.includes("max retries exceeded") ||
+    normalized.includes("connection reset") ||
+    normalized.includes("econnreset") ||
+    normalized.includes("etimedout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("temporarily unavailable")
+  )
 }
 
 function pushTaskProgressEvent(events: AssistantTaskProgressEvent[], input: AssistantTaskProgressEvent) {
@@ -317,6 +352,21 @@ function getTaskAgeMs(task: ParsedTaskRow | null) {
   const updatedAt = task.updatedAt instanceof Date ? task.updatedAt.getTime() : new Date(task.updatedAt).getTime()
   if (!Number.isFinite(updatedAt)) return Number.POSITIVE_INFINITY
   return Math.max(0, Date.now() - updatedAt)
+}
+
+function getTaskLeaseExpiresAtMs(task: ParsedTaskRow | null) {
+  if (!task?.leaseExpiresAt) return null
+  const leaseExpiresAt =
+    task.leaseExpiresAt instanceof Date ? task.leaseExpiresAt.getTime() : new Date(task.leaseExpiresAt).getTime()
+  return Number.isFinite(leaseExpiresAt) ? leaseExpiresAt : null
+}
+
+function hasActiveTaskLease(task: ParsedTaskRow | null) {
+  if (!task || task.status !== "running") {
+    return false
+  }
+  const leaseExpiresAtMs = getTaskLeaseExpiresAtMs(task)
+  return leaseExpiresAtMs !== null && leaseExpiresAtMs > Date.now()
 }
 
 async function waitForRunningTask(taskId: number, timeoutMs?: number) {
@@ -774,45 +824,99 @@ async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload
   let agentName = ""
 
   try {
-    const upstream = await sendMessage(
-      config,
-      {
-        inputs: mergeDifyInputsWithMemoryBridge({ contents: payload.query }, memoryBridge),
-        query: payload.query,
-        response_mode: "blocking",
-        user: difyUser,
-        advisorType: payload.advisorType,
-        ...(payload.conversationId ? { conversation_id: payload.conversationId } : {}),
-      },
-      { signal: abortController.signal },
-    )
+    let lastUpstreamError: Error | null = null
 
-    if (!upstream.ok) {
-      const details = await upstream.text().catch(() => "")
-      throw new Error(details || `advisor_http_${upstream.status}`)
+    for (let attempt = 0; attempt < ADVISOR_UPSTREAM_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        const upstream = await sendMessage(
+          config,
+          {
+            inputs: mergeDifyInputsWithMemoryBridge({ contents: payload.query }, memoryBridge),
+            query: payload.query,
+            response_mode: "blocking",
+            user: difyUser,
+            advisorType: payload.advisorType,
+            ...(payload.conversationId ? { conversation_id: payload.conversationId } : {}),
+          },
+          { signal: abortController.signal },
+        )
+
+        if (!upstream.ok) {
+          const details = await upstream.text().catch(() => "")
+          const upstreamErrorMessage = details || `advisor_http_${upstream.status}`
+          const shouldRetry =
+            attempt < ADVISOR_UPSTREAM_RETRY_ATTEMPTS - 1 &&
+            shouldRetryAdvisorUpstreamError(upstreamErrorMessage)
+
+          if (shouldRetry) {
+            const delayMs = ADVISOR_UPSTREAM_RETRY_BASE_DELAY_MS * Math.max(1, attempt + 1)
+            console.warn("advisor.upstream.retrying", {
+              taskId,
+              attempt: attempt + 1,
+              delayMs,
+              message: truncateText(upstreamErrorMessage, 320),
+            })
+            await sleep(delayMs)
+            continue
+          }
+
+          throw new Error(upstreamErrorMessage)
+        }
+
+        const data = (await upstream.json().catch(() => null)) as
+          | {
+              answer?: unknown
+              conversation_id?: string
+              metadata?: { agent_name?: string } | null
+              agent_name?: string
+              data?: { answer?: unknown; outputs?: unknown } | null
+            }
+          | null
+
+        answer = sanitizeAssistantContent(
+          extractText(data?.answer) ||
+            extractText(data?.data?.answer) ||
+            extractText(data?.data?.outputs),
+        )
+        conversationId =
+          (typeof data?.conversation_id === "string" ? data.conversation_id : null) ||
+          conversationId
+        agentName =
+          (typeof data?.agent_name === "string" ? data.agent_name : "") ||
+          (typeof data?.metadata?.agent_name === "string" ? data.metadata.agent_name : "")
+
+        lastUpstreamError = null
+        break
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const shouldRetry =
+          attempt < ADVISOR_UPSTREAM_RETRY_ATTEMPTS - 1 &&
+          shouldRetryAdvisorUpstreamError(message)
+
+        if (shouldRetry) {
+          const delayMs = ADVISOR_UPSTREAM_RETRY_BASE_DELAY_MS * Math.max(1, attempt + 1)
+          console.warn("advisor.upstream.retrying", {
+            taskId,
+            attempt: attempt + 1,
+            delayMs,
+            message: truncateText(message, 320),
+          })
+          await sleep(delayMs)
+          continue
+        }
+
+        lastUpstreamError = error instanceof Error ? error : new Error(message)
+        break
+      }
     }
 
-    const data = (await upstream.json().catch(() => null)) as
-      | {
-          answer?: unknown
-          conversation_id?: string
-          metadata?: { agent_name?: string } | null
-          agent_name?: string
-          data?: { answer?: unknown; outputs?: unknown } | null
-        }
-      | null
+    if (lastUpstreamError) {
+      throw lastUpstreamError
+    }
 
-    answer = sanitizeAssistantContent(
-      extractText(data?.answer) ||
-        extractText(data?.data?.answer) ||
-        extractText(data?.data?.outputs),
-    )
-    conversationId =
-      (typeof data?.conversation_id === "string" ? data.conversation_id : null) ||
-      conversationId
-    agentName =
-      (typeof data?.agent_name === "string" ? data.agent_name : "") ||
-      (typeof data?.metadata?.agent_name === "string" ? data.metadata.agent_name : "")
+    if (!answer) {
+      throw new Error("advisor_empty_response")
+    }
   } catch (error) {
     const recovered = await tryRecoverAdvisorAnswer({ payload: { ...payload, conversationId }, config, difyUser }).catch(
       () => null,
@@ -1032,6 +1136,12 @@ async function recoverAssistantTask(
   }
 
   if (task.parsedPayload.kind === "advisor_turn" && !normalizeLeadHunterAdvisorType(task.parsedPayload.advisorType)) {
+    // Another worker still owns this task lease or the row is not stale yet.
+    // Avoid prematurely converting an in-flight advisor turn into advisor_task_stale.
+    if (hasActiveTaskLease(task) || ageMs < ASSISTANT_STALE_TASK_MS) {
+      return { task, launched: false, waited: false, timedOut: false }
+    }
+
     const difyUser = buildDifyUserIdentity(task.parsedPayload.userEmail, task.parsedPayload.advisorType)
     const config = await getDifyConfigByAdvisorType(task.parsedPayload.advisorType, {
       userId: task.parsedPayload.userId,
