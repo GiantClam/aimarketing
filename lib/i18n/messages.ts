@@ -161,7 +161,7 @@ export const messages = {
       pendingEnterprise: "你的企业加入申请正在审核中。",
       rejectedEnterprise: "你的企业加入申请已被拒绝，请联系管理员。",
       advisorSection: "专家 Agent",
-      leadHunterSection: "客户画像",
+      leadHunterSection: "海外猎客",
       brandAdvisor: "品牌战略顾问",
       growthAdvisor: "增长顾问",
       leadHunter: "客户画像",
