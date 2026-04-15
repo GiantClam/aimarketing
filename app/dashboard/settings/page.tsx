@@ -488,8 +488,8 @@ export default function SettingsPage() {
       applyAdvisorConfigPayload(json?.data)
       setAdvisorConfigMessage(
         executionMode === "skill"
-          ? t("海外猎客执行模式已切换为 Skill。", "Lead Hunter execution mode switched to Skill.")
-          : t("海外猎客执行模式已切换为 Dify。", "Lead Hunter execution mode switched to Dify."),
+          ? t("客户画像执行模式已切换为 Skill。", "Customer Profile execution mode switched to Skill.")
+          : t("客户画像执行模式已切换为 Dify。", "Customer Profile execution mode switched to Dify."),
       )
     } catch (error) {
       if (error instanceof Error && error.message === "advisor_base_url_and_api_key_required") {
@@ -546,7 +546,7 @@ export default function SettingsPage() {
       ? [
         {
           advisorType: "lead-hunter" as const,
-          title: t("客户画像（Lead Hunter）", "Lead Hunter (Customer Profile)"),
+          title: t("客户画像（Customer Profile）", "Customer Profile"),
           description: t("客户画像入口为独立入口，可在企业数据库中切换执行模式（Dify/Skill）。", "Customer profile is a dedicated entry and can switch execution mode (Dify/Skill) in enterprise database."),
         },
       ]
@@ -786,7 +786,7 @@ export default function SettingsPage() {
                 <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />{t("成员功能权限", "Member feature permissions")}</CardTitle>
-                    <CardDescription>{t("配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问、增长顾问和海外猎客入口；企业管理员始终可见。", "Configure feature access for members. After enabling Expert Advisor, members can see Brand/Growth/Lead Hunter entries; enterprise admins always can.")}</CardDescription>
+                    <CardDescription>{t("配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问、增长顾问和客户画像入口；企业管理员始终可见。", "Configure feature access for members. After enabling Expert Advisor, members can see Brand/Growth/Customer Profile entries; enterprise admins always can.")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
               {members.length === 0 && !loadingAdminData ? (
@@ -968,8 +968,8 @@ export default function SettingsPage() {
                 {isEnterpriseAdmin && (
                   <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />{t("专家顾问与海外猎客 Dify Workflow 配置", "Advisor and Lead Hunter Dify workflow config")}</CardTitle>
-                      <CardDescription>{t("品牌顾问和增长顾问只读展示。客户画像（Lead Hunter）可在此切换执行模式（Dify/Skill）；公司搜索与联系人挖掘保持原有 Dify workflow。", "Brand/Growth workflows are read-only. Lead Hunter (customer profile) can switch execution mode (Dify/Skill); Company Search and Contact Mining keep original Dify workflows.")}</CardDescription>
+                      <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />{t("专家顾问与客户画像 Dify Workflow 配置", "Advisor and Customer Profile Dify workflow config")}</CardTitle>
+                      <CardDescription>{t("品牌顾问和增长顾问只读展示。客户画像（Customer Profile）可在此切换执行模式（Dify/Skill）；公司搜索与联系人挖掘保持原有 Dify workflow。", "Brand/Growth workflows are read-only. Customer Profile can switch execution mode (Dify/Skill); Company Search and Contact Mining keep original Dify workflows.")}</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
               {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">{t("正在读取顾问配置...", "Loading advisor config...")}</p>}
@@ -1033,7 +1033,7 @@ export default function SettingsPage() {
                         {isLeadHunterWorkflow ? (
                           <div className="space-y-4">
                             <p className="text-xs leading-6 text-muted-foreground">
-                              {t("客户画像（Lead Hunter）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。", "Lead Hunter (customer profile) has no system-default workflow. Entry appears only when enterprise database configuration is available.")}
+                              {t("客户画像（Customer Profile）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。", "Customer Profile has no system-default workflow. Entry appears only when enterprise database configuration is available.")}
                             </p>
                             {leadHunterAdvisorType ? (
                               <div className="space-y-3 rounded-xl border border-border/70 bg-background/70 p-3">

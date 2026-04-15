@@ -17,5 +17,5 @@ export function getLeadHunterAgentName(advisorType: string | null | undefined) {
   const normalized = normalizeLeadHunterAdvisorType(advisorType)
   if (normalized === "contact-mining") return "Contact Mining"
   if (normalized === "company-search") return "Company Search"
-  return "Lead Hunter"
+  return "Customer Profile"
 }

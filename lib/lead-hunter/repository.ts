@@ -5,7 +5,7 @@ import { leadHunterConversations, leadHunterEvidences, leadHunterMessages } from
 import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
 import { normalizeLeadHunterAdvisorType, type LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
-const DEFAULT_CONVERSATION_TITLE = "海外猎客搜索"
+const DEFAULT_CONVERSATION_TITLE = "客户画像搜索"
 
 function parsePositiveInt(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value)
