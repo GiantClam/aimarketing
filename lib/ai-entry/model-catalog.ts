@@ -6,6 +6,7 @@ import {
 import {
   compareModelDisplayIdPreference,
   equivalentModelFingerprint,
+  normalizeModelDisplayId,
   pickPreferredDisplayModelId,
   splitProviderModelId,
 } from "@/lib/ai-entry/model-id-registry"
@@ -534,11 +535,21 @@ function dedupeEquivalentModelIds(models: ParsedModel[]) {
   }
 
   return [...bestByKey.entries()].map(([key, model]) => {
-    const aliases = [...(aliasesByKey.get(key) || new Set<string>())]
+    const aliases = [
+      ...new Set(
+        [...(aliasesByKey.get(key) || new Set<string>())]
+          .flatMap((item) => {
+            const normalized = normalizeModelDisplayId(item)
+            return normalized ? [item, normalized] : [item]
+          })
+          .filter(Boolean),
+      ),
+    ]
     const displayId = pickPreferredDisplayModelId([model.id, ...aliases]) || model.id
     return {
       ...model,
       id: displayId,
+      name: displayId,
       runtimeId: model.id,
       canonicalId: canonicalDuplicateKey(model.id),
       aliases,

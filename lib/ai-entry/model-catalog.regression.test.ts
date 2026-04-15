@@ -351,7 +351,7 @@ test("model catalog infers target families from bare ids and keeps only high-tie
           ["anthropic", "openai", "gemini"],
         )
         assert.equal(catalog.models.some((item) => item.id === "gpt-5.4-mini"), true)
-        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4-6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4.6"), true)
         assert.equal(catalog.models.some((item) => item.id === "gemini-3-flash"), true)
         assert.equal(catalog.models.some((item) => item.id === "qwen3-vl-plus"), false)
       } finally {
@@ -392,15 +392,12 @@ test("model catalog keeps canonical bare id when provider and separator variants
           catalog.models.some((item) => item.id === "openai/gpt-5-4-mini"),
           false,
         )
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
         assert.equal(
-          catalog.models.some((item) => item.id === "claude-sonnet-4.6"),
+          catalog.models.some((item) => item.id === "claude-sonnet-4-6"),
           false,
         )
-        assert.equal(
-          catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6"),
-          false,
-        )
+        assert.equal(catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6"), false)
         assert.equal(
           catalog.models.some((item) => item.id === "openai/gpt-5.4-nano"),
           true,
@@ -436,11 +433,12 @@ test("model catalog keeps claude thinking variant as a distinct model", async ()
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
         assert.equal(
-          catalog.models.some((item) => item.id === "claude-sonnet-4-6-thinking"),
+          catalog.models.some((item) => item.id === "claude-sonnet-4.6-thinking"),
           true,
         )
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6-thinking"), false)
         assert.equal(
           catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6"),
           false,
@@ -482,9 +480,9 @@ test("model catalog keeps only claude sonnet/opus/haiku in versions 4.5 and 4.6"
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6"), true)
-        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4-5"), true)
-        assert.equal(catalog.models.some((item) => item.id === "claude-haiku-4-5"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4.5"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-haiku-4.5"), true)
         assert.equal(
           catalog.models.some((item) => item.id === "claude-haiku-4-5-20251001"),
           false,
@@ -536,7 +534,7 @@ test("model catalog dedupes provider and separator variants generically across h
           false,
         )
 
-        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4-5"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4.5"), true)
         assert.equal(
           catalog.models.some((item) => item.id === "anthropic/claude-opus-4.5"),
           false,
@@ -598,7 +596,7 @@ test("model catalog falls back to crazyroute when aiberm is unavailable", async 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
         assert.equal(catalog.providerId, "crazyroute")
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
         assert.equal(calls[0]?.includes("https://aiberm.example/v1/models"), true)
         assert.equal(calls.some((item) => item.includes("https://crazy.example/v1/models")), true)
       } finally {

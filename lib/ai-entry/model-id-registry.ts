@@ -10,7 +10,55 @@ function hasClaudeTierFamilyToken(value: string) {
 
 function stripClaudeReleaseSuffix(value: string) {
   if (!hasClaudeTierFamilyToken(value)) return value
-  return value.replace(/([._-](?:20\d{6}|\d{8}|v\d+))+$/gi, "")
+  return value
+    .replace(/([._-](?:20\d{6}|\d{8}|v\d+))(?=([._-]thinking)?$)/gi, "")
+    .replace(/([._-](?:20\d{6}|\d{8}|v\d+))+$/gi, "")
+}
+
+function normalizeClaudeModelCore(value: string) {
+  const normalized = normalizeText(value)
+  if (!normalized) return ""
+
+  const lower = normalized.toLowerCase()
+  const compact = lower.replace(/[^a-z0-9]+/g, "")
+  if (!compact.includes("claude")) {
+    return stripClaudeReleaseSuffix(normalized)
+  }
+
+  const tokens = lower.split(/[^a-z0-9]+/g).filter(Boolean)
+  const tierFromToken = tokens.find((token) => token === "sonnet" || token === "opus" || token === "haiku") || ""
+  const tierFromCompactMatch = compact.match(/(sonnet|opus|haiku)/)
+  const tier = tierFromToken || (tierFromCompactMatch?.[1] || "")
+  if (!tier) {
+    return stripClaudeReleaseSuffix(normalized)
+  }
+
+  const thinking = tokens.includes("thinking") || compact.includes("thinking")
+  const tierTokenIndex = tokens.findIndex((token) => token === tier)
+  const numericTokens =
+    tierTokenIndex >= 0
+      ? tokens
+          .slice(tierTokenIndex + 1)
+          .filter((token) => /^\d+$/.test(token))
+      : []
+  const shortNumericTokens = numericTokens.filter((token) => token.length <= 2)
+  let major = shortNumericTokens[0] || ""
+  let minor = shortNumericTokens[1] || ""
+
+  if (!major) {
+    const compactVersionMatch = compact.match(
+      new RegExp(`claude${tier}(?:v)?(\\d)(?:[._-]?(\\d))?`, "i"),
+    ) || compact.match(new RegExp(`${tier}(?:v)?(\\d)(?:[._-]?(\\d))?`, "i"))
+    major = compactVersionMatch?.[1] || ""
+    minor = compactVersionMatch?.[2] || ""
+  }
+
+  if (!major) {
+    return stripClaudeReleaseSuffix(normalized)
+  }
+
+  const version = minor ? `${major}.${minor}` : major
+  return `claude-${tier}-${version}${thinking ? "-thinking" : ""}`
 }
 
 export function splitProviderModelId(modelId: string) {
@@ -33,8 +81,8 @@ export function normalizeModelDisplayId(modelId: string) {
   const normalized = normalizeText(modelId)
   if (!normalized) return ""
   const parsed = splitProviderModelId(normalized)
-  if (!parsed) return stripClaudeReleaseSuffix(normalized)
-  return `${parsed.prefix}/${stripClaudeReleaseSuffix(parsed.suffix)}`
+  if (!parsed) return normalizeClaudeModelCore(normalized)
+  return `${parsed.prefix}/${normalizeClaudeModelCore(parsed.suffix)}`
 }
 
 export function modelIdFingerprint(modelId: string) {
@@ -42,8 +90,9 @@ export function modelIdFingerprint(modelId: string) {
 }
 
 export function equivalentModelFingerprint(modelId: string) {
-  const stripped = stripProviderPrefix(modelId)
-  return modelIdFingerprint(stripClaudeReleaseSuffix(stripped))
+  const normalized = normalizeModelDisplayId(modelId)
+  const stripped = stripProviderPrefix(normalized)
+  return modelIdFingerprint(stripped)
 }
 
 export function areEquivalentModelIds(a: string, b: string) {

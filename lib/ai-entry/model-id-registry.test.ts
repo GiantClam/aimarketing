@@ -31,7 +31,7 @@ test("model registry prefers single display id deterministically", () => {
       "claude-sonnet-4-6",
       "claude-sonnet-4-6-thinking",
     ]),
-    "claude-sonnet-4-6",
+    "claude-sonnet-4.6",
   )
 })
 
@@ -41,16 +41,20 @@ test("model registry resolves persisted alias to displayed model id", () => {
     "claude-sonnet-4-6",
   ])
 
-  assert.equal(resolved, "claude-sonnet-4-6")
+  assert.equal(resolved, "claude-sonnet-4.6")
 })
 
 test("model registry strips claude release date suffix but keeps thinking distinction", () => {
   assert.equal(
     normalizeModelDisplayId("claude-haiku-4-5-20251001"),
-    "claude-haiku-4-5",
+    "claude-haiku-4.5",
   )
   assert.equal(
     normalizeModelDisplayId("claude-haiku-4-5-thinking-20251001"),
-    "claude-haiku-4-5-thinking",
+    "claude-haiku-4.5-thinking",
+  )
+  assert.equal(
+    normalizeModelDisplayId("anthropic/claude-opus-4-6-20251101-thinking"),
+    "anthropic/claude-opus-4.6-thinking",
   )
 })

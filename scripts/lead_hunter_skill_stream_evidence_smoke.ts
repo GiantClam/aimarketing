@@ -115,7 +115,6 @@ function buildSmokeQuery(advisorType: LeadHunterAdvisorType, suffix: string) {
 async function run() {
   const advisorType = parseAdvisorTypeFromArgs()
 
-  process.env.LEAD_HUNTER_ENGINE = "skill"
   process.env.TAVILY_API_KEY = process.env.TAVILY_API_KEY || "smoke-tavily-key"
   process.env.SERPER_API_KEY = process.env.SERPER_API_KEY || "smoke-serper-key"
   process.env.LEAD_HUNTER_SKILL_MODEL = process.env.LEAD_HUNTER_SKILL_MODEL || "smoke-lead-hunter-skill-model"

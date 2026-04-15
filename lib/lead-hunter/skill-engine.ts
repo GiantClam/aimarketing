@@ -566,10 +566,6 @@ Requirements:
   return sanitizeAssistantContent(answer)
 }
 export async function runLeadHunterSkillConversation(input: LeadHunterSkillRunInput): Promise<LeadHunterSkillRunResult> {
-  if (!hasAnyWebSearchProviderConfig()) {
-    throw new Error("lead_hunter_search_provider_missing")
-  }
-
   const language = detectLanguage(input.query)
   const companyName = pickCompanyName(input.query)
   const website = pickWebsiteUrl(input.query)
@@ -647,6 +643,16 @@ export async function runLeadHunterSkillConversation(input: LeadHunterSkillRunIn
 
   const hits: SearchHit[] = []
   await emit({ event: "node_started", data: { node_name: "search_collect" } })
+  if (!hasAnyWebSearchProviderConfig()) {
+    await emit({
+      event: "info",
+      data: {
+        node_name: "search_collect",
+        status: "degraded",
+        message: "web_search_provider_missing",
+      },
+    })
+  }
   hits.push(...(await collectSearchHits({ queries: searchQueries, signal: input.signal })))
   const dedupedHits = dedupeHits(hits)
   await emit({

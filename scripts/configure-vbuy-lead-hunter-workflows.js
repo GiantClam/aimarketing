@@ -8,11 +8,19 @@ const TABLES = {
 }
 
 const ENTERPRISE_CODE = "vbuy"
-const COMPANY_SEARCH_API_KEY = "app-JWfhYJewNIa6wSEHJbnBZaj0"
-const CONTACT_MINING_API_KEY = "app-EhIMlRjmbZEU2WK7PTMx0Tps"
 const DEFAULT_BASE_URL = process.env.DIFY_DEFAULT_BASE_URL || process.env.ENTERPRISE_DIFY_BASE_URL || "https://dify-api.o3-tools.com/v1"
 const LEAD_HUNTER_SKILL_BASE_URL = "skill://lead-hunter"
 const LEAD_HUNTER_SKILL_API_KEY = "managed"
+const COMPANY_SEARCH_API_KEY =
+  process.env.VBUY_COMPANY_SEARCH_DIFY_API_KEY ||
+  process.env.COMPANY_SEARCH_DIFY_API_KEY ||
+  process.env.DIFY_DEFAULT_COMPANY_SEARCH_API_KEY ||
+  ""
+const CONTACT_MINING_API_KEY =
+  process.env.VBUY_CONTACT_MINING_DIFY_API_KEY ||
+  process.env.CONTACT_MINING_DIFY_API_KEY ||
+  process.env.DIFY_DEFAULT_CONTACT_MINING_API_KEY ||
+  ""
 
 function maskApiKey(apiKey) {
   const trimmed = String(apiKey || "").trim()
@@ -39,11 +47,11 @@ async function upsertAdvisorConfig(pool, enterpriseId, advisorType, apiKey) {
       DO UPDATE SET
         execution_mode = EXCLUDED.execution_mode,
         base_url = EXCLUDED.base_url,
-        api_key = EXCLUDED.api_key,
+        api_key = COALESCE(EXCLUDED.api_key, "${TABLES.advisorConfigs}".api_key),
         enabled = EXCLUDED.enabled,
         updated_at = CURRENT_TIMESTAMP;
     `,
-    [enterpriseId, advisorType, DEFAULT_BASE_URL, apiKey],
+    [enterpriseId, advisorType, DEFAULT_BASE_URL, apiKey || null],
   )
 }
 
@@ -73,6 +81,30 @@ async function upsertLeadHunterSkillConfig(pool, enterpriseId) {
   )
 }
 
+async function getExistingAdvisorApiKey(pool, enterpriseId, advisorType) {
+  const res = await pool.query(
+    `
+      SELECT api_key
+      FROM "${TABLES.advisorConfigs}"
+      WHERE enterprise_id = $1 AND advisor_type = $2
+      LIMIT 1
+    `,
+    [enterpriseId, advisorType],
+  )
+  const raw = String(res.rows?.[0]?.api_key || "").trim()
+  return raw || ""
+}
+
+async function resolveDifyApiKey(pool, enterpriseId, advisorType, preferredApiKey) {
+  const preferred = String(preferredApiKey || "").trim()
+  if (preferred) return preferred
+  const existing = await getExistingAdvisorApiKey(pool, enterpriseId, advisorType)
+  if (existing && existing.toLowerCase() !== "managed") {
+    return existing
+  }
+  throw new Error(`missing_dify_api_key:${advisorType}`)
+}
+
 async function main() {
   const pool = new Pool(getMigrationPoolConfig())
 
@@ -93,8 +125,21 @@ async function main() {
       throw new Error(`enterprise_not_found:${ENTERPRISE_CODE}`)
     }
 
-    await upsertAdvisorConfig(pool, enterprise.id, "company-search", COMPANY_SEARCH_API_KEY)
-    await upsertAdvisorConfig(pool, enterprise.id, "contact-mining", CONTACT_MINING_API_KEY)
+    const companySearchApiKey = await resolveDifyApiKey(
+      pool,
+      enterprise.id,
+      "company-search",
+      COMPANY_SEARCH_API_KEY,
+    )
+    const contactMiningApiKey = await resolveDifyApiKey(
+      pool,
+      enterprise.id,
+      "contact-mining",
+      CONTACT_MINING_API_KEY,
+    )
+
+    await upsertAdvisorConfig(pool, enterprise.id, "company-search", companySearchApiKey)
+    await upsertAdvisorConfig(pool, enterprise.id, "contact-mining", contactMiningApiKey)
     await upsertLeadHunterSkillConfig(pool, enterprise.id)
 
     const savedRes = await pool.query(

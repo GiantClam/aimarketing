@@ -4,7 +4,6 @@ import { isDemoLoginEnabled } from "@/lib/auth/session"
 import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { difyConnections, enterpriseDifyAdvisorConfigs, enterprises, users } from "@/lib/db/schema"
-import { isLeadHunterSkillRuntimeAvailable } from "@/lib/lead-hunter/engine-mode"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 type DifyLookupOptions = {
@@ -536,9 +535,6 @@ async function getAdvisorConfig(
       enterpriseOverride.baseUrl.startsWith("skill://") || enterpriseOverride.apiKey.trim().toLowerCase() === "managed"
 
     if (advisorType === "lead-hunter" && enterpriseOverride.executionMode === "skill") {
-      if (!isLeadHunterSkillRuntimeAvailable()) {
-        return null
-      }
       return {
         source: "skill" as const,
         baseUrl: "skill://lead-hunter",

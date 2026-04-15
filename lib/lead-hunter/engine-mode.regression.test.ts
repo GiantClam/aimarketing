@@ -3,9 +3,7 @@ import test from "node:test"
 
 import {
   hasLeadHunterSkillSearchConfig,
-  isLeadHunterSkillEngineEnabled,
   isLeadHunterSkillRuntimeAvailable,
-  resolveLeadHunterEngineMode,
 } from "./engine-mode"
 
 function withEnv<T>(overrides: Record<string, string | undefined>, fn: () => T) {
@@ -32,32 +30,24 @@ function withEnv<T>(overrides: Record<string, string | undefined>, fn: () => T) 
   }
 }
 
-test("lead hunter engine mode defaults to dify", () => {
-  withEnv({ LEAD_HUNTER_ENGINE: undefined, LEAD_HUNTER_EXECUTION_ENGINE: undefined }, () => {
-    assert.equal(resolveLeadHunterEngineMode(), "dify")
-    assert.equal(isLeadHunterSkillEngineEnabled(), false)
-  })
-})
-
-test("lead hunter engine mode reads skill flag", () => {
-  withEnv({ LEAD_HUNTER_ENGINE: "skill" }, () => {
-    assert.equal(resolveLeadHunterEngineMode(), "skill")
-    assert.equal(isLeadHunterSkillEngineEnabled(), true)
+test("lead hunter skill runtime availability is not controlled by env switch", () => {
+  withEnv({ LEAD_HUNTER_SKILL_FORCE_DISABLE: "1" }, () => {
+    assert.equal(isLeadHunterSkillRuntimeAvailable(), true)
   })
 })
 
 test("lead hunter skill search config checks Tavily/Serper keys", () => {
-  withEnv({ LEAD_HUNTER_ENGINE: "dify", TAVILY_API_KEY: undefined, SERPER_API_KEY: undefined }, () => {
+  withEnv({ TAVILY_API_KEY: undefined, SERPER_API_KEY: undefined }, () => {
     assert.equal(hasLeadHunterSkillSearchConfig(), false)
-    assert.equal(isLeadHunterSkillRuntimeAvailable(), false)
+    assert.equal(isLeadHunterSkillRuntimeAvailable(), true)
   })
 
-  withEnv({ LEAD_HUNTER_ENGINE: "dify", TAVILY_API_KEY: "abc", SERPER_API_KEY: undefined }, () => {
+  withEnv({ TAVILY_API_KEY: "abc", SERPER_API_KEY: undefined }, () => {
     assert.equal(hasLeadHunterSkillSearchConfig(), true)
     assert.equal(isLeadHunterSkillRuntimeAvailable(), true)
   })
 
-  withEnv({ LEAD_HUNTER_ENGINE: "dify", TAVILY_API_KEY: undefined, SERPER_API_KEY: "xyz" }, () => {
+  withEnv({ TAVILY_API_KEY: undefined, SERPER_API_KEY: "xyz" }, () => {
     assert.equal(hasLeadHunterSkillSearchConfig(), true)
     assert.equal(isLeadHunterSkillRuntimeAvailable(), true)
   })
