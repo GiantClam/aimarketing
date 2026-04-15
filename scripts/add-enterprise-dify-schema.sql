@@ -30,12 +30,16 @@ CREATE TABLE IF NOT EXISTS "AI_MARKETING_enterprise_dify_advisor_configs" (
   id SERIAL PRIMARY KEY,
   enterprise_id INTEGER NOT NULL REFERENCES "AI_MARKETING_enterprises"(id) ON DELETE CASCADE,
   advisor_type VARCHAR(32) NOT NULL,
+  execution_mode VARCHAR(16) NOT NULL DEFAULT 'dify',
   base_url TEXT NOT NULL,
   api_key VARCHAR(500),
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE "AI_MARKETING_enterprise_dify_advisor_configs"
+ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(16) NOT NULL DEFAULT 'dify';
 
 CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_enterprise_dify_advisors_enterprise_type_idx"
 ON "AI_MARKETING_enterprise_dify_advisor_configs"(enterprise_id, advisor_type);

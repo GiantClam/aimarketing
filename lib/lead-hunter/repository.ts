@@ -1,7 +1,8 @@
 import { and, desc, eq, lt, or } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { leadHunterConversations, leadHunterMessages } from "@/lib/db/schema"
+import { leadHunterConversations, leadHunterEvidences, leadHunterMessages } from "@/lib/db/schema"
+import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
 import { normalizeLeadHunterAdvisorType, type LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 const DEFAULT_CONVERSATION_TITLE = "海外猎客搜索"
@@ -290,6 +291,61 @@ export async function appendLeadHunterMessage(
     answer: message.answer,
     created_at: toEpochSeconds(message.createdAt),
   }
+}
+
+export async function saveLeadHunterEvidenceForMessage(
+  userId: number,
+  advisorType: string | null | undefined,
+  conversationId: string,
+  messageId: string,
+  evidence: LeadHunterEvidenceItem[],
+) {
+  const normalizedType = resolveAdvisorType(advisorType)
+  const conversation = await getLeadHunterConversation(userId, normalizedType, conversationId)
+  if (!conversation) {
+    return 0
+  }
+
+  const parsedMessageId = parsePositiveInt(messageId)
+  if (!parsedMessageId) {
+    return 0
+  }
+
+  const sanitizedEvidence = (Array.isArray(evidence) ? evidence : [])
+    .map((item) => ({
+      claim: (item?.claim || "").trim(),
+      sourceTitle: (item?.source_title || "").trim(),
+      sourceUrl: (item?.source_url || "").trim(),
+      sourceType: (item?.source_type || "").trim() || "web",
+      sourceProvider: (item?.source_provider || "other").trim(),
+      extractedBy: (item?.extracted_by || "not_extracted").trim(),
+      confidence: (item?.confidence || "low").trim(),
+    }))
+    .filter((item) => item.claim && item.sourceUrl)
+    .slice(0, 60)
+
+  await db.delete(leadHunterEvidences).where(eq(leadHunterEvidences.messageId, parsedMessageId))
+
+  if (!sanitizedEvidence.length) {
+    return 0
+  }
+
+  await db.insert(leadHunterEvidences).values(
+    sanitizedEvidence.map((item) => ({
+      conversationId: conversation.id,
+      messageId: parsedMessageId,
+      claim: item.claim,
+      sourceTitle: item.sourceTitle || item.sourceUrl,
+      sourceUrl: item.sourceUrl,
+      sourceType: item.sourceType,
+      sourceProvider: item.sourceProvider,
+      extractedBy: item.extractedBy,
+      confidence: item.confidence,
+      createdAt: new Date(),
+    })),
+  )
+
+  return sanitizedEvidence.length
 }
 
 export async function ensureLeadHunterConversation(

@@ -24,6 +24,7 @@ import { writerRequestJson, writerRequestText } from "@/lib/writer/network"
 import { isWriterR2Available } from "@/lib/writer/r2"
 import { buildWriterRoutingDecision, describeWriterRoute, hasWriterXPlatformSignal } from "@/lib/writer/routing"
 import { listWriterPlatformSkills } from "@/lib/writer/skill-catalog"
+import { hasSerperWebSearchConfig, searchWithSerperWeb } from "@/lib/skills/tools/web-search"
 import { getWriterSoulProfile, listWriterMemories } from "@/lib/writer/memory/repository"
 import { rankWriterMemories } from "@/lib/writer/memory/retrieval"
 import { composeWriterSoulCard, renderSoulCardForPrompt } from "@/lib/writer/memory/soul-card"
@@ -3657,37 +3658,16 @@ async function readWithDirectFetch(url: string) {
 }
 
 async function serperSearch(query: string, num = 5): Promise<SearchItem[]> {
-  if (!SERPER_API_KEY) {
+  if (!hasSerperWebSearchConfig()) {
     throw new Error("writer_search_config_missing")
   }
 
-  const response = await writerRequestJson(
-    `${SERPER_API_BASE}/search`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": SERPER_API_KEY,
-      },
-      body: JSON.stringify({
-        q: query,
-        num: Math.min(Math.max(num, 1), 10),
-      }),
-    },
-    { attempts: 2, timeoutMs: 60_000 },
-  )
-  if (!response.ok) {
-    throw new Error(`serper_search_http_${response.status}`)
-  }
-
-  const data = response.data as any
-  return Array.isArray(data?.organic)
-    ? data.organic.map((item: any) => ({
-        title: item?.title || "",
-        snippet: item?.snippet || "",
-        link: item?.link || "",
-      }))
-    : []
+  const hits = await searchWithSerperWeb(query, { num })
+  return hits.map((item) => ({
+    title: item.title,
+    snippet: item.snippet,
+    link: item.url,
+  }))
 }
 
 function extractSerperScrapeText(data: any) {

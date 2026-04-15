@@ -47,8 +47,12 @@ function extractCookieHeader(response) {
 
 async function requestJson(baseUrl, pathname, options = {}, cookieHeader = "") {
   const defaultTimeoutMs = pathname.startsWith("/api/ai/chat") ? 90000 : 15000
+  const timeoutOverride =
+    pathname.startsWith("/api/auth/demo")
+      ? process.env.AI_ENTRY_SMOKE_AUTH_TIMEOUT_MS || process.env.AI_ENTRY_SMOKE_TIMEOUT_MS
+      : process.env.AI_ENTRY_SMOKE_TIMEOUT_MS
   const timeoutMs = Number.parseInt(
-    process.env.AI_ENTRY_SMOKE_TIMEOUT_MS || String(defaultTimeoutMs),
+    timeoutOverride || String(defaultTimeoutMs),
     10,
   )
   const controller = new AbortController()

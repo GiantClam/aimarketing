@@ -40,6 +40,10 @@ function buildDifyMemoryContext(items: WriterMemoryItem[], maxChars = 1000) {
 export function mapAdvisorTypeToWriterAgentType(advisorType: string | null | undefined): WriterAgentType | null {
   const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(advisorType)
   if (normalizedLeadHunterType) {
+    if (normalizedLeadHunterType === "lead-hunter") {
+      // Reuse company-search memory lane for the lead-hunter profile entry.
+      return "company-search"
+    }
     return normalizedLeadHunterType
   }
   if (advisorType === "brand-strategy" || advisorType === "growth") {

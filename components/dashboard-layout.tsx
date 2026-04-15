@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PenSquare,
+  Radar,
   Search,
   Settings,
   Target,
@@ -89,7 +90,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   const showLeadHunterSection = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
-    return hasAdvisorFeature && (advisor.companySearch || advisor.contactMining)
+    return hasAdvisorFeature && (advisor.leadHunter || advisor.companySearch || advisor.contactMining)
   }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature])
 
   const showWriterEntry = useMemo(() => {
@@ -244,10 +245,21 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         {messages.dashboardLayout.leadHunterSection}
                       </h3>
                     )}
+                    {hasAdvisorFeature && advisor.leadHunter && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/lead-hunter/new">
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.leadHunter}>
+                            <Radar className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.leadHunter} advisorType="lead-hunter" userEmail={userEmail} icon={Radar} />
+                      )
+                    )}
                     {hasAdvisorFeature && advisor.companySearch && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/company-search/new">
-                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.companySearch}>
+                          <Button variant="ghost" className={advisor.leadHunter ? "mt-1 w-full justify-center" : "w-full justify-center"} size="sm" title={messages.dashboardLayout.companySearch}>
                             <Search className="h-4 w-4" />
                           </Button>
                         </Link>

@@ -3,9 +3,15 @@ import {
   type AiEntryProviderConfig,
   type AiEntryProviderId,
 } from "@/lib/ai-entry/provider-routing"
+import {
+  compareModelDisplayIdPreference,
+  equivalentModelFingerprint,
+  pickPreferredDisplayModelId,
+  splitProviderModelId,
+} from "@/lib/ai-entry/model-id-registry"
 
 const CACHE_TTL_MS = 30 * 60 * 1000
-const CATALOG_FILTER_CACHE_VERSION = "v3"
+const CATALOG_FILTER_CACHE_VERSION = "v4"
 const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "gemini"] as const
 const ALLOWED_PROVIDER_FAMILIES = [
   "anthropic",
@@ -87,6 +93,9 @@ type GlobalWithAiEntryModelCache = typeof globalThis & {
 export type AiEntryModelOption = {
   id: string
   name: string
+  runtimeId?: string
+  canonicalId?: string
+  aliases?: string[]
 }
 
 export type AiEntryModelGroup = {
@@ -267,7 +276,7 @@ function inferProviderFamily(item: ModelApiItem, id: string) {
   return "other"
 }
 
-function normalizeModalities(raw: unknown) {
+function normalizeModalities(raw: unknown): string[] {
   if (typeof raw === "string") {
     return raw
       .split(/[,\s>/|-]+/g)
@@ -282,9 +291,9 @@ function normalizeModalities(raw: unknown) {
   }
 
   if (raw && typeof raw === "object") {
-    const values = Object.values(raw as Record<string, unknown>)
-      .map((value) => normalizeModalities(value))
-      .flat()
+    const values = Object.values(raw as Record<string, unknown>).flatMap((value) =>
+      normalizeModalities(value),
+    )
     return values
   }
 
@@ -364,8 +373,20 @@ function compareModels(a: ParsedModel, b: ParsedModel) {
   return a.id.localeCompare(b.id, "en", { sensitivity: "base" })
 }
 
-function toModelOption(model: ParsedModel): AiEntryModelOption {
-  return { id: model.id, name: model.name }
+function toModelOption(
+  model: ParsedModel & { runtimeId?: string; canonicalId?: string; aliases?: string[] },
+): AiEntryModelOption {
+  return {
+    id: model.id,
+    name: model.name,
+    ...(typeof model.runtimeId === "string" && model.runtimeId
+      ? { runtimeId: model.runtimeId }
+      : {}),
+    ...(model.canonicalId ? { canonicalId: model.canonicalId } : {}),
+    ...(Array.isArray(model.aliases) && model.aliases.length > 0
+      ? { aliases: model.aliases }
+      : {}),
+  }
 }
 
 function toFamilyLabel(family: string) {
@@ -448,26 +469,9 @@ function filterAllowedFamilyModels(models: ParsedModel[]) {
   return models.filter((model) => ALLOWED_PROVIDER_FAMILY_SET.has(model.family))
 }
 
-function splitProviderModelId(id: string) {
-  const slashIndex = id.indexOf("/")
-  if (slashIndex <= 0 || slashIndex >= id.length - 1) return null
-  const prefix = id.slice(0, slashIndex).trim()
-  const suffix = id.slice(slashIndex + 1).trim()
-  if (!prefix || !suffix) return null
-  return { prefix, suffix }
-}
-
-function canonicalModelId(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
-}
-
 function canonicalDuplicateKey(id: string) {
   const parsed = splitProviderModelId(id)
-  return canonicalModelId(parsed ? parsed.suffix : id)
-}
-
-function hasProviderPrefix(id: string) {
-  return Boolean(splitProviderModelId(id))
+  return equivalentModelFingerprint(parsed ? parsed.suffix : id)
 }
 
 function filterProviderPrefixedDuplicates(models: ParsedModel[]) {
@@ -496,21 +500,7 @@ function filterProviderPrefixedDuplicates(models: ParsedModel[]) {
 }
 
 function compareModelDedupPreference(a: ParsedModel, b: ParsedModel) {
-  const aHasPrefix = hasProviderPrefix(a.id)
-  const bHasPrefix = hasProviderPrefix(b.id)
-  if (aHasPrefix !== bHasPrefix) return aHasPrefix ? 1 : -1
-
-  const aHasDot = a.id.includes(".")
-  const bHasDot = b.id.includes(".")
-  if (aHasDot !== bHasDot) return aHasDot ? 1 : -1
-
-  const aThinking = canonicalModelId(a.id).includes("thinking")
-  const bThinking = canonicalModelId(b.id).includes("thinking")
-  if (aThinking !== bThinking) return aThinking ? 1 : -1
-
-  if (a.id.length !== b.id.length) return a.id.length - b.id.length
-
-  return a.id.localeCompare(b.id, "en", { sensitivity: "base" })
+  return compareModelDisplayIdPreference(a.id, b.id)
 }
 
 function pickPreferredEquivalentModel(a: ParsedModel, b: ParsedModel) {
@@ -529,8 +519,12 @@ function pickPreferredEquivalentModel(a: ParsedModel, b: ParsedModel) {
 
 function dedupeEquivalentModelIds(models: ParsedModel[]) {
   const bestByKey = new Map<string, ParsedModel>()
+  const aliasesByKey = new Map<string, Set<string>>()
   for (const model of models) {
     const key = `${model.family}:${canonicalDuplicateKey(model.id)}`
+    const aliasSet = aliasesByKey.get(key) || new Set<string>()
+    aliasSet.add(model.id)
+    aliasesByKey.set(key, aliasSet)
     const previous = bestByKey.get(key)
     if (!previous) {
       bestByKey.set(key, model)
@@ -539,7 +533,17 @@ function dedupeEquivalentModelIds(models: ParsedModel[]) {
     bestByKey.set(key, pickPreferredEquivalentModel(previous, model))
   }
 
-  return [...bestByKey.values()]
+  return [...bestByKey.entries()].map(([key, model]) => {
+    const aliases = [...(aliasesByKey.get(key) || new Set<string>())]
+    const displayId = pickPreferredDisplayModelId([model.id, ...aliases]) || model.id
+    return {
+      ...model,
+      id: displayId,
+      runtimeId: model.id,
+      canonicalId: canonicalDuplicateKey(model.id),
+      aliases,
+    }
+  })
 }
 
 function parseVersionAfterToken(
@@ -569,12 +573,27 @@ function versionAtLeast(
   return version.minor >= minMinor
 }
 
+function isClaudeTierVariant(text: string) {
+  if (/\b(sonnet|opus|haiku)\b/.test(text)) return true
+  const compact = text.replace(/[^a-z0-9]+/g, "")
+  return (
+    compact.includes("sonnet") ||
+    compact.includes("opus") ||
+    compact.includes("haiku")
+  )
+}
+
+function isSupportedClaudeVersion(version: { major: number; minor: number }) {
+  return version.major === 4 && (version.minor === 5 || version.minor === 6)
+}
+
 function isHighTierDisplayModel(input: { id: string; name: string }) {
   const text = `${input.id} ${input.name}`.toLowerCase()
 
   if (text.includes("claude")) {
+    if (!isClaudeTierVariant(text)) return false
     const version = parseVersionAfterToken(text, "claude")
-    return Boolean(version && versionAtLeast(version, 4, 5))
+    return Boolean(version && isSupportedClaudeVersion(version))
   }
 
   if (text.includes("gemini")) {
@@ -614,7 +633,7 @@ function buildFallbackCatalog(
     : false
   const models =
     fallbackId && ALLOWED_PROVIDER_FAMILY_SET.has(fallbackFamily) && fallbackIsHighTier
-      ? [{ id: fallbackId, name: fallbackId }]
+      ? [{ id: fallbackId, name: fallbackId, runtimeId: fallbackId }]
       : []
   const modelGroups: AiEntryModelGroup[] =
     models.length > 0

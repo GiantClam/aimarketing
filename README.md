@@ -113,6 +113,86 @@ Or run the full pipeline:
 node scripts/run-all-db-migrations.js
 ```
 
+## Lead Hunter Skill Engine
+
+`lead-hunter` supports two backends:
+
+- `dify` (default): keep using enterprise Dify `/chat-messages`
+- `skill`: use in-repo search + synthesis pipeline while keeping UI contract unchanged
+
+Backend selection is now **database-driven per enterprise** via
+`AI_MARKETING_enterprise_dify_advisor_configs.execution_mode` (`dify` | `skill`)
+for advisor types `company-search` and `contact-mining`.
+
+### Environment variables
+
+```bash
+# runtime requirement for skill mode (at least one provider key is required)
+TAVILY_API_KEY=...
+TAVILY_API_BASE=https://api.tavily.com
+SERPER_API_KEY=...
+SERPER_API_BASE=https://google.serper.dev
+
+# optional model override for skill synthesis
+LEAD_HUNTER_SKILL_MODEL=google/gemini-3-flash
+
+# optional legacy global default (execution_mode in DB still has priority)
+LEAD_HUNTER_ENGINE=dify
+
+# optional performance tuning (defaults shown)
+LEAD_HUNTER_MAX_SEARCH_QUERIES=6
+LEAD_HUNTER_SEARCH_QUERY_CONCURRENCY=3
+LEAD_HUNTER_SEARCH_EARLY_STOP_SIGNALS=14
+LEAD_HUNTER_SEARCH_CACHE_TTL_MS=120000
+LEAD_HUNTER_SERPER_RESULT_NUM=4
+LEAD_HUNTER_TAVILY_RESULT_NUM=4
+LEAD_HUNTER_ENTERPRISE_QUERY_VARIANTS=3
+LEAD_HUNTER_REPORT_PROMPT_EVIDENCE_LIMIT=12
+LEAD_HUNTER_REPORT_ENTERPRISE_SNIPPETS=4
+LEAD_HUNTER_REPORT_MAX_TOKENS=1600
+LEAD_HUNTER_REPORT_TIMEOUT_MS=60000
+LEAD_HUNTER_REPORT_PROVIDER_TIMEOUT_MS=35000
+LEAD_HUNTER_VBUY_FIT_LAYER_CHARS=6000
+LEAD_HUNTER_ASYNC_EVIDENCE_PERSIST=true
+LEAD_HUNTER_EVIDENCE_PERSIST_LIMIT=16
+LEAD_HUNTER_DEFER_PERSIST_AFTER_SUCCESS=true
+```
+
+### Configure enterprise engine modes
+
+```bash
+npm run config:lead-hunter:engine-modes
+```
+
+Default script behavior:
+- `vbuy` -> `skill`
+- `灵创智能` -> `dify`
+
+### Lead Hunter evidence migration
+
+```bash
+npm run migrate:enterprise:dify
+npm run migrate:lead-hunter:evidence
+```
+
+Or run all migrations:
+
+```bash
+npm run migrate:all
+```
+
+### Skill stream + evidence smoke test
+
+```bash
+npm run test:lead-hunter:skill-stream
+```
+
+Run both advisor types:
+
+```bash
+npm run test:lead-hunter:skill-stream:all
+```
+
 ### API endpoints
 
 - `GET/POST /api/writer/memory/items`

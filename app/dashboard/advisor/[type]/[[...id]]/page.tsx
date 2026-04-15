@@ -29,12 +29,6 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
       return
     }
 
-    if (advisorType === "lead-hunter") {
-      const nextConversationId = conversationId ? `/${conversationId}` : "/new"
-      router.replace(`/dashboard/advisor/company-search${nextConversationId}`)
-      return
-    }
-
     let cancelled = false
 
     const checkAvailability = async () => {
@@ -60,6 +54,11 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
         }
 
         if (advisorType === "growth" && !available.growth) {
+          router.replace("/dashboard")
+          return
+        }
+
+        if (advisorType === "lead-hunter" && !available.leadHunter) {
           router.replace("/dashboard")
           return
         }

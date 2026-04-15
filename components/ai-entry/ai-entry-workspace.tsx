@@ -40,10 +40,17 @@ import {
   pickSonnet46ModelId,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
+import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { cn } from "@/lib/utils"
 
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string }
-type ModelOption = { id: string; name: string }
+type ModelOption = {
+  id: string
+  name: string
+  runtimeId?: string
+  canonicalId?: string
+  aliases?: string[]
+}
 type ModelGroupOption = { family: string; label: string; models: ModelOption[] }
 type AgentOption = { id: string; category: string; name: string; description: string }
 type AgentGroupOption = { id: string; label: string; agents: AgentOption[] }
@@ -80,8 +87,24 @@ type ChatStreamApiResponse = {
 type ModelApiResponse = {
   providerId?: string | null
   selectedModelId?: string | null
-  modelGroups?: Array<{ family?: string; label?: string; models?: Array<{ id?: string; name?: string }> }>
-  models?: Array<{ id?: string; name?: string }>
+  modelGroups?: Array<{
+    family?: string
+    label?: string
+    models?: Array<{
+      id?: string
+      name?: string
+      runtimeId?: string
+      canonicalId?: string
+      aliases?: string[]
+    }>
+  }>
+  models?: Array<{
+    id?: string
+    name?: string
+    runtimeId?: string
+    canonicalId?: string
+    aliases?: string[]
+  }>
 }
 type AgentApiResponse = {
   defaultAgentId?: string | null
@@ -108,6 +131,32 @@ function readPersistedSelectedModelId() {
   } catch {
     return null
   }
+}
+
+function resolveDisplayModelId(
+  rawModelId: string | null | undefined,
+  models: ModelOption[],
+) {
+  const normalized = typeof rawModelId === "string" ? rawModelId.trim() : ""
+  if (!normalized) return null
+
+  const exact = models.find((item) => item.id === normalized)
+  if (exact) return exact.id
+
+  const candidates = models.flatMap((item) =>
+    [item.id, item.runtimeId, item.canonicalId, ...(item.aliases || [])]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => ({ optionId: item.id, value })),
+  )
+
+  const matched = resolveEquivalentModelId(
+    normalized,
+    candidates.map((item) => item.value),
+  )
+  if (!matched) return null
+
+  const mapped = candidates.find((item) => item.value === matched)
+  return mapped?.optionId || null
 }
 
 function consumeSseBuffer<T extends object>(buffer: string) {
@@ -369,11 +418,32 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         if (cancelled) return
         if (!response.ok) throw new Error(`http_${response.status}`)
 
-        const normalizeModel = (item: { id?: string; name?: string } | null | undefined) => {
+        const normalizeModel = (
+          item: {
+            id?: string
+            name?: string
+            runtimeId?: string
+            canonicalId?: string
+            aliases?: string[]
+          } | null | undefined,
+        ) => {
           const id = typeof item?.id === "string" ? item.id.trim() : ""
           if (!id) return null
           const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : id
-          return { id, name } as ModelOption
+          const runtimeId =
+            typeof item?.runtimeId === "string" && item.runtimeId.trim()
+              ? item.runtimeId.trim()
+              : undefined
+          const canonicalId =
+            typeof item?.canonicalId === "string" && item.canonicalId.trim()
+              ? item.canonicalId.trim()
+              : undefined
+          const aliases = Array.isArray(item?.aliases)
+            ? item.aliases
+                .map((value) => (typeof value === "string" ? value.trim() : ""))
+                .filter((value) => value.length > 0)
+            : undefined
+          return { id, name, runtimeId, canonicalId, aliases } as ModelOption
         }
 
         const normalizedGroups = (payload?.modelGroups || [])
@@ -411,18 +481,17 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
           const normalizedCurrent =
             typeof current === "string" && current.trim() ? current.trim() : null
-          if (
-            normalizedCurrent &&
-            normalizedModels.some((item) => item.id === normalizedCurrent)
-          ) {
-            return normalizedCurrent
+          if (normalizedCurrent) {
+            const resolvedCurrent = resolveDisplayModelId(normalizedCurrent, normalizedModels)
+            if (resolvedCurrent) return resolvedCurrent
           }
 
-          if (
-            preferredFromCatalog &&
-            normalizedModels.some((item) => item.id === preferredFromCatalog)
-          ) {
-            return preferredFromCatalog
+          if (preferredFromCatalog) {
+            const resolvedPreferred = resolveDisplayModelId(
+              preferredFromCatalog,
+              normalizedModels,
+            )
+            if (resolvedPreferred) return resolvedPreferred
           }
 
           if (
@@ -581,7 +650,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             : null
 
         if (conversationModelId && !shouldLockModel) {
-          setSelectedModelId(conversationModelId)
+          const resolvedModelId = resolveDisplayModelId(conversationModelId, models)
+          setSelectedModelId(resolvedModelId || null)
         }
       } catch (error) {
         if (cancelled) return
@@ -728,7 +798,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           }
 
           if (event.event === "provider_selected" || event.event === "provider_fallback") {
-            const detail = [event.provider, event.provider_model].filter(Boolean).join(" / ")
+            const normalizedProviderModel = resolveDisplayModelId(
+              typeof event.provider_model === "string" ? event.provider_model : null,
+              models,
+            )
+            const detail = [event.provider, normalizedProviderModel || selectedModelId]
+              .filter(Boolean)
+              .join(" / ")
             upsertTaskEvent({
               type: "provider",
               label: "Model routing",
@@ -822,14 +898,21 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               setSelectedAgentId(event.agent_id)
             }
 
-            if (event.provider_model && models.some((item) => item.id === event.provider_model)) {
-              setSelectedModelId(event.provider_model)
+            const resolvedProviderModelId = resolveDisplayModelId(
+              typeof event.provider_model === "string" ? event.provider_model : null,
+              models,
+            )
+            if (resolvedProviderModelId) {
+              setSelectedModelId(resolvedProviderModelId)
             }
 
             upsertTaskEvent({
               type: "response",
               label: "Response complete",
-              detail: [event.provider, event.provider_model].filter(Boolean).join(" / ") || undefined,
+              detail:
+                [event.provider, resolvedProviderModelId || selectedModelId]
+                  .filter(Boolean)
+                  .join(" / ") || undefined,
               status: "completed",
               at: now,
             })

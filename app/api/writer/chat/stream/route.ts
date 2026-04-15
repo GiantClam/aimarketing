@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { createPendingWriterConversation } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
+import { loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
 import { getWriterConversation, listWriterMessages, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
-import { runWriterSkillsTurn, type WriterProgressEvent } from "@/lib/writer/skills"
 import type { WriterConversationStatus, WriterPreloadedBrief } from "@/lib/writer/types"
 
 export const runtime = "nodejs"
@@ -19,6 +19,14 @@ const STREAM_HEADERS = {
 }
 const WRITER_STREAM_CHUNK_SIZE = 120
 const WRITER_STREAM_CHUNK_DELAY_MS = 16
+
+type WriterProgressEvent = {
+  type: string
+  label: string
+  detail?: string
+  status: string
+  at?: number
+}
 
 function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
@@ -131,7 +139,8 @@ export async function POST(req: NextRequest) {
         })
 
         try {
-          const turnResult = await runWriterSkillsTurn({
+          const writerSkillRunner = loadWriterSkillRunner()
+          const turnResult = await writerSkillRunner.runBlocking({
             query: userQuery,
             preloadedBrief,
             userId: auth.user.id,

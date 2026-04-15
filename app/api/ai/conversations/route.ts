@@ -14,6 +14,7 @@ import {
   pickSonnet46ModelId,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
+import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { loadExecutiveSkillForAgent } from "@/lib/ai-entry/executive-skill-loader"
 
 function parseLimit(input: string | null, fallback: number) {
@@ -28,6 +29,20 @@ async function resolveCreateConversationModelId(
   scope: AiEntryConversationScope,
   options?: { forceSonnet46?: boolean },
 ) {
+  const resolveRequestedFromCatalog = async () => {
+    if (!requestedModelId) return null
+    try {
+      const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
+      const matched = resolveEquivalentModelId(
+        requestedModelId,
+        catalog.models.map((item) => item.id),
+      )
+      return matched || requestedModelId
+    } catch {
+      return requestedModelId
+    }
+  }
+
   if (options?.forceSonnet46) {
     try {
       const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -42,7 +57,7 @@ async function resolveCreateConversationModelId(
     return AI_ENTRY_SONNET_46_MODEL_HINT
   }
 
-  if (requestedModelId) return requestedModelId
+  if (requestedModelId) return await resolveRequestedFromCatalog()
 
   try {
     const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })

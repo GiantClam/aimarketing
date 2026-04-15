@@ -191,7 +191,7 @@ test("model catalog recent-year filter excludes old models when created is prese
           data: [
             { id: "openai/gpt-5.4", name: "GPT 5.4", created: nowSeconds },
             { id: "openai/gpt-5.3", name: "GPT 5.3", created: oldSeconds },
-            { id: "anthropic/claude-4.5", name: "Claude 4.5" },
+            { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
           ],
         }),
       })) as typeof fetch
@@ -200,7 +200,10 @@ test("model catalog recent-year filter excludes old models when created is prese
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: 365 })
         assert.equal(catalog.models.some((item) => item.id === "openai/gpt-5.3"), false)
         assert.equal(catalog.models.some((item) => item.id === "openai/gpt-5.4"), true)
-        assert.equal(catalog.models.some((item) => item.id === "anthropic/claude-4.5"), true)
+        assert.equal(
+          catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.5"),
+          true,
+        )
       } finally {
         globalThis.fetch = originalFetch
       }
@@ -225,7 +228,7 @@ test("model catalog strict recent filter excludes models without created timesta
         json: async () => ({
           data: [
             { id: "openai/gpt-5.4", name: "GPT 5.4", created: nowSeconds },
-            { id: "anthropic/claude-4.5", name: "Claude 4.5" },
+            { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
           ],
         }),
       })) as typeof fetch
@@ -233,7 +236,7 @@ test("model catalog strict recent filter excludes models without created timesta
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: 365, recentStrict: true })
         assert.equal(catalog.models.some((item) => item.id === "openai/gpt-5.4"), true)
-        assert.equal(catalog.models.some((item) => item.id === "anthropic/claude-4.5"), false)
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-5"), false)
         assert.equal(catalog.recentStrict, true)
       } finally {
         globalThis.fetch = originalFetch
@@ -259,7 +262,7 @@ test("model catalog falls back to unfiltered high-tier chat models when recent f
         json: async () => ({
           data: [
             { id: "openai/gpt-5.4", name: "GPT 5.4", created: oldSeconds },
-            { id: "anthropic/claude-4.5", name: "Claude 4.5", created: oldSeconds },
+            { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", created: oldSeconds },
           ],
         }),
       })) as typeof fetch
@@ -402,6 +405,94 @@ test("model catalog keeps canonical bare id when provider and separator variants
           catalog.models.some((item) => item.id === "openai/gpt-5.4-nano"),
           true,
         )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
+test("model catalog keeps claude thinking variant as a distinct model", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4-6",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { id: "anthropic/claude-sonnet-4.6", owned_by: "custom" },
+            { id: "claude-sonnet-4-6", owned_by: "custom" },
+            { id: "anthropic/claude-sonnet-4.6-thinking", owned_by: "custom" },
+            { id: "claude-sonnet-4-6-thinking", owned_by: "custom" },
+          ],
+        }),
+      })) as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6"), true)
+        assert.equal(
+          catalog.models.some((item) => item.id === "claude-sonnet-4-6-thinking"),
+          true,
+        )
+        assert.equal(
+          catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6"),
+          false,
+        )
+        assert.equal(
+          catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6-thinking"),
+          false,
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
+test("model catalog keeps only claude sonnet/opus/haiku in versions 4.5 and 4.6", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4-6",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { id: "claude-sonnet-4-6", owned_by: "custom" },
+            { id: "claude-opus-4-5", owned_by: "custom" },
+            { id: "claude-haiku-4-5-20251001", owned_by: "custom" },
+            { id: "claude-sonnet-4-7", owned_by: "custom" },
+            { id: "claude-opus-4-4", owned_by: "custom" },
+            { id: "claude-4-6", owned_by: "custom" },
+          ],
+        }),
+      })) as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4-5"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-haiku-4-5"), true)
+        assert.equal(
+          catalog.models.some((item) => item.id === "claude-haiku-4-5-20251001"),
+          false,
+        )
+
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-7"), false)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4-4"), false)
+        assert.equal(catalog.models.some((item) => item.id === "claude-4-6"), false)
       } finally {
         globalThis.fetch = originalFetch
       }

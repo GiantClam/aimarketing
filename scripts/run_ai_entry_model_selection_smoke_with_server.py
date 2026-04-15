@@ -3,15 +3,14 @@ import os
 import signal
 import socket
 import subprocess
-import sys
 import time
 import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LOG_PATH = ROOT / "artifacts" / "lead-hunter-workflows-e2e-start.log"
+LOG_PATH = ROOT / "artifacts" / "ai-entry-model-selection-start.log"
 NEXT_CLI = ROOT / "node_modules" / ".bin" / "next.CMD"
-VALIDATION_DIST_DIR = ".next-lead-hunter-workflows-e2e"
+VALIDATION_DIST_DIR = ".next-ai-entry-model-selection-e2e"
 
 
 def find_free_port() -> int:
@@ -20,7 +19,7 @@ def find_free_port() -> int:
         return sock.getsockname()[1]
 
 
-def wait_for_ready(base_url: str, timeout_seconds: int = 180):
+def wait_for_ready(base_url: str, timeout_seconds: int = 240):
     deadline = time.time() + timeout_seconds
     last_error: Exception | None = None
     while time.time() < deadline:
@@ -36,13 +35,18 @@ def wait_for_ready(base_url: str, timeout_seconds: int = 180):
     raise RuntimeError(f"server did not become ready: {last_error}")
 
 
-def run_validation_with_retry(cmd: list[str], env: dict[str, str]) -> int:
-    max_attempts = max(1, int(env.get("LEAD_HUNTER_E2E_RETRY_COUNT", "2")))
-    retry_delay_seconds = max(1, int(env.get("LEAD_HUNTER_E2E_RETRY_DELAY_SECONDS", "10")))
+def run_validation_with_retry(env: dict[str, str]) -> int:
+    max_attempts = max(1, int(env.get("AI_ENTRY_SMOKE_RETRY_COUNT", "2")))
+    retry_delay_seconds = max(1, int(env.get("AI_ENTRY_SMOKE_RETRY_DELAY_SECONDS", "5")))
     for attempt_index in range(max_attempts):
         attempt_no = attempt_index + 1
-        print(f"[lead-hunter] workflows attempt {attempt_no}/{max_attempts}")
-        validation = subprocess.run(cmd, cwd=str(ROOT), check=False, env=env)
+        print(f"[ai-entry] smoke attempt {attempt_no}/{max_attempts}")
+        validation = subprocess.run(
+            ["node", "scripts/ai_entry_model_selection_smoke_test.js"],
+            cwd=str(ROOT),
+            check=False,
+            env=env,
+        )
         if validation.returncode == 0:
             return 0
         if attempt_no < max_attempts:
@@ -59,16 +63,15 @@ def main():
         "USERPROFILE": str(ROOT),
         "APPDATA": str(ROOT),
         "NEXT_DIST_DIR": VALIDATION_DIST_DIR,
+        "ALLOW_DEMO_LOGIN": "true",
+        "NEXT_PUBLIC_ALLOW_DEMO_LOGIN": "true",
+        "AI_ENTRY_SMOKE_AUTH_TIMEOUT_MS": os.environ.get("AI_ENTRY_SMOKE_AUTH_TIMEOUT_MS", "45000"),
     }
 
     subprocess.run([str(NEXT_CLI), "build"], cwd=str(ROOT), check=True, env=shared_env)
 
     port = find_free_port()
     base_url = f"http://127.0.0.1:{port}"
-    email = os.environ.get("LEAD_HUNTER_E2E_EMAIL") or os.environ.get("VBUY_ADMIN_EMAIL", "")
-    password = os.environ.get("LEAD_HUNTER_E2E_PASSWORD") or os.environ.get("VBUY_ADMIN_PASSWORD", "")
-    session_cookie = os.environ.get("LEAD_HUNTER_E2E_SESSION_COOKIE", "")
-    timeout_seconds = os.environ.get("LEAD_HUNTER_E2E_TIMEOUT_SECONDS", "480")
 
     with LOG_PATH.open("w", encoding="utf-8") as log_file:
         proc = subprocess.Popen(
@@ -81,25 +84,8 @@ def main():
 
         try:
             wait_for_ready(base_url)
-
-            cmd = [
-                sys.executable,
-                "scripts/lead_hunter_workflows_e2e.py",
-                "--base-url",
-                base_url,
-                "--timeout-seconds",
-                timeout_seconds,
-            ]
-            if session_cookie:
-                cmd.extend(["--session-cookie", session_cookie])
-            else:
-                if not email or not password:
-                    raise RuntimeError(
-                        "Set LEAD_HUNTER_E2E_SESSION_COOKIE or both LEAD_HUNTER_E2E_EMAIL and LEAD_HUNTER_E2E_PASSWORD.",
-                    )
-                cmd.extend(["--email", email, "--password", password])
-
-            raise SystemExit(run_validation_with_retry(cmd, shared_env))
+            validation_env = {**shared_env, "BASE_URL": base_url}
+            raise SystemExit(run_validation_with_retry(validation_env))
         finally:
             if proc.poll() is None:
                 if os.name == "nt":

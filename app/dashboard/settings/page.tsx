@@ -43,7 +43,7 @@ type EnterpriseDifyDataset = {
   enabled: boolean
 }
 
-type EnterpriseAdvisorType = "brand-strategy" | "growth" | "company-search" | "contact-mining"
+type EnterpriseAdvisorType = "brand-strategy" | "growth" | "lead-hunter" | "company-search" | "contact-mining"
 
 type AdvisorWorkflowSummary = {
   configured: boolean
@@ -54,6 +54,7 @@ type AdvisorDefaultsSummary = {
   baseUrl: string | null
   brandStrategy: AdvisorWorkflowSummary
   growth: AdvisorWorkflowSummary
+  leadHunter: AdvisorWorkflowSummary
   companySearch: AdvisorWorkflowSummary
   contactMining: AdvisorWorkflowSummary
 }
@@ -61,11 +62,14 @@ type AdvisorDefaultsSummary = {
 type AdvisorOverrideSummary = {
   id: number
   advisorType: EnterpriseAdvisorType
+  executionMode: "dify" | "skill"
   baseUrl: string
   apiKeyMasked: string
   hasApiKey: boolean
   enabled: boolean
 }
+
+type LeadHunterAdvisorType = "lead-hunter"
 
 function formatEnterpriseDifyMessage(error: unknown, fallback: string, locale: AppLocale) {
   const isZh = locale === "zh"
@@ -171,6 +175,9 @@ export default function SettingsPage() {
   const [advisorDefaults, setAdvisorDefaults] = useState<AdvisorDefaultsSummary | null>(null)
   const [advisorOverrides, setAdvisorOverrides] = useState<Partial<Record<EnterpriseAdvisorType, AdvisorOverrideSummary>>>({})
   const [loadingAdvisorConfig, setLoadingAdvisorConfig] = useState(false)
+  const [leadHunterModeDrafts, setLeadHunterModeDrafts] = useState<Partial<Record<LeadHunterAdvisorType, "dify" | "skill">>>({})
+  const [savingLeadHunterAdvisorType, setSavingLeadHunterAdvisorType] = useState<LeadHunterAdvisorType | null>(null)
+  const [advisorConfigMessage, setAdvisorConfigMessage] = useState("")
 
   useEffect(() => {
     setName(user?.name || "")
@@ -240,6 +247,43 @@ export default function SettingsPage() {
     }
   }, [canViewEnterpriseDify, userId])
 
+  const applyAdvisorConfigPayload = useCallback((payload: any) => {
+    const defaults = payload?.defaults
+    const overrides = Array.isArray(payload?.overrides) ? payload.overrides : []
+    setAdvisorDefaults(defaults)
+
+    const nextOverrides: Partial<Record<EnterpriseAdvisorType, AdvisorOverrideSummary>> = {}
+    const nextLeadHunterModeDrafts: Partial<Record<LeadHunterAdvisorType, "dify" | "skill">> = {}
+
+    for (const override of overrides) {
+      if (
+        override?.advisorType === "brand-strategy" ||
+        override?.advisorType === "growth" ||
+        override?.advisorType === "lead-hunter" ||
+        override?.advisorType === "company-search" ||
+        override?.advisorType === "contact-mining"
+      ) {
+        const advisorType = override.advisorType as EnterpriseAdvisorType
+        const executionMode = override?.executionMode === "skill" ? "skill" : "dify"
+        nextOverrides[advisorType] = {
+          id: Number(override?.id || 0),
+          advisorType,
+          executionMode,
+          baseUrl: String(override?.baseUrl || ""),
+          apiKeyMasked: String(override?.apiKeyMasked || ""),
+          hasApiKey: Boolean(override?.hasApiKey),
+          enabled: Boolean(override?.enabled),
+        }
+        if (advisorType === "lead-hunter") {
+          nextLeadHunterModeDrafts[advisorType] = executionMode
+        }
+      }
+    }
+
+    setAdvisorOverrides(nextOverrides)
+    setLeadHunterModeDrafts(nextLeadHunterModeDrafts)
+  }, [])
+
   const loadAdvisorConfig = useCallback(async () => {
     if (!isEnterpriseAdmin || !Number.isFinite(userId) || userId <= 0) return
 
@@ -249,36 +293,11 @@ export default function SettingsPage() {
       if (!response.ok) return
 
       const json = await response.json()
-      const defaults = json?.data?.defaults
-      const overrides = Array.isArray(json?.data?.overrides) ? json.data.overrides : []
-      setAdvisorDefaults(defaults)
-
-      const nextOverrides: Partial<Record<EnterpriseAdvisorType, AdvisorOverrideSummary>> = {}
-
-      for (const override of overrides) {
-        if (
-          override?.advisorType === "brand-strategy" ||
-          override?.advisorType === "growth" ||
-          override?.advisorType === "company-search" ||
-          override?.advisorType === "contact-mining"
-        ) {
-          const advisorType = override.advisorType as EnterpriseAdvisorType
-          nextOverrides[advisorType] = {
-            id: Number(override?.id || 0),
-            advisorType,
-            baseUrl: String(override?.baseUrl || ""),
-            apiKeyMasked: String(override?.apiKeyMasked || ""),
-            hasApiKey: Boolean(override?.hasApiKey),
-            enabled: Boolean(override?.enabled),
-          }
-        }
-      }
-
-      setAdvisorOverrides(nextOverrides)
+      applyAdvisorConfigPayload(json?.data)
     } finally {
       setLoadingAdvisorConfig(false)
     }
-  }, [isEnterpriseAdmin, userId])
+  }, [applyAdvisorConfigPayload, isEnterpriseAdmin, userId])
 
   useEffect(() => {
     void loadAdminData()
@@ -445,6 +464,53 @@ export default function SettingsPage() {
     }
   }
 
+  const saveLeadHunterExecutionMode = async (
+    advisorType: LeadHunterAdvisorType,
+    executionMode: "dify" | "skill",
+  ) => {
+    setSavingLeadHunterAdvisorType(advisorType)
+    setAdvisorConfigMessage("")
+    try {
+      const response = await fetch("/api/enterprise/dify/advisors", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          advisorType,
+          enabled: true,
+          executionMode,
+        }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(json?.error || "advisor_config_save_failed")
+      }
+
+      applyAdvisorConfigPayload(json?.data)
+      setAdvisorConfigMessage(
+        executionMode === "skill"
+          ? t("海外猎客执行模式已切换为 Skill。", "Lead Hunter execution mode switched to Skill.")
+          : t("海外猎客执行模式已切换为 Dify。", "Lead Hunter execution mode switched to Dify."),
+      )
+    } catch (error) {
+      if (error instanceof Error && error.message === "advisor_base_url_and_api_key_required") {
+        setAdvisorConfigMessage(
+          t(
+            "切换到 Dify 前，请先在数据库中配置该顾问的 Dify Base URL 和 API Key。",
+            "Configure Dify Base URL and API key in database for this advisor before switching to Dify.",
+          ),
+        )
+      } else {
+        setAdvisorConfigMessage(
+          error instanceof Error
+            ? error.message
+            : t("保存顾问配置失败。", "Failed to save advisor config."),
+        )
+      }
+    } finally {
+      setSavingLeadHunterAdvisorType(null)
+    }
+  }
+
   const statusText = useMemo(() => {
     if (!user?.enterpriseStatus) return t("未知", "Unknown")
     if (user.enterpriseStatus === "pending") return t("待审核", "Pending")
@@ -476,12 +542,21 @@ export default function SettingsPage() {
       title: t("增长顾问", "Growth advisor"),
       description: t("优先读取企业数据库中的 workflow；未配置企业专属 workflow 时回退到系统默认 workflow。", "Prefer enterprise workflow from database; fallback to system default workflow when enterprise override is not configured."),
     },
+    ...(advisorOverrides["lead-hunter"]
+      ? [
+        {
+          advisorType: "lead-hunter" as const,
+          title: t("客户画像（Lead Hunter）", "Lead Hunter (Customer Profile)"),
+          description: t("客户画像入口为独立入口，可在企业数据库中切换执行模式（Dify/Skill）。", "Customer profile is a dedicated entry and can switch execution mode (Dify/Skill) in enterprise database."),
+        },
+      ]
+      : []),
     ...(advisorOverrides["company-search"]
       ? [
         {
           advisorType: "company-search" as const,
           title: t("公司搜索（Company Search）", "Company Search"),
-          description: t("仅当前企业在数据库中配置了 company search workflow 时展示；每次只触发当前搜索条件对应的 workflow。", "Shown only when company-search workflow is configured in enterprise database; each run triggers only the workflow for current criteria."),
+          description: t("保留原有 Dify workflow。仅当前企业在数据库中配置了 company search workflow 时展示。", "Keeps original Dify workflow. Shown only when company-search workflow is configured in enterprise database."),
         },
       ]
       : []),
@@ -490,7 +565,7 @@ export default function SettingsPage() {
         {
           advisorType: "contact-mining" as const,
           title: t("联系人挖掘（Contact Mining）", "Contact Mining"),
-          description: t("仅当前企业在数据库中配置了 contact mining workflow 时展示；每次只触发当前搜索条件对应的 workflow。", "Shown only when contact-mining workflow is configured in enterprise database; each run triggers only the workflow for current criteria."),
+          description: t("保留原有 Dify workflow。仅当前企业在数据库中配置了 contact mining workflow 时展示。", "Keeps original Dify workflow. Shown only when contact-mining workflow is configured in enterprise database."),
         },
       ]
       : []),
@@ -894,30 +969,48 @@ export default function SettingsPage() {
                   <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />{t("专家顾问与海外猎客 Dify Workflow 配置", "Advisor and Lead Hunter Dify workflow config")}</CardTitle>
-                      <CardDescription>{t("设置页只展示当前工作流信息。企业数据库中的 workflow 优先级高于系统默认 workflow；Company Search 与 Contact Mining 仅在企业数据库已配置时展示。", "This page is display-only for workflow info. Enterprise workflow overrides system defaults; Company Search and Contact Mining are shown only when configured in enterprise database.")}</CardDescription>
+                      <CardDescription>{t("品牌顾问和增长顾问只读展示。客户画像（Lead Hunter）可在此切换执行模式（Dify/Skill）；公司搜索与联系人挖掘保持原有 Dify workflow。", "Brand/Growth workflows are read-only. Lead Hunter (customer profile) can switch execution mode (Dify/Skill); Company Search and Contact Mining keep original Dify workflows.")}</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
               {loadingAdvisorConfig && <p className="text-sm text-muted-foreground">{t("正在读取顾问配置...", "Loading advisor config...")}</p>}
+              {advisorConfigMessage && <p className="text-sm text-muted-foreground">{advisorConfigMessage}</p>}
               <div className="grid gap-4">
                 {advisorCards.map((card) => {
                   const override = advisorOverrides[card.advisorType]
-                  const isLeadHunterWorkflow =
-                    card.advisorType === "company-search" || card.advisorType === "contact-mining"
+                  const isLeadHunterWorkflow = card.advisorType === "lead-hunter"
+                  const leadHunterAdvisorType = isLeadHunterWorkflow ? (card.advisorType as LeadHunterAdvisorType) : null
                   const defaultInfo =
                     card.advisorType === "brand-strategy"
                       ? advisorDefaults?.brandStrategy
                       : card.advisorType === "growth"
                         ? advisorDefaults?.growth
+                        : card.advisorType === "lead-hunter"
+                          ? advisorDefaults?.leadHunter
                         : card.advisorType === "company-search"
                           ? advisorDefaults?.companySearch
                           : advisorDefaults?.contactMining
                   const hasEnterpriseWorkflow = Boolean(override?.baseUrl && override?.hasApiKey)
                   const enterpriseEnabled = Boolean(hasEnterpriseWorkflow && override?.enabled)
                   const hasSystemDefault = Boolean(defaultInfo?.configured)
+                  const currentLeadHunterMode = override?.executionMode === "skill" ? "skill" : "dify"
+                  const leadHunterModeDraft =
+                    isLeadHunterWorkflow && leadHunterAdvisorType
+                      ? leadHunterModeDrafts[leadHunterAdvisorType] || currentLeadHunterMode
+                      : "dify"
+                  const isSavingLeadHunterMode =
+                    isLeadHunterWorkflow && leadHunterAdvisorType
+                      ? savingLeadHunterAdvisorType === leadHunterAdvisorType
+                      : false
+                  const canSaveLeadHunterMode =
+                    isLeadHunterWorkflow && leadHunterAdvisorType
+                      ? leadHunterModeDraft !== currentLeadHunterMode
+                      : false
                   const statusLabel =
                     isLeadHunterWorkflow
                           ? enterpriseEnabled
-                        ? t("当前生效：企业数据库", "Current source: enterprise database")
+                        ? override?.executionMode === "skill"
+                          ? t("当前生效：企业数据库（Skill）", "Current source: enterprise database (skill)")
+                          : t("当前生效：企业数据库（Dify）", "Current source: enterprise database (dify)")
                         : t("当前状态：未启用", "Current status: disabled")
                       : enterpriseEnabled
                         ? t("当前生效：企业数据库", "Current source: enterprise database")
@@ -938,9 +1031,65 @@ export default function SettingsPage() {
 
                       <div className="grid gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 text-sm">
                         {isLeadHunterWorkflow ? (
+                          <div className="space-y-4">
                             <p className="text-xs leading-6 text-muted-foreground">
-                            {t("海外猎客（Company Search / Contact Mining）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。", "Lead Hunter (Company Search / Contact Mining) has no system-default workflow. Entry appears only when enterprise database configuration is available.")}
-                          </p>
+                              {t("客户画像（Lead Hunter）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。", "Lead Hunter (customer profile) has no system-default workflow. Entry appears only when enterprise database configuration is available.")}
+                            </p>
+                            {leadHunterAdvisorType ? (
+                              <div className="space-y-3 rounded-xl border border-border/70 bg-background/70 p-3">
+                                <p className="text-xs text-muted-foreground">{t("执行模式（数据库配置）", "Execution mode (database config)")}</p>
+                                <div className="flex flex-wrap gap-3">
+                                  <label className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-sm text-foreground">
+                                    <input
+                                      type="radio"
+                                      name={`${leadHunterAdvisorType}-mode`}
+                                      className="border-border"
+                                      checked={leadHunterModeDraft === "dify"}
+                                      onChange={() =>
+                                        setLeadHunterModeDrafts((prev) => ({ ...prev, [leadHunterAdvisorType]: "dify" }))
+                                      }
+                                      disabled={isSavingLeadHunterMode}
+                                    />
+                                    <span>Dify</span>
+                                  </label>
+                                  <label className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-sm text-foreground">
+                                    <input
+                                      type="radio"
+                                      name={`${leadHunterAdvisorType}-mode`}
+                                      className="border-border"
+                                      checked={leadHunterModeDraft === "skill"}
+                                      onChange={() =>
+                                        setLeadHunterModeDrafts((prev) => ({ ...prev, [leadHunterAdvisorType]: "skill" }))
+                                      }
+                                      disabled={isSavingLeadHunterMode}
+                                    />
+                                    <span>Skill</span>
+                                  </label>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="rounded-full"
+                                    onClick={() =>
+                                      void saveLeadHunterExecutionMode(
+                                        leadHunterAdvisorType,
+                                        leadHunterModeDraft,
+                                      )
+                                    }
+                                    disabled={isSavingLeadHunterMode || !canSaveLeadHunterMode}
+                                  >
+                                    {isSavingLeadHunterMode
+                                      ? t("保存中...", "Saving...")
+                                      : t("保存执行模式", "Save mode")}
+                                  </Button>
+                                  <span className="text-xs text-muted-foreground">
+                                    {t("仅修改执行引擎，不会改动企业工作流的 Base URL / API Key。", "Only execution engine is updated; Base URL/API Key remain unchanged.")}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
                         ) : (
                           <div className="grid gap-3 md:grid-cols-2">
                             <div className="grid gap-1">

@@ -11,7 +11,7 @@ import {
 } from "@/lib/dify/config"
 import { isEnterpriseAdmin } from "@/lib/enterprise/server"
 
-type EnterpriseAdvisorType = "brand-strategy" | "growth" | "company-search" | "contact-mining"
+type EnterpriseAdvisorType = "brand-strategy" | "growth" | "lead-hunter" | "company-search" | "contact-mining"
 
 async function getAdminEnterpriseId(userId: number) {
   const allowed = await isEnterpriseAdmin(userId)
@@ -42,17 +42,16 @@ function serializeOverride(override: {
   id: number
   enterpriseId: number
   advisorType: string
+  executionMode: string
   baseUrl: string
   apiKey: string
   enabled: boolean
 }) {
-  const normalizedAdvisorType =
-    override.advisorType === "lead-hunter" ? "company-search" : override.advisorType
-
   return {
     id: override.id,
     enterpriseId: override.enterpriseId,
-    advisorType: normalizedAdvisorType as EnterpriseAdvisorType,
+    advisorType: override.advisorType as EnterpriseAdvisorType,
+    executionMode: override.executionMode === "skill" ? "skill" : "dify",
     baseUrl: override.baseUrl,
     enabled: override.enabled,
     hasApiKey: Boolean(override.apiKey.trim()),
@@ -106,22 +105,24 @@ export async function PUT(request: NextRequest) {
         ? "growth"
         : body?.advisorType === "brand-strategy"
           ? "brand-strategy"
+          : body?.advisorType === "lead-hunter"
+            ? "lead-hunter"
           : body?.advisorType === "company-search"
             ? "company-search"
-            : body?.advisorType === "lead-hunter"
-              ? "company-search"
             : body?.advisorType === "contact-mining"
               ? "contact-mining"
             : null
     if (!advisorType) {
       return NextResponse.json({ error: "advisor_type_required" }, { status: 400 })
     }
+    const executionMode = advisorType === "lead-hunter" && body?.executionMode === "skill" ? "skill" : "dify"
 
     await upsertEnterpriseAdvisorOverride(enterpriseId, advisorType, {
       useDefault: Boolean(body?.useDefault),
       enabled: body?.enabled !== false,
-      baseUrl: typeof body?.baseUrl === "string" ? body.baseUrl : "",
-      apiKey: typeof body?.apiKey === "string" ? body.apiKey : "",
+      executionMode,
+      baseUrl: typeof body?.baseUrl === "string" ? body.baseUrl : undefined,
+      apiKey: typeof body?.apiKey === "string" ? body.apiKey : undefined,
     })
 
     const [defaults, overrides] = await Promise.all([

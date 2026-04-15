@@ -262,6 +262,31 @@ export const leadHunterMessages = pgTable(
   },
 )
 
+export const leadHunterEvidences = pgTable(
+  withPrefix("lead_hunter_evidences"),
+  {
+    id: serial("id").primaryKey(),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => leadHunterConversations.id, { onDelete: "cascade" }),
+    messageId: integer("message_id")
+      .notNull()
+      .references(() => leadHunterMessages.id, { onDelete: "cascade" }),
+    claim: text("claim").notNull(),
+    sourceTitle: text("source_title").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    sourceType: varchar("source_type", { length: 32 }).notNull(),
+    sourceProvider: varchar("source_provider", { length: 32 }).notNull(),
+    extractedBy: varchar("extracted_by", { length: 32 }).notNull(),
+    confidence: varchar("confidence", { length: 16 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    messageIdx: index(withPrefix("lead_hunter_evidences_message_idx")).on(table.messageId, table.id),
+    conversationIdx: index(withPrefix("lead_hunter_evidences_conversation_idx")).on(table.conversationId, table.id),
+  }),
+)
+
 export const enterpriseDifyBindings = pgTable(
   withPrefix("enterprise_dify_bindings"),
   {
@@ -311,6 +336,7 @@ export const enterpriseDifyAdvisorConfigs = pgTable(
       .notNull()
       .references(() => enterprises.id),
     advisorType: varchar("advisor_type", { length: 32 }).notNull(),
+    executionMode: varchar("execution_mode", { length: 16 }).default("dify").notNull(),
     baseUrl: text("base_url").notNull(),
     apiKey: varchar("api_key", { length: 500 }),
     enabled: boolean("enabled").default(true).notNull(),

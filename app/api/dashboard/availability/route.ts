@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
           advisor: {
             brandStrategy: false,
             growth: false,
+            leadHunter: false,
             companySearch: false,
             contactMining: false,
             copywriting: false,
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
         : {
             brandStrategy: hasAdvisorAccess,
             growth: hasAdvisorAccess,
+            leadHunter: hasAdvisorAccess,
             companySearch: hasAdvisorAccess,
             contactMining: hasAdvisorAccess,
             copywriting: hasCopywritingAccess,
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest) {
     const advisor = {
       brandStrategy: hasAdvisorAccess && advisorAvailability.brandStrategy,
       growth: hasAdvisorAccess && advisorAvailability.growth,
+      leadHunter: hasAdvisorAccess && advisorAvailability.leadHunter,
       companySearch: hasAdvisorAccess && advisorAvailability.companySearch,
       contactMining: hasAdvisorAccess && advisorAvailability.contactMining,
       copywriting: hasCopywritingAccess && advisorAvailability.copywriting,
@@ -78,6 +81,7 @@ export async function GET(req: NextRequest) {
         (hasAdvisorAccess &&
           (advisorAvailability.brandStrategy ||
             advisorAvailability.growth ||
+            advisorAvailability.leadHunter ||
             advisorAvailability.companySearch ||
             advisorAvailability.contactMining)) ||
         (hasCopywritingAccess && advisorAvailability.copywriting),

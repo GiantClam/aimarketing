@@ -3,26 +3,36 @@ import { and, desc, eq } from "drizzle-orm"
 import { isDemoLoginEnabled } from "@/lib/auth/session"
 import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
-import { difyConnections, enterpriseDifyAdvisorConfigs, users } from "@/lib/db/schema"
+import { difyConnections, enterpriseDifyAdvisorConfigs, enterprises, users } from "@/lib/db/schema"
+import { isLeadHunterSkillRuntimeAvailable } from "@/lib/lead-hunter/engine-mode"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
 type DifyLookupOptions = {
   userId?: number | null
   userEmail?: string | null
   enterpriseId?: number | null
+  enterpriseCode?: string | null
 }
 
 type ResolvedUserContext = {
   userId: number | null
   enterpriseId: number | null
+  enterpriseCode: string | null
 }
 
 type DifyConfig = {
   baseUrl: string
   apiKey: string
 }
+type LeadHunterExecutionMode = "dify" | "skill"
 
-type AdvisorType = "brand-strategy" | "growth" | "copywriting" | "company-search" | "contact-mining"
+type AdvisorType =
+  | "brand-strategy"
+  | "growth"
+  | "copywriting"
+  | "lead-hunter"
+  | "company-search"
+  | "contact-mining"
 const DEMO_USER_EMAIL = "demo@example.com"
 const DIFY_DB_RETRY_DELAYS_MS = [250, 750]
 const isRetryableDifyDbError = createRetryableDbErrorMatcher(["timeout exceeded"])
@@ -32,10 +42,19 @@ function normalizeOptional(value?: string | null) {
   return trimmed ? trimmed : null
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
 function normalizeBaseUrl(baseUrl?: string | null) {
   const trimmed = normalizeOptional(baseUrl)
   if (!trimmed) return null
   return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed.replace(/\/+$/, "")}/v1`
+}
+
+function normalizeLeadHunterExecutionMode(raw: string | null | undefined): LeadHunterExecutionMode {
+  return (raw || "").trim().toLowerCase() === "skill" ? "skill" : "dify"
 }
 
 async function withDifyDbRetry<T>(label: string, operation: () => Promise<T>) {
@@ -58,7 +77,7 @@ function getAdvisorEnvPrefix(advisorType: AdvisorType) {
 }
 
 function getSystemDefaultAdvisorConfig(advisorType: AdvisorType): DifyConfig | null {
-  if (advisorType === "company-search" || advisorType === "contact-mining") {
+  if (advisorType === "lead-hunter" || advisorType === "company-search" || advisorType === "contact-mining") {
     return null
   }
 
@@ -90,6 +109,10 @@ export function getSystemDefaultAdvisorSummary() {
     growth: {
       configured: Boolean(growth),
       baseUrl: growth?.baseUrl || null,
+    },
+    leadHunter: {
+      configured: false,
+      baseUrl: null,
     },
     companySearch: {
       configured: false,
@@ -136,23 +159,26 @@ async function resolveUserContext(options?: DifyLookupOptions): Promise<Resolved
     typeof options?.enterpriseId === "number" && Number.isFinite(options.enterpriseId) && options.enterpriseId > 0
       ? options.enterpriseId
       : null
+  const enterpriseCode = normalizeOptional(options?.enterpriseCode || null)
 
   if (!userEmail && !normalizedUserId) {
-    return { userId: null, enterpriseId }
+    return { userId: null, enterpriseId, enterpriseCode }
   }
 
-  if (normalizedUserId && enterpriseId) {
+  if (normalizedUserId && enterpriseId && enterpriseCode) {
     return {
       userId: normalizedUserId,
       enterpriseId,
+      enterpriseCode,
     }
   }
 
   try {
     const rows = await withDifyDbRetry("resolve-user-context", async () =>
       db
-        .select({ id: users.id, enterpriseId: users.enterpriseId })
+        .select({ id: users.id, enterpriseId: users.enterpriseId, enterpriseCode: enterprises.enterpriseCode })
         .from(users)
+        .leftJoin(enterprises, eq(users.enterpriseId, enterprises.id))
         .where(userEmail ? eq(users.email, userEmail) : eq(users.id, normalizedUserId as number))
         .limit(1),
     )
@@ -161,6 +187,7 @@ async function resolveUserContext(options?: DifyLookupOptions): Promise<Resolved
       return {
         userId: rows[0].id,
         enterpriseId: rows[0].enterpriseId ?? null,
+        enterpriseCode: normalizeOptional(rows[0].enterpriseCode ?? null),
       }
     }
   } catch (error) {
@@ -174,6 +201,7 @@ async function resolveUserContext(options?: DifyLookupOptions): Promise<Resolved
   return {
     userId: normalizedUserId,
     enterpriseId,
+    enterpriseCode,
   }
 }
 
@@ -379,23 +407,14 @@ export async function getEnterpriseAdvisorOverride(
       .limit(1),
   )
 
-  let row = rows[0]
-  if (!row && advisorType === "company-search") {
-    const legacyRows = await withDifyDbRetry("enterprise-advisor-override.select-legacy", async () =>
-      db
-        .select()
-        .from(enterpriseDifyAdvisorConfigs)
-        .where(and(eq(enterpriseDifyAdvisorConfigs.enterpriseId, enterpriseId), eq(enterpriseDifyAdvisorConfigs.advisorType, "lead-hunter")))
-        .limit(1),
-    )
-    row = legacyRows[0]
-  }
+  const row = rows[0]
   if (!row) return null
 
   return {
     id: row.id,
     enterpriseId: row.enterpriseId,
     advisorType: row.advisorType,
+    executionMode: normalizeLeadHunterExecutionMode(row.executionMode),
     baseUrl: row.baseUrl,
     apiKey: row.apiKey || "",
     enabled: Boolean(row.enabled),
@@ -419,6 +438,7 @@ export async function listEnterpriseAdvisorOverrides(enterpriseId: number | null
     id: row.id,
     enterpriseId: row.enterpriseId,
     advisorType: row.advisorType,
+    executionMode: normalizeLeadHunterExecutionMode(row.executionMode),
     baseUrl: row.baseUrl,
     apiKey: row.apiKey || "",
     enabled: Boolean(row.enabled),
@@ -431,8 +451,9 @@ export async function upsertEnterpriseAdvisorOverride(
   input: {
     useDefault: boolean
     enabled: boolean
-    baseUrl: string
-    apiKey: string
+    executionMode?: LeadHunterExecutionMode
+    baseUrl?: string
+    apiKey?: string
   },
 ) {
   if (input.useDefault) {
@@ -444,18 +465,30 @@ export async function upsertEnterpriseAdvisorOverride(
     return null
   }
 
-  const baseUrl = normalizeBaseUrl(input.baseUrl)
-  const apiKey = normalizeOptional(input.apiKey)
+  const existing = await getEnterpriseAdvisorOverride(enterpriseId, advisorType)
+  const canUseSkillMode = advisorType === "lead-hunter"
+  const executionMode = canUseSkillMode ? normalizeLeadHunterExecutionMode(input.executionMode) : "dify"
+  const requiresDifyConfig = !(canUseSkillMode && executionMode === "skill")
+  const sourceBaseUrl = normalizeOptional(input.baseUrl ?? existing?.baseUrl ?? null)
+  const sourceApiKey = normalizeOptional(input.apiKey ?? existing?.apiKey ?? null)
+  const baseUrl = requiresDifyConfig ? normalizeBaseUrl(sourceBaseUrl) : "skill://lead-hunter"
+  const apiKey = requiresDifyConfig ? normalizeOptional(sourceApiKey) : "managed"
+  const invalidPlaceholderConfig =
+    requiresDifyConfig &&
+    ((baseUrl && baseUrl.startsWith("skill://")) || apiKey === "managed")
   if (!baseUrl || !apiKey) {
     throw new Error("advisor_base_url_and_api_key_required")
   }
+  if (invalidPlaceholderConfig) {
+    throw new Error("advisor_base_url_and_api_key_required")
+  }
 
-  const existing = await getEnterpriseAdvisorOverride(enterpriseId, advisorType)
   if (existing?.id) {
     await withDifyDbRetry("enterprise-advisor-override.update", async () =>
       db
         .update(enterpriseDifyAdvisorConfigs)
         .set({
+          executionMode,
           baseUrl,
           apiKey,
           enabled: Boolean(input.enabled),
@@ -468,6 +501,7 @@ export async function upsertEnterpriseAdvisorOverride(
       db.insert(enterpriseDifyAdvisorConfigs).values({
         enterpriseId,
         advisorType,
+        executionMode,
         baseUrl,
         apiKey,
         enabled: Boolean(input.enabled),
@@ -498,6 +532,29 @@ async function getAdvisorConfig(
     })
   }
   if (enterpriseOverride && enterpriseOverride.enabled && enterpriseOverride.baseUrl && enterpriseOverride.apiKey) {
+    const usesSkillPlaceholder =
+      enterpriseOverride.baseUrl.startsWith("skill://") || enterpriseOverride.apiKey.trim().toLowerCase() === "managed"
+
+    if (advisorType === "lead-hunter" && enterpriseOverride.executionMode === "skill") {
+      if (!isLeadHunterSkillRuntimeAvailable()) {
+        return null
+      }
+      return {
+        source: "skill" as const,
+        baseUrl: "skill://lead-hunter",
+        apiKey: "managed",
+        enterpriseId: resolvedContext.enterpriseId,
+      }
+    }
+
+    if (advisorType !== "lead-hunter" && (enterpriseOverride.executionMode === "skill" || usesSkillPlaceholder)) {
+      // Company Search / Contact Mining must stay on Dify workflow.
+      return null
+    }
+    if (advisorType === "lead-hunter" && enterpriseOverride.executionMode !== "skill" && usesSkillPlaceholder) {
+      return null
+    }
+
     return {
       source: "enterprise" as const,
       baseUrl: enterpriseOverride.baseUrl,
@@ -505,8 +562,7 @@ async function getAdvisorConfig(
       enterpriseId: resolvedContext.enterpriseId,
     }
   }
-
-  if (advisorType === "company-search" || advisorType === "contact-mining") {
+  if (advisorType === "lead-hunter" || advisorType === "company-search" || advisorType === "contact-mining") {
     return null
   }
 
@@ -543,10 +599,20 @@ async function getAdvisorConfig(
 
 export async function getAdvisorAvailability(options?: DifyLookupOptions) {
   const context = await resolveUserContext(options)
-  const [brandConfig, growthConfig, companySearchConfig, contactMiningConfig, copywritingNamedConfig, defaultConfig, writerMockAvailable] =
+  const [
+    brandConfig,
+    growthConfig,
+    leadHunterConfig,
+    companySearchConfig,
+    contactMiningConfig,
+    copywritingNamedConfig,
+    defaultConfig,
+    writerMockAvailable,
+  ] =
     await Promise.all([
       getAdvisorConfig("brand-strategy", options, context),
       getAdvisorConfig("growth", options, context),
+      getAdvisorConfig("lead-hunter", options, context, { includeSystemDefault: false }),
       getAdvisorConfig("company-search", options, context, { includeSystemDefault: false }),
       getAdvisorConfig("contact-mining", options, context, { includeSystemDefault: false }),
       hasDifyConfigByName("文案写作专家", options),
@@ -558,12 +624,14 @@ export async function getAdvisorAvailability(options?: DifyLookupOptions) {
   return {
     brandStrategy: Boolean(brandConfig),
     growth: Boolean(growthConfig),
+    leadHunter: Boolean(leadHunterConfig),
     companySearch: Boolean(companySearchConfig),
     contactMining: Boolean(contactMiningConfig),
     copywriting,
     hasAny:
       Boolean(brandConfig) ||
       Boolean(growthConfig) ||
+      Boolean(leadHunterConfig) ||
       Boolean(companySearchConfig) ||
       Boolean(contactMiningConfig) ||
       copywriting,
@@ -580,6 +648,11 @@ export async function getDifyConfigByAdvisorType(advisorType?: string | null, op
 
   if (normalizedAdvisorType === "growth") {
     const config = await getAdvisorConfig("growth", options, context)
+    return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
+  }
+
+  if (normalizedAdvisorType === "lead-hunter") {
+    const config = await getAdvisorConfig("lead-hunter", options, context)
     return config ? { baseUrl: config.baseUrl, apiKey: config.apiKey } : null
   }
 

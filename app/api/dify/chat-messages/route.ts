@@ -5,11 +5,16 @@ import { requireAdvisorAccess } from "@/lib/auth/guards"
 import { sendMessage } from "@/lib/dify/client"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { buildDifyMemoryBridge, mergeDifyInputsWithMemoryBridge } from "@/lib/dify/memory-bridge"
-import { appendLeadHunterMessage, ensureLeadHunterConversation } from "@/lib/lead-hunter/repository"
+import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
+import { appendLeadHunterMessage, ensureLeadHunterConversation, saveLeadHunterEvidenceForMessage } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
+import { loadLeadHunterSkillRunner } from "@/lib/skills/runtime/registry"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
+
+export const runtime = "nodejs"
+export const maxDuration = 300
 
 function sanitizeAssistantContent(raw: string) {
   return raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
@@ -76,6 +81,7 @@ async function persistLeadHunterStreamingMessage(input: {
   let buffer = ""
   let accumulated = ""
   let workflowOutput: unknown = null
+  let workflowEvidence: LeadHunterEvidenceItem[] = []
 
   const consumeBlocks = (blocks: string[]) => {
     let terminalEventSeen = false
@@ -102,6 +108,9 @@ async function persistLeadHunterStreamingMessage(input: {
           (data as { output?: unknown }).output ||
           (data as { result?: unknown }).result ||
           workflowOutput
+        if (Array.isArray(payloadData?.evidence)) {
+          workflowEvidence = payloadData.evidence as LeadHunterEvidenceItem[]
+        }
       }
 
       if (event === "message_end") {
@@ -135,13 +144,22 @@ async function persistLeadHunterStreamingMessage(input: {
 
   const rawResult = accumulated.trim() ? accumulated : workflowOutput
   const answer = sanitizeAssistantContent(formatLeadHunterChatOutput(rawResult))
-  await appendLeadHunterMessage(
+  const savedMessage = await appendLeadHunterMessage(
     input.userId,
     input.advisorType,
     input.conversationId,
     input.query,
     answer || "No lead data returned.",
   )
+  if (savedMessage?.id && workflowEvidence.length > 0) {
+    await saveLeadHunterEvidenceForMessage(
+      input.userId,
+      input.advisorType,
+      input.conversationId,
+      String(savedMessage.id),
+      workflowEvidence,
+    )
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -168,10 +186,13 @@ export async function POST(req: NextRequest) {
     const config = await getDifyConfigByAdvisorType(resolvedAdvisorType, {
       userId: auth.user.id,
       userEmail: auth.user.email,
+      enterpriseId: auth.user.enterpriseId,
+      enterpriseCode: auth.user.enterpriseCode,
     })
+    const useLeadHunterSkillEngine = Boolean(normalizedLeadHunterType && config?.baseUrl === "skill://lead-hunter")
     if (!config) {
       logAuditEvent(req, "advisor.chat.config_missing", { userId: auth.user.id, advisorType: resolvedAdvisorType })
-      return NextResponse.json({ error: "No Dify connection configured" }, { status: 500 })
+      return NextResponse.json({ error: "No advisor engine configured" }, { status: 500 })
     }
 
     if (body?.response_mode === "async") {
@@ -213,6 +234,8 @@ export async function POST(req: NextRequest) {
           memoryContext: memoryBridge.memoryContext,
           soulCard: memoryBridge.soulCard,
           memoryAppliedIds: memoryBridge.memoryAppliedIds,
+          enterpriseId: auth.user.enterpriseId,
+          enterpriseCode: auth.user.enterpriseCode,
         },
       })
 
@@ -229,6 +252,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (normalizedLeadHunterType) {
+      const leadHunterSkillRunner = loadLeadHunterSkillRunner(normalizedLeadHunterType)
       const query = extractAdvisorQuery(body)
       if (!query.trim()) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
@@ -249,24 +273,79 @@ export async function POST(req: NextRequest) {
           )
         : null
 
-      const chatRes = await sendMessage(
-        config,
-        buildLeadHunterChatPayload({
-          query,
-          responseMode: isStreaming ? "streaming" : "blocking",
-          user: difyUser,
-          advisorType: normalizedLeadHunterType,
-          extraInputs: memoryInputs,
-        }),
-      )
+      const chatRes = useLeadHunterSkillEngine
+        ? null
+        : await sendMessage(
+            config!,
+            buildLeadHunterChatPayload({
+              query,
+              responseMode: isStreaming ? "streaming" : "blocking",
+              user: difyUser,
+              advisorType: normalizedLeadHunterType,
+              extraInputs: memoryInputs,
+            }),
+          )
 
-      if (!chatRes.ok) {
+      if (chatRes && !chatRes.ok) {
         const chatError = await chatRes.text().catch(() => "")
         return NextResponse.json({ error: "Dify Chat Error", details: chatError }, { status: chatRes.status })
       }
 
-      if (isStreaming && chatRes.body) {
-        const [clientStream, persistStream] = chatRes.body.tee()
+      if (isStreaming) {
+        if (useLeadHunterSkillEngine) {
+          const skillStream = leadHunterSkillRunner.runStreaming({
+            query,
+            conversationId: streamingConversation ? String(streamingConversation.id) : null,
+            enterpriseId: auth.user.enterpriseId,
+            enterpriseCode: auth.user.enterpriseCode,
+            memoryContext: memoryBridge.memoryContext,
+            soulCard: memoryBridge.soulCard,
+          })
+          if (streamingConversation?.id) {
+            void skillStream.done
+              .then(async (result) => {
+                const savedMessage = await appendLeadHunterMessage(
+                  auth.user.id,
+                  normalizedLeadHunterType,
+                  String(streamingConversation.id),
+                  query,
+                  result.answer || "No lead data returned.",
+                )
+                if (savedMessage?.id && result.evidence.length > 0) {
+                  await saveLeadHunterEvidenceForMessage(
+                    auth.user.id,
+                    normalizedLeadHunterType,
+                    String(streamingConversation.id),
+                    String(savedMessage.id),
+                    result.evidence,
+                  )
+                }
+              })
+              .catch((error) => {
+                console.error("lead_hunter.skill.stream.persist_failed", {
+                  userId: auth.user.id,
+                  conversationId: String(streamingConversation.id),
+                  message: error instanceof Error ? error.message : String(error),
+                })
+              })
+          }
+          return new Response(skillStream.stream, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+              ...(streamingConversation?.id ? { "X-Conversation-Id": String(streamingConversation.id) } : {}),
+            },
+          })
+        }
+
+        const sourceStream = chatRes?.body || null
+
+        if (!sourceStream) {
+          return NextResponse.json({ error: "Lead hunter streaming unavailable" }, { status: 500 })
+        }
+
+        const [clientStream, persistStream] = sourceStream.tee()
         if (streamingConversation?.id) {
           void persistLeadHunterStreamingMessage({
             stream: persistStream,
@@ -294,12 +373,27 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      const chatData = (await chatRes.json().catch(() => null)) as
-        | { answer?: unknown; data?: { answer?: unknown } | null }
-        | null
+      let answer = ""
+      if (useLeadHunterSkillEngine) {
+        answer = (
+          await leadHunterSkillRunner.runBlocking({
+            query,
+            conversationId: typeof body?.conversation_id === "string" ? body.conversation_id : null,
+            enterpriseId: auth.user.enterpriseId,
+            enterpriseCode: auth.user.enterpriseCode,
+            memoryContext: memoryBridge.memoryContext,
+            soulCard: memoryBridge.soulCard,
+          })
+        ).answer
+      } else {
+        const chatData = (await chatRes?.json().catch(() => null)) as
+          | { answer?: unknown; data?: { answer?: unknown } | null }
+          | null
+        answer = formatLeadHunterChatOutput(chatData?.answer ?? chatData?.data?.answer ?? chatData)
+      }
 
       return NextResponse.json({
-        answer: formatLeadHunterChatOutput(chatData?.answer ?? chatData?.data?.answer ?? chatData),
+        answer,
       })
     }
 
@@ -313,7 +407,7 @@ export async function POST(req: NextRequest) {
       body?.inputs && typeof body.inputs === "object" ? (body.inputs as Record<string, unknown>) : null,
       memoryBridge,
     )
-    const difyRes = await sendMessage(config, { ...body, inputs: mergedInputs, user: difyUser })
+    const difyRes = await sendMessage(config!, { ...body, inputs: mergedInputs, user: difyUser })
 
     if (!difyRes.ok) {
       const errorData = await difyRes.text()

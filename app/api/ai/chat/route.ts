@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
-  generateText,
   stepCountIs,
-  streamText,
   type CoreMessage,
-  type ToolSet,
 } from "ai"
 
 import { requireSessionUser } from "@/lib/auth/guards"
@@ -19,30 +16,23 @@ import {
   ensureAiEntryConversation,
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
-import {
-  getAiEntryMcpServerUrls,
-  loadAiEntryMcpTools,
-  selectAiEntryTools,
-} from "@/lib/ai-entry/mcp-tools"
-import {
-  executeAiEntryWithProviderFailover,
-  type AiEntryProviderId,
-} from "@/lib/ai-entry/provider-routing"
+import { type AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
 import {
   isAiEntryAgentId,
 } from "@/lib/ai-entry/agent-catalog"
 import {
-  isExecutiveConsultingAgent,
-  loadExecutiveSkillForAgent,
-} from "@/lib/ai-entry/executive-skill-loader"
-import { routeExecutiveAgentByPrompt } from "@/lib/ai-entry/executive-agent-router"
-import {
   AI_ENTRY_SONNET_46_MODEL_HINT,
   pickSonnet46ModelId,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
+import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
+import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
+import {
+  runAiEntryConsultingBlocking,
+  runAiEntryConsultingStreaming,
+} from "@/lib/skills/runtime/ai-entry-executor"
 
 export const runtime = "nodejs"
 
@@ -72,25 +62,12 @@ type ChatRequestBody = {
   }
 }
 
-type FullStreamPart = {
-  type?: string
-  textDelta?: string
-  toolName?: string
-  toolCallId?: string
-  args?: unknown
-  input?: unknown
-  result?: unknown
-  error?: unknown
-}
-
 const STREAM_HEADERS = {
   "Content-Type": "text/event-stream; charset=utf-8",
   "Cache-Control": "no-cache, no-transform",
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
 }
-const AI_ENTRY_EMPTY_RESPONSE_ERROR = "ai_entry_empty_response"
-const AI_ENTRY_EMPTY_RESPONSE_AUTO_RETRY_LIMIT = 1
 
 function createChatTraceId() {
   return `ai-entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -126,45 +103,6 @@ function extractErrorMessage(error: unknown) {
     if (typeof candidate === "string" && candidate.trim()) return candidate.trim()
   }
   return "ai_entry_stream_failed"
-}
-
-function toAiEntryExecutionError(error: unknown, retryable: boolean) {
-  const normalized = error instanceof Error ? error : new Error(extractErrorMessage(error))
-  ;(normalized as Error & { aiEntryRetryable?: boolean }).aiEntryRetryable = retryable
-  return normalized
-}
-
-function isAiEntryEmptyResponseError(error: unknown) {
-  return extractErrorMessage(error) === AI_ENTRY_EMPTY_RESPONSE_ERROR
-}
-
-async function executeWithEmptyResponseAutoRetry<T>(params: {
-  traceId: string
-  conversationId: string
-  streamed: boolean
-  run: () => Promise<T>
-}) {
-  let retryAttempt = 0
-  while (true) {
-    try {
-      return await params.run()
-    } catch (error) {
-      if (
-        !isAiEntryEmptyResponseError(error) ||
-        retryAttempt >= AI_ENTRY_EMPTY_RESPONSE_AUTO_RETRY_LIMIT
-      ) {
-        throw error
-      }
-      retryAttempt += 1
-      console.warn("ai-entry.chat.empty_response.retry", {
-        traceId: params.traceId,
-        conversationId: params.conversationId,
-        streamed: params.streamed,
-        retryAttempt,
-        retryLimit: AI_ENTRY_EMPTY_RESPONSE_AUTO_RETRY_LIMIT,
-      })
-    }
-  }
 }
 
 function canLoadEnterpriseKnowledgeForUser(user: {
@@ -388,7 +326,32 @@ async function resolveModelConfig(
   options?: { forceSonnet46?: boolean },
 ) {
   const catalog = await getAiEntryModelCatalog()
-  const availableModelIds = new Set(catalog.models.map((item) => item.id))
+  const availableModelIds = catalog.models.map((item) => item.id)
+  const allCatalogModelAliases = catalog.models.flatMap((item) =>
+    [
+      item.id,
+      item.canonicalId,
+      item.runtimeId,
+      ...(Array.isArray(item.aliases) ? item.aliases : []),
+    ].filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+  )
+  const findCatalogModelOption = (value: string | null | undefined) => {
+    const normalized = typeof value === "string" ? value.trim() : ""
+    if (!normalized) return null
+    return (
+      catalog.models.find((item) => {
+        const aliases = [
+          item.id,
+          item.canonicalId,
+          item.runtimeId,
+          ...(Array.isArray(item.aliases) ? item.aliases : []),
+        ].filter((candidate): candidate is string =>
+          typeof candidate === "string" && candidate.trim().length > 0,
+        )
+        return aliases.includes(normalized)
+      }) || null
+    )
+  }
   const catalogFallbackModelId = catalog.selectedModelId || catalog.models[0]?.id || null
   const requestedModelId = input?.modelId || null
   const requestedProviderId = input?.providerId || null
@@ -409,13 +372,25 @@ async function resolveModelConfig(
     return {
       providerId: resolvedProviderId,
       modelId: lockedModelId,
+      providerModelId: lockedModelId,
     }
   }
 
-  const resolvedModelId =
-    requestedModelId && availableModelIds.has(requestedModelId)
-      ? requestedModelId
-      : catalogFallbackModelId
+  const normalizedRequestedModelId = resolveEquivalentModelId(
+    requestedModelId,
+    allCatalogModelAliases.length > 0 ? allCatalogModelAliases : availableModelIds,
+  )
+  const requestedModelOption =
+    findCatalogModelOption(normalizedRequestedModelId || requestedModelId) || null
+  const fallbackModelOption = findCatalogModelOption(catalogFallbackModelId) || null
+  const resolvedModelId = requestedModelOption?.id || fallbackModelOption?.id || catalogFallbackModelId
+  const resolvedProviderModelId =
+    requestedModelOption?.runtimeId ||
+    requestedModelOption?.aliases?.[0] ||
+    requestedModelOption?.id ||
+    fallbackModelOption?.runtimeId ||
+    fallbackModelOption?.aliases?.[0] ||
+    resolvedModelId
   const resolvedProviderId = catalog.providerId || requestedProviderId
 
   if (requestedModelId && resolvedModelId !== requestedModelId) {
@@ -429,6 +404,7 @@ async function resolveModelConfig(
   return {
     providerId: resolvedProviderId,
     modelId: resolvedModelId,
+    providerModelId: resolvedProviderModelId,
   }
 }
 
@@ -447,52 +423,6 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
   return {
     agentId: resolvedAgentId,
     lockModelToSonnet46,
-  }
-}
-
-function buildProviderMessages(params: {
-  providerId: AiEntryProviderId
-  systemPrompt: string
-  messages: CoreMessage[]
-}) {
-  const { providerId, systemPrompt, messages } = params
-
-  if (providerId !== "aiberm") {
-    return {
-      system: systemPrompt,
-      messages,
-    }
-  }
-
-  const normalizedSystemPrompt = systemPrompt.trim()
-  if (!normalizedSystemPrompt) {
-    return {
-      messages,
-    }
-  }
-
-  const systemAsUserPrefix = `System instruction (must follow):\n${normalizedSystemPrompt}`
-  const first = messages[0]
-  if (first?.role === "user" && typeof first.content === "string") {
-    return {
-      messages: [
-        {
-          role: "user" as const,
-          content: `${systemAsUserPrefix}\n\nUser request:\n${first.content}`,
-        },
-        ...messages.slice(1),
-      ],
-    }
-  }
-
-  return {
-    messages: [
-      {
-        role: "user" as const,
-        content: systemAsUserPrefix,
-      },
-      ...messages,
-    ],
   }
 }
 
@@ -650,11 +580,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let effectiveAgentId = agentConfig.agentId
-    let routeDecision: ReturnType<typeof routeExecutiveAgentByPrompt> | null = null
-    if (!effectiveAgentId && agentConfig.lockModelToSonnet46) {
-      routeDecision = routeExecutiveAgentByPrompt(latestUserPrompt)
-      effectiveAgentId = routeDecision.agentId
+    const skillsEnabled = body.skillConfig?.enabled !== false
+    const enabledToolNames = parseEnabledToolNames(body.skillConfig?.enabledToolNames)
+    const consultingRuntime = await prepareAiEntryConsultingRuntime({
+      latestUserPrompt,
+      requestedAgentId: agentConfig.agentId,
+      lockModelToSonnet46: agentConfig.lockModelToSonnet46,
+      skillsEnabled,
+      enabledToolNames,
+    })
+    const {
+      effectiveAgentId,
+      routeDecision,
+      resolvedInstruction,
+      selectedTools,
+      selectedToolIds,
+      closeTools: loadedCloseTools,
+      toolLoadWarning,
+    } = consultingRuntime
+    if (loadedCloseTools) {
+      closeTools = loadedCloseTools
+    }
+
+    if (toolLoadWarning) {
+      console.warn("ai-entry.chat.mcp-tools.load.failed", {
+        message: toolLoadWarning,
+      })
     }
 
     if (routeDecision) {
@@ -668,49 +619,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    let resolvedInstruction = ""
-    if (effectiveAgentId && isExecutiveConsultingAgent(effectiveAgentId)) {
-      const skillContent = await loadExecutiveSkillForAgent(effectiveAgentId)
-      if (skillContent.trim()) {
-        resolvedInstruction = `# Skill Documents\n\n${skillContent.trim()}`
-      }
-    }
-    const skillsEnabled = body.skillConfig?.enabled !== false
-    const enabledToolNames = parseEnabledToolNames(body.skillConfig?.enabledToolNames)
-
-    let selectedTools = {} as ToolSet
-    let selectedToolIds: string[] = []
-    if (skillsEnabled) {
-      const urls = getAiEntryMcpServerUrls()
-      if (urls.length > 0) {
-        try {
-          const loaded = await loadAiEntryMcpTools(urls)
-          closeTools = loaded.close
-          const loadedTools =
-            loaded.tools && typeof loaded.tools === "object"
-              ? loaded.tools
-              : ({} as ToolSet)
-          selectedTools =
-            enabledToolNames.length > 0
-              ? selectAiEntryTools(loadedTools, enabledToolNames)
-              : loadedTools
-          selectedToolIds = Object.keys((selectedTools || {}) as Record<string, unknown>)
-        } catch (error) {
-          console.warn("ai-entry.chat.mcp-tools.load.failed", {
-            message: error instanceof Error ? error.message : String(error),
-          })
-          selectedTools = {} as ToolSet
-          selectedToolIds = []
-        }
-      }
-    }
-
     const maxStepCount = selectedToolIds.length > 0 ? 8 : 1
     const stopWhen = stepCountIs(maxStepCount)
     const providerOptions = modelConfig
       ? {
           preferredProviderId: modelConfig.providerId || undefined,
-          preferredModel: modelConfig.modelId || undefined,
+          preferredModel:
+            modelConfig.providerModelId || modelConfig.modelId || undefined,
           ...(agentConfig.lockModelToSonnet46
             ? {
                 forceModelAcrossProviders: true,
@@ -731,6 +646,7 @@ export async function POST(request: NextRequest) {
       selectedAgentId: effectiveAgentId,
       modelProviderId: modelConfig?.providerId || null,
       modelId: modelConfig?.modelId || null,
+      providerModelId: modelConfig?.providerModelId || null,
     })
 
     if (!stream) {
@@ -741,61 +657,41 @@ export async function POST(request: NextRequest) {
         latestUserPrompt,
         forcedReplyLanguage,
       )
-      const execution = await executeWithEmptyResponseAutoRetry({
-        traceId,
-        conversationId,
-        streamed: false,
-        run: () =>
-          executeAiEntryWithProviderFailover(
-            async (providerRun) => {
-              console.info("ai-entry.chat.provider.attempt", {
-                traceId,
-                conversationId,
-                provider: providerRun.providerId,
-                model: providerRun.model,
-                attempt: providerRun.attempt,
-              })
-              const providerInput = buildProviderMessages({
-                providerId: providerRun.providerId,
-                systemPrompt,
-                messages: normalizedMessages,
-              })
-              const result = await generateText({
-                // Force OpenAI-compatible chat completions path for proxy providers
-                // that do not implement the newer /responses endpoint.
-                model: providerRun.provider.chat(providerRun.model),
-                ...(providerInput.system ? { system: providerInput.system } : {}),
-                messages: providerInput.messages,
-                tools: selectedTools,
-                stopWhen,
-              })
-              const resolvedText = (result.text || "").trim()
-              if (!resolvedText) {
-                console.warn("ai-entry.chat.provider.empty_response", {
-                  traceId,
-                  conversationId,
-                  provider: providerRun.providerId,
-                  model: providerRun.model,
-                  attempt: providerRun.attempt,
-                })
-                throw toAiEntryExecutionError(
-                  new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
-                  true,
-                )
-              }
-              console.info("ai-entry.chat.provider.success", {
-                traceId,
-                conversationId,
-                provider: providerRun.providerId,
-                model: providerRun.model,
-                attempt: providerRun.attempt,
-                outputChars: resolvedText.length,
-                streamed: false,
-              })
-              return result
-            },
-            providerOptions,
-          ),
+      const execution = await runAiEntryConsultingBlocking({
+        systemPrompt,
+        messages: normalizedMessages,
+        selectedTools,
+        stopWhen,
+        providerOptions,
+        onProviderAttempt: (providerRun) => {
+          console.info("ai-entry.chat.provider.attempt", {
+            traceId,
+            conversationId,
+            provider: providerRun.providerId,
+            model: providerRun.model,
+            attempt: providerRun.attempt,
+          })
+        },
+        onProviderSuccess: (providerRun) => {
+          console.info("ai-entry.chat.provider.success", {
+            traceId,
+            conversationId,
+            provider: providerRun.providerId,
+            model: providerRun.model,
+            attempt: providerRun.attempt,
+            outputChars: providerRun.outputChars,
+            streamed: false,
+          })
+        },
+        onEmptyResponseRetry: ({ retryAttempt, retryLimit }) => {
+          console.warn("ai-entry.chat.empty_response.retry", {
+            traceId,
+            conversationId,
+            streamed: false,
+            retryAttempt,
+            retryLimit,
+          })
+        },
       })
       const normalizedAssistantMessage = normalizeAiEntryIdentity(
         execution.result.text || "",
@@ -870,139 +766,84 @@ export async function POST(request: NextRequest) {
             forcedReplyLanguage,
           )
 
-          const execution = await executeWithEmptyResponseAutoRetry({
-            traceId,
-            conversationId,
-            streamed: true,
-            run: () =>
-              executeAiEntryWithProviderFailover(async (providerRun) => {
-                console.info("ai-entry.chat.provider.attempt", {
-                  traceId,
-                  conversationId,
-                  provider: providerRun.providerId,
-                  model: providerRun.model,
-                  attempt: providerRun.attempt,
-                })
-                const providerInput = buildProviderMessages({
-                  providerId: providerRun.providerId,
-                  systemPrompt,
-                  messages: normalizedMessages,
-                })
-                sendEvent({
-                  event:
-                    providerRun.attempt === 1
-                      ? "provider_selected"
-                      : "provider_fallback",
-                  conversation_id: conversationId,
-                  provider: providerRun.providerId,
-                  provider_model: providerRun.model,
-                  provider_order: providerRun.providerOrder,
-                  provider_attempt: providerRun.attempt,
-                  provider_upgrade_probe: providerRun.upgradeProbe,
-                })
-
-                const result = streamText({
-                  // Keep stream mode aligned with non-stream mode on chat/completions.
-                  model: providerRun.provider.chat(providerRun.model),
-                  ...(providerInput.system ? { system: providerInput.system } : {}),
-                  messages: providerInput.messages,
-                  tools: selectedTools,
-                  stopWhen,
-                })
-
-                let accumulated = ""
-                let hasStreamOutput = false
-                try {
-                  for await (const part of result.fullStream) {
-                    const streamPart = part as FullStreamPart
-                    const eventType = streamPart.type || ""
-
-                    if (eventType === "text-delta") {
-                      const delta = streamPart.textDelta || ""
-                      if (delta) {
-                        accumulated += delta
-                        hasStreamOutput = true
-                        sendEvent({
-                          event: "message",
-                          conversation_id: conversationId,
-                          answer: delta,
-                        })
-                      }
-                      continue
-                    }
-
-                    if (eventType === "tool-call") {
-                      sendEvent({
-                        event: "tool_call",
-                        conversation_id: conversationId,
-                        data: {
-                          toolName: streamPart.toolName || "",
-                          toolCallId: streamPart.toolCallId || "",
-                          args: streamPart.args ?? streamPart.input ?? null,
-                        },
-                      })
-                      continue
-                    }
-
-                    if (eventType === "tool-result") {
-                      sendEvent({
-                        event: "tool_result",
-                        conversation_id: conversationId,
-                        data: {
-                          toolName: streamPart.toolName || "",
-                          toolCallId: streamPart.toolCallId || "",
-                          result: streamPart.result ?? null,
-                        },
-                      })
-                      continue
-                    }
-
-                    if (eventType === "error") {
-                      throw new Error(extractErrorMessage(streamPart.error))
-                    }
-                  }
-
-                  if (!accumulated.trim()) {
-                    const fallbackText = (await result.text).trim()
-                    if (fallbackText) {
-                      accumulated = fallbackText
-                      hasStreamOutput = true
-                      sendEvent({
-                        event: "message",
-                        conversation_id: conversationId,
-                        answer: fallbackText,
-                      })
-                    }
-                  }
-                  const resolvedText = accumulated.trim()
-                  if (!resolvedText) {
-                    console.warn("ai-entry.chat.provider.empty_response", {
-                      traceId,
-                      conversationId,
-                      provider: providerRun.providerId,
-                      model: providerRun.model,
-                      attempt: providerRun.attempt,
-                    })
-                    throw toAiEntryExecutionError(
-                      new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR),
-                      true,
-                    )
-                  }
-                  console.info("ai-entry.chat.provider.success", {
-                    traceId,
-                    conversationId,
-                    provider: providerRun.providerId,
-                    model: providerRun.model,
-                    attempt: providerRun.attempt,
-                    outputChars: resolvedText.length,
-                    streamed: true,
-                  })
-                } catch (error) {
-                  throw toAiEntryExecutionError(error, !hasStreamOutput)
-                }
-
-                return { accumulated }
-              }, providerOptions),
+          const execution = await runAiEntryConsultingStreaming({
+            systemPrompt,
+            messages: normalizedMessages,
+            selectedTools,
+            stopWhen,
+            providerOptions,
+            onProviderAttempt: (providerRun) => {
+              console.info("ai-entry.chat.provider.attempt", {
+                traceId,
+                conversationId,
+                provider: providerRun.providerId,
+                model: providerRun.model,
+                attempt: providerRun.attempt,
+              })
+            },
+            onProviderSelected: (providerRun) => {
+              sendEvent({
+                event:
+                  providerRun.attempt === 1
+                    ? "provider_selected"
+                    : "provider_fallback",
+                conversation_id: conversationId,
+                provider: providerRun.providerId,
+                provider_model: providerRun.model,
+                provider_order: providerRun.providerOrder,
+                provider_attempt: providerRun.attempt,
+                provider_upgrade_probe: providerRun.upgradeProbe,
+              })
+            },
+            onProviderSuccess: (providerRun) => {
+              console.info("ai-entry.chat.provider.success", {
+                traceId,
+                conversationId,
+                provider: providerRun.providerId,
+                model: providerRun.model,
+                attempt: providerRun.attempt,
+                outputChars: providerRun.outputChars,
+                streamed: true,
+              })
+            },
+            onTextDelta: (delta) => {
+              sendEvent({
+                event: "message",
+                conversation_id: conversationId,
+                answer: delta,
+              })
+            },
+            onToolCall: (payload) => {
+              sendEvent({
+                event: "tool_call",
+                conversation_id: conversationId,
+                data: {
+                  toolName: payload.toolName,
+                  toolCallId: payload.toolCallId,
+                  args: payload.args,
+                },
+              })
+            },
+            onToolResult: (payload) => {
+              sendEvent({
+                event: "tool_result",
+                conversation_id: conversationId,
+                data: {
+                  toolName: payload.toolName,
+                  toolCallId: payload.toolCallId,
+                  result: payload.result,
+                },
+              })
+            },
+            onEmptyResponseRetry: ({ retryAttempt, retryLimit }) => {
+              console.warn("ai-entry.chat.empty_response.retry", {
+                traceId,
+                conversationId,
+                streamed: true,
+                retryAttempt,
+                retryLimit,
+              })
+            },
           })
 
           const normalizedStreamedAnswer = normalizeAiEntryIdentity(

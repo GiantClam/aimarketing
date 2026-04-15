@@ -1,0 +1,45 @@
+name: Lead Hunter Skill Stream Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 18 * * *"
+
+jobs:
+  lead-hunter-skill-stream-smoke:
+    if: ${{ secrets.DATABASE_URL != '' || secrets.POSTGRES_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ensure lead hunter schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+        run: |
+          pnpm migrate:enterprise:dify
+          pnpm migrate:lead-hunter
+          pnpm migrate:lead-hunter:evidence
+
+      - name: Run lead hunter skill stream smoke (company + contact)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+        run: pnpm test:lead-hunter:skill-stream:all

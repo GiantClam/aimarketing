@@ -14,12 +14,13 @@ import {
   createImageAssistantMessage,
   getImageAssistantSession,
 } from "@/lib/image-assistant/repository"
-import { appendLeadHunterMessage } from "@/lib/lead-hunter/repository"
+import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
+import { appendLeadHunterMessage, saveLeadHunterEvidenceForMessage } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { getLeadHunterAgentName, normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import { resolveImageAssistantMemoryBridge } from "@/lib/image-assistant/memory-bridge"
-import { runWriterSkillsTurn } from "@/lib/writer/skills"
+import { loadLeadHunterSkillRunner, loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 import { persistWriterImplicitMemoryFromTurn } from "@/lib/writer/memory/extractor"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
@@ -83,6 +84,8 @@ type AdvisorTurnTaskPayload = {
   memoryContext?: string | null
   soulCard?: string | null
   memoryAppliedIds?: number[]
+  enterpriseId?: number | null
+  enterpriseCode?: string | null
 }
 
 export type AssistantTaskPayload = WriterTurnTaskPayload | ImageTurnTaskPayload | AdvisorTurnTaskPayload
@@ -103,6 +106,20 @@ function parseTimeoutMs(raw: string | undefined, fallbackMs: number, minMs = 5_0
   const parsed = Number.parseInt(raw || "", 10)
   const value = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs
   return Math.max(minMs, Math.min(maxMs, value))
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean) {
+  if (!raw) return fallback
+  const normalized = raw.trim().toLowerCase()
+  if (["1", "true", "yes", "on"].includes(normalized)) return true
+  if (["0", "false", "no", "off"].includes(normalized)) return false
+  return fallback
+}
+
+function parseIntWithRange(raw: string | undefined, fallback: number, min: number, max: number) {
+  const parsed = Number.parseInt(raw || "", 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, parsed))
 }
 
 const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 180_000)
@@ -130,6 +147,17 @@ const ASSISTANT_TASK_LEASE_MS = 30_000
 const ASSISTANT_TASK_HEARTBEAT_MS = 10_000
 const ASSISTANT_TASK_PROGRESS_LIMIT = 40
 const ASSISTANT_TASK_PROGRESS_PERSIST_INTERVAL_MS = 900
+const LEAD_HUNTER_ASYNC_EVIDENCE_PERSIST = parseBooleanFlag(process.env.LEAD_HUNTER_ASYNC_EVIDENCE_PERSIST, true)
+const LEAD_HUNTER_DEFER_PERSIST_AFTER_SUCCESS = parseBooleanFlag(
+  process.env.LEAD_HUNTER_DEFER_PERSIST_AFTER_SUCCESS,
+  true,
+)
+const LEAD_HUNTER_EVIDENCE_PERSIST_LIMIT = parseIntWithRange(
+  process.env.LEAD_HUNTER_EVIDENCE_PERSIST_LIMIT,
+  16,
+  4,
+  60,
+)
 const ASSISTANT_TASK_RECOVERY_BATCH_LIMIT = Math.max(
   1,
   Math.min(30, Number.parseInt(process.env.ASSISTANT_TASK_RECOVERY_BATCH_LIMIT || "", 10) || 6),
@@ -498,8 +526,9 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
     at: Date.now(),
   })
 
+  const writerSkillRunner = loadWriterSkillRunner()
   const turnResult = await withTaskTimeout(
-    runWriterSkillsTurn({
+    writerSkillRunner.runBlocking({
       query: payload.query,
       preloadedBrief: payload.brief,
       userId,
@@ -632,7 +661,7 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
 async function handleLeadHunterTurn(
   taskId: number,
   payload: AdvisorTurnTaskPayload,
-  config: { baseUrl: string; apiKey: string },
+  config: { baseUrl: string; apiKey: string } | null,
   difyUser: string,
   memoryInputs: Record<string, unknown>,
 ) {
@@ -645,27 +674,54 @@ async function handleLeadHunterTurn(
     throw new Error("lead_hunter_conversation_missing")
   }
 
-  const chatResponse = await sendMessage(
-    config,
-    buildLeadHunterChatPayload({
-      query: payload.query,
-      responseMode: "streaming",
-      user: difyUser,
-      advisorType: normalizedAdvisorType,
-      extraInputs: memoryInputs,
-    }),
-  )
+  const useSkillEngine = Boolean(config?.baseUrl === "skill://lead-hunter")
+  let responseStream: ReadableStream<Uint8Array> | null
+  let skillResultPromise: Promise<{ answer: string; evidence: LeadHunterEvidenceItem[] }> | null = null
 
-  if (!chatResponse.ok || !chatResponse.body) {
-    const chatError = await chatResponse.text().catch(() => "")
-    throw new Error(chatError || `lead_hunter_chat_http_${chatResponse.status}`)
+  if (useSkillEngine) {
+    const leadHunterSkillRunner = loadLeadHunterSkillRunner(normalizedAdvisorType)
+    const skillStream = leadHunterSkillRunner.runStreaming({
+      query: payload.query,
+      conversationId: payload.conversationId,
+      enterpriseId: payload.enterpriseId,
+      enterpriseCode: payload.enterpriseCode,
+      memoryContext: payload.memoryContext || null,
+      soulCard: payload.soulCard || null,
+    })
+    responseStream = skillStream.stream
+    skillResultPromise = skillStream.done
+  } else {
+    if (!config) {
+      throw new Error("advisor_config_missing")
+    }
+    const chatResponse = await sendMessage(
+      config,
+      buildLeadHunterChatPayload({
+        query: payload.query,
+        responseMode: "streaming",
+        user: difyUser,
+        advisorType: normalizedAdvisorType,
+        extraInputs: memoryInputs,
+      }),
+    )
+
+    if (!chatResponse.ok || !chatResponse.body) {
+      const chatError = await chatResponse.text().catch(() => "")
+      throw new Error(chatError || `lead_hunter_chat_http_${chatResponse.status}`)
+    }
+    responseStream = chatResponse.body
   }
 
-  const reader = chatResponse.body.getReader()
+  if (!responseStream) {
+    throw new Error("lead_hunter_stream_missing")
+  }
+
+  const reader = responseStream.getReader()
   const decoder = new TextDecoder("utf-8")
   let buffer = ""
   let accumulated = ""
   let streamedChars = 0
+  let workflowEvidence: LeadHunterEvidenceItem[] = []
   let streamingEventIndex = -1
   let lastProgressPersistAt = 0
   const progressEvents: AssistantTaskProgressEvent[] = []
@@ -730,6 +786,12 @@ async function handleLeadHunterTurn(
       }
 
       const mappedEvent = mapDifySseEventToTaskProgress(data)
+      if (!useSkillEngine && event === "workflow_finished") {
+        const workflowData = getObjectRecord(data.data)
+        if (Array.isArray(workflowData?.evidence)) {
+          workflowEvidence = workflowData.evidence as LeadHunterEvidenceItem[]
+        }
+      }
       if (!mappedEvent) continue
       pushTaskProgressEvent(progressEvents, mappedEvent)
       await persistTaskProgress(true)
@@ -751,7 +813,16 @@ async function handleLeadHunterTurn(
     await consumeSseBlocks(parsed.blocks)
   }
 
-  const answer = sanitizeAssistantContent(formatLeadHunterChatOutput(accumulated))
+  let answer = sanitizeAssistantContent(formatLeadHunterChatOutput(accumulated))
+  if (skillResultPromise) {
+    const skillResult = await skillResultPromise
+    if (skillResult.answer) {
+      answer = sanitizeAssistantContent(formatLeadHunterChatOutput(skillResult.answer))
+    }
+    if (Array.isArray(skillResult.evidence)) {
+      workflowEvidence = skillResult.evidence
+    }
+  }
   pushTaskProgressEvent(progressEvents, {
     type: "response_ready",
     label: "Response ready",
@@ -759,33 +830,83 @@ async function handleLeadHunterTurn(
     at: Date.now(),
   })
 
-  await appendLeadHunterMessage(
-    payload.userId,
-    normalizedAdvisorType,
-    payload.conversationId,
-    payload.query,
-    answer || "No lead data returned.",
-  )
+  const taskSuccessResult = {
+    conversation_id: payload.conversationId,
+    answer: answer || "No lead data returned.",
+    agent_name: getLeadHunterAgentName(normalizedAdvisorType),
+    events: progressEvents,
+    streamed_chars: streamedChars,
+  }
+
+  const persistConversationArtifacts = async () => {
+    const savedMessage = await appendLeadHunterMessage(
+      payload.userId,
+      normalizedAdvisorType,
+      payload.conversationId,
+      payload.query,
+      answer || "No lead data returned.",
+    )
+
+    if (!savedMessage?.id || workflowEvidence.length <= 0) {
+      return
+    }
+
+    const persistPromise = saveLeadHunterEvidenceForMessage(
+      payload.userId,
+      normalizedAdvisorType,
+      payload.conversationId,
+      String(savedMessage.id),
+      workflowEvidence.slice(0, LEAD_HUNTER_EVIDENCE_PERSIST_LIMIT),
+    ).catch((error) => {
+      console.warn("lead_hunter.evidence_persist_failed", {
+        taskId,
+        conversationId: payload.conversationId,
+        messageId: savedMessage.id,
+        evidenceCount: workflowEvidence.length,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return 0
+    })
+
+    if (LEAD_HUNTER_ASYNC_EVIDENCE_PERSIST) {
+      void persistPromise
+      return
+    }
+    await persistPromise
+  }
+
+  if (LEAD_HUNTER_DEFER_PERSIST_AFTER_SUCCESS) {
+    await updateTaskStatus(taskId, {
+      status: "success",
+      result: taskSuccessResult,
+    })
+    void persistConversationArtifacts().catch((error) => {
+      console.warn("lead_hunter.message_persist_failed", {
+        taskId,
+        conversationId: payload.conversationId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
+    return
+  }
+
+  await persistConversationArtifacts()
 
   await updateTaskStatus(taskId, {
     status: "success",
-    result: {
-      conversation_id: payload.conversationId,
-      answer: answer || "No lead data returned.",
-      agent_name: getLeadHunterAgentName(normalizedAdvisorType),
-      events: progressEvents,
-      streamed_chars: streamedChars,
-    },
+    result: taskSuccessResult,
   })
 }
 
 async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload) {
   const difyUser = buildDifyUserIdentity(payload.userEmail, payload.advisorType)
+  const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(payload.advisorType)
   const config = await getDifyConfigByAdvisorType(payload.advisorType, {
     userId: payload.userId,
     userEmail: payload.userEmail,
+    enterpriseId: payload.enterpriseId,
+    enterpriseCode: payload.enterpriseCode,
   })
-
   if (!config) {
     throw new Error("advisor_config_missing")
   }
@@ -811,7 +932,7 @@ async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload
   }
   const memoryInputs = mergeDifyInputsWithMemoryBridge({}, memoryBridge)
 
-  if (normalizeLeadHunterAdvisorType(payload.advisorType)) {
+  if (normalizedLeadHunterType) {
     await handleLeadHunterTurn(taskId, payload, config, difyUser, memoryInputs)
     return
   }
@@ -1146,6 +1267,8 @@ async function recoverAssistantTask(
     const config = await getDifyConfigByAdvisorType(task.parsedPayload.advisorType, {
       userId: task.parsedPayload.userId,
       userEmail: task.parsedPayload.userEmail,
+      enterpriseId: task.parsedPayload.enterpriseId,
+      enterpriseCode: task.parsedPayload.enterpriseCode,
     }).catch(() => null)
 
     const recovered = config

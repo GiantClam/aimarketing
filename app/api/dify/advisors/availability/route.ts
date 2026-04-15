@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
         data: {
           brandStrategy: false,
           growth: false,
+          leadHunter: false,
           companySearch: false,
           contactMining: false,
           copywriting: false,
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
       userId: currentUser.id,
       userEmail: currentUser.email,
       enterpriseId: currentUser.enterpriseId,
+      enterpriseCode: currentUser.enterpriseCode,
     })
 
     return NextResponse.json({ data })

@@ -3,6 +3,10 @@ import { and, desc, eq, lt, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { conversations, messages } from "@/lib/db/schema"
+import {
+  pickPreferredDisplayModelId,
+  stripProviderPrefix,
+} from "@/lib/ai-entry/model-id-registry"
 
 const AI_ENTRY_CHAT_TITLE_PREFIX = "[ai-entry] "
 const AI_ENTRY_CONSULTING_TITLE_PREFIX = "[ai-consulting] "
@@ -117,7 +121,12 @@ function normalizeConversationName(name: string | null | undefined) {
 
 function normalizeModelId(modelId: string | null | undefined) {
   const normalized = typeof modelId === "string" ? modelId.trim() : ""
-  return normalized || null
+  if (!normalized) return null
+  const canonical = pickPreferredDisplayModelId([
+    normalized,
+    stripProviderPrefix(normalized),
+  ])
+  return canonical || normalized
 }
 
 function getTitlePrefix(scope: AiEntryConversationScope) {
