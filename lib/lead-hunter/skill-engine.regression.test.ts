@@ -66,10 +66,12 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 let runLeadHunterSkillConversation: (input: {
   advisorType: "company-search" | "contact-mining"
   query: string
+  preferredLanguage?: "zh" | "en" | "auto" | null
   conversationId?: string | null
   onSseEvent?: (payload: { event: string; data?: Record<string, unknown> }) => void | Promise<void>
 }) => Promise<{
   answer: string
+  language: "zh" | "en"
   evidence: Array<{ source_url: string }>
 }>
 let createLeadHunterSkillSseStream: (input: {
@@ -174,4 +176,25 @@ test("search cache avoids duplicate provider calls for same query", async () => 
       process.env.LEAD_HUNTER_MAX_SEARCH_QUERIES = previousMaxQueries
     }
   }
+})
+
+test("preferred language overrides query language detection", async () => {
+  const result = await runLeadHunterSkillConversation({
+    advisorType: "company-search",
+    query: "SWAG GOLF https://swag.golf/",
+    preferredLanguage: "zh",
+    conversationId: "conv-lang-1",
+  })
+
+  assert.equal(result.language, "zh")
+})
+
+test("default language stays Chinese for English company query", async () => {
+  const result = await runLeadHunterSkillConversation({
+    advisorType: "company-search",
+    query: "SWAG GOLF official website and customer profile",
+    conversationId: "conv-lang-default-zh",
+  })
+
+  assert.equal(result.language, "zh")
 })

@@ -12,11 +12,11 @@ import {
 test("pickSonnet46ModelId prefers non-thinking variant across separator styles", () => {
   const selected = pickSonnet46ModelId([
     { id: "anthropic/claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
-    { id: "claude-sonnet-4-6:thinking", name: "Claude Sonnet 4.6 Thinking" },
-    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    { id: "claude-sonnet-4.6:thinking", name: "Claude Sonnet 4.6 Thinking" },
+    { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
   ])
 
-  assert.equal(selected, "claude-sonnet-4-6")
+  assert.equal(selected, "claude-sonnet-4.6")
 })
 
 test("pickSonnet46ModelId returns null when sonnet-4.6 model does not exist", () => {

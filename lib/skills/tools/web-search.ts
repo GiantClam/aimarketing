@@ -9,20 +9,20 @@ export type WebSearchHit = {
   provider: WebSearchProvider
 }
 
-function getTavilyApiBase() {
-  return (process.env.TAVILY_API_BASE || "https://api.tavily.com").replace(/\/+$/, "")
-}
-
-function getTavilyApiKey() {
-  return (process.env.TAVILY_API_KEY || "").trim()
-}
-
 function getSerperApiBase() {
   return (process.env.SERPER_API_BASE || "https://google.serper.dev").replace(/\/+$/, "")
 }
 
 function getSerperApiKey() {
   return (process.env.SERPER_API_KEY || "").trim()
+}
+
+function getTavilyApiBase() {
+  return (process.env.TAVILY_API_BASE || "https://api.tavily.com").replace(/\/+$/, "")
+}
+
+function getTavilyApiKey() {
+  return (process.env.TAVILY_API_KEY || "").trim()
 }
 
 function normalizeWhitespace(text: string) {
@@ -94,8 +94,12 @@ export async function searchWithTavilyWeb(
   if (!apiKey) return []
 
   const response = await writerRequestJson<{
-    results?: Array<{ title?: string; url?: string; content?: string }>
-    answer?: string
+    results?: Array<{
+      title?: string
+      url?: string
+      content?: string
+      raw_content?: string
+    }>
   }>(
     `${getTavilyApiBase()}/search`,
     {
@@ -106,14 +110,14 @@ export async function searchWithTavilyWeb(
       body: JSON.stringify({
         api_key: apiKey,
         query,
-        max_results: options?.maxResults ?? 5,
-        search_depth: options?.searchDepth || "basic",
-        include_answer: options?.includeAnswer ?? true,
+        max_results: Math.min(Math.max(options?.maxResults ?? 5, 1), 10),
+        search_depth: options?.searchDepth ?? "basic",
+        include_answer: options?.includeAnswer ?? false,
         include_raw_content: options?.includeRawContent ?? false,
       }),
       signal: options?.signal,
     },
-    { attempts: 2, timeoutMs: 75_000 },
+    { attempts: 2, timeoutMs: 60_000 },
   )
 
   if (!response.ok) {
@@ -125,7 +129,7 @@ export async function searchWithTavilyWeb(
     .map((item) => ({
       title: normalizeWhitespace(item.title || ""),
       url: normalizeWhitespace(item.url || ""),
-      snippet: normalizeWhitespace(item.content || response.data?.answer || ""),
+      snippet: normalizeWhitespace(item.content || item.raw_content || ""),
       provider: "tavily" as const,
     }))
     .filter((item) => item.url)

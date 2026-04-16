@@ -245,21 +245,10 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         {messages.dashboardLayout.leadHunterSection}
                       </h3>
                     )}
-                    {hasAdvisorFeature && advisor.leadHunter && userEmail && (
-                      sidebarCollapsed ? (
-                        <Link href="/dashboard/advisor/lead-hunter/new">
-                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.leadHunter}>
-                            <Radar className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      ) : (
-                        <AdvisorSidebarItem title={messages.dashboardLayout.leadHunter} advisorType="lead-hunter" userEmail={userEmail} icon={Radar} />
-                      )
-                    )}
                     {hasAdvisorFeature && advisor.companySearch && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/company-search/new">
-                          <Button variant="ghost" className={advisor.leadHunter ? "mt-1 w-full justify-center" : "w-full justify-center"} size="sm" title={messages.dashboardLayout.companySearch}>
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.companySearch}>
                             <Search className="h-4 w-4" />
                           </Button>
                         </Link>
@@ -267,10 +256,31 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         <AdvisorSidebarItem title={messages.dashboardLayout.companySearch} advisorType="company-search" userEmail={userEmail} icon={Search} />
                       )
                     )}
+                    {hasAdvisorFeature && advisor.leadHunter && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/lead-hunter/new">
+                          <Button
+                            variant="ghost"
+                            className={advisor.companySearch ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            size="sm"
+                            title={messages.dashboardLayout.leadHunter}
+                          >
+                            <Radar className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.leadHunter} advisorType="lead-hunter" userEmail={userEmail} icon={Radar} />
+                      )
+                    )}
                     {hasAdvisorFeature && advisor.contactMining && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/contact-mining/new">
-                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.contactMining}>
+                          <Button
+                            variant="ghost"
+                            className={advisor.companySearch || advisor.leadHunter ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            size="sm"
+                            title={messages.dashboardLayout.contactMining}
+                          >
                             <Users className="h-4 w-4" />
                           </Button>
                         </Link>

@@ -159,6 +159,34 @@ function resolveDisplayModelId(
   return mapped?.optionId || null
 }
 
+function isProviderQualifiedModelId(rawModelId: string | null | undefined) {
+  const normalized = typeof rawModelId === "string" ? rawModelId.trim() : ""
+  if (!normalized) return false
+  const slashIndex = normalized.indexOf("/")
+  return slashIndex > 0 && slashIndex < normalized.length - 1
+}
+
+function dedupeStringList(values: Array<string | null | undefined>) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const normalized = typeof value === "string" ? value.trim() : ""
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    result.push(normalized)
+  }
+  return result
+}
+
+function dedupeModelsById(models: ModelOption[]) {
+  const seen = new Set<string>()
+  return models.filter((item) => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
+}
+
 function consumeSseBuffer<T extends object>(buffer: string) {
   const blocks = buffer.split(/\r?\n\r?\n/)
   const rest = blocks.pop() ?? ""
@@ -429,7 +457,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         ) => {
           const id = typeof item?.id === "string" ? item.id.trim() : ""
           if (!id) return null
-          const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : id
           const runtimeId =
             typeof item?.runtimeId === "string" && item.runtimeId.trim()
               ? item.runtimeId.trim()
@@ -438,27 +465,42 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             typeof item?.canonicalId === "string" && item.canonicalId.trim()
               ? item.canonicalId.trim()
               : undefined
-          const aliases = Array.isArray(item?.aliases)
-            ? item.aliases
-                .map((value) => (typeof value === "string" ? value.trim() : ""))
-                .filter((value) => value.length > 0)
-            : undefined
-          return { id, name, runtimeId, canonicalId, aliases } as ModelOption
+          const normalizedAliases = dedupeStringList([
+            ...(Array.isArray(item?.aliases) ? item.aliases : []),
+            id,
+            runtimeId,
+            canonicalId,
+          ])
+          const providerQualifiedId =
+            normalizedAliases.find((value) => isProviderQualifiedModelId(value)) || null
+          if (!providerQualifiedId) return null
+
+          return {
+            id: providerQualifiedId,
+            name: providerQualifiedId,
+            runtimeId,
+            canonicalId,
+            aliases: normalizedAliases,
+          } as ModelOption
         }
 
         const normalizedGroups = (payload?.modelGroups || [])
           .map((group) => {
             const family = typeof group.family === "string" && group.family.trim() ? group.family.trim() : "other"
             const label = typeof group.label === "string" && group.label.trim() ? group.label.trim() : family
-            const groupModels = (group.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item))
+            const groupModels = dedupeModelsById(
+              (group.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item)),
+            )
             if (groupModels.length === 0) return null
             return { family, label, models: groupModels } as ModelGroupOption
           })
           .filter((item): item is ModelGroupOption => Boolean(item))
 
-        const normalizedModels = normalizedGroups.length > 0
-          ? normalizedGroups.flatMap((group) => group.models)
-          : (payload?.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item))
+        const normalizedModels = dedupeModelsById(
+          normalizedGroups.length > 0
+            ? normalizedGroups.flatMap((group) => group.models)
+            : (payload?.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item)),
+        )
 
         setModelProviderId(typeof payload?.providerId === "string" ? payload.providerId : null)
         setModels(normalizedModels)

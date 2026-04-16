@@ -379,7 +379,7 @@ test("model catalog keeps canonical bare id when provider and separator variants
             { id: "openai/gpt-5-4-mini", owned_by: "custom" },
             { id: "anthropic/claude-sonnet-4.6", owned_by: "custom" },
             { id: "claude-sonnet-4.6", owned_by: "custom" },
-            { id: "claude-sonnet-4-6", owned_by: "custom" },
+            { id: "openai/gpt-5.3-codex", owned_by: "custom" },
             { id: "openai/gpt-5.4-nano", owned_by: "custom" },
           ],
         }),
@@ -394,8 +394,8 @@ test("model catalog keeps canonical bare id when provider and separator variants
         )
         assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
         assert.equal(
-          catalog.models.some((item) => item.id === "claude-sonnet-4-6"),
-          false,
+          catalog.models.some((item) => item.id === "openai/gpt-5.3-codex"),
+          true,
         )
         assert.equal(catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6"), false)
         assert.equal(
@@ -409,12 +409,12 @@ test("model catalog keeps canonical bare id when provider and separator variants
   )
 })
 
-test("model catalog keeps claude thinking variant as a distinct model", async () => {
+test("model catalog keeps gpt codex thinking variant as a distinct model", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
       AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
-      AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4-6",
+      AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.3-codex",
     },
     async () => {
       const originalFetch = globalThis.fetch
@@ -424,28 +424,28 @@ test("model catalog keeps claude thinking variant as a distinct model", async ()
         json: async () => ({
           data: [
             { id: "anthropic/claude-sonnet-4.6", owned_by: "custom" },
-            { id: "claude-sonnet-4-6", owned_by: "custom" },
+            { id: "openai/gpt-5.3-codex", owned_by: "custom" },
             { id: "anthropic/claude-sonnet-4.6-thinking", owned_by: "custom" },
-            { id: "claude-sonnet-4-6-thinking", owned_by: "custom" },
+            { id: "openai/gpt-5.3-codex-thinking", owned_by: "custom" },
           ],
         }),
       })) as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "openai/gpt-5.3-codex"), true)
         assert.equal(
-          catalog.models.some((item) => item.id === "claude-sonnet-4.6-thinking"),
+          catalog.models.some((item) => item.id === "openai/gpt-5.3-codex-thinking"),
           true,
         )
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4-6-thinking"), false)
+        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), false)
         assert.equal(
           catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6"),
-          false,
+          true,
         )
         assert.equal(
           catalog.models.some((item) => item.id === "anthropic/claude-sonnet-4.6-thinking"),
-          false,
+          true,
         )
       } finally {
         globalThis.fetch = originalFetch
@@ -454,12 +454,12 @@ test("model catalog keeps claude thinking variant as a distinct model", async ()
   )
 })
 
-test("model catalog keeps only claude sonnet/opus/haiku in versions 4.5 and 4.6", async () => {
+test("model catalog keeps gpt codex and valid claude 4.5/4.6 tier models", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key",
       AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
-      AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4-6",
+      AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.3-codex",
     },
     async () => {
       const originalFetch = globalThis.fetch
@@ -468,7 +468,7 @@ test("model catalog keeps only claude sonnet/opus/haiku in versions 4.5 and 4.6"
         status: 200,
         json: async () => ({
           data: [
-            { id: "claude-sonnet-4-6", owned_by: "custom" },
+            { id: "openai/gpt-5.3-codex", owned_by: "custom" },
             { id: "claude-opus-4-5", owned_by: "custom" },
             { id: "claude-haiku-4-5-20251001", owned_by: "custom" },
             { id: "claude-sonnet-4-7", owned_by: "custom" },
@@ -480,7 +480,7 @@ test("model catalog keeps only claude sonnet/opus/haiku in versions 4.5 and 4.6"
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "openai/gpt-5.3-codex"), true)
         assert.equal(catalog.models.some((item) => item.id === "claude-opus-4.5"), true)
         assert.equal(catalog.models.some((item) => item.id === "claude-haiku-4.5"), true)
         assert.equal(
@@ -554,7 +554,7 @@ test("model catalog falls back to crazyroute when aiberm is unavailable", async 
       AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.3",
       AI_ENTRY_CRAZYROUTE_API_KEY: "crazy-key",
       AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
-      AI_ENTRY_CRAZYROUTE_MODEL: "claude-sonnet-4-6",
+      AI_ENTRY_CRAZYROUTE_MODEL: "openai/gpt-5.3-codex",
     },
     async () => {
       const calls: string[] = []
@@ -580,7 +580,7 @@ test("model catalog falls back to crazyroute when aiberm is unavailable", async 
             status: 200,
             text: async () => "",
             json: async () => ({
-              data: [{ id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" }],
+              data: [{ id: "openai/gpt-5.3-codex", name: "Claude Sonnet 4.6" }],
             }),
           } as Response
         }
@@ -596,7 +596,7 @@ test("model catalog falls back to crazyroute when aiberm is unavailable", async 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
         assert.equal(catalog.providerId, "crazyroute")
-        assert.equal(catalog.models.some((item) => item.id === "claude-sonnet-4.6"), true)
+        assert.equal(catalog.models.some((item) => item.id === "openai/gpt-5.3-codex"), true)
         assert.equal(calls[0]?.includes("https://aiberm.example/v1/models"), true)
         assert.equal(calls.some((item) => item.includes("https://crazy.example/v1/models")), true)
       } finally {
@@ -614,7 +614,7 @@ test("model catalog falls back to openrouter when aiberm and crazyroute are unav
       AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.3",
       AI_ENTRY_CRAZYROUTE_API_KEY: "crazy-key",
       AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
-      AI_ENTRY_CRAZYROUTE_MODEL: "claude-sonnet-4-6",
+      AI_ENTRY_CRAZYROUTE_MODEL: "openai/gpt-5.3-codex",
       AI_ENTRY_OPENROUTER_API_KEY: "openrouter-key",
       AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
       AI_ENTRY_OPENROUTER_MODEL: "openai/gpt-5.4-mini",

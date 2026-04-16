@@ -7,6 +7,8 @@ import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
 import { getLeadHunterAgentName, type LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import {
   hasAnyWebSearchProviderConfig,
+  hasSerperWebSearchConfig,
+  hasTavilyWebSearchConfig,
   searchWithSerperWeb,
   searchWithTavilyWeb,
 } from "@/lib/skills/tools/web-search"
@@ -17,25 +19,33 @@ const LEAD_HUNTER_SKILL_MODEL =
   process.env.WRITER_SKILL_MODEL ||
   "google/gemini-3-flash"
 
-const DEFAULT_MAX_SEARCH_QUERIES_COMPANY = 6
-const DEFAULT_MAX_SEARCH_QUERIES_CONTACT = 5
-const MAX_SEARCH_QUERY_LIMIT = 12
+const DEFAULT_MAX_SEARCH_QUERIES_COMPANY = 14
+const DEFAULT_MAX_SEARCH_QUERIES_CONTACT = 12
+const MAX_SEARCH_QUERY_LIMIT = 24
 const SEARCH_QUERY_CONCURRENCY = 3
-const SEARCH_EARLY_STOP_SIGNALS = 14
+const SEARCH_EARLY_STOP_SIGNALS = 48
 const SEARCH_RESULT_CACHE_TTL_MS = 120_000
-const SERPER_RESULT_NUM = 4
-const TAVILY_RESULT_NUM = 4
+const SERPER_RESULT_NUM = 8
+const TAVILY_RESULT_NUM = 5
+const DEFAULT_TAVILY_SUPPLEMENT_TRIGGER_SIGNALS = SEARCH_EARLY_STOP_SIGNALS
+const DEFAULT_TAVILY_SUPPLEMENT_MAX_QUERIES = 8
 const MAX_ENTERPRISE_KNOWLEDGE_QUERY_VARIANTS = 3
 const MAX_EVIDENCE_ITEMS = 24
 const MAX_ENTERPRISE_SNIPPETS = 8
+const DEFAULT_PAGE_EXTRACTION_LIMIT = 8
+const MAX_PAGE_EXTRACTION_LIMIT = 12
+const PAGE_EXTRACTION_TIMEOUT_MS = 12_000
+const PAGE_EXTRACTION_CONCURRENCY = 3
+const MAX_SKILL_GUIDE_CHARS = 6_000
 const DEFAULT_REPORT_PROMPT_EVIDENCE_LIMIT = 12
 const DEFAULT_REPORT_ENTERPRISE_SNIPPET_LIMIT = 4
 const DEFAULT_REPORT_MAX_TOKENS = 1600
 const DEFAULT_REPORT_TIMEOUT_MS = 60_000
-const DEFAULT_REPORT_PROVIDER_TIMEOUT_MS = 35_000
+const DEFAULT_REPORT_PROVIDER_TIMEOUT_MS = 70_000
 const DEFAULT_VBUY_FIT_LAYER_CHARS = 6_000
 const MAX_VBUY_FIT_LAYER_CHARS = 14_000
 const REPORT_TIMEOUT_MS = 120_000
+const SKILL_GUIDE_PATH = path.join(process.cwd(), "content", "skills", "customer-intelligence-risk", "SKILL.md")
 
 export type LeadHunterSkillEventPayload = {
   event: string
@@ -59,6 +69,7 @@ export type LeadHunterSkillRunResult = {
 export type LeadHunterSkillRunInput = {
   advisorType: LeadHunterAdvisorType
   query: string
+  preferredLanguage?: "zh" | "en" | "auto" | null
   conversationId?: string | null
   enterpriseId?: number | null
   enterpriseCode?: string | null
@@ -72,7 +83,7 @@ type SearchHit = {
   title: string
   url: string
   snippet: string
-  provider: "tavily" | "serper"
+  provider: "serper" | "tavily"
 }
 
 type SearchCacheEntry = {
@@ -81,6 +92,7 @@ type SearchCacheEntry = {
 }
 
 const SEARCH_QUERY_CACHE = new Map<string, SearchCacheEntry>()
+let SKILL_GUIDE_CACHE: string | null | undefined
 
 function sanitizeAssistantContent(raw: string) {
   return raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
@@ -128,6 +140,27 @@ function resolveSerperResultNum() {
 
 function resolveTavilyResultNum() {
   return parseEnvInt("LEAD_HUNTER_TAVILY_RESULT_NUM", TAVILY_RESULT_NUM, { min: 2, max: 10 })
+}
+
+function resolveTavilySupplementTriggerSignals() {
+  return parseEnvInt("LEAD_HUNTER_TAVILY_SUPPLEMENT_TRIGGER_SIGNALS", DEFAULT_TAVILY_SUPPLEMENT_TRIGGER_SIGNALS, {
+    min: 4,
+    max: 48,
+  })
+}
+
+function resolveTavilySupplementMaxQueries() {
+  return parseEnvInt("LEAD_HUNTER_TAVILY_SUPPLEMENT_MAX_QUERIES", DEFAULT_TAVILY_SUPPLEMENT_MAX_QUERIES, {
+    min: 1,
+    max: MAX_SEARCH_QUERY_LIMIT,
+  })
+}
+
+function resolvePageExtractionLimit() {
+  return parseEnvInt("LEAD_HUNTER_PAGE_EXTRACTION_LIMIT", DEFAULT_PAGE_EXTRACTION_LIMIT, {
+    min: 0,
+    max: MAX_PAGE_EXTRACTION_LIMIT,
+  })
 }
 
 function resolveEnterpriseKnowledgeQueryVariantLimit() {
@@ -179,16 +212,27 @@ function resolveVbuyFitLayerChars() {
   })
 }
 
-function isLikelyChinese(text: string) {
-  return /[\u4e00-\u9fa5]/.test(text)
+function normalizePreferredLanguage(value: LeadHunterSkillRunInput["preferredLanguage"]): "zh" | "en" | null {
+  if (!value) return null
+  if (value === "zh" || value === "en") return value
+  return null
 }
 
-function detectLanguage(text: string): "zh" | "en" {
-  return isLikelyChinese(text) ? "zh" : "en"
+function resolveOutputLanguage(input: { preferredLanguage?: LeadHunterSkillRunInput["preferredLanguage"]; query: string }) {
+  return normalizePreferredLanguage(input.preferredLanguage) || "zh"
 }
 
 function toSseWireChunk(payload: LeadHunterSkillEventPayload) {
   return `data: ${JSON.stringify(payload)}\n\n`
+}
+
+function stripInlineUrlAndDomain(text: string) {
+  return normalizeWhitespace(
+    text
+      .replace(/https?:\/\/[^\s,;]+/gi, " ")
+      .replace(/\b(?:www\.)?[a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s,;]*)?/gi, " ")
+      .replace(/\s*[|\uFF5C]\s*/g, " "),
+  )
 }
 
 function pickCompanyName(query: string) {
@@ -197,8 +241,28 @@ function pickCompanyName(query: string) {
 
   const explicit =
     normalized.match(/(?:company[_\s-]*name|company)\s*[:=]\s*([^;,\n]+)/i) ||
-    normalized.match(/��˾����\s*[:��]\s*([^;,\n]+)/)
-  if (explicit?.[1]) return explicit[1].trim().slice(0, 120)
+    normalized.match(/(?:\u516c\u53f8\u540d\u79f0|\u516c\u53f8)\s*[\u003a\uff1a=]\s*([^;,\n]+)/)
+  if (explicit?.[1]) return stripInlineUrlAndDomain(explicit[1]).slice(0, 120)
+
+  const stripped = stripInlineUrlAndDomain(normalized)
+  if (stripped) {
+    return stripped
+      .split(/\s+/)
+      .slice(0, 10)
+      .join(" ")
+      .slice(0, 120)
+  }
+
+  const inlineUrl = normalized.match(/https?:\/\/[^\s,;]+/i)?.[0] || ""
+  if (inlineUrl) {
+    try {
+      const host = new URL(inlineUrl).hostname.replace(/^www\./i, "")
+      const root = host.split(".").slice(0, -1).join(" ") || host
+      return normalizeWhitespace(root).slice(0, 120)
+    } catch {
+      return normalized.slice(0, 120)
+    }
+  }
 
   return normalized.slice(0, 120)
 }
@@ -207,24 +271,33 @@ function pickWebsiteUrl(query: string) {
   const normalized = normalizeWhitespace(query)
   const explicit =
     normalized.match(/(?:website|domain|url)\s*[:=]\s*([^;,\n]+)/i) ||
-    normalized.match(/����\s*[:��]\s*([^;,\n]+)/)
-  const candidate = explicit?.[1] || ""
-  if (!candidate.trim()) return ""
-  if (/^https?:\/\//i.test(candidate)) return candidate.trim()
-  return `https://${candidate.trim()}`
-}
+    normalized.match(/(?:\u5b98\u7f51|\u7f51\u7ad9|\u57df\u540d)\s*[\u003a\uff1a=]\s*([^;,\n]+)/)
+  const candidate = (explicit?.[1] || "").trim()
+  if (candidate) {
+    if (/^https?:\/\//i.test(candidate)) return candidate
+    return `https://${candidate}`
+  }
 
+  const inlineUrl = normalized.match(/https?:\/\/[^\s,;]+/i)?.[0] || ""
+  if (inlineUrl) return inlineUrl.trim()
+
+  const domainLike = normalized.match(/\b(?:www\.)?[a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s,;]*)?/i)?.[0] || ""
+  if (domainLike) {
+    return /^https?:\/\//i.test(domainLike) ? domainLike : `https://${domainLike}`
+  }
+
+  return ""
+}
 function shouldEnableVbuyMode(query: string) {
   const text = query.toLowerCase()
   return (
     text.includes("vbuy") ||
-    query.includes("����") ||
-    query.includes("����������ʵҵ���޹�˾") ||
+    query.includes("\u5fae\u5e03") ||
+    query.includes("\u6c5f\u82cf\u5fae\u5e03\u5b9e\u4e1a\u6709\u9650\u516c\u53f8") ||
     query.includes("Jiangsu Vbuy Textile Group") ||
     query.includes("our company knowledge base")
   )
 }
-
 function normalizeEnterpriseCode(value: string | null | undefined) {
   return (value || "").trim().toLowerCase()
 }
@@ -260,11 +333,27 @@ async function loadVbuyFitLayer() {
   }
 }
 
+async function loadCustomerIntelligenceSkillGuide() {
+  if (SKILL_GUIDE_CACHE !== undefined) {
+    return SKILL_GUIDE_CACHE
+  }
+
+  try {
+    const text = await readFile(SKILL_GUIDE_PATH, "utf8")
+    const normalized = text.trim()
+    SKILL_GUIDE_CACHE = normalized ? normalized.slice(0, MAX_SKILL_GUIDE_CHARS) : null
+    return SKILL_GUIDE_CACHE
+  } catch {
+    SKILL_GUIDE_CACHE = null
+    return null
+  }
+}
+
 function dedupeHits(hits: SearchHit[]) {
   const seen = new Set<string>()
   const output: SearchHit[] = []
   for (const hit of hits) {
-    const key = hit.url.toLowerCase()
+    const key = normalizeSourceUrlForDedupe(hit.url)
     if (seen.has(key)) continue
     seen.add(key)
     output.push(hit)
@@ -272,8 +361,92 @@ function dedupeHits(hits: SearchHit[]) {
   return output
 }
 
+function normalizeWebsiteDomain(raw: string) {
+  return raw.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim().toLowerCase()
+}
+
+function normalizeSourceUrlForDedupe(raw: string) {
+  const value = (raw || "").trim()
+  if (!value) return ""
+  try {
+    const url = new URL(value)
+    for (const key of [...url.searchParams.keys()]) {
+      const lower = key.toLowerCase()
+      if (
+        lower === "srsltid" ||
+        lower === "gclid" ||
+        lower === "fbclid" ||
+        lower.startsWith("utm_") ||
+        lower === "ref" ||
+        lower === "source"
+      ) {
+        url.searchParams.delete(key)
+      }
+    }
+    url.hash = ""
+    return url.toString().toLowerCase()
+  } catch {
+    return value.toLowerCase()
+  }
+}
+
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+}
+
+function extractPlainTextFromHtml(html: string) {
+  return normalizeWhitespace(
+    decodeHtmlEntities(
+      html
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+        .replace(/<[^>]+>/g, " "),
+    ),
+  )
+}
+
+function extractTitleFromHtml(html: string) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  return match?.[1] ? normalizeWhitespace(decodeHtmlEntities(match[1])) : ""
+}
+
+async function fetchTextWithTimeout(url: string, timeoutMs: number, signal?: AbortSignal) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const onAbort = () => controller.abort()
+  signal?.addEventListener("abort", onAbort)
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "AIMarketingLeadHunter/1.0 (+https://aimarketing.app)",
+        Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
+      },
+      redirect: "follow",
+    })
+    if (!response.ok) return null
+    const contentType = (response.headers.get("content-type") || "").toLowerCase()
+    if (!contentType.includes("text/html") && !contentType.includes("text/plain")) return null
+    const text = await response.text()
+    return { text, finalUrl: response.url || url }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener("abort", onAbort)
+  }
+}
+
 function buildSearchQueries(input: { advisorType: LeadHunterAdvisorType; query: string; companyName: string; website: string }) {
   const root = input.companyName || input.query
+  const websiteDomain = normalizeWebsiteDomain(input.website)
   const queries: string[] = []
 
   const push = (value: string) => {
@@ -283,22 +456,49 @@ function buildSearchQueries(input: { advisorType: LeadHunterAdvisorType; query: 
     queries.push(trimmed)
   }
 
-  push(`${root} official website profile`)
-  push(`${root} market positioning customers`)
-  push(`${root} products pricing`)
+  // Company basics
+  push(`${root} official website about founder headquarters`)
+  push(`${root} linkedin company employees headquarters`)
+  push(`${root} funding acquisition revenue expansion`)
+
+  // Business and market
+  push(`${root} products customers market positioning`)
+  push(`${root} partnership collaboration launch`)
+  push(`${root} ceo founder interview strategy`)
+  push(`${root} target customer persona icp`)
+  push(`${root} competitors alternatives`)
+
+  // Product and pricing
+  push(`${root} product price`)
+  push(`${root} pricing product collection`)
+  push(`${root} bundle discount promotion`)
 
   if (input.advisorType === "contact-mining") {
     push(`${root} linkedin leadership team`)
     push(`${root} contact email sales procurement`)
     push(`${root} founder ceo cmo`)
+    push(`${root} sales manager procurement manager linkedin`)
   } else {
     push(`${root} customer reviews complaints lawsuit`)
-    push(`${root} headquarters employees linkedin`)
-    push(`${root} partnership distributor`)
+    push(`${root} customer service complaints`)
+    push(`${root} trustpilot reviews`)
+    push(`${root} bbb complaints`)
+    push(`${root} reddit complaints`)
+    push(`${root} partnership distributor wholesale`)
+    push(`${root} corporate orders wholesale`)
+    push(`${root} asia expansion europe distributor`)
   }
 
-  if (input.website) {
-    push(`site:${input.website.replace(/^https?:\/\//i, "")} ${root}`)
+  if (websiteDomain) {
+    push(`site:${websiteDomain} about us`)
+    push(`site:${websiteDomain} products`)
+    push(`site:${websiteDomain} collections products price`)
+    push(`site:${websiteDomain} bundle discount promotion`)
+    push(`site:${websiteDomain} terms`)
+    push(`site:${websiteDomain} return policy`)
+    push(`site:${websiteDomain} shipping policy`)
+    push(`site:${websiteDomain} refund policy`)
+    push(`site:${websiteDomain} corporate order wholesale`)
   }
 
   return queries.slice(0, resolveMaxSearchQueries(input.advisorType))
@@ -314,7 +514,8 @@ function classifySourceType(url: string) {
 }
 
 function toEvidenceItem(hit: SearchHit): LeadHunterEvidenceItem {
-  const confidence = hit.provider === "tavily" ? "high" : hit.snippet ? "medium" : "low"
+  const confidence: LeadHunterEvidenceItem["confidence"] =
+    hit.provider === "tavily" || hit.snippet.length >= 220 ? "high" : hit.snippet ? "medium" : "low"
   return {
     claim: hit.snippet || `Signal from ${hit.title || hit.url}`,
     source_title: hit.title || hit.url,
@@ -390,86 +591,151 @@ function toPromptEvidenceMatrix(evidence: LeadHunterEvidenceItem[], limit: numbe
   }))
 }
 
-function makeSearchCacheKey(query: string) {
-  return normalizeWhitespace(query).toLowerCase()
+function makeSearchCacheKey(provider: SearchHit["provider"], query: string) {
+  return `${provider}:${normalizeWhitespace(query).toLowerCase()}`
 }
 
-function getCachedSearchHits(query: string) {
+function getCachedSearchHits(provider: SearchHit["provider"], query: string) {
   const ttlMs = resolveSearchCacheTtlMs()
   if (ttlMs <= 0) return null
-  const entry = SEARCH_QUERY_CACHE.get(makeSearchCacheKey(query))
+  const entry = SEARCH_QUERY_CACHE.get(makeSearchCacheKey(provider, query))
   if (!entry) return null
   if (entry.expiresAt <= Date.now()) {
-    SEARCH_QUERY_CACHE.delete(makeSearchCacheKey(query))
+    SEARCH_QUERY_CACHE.delete(makeSearchCacheKey(provider, query))
     return null
   }
   return [...entry.hits]
 }
 
-function setCachedSearchHits(query: string, hits: SearchHit[]) {
+function setCachedSearchHits(provider: SearchHit["provider"], query: string, hits: SearchHit[]) {
   const ttlMs = resolveSearchCacheTtlMs()
   if (ttlMs <= 0 || hits.length === 0) return
-  SEARCH_QUERY_CACHE.set(makeSearchCacheKey(query), {
+  SEARCH_QUERY_CACHE.set(makeSearchCacheKey(provider, query), {
     hits: [...hits],
     expiresAt: Date.now() + ttlMs,
   })
 }
 
-async function runWebSearchForQuery(query: string, signal?: AbortSignal) {
-  const cached = getCachedSearchHits(query)
+async function runWebSearchForQuery(provider: SearchHit["provider"], query: string, signal?: AbortSignal) {
+  if (provider === "serper" && !hasSerperWebSearchConfig()) {
+    return []
+  }
+  if (provider === "tavily" && !hasTavilyWebSearchConfig()) {
+    return []
+  }
+
+  const cached = getCachedSearchHits(provider, query)
   if (cached) return cached
 
-  const [serperHits, tavilyHits] = await Promise.all([
-    searchWithSerperWeb(query, { signal, num: resolveSerperResultNum() }).catch(() => [] as SearchHit[]),
-    searchWithTavilyWeb(query, {
-      signal,
-      maxResults: resolveTavilyResultNum(),
-      searchDepth: "basic",
-      includeAnswer: false,
-      includeRawContent: false,
-    }).catch(() => [] as SearchHit[]),
-  ])
+  if (provider === "serper") {
+    const serperHits = await searchWithSerperWeb(query, { signal, num: resolveSerperResultNum() }).catch(
+      () => [] as SearchHit[],
+    )
+    setCachedSearchHits(provider, query, serperHits)
+    return serperHits
+  }
 
-  const merged = [...serperHits, ...tavilyHits]
-  setCachedSearchHits(query, merged)
-  return merged
+  const tavilyHits = await searchWithTavilyWeb(query, {
+    signal,
+    maxResults: resolveTavilyResultNum(),
+    searchDepth: "advanced",
+    includeAnswer: false,
+    includeRawContent: false,
+  }).catch(() => [] as SearchHit[])
+  setCachedSearchHits(provider, query, tavilyHits)
+  return tavilyHits
+}
+
+async function enrichHitsWithPageExtraction(input: { hits: SearchHit[]; signal?: AbortSignal }) {
+  const limit = resolvePageExtractionLimit()
+  if (limit <= 0 || input.hits.length === 0) {
+    return input.hits
+  }
+
+  const targets = input.hits.slice(0, limit)
+  let nextIndex = 0
+  const enriched = [...input.hits]
+
+  const worker = async () => {
+    while (true) {
+      if (input.signal?.aborted) throw new Error("lead_hunter_skill_aborted")
+      const currentIndex = nextIndex
+      if (currentIndex >= targets.length) return
+      nextIndex += 1
+
+      const target = targets[currentIndex]
+      const fetched = await fetchTextWithTimeout(target.url, PAGE_EXTRACTION_TIMEOUT_MS, input.signal)
+      if (!fetched?.text) continue
+
+      const pageTitle = extractTitleFromHtml(fetched.text)
+      const pageSnippet = extractPlainTextFromHtml(fetched.text).slice(0, 420)
+      if (!pageSnippet) continue
+
+      enriched[currentIndex] = {
+        ...target,
+        title: pageTitle || target.title,
+        url: fetched.finalUrl || target.url,
+        snippet: pageSnippet,
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(PAGE_EXTRACTION_CONCURRENCY, targets.length)) }, () => worker()),
+  )
+  return dedupeHits(enriched)
 }
 
 async function collectSearchHits(input: { queries: string[]; signal?: AbortSignal }) {
   const concurrency = resolveSearchConcurrency(input.queries.length)
   const earlyStopSignals = resolveSearchEarlyStopSignals()
+  const tavilyTriggerSignals = resolveTavilySupplementTriggerSignals()
+  const tavilySupplementQueries = Math.min(resolveTavilySupplementMaxQueries(), input.queries.length)
   const hits: SearchHit[] = []
   const seenUrls = new Set<string>()
   let uniqueSignals = 0
-  let nextIndex = 0
-  let stop = false
 
-  const worker = async () => {
-    while (true) {
-      if (input.signal?.aborted) throw new Error("lead_hunter_skill_aborted")
-      if (stop) return
-      const currentIndex = nextIndex
-      if (currentIndex >= input.queries.length) return
-      nextIndex += 1
+  const collectForProvider = async (provider: SearchHit["provider"], queries: string[]) => {
+    let nextIndex = 0
+    let stop = false
+    const worker = async () => {
+      while (true) {
+        if (input.signal?.aborted) throw new Error("lead_hunter_skill_aborted")
+        if (stop) return
+        const currentIndex = nextIndex
+        if (currentIndex >= queries.length) return
+        nextIndex += 1
 
-      const query = input.queries[currentIndex]
-      const batch = await runWebSearchForQuery(query, input.signal)
-      if (!batch.length) continue
+        const query = queries[currentIndex]
+        const batch = await runWebSearchForQuery(provider, query, input.signal)
+        if (!batch.length) continue
 
-      hits.push(...batch)
-      for (const item of batch) {
-        const url = item.url.toLowerCase()
-        if (seenUrls.has(url)) continue
-        seenUrls.add(url)
-        uniqueSignals += 1
-      }
-      if (uniqueSignals >= earlyStopSignals) {
-        stop = true
+        hits.push(...batch)
+        for (const item of batch) {
+          const url = normalizeSourceUrlForDedupe(item.url)
+          if (seenUrls.has(url)) continue
+          seenUrls.add(url)
+          uniqueSignals += 1
+        }
+        if (uniqueSignals >= earlyStopSignals) {
+          stop = true
+        }
       }
     }
+
+    await Promise.all(Array.from({ length: Math.max(1, concurrency) }, () => worker()))
   }
 
-  await Promise.all(Array.from({ length: Math.max(1, concurrency) }, () => worker()))
+  await collectForProvider("serper", input.queries)
+
+  const tavilyTriggerThreshold = Math.min(earlyStopSignals, tavilyTriggerSignals)
+  const shouldRunTavilySupplement =
+    uniqueSignals <= tavilyTriggerThreshold &&
+    Boolean(process.env.TAVILY_API_KEY?.trim())
+  if (shouldRunTavilySupplement) {
+    await collectForProvider("tavily", input.queries.slice(0, tavilySupplementQueries))
+  }
+
   return dedupeHits(hits)
 }
 
@@ -483,20 +749,79 @@ function buildFallbackBrief(input: {
 }) {
   const topEvidence = input.evidence.slice(0, 6)
   const risk = topEvidence.some((item) => /complaint|lawsuit|dispute|refund|negative|risk/i.test(item.claim))
-    ? "��"
+    ? "medium-high"
     : topEvidence.length >= 3
-      ? "��"
-      : "֤�ݲ���"
+      ? "medium"
+      : "insufficient"
+  const evidenceLines = topEvidence
+    .map((item, index) => `- [S${index + 1}] ${item.source_title} (${item.source_url})`)
+    .join("\n")
 
-  if (input.language === "en") {
-    const company = input.companyName || "Target Company"
-    return `# ${company} Customer Profile and Cooperation Risk Brief\n\n## 1. Company Overview\n- Target: ${company}\n- Current request: ${input.query}\n- Public coverage: ${topEvidence.length > 0 ? "available" : "limited"}\n\n## 2. Business and Market Positioning\n- Preliminary positioning inferred from search signals.\n- Recommend validation against official site and recent announcements.\n\n## 3. Product and Price Range\n- Public product and pricing detail extraction is limited in this run.\n- Suggest follow-up extraction on official catalog pages.\n\n## 4. Target Customer Profile\n- Likely serves customers reflected in current public mentions.\n- Need first-party validation before qualification.\n\n## 5. Buying and Cooperation Chain\n- Decision chain cannot be fully confirmed from public snippets.\n- Prioritize role mapping in first outreach round.\n\n## 6. Sentiment and Commercial Fulfillment Risk\n- Overall risk: ${risk}\n- Payment risk: pending validation\n- Delivery risk: pending validation\n- Service risk: pending validation\n- Contract entity risk: pending validation\n- Channel stability risk: pending validation\n\n## 7. ${input.vbuyMode ? "VBUY Cooperation Entry" : "Cooperation Entry"}\n- Start with low-commitment discovery call and qualification checklist.\n\n## 8. First Outreach Suggestions\n- Confirm procurement owner, timeline, and quality/compliance requirements.\n- Bring concrete samples, MOQ, lead-time, and fulfillment evidence.`
+  if (input.language === "zh") {
+    const company = input.companyName || "目标公司"
+    const riskLabel = risk === "medium-high" ? "中高" : risk === "medium" ? "中" : "证据不足"
+    const entryTitle = input.vbuyMode ? "VBUY 合作切入点" : "合作切入点"
+    return (
+      `# ${company} 客户画像与合作风险简报\n\n` +
+      `## 1. 公司概览\n` +
+      `- 目标公司：${company}\n` +
+      `- 当前需求：${input.query}\n` +
+      `- 公开信息覆盖：${topEvidence.length > 0 ? "已有一定信号" : "公开信号较少"}\n\n` +
+      `## 2. 业务与市场定位\n` +
+      `- 基于当前证据可形成初步定位，仍需官网与最新公开资料复核。\n` +
+      `- 建议补充品牌声明、主要渠道与目标区域信息。\n\n` +
+      `## 3. 产品与价格区间\n` +
+      `- 本轮公网信息对 SKU 与价格覆盖有限，建议二轮补抓产品页/集合页/政策页。\n\n` +
+      `## 4. 目标客户画像\n` +
+      `- 目前可初步推断 ICP，但需通过销售触达与访谈进一步确认。\n\n` +
+      `## 5. 采购与合作决策链\n` +
+      `- 当前无法完整确认全部决策角色与签约主体，建议首轮聚焦采购/运营/品牌负责人。\n\n` +
+      `## 6. 舆情与商业履约风险\n` +
+      `- 综合风险等级：${riskLabel}\n` +
+      `- 回款、交付、售后、签约主体与渠道稳定性仍需进一步核验。\n\n` +
+      `## 7. ${entryTitle}\n` +
+      `- 建议从低承诺试单或小批量合作切入，先验证质量、交期与协同效率。\n\n` +
+      `## 8. 首次接洽建议\n` +
+      `- 首轮明确 owner、周期、验收标准及合规要求，同步准备样品、MOQ、交期与履约证明。` +
+      (evidenceLines ? `\n\n## 证据快照\n${evidenceLines}` : "")
+    )
   }
 
-  const company = input.companyName || "Ŀ�깫˾"
-  return `# ${company} �ͻ�������������ռ�\n\n## 1. ��˾����\n- Ŀ�깫˾��${company}\n- ��ǰ����${input.query}\n- ������Ϣ���ǣ�${topEvidence.length > 0 ? "��һ������" : "��������"}\n\n## 2. ҵ�����г���λ\n- ���ڹ����źų����ж���ҵ��λ��\n- �������״ι�ͨ�в������������ҵ�񹫸���֤��\n\n## 3. ��Ʒ��۸�����\n- ���ֹ�����Ϣ�п�ֱ����ȡ�ļ۸���Ϣ���ޡ�\n- ���������Թ�����Ʒҳ�����򲹳���ȡ��\n\n## 4. Ŀ��ͻ�����\n- ��ǰ�ɼ��ź���ʾ��ͻ����������һ��ϸ��ȷ�ϡ�\n- ���鰴��ҵ���������ɹ��������ж��λ���\n\n## 5. �ɹ������������\n- ��������ɫ��δ��ȫ��ȷ��\n- ���ֽ�Ǣ���������ɹ�/��Ӫ/������ظ����ˡ�\n\n## 6. ��������ҵ��Լ����\n- �ܷ��յȼ���${risk}\n- ������գ�����֤\n- �������գ�����֤\n- �ۺ�/�ͷ����գ�����֤\n- ǩԼ������գ�����֤\n- ����/�����ȶ��Է��գ�����֤\n\n## 7. ${input.vbuyMode ? "VBUY ���������" : "���������"}\n- �����Եͳ�ŵ�ɱ���̽���Թ�ͨ���룬����֤ƥ��ȡ�\n\n## 8. �״ν�Ǣ����\n- �״ι�ͨ�۽��ɹ�ʱ�䡢������׼�����ڡ�������Ϲ�Ҫ��\n- ��ǰ׼����Ʒ�����������������ȶ�����֤����`
+  const company = input.companyName || "Target Company"
+  const entryTitle = input.vbuyMode ? "VBUY Cooperation Entry" : "Cooperation Entry"
+  return (
+    `# ${company} Customer Profile and Cooperation Risk Brief\n\n` +
+    `## 1. Company Overview\n` +
+    `- Target: ${company}\n` +
+    `- Current request: ${input.query}\n` +
+    `- Public coverage: ${topEvidence.length > 0 ? "available" : "limited"}\n\n` +
+    `## 2. Business and Market Positioning\n` +
+    `- Preliminary positioning inferred from search signals.\n` +
+    `- Validate against official pages and latest announcements.\n\n` +
+    `## 3. Product and Price Range\n` +
+    `- Public extraction is limited for SKU and pricing in this run.\n` +
+    `- Recommend follow-up extraction on official catalog pages.\n\n` +
+    `## 4. Target Customer Profile\n` +
+    `- Current signals suggest a preliminary ICP only.\n` +
+    `- Confirm via first-party outreach and qualification.\n\n` +
+    `## 5. Buying and Cooperation Chain\n` +
+    `- Decision roles and contract entity are not fully confirmed yet.\n` +
+    `- Prioritize mapping procurement, operations, and brand owners.\n\n` +
+    `## 6. Sentiment and Commercial Fulfillment Risk\n` +
+    `- Overall risk: ${risk}\n` +
+    `- Payment risk: pending validation\n` +
+    `- Delivery risk: pending validation\n` +
+    `- Service risk: pending validation\n` +
+    `- Contract entity risk: pending validation\n` +
+    `- Channel stability risk: pending validation\n\n` +
+    `## 7. ${entryTitle}\n` +
+    `- Start with low-commitment pilot orders and measurable checkpoints.\n\n` +
+    `## 8. First Outreach Suggestions\n` +
+    `- Confirm owner, timeline, acceptance criteria, and compliance baseline.\n` +
+    `- Bring sample, MOQ, lead-time, and fulfillment proof in round one.` +
+    (evidenceLines ? `\n\n## Evidence Snapshot\n${evidenceLines}` : "")
+  )
 }
-
 async function emitEvent(input: {
   onSseEvent?: (payload: LeadHunterSkillEventPayload) => void | Promise<void>
   payload: LeadHunterSkillEventPayload
@@ -515,6 +840,7 @@ async function generateReportWithModel(input: {
   enterpriseKnowledge: EnterpriseKnowledgeContext | null
   vbuyMode: boolean
   vbuyFitLayer: string
+  skillGuide?: string | null
   memoryContext?: string | null
   soulCard?: string | null
   signal?: AbortSignal
@@ -524,49 +850,113 @@ async function generateReportWithModel(input: {
   const reportMaxTokens = resolveReportMaxTokens()
   const reportTimeoutMs = resolveReportTimeoutMs()
   const reportProviderTimeoutMs = resolveReportProviderTimeoutMs()
-  const section7Title = input.vbuyMode ? "VBUY Cooperation Entry" : "Cooperation Entry"
+
+  const sectionHeadings =
+    input.language === "zh"
+      ? [
+          "1. \u516c\u53f8\u6982\u89c8",
+          "2. \u4e1a\u52a1\u4e0e\u5e02\u573a\u5b9a\u4f4d",
+          "3. \u4ea7\u54c1\u4e0e\u4ef7\u683c\u533a\u95f4",
+          "4. \u76ee\u6807\u5ba2\u6237\u753b\u50cf",
+          "5. \u91c7\u8d2d\u4e0e\u5408\u4f5c\u51b3\u7b56\u94fe",
+          "6. \u8206\u60c5\u4e0e\u5546\u4e1a\u5c65\u7ea6\u98ce\u9669",
+          input.vbuyMode ? "7. VBUY \u5408\u4f5c\u5207\u5165\u70b9" : "7. \u5408\u4f5c\u5207\u5165\u70b9",
+          "8. \u9996\u6b21\u63a5\u6d3d\u5efa\u8bae",
+        ]
+      : [
+          "1. Company Overview",
+          "2. Business and Market Positioning",
+          "3. Product and Price Range",
+          "4. Target Customer Profile",
+          "5. Buying and Cooperation Chain",
+          "6. Sentiment and Commercial Fulfillment Risk",
+          input.vbuyMode ? "7. VBUY Cooperation Entry" : "7. Cooperation Entry",
+          "8. First Outreach Suggestions",
+        ]
+
+  const minCitations = Math.max(3, Math.min(8, input.evidence.length))
+  const languageInstruction =
+    input.language === "zh"
+      ? "Write the full report in Simplified Chinese. Keep company, product, and person names in original language."
+      : "Write the report in English."
+
   const systemPrompt = `You are a commercial due-diligence advisor.
-Produce a concise, practical BD brief in ${input.language === "zh" ? "Chinese" : "English"}.
+${languageInstruction}
+Use exactly these 8 section headings, in order:
+${sectionHeadings.map((item) => `- ${item}`).join("\n")}
+
 Requirements:
-1) Exactly 8 sections with fixed headings.
-2) Do not expose tool/provider implementation details.
-3) Use uncertainty wording when evidence is thin.
+1) Ground factual claims in evidence; use inline citations like [S1], [S2], mapped to evidence_summary indices.
+2) Use at least ${minCitations} distinct citations when enough evidence exists.
+3) If evidence is thin or conflicting, state uncertainty explicitly.
 4) Risk means commercial fulfillment risk, not legal conclusion.
-5) Section 7 title must be "${section7Title}".`
+5) Do not expose tool/provider implementation details.
+6) Keep each section concise and actionable; prefer bullet points over long paragraphs.
+7) For key factual bullets, append source links or source titles in-line, e.g. "source: https://...".`
 
-  const userPrompt = [
-    `advisor_type: ${input.advisorType}`
-    ,`company_name: ${input.companyName || ""}`
-    ,`website_url: ${input.website || ""}`
-    ,`user_query: ${input.query}`
-    ,input.memoryContext ? `memory_context: ${input.memoryContext}` : ""
-    ,input.soulCard ? `soul_card: ${input.soulCard}` : ""
-    ,input.vbuyMode ? "vbuy_mode: true" : "vbuy_mode: false"
-    ,input.vbuyMode && input.vbuyFitLayer
-      ? `vbuy_fit_reference (internal, summarize only relevant lines):\n${input.vbuyFitLayer}`
-      : ""
-    ,input.enterpriseKnowledge
-      ? `enterprise_knowledge_summary:\n${buildEnterpriseKnowledgeSummary(input.enterpriseKnowledge, enterpriseSnippetLimit)}`
-      : ""
-    ,`evidence_summary:\n${toEvidenceSummary(input.evidence, promptEvidenceLimit)}`
-    ,`evidence_matrix_json_compact:\n${JSON.stringify(toPromptEvidenceMatrix(input.evidence, promptEvidenceLimit))}`
-  ]
-    .filter(Boolean)
-    .join("\n\n")
+  const buildUserPrompt = (options?: { compact?: boolean }) =>
+    [
+      `advisor_type: ${input.advisorType}`,
+      `company_name: ${input.companyName || ""}`,
+      `website_url: ${input.website || ""}`,
+      `user_query: ${input.query}`,
+      input.memoryContext ? `memory_context: ${input.memoryContext}` : "",
+      input.soulCard ? `soul_card: ${input.soulCard}` : "",
+      input.vbuyMode ? "vbuy_mode: true" : "vbuy_mode: false",
+      !options?.compact && input.skillGuide ? `skill_guide_excerpt:\n${input.skillGuide}` : "",
+      !options?.compact && input.vbuyMode && input.vbuyFitLayer
+        ? `vbuy_fit_reference (internal, summarize only relevant lines):\n${input.vbuyFitLayer}`
+        : "",
+      input.enterpriseKnowledge
+        ? `enterprise_knowledge_summary:\n${buildEnterpriseKnowledgeSummary(input.enterpriseKnowledge, enterpriseSnippetLimit)}`
+        : "",
+      `evidence_summary:\n${toEvidenceSummary(
+        input.evidence,
+        options?.compact ? Math.max(6, Math.floor(promptEvidenceLimit * 0.75)) : promptEvidenceLimit,
+      )}`,
+      `evidence_matrix_json_compact:\n${JSON.stringify(
+        toPromptEvidenceMatrix(
+          input.evidence,
+          options?.compact ? Math.max(6, Math.floor(promptEvidenceLimit * 0.75)) : promptEvidenceLimit,
+        ),
+      )}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n")
 
-  const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, LEAD_HUNTER_SKILL_MODEL, {
-    temperature: 0.2,
-    maxTokens: reportMaxTokens,
-    timeoutMs: reportTimeoutMs,
-    totalTimeoutMs: REPORT_TIMEOUT_MS,
-    providerTimeoutMs: reportProviderTimeoutMs,
-    signal: input.signal,
-  })
-
-  return sanitizeAssistantContent(answer)
+  try {
+    const answer = await generateTextWithWriterModel(systemPrompt, buildUserPrompt(), LEAD_HUNTER_SKILL_MODEL, {
+      temperature: 0.2,
+      maxTokens: reportMaxTokens,
+      timeoutMs: reportTimeoutMs,
+      totalTimeoutMs: REPORT_TIMEOUT_MS,
+      providerTimeoutMs: reportProviderTimeoutMs,
+      signal: input.signal,
+    })
+    return sanitizeAssistantContent(answer)
+  } catch (error) {
+    console.warn("lead_hunter.skill.model_retry_compact", {
+      message: error instanceof Error ? error.message : String(error),
+      advisorType: input.advisorType,
+    })
+    const answer = await generateTextWithWriterModel(
+      systemPrompt,
+      buildUserPrompt({ compact: true }),
+      LEAD_HUNTER_SKILL_MODEL,
+      {
+        temperature: 0.15,
+        maxTokens: Math.max(1200, Math.floor(reportMaxTokens * 0.85)),
+        timeoutMs: Math.max(30_000, Math.floor(reportTimeoutMs * 0.85)),
+        totalTimeoutMs: REPORT_TIMEOUT_MS,
+        providerTimeoutMs: Math.max(30_000, Math.floor(reportProviderTimeoutMs * 0.85)),
+        signal: input.signal,
+      },
+    )
+    return sanitizeAssistantContent(answer)
+  }
 }
 export async function runLeadHunterSkillConversation(input: LeadHunterSkillRunInput): Promise<LeadHunterSkillRunResult> {
-  const language = detectLanguage(input.query)
+  const language = resolveOutputLanguage({ preferredLanguage: input.preferredLanguage, query: input.query })
   const companyName = pickCompanyName(input.query)
   const website = pickWebsiteUrl(input.query)
   const vbuyMode = shouldEnableVbuyModeFromContext({
@@ -655,23 +1045,28 @@ export async function runLeadHunterSkillConversation(input: LeadHunterSkillRunIn
   }
   hits.push(...(await collectSearchHits({ queries: searchQueries, signal: input.signal })))
   const dedupedHits = dedupeHits(hits)
+  const enrichedHits = await enrichHitsWithPageExtraction({ hits: dedupedHits, signal: input.signal })
   await emit({
     event: "node_finished",
     data: {
       node_name: "search_collect",
-      status: dedupedHits.length > 0 ? "succeeded" : "failed",
-      signals: dedupedHits.length,
+      status: enrichedHits.length > 0 ? "succeeded" : "failed",
+      signals: enrichedHits.length,
+      extracted_pages: Math.min(resolvePageExtractionLimit(), dedupedHits.length),
     },
   })
 
   const enterpriseKnowledge = await enterpriseKnowledgePromise
 
-  const webEvidence = dedupedHits.map(toEvidenceItem)
+  const webEvidence = enrichedHits.map(toEvidenceItem)
   const enterpriseEvidence = toEnterpriseKnowledgeEvidence(enterpriseKnowledge)
   const evidence = [...enterpriseEvidence, ...webEvidence].slice(0, MAX_EVIDENCE_ITEMS)
 
   await emit({ event: "node_started", data: { node_name: "report_synthesis" } })
-  const vbuyFitLayer = vbuyMode ? await loadVbuyFitLayer() : ""
+  const [vbuyFitLayer, skillGuide] = await Promise.all([
+    vbuyMode ? loadVbuyFitLayer() : Promise.resolve(""),
+    loadCustomerIntelligenceSkillGuide(),
+  ])
 
   let answer: string
   try {
@@ -685,6 +1080,7 @@ export async function runLeadHunterSkillConversation(input: LeadHunterSkillRunIn
       enterpriseKnowledge,
       vbuyMode,
       vbuyFitLayer,
+      skillGuide,
       memoryContext: input.memoryContext,
       soulCard: input.soulCard,
       signal: input.signal,
@@ -774,8 +1170,5 @@ export function createLeadHunterSkillSseStream(input: LeadHunterSkillRunInput) {
 
   return { stream, done }
 }
-
-
-
 
 

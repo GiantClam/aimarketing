@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict"
+import assert from "node:assert/strict"
 import test from "node:test"
 
 import { executeAiEntryWithProviderFailover } from "./provider-routing"
@@ -58,9 +58,9 @@ async function withProviderEnv<T>(
   }
 }
 
-function isEquivalentSonnet46Model(modelId: string) {
+function isEquivalentGpt53CodexModel(modelId: string) {
   const normalized = modelId.toLowerCase().replace(/[^a-z0-9]+/g, "")
-  return normalized.includes("claudesonnet46")
+  return normalized.includes("gpt53codex")
 }
 
 async function withMockFetch<T>(
@@ -210,7 +210,7 @@ test("force model across providers: fuzzy match model id for openrouter", async 
           if (rawUrl.includes("aiberm.example")) {
             return new Response(
               JSON.stringify({
-                data: [{ id: "claude-sonnet-4-6" }],
+                data: [{ id: "openai/gpt-5.3-codex" }],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -232,21 +232,21 @@ test("force model across providers: fuzzy match model id for openrouter", async 
               }
               if (params.providerId === "openrouter") {
                 assert.equal(params.model.includes("/"), true)
-                assert.equal(isEquivalentSonnet46Model(params.model), true)
+                assert.equal(isEquivalentGpt53CodexModel(params.model), true)
                 return "ok"
               }
               throw new Error(`unexpected provider:${params.providerId}`)
             },
             {
               preferredProviderId: "aiberm",
-              preferredModel: "claude-sonnet-4-6",
+              preferredModel: "openai/gpt-5.3-codex",
               forceModelAcrossProviders: true,
               disableSameProviderModelFallback: true,
             },
           )
 
           assert.equal(result.providerId, "openrouter")
-          assert.equal(isEquivalentSonnet46Model(result.model), true)
+          assert.equal(isEquivalentGpt53CodexModel(result.model), true)
           assert.equal(attempts.some((item) => item.startsWith("openrouter:")), true)
         },
       )
@@ -254,7 +254,7 @@ test("force model across providers: fuzzy match model id for openrouter", async 
   )
 })
 
-test("consulting sonnet fallback: aiberm prefers anthropic/claude-sonnet-4.6", async () => {
+test("consulting model fallback: aiberm keeps gpt-5.3-codex across providers", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key-a",
@@ -277,7 +277,7 @@ test("consulting sonnet fallback: aiberm prefers anthropic/claude-sonnet-4.6", a
           if (rawUrl.includes("aiberm.example")) {
             return new Response(
               JSON.stringify({
-                data: [{ id: "claude-sonnet-4-6" }],
+                data: [{ id: "openai/gpt-5.3-codex" }],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -286,7 +286,7 @@ test("consulting sonnet fallback: aiberm prefers anthropic/claude-sonnet-4.6", a
           if (rawUrl.includes("crazy.example")) {
             return new Response(
               JSON.stringify({
-                data: [{ id: "claude-sonnet-4-6" }],
+                data: [{ id: "openai/gpt-5.3-codex" }],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -312,14 +312,14 @@ test("consulting sonnet fallback: aiberm prefers anthropic/claude-sonnet-4.6", a
             },
             {
               preferredProviderId: "aiberm",
-              preferredModel: "claude-sonnet-4-6",
+              preferredModel: "openai/gpt-5.3-codex",
               forceModelAcrossProviders: true,
               disableSameProviderModelFallback: true,
             },
           )
 
           assert.equal(result.providerId, "crazyroute")
-          assert.equal(attempts[0], "aiberm:anthropic/claude-sonnet-4.6")
+          assert.equal(attempts[0], "aiberm:openai/gpt-5.3-codex")
         },
       )
     },
@@ -351,7 +351,7 @@ test("direct provider failover: skip same-provider model retries on error", asyn
               JSON.stringify({
                 data: [
                   { id: "anthropic/claude-sonnet-4.6" },
-                  { id: "claude-sonnet-4-6" },
+                  { id: "openai/gpt-5.3-codex" },
                 ],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
@@ -361,7 +361,7 @@ test("direct provider failover: skip same-provider model retries on error", asyn
           if (rawUrl.includes("crazy.example")) {
             return new Response(
               JSON.stringify({
-                data: [{ id: "claude-sonnet-4-6" }],
+                data: [{ id: "openai/gpt-5.3-codex" }],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -387,7 +387,7 @@ test("direct provider failover: skip same-provider model retries on error", asyn
             },
             {
               preferredProviderId: "aiberm",
-              preferredModel: "claude-sonnet-4-6",
+              preferredModel: "openai/gpt-5.3-codex",
               forceModelAcrossProviders: true,
               disableSameProviderModelFallback: true,
               directProviderFailoverOnError: true,
@@ -396,8 +396,8 @@ test("direct provider failover: skip same-provider model retries on error", asyn
 
           assert.equal(result.providerId, "crazyroute")
           assert.deepEqual(attempts, [
-            "aiberm:anthropic/claude-sonnet-4.6",
-            "crazyroute:claude-sonnet-4-6",
+            "aiberm:openai/gpt-5.3-codex",
+            "crazyroute:openai/gpt-5.3-codex",
           ])
         },
       )
@@ -429,8 +429,8 @@ test("policy errors skip same-provider model variants and switch provider", asyn
             return new Response(
               JSON.stringify({
                 data: [
-                  { id: "anthropic/claude-sonnet-4.6" },
-                  { id: "claude-sonnet-4.6" },
+                  { id: "openai/gpt-5.3-codex" },
+                  { id: "gpt-5-3-codex" },
                 ],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
@@ -440,7 +440,7 @@ test("policy errors skip same-provider model variants and switch provider", asyn
           if (rawUrl.includes("crazy.example")) {
             return new Response(
               JSON.stringify({
-                data: [{ id: "claude-sonnet-4-6" }],
+                data: [{ id: "openai/gpt-5.3-codex" }],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -465,14 +465,14 @@ test("policy errors skip same-provider model variants and switch provider", asyn
                 throw policyError
               }
               if (params.providerId === "crazyroute") {
-                assert.equal(isEquivalentSonnet46Model(params.model), true)
+                assert.equal(isEquivalentGpt53CodexModel(params.model), true)
                 return "ok"
               }
               throw new Error(`unexpected provider:${params.providerId}`)
             },
             {
               preferredProviderId: "openrouter",
-              preferredModel: "claude-sonnet-4-6",
+              preferredModel: "openai/gpt-5.3-codex",
               forceModelAcrossProviders: true,
               disableSameProviderModelFallback: true,
             },

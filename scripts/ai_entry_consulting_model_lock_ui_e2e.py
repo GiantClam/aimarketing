@@ -16,7 +16,7 @@ SCENARIO = os.environ.get("AI_ENTRY_E2E_SCENARIO", "consulting-model-lock-ui").s
 ARTIFACT_DIR = Path("artifacts") / "ai-entry" / SCENARIO
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
-LOCKED_MODEL_ID = "claude-sonnet-4-6"
+LOCKED_MODEL_ID = "openai/gpt-5.3-codex"
 SWITCHABLE_MODEL_ID = "openai/gpt-5-4"
 DEFAULT_NORMAL_MODEL_ID = "openai/gpt-5-3"
 
@@ -121,7 +121,7 @@ def run():
                                 "family": "anthropic",
                                 "label": "Anthropic",
                                 "models": [
-                                    {"id": LOCKED_MODEL_ID, "name": "Claude Sonnet 4.6"},
+                                    {"id": LOCKED_MODEL_ID, "name": "GPT-5.3 Codex"},
                                 ],
                             },
                             {
@@ -210,7 +210,7 @@ def run():
         try:
             login(context, page)
 
-            # Scenario 1: consulting advisor entry should lock model to sonnet-4-6.
+            # Scenario 1: consulting advisor entry should lock model to openai/gpt-5.3-codex.
             page.goto(
                 f"{BASE_URL}/dashboard/ai?entry=consulting-advisor",
                 timeout=90000,
@@ -225,10 +225,10 @@ def run():
                 f"consulting entry should hide model selector combobox, got={model_combobox_count}",
             )
 
-            locked_model_label = page.get_by_text(re.compile(r"sonnet\s*4\.?6", re.IGNORECASE))
+            locked_model_label = page.get_by_text(re.compile(r"gpt\s*[- ]?5\.?3.*codex", re.IGNORECASE))
             expect(
                 locked_model_label.count() >= 1,
-                "consulting entry should show locked sonnet-4.6 model label",
+                "consulting entry should show locked gpt-5.3-codex model label",
             )
 
             textarea = wait_for_chat_interactive(page)

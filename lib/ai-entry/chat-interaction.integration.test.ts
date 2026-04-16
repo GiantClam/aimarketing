@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict"
+import assert from "node:assert/strict"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import test from "node:test"
 
@@ -90,9 +90,9 @@ function json(res: ServerResponse, statusCode: number, payload: unknown) {
   res.end(JSON.stringify(payload))
 }
 
-function isEquivalentSonnet46Model(modelId: string) {
+function isEquivalentGpt53CodexModel(modelId: string) {
   const normalized = modelId.toLowerCase().replace(/[^a-z0-9]+/g, "")
-  return normalized.includes("claudesonnet46")
+  return normalized.includes("gpt53codex")
 }
 
 function sleep(ms: number) {
@@ -254,8 +254,8 @@ test("chat interaction: selected model fallback to default model in real complet
   assert.equal(requestedModels[requestedModels.length - 1], defaultModel)
 })
 
-test("chat interaction: consulting mode keeps sonnet model across provider fallback", async () => {
-  const lockedModel = "claude-sonnet-4-6"
+test("chat interaction: consulting mode keeps gpt-5.3-codex across provider fallback", async () => {
+  const lockedModel = "openai/gpt-5.3-codex"
   const requested: Array<{ provider: string; model: string }> = []
 
   await withMockOpenAiServer(
@@ -278,14 +278,14 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
 
         if (provider === "aiberm") {
           json(res, 200, {
-            data: [{ id: "claude-sonnet-4-6" }],
+            data: [{ id: "openai/gpt-5.3-codex" }],
           })
           return
         }
 
         if (provider === "crazyroute") {
           json(res, 200, {
-            data: [{ id: "anthropic/claude-sonnet-4.6" }],
+            data: [{ id: "openai/gpt-5.3-codex" }],
           })
           return
         }
@@ -319,7 +319,7 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
           return
         }
 
-        if (provider === "crazyroute" && isEquivalentSonnet46Model(model)) {
+        if (provider === "crazyroute" && isEquivalentGpt53CodexModel(model)) {
           json(res, 200, {
             id: "chatcmpl-test-locked",
             object: "chat.completion",
@@ -331,7 +331,7 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
                 finish_reason: "stop",
                 message: {
                   role: "assistant",
-                  content: "locked sonnet flow passed",
+                  content: "locked gpt flow passed",
                 },
               },
             ],
@@ -368,7 +368,7 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
             async (providerRun) => {
               const result = await generateText({
                 model: providerRun.provider.chat(providerRun.model),
-                messages: [{ role: "user", content: "Reply with locked sonnet flow passed." }],
+                messages: [{ role: "user", content: "Reply with locked gpt flow passed." }],
               })
               return result.text.trim()
             },
@@ -381,8 +381,8 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
           )
 
           assert.equal(execution.providerId, "crazyroute")
-          assert.equal(isEquivalentSonnet46Model(execution.model), true)
-          assert.equal(execution.result, "locked sonnet flow passed")
+          assert.equal(isEquivalentGpt53CodexModel(execution.model), true)
+          assert.equal(execution.result, "locked gpt flow passed")
         },
       )
     },
@@ -390,10 +390,10 @@ test("chat interaction: consulting mode keeps sonnet model across provider fallb
 
   assert.ok(requested.length >= 2)
   assert.equal(requested[0]?.provider, "aiberm")
-  assert.equal(isEquivalentSonnet46Model(requested[0]?.model || ""), true)
+  assert.equal(isEquivalentGpt53CodexModel(requested[0]?.model || ""), true)
   assert.equal(requested.some((item) => item.provider === "crazyroute"), true)
   assert.equal(
-    requested.every((item) => isEquivalentSonnet46Model(item.model)),
+    requested.every((item) => isEquivalentGpt53CodexModel(item.model)),
     true,
   )
 })
@@ -422,14 +422,14 @@ test("chat interaction: slow crazyroute response still completes without hanging
 
         if (provider === "aiberm") {
           json(res, 200, {
-            data: [{ id: "anthropic/claude-sonnet-4.6" }],
+            data: [{ id: "openai/gpt-5.3-codex" }],
           })
           return
         }
 
         if (provider === "crazyroute") {
           json(res, 200, {
-            data: [{ id: "claude-sonnet-4-6" }],
+            data: [{ id: "openai/gpt-5.3-codex" }],
           })
           return
         }
@@ -520,7 +520,7 @@ test("chat interaction: slow crazyroute response still completes without hanging
             },
             {
               preferredProviderId: "aiberm",
-              preferredModel: "claude-sonnet-4-6",
+              preferredModel: "openai/gpt-5.3-codex",
               forceModelAcrossProviders: true,
               disableSameProviderModelFallback: true,
               directProviderFailoverOnError: true,

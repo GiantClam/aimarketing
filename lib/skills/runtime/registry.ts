@@ -8,6 +8,7 @@ import { runWriterSkillsTurn } from "@/lib/writer/skills"
 
 type LeadHunterSkillInput = {
   query: string
+  preferredLanguage?: "zh" | "en" | "auto" | null
   conversationId?: string | null
   enterpriseId?: number | null
   enterpriseCode?: string | null
@@ -40,6 +41,7 @@ export function loadLeadHunterSkillRunner(advisorType: LeadHunterAdvisorType) {
       runLeadHunterSkillConversation({
         advisorType,
         query: input.query,
+        preferredLanguage: input.preferredLanguage,
         conversationId: input.conversationId,
         enterpriseId: input.enterpriseId,
         enterpriseCode: input.enterpriseCode,
@@ -52,6 +54,7 @@ export function loadLeadHunterSkillRunner(advisorType: LeadHunterAdvisorType) {
       createLeadHunterSkillSseStream({
         advisorType,
         query: input.query,
+        preferredLanguage: input.preferredLanguage,
         conversationId: input.conversationId,
         enterpriseId: input.enterpriseId,
         enterpriseCode: input.enterpriseCode,

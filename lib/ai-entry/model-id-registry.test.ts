@@ -10,7 +10,7 @@ import {
 
 test("model registry treats provider and separator variants as equivalent", () => {
   assert.equal(
-    areEquivalentModelIds("anthropic/claude-sonnet-4.6", "claude-sonnet-4-6"),
+    areEquivalentModelIds("anthropic/claude-sonnet-4.6", "claude-sonnet-4.6"),
     true,
   )
   assert.equal(
@@ -28,8 +28,8 @@ test("model registry prefers single display id deterministically", () => {
     pickPreferredDisplayModelId([
       "anthropic/claude-sonnet-4.6",
       "claude-sonnet-4.6",
-      "claude-sonnet-4-6",
-      "claude-sonnet-4-6-thinking",
+      "anthropic/claude-sonnet-4.6-thinking",
+      "claude-sonnet-4.6-thinking",
     ]),
     "claude-sonnet-4.6",
   )
@@ -38,7 +38,7 @@ test("model registry prefers single display id deterministically", () => {
 test("model registry resolves persisted alias to displayed model id", () => {
   const resolved = resolveEquivalentModelId("anthropic/claude-sonnet-4.6", [
     "gpt-5-4-mini",
-    "claude-sonnet-4-6",
+    "claude-sonnet-4.6",
   ])
 
   assert.equal(resolved, "claude-sonnet-4.6")

@@ -10,6 +10,7 @@ import { appendLeadHunterMessage, ensureLeadHunterConversation, saveLeadHunterEv
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { loadLeadHunterSkillRunner } from "@/lib/skills/runtime/registry"
+import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
@@ -167,6 +168,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(body?.advisorType)
     const resolvedAdvisorType = normalizedLeadHunterType || body?.advisorType
+    const locale = resolveRequestLocale(req.cookies.get(LOCALE_COOKIE_NAME)?.value, req.headers.get("accept-language"))
+    const preferredLeadHunterLanguage = locale === "zh" ? "zh" : "en"
     const auth = await requireAdvisorAccess(req, body?.advisorType)
     if ("response" in auth) {
       return auth.response
@@ -236,6 +239,7 @@ export async function POST(req: NextRequest) {
           memoryAppliedIds: memoryBridge.memoryAppliedIds,
           enterpriseId: auth.user.enterpriseId,
           enterpriseCode: auth.user.enterpriseCode,
+          preferredLanguage: preferredLeadHunterLanguage,
         },
       })
 
@@ -295,6 +299,7 @@ export async function POST(req: NextRequest) {
         if (useLeadHunterSkillEngine) {
           const skillStream = leadHunterSkillRunner.runStreaming({
             query,
+            preferredLanguage: preferredLeadHunterLanguage,
             conversationId: streamingConversation ? String(streamingConversation.id) : null,
             enterpriseId: auth.user.enterpriseId,
             enterpriseCode: auth.user.enterpriseCode,
@@ -378,6 +383,7 @@ export async function POST(req: NextRequest) {
         answer = (
           await leadHunterSkillRunner.runBlocking({
             query,
+            preferredLanguage: preferredLeadHunterLanguage,
             conversationId: typeof body?.conversation_id === "string" ? body.conversation_id : null,
             enterpriseId: auth.user.enterpriseId,
             enterpriseCode: auth.user.enterpriseCode,

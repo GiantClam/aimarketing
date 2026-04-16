@@ -80,6 +80,7 @@ type AdvisorTurnTaskPayload = {
   userEmail: string
   advisorType: string
   query: string
+  preferredLanguage?: "zh" | "en" | "auto" | null
   conversationId?: string | null
   memoryContext?: string | null
   soulCard?: string | null
@@ -682,6 +683,7 @@ async function handleLeadHunterTurn(
     const leadHunterSkillRunner = loadLeadHunterSkillRunner(normalizedAdvisorType)
     const skillStream = leadHunterSkillRunner.runStreaming({
       query: payload.query,
+      preferredLanguage: payload.preferredLanguage,
       conversationId: payload.conversationId,
       enterpriseId: payload.enterpriseId,
       enterpriseCode: payload.enterpriseCode,
