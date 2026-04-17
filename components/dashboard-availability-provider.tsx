@@ -67,6 +67,7 @@ function buildPermissionFallback(user: {
   permissions?: PermissionMap
 }): DashboardAvailabilityState {
   const advisorEnabled = hasPermission(user, "expert_advisor")
+  const leadHunterEnabled = hasPermission(user, "customer_profile_entry")
   const writerEnabled = hasPermission(user, "copywriting_generation")
   const imageEnabled = hasPermission(user, "image_design_generation")
 
@@ -75,11 +76,11 @@ function buildPermissionFallback(user: {
     advisor: {
       brandStrategy: advisorEnabled,
       growth: advisorEnabled,
-      leadHunter: advisorEnabled,
+      leadHunter: leadHunterEnabled,
       companySearch: advisorEnabled,
       contactMining: advisorEnabled,
       copywriting: writerEnabled,
-      hasAny: advisorEnabled || writerEnabled,
+      hasAny: advisorEnabled || leadHunterEnabled || writerEnabled,
     },
     writer: {
       enabled: writerEnabled,
@@ -163,7 +164,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
     return () => {
       cancelled = true
     }
-  }, [authLoading, user?.enterpriseId, user?.id])
+  }, [authLoading, user])
 
   const value = useMemo(() => availability, [availability])
   return <DashboardAvailabilityContext.Provider value={value}>{children}</DashboardAvailabilityContext.Provider>

@@ -145,6 +145,7 @@ export default function SettingsPage() {
   const featureLabels = useMemo(
     () => ({
       expert_advisor: t("专家顾问", "Expert advisor"),
+      customer_profile_entry: t("客户画像入口", "Customer profile entry"),
       website_generation: t("网站生成", "Website generation"),
       video_generation: t("视频生成", "Video generation"),
       copywriting_generation: t("文案生成", "Copywriting generation"),
@@ -786,7 +787,7 @@ export default function SettingsPage() {
                 <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />{t("成员功能权限", "Member feature permissions")}</CardTitle>
-                    <CardDescription>{t("配置成员可访问的功能模块。开启“专家顾问”后，成员可看到品牌顾问、增长顾问和客户画像入口；企业管理员始终可见。", "Configure feature access for members. After enabling Expert Advisor, members can see Brand/Growth/Customer Profile entries; enterprise admins always can.")}</CardDescription>
+                    <CardDescription>{t("配置成员可访问的功能模块。专家顾问与客户画像入口可分别授权；企业管理员始终可见。", "Configure feature access for members. Expert Advisor and Customer Profile entry can be granted independently; enterprise admins always can.")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
               {members.length === 0 && !loadingAdminData ? (
@@ -811,7 +812,6 @@ export default function SettingsPage() {
                             type="checkbox"
                             className="rounded border-border"
                             checked={Boolean(draft[feature])}
-                            disabled={member.enterpriseRole === "admin" && member.id !== userId}
                             onChange={(event) => {
                               setPermissionDrafts((prev) => ({
                                 ...prev,

@@ -151,6 +151,9 @@ export async function getPermissionMap(userId: number): Promise<PermissionMap> {
       map[row.featureKey as FeatureKey] = Boolean(row.enabled)
     }
   }
+  if (!rows.some((row) => row.featureKey === "customer_profile_entry")) {
+    map.customer_profile_entry = map.expert_advisor
+  }
   return map
 }
 

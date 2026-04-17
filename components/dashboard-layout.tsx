@@ -76,6 +76,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   const userEmail = user?.email || ""
   const hasAdvisorFeature = hasFeature("expert_advisor")
+  const hasLeadHunterFeature = hasFeature("customer_profile_entry")
   const hasWebsiteFeature = hasFeature("website_generation")
   const hasVideoFeature = hasFeature("video_generation")
   const hasCopywritingFeature = hasFeature("copywriting_generation")
@@ -90,8 +91,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   const showLeadHunterSection = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
-    return hasAdvisorFeature && (advisor.leadHunter || advisor.companySearch || advisor.contactMining)
-  }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature])
+    return (hasLeadHunterFeature && advisor.leadHunter) || (hasAdvisorFeature && (advisor.companySearch || advisor.contactMining))
+  }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature, hasLeadHunterFeature])
 
   const showWriterEntry = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
@@ -256,12 +257,12 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         <AdvisorSidebarItem title={messages.dashboardLayout.companySearch} advisorType="company-search" userEmail={userEmail} icon={Search} />
                       )
                     )}
-                    {hasAdvisorFeature && advisor.leadHunter && userEmail && (
+                    {hasLeadHunterFeature && advisor.leadHunter && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/lead-hunter/new">
                           <Button
                             variant="ghost"
-                            className={advisor.companySearch ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            className={hasAdvisorFeature && advisor.companySearch ? "mt-1 w-full justify-center" : "w-full justify-center"}
                             size="sm"
                             title={messages.dashboardLayout.leadHunter}
                           >
@@ -277,7 +278,11 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         <Link href="/dashboard/advisor/contact-mining/new">
                           <Button
                             variant="ghost"
-                            className={advisor.companySearch || advisor.leadHunter ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            className={
+                              (hasAdvisorFeature && advisor.companySearch) || (hasLeadHunterFeature && advisor.leadHunter)
+                                ? "mt-1 w-full justify-center"
+                                : "w-full justify-center"
+                            }
                             size="sm"
                             title={messages.dashboardLayout.contactMining}
                           >

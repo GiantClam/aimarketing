@@ -232,6 +232,9 @@ export async function getSessionUser(request: NextRequest) {
               permissions[row.featureKey as (typeof FEATURE_KEYS)[number]] = Boolean(row.enabled)
             }
           }
+          if (!permissionRows.some((row) => row.featureKey === "customer_profile_entry")) {
+            permissions.customer_profile_entry = permissions.expert_advisor
+          }
 
           return {
             id: demoUser.userId,
@@ -320,6 +323,9 @@ export async function getSessionUser(request: NextRequest) {
     if ((FEATURE_KEYS as readonly string[]).includes(row.featureKey)) {
       permissions[row.featureKey as (typeof FEATURE_KEYS)[number]] = Boolean(row.enabled)
     }
+  }
+  if (!permissionRows.some((row) => row.featureKey === "customer_profile_entry")) {
+    permissions.customer_profile_entry = permissions.expert_advisor
   }
 
   return {

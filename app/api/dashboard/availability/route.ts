@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
 
     const imageAssistantAvailability = getImageAssistantAvailability()
     const hasAdvisorAccess = hasFeatureAccess(currentUser, "expert_advisor")
+    const hasLeadHunterAccess = hasFeatureAccess(currentUser, "customer_profile_entry")
     const hasCopywritingAccess = hasFeatureAccess(currentUser, "copywriting_generation")
     const hasImageAssistantAccess = hasFeatureAccess(currentUser, "image_design_generation")
 
@@ -52,11 +53,11 @@ export async function GET(req: NextRequest) {
         : {
             brandStrategy: hasAdvisorAccess,
             growth: hasAdvisorAccess,
-            leadHunter: hasAdvisorAccess,
+            leadHunter: hasLeadHunterAccess,
             companySearch: hasAdvisorAccess,
             contactMining: hasAdvisorAccess,
             copywriting: hasCopywritingAccess,
-            hasAny: hasAdvisorAccess || hasCopywritingAccess,
+            hasAny: hasAdvisorAccess || hasLeadHunterAccess || hasCopywritingAccess,
           }
 
     if (advisorAvailabilityResult.status === "rejected") {
@@ -73,17 +74,13 @@ export async function GET(req: NextRequest) {
     const advisor = {
       brandStrategy: hasAdvisorAccess && advisorAvailability.brandStrategy,
       growth: hasAdvisorAccess && advisorAvailability.growth,
-      leadHunter: hasAdvisorAccess && advisorAvailability.leadHunter,
+      leadHunter: hasLeadHunterAccess && advisorAvailability.leadHunter,
       companySearch: hasAdvisorAccess && advisorAvailability.companySearch,
       contactMining: hasAdvisorAccess && advisorAvailability.contactMining,
       copywriting: hasCopywritingAccess && advisorAvailability.copywriting,
       hasAny:
-        (hasAdvisorAccess &&
-          (advisorAvailability.brandStrategy ||
-            advisorAvailability.growth ||
-            advisorAvailability.leadHunter ||
-            advisorAvailability.companySearch ||
-            advisorAvailability.contactMining)) ||
+        (hasAdvisorAccess && (advisorAvailability.brandStrategy || advisorAvailability.growth || advisorAvailability.companySearch || advisorAvailability.contactMining)) ||
+        (hasLeadHunterAccess && advisorAvailability.leadHunter) ||
         (hasCopywritingAccess && advisorAvailability.copywriting),
     }
 

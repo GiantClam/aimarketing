@@ -16,6 +16,7 @@ export function hasFeatureAccess(user: AuthUserPayload, feature?: FeatureKey) {
 
 export function getAdvisorFeature(advisorType: string | null | undefined): FeatureKey | null {
   if (advisorType === "copywriting") return "copywriting_generation"
+  if (advisorType === "lead-hunter") return "customer_profile_entry"
   if (advisorType === "brand-strategy" || advisorType === "growth" || isLeadHunterAdvisorType(advisorType)) return "expert_advisor"
   return null
 }

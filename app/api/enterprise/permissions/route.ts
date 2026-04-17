@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     const targetRows = await db
-      .select({ enterpriseId: users.enterpriseId, enterpriseRole: users.enterpriseRole })
+      .select({ enterpriseId: users.enterpriseId })
       .from(users)
       .where(eq(users.id, targetUserId))
       .limit(1)
@@ -51,11 +51,6 @@ export async function POST(request: NextRequest) {
         userId: currentUser.id,
       })
       return NextResponse.json({ error: "target user must belong to same enterprise" }, { status: 403 })
-    }
-
-    if (target.enterpriseRole === "admin" && currentUser.id !== targetUserId) {
-      logAuditEvent(request, "enterprise.permissions.other_admin_blocked", { userId: currentUser.id, targetUserId })
-      return NextResponse.json({ error: "cannot edit permissions of another admin" }, { status: 403 })
     }
 
     const finalPermissions = {

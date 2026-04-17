@@ -1,11 +1,12 @@
-import { and, desc, eq, lt, or } from "drizzle-orm"
+import { and, desc, eq, lt, or, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { leadHunterConversations, leadHunterEvidences, leadHunterMessages } from "@/lib/db/schema"
 import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
 import { normalizeLeadHunterAdvisorType, type LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 
-const DEFAULT_CONVERSATION_TITLE = "客户画像搜索"
+const DEFAULT_CONVERSATION_TITLE = "新建会话"
+const CONVERSATION_TITLE_MAX_CHARS = 60
 
 function parsePositiveInt(value: string | number | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value)
@@ -33,7 +34,7 @@ function toEpochSeconds(value: Date | string | number | null | undefined) {
 function buildConversationTitle(query: string) {
   const normalized = query.replace(/\s+/g, " ").trim()
   if (!normalized) return DEFAULT_CONVERSATION_TITLE
-  return normalized.slice(0, 80)
+  return normalized.slice(0, CONVERSATION_TITLE_MAX_CHARS)
 }
 
 function isGenericConversationTitle(title: string | null | undefined) {
@@ -45,12 +46,15 @@ function isGenericConversationTitle(title: string | null | undefined) {
     lowered === "new chat" ||
     lowered === "new conversation" ||
     lowered === "new session" ||
+    lowered === "new thread" ||
+    lowered === "new dialogue" ||
     lowered === "untitled" ||
     lowered === "untitled chat" ||
     lowered === "untitled conversation" ||
     lowered === "untitled session" ||
     lowered === "draft" ||
     lowered === DEFAULT_CONVERSATION_TITLE.toLowerCase() ||
+    lowered === "\u65b0\u5bf9\u8bdd" ||
     lowered === "\u65b0\u4f1a\u8bdd" ||
     lowered === "\u65b0\u5efa\u4f1a\u8bdd"
   ) {
@@ -266,6 +270,16 @@ export async function appendLeadHunterMessage(
     return null
   }
 
+  const existingMessageCountRows = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(leadHunterMessages)
+    .where(eq(leadHunterMessages.conversationId, conversation.id))
+    .limit(1)
+  const existingMessageCount = Number(existingMessageCountRows[0]?.count || 0)
+  const shouldRetitleFromFirstQuery = existingMessageCount === 0
+
   const [message] = await db
     .insert(leadHunterMessages)
     .values({
@@ -280,7 +294,10 @@ export async function appendLeadHunterMessage(
     .update(leadHunterConversations)
     .set({
       updatedAt: new Date(),
-      title: isGenericConversationTitle(conversation.title) ? buildConversationTitle(query) : conversation.title,
+      title:
+        shouldRetitleFromFirstQuery || isGenericConversationTitle(conversation.title)
+          ? buildConversationTitle(query)
+          : conversation.title,
     })
     .where(eq(leadHunterConversations.id, conversation.id))
 

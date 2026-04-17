@@ -34,7 +34,12 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
     const checkAvailability = async () => {
       if (loading || !user) return
 
-      const allowed = advisorType === "copywriting" ? hasFeature("copywriting_generation") : hasFeature("expert_advisor")
+      const allowed =
+        advisorType === "copywriting"
+          ? hasFeature("copywriting_generation")
+          : advisorType === "lead-hunter"
+            ? hasFeature("customer_profile_entry")
+            : hasFeature("expert_advisor")
       if (!allowed) {
         router.replace("/dashboard")
         return
