@@ -27,7 +27,7 @@ import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import {
   AI_ENTRY_CONSULTING_ENTRY_MODE,
-  AI_ENTRY_SONNET_46_MODEL_HINT,
+  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
   isConsultingAdvisorEntryMode,
 } from "@/lib/ai-entry/model-policy"
 
@@ -192,7 +192,7 @@ export function AiEntrySidebarItem({
         body: JSON.stringify({
           title: messages.sidebar.newChatFallback,
           ...(isConsultingEntry
-            ? { modelId: AI_ENTRY_SONNET_46_MODEL_HINT }
+            ? { modelId: AI_ENTRY_CONSULTING_SPEED_MODEL_HINT, modelMode: "speed" }
             : persistedModelId
               ? { modelId: persistedModelId }
               : {}),

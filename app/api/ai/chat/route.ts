@@ -22,11 +22,17 @@ import {
   isAiEntryAgentId,
 } from "@/lib/ai-entry/agent-catalog"
 import {
-  AI_ENTRY_SONNET_46_MODEL_HINT,
-  pickSonnet46ModelId,
+  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  pickConsultingModelId,
+  resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
+  type AiEntryConsultingModelMode,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
+import {
+  getAiEntryWebSearchSystemRule,
+  shouldQueryAiEntryEnterpriseKnowledge,
+} from "@/lib/ai-entry/chat-policy"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
@@ -69,6 +75,7 @@ type ChatRequestBody = {
   agentConfig?: {
     agentId?: string
     entryMode?: string
+    modelMode?: string
   }
   skillConfig?: {
     enabled?: boolean
@@ -208,9 +215,9 @@ function buildAiEntryKnowledgeQueryVariants(query: string, enterpriseName: strin
   const normalizedQuery = query.replace(/\s+/g, " ").trim()
   const variants = [normalizedQuery]
   if (enterpriseName) {
-    variants.push(`${enterpriseName} 企业介绍`)
-    variants.push(`${enterpriseName} 核心业务与产品`)
-    variants.push(`${enterpriseName} 目标客户与典型场景`)
+    variants.push(`${enterpriseName} \u4f01\u4e1a\u4ecb\u7ecd`)
+    variants.push(`${enterpriseName} \u6838\u5fc3\u4e1a\u52a1\u4e0e\u4ea7\u54c1`)
+    variants.push(`${enterpriseName} \u76ee\u6807\u5ba2\u6237\u4e0e\u5178\u578b\u573a\u666f`)
   }
 
   return [...new Set(variants.map((item) => item.trim()).filter(Boolean))].slice(0, 4)
@@ -221,7 +228,7 @@ function inferAiEntryPreferredKnowledgeScopes(query: string): EnterpriseKnowledg
   if (!normalizedQuery) return undefined
 
   const brandIntroPattern =
-    /品牌|品牌叙事|品牌优化|公司介绍|企业介绍|企业简介|价值主张|定位|about\s+us|company\s+intro|brand|positioning|value\s+proposition/i
+    /\u54c1\u724c|\u54c1\u724c\u53d9\u4e8b|\u54c1\u724c\u4f18\u5316|\u516c\u53f8\u4ecb\u7ecd|\u4f01\u4e1a\u4ecb\u7ecd|\u4f01\u4e1a\u7b80\u4ecb|\u4ef7\u503c\u4e3b\u5f20|\u5b9a\u4f4d|about\s+us|company\s+intro|brand|positioning|value\s+proposition/i
 
   if (brandIntroPattern.test(normalizedQuery)) {
     return ["brand", "general"]
@@ -263,7 +270,11 @@ function buildAiEntrySystemPrompt(
   agentInstruction: string,
   latestUserPrompt: string,
   forcedReplyLanguage: "zh" | "en" | null,
-  webSearchAvailable = false,
+  webSearch: {
+    available?: boolean
+    conversationScope?: AiEntryConversationScope
+    consultingModelMode?: AiEntryConsultingModelMode
+  } = {},
 ) {
   const normalizedPrompt = latestUserPrompt.trim()
   const inferredLanguage = /[\u4e00-\u9fff]/.test(normalizedPrompt)
@@ -280,7 +291,7 @@ function buildAiEntrySystemPrompt(
       : forcedReplyLanguage === "zh"
         ? [
             "Language lock: the user explicitly requested Chinese responses.",
-            "后续回复必须保持中文，不受用户输入语言影响，直到用户再次明确要求切换语言。",
+            "Reply in Chinese for subsequent turns regardless of user input language until the user explicitly asks to switch language.",
           ]
         : [
             "Language rule: default to the same language as the user's latest input.",
@@ -292,11 +303,14 @@ function buildAiEntrySystemPrompt(
     "Identity rule: never claim you are Kiro or a software-development-only assistant.",
     "Identity rule: when asked who you are, describe yourself as a general consulting advisor assistant.",
     ...languageDirectives,
-    "Provide concise but actionable answers with structured bullets when useful.",
+    "Prioritize a fast first useful response, then add structure, evidence, and caveats only where they improve the answer.",
+    "Provide practical, high-signal answers with concrete next steps; avoid generic filler.",
     "When tools are available, call them only if they materially improve correctness.",
-    webSearchAvailable
-      ? "Web search tool rule: a web_search tool is available. Decide from the user's intent whether fresh external evidence is needed; do not rely on fixed trigger words. If you call web_search, cite the result URLs that shaped the answer."
-      : "",
+    getAiEntryWebSearchSystemRule({
+      webSearchAvailable: Boolean(webSearch.available),
+      conversationScope: webSearch.conversationScope,
+      consultingModelMode: webSearch.consultingModelMode,
+    }),
     "Ground answers in the user's question and sound consulting practice; do not invent company-specific facts, figures, or policies unless they come from the user or from retrieved enterprise knowledge below.",
   ].filter(Boolean).join("\n")
   const sections = [base]
@@ -412,7 +426,10 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
 
 async function resolveModelConfig(
   input: ReturnType<typeof parseModelConfig>,
-  options?: { forceSonnet46?: boolean },
+  options?: {
+    forceConsultingModel?: boolean
+    consultingModelMode?: AiEntryConsultingModelMode
+  },
 ) {
   const catalog = await getAiEntryModelCatalog()
   const availableModelIds = catalog.models.map((item) => item.id)
@@ -445,9 +462,10 @@ async function resolveModelConfig(
   const requestedModelId = input?.modelId || null
   const requestedProviderId = input?.providerId || null
 
-  if (options?.forceSonnet46) {
+  if (options?.forceConsultingModel) {
     const lockedModelId =
-      pickSonnet46ModelId(catalog.models) || AI_ENTRY_SONNET_46_MODEL_HINT
+      pickConsultingModelId(catalog.models, options.consultingModelMode) ||
+      AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
     const resolvedProviderId = requestedProviderId || catalog.providerId || null
 
     if (requestedModelId && requestedModelId !== lockedModelId) {
@@ -504,14 +522,18 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
     rawAgentId && isAiEntryAgentId(rawAgentId)
       ? rawAgentId
       : null
-  const lockModelToSonnet46 = shouldLockConsultingAdvisorModel({
+  const lockModelToConsultingModel = shouldLockConsultingAdvisorModel({
     entryMode: input?.entryMode,
     agentId: resolvedAgentId,
+  })
+  const consultingModelMode = resolveConsultingModelMode({
+    requestedMode: input?.modelMode,
   })
 
   return {
     agentId: resolvedAgentId,
-    lockModelToSonnet46,
+    lockModelToConsultingModel,
+    consultingModelMode,
   }
 }
 
@@ -578,7 +600,8 @@ export async function POST(request: NextRequest) {
     const agentConfig = parseAgentConfig(body.agentConfig)
     const conversationScope: AiEntryConversationScope = parseConversationScope(body)
     const modelConfig = await resolveModelConfig(parseModelConfig(body.modelConfig), {
-      forceSonnet46: agentConfig.lockModelToSonnet46,
+      forceConsultingModel: agentConfig.lockModelToConsultingModel,
+      consultingModelMode: agentConfig.consultingModelMode,
     })
     if (attachments.some((attachment) => attachment.mediaType.startsWith("image/"))) {
       const resolvedModelId = modelConfig?.providerModelId || modelConfig?.modelId || null
@@ -633,11 +656,12 @@ export async function POST(request: NextRequest) {
       typeof enterpriseId === "number" &&
       enterpriseId > 0 &&
       latestUserPrompt.trim().length > 0
+    let shouldQueryEnterpriseKnowledgeForRequest = false
 
     const loadEnterpriseKnowledge = async (
       notifyProgress?: (progress: KnowledgeQueryProgress) => void,
     ) => {
-      if (!canQueryEnterpriseKnowledge) return null
+      if (!shouldQueryEnterpriseKnowledgeForRequest) return null
 
       notifyProgress?.({
         event: "knowledge_query_start",
@@ -684,7 +708,7 @@ export async function POST(request: NextRequest) {
     const consultingRuntime = await prepareAiEntryConsultingRuntime({
       latestUserPrompt,
       requestedAgentId: agentConfig.agentId,
-      lockModelToSonnet46: agentConfig.lockModelToSonnet46,
+      lockModelToConsultingModel: agentConfig.lockModelToConsultingModel,
       skillsEnabled,
       enabledToolNames,
     })
@@ -696,10 +720,21 @@ export async function POST(request: NextRequest) {
       closeTools: loadedCloseTools,
       toolLoadWarning,
     } = consultingRuntime
+    shouldQueryEnterpriseKnowledgeForRequest = shouldQueryAiEntryEnterpriseKnowledge({
+      canQueryEnterpriseKnowledge,
+      effectiveAgentId,
+    })
     if (loadedCloseTools) {
       closeTools = loadedCloseTools
     }
-    const webSearchTools = buildAiEntryWebSearchTools()
+    const webSearchPolicy =
+      conversationScope === "consulting" &&
+      agentConfig.consultingModelMode === "speed"
+        ? "consulting-speed"
+        : "standard"
+    const webSearchTools = buildAiEntryWebSearchTools({
+      policy: webSearchPolicy,
+    })
     const effectiveSelectedTools = {
       ...(selectedTools || {}),
       ...webSearchTools,
@@ -730,7 +765,7 @@ export async function POST(request: NextRequest) {
           preferredProviderId: modelConfig.providerId || undefined,
           preferredModel:
             modelConfig.providerModelId || modelConfig.modelId || undefined,
-          ...(agentConfig.lockModelToSonnet46
+          ...(agentConfig.lockModelToConsultingModel
             ? {
                 forceModelAcrossProviders: true,
                 disableSameProviderModelFallback: true,
@@ -746,7 +781,8 @@ export async function POST(request: NextRequest) {
       conversationId,
       stream,
       scope: conversationScope,
-      lockModel: agentConfig.lockModelToSonnet46,
+      lockModel: agentConfig.lockModelToConsultingModel,
+      consultingModelMode: agentConfig.consultingModelMode,
       selectedAgentId: effectiveAgentId,
       modelProviderId: modelConfig?.providerId || null,
       modelId: modelConfig?.modelId || null,
@@ -762,7 +798,11 @@ export async function POST(request: NextRequest) {
         resolvedInstruction,
         latestUserPrompt,
         forcedReplyLanguage,
-        Boolean(webSearchTools.web_search),
+        {
+          available: Boolean(webSearchTools.web_search),
+          conversationScope,
+          consultingModelMode: agentConfig.consultingModelMode,
+        },
       )
       const execution = await runAiEntryConsultingBlocking({
         systemPrompt,
@@ -871,7 +911,11 @@ export async function POST(request: NextRequest) {
             resolvedInstruction,
             latestUserPrompt,
             forcedReplyLanguage,
-            Boolean(webSearchTools.web_search),
+            {
+              available: Boolean(webSearchTools.web_search),
+              conversationScope,
+              consultingModelMode: agentConfig.consultingModelMode,
+            },
           )
 
           const execution = await runAiEntryConsultingStreaming({

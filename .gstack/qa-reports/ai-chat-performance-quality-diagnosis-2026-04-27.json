@@ -1,0 +1,199 @@
+{
+  "modelsApiStatus": 200,
+  "providerId": "aiberm",
+  "selectedModelId": "claude-haiku-4.5",
+  "modelSample": [
+    "claude-haiku-4.5",
+    "claude-haiku-4.5-thinking",
+    "claude-opus-4.5",
+    "claude-opus-4.5-thinking",
+    "claude-opus-4.6",
+    "claude-opus-4.6-thinking",
+    "claude-sonnet-4.5",
+    "claude-sonnet-4.5-thinking",
+    "claude-sonnet-4.6",
+    "claude-sonnet-4.6-thinking",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-xhigh"
+  ],
+  "probes": [
+    {
+      "name": "normal_default",
+      "result": {
+        "status": 200,
+        "elapsedSec": 10.35,
+        "firstEventSec": 1.282,
+        "firstTokenSec": 8.856,
+        "answerChars": 147,
+        "answerPreview": "我注意到您的消息中包含了很多问号。能否请您用清晰的语言重新表述您的问题？\n\n例如，您是想了解：\n- VBUY 在 B2B 领域的业务模式或竞争优势？\n- 如何利用 AI 工具来优化 B2B 运营或客户服务？\n- 其他具体的咨询需求？\n\n请告诉我您具体想要咨询的内容，我会为您提供有针对性的建议。",
+        "providerEvents": [
+          {
+            "event": "provider_selected",
+            "conversation_id": "142",
+            "provider": "aiberm",
+            "provider_model": "claude-haiku-4-5-20251001",
+            "provider_order": [
+              "aiberm",
+              "crazyroute",
+              "openrouter"
+            ],
+            "provider_attempt": 1,
+            "provider_upgrade_probe": false
+          }
+        ],
+        "toolEvents": [],
+        "knowledgeEvents": [
+          {
+            "event": "knowledge_query_start",
+            "conversation_id": "142",
+            "data": null
+          },
+          {
+            "event": "knowledge_query_result",
+            "conversation_id": "142",
+            "data": {
+              "status": "hit",
+              "snippetCount": 3,
+              "datasetCount": 1
+            }
+          }
+        ],
+        "eventSequence": [
+          "conversation_init",
+          "knowledge_query_start",
+          "knowledge_query_result",
+          "provider_selected",
+          "message",
+          "message_end"
+        ]
+      }
+    },
+    {
+      "name": "fresh_info_default",
+      "result": {
+        "status": 200,
+        "elapsedSec": 14.767,
+        "firstEventSec": 0.773,
+        "firstTokenSec": 6.924,
+        "answerChars": 143,
+        "answerPreview": "我注意到您的消息中包含了大量问号和特殊字符，这使得我无法理解您的具体需求。\n\n请您重新表述您的问题或需求，我会很乐意为您提供帮助。例如，您可以：\n\n- 清晰地描述您想要咨询的具体问题\n- 说明您需要的信息类型（如战略、运营、市场等）\n- 提供相关的背景信息或上下文\n\n期待您的明确反馈。",
+        "providerEvents": [
+          {
+            "event": "provider_selected",
+            "conversation_id": "143",
+            "provider": "aiberm",
+            "provider_model": "claude-haiku-4-5-20251001",
+            "provider_order": [
+              "aiberm",
+              "crazyroute",
+              "openrouter"
+            ],
+            "provider_attempt": 1,
+            "provider_upgrade_probe": false
+          }
+        ],
+        "toolEvents": [],
+        "knowledgeEvents": [
+          {
+            "event": "knowledge_query_start",
+            "conversation_id": "143",
+            "data": null
+          },
+          {
+            "event": "knowledge_query_result",
+            "conversation_id": "143",
+            "data": {
+              "status": "hit",
+              "snippetCount": 3,
+              "datasetCount": 1
+            }
+          }
+        ],
+        "eventSequence": [
+          "conversation_init",
+          "knowledge_query_start",
+          "knowledge_query_result",
+          "provider_selected",
+          "message",
+          "message_end"
+        ]
+      }
+    },
+    {
+      "name": "consulting_locked",
+      "result": {
+        "status": 200,
+        "elapsedSec": 57.168,
+        "firstEventSec": 3.328,
+        "firstTokenSec": 55.559,
+        "answerChars": 2034,
+        "answerPreview": "这是一个很好的增长方向。结合 VBUY 的业务特点（B2B定制、多场景产品矩阵、工贸一体、目标客群为 importer/distributor/brand buyer），以下是系统性判断和可操作建议。\n\n---\n\n## VBUY 使用 AI 工具做 B2B 获客：判断与打法\n\n### 一、先说结论\n\nAI 获客工具对 VBUY **有实质性价值**，但不是\"买个工具就能获客\"——工具只放大你的方向正确性。VBUY 要先想清楚\"找谁\"，再选工具。\n\n---\n\n### 二、VBUY 的获客逻辑应该是什么？\n\nVBUY 的核心价值是**定制协同 + 合规交付 + 系列化产品**，不是打低价。这决定了：\n\n- **目标客户**：有定制需求、注重合规认证、需要系列化采购的 importer / brand buyer，而非一次性价格比价型买家\n- **决策链**：通常是采购总监、产品开发负责人、品牌供应链负责人，不是普通采购员\n- **触达逻辑**：需要建立信任 + 展示能力，冷邮件群发效果弱，**精准触达 + 内容价值**更关键\n\n---\n\n### 三、推荐的 AI 获客工具组合（按优先级）\n\n#### 🥇 优先级 1：LinkedIn 精准触达\n\n**工具推荐：**\n- **LinkedIn Sales Navigator**：按行业、职位、公司规模筛选决策人，精准定位 brand buyer / sourcing manager\n- **Expandi / La Growth Machine / Waalaxy**：LinkedIn 自动化序列工具，支持 LinkedIn + 邮件混合触达，AI 辅助撰写个性化开场白\n\n**适合 VBUY 的原因：**\n- 目标客群（欧美品牌买家、进口商）高度集中在 LinkedIn\n- 可以按\"家居用品品牌 + 采购职能 + 公司规模\"精准",
+        "providerEvents": [
+          {
+            "event": "provider_selected",
+            "conversation_id": "144",
+            "provider": "aiberm",
+            "provider_model": "anthropic/claude-sonnet-4.6",
+            "provider_order": [
+              "aiberm",
+              "crazyroute",
+              "openrouter"
+            ],
+            "provider_attempt": 1,
+            "provider_upgrade_probe": false
+          }
+        ],
+        "toolEvents": [
+          {
+            "event": "tool_call",
+            "conversation_id": "144",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "toolu_01SRn1QwZGUdNXZsL3fWHkaA",
+              "args": {
+                "query": "B2B外贸企业AI获客工具 2024 LinkedIn自动化 海关数据 邮件营销",
+                "intent": "了解当前B2B外贸企业使用AI工具获客的主流方式和产品，为VBUY提供实际可操作建议",
+                "maxResults": 6
+              }
+            }
+          },
+          {
+            "event": "tool_result",
+            "conversation_id": "144",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "toolu_01SRn1QwZGUdNXZsL3fWHkaA",
+              "result": null
+            }
+          }
+        ],
+        "knowledgeEvents": [
+          {
+            "event": "knowledge_query_start",
+            "conversation_id": "144",
+            "data": null
+          },
+          {
+            "event": "knowledge_query_result",
+            "conversation_id": "144",
+            "data": {
+              "status": "hit",
+              "snippetCount": 3,
+              "datasetCount": 1
+            }
+          }
+        ],
+        "eventSequence": [
+          "conversation_init",
+          "knowledge_query_start",
+          "knowledge_query_result",
+          "provider_selected",
+          "tool_call",
+          "tool_result",
+          "message",
+          "message_end"
+        ]
+      }
+    }
+  ]
+}

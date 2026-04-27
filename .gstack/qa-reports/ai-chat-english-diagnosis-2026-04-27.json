@@ -1,0 +1,182 @@
+{
+  "providerId": "aiberm",
+  "selectedModelId": "claude-haiku-4.5",
+  "probes": [
+    {
+      "name": "english_normal_default",
+      "result": {
+        "status": 200,
+        "elapsedSec": 25.016,
+        "firstEventSec": 0.843,
+        "firstTokenSec": 23.747,
+        "answerChars": 4767,
+        "answerPreview": "Based on current B2B AI practices and your cross-border context, here's a concrete diagnostic framework:\n\n---\n\n## **RESPONSE SPEED DIAGNOSTIC**\n\n**Measurement Layer**\n- First-token latency: <2 seconds (target for B2B)\n- Full response time: <8 seconds for routine queries, <15 seconds for complex ones\n- Query routing time: <500ms (time to identify query type and route to correct knowledge source)\n\n**Speed Bottleneck Checklist**\n\n*Infrastructure & Model*\n- Is your LM inference running on dedicated GPU/TPU or shared resources? (Shared = 3-5x slower)\n- Are you using model quantization or distillation for faster inference?\n- Is knowledge retrieval (RAG) hitting a slow database? Measure retrieval latency separately from generation latency.\n- Are you batching requests or processing sequentially?\n\n*Knowledge Architecture*\n- How many documents/records does the assistant search through per query? (Larger corpus = slower retrieval)\n- Is your vector database indexed properly? (Poor indexing can ad ",
+        "providerEvents": [
+          {
+            "event": "provider_selected",
+            "conversation_id": "145",
+            "provider": "aiberm",
+            "provider_model": "claude-haiku-4-5-20251001",
+            "provider_order": [
+              "aiberm",
+              "crazyroute",
+              "openrouter"
+            ],
+            "provider_attempt": 1,
+            "provider_upgrade_probe": false
+          }
+        ],
+        "toolEvents": [
+          {
+            "event": "tool_call",
+            "conversation_id": "145",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "tooluse_5mtOYewb9zj0krQIipoyvp",
+              "args": {
+                "query": "B2B AI chatbot response time optimization metrics 2025 2026",
+                "intent": "Get current best practices and benchmarks for B2B AI assistant performance metrics to ground the framework in real-world standards.",
+                "maxResults": 5
+              }
+            }
+          },
+          {
+            "event": "tool_call",
+            "conversation_id": "145",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "tooluse_Vav9Po4f5qfw3Q35Ff09KI",
+              "args": {
+                "query": "cross-border B2B customer service AI quality metrics compliance",
+                "intent": "Understand quality dimensions specific to cross-border B2B contexts, including compliance and localization factors.",
+                "maxResults": 5
+              }
+            }
+          },
+          {
+            "event": "tool_result",
+            "conversation_id": "145",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "tooluse_5mtOYewb9zj0krQIipoyvp",
+              "result": null
+            }
+          },
+          {
+            "event": "tool_result",
+            "conversation_id": "145",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "tooluse_Vav9Po4f5qfw3Q35Ff09KI",
+              "result": null
+            }
+          }
+        ],
+        "knowledgeEvents": [
+          {
+            "event": "knowledge_query_start",
+            "conversation_id": "145",
+            "data": null
+          },
+          {
+            "event": "knowledge_query_result",
+            "conversation_id": "145",
+            "data": {
+              "status": "hit",
+              "snippetCount": 3,
+              "datasetCount": 1
+            }
+          }
+        ],
+        "eventSequence": [
+          "conversation_init",
+          "knowledge_query_start",
+          "knowledge_query_result",
+          "provider_selected",
+          "tool_call",
+          "tool_call",
+          "tool_result",
+          "tool_result",
+          "message",
+          "message_end"
+        ]
+      }
+    },
+    {
+      "name": "english_fresh_default",
+      "result": {
+        "status": 200,
+        "elapsedSec": 24.471,
+        "firstEventSec": 0.766,
+        "firstTokenSec": 23.32,
+        "answerChars": 1441,
+        "answerPreview": "Based on current information, here are 3 recent shifts in AI marketing automation:\n\n**1. Real-time Multi-channel Optimization**\nAI systems now monitor and adjust campaigns across all channels simultaneously—dynamically testing image performance, adjusting ad bids, and personalizing experiences in real time rather than batch processing. This moves beyond scheduled automation to continuous, adaptive decision-making.\n*Source: LinkedIn Pulse - \"How AI is Completely Changing Marketing Automation in 2026\"*\n\n**2. AI Copilots & Integrated Platform Stacks**\nMarketing teams are adopting AI copilots alongside deeper technical integration between CDPs, automation platforms, BI tools, CRM systems, and AI models. The challenge now is orchestrating these connections seamlessly rather than managing isolated tools.\n*Source: Keyrus - \"AI-Driven Marketing: What Needs to Change in 2026\"*\n\n**3. Privacy-First Personalization**\nBrands are shifting toward personalization strategies that respect privacy constr",
+        "providerEvents": [
+          {
+            "event": "provider_selected",
+            "conversation_id": "146",
+            "provider": "aiberm",
+            "provider_model": "claude-haiku-4-5-20251001",
+            "provider_order": [
+              "aiberm",
+              "crazyroute",
+              "openrouter"
+            ],
+            "provider_attempt": 1,
+            "provider_upgrade_probe": false
+          }
+        ],
+        "toolEvents": [
+          {
+            "event": "tool_call",
+            "conversation_id": "146",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "tooluse_q06aCX1kfyGSxdLOkVwcgd",
+              "args": {
+                "query": "recent changes AI marketing automation 2026",
+                "intent": "User needs current information on recent AI marketing automation developments to understand the latest industry shifts",
+                "maxResults": 5
+              }
+            }
+          },
+          {
+            "event": "tool_result",
+            "conversation_id": "146",
+            "data": {
+              "toolName": "web_search",
+              "toolCallId": "tooluse_q06aCX1kfyGSxdLOkVwcgd",
+              "result": null
+            }
+          }
+        ],
+        "knowledgeEvents": [
+          {
+            "event": "knowledge_query_start",
+            "conversation_id": "146",
+            "data": null
+          },
+          {
+            "event": "knowledge_query_result",
+            "conversation_id": "146",
+            "data": {
+              "status": "hit",
+              "snippetCount": 3,
+              "datasetCount": 1
+            }
+          }
+        ],
+        "eventSequence": [
+          "conversation_init",
+          "knowledge_query_start",
+          "knowledge_query_result",
+          "provider_selected",
+          "tool_call",
+          "tool_result",
+          "message",
+          "message_end"
+        ]
+      }
+    }
+  ]
+}

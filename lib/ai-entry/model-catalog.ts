@@ -10,6 +10,10 @@ import {
   pickPreferredDisplayModelId,
   splitProviderModelId,
 } from "@/lib/ai-entry/model-id-registry"
+import {
+  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  normalizeModelFingerprint,
+} from "@/lib/ai-entry/model-policy"
 
 const CACHE_TTL_MS = 30 * 60 * 1000
 const CATALOG_FILTER_CACHE_VERSION = "v4"
@@ -629,6 +633,60 @@ function filterHighTierDisplayModels(models: ParsedModel[]) {
   )
 }
 
+function pickPreferredNormalChatModelId(models: AiEntryModelOption[]) {
+  const explicitDefault = normalizeText(process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL)
+  const preferenceHints = [
+    explicitDefault,
+    normalizeText(process.env.AI_ENTRY_NORMAL_FAST_MODEL),
+    AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  ].filter(Boolean)
+
+  const scoreModel = (model: AiEntryModelOption, hint: string) => {
+    const candidateFingerprint = normalizeModelFingerprint(
+      [
+        model.id,
+        model.name,
+        model.runtimeId,
+        model.canonicalId,
+        ...(Array.isArray(model.aliases) ? model.aliases : []),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    )
+    const hintFingerprint = normalizeModelFingerprint(hint)
+    if (!hintFingerprint || !candidateFingerprint.includes(hintFingerprint)) return null
+
+    let score = 0
+    if (!candidateFingerprint.includes("thinking")) score += 100
+    if (!model.id.includes("/")) score += 10
+    if (!model.id.includes(".")) score += 5
+    score -= model.id.length / 100
+    return score
+  }
+
+  for (const hint of preferenceHints) {
+    const candidates = models
+      .map((model) => {
+        const score = scoreModel(model, hint)
+        return score === null ? null : { model, score }
+      })
+      .filter((item): item is { model: AiEntryModelOption; score: number } =>
+        Boolean(item),
+      )
+      .sort((a, b) => {
+        if (a.score !== b.score) return b.score - a.score
+        return a.model.id.localeCompare(b.model.id, "en", { sensitivity: "base" })
+      })
+    if (candidates[0]?.model.id) return candidates[0].model.id
+  }
+
+  const nonThinking = models.find((model) => {
+    const fingerprint = normalizeModelFingerprint(`${model.id} ${model.name}`)
+    return !fingerprint.includes("thinking")
+  })
+  return nonThinking?.id || models[0]?.id || null
+}
+
 function buildFallbackCatalog(
   provider: AiEntryProviderConfig | null,
   cached: boolean,
@@ -791,10 +849,7 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
       }
 
       const selectedModelId =
-        (configuredDefaultModel &&
-        grouped.flattened.some((item) => item.id === configuredDefaultModel)
-          ? configuredDefaultModel
-          : grouped.flattened[0]?.id) || null
+        pickPreferredNormalChatModelId(grouped.flattened) || null
 
       const value: AiEntryModelCatalog = {
         providerId: provider.id,

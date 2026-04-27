@@ -42,12 +42,14 @@ type StreamingExecution = {
 
 type FullStreamPart = {
   type?: string
+  text?: string
   textDelta?: string
   toolName?: string
   toolCallId?: string
   args?: unknown
   input?: unknown
   result?: unknown
+  output?: unknown
   error?: unknown
 }
 
@@ -72,6 +74,14 @@ function toAiEntryExecutionError(error: unknown, retryable: boolean) {
 
 function isAiEntryEmptyResponseError(error: unknown) {
   return extractErrorMessage(error) === AI_ENTRY_EMPTY_RESPONSE_ERROR
+}
+
+export function getAiEntryTextDeltaFromStreamPart(part: FullStreamPart) {
+  return part.textDelta || part.text || ""
+}
+
+export function getAiEntryToolResultFromStreamPart(part: FullStreamPart) {
+  return part.result ?? part.output ?? null
 }
 
 async function executeWithEmptyResponseAutoRetry<T>(params: {
@@ -253,7 +263,7 @@ export async function runAiEntryConsultingStreaming(params: {
               const eventType = streamPart.type || ""
 
               if (eventType === "text-delta") {
-                const delta = streamPart.textDelta || ""
+                const delta = getAiEntryTextDeltaFromStreamPart(streamPart)
                 if (delta) {
                   accumulated += delta
                   hasStreamOutput = true
@@ -275,7 +285,7 @@ export async function runAiEntryConsultingStreaming(params: {
                 params.onToolResult?.({
                   toolName: streamPart.toolName || "",
                   toolCallId: streamPart.toolCallId || "",
-                  result: streamPart.result ?? null,
+                  result: getAiEntryToolResultFromStreamPart(streamPart),
                 })
                 continue
               }

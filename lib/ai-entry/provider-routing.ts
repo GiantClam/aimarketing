@@ -90,7 +90,7 @@ function parsePositiveInt(raw: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
-function normalizeText(raw: string | undefined) {
+function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
 }
 
@@ -479,6 +479,7 @@ function findNextRuntimeIndex(params: {
 
 function getAiEntryDefaultModel() {
   return (
+    normalizeText(process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL) ||
     normalizeText(process.env.AI_ENTRY_MODEL) ||
     normalizeText(process.env.WRITER_TEXT_MODEL) ||
     DEFAULT_MODEL

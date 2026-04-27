@@ -35,10 +35,11 @@ import { TypingIndicator } from "@/components/ui/typing-indicator"
 import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
 import type { PendingTaskEvent } from "@/lib/assistant-task-events"
 import {
+  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
-  AI_ENTRY_SONNET_46_MODEL_HINT,
-  pickSonnet46ModelId,
+  pickConsultingModelId,
   shouldLockConsultingAdvisorModel,
+  type AiEntryConsultingModelMode,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { cn } from "@/lib/utils"
@@ -370,6 +371,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
     readPersistedSelectedModelId(),
   )
+  const [consultingModelMode, setConsultingModelMode] =
+    useState<AiEntryConsultingModelMode>("speed")
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
 
   const [agentLoading, setAgentLoading] = useState(true)
@@ -396,9 +399,11 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const workspaceSubtitle = shouldLockModel
     ? (isZh ? "企业咨询专家对话入口" : "Enterprise consulting advisor entry")
     : copy.subtitle
-  const lockedSonnetModelId = useMemo(
-    () => pickSonnet46ModelId(models) || AI_ENTRY_SONNET_46_MODEL_HINT,
-    [models],
+  const lockedConsultingModelId = useMemo(
+    () =>
+      pickConsultingModelId(models, consultingModelMode) ||
+      AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+    [consultingModelMode, models],
   )
   const showLanding =
     !isConversationLoading &&
@@ -570,12 +575,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         )
         const preferredFromCatalog =
           typeof payload?.selectedModelId === "string" ? payload.selectedModelId : null
-        const sonnet46Fallback = pickSonnet46ModelId(normalizedModels)
-        const lockedModelFallback = sonnet46Fallback || AI_ENTRY_SONNET_46_MODEL_HINT
+        const consultingModelFallback =
+          pickConsultingModelId(normalizedModels, consultingModelMode) ||
+          AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
 
         setSelectedModelId((current) => {
           if (shouldLockModel) {
-            return lockedModelFallback
+            return consultingModelFallback
           }
 
           const normalizedCurrent =
@@ -591,13 +597,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               normalizedModels,
             )
             if (resolvedPreferred) return resolvedPreferred
-          }
-
-          if (
-            sonnet46Fallback &&
-            normalizedModels.some((item) => item.id === sonnet46Fallback)
-          ) {
-            return sonnet46Fallback
           }
 
           return normalizedModels[0]?.id || null
@@ -618,7 +617,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return () => {
       cancelled = true
     }
-  }, [isZh, shouldLockModel])
+  }, [consultingModelMode, isZh, shouldLockModel])
 
   useEffect(() => {
     let cancelled = false
@@ -689,8 +688,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
   useEffect(() => {
     if (shouldLockModel) {
-      if (selectedModelId !== lockedSonnetModelId) {
-        setSelectedModelId(lockedSonnetModelId)
+      if (selectedModelId !== lockedConsultingModelId) {
+        setSelectedModelId(lockedConsultingModelId)
       }
       return
     }
@@ -703,7 +702,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     if (!selectedModelId || !models.some((item) => item.id === selectedModelId)) {
       setSelectedModelId(models[0]?.id || null)
     }
-  }, [lockedSonnetModelId, models, selectedModelId, shouldLockModel])
+  }, [lockedConsultingModelId, models, selectedModelId, shouldLockModel])
 
   useEffect(() => {
     setConversationId(initialConversationId)
@@ -713,8 +712,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       setMessages([])
       setIsConversationLoading(false)
       if (!shouldLockModel && models.length > 0) {
-        const sonnetDefault = pickSonnet46ModelId(models) || models[0]?.id || null
-        setSelectedModelId(sonnetDefault)
+        setSelectedModelId(models[0]?.id || null)
       }
       return
     }
@@ -909,7 +907,12 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             selectedAgentId || shouldLockModel
               ? {
                   ...(!shouldLockModel && selectedAgentId ? { agentId: selectedAgentId } : {}),
-                  ...(shouldLockModel ? { entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE } : {}),
+                  ...(shouldLockModel
+                    ? {
+                        entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
+                        modelMode: consultingModelMode,
+                      }
+                    : {}),
                 }
               : undefined,
         }),
@@ -1023,7 +1026,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             const isWebSearch = toolName === "web_search"
             upsertTaskEvent({
               type: `tool:${toolId}`,
-              label: isWebSearch ? (isZh ? "正在搜索网页" : "Searching the web") : `Tool: ${toolName}`,
+              label: isWebSearch ? (isZh ? "\u6b63\u5728\u641c\u7d22\u7f51\u9875" : "Searching the web") : `Tool: ${toolName}`,
               detail: isWebSearch ? event.data?.args?.query : undefined,
               status: "running",
               at: now,
@@ -1039,11 +1042,11 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               ? event.data.result.results.filter((source) => typeof source?.url === "string" && source.url.trim())
               : []
             const sourceDetail = sources.length
-              ? `${sources.length} ${isZh ? "个来源" : "sources"}: ${sources.slice(0, 2).map((source) => source.title || source.url).filter(Boolean).join(" / ")}`
+              ? `${sources.length} ${isZh ? "\u4e2a\u6765\u6e90" : "sources"}: ${sources.slice(0, 2).map((source) => source.title || source.url).filter(Boolean).join(" / ")}`
               : undefined
             upsertTaskEvent({
               type: `tool:${toolId}`,
-              label: isWebSearch ? (isZh ? "网页搜索完成" : "Web search completed") : `Tool: ${toolName}`,
+              label: isWebSearch ? (isZh ? "\u7f51\u9875\u641c\u7d22\u5b8c\u6210" : "Web search completed") : `Tool: ${toolName}`,
               detail: isWebSearch ? sourceDetail : undefined,
               status: "completed",
               at: now,
@@ -1188,6 +1191,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     }
   }, [
     attachments,
+    consultingModelMode,
     conversationId,
     copy,
     input,
@@ -1206,13 +1210,54 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (
     <div className="flex flex-wrap items-center gap-2 px-1">
       {shouldLockModel ? (
-        <div
-          className={`inline-flex max-w-[260px] items-center rounded-full border border-border bg-background px-3 text-xs text-foreground ${buttonHeight}`}
-          title={selectedModel?.name || lockedSonnetModelId}
-        >
-          <span className="truncate">
-            {copy.modelLabel}: {selectedModel?.name || lockedSonnetModelId}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={`inline-flex max-w-[260px] items-center rounded-full border border-border bg-background px-3 text-xs text-foreground ${buttonHeight}`}
+            title={selectedModel?.name || lockedConsultingModelId}
+          >
+            <span className="truncate">
+              {copy.modelLabel}: {selectedModel?.name || lockedConsultingModelId}
+            </span>
+          </div>
+          <div
+            className={`inline-flex items-center rounded-full border border-border bg-background p-1 ${buttonHeight}`}
+            aria-label={isZh ? "咨询模型模式" : "Consulting model mode"}
+          >
+            {(["speed", "quality"] as const).map((mode) => {
+              const active = consultingModelMode === mode
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  className={cn(
+                    "h-7 rounded-full px-3 text-xs transition",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                  title={
+                    mode === "speed"
+                      ? isZh
+                        ? "快速响应"
+                        : "Fast response"
+                      : isZh
+                        ? "深度质量"
+                        : "Higher quality"
+                  }
+                  onClick={() => setConsultingModelMode(mode)}
+                  disabled={isLoading}
+                >
+                  {mode === "speed"
+                    ? isZh
+                      ? "快速"
+                      : "Fast"
+                    : isZh
+                      ? "深度"
+                      : "Deep"}
+                </button>
+              )
+            })}
+          </div>
         </div>
       ) : (
       <Select

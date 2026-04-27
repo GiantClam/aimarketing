@@ -10,9 +10,11 @@ import {
 import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
 import {
   AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID,
-  AI_ENTRY_SONNET_46_MODEL_HINT,
-  pickSonnet46ModelId,
+  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  pickConsultingModelId,
+  resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
+  type AiEntryConsultingModelMode,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { loadExecutiveSkillForAgent } from "@/lib/ai-entry/executive-skill-loader"
@@ -27,7 +29,10 @@ async function resolveCreateConversationModelId(
   userId: number,
   requestedModelId: string | null,
   scope: AiEntryConversationScope,
-  options?: { forceSonnet46?: boolean },
+  options?: {
+    forceConsultingModel?: boolean
+    consultingModelMode?: AiEntryConsultingModelMode
+  },
 ) {
   const resolveRequestedFromCatalog = async () => {
     if (!requestedModelId) return null
@@ -43,26 +48,27 @@ async function resolveCreateConversationModelId(
     }
   }
 
-  if (options?.forceSonnet46) {
+  if (options?.forceConsultingModel) {
     try {
       const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
-      const sonnetModelId = pickSonnet46ModelId(catalog.models)
-      if (sonnetModelId) return sonnetModelId
+      const consultingModelId = pickConsultingModelId(
+        catalog.models,
+        options.consultingModelMode,
+      )
+      if (consultingModelId) return consultingModelId
     } catch (error) {
       console.warn("ai-entry.conversation.create.locked-model.resolve.failed", {
         message: error instanceof Error ? error.message : String(error),
       })
     }
 
-    return AI_ENTRY_SONNET_46_MODEL_HINT
+    return AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
   }
 
   if (requestedModelId) return await resolveRequestedFromCatalog()
 
   try {
     const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
-    const sonnetModelId = pickSonnet46ModelId(catalog.models)
-    if (sonnetModelId) return sonnetModelId
     if (catalog.selectedModelId) return catalog.selectedModelId
   } catch (error) {
     console.warn("ai-entry.conversation.create.default-model.resolve.failed", {
@@ -73,7 +79,7 @@ async function resolveCreateConversationModelId(
   const latestModelId = await getLatestAiEntryConversationModelId(userId, scope)
   if (latestModelId) return latestModelId
 
-  return AI_ENTRY_SONNET_46_MODEL_HINT
+  return AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
 }
 
 export async function GET(request: NextRequest) {
@@ -116,6 +122,7 @@ export async function POST(request: NextRequest) {
     modelId?: unknown
     entryMode?: unknown
     agentId?: unknown
+    modelMode?: unknown
   }
   const rawTitle = typeof body.title === "string" ? body.title : null
   const rawModelId =
@@ -133,13 +140,19 @@ export async function POST(request: NextRequest) {
   const conversationScope: AiEntryConversationScope = shouldLockModel
     ? "consulting"
     : "chat"
+  const consultingModelMode = resolveConsultingModelMode({
+    requestedMode: body.modelMode,
+  })
 
   try {
     const resolvedModelId = await resolveCreateConversationModelId(
       auth.user.id,
       rawModelId,
       conversationScope,
-      { forceSonnet46: shouldLockModel },
+      {
+        forceConsultingModel: shouldLockModel,
+        consultingModelMode,
+      },
     )
 
     if (shouldLockModel) {

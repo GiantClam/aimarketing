@@ -13,6 +13,8 @@ const PROVIDER_ENV_KEYS = [
   "AI_ENTRY_OPENROUTER_API_KEY",
   "AI_ENTRY_OPENROUTER_BASE_URL",
   "AI_ENTRY_OPENROUTER_MODEL",
+  "AI_ENTRY_NORMAL_DEFAULT_MODEL",
+  "AI_ENTRY_NORMAL_FAST_MODEL",
   "AI_ENTRY_MODEL_RECENT_DAYS",
   "AIBERM_API_KEY",
   "AIBERM_BASE_URL",
@@ -79,7 +81,7 @@ test("model catalog selects configured default model when /models omits it", asy
             { id: "aiberm/audio-model", name: "Audio Model" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog()
@@ -120,6 +122,71 @@ test("model catalog does not duplicate configured default model when already pre
         assert.equal(
           catalog.models.filter((item) => item.id === "openai/gpt-5.3").length,
           1,
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
+test("model catalog selects fast sonnet as normal chat default when no configured model is present", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
+            { id: "claude-sonnet-4.5-thinking", name: "Claude Sonnet 4.5 Thinking" },
+            { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+          ],
+        }),
+      })) as unknown as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog()
+        assert.equal(catalog.providerId, "aiberm")
+        assert.equal(catalog.selectedModelId, "claude-sonnet-4.5")
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
+test("model catalog product policy overrides stale provider haiku default", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "claude-haiku-4.5",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
+            { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+          ],
+        }),
+      })) as unknown as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog()
+        assert.equal(catalog.selectedModelId, "claude-sonnet-4.5")
+        assert.equal(
+          catalog.models.some((item) => item.id === "claude-haiku-4.5"),
+          true,
         )
       } finally {
         globalThis.fetch = originalFetch

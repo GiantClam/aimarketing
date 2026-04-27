@@ -14,7 +14,7 @@ import { routeExecutiveAgentByPrompt } from "@/lib/ai-entry/executive-agent-rout
 type AiEntryConsultingPreparationInput = {
   latestUserPrompt: string
   requestedAgentId: string | null
-  lockModelToSonnet46: boolean
+  lockModelToConsultingModel: boolean
   skillsEnabled: boolean
   enabledToolNames: string[]
 }
@@ -34,7 +34,7 @@ export async function prepareAiEntryConsultingRuntime(
 ): Promise<AiEntryConsultingPreparationResult> {
   let effectiveAgentId = input.requestedAgentId
   let routeDecision: ReturnType<typeof routeExecutiveAgentByPrompt> | null = null
-  if (!effectiveAgentId && input.lockModelToSonnet46) {
+  if (!effectiveAgentId && input.lockModelToConsultingModel) {
     routeDecision = routeExecutiveAgentByPrompt(input.latestUserPrompt)
     effectiveAgentId = routeDecision.agentId
   }
