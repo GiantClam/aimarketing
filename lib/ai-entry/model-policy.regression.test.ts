@@ -4,7 +4,7 @@ import test from "node:test"
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
-  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
   AI_ENTRY_SONNET_46_MODEL_HINT,
   isConsultingAdvisorEntryMode,
   pickConsultingModelId,
@@ -32,14 +32,14 @@ test("pickSonnet46ModelId returns null when sonnet-4.6 model does not exist", ()
   assert.equal(selected, null)
 })
 
-test("pickConsultingModelId defaults consulting advisor to fast sonnet 4.5", () => {
+test("pickConsultingModelId defaults consulting advisor to quality sonnet 4.6", () => {
   const selected = pickConsultingModelId([
-    { id: "claude-sonnet-4.5-thinking", name: "Claude Sonnet 4.5 Thinking" },
-    { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
-    { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+    { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+    { id: "claude-sonnet-4.6-thinking", name: "Claude Sonnet 4.6 Thinking" },
+    { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
   ])
 
-  assert.equal(selected, "anthropic/claude-sonnet-4.5")
+  assert.equal(selected, "claude-sonnet-4.6")
 })
 
 test("pickConsultingModelId quality mode targets sonnet 4.6", () => {
@@ -54,11 +54,11 @@ test("pickConsultingModelId quality mode targets sonnet 4.6", () => {
   assert.equal(selected, "claude-sonnet-4.6")
 })
 
-test("resolveConsultingModelMode is intent explicit and speed-first by default", () => {
+test("resolveConsultingModelMode always keeps consulting advisor on quality", () => {
   assert.equal(resolveConsultingModelMode({ requestedMode: "quality" }), "quality")
   assert.equal(resolveConsultingModelMode({ requestedMode: "deep" }), "quality")
-  assert.equal(resolveConsultingModelMode({ requestedMode: "fast" }), "speed")
-  assert.equal(resolveConsultingModelMode({ requestedMode: undefined }), "speed")
+  assert.equal(resolveConsultingModelMode({ requestedMode: "fast" }), "quality")
+  assert.equal(resolveConsultingModelMode({ requestedMode: undefined }), "quality")
 })
 
 test("consulting entry mode detection and lock flag", () => {
@@ -80,7 +80,7 @@ test("consulting entry mode detection and lock flag", () => {
     }),
     false,
   )
-  assert.equal(AI_ENTRY_CONSULTING_SPEED_MODEL_HINT, "claude-sonnet-4.5")
+  assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.5")
   assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT)
 })

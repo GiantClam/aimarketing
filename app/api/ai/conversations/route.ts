@@ -10,7 +10,7 @@ import {
 import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
 import {
   AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID,
-  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   pickConsultingModelId,
   resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
@@ -51,10 +51,7 @@ async function resolveCreateConversationModelId(
   if (options?.forceConsultingModel) {
     try {
       const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
-      const consultingModelId = pickConsultingModelId(
-        catalog.models,
-        options.consultingModelMode,
-      )
+      const consultingModelId = pickConsultingModelId(catalog.models)
       if (consultingModelId) return consultingModelId
     } catch (error) {
       console.warn("ai-entry.conversation.create.locked-model.resolve.failed", {
@@ -62,7 +59,7 @@ async function resolveCreateConversationModelId(
       })
     }
 
-    return AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
+    return AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
   }
 
   if (requestedModelId) return await resolveRequestedFromCatalog()
@@ -79,7 +76,7 @@ async function resolveCreateConversationModelId(
   const latestModelId = await getLatestAiEntryConversationModelId(userId, scope)
   if (latestModelId) return latestModelId
 
-  return AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
+  return AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
 }
 
 export async function GET(request: NextRequest) {
@@ -122,7 +119,6 @@ export async function POST(request: NextRequest) {
     modelId?: unknown
     entryMode?: unknown
     agentId?: unknown
-    modelMode?: unknown
   }
   const rawTitle = typeof body.title === "string" ? body.title : null
   const rawModelId =
@@ -140,9 +136,7 @@ export async function POST(request: NextRequest) {
   const conversationScope: AiEntryConversationScope = shouldLockModel
     ? "consulting"
     : "chat"
-  const consultingModelMode = resolveConsultingModelMode({
-    requestedMode: body.modelMode,
-  })
+  const consultingModelMode = resolveConsultingModelMode()
 
   try {
     const resolvedModelId = await resolveCreateConversationModelId(

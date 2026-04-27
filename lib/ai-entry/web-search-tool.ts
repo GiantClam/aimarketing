@@ -10,8 +10,6 @@ import {
 
 const WEB_SEARCH_MAX_RESULTS = 6
 
-export type AiEntryWebSearchToolPolicy = "standard" | "consulting-speed"
-
 function dedupeHits(hits: WebSearchHit[]) {
   const seen = new Set<string>()
   const output: WebSearchHit[] = []
@@ -24,27 +22,16 @@ function dedupeHits(hits: WebSearchHit[]) {
   return output
 }
 
-function getWebSearchToolDescription(policy: AiEntryWebSearchToolPolicy) {
-  if (policy === "consulting-speed") {
-    return [
-      "Search the public web only when the user's intent truly requires fresh, current, external, or verifiable public information.",
-      "In consulting speed mode, do not search for evergreen diagnosis, strategy, funnel, messaging, operations, or general best-practice questions.",
-      "Return concise sources and cite URLs in the final answer.",
-    ].join(" ")
-  }
-
+function getWebSearchToolDescription() {
   return "Search the public web when the user's intent requires fresh, external, or verifiable information. Use this based on intent, not fixed keywords. Return concise sources and cite URLs in the final answer."
 }
 
-export function buildAiEntryWebSearchTools(
-  options?: { policy?: AiEntryWebSearchToolPolicy },
-): ToolSet {
+export function buildAiEntryWebSearchTools(): ToolSet {
   if (!hasAnyWebSearchProviderConfig()) return {} as ToolSet
-  const policy = options?.policy || "standard"
 
   return {
     web_search: tool({
-      description: getWebSearchToolDescription(policy),
+      description: getWebSearchToolDescription(),
       inputSchema: z.object({
         query: z.string().min(2).describe("A focused web search query generated from the user's intent."),
         intent: z.string().optional().describe("Why fresh external evidence is needed for this request."),

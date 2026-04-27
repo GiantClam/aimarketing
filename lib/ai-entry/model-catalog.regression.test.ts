@@ -1,4 +1,4 @@
-import assert from "node:assert/strict"
+﻿import assert from "node:assert/strict"
 import test from "node:test"
 
 import { getAiEntryModelCatalog } from "./model-catalog"
@@ -114,7 +114,7 @@ test("model catalog does not duplicate configured default model when already pre
             { id: "openai/gpt-5.4", name: "GPT 5.4" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog()
@@ -216,7 +216,7 @@ test("model catalog keeps high-tier model families and prioritized order", async
             { id: "openai/text-embedding-3-large", name: "Embedding 3 Large" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -261,7 +261,7 @@ test("model catalog recent-year filter excludes old models when created is prese
             { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: 365 })
@@ -298,7 +298,7 @@ test("model catalog strict recent filter excludes models without created timesta
             { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: 365, recentStrict: true })
@@ -332,7 +332,7 @@ test("model catalog falls back to unfiltered high-tier chat models when recent f
             { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", created: oldSeconds },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: 365, recentStrict: false })
@@ -369,7 +369,7 @@ test("model catalog filters out non-target provider families under high-tier pol
             { id: "openai/gpt-5.3", name: "GPT 5.3" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -409,7 +409,7 @@ test("model catalog infers target families from bare ids and keeps only high-tie
             { id: "kimi-k2", owned_by: "custom" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -450,7 +450,7 @@ test("model catalog keeps canonical bare id when provider and separator variants
             { id: "openai/gpt-5.4-nano", owned_by: "custom" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -496,7 +496,7 @@ test("model catalog keeps gpt codex thinking variant as a distinct model", async
             { id: "openai/gpt-5.3-codex-thinking", owned_by: "custom" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -543,7 +543,7 @@ test("model catalog keeps gpt codex and valid claude 4.5/4.6 tier models", async
             { id: "claude-4-6", owned_by: "custom" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -587,7 +587,7 @@ test("model catalog dedupes provider and separator variants generically across h
             { id: "claude-opus-4-5", owned_by: "custom" },
           ],
         }),
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
       try {
         const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
@@ -749,3 +749,4 @@ test("model catalog falls back to openrouter when aiberm and crazyroute are unav
     },
   )
 })
+

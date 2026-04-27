@@ -11,7 +11,7 @@ import {
   splitProviderModelId,
 } from "@/lib/ai-entry/model-id-registry"
 import {
-  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
   normalizeModelFingerprint,
 } from "@/lib/ai-entry/model-policy"
 
@@ -638,7 +638,7 @@ function pickPreferredNormalChatModelId(models: AiEntryModelOption[]) {
   const preferenceHints = [
     explicitDefault,
     normalizeText(process.env.AI_ENTRY_NORMAL_FAST_MODEL),
-    AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+    AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
   ].filter(Boolean)
 
   const scoreModel = (model: AiEntryModelOption, hint: string) => {

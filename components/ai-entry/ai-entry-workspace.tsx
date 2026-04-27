@@ -35,11 +35,10 @@ import { TypingIndicator } from "@/components/ui/typing-indicator"
 import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
 import type { PendingTaskEvent } from "@/lib/assistant-task-events"
 import {
-  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
   pickConsultingModelId,
   shouldLockConsultingAdvisorModel,
-  type AiEntryConsultingModelMode,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { cn } from "@/lib/utils"
@@ -371,8 +370,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
     readPersistedSelectedModelId(),
   )
-  const [consultingModelMode, setConsultingModelMode] =
-    useState<AiEntryConsultingModelMode>("speed")
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
 
   const [agentLoading, setAgentLoading] = useState(true)
@@ -401,9 +398,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     : copy.subtitle
   const lockedConsultingModelId = useMemo(
     () =>
-      pickConsultingModelId(models, consultingModelMode) ||
-      AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
-    [consultingModelMode, models],
+      pickConsultingModelId(models) ||
+      AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
+    [models],
   )
   const showLanding =
     !isConversationLoading &&
@@ -576,8 +573,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         const preferredFromCatalog =
           typeof payload?.selectedModelId === "string" ? payload.selectedModelId : null
         const consultingModelFallback =
-          pickConsultingModelId(normalizedModels, consultingModelMode) ||
-          AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
+          pickConsultingModelId(normalizedModels) ||
+          AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
 
         setSelectedModelId((current) => {
           if (shouldLockModel) {
@@ -617,7 +614,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return () => {
       cancelled = true
     }
-  }, [consultingModelMode, isZh, shouldLockModel])
+  }, [isZh, shouldLockModel])
 
   useEffect(() => {
     let cancelled = false
@@ -910,7 +907,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                   ...(shouldLockModel
                     ? {
                         entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
-                        modelMode: consultingModelMode,
                       }
                     : {}),
                 }
@@ -1191,7 +1187,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     }
   }, [
     attachments,
-    consultingModelMode,
     conversationId,
     copy,
     input,
@@ -1210,54 +1205,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (
     <div className="flex flex-wrap items-center gap-2 px-1">
       {shouldLockModel ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            className={`inline-flex max-w-[260px] items-center rounded-full border border-border bg-background px-3 text-xs text-foreground ${buttonHeight}`}
-            title={selectedModel?.name || lockedConsultingModelId}
-          >
-            <span className="truncate">
-              {copy.modelLabel}: {selectedModel?.name || lockedConsultingModelId}
-            </span>
-          </div>
-          <div
-            className={`inline-flex items-center rounded-full border border-border bg-background p-1 ${buttonHeight}`}
-            aria-label={isZh ? "咨询模型模式" : "Consulting model mode"}
-          >
-            {(["speed", "quality"] as const).map((mode) => {
-              const active = consultingModelMode === mode
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  className={cn(
-                    "h-7 rounded-full px-3 text-xs transition",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                  title={
-                    mode === "speed"
-                      ? isZh
-                        ? "快速响应"
-                        : "Fast response"
-                      : isZh
-                        ? "深度质量"
-                        : "Higher quality"
-                  }
-                  onClick={() => setConsultingModelMode(mode)}
-                  disabled={isLoading}
-                >
-                  {mode === "speed"
-                    ? isZh
-                      ? "快速"
-                      : "Fast"
-                    : isZh
-                      ? "深度"
-                      : "Deep"}
-                </button>
-              )
-            })}
-          </div>
+        <div
+          className={`inline-flex max-w-[260px] items-center rounded-full border border-border bg-background px-3 text-xs text-foreground ${buttonHeight}`}
+          title={selectedModel?.name || lockedConsultingModelId}
+        >
+          <span className="truncate">
+            {copy.modelLabel}: {selectedModel?.name || lockedConsultingModelId}
+          </span>
         </div>
       ) : (
       <Select

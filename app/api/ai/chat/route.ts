@@ -22,7 +22,7 @@ import {
   isAiEntryAgentId,
 } from "@/lib/ai-entry/agent-catalog"
 import {
-  AI_ENTRY_CONSULTING_SPEED_MODEL_HINT,
+  AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   pickConsultingModelId,
   resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
@@ -75,7 +75,6 @@ type ChatRequestBody = {
   agentConfig?: {
     agentId?: string
     entryMode?: string
-    modelMode?: string
   }
   skillConfig?: {
     enabled?: boolean
@@ -464,8 +463,8 @@ async function resolveModelConfig(
 
   if (options?.forceConsultingModel) {
     const lockedModelId =
-      pickConsultingModelId(catalog.models, options.consultingModelMode) ||
-      AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
+      pickConsultingModelId(catalog.models) ||
+      AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
     const resolvedProviderId = requestedProviderId || catalog.providerId || null
 
     if (requestedModelId && requestedModelId !== lockedModelId) {
@@ -526,9 +525,7 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
     entryMode: input?.entryMode,
     agentId: resolvedAgentId,
   })
-  const consultingModelMode = resolveConsultingModelMode({
-    requestedMode: input?.modelMode,
-  })
+  const consultingModelMode = resolveConsultingModelMode()
 
   return {
     agentId: resolvedAgentId,
@@ -727,14 +724,7 @@ export async function POST(request: NextRequest) {
     if (loadedCloseTools) {
       closeTools = loadedCloseTools
     }
-    const webSearchPolicy =
-      conversationScope === "consulting" &&
-      agentConfig.consultingModelMode === "speed"
-        ? "consulting-speed"
-        : "standard"
-    const webSearchTools = buildAiEntryWebSearchTools({
-      policy: webSearchPolicy,
-    })
+    const webSearchTools = buildAiEntryWebSearchTools()
     const effectiveSelectedTools = {
       ...(selectedTools || {}),
       ...webSearchTools,

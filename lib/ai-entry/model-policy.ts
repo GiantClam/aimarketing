@@ -1,10 +1,10 @@
 export const AI_ENTRY_CONSULTING_ENTRY_MODE = "consulting-advisor"
-export const AI_ENTRY_CONSULTING_SPEED_MODEL_HINT = "claude-sonnet-4.5"
+export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.5"
 export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"
 
-export type AiEntryConsultingModelMode = "speed" | "quality"
+export type AiEntryConsultingModelMode = "quality"
 
 type ModelCandidate = {
   id?: string | null
@@ -89,33 +89,22 @@ function pickModelByHint(models: ModelCandidate[], modelHint: string) {
 export function resolveConsultingModelMode(input?: {
   requestedMode?: unknown
 }): AiEntryConsultingModelMode {
-  const requestedMode = normalizeText(input?.requestedMode).toLowerCase()
-  if (requestedMode === "quality" || requestedMode === "deep") return "quality"
-  if (requestedMode === "speed" || requestedMode === "fast") return "speed"
-
-  const envMode = normalizeText(process.env.AI_ENTRY_CONSULTING_MODEL_MODE).toLowerCase()
-  if (envMode === "quality" || envMode === "deep") return "quality"
-  return "speed"
+  void input
+  return "quality"
 }
 
-export function getConsultingModelHint(mode: AiEntryConsultingModelMode) {
-  if (mode === "quality") {
-    return (
-      normalizeText(process.env.AI_ENTRY_CONSULTING_QUALITY_MODEL) ||
-      normalizeText(process.env.AI_ENTRY_CONSULTING_MODEL) ||
-      AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
-    )
-  }
+export function getConsultingModelHint(mode: AiEntryConsultingModelMode = "quality") {
+  void mode
   return (
-    normalizeText(process.env.AI_ENTRY_CONSULTING_SPEED_MODEL) ||
+    normalizeText(process.env.AI_ENTRY_CONSULTING_QUALITY_MODEL) ||
     normalizeText(process.env.AI_ENTRY_CONSULTING_MODEL) ||
-    AI_ENTRY_CONSULTING_SPEED_MODEL_HINT
+    AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
   )
 }
 
 export function pickConsultingModelId(
   models: ModelCandidate[],
-  mode: AiEntryConsultingModelMode = "speed",
+  mode: AiEntryConsultingModelMode = "quality",
 ) {
   return pickModelByHint(models, getConsultingModelHint(mode))
 }

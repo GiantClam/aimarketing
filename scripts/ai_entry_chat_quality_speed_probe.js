@@ -120,18 +120,6 @@ async function main() {
       },
     },
     {
-      name: "consulting_speed",
-      body: {
-        stream: true,
-        conversationScope: "consulting",
-        message: "Quickly diagnose why a B2B website receives few inbound leads.",
-        agentConfig: {
-          entryMode: "consulting-advisor",
-          modelMode: "speed",
-        },
-      },
-    },
-    {
       name: "consulting_quality",
       body: {
         stream: true,
@@ -139,7 +127,6 @@ async function main() {
         message: "Deeply analyze why a B2B website receives few inbound leads and rank the priorities.",
         agentConfig: {
           entryMode: "consulting-advisor",
-          modelMode: "quality",
         },
       },
     },

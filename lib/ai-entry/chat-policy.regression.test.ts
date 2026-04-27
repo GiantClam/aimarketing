@@ -36,23 +36,22 @@ test("enterprise knowledge remains disabled when enterprise state is unavailable
   )
 })
 
-test("consulting speed mode keeps web search intent-gated for fresh external facts only", () => {
+test("consulting uses the standard intent-based web search guidance", () => {
   const rule = getAiEntryWebSearchSystemRule({
     webSearchAvailable: true,
     conversationScope: "consulting",
-    consultingModelMode: "speed",
+    consultingModelMode: "quality",
   })
 
-  assert.match(rule, /consulting speed mode/)
-  assert.match(rule, /Do not call web_search for evergreen diagnosis/)
-  assert.match(rule, /fresh\/current external facts/)
+  assert.match(rule, /Decide from the user's intent/)
+  assert.doesNotMatch(rule, /consulting speed mode/)
 })
 
 test("normal chat keeps standard intent-based web search guidance", () => {
   const rule = getAiEntryWebSearchSystemRule({
     webSearchAvailable: true,
     conversationScope: "chat",
-    consultingModelMode: "speed",
+    consultingModelMode: "quality",
   })
 
   assert.match(rule, /Decide from the user's intent/)
