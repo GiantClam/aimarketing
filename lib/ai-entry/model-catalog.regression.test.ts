@@ -428,6 +428,100 @@ test("model catalog infers target families from bare ids and keeps only high-tie
   )
 })
 
+test("model catalog keeps verified gpt 5.4/5.5 and claude opus 4.7 ids", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "gpt-5.4",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { id: "gpt-5.4", owned_by: "custom" },
+            { id: "gpt-5.4-mini", owned_by: "custom" },
+            { id: "gpt-5.5", owned_by: "custom" },
+            { id: "claude-opus-4-7", owned_by: "custom" },
+            { id: "claude-opus-4-4", owned_by: "custom" },
+          ],
+        }),
+      })) as unknown as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog({
+          onlyRecentDays: null,
+          providerId: "aiberm",
+        })
+        assert.equal(catalog.models.some((item) => item.id === "gpt-5.4"), true)
+        assert.equal(catalog.models.some((item) => item.id === "gpt-5.4-mini"), true)
+        assert.equal(catalog.models.some((item) => item.id === "gpt-5.5"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4.7"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4-4"), false)
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
+test("model catalog can load crazyroute and inject verified mini model", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "gpt-5.4",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "gpt-5.5",
+    },
+    async () => {
+      const calls: string[] = []
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async (input) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+        calls.push(url)
+        if (url.startsWith("https://crazy.example/v1/models")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [
+                { id: "gpt-5.4", owned_by: "custom" },
+                { id: "gpt-5.5", owned_by: "custom" },
+                { id: "claude-opus-4-7", owned_by: "custom" },
+              ],
+            }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ id: "gpt-5.4", owned_by: "custom" }] }),
+        } as Response
+      }) as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog({
+          onlyRecentDays: null,
+          providerId: "crazyroute",
+        })
+        assert.equal(catalog.providerId, "crazyroute")
+        assert.equal(catalog.models.some((item) => item.id === "gpt-5.4"), true)
+        assert.equal(catalog.models.some((item) => item.id === "gpt-5.4-mini"), true)
+        assert.equal(catalog.models.some((item) => item.id === "gpt-5.5"), true)
+        assert.equal(catalog.models.some((item) => item.id === "claude-opus-4.7"), true)
+        assert.deepEqual(calls, ["https://crazy.example/v1/models"])
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
 test("model catalog keeps canonical bare id when provider and separator variants coexist", async () => {
   await withProviderEnv(
     {

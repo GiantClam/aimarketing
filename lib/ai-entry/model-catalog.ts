@@ -16,7 +16,7 @@ import {
 } from "@/lib/ai-entry/model-policy"
 
 const CACHE_TTL_MS = 30 * 60 * 1000
-const CATALOG_FILTER_CACHE_VERSION = "v4"
+const CATALOG_FILTER_CACHE_VERSION = "v5"
 const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "gemini"] as const
 const ALLOWED_PROVIDER_FAMILIES = [
   "anthropic",
@@ -124,6 +124,7 @@ export type AiEntryModelCatalog = {
 type AiEntryModelCatalogOptions = {
   onlyRecentDays?: number | null
   recentStrict?: boolean
+  providerId?: AiEntryProviderId | null
 }
 
 type ModelApiItem = {
@@ -158,6 +159,21 @@ type ParsedModel = {
 
 type RecentFilterResult = {
   models: ParsedModel[]
+}
+
+const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> = {
+  aiberm: [
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "claude-opus-4-7",
+  ],
+  crazyroute: [
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "claude-opus-4-7",
+  ],
 }
 
 function normalizeText(raw: unknown) {
@@ -453,6 +469,27 @@ function getRecentStrict(options?: AiEntryModelCatalogOptions) {
   return false
 }
 
+function addVerifiedProviderModels(
+  provider: AiEntryProviderConfig,
+  models: ParsedModel[],
+) {
+  const verifiedIds = VERIFIED_PROVIDER_MODEL_IDS[provider.id] || []
+  if (verifiedIds.length === 0) return models
+
+  const existingIds = new Set(models.map((model) => model.id))
+  const additions = verifiedIds
+    .filter((id) => !existingIds.has(id))
+    .map((id) => ({
+      id,
+      name: id,
+      family: inferProviderFamily({ id, name: id }, id),
+      createdAtMs: null,
+      isLikelyChat: true,
+    }))
+
+  return additions.length > 0 ? [...models, ...additions] : models
+}
+
 function applyRecentFilter(
   models: ParsedModel[],
   recentDays: number | null,
@@ -599,7 +636,7 @@ function isClaudeTierVariant(text: string) {
 }
 
 function isSupportedClaudeVersion(version: { major: number; minor: number }) {
-  return version.major === 4 && (version.minor === 5 || version.minor === 6)
+  return version.major === 4 && version.minor >= 5
 }
 
 function isHighTierDisplayModel(input: { id: string; name: string }) {
@@ -765,7 +802,10 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
   const now = Date.now()
   const recentDays = getRecentDays(options)
   const recentStrict = getRecentStrict(options)
-  const providers = getConfiguredAiEntryProviders()
+  const requestedProviderId = options?.providerId || null
+  const providers = getConfiguredAiEntryProviders().filter((provider) =>
+    requestedProviderId ? provider.id === requestedProviderId : true,
+  )
 
   const cacheStore = globalScope.__aiEntryModelCatalogCacheV2__ || {}
   globalScope.__aiEntryModelCatalogCacheV2__ = cacheStore
@@ -793,7 +833,9 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
       const fetchedModels = await fetchProviderModels(provider)
       const configuredDefaultModel = provider.model.trim()
 
-      const modelsWithDefault = [...fetchedModels]
+      const modelsWithDefault = requestedProviderId
+        ? addVerifiedProviderModels(provider, [...fetchedModels])
+        : [...fetchedModels]
       const hasConfiguredDefaultInList =
         configuredDefaultModel.length > 0 &&
         modelsWithDefault.some((item) => item.id === configuredDefaultModel)

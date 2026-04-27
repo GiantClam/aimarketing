@@ -59,6 +59,7 @@ type ModelOption = {
   canonicalId?: string
   aliases?: string[]
 }
+type ModelProviderOption = { id: string; label: string }
 type ModelGroupOption = { family: string; label: string; models: ModelOption[] }
 type AgentOption = { id: string; category: string; name: string; description: string }
 type AgentGroupOption = { id: string; label: string; agents: AgentOption[] }
@@ -102,6 +103,7 @@ type ChatStreamApiResponse = {
 }
 type ModelApiResponse = {
   providerId?: string | null
+  providers?: Array<{ id?: string; label?: string }>
   selectedModelId?: string | null
   modelGroups?: Array<{
     family?: string
@@ -175,13 +177,6 @@ function resolveDisplayModelId(
 
   const mapped = candidates.find((item) => item.value === matched)
   return mapped?.optionId || null
-}
-
-function isProviderQualifiedModelId(rawModelId: string | null | undefined) {
-  const normalized = typeof rawModelId === "string" ? rawModelId.trim() : ""
-  if (!normalized) return false
-  const slashIndex = normalized.indexOf("/")
-  return slashIndex > 0 && slashIndex < normalized.length - 1
 }
 
 function dedupeStringList(values: Array<string | null | undefined>) {
@@ -318,6 +313,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             loading: "Generating...",
             restoring: "Restoring conversation...",
             quickStart: "Quick tips",
+            providerLabel: "Provider",
             modelLabel: "Model",
             modelLoading: "Loading models...",
             modelEmpty: "No models",
@@ -365,6 +361,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
   const [modelsLoading, setModelsLoading] = useState(true)
   const [modelProviderId, setModelProviderId] = useState<string | null>(null)
+  const [modelProviders, setModelProviders] = useState<ModelProviderOption[]>([])
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelGroups, setModelGroups] = useState<ModelGroupOption[]>([])
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
@@ -500,7 +497,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     const loadModels = async () => {
       setModelsLoading(true)
       try {
-        const response = await fetch("/api/ai/models", { cache: "no-store", credentials: "same-origin" })
+        const query = modelProviderId
+          ? `?providerId=${encodeURIComponent(modelProviderId)}`
+          : ""
+        const response = await fetch(`/api/ai/models${query}`, { cache: "no-store", credentials: "same-origin" })
         const payload = (await response.json().catch(() => null)) as ModelApiResponse | null
         if (cancelled) return
         if (!response.ok) throw new Error(`http_${response.status}`)
@@ -530,13 +530,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             runtimeId,
             canonicalId,
           ])
-          const providerQualifiedId =
-            normalizedAliases.find((value) => isProviderQualifiedModelId(value)) || null
-          if (!providerQualifiedId) return null
-
           return {
-            id: providerQualifiedId,
-            name: providerQualifiedId,
+            id,
+            name: typeof item?.name === "string" && item.name.trim() ? item.name.trim() : id,
             runtimeId,
             canonicalId,
             aliases: normalizedAliases,
@@ -561,6 +557,20 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             : (payload?.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item)),
         )
 
+        const normalizedProviders = (payload?.providers || [])
+          .map((provider) => {
+            const id = typeof provider?.id === "string" ? provider.id.trim() : ""
+            if (!id) return null
+            return {
+              id,
+              label:
+                typeof provider?.label === "string" && provider.label.trim()
+                  ? provider.label.trim()
+                  : id,
+            } as ModelProviderOption
+          })
+          .filter((provider): provider is ModelProviderOption => Boolean(provider))
+        setModelProviders(normalizedProviders)
         setModelProviderId(typeof payload?.providerId === "string" ? payload.providerId : null)
         setModels(normalizedModels)
         setModelGroups(
@@ -602,6 +612,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         if (cancelled) return
         console.error("ai-entry.models.load.failed", error)
         setModelProviderId(null)
+        setModelProviders([])
         setModels([])
         setModelGroups([])
         setSelectedModelId(null)
@@ -614,7 +625,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return () => {
       cancelled = true
     }
-  }, [isZh, shouldLockModel])
+  }, [isZh, modelProviderId, shouldLockModel])
 
   useEffect(() => {
     let cancelled = false
@@ -1214,21 +1225,42 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           </span>
         </div>
       ) : (
-      <Select
-        open={modelSelectOpen}
-        onOpenChange={setModelSelectOpen}
-        value={selectedModelId ?? undefined}
-        onValueChange={(nextValue) => {
-          setSelectedModelId(nextValue || null)
-          setModelSelectOpen(false)
-        }}
-        disabled={isLoading || modelsLoading || models.length === 0}
-      >
-        <SelectTrigger className={`w-[220px] max-w-[220px] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary ${buttonHeight}`}>
-          <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
-        </SelectTrigger>
-        <SelectContent>{renderModelSelectContent()}</SelectContent>
-      </Select>
+        <>
+          <Select
+            value={modelProviderId ?? undefined}
+            onValueChange={(nextValue) => {
+              setModelProviderId(nextValue || null)
+              setSelectedModelId(null)
+            }}
+            disabled={isLoading || modelsLoading || modelProviders.length <= 1}
+          >
+            <SelectTrigger className={`w-[150px] max-w-[150px] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary ${buttonHeight}`}>
+              <SelectValue placeholder={isZh ? "平台" : "Provider"} />
+            </SelectTrigger>
+            <SelectContent>
+              {modelProviders.map((provider) => (
+                <SelectItem key={provider.id} value={provider.id}>
+                  {provider.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            open={modelSelectOpen}
+            onOpenChange={setModelSelectOpen}
+            value={selectedModelId ?? undefined}
+            onValueChange={(nextValue) => {
+              setSelectedModelId(nextValue || null)
+              setModelSelectOpen(false)
+            }}
+            disabled={isLoading || modelsLoading || models.length === 0}
+          >
+            <SelectTrigger className={`w-[220px] max-w-[220px] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary ${buttonHeight}`}>
+              <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
+            </SelectTrigger>
+            <SelectContent>{renderModelSelectContent()}</SelectContent>
+          </Select>
+        </>
       )}
     </div>
   )

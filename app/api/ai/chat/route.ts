@@ -403,12 +403,16 @@ function getLatestUserPrompt(messages: CoreMessage[]) {
 function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
   const rawProviderId =
     typeof input?.providerId === "string" ? input.providerId.trim().toLowerCase() : ""
-  const providerId: AiEntryProviderId | null =
+  let providerId: AiEntryProviderId | null = null
+  if (rawProviderId === "crazyrouter") {
+    providerId = "crazyroute"
+  } else if (
     rawProviderId === "aiberm" ||
     rawProviderId === "crazyroute" ||
     rawProviderId === "openrouter"
-      ? rawProviderId
-      : null
+  ) {
+    providerId = rawProviderId
+  }
 
   if (!providerId) return null
 
@@ -430,7 +434,8 @@ async function resolveModelConfig(
     consultingModelMode?: AiEntryConsultingModelMode
   },
 ) {
-  const catalog = await getAiEntryModelCatalog()
+  const requestedProviderId = input?.providerId || null
+  const catalog = await getAiEntryModelCatalog({ providerId: requestedProviderId })
   const availableModelIds = catalog.models.map((item) => item.id)
   const allCatalogModelAliases = catalog.models.flatMap((item) =>
     [
@@ -459,8 +464,6 @@ async function resolveModelConfig(
   }
   const catalogFallbackModelId = catalog.selectedModelId || catalog.models[0]?.id || null
   const requestedModelId = input?.modelId || null
-  const requestedProviderId = input?.providerId || null
-
   if (options?.forceConsultingModel) {
     const lockedModelId =
       pickConsultingModelId(catalog.models) ||
@@ -497,7 +500,7 @@ async function resolveModelConfig(
     fallbackModelOption?.runtimeId ||
     fallbackModelOption?.aliases?.[0] ||
     resolvedModelId
-  const resolvedProviderId = catalog.providerId || requestedProviderId
+  const resolvedProviderId = requestedProviderId || catalog.providerId
 
   if (requestedModelId && resolvedModelId !== requestedModelId) {
     console.warn("ai-entry.chat.model.unavailable.fallback", {

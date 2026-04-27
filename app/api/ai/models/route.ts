@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
+import {
+  getConfiguredAiEntryProviders,
+  type AiEntryProviderId,
+} from "@/lib/ai-entry/provider-routing"
+
+function parseProviderId(value: string | null): AiEntryProviderId | null {
+  const normalized = (value || "").trim().toLowerCase()
+  if (normalized === "crazyrouter") return "crazyroute"
+  if (
+    normalized === "aiberm" ||
+    normalized === "crazyroute" ||
+    normalized === "openrouter"
+  ) {
+    return normalized
+  }
+  return null
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireSessionUser(request)
@@ -10,8 +27,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const catalog = await getAiEntryModelCatalog()
-    return NextResponse.json(catalog, {
+    const providerId = parseProviderId(request.nextUrl.searchParams.get("providerId"))
+    const providers = getConfiguredAiEntryProviders().map((provider) => ({
+      id: provider.id,
+      label:
+        provider.id === "aiberm"
+          ? "Aiberm"
+          : provider.id === "crazyroute"
+            ? "CrazyRouter"
+            : "OpenRouter",
+    }))
+    const catalog = await getAiEntryModelCatalog({ providerId })
+    return NextResponse.json({
+      ...catalog,
+      providers,
+    }, {
       headers: {
         "Cache-Control": "private, max-age=60",
       },
