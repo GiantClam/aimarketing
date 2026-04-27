@@ -255,6 +255,51 @@ test("force model across providers: fuzzy match model id for openrouter", async 
   )
 })
 
+test("force model across providers: aiberm prefers catalog runtime id for sonnet 4.6", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4.5",
+    },
+    async () => {
+      await withMockFetch(
+        (async () =>
+          new Response(
+            JSON.stringify({
+              data: [
+                { id: "anthropic/claude-sonnet-4.6" },
+                { id: "claude-sonnet-4-6" },
+                { id: "claude-sonnet-4.6-thinking" },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          )) as typeof fetch,
+        async () => {
+          const attempts: string[] = []
+
+          const result = await executeAiEntryWithProviderFailover(
+            async (params) => {
+              attempts.push(`${params.providerId}:${params.model}`)
+              return "ok"
+            },
+            {
+              preferredProviderId: "aiberm",
+              preferredModel: "claude-sonnet-4.6",
+              forceModelAcrossProviders: true,
+              disableSameProviderModelFallback: true,
+            },
+          )
+
+          assert.equal(result.providerId, "aiberm")
+          assert.equal(result.model, "claude-sonnet-4-6")
+          assert.deepEqual(attempts, ["aiberm:claude-sonnet-4-6"])
+        },
+      )
+    },
+  )
+})
+
 test("consulting model fallback: aiberm keeps gpt-5.3-codex across providers", async () => {
   await withProviderEnv(
     {

@@ -98,14 +98,6 @@ function canonicalModelFingerprint(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
 }
 
-function isSonnet46ModelId(modelId: string) {
-  const fingerprint = canonicalModelFingerprint(modelId)
-  return (
-    fingerprint.includes("claudesonnet46") ||
-    fingerprint.includes("sonnet46")
-  )
-}
-
 function stripProviderPrefix(modelId: string) {
   const normalized = normalizeText(modelId)
   if (!normalized) return ""
@@ -611,12 +603,6 @@ async function buildProviderRuntimes(
         ...matchedFromProviderCatalog,
         ...buildProviderModelCandidates(item.id, preferredModel),
       ])
-      if (item.id === "aiberm" && isSonnet46ModelId(preferredModel)) {
-        candidateModels = dedupeStringList([
-          "anthropic/claude-sonnet-4.6",
-          ...candidateModels,
-        ])
-      }
     }
 
     for (const candidateModel of candidateModels) {

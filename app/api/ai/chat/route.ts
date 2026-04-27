@@ -875,6 +875,11 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder()
     const responseStream = new ReadableStream({
       async start(controller) {
+        let knowledgeQueryStartedAtMs: number | null = null
+        let knowledgeQueryCompletedAtMs: number | null = null
+        let providerSelectedAtMs: number | null = null
+        let firstTextDeltaAtMs: number | null = null
+        let lastTextDeltaAtMs: number | null = null
         const sendEvent = (payload: Record<string, unknown>) => {
           controller.enqueue(encoder.encode(buildSseEvent(payload)))
         }
@@ -890,6 +895,11 @@ export async function POST(request: NextRequest) {
             agent_route: routeDecision,
           })
           const enterpriseKnowledge = await loadEnterpriseKnowledge((progress) => {
+            if (progress.event === "knowledge_query_start") {
+              knowledgeQueryStartedAtMs = Date.now()
+            } else if (progress.event === "knowledge_query_result") {
+              knowledgeQueryCompletedAtMs = Date.now()
+            }
             sendEvent({
               event: progress.event,
               conversation_id: conversationId,
@@ -924,6 +934,7 @@ export async function POST(request: NextRequest) {
               })
             },
             onProviderSelected: (providerRun) => {
+              providerSelectedAtMs = Date.now()
               sendEvent({
                 event:
                   providerRun.attempt === 1
@@ -946,9 +957,37 @@ export async function POST(request: NextRequest) {
                 attempt: providerRun.attempt,
                 outputChars: providerRun.outputChars,
                 streamed: true,
+                firstTokenMs:
+                  firstTextDeltaAtMs === null
+                    ? null
+                    : firstTextDeltaAtMs - startedAtMs,
+                providerToFirstTokenMs:
+                  firstTextDeltaAtMs === null || providerSelectedAtMs === null
+                    ? null
+                    : firstTextDeltaAtMs - providerSelectedAtMs,
               })
             },
             onTextDelta: (delta) => {
+              if (delta) {
+                const now = Date.now()
+                if (firstTextDeltaAtMs === null) {
+                  firstTextDeltaAtMs = now
+                  console.info("ai-entry.chat.first_token", {
+                    traceId,
+                    conversationId,
+                    providerSelectedElapsedMs:
+                      providerSelectedAtMs === null
+                        ? null
+                        : providerSelectedAtMs - startedAtMs,
+                    elapsedMs: now - startedAtMs,
+                    providerToFirstTokenMs:
+                      providerSelectedAtMs === null
+                        ? null
+                        : now - providerSelectedAtMs,
+                  })
+                }
+                lastTextDeltaAtMs = now
+              }
               sendEvent({
                 event: "message",
                 conversation_id: conversationId,
@@ -1022,6 +1061,23 @@ export async function POST(request: NextRequest) {
             persisted: persistenceEnabled,
             streamed: true,
             elapsedMs: Date.now() - startedAtMs,
+            knowledgeQueryMs:
+              knowledgeQueryStartedAtMs === null ||
+              knowledgeQueryCompletedAtMs === null
+                ? null
+                : knowledgeQueryCompletedAtMs - knowledgeQueryStartedAtMs,
+            firstTokenMs:
+              firstTextDeltaAtMs === null
+                ? null
+                : firstTextDeltaAtMs - startedAtMs,
+            lastTokenMs:
+              lastTextDeltaAtMs === null
+                ? null
+                : lastTextDeltaAtMs - startedAtMs,
+            providerToFirstTokenMs:
+              firstTextDeltaAtMs === null || providerSelectedAtMs === null
+                ? null
+                : firstTextDeltaAtMs - providerSelectedAtMs,
           })
         } catch (error) {
           console.error("ai-entry.chat.request.failed", {

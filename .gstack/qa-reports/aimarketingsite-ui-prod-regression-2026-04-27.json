@@ -1,0 +1,22 @@
+{
+  "baseUrl": "https://www.aimarketingsite.com",
+  "checks": [
+    {
+      "name": "consulting_page_loaded",
+      "passed": false,
+      "url": "https://www.aimarketingsite.com/login?next=%2Fdashboard%2Fai"
+    },
+    {
+      "name": "no_fast_deep_selector_text",
+      "passed": true
+    },
+    {
+      "name": "no_model_mode_payload_hint_in_dom",
+      "passed": true
+    },
+    {
+      "name": "screenshot",
+      "path": ".gstack\\qa-reports\\aimarketingsite-consulting-advisor-prod-2026-04-27.png"
+    }
+  ]
+}

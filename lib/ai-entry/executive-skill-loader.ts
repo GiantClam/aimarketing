@@ -29,10 +29,7 @@ function stripFrontmatter(markdown: string) {
 // Agent ID 到 skill 文件的映射
 const AGENT_SKILL_MAP: Record<string, string[]> = {
   "executive-diagnostic": [
-    "SKILL.md",
-    "references/diagnostic-core.md",
-    "references/routing-matrix.md",
-    "references/kb-contract.md",
+    "references/diagnostic-runtime-brief.md",
   ],
   "executive-brand": [
     "SKILL.md",

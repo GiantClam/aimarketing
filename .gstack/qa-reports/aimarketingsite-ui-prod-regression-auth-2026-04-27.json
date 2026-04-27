@@ -1,0 +1,31 @@
+{
+  "baseUrl": "https://www.aimarketingsite.com",
+  "checks": [
+    {
+      "name": "api_login_for_browser_context",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "consulting_page_loaded",
+      "passed": true,
+      "url": "https://www.aimarketingsite.com/dashboard/ai?entry=consulting-advisor"
+    },
+    {
+      "name": "no_fast_deep_selector_text",
+      "passed": false
+    },
+    {
+      "name": "no_model_mode_payload_hint_in_dom",
+      "passed": true
+    },
+    {
+      "name": "body_excerpt",
+      "text": "ai\nWORKSPACE\nAI Marketing\n\nVBUY (vbuy)\n\nAI 对话\n新建会话\nWhat are the latest changes in AI search advertising today?\nUse three concrete bullets to explain how AI marketing autom\nUse three concrete bullets to explain how AI marketing autom\nPlease give three practical ways to improve B2B marketing em\nUse three concrete bullets to explain how AI marketing autom\nWhat are the latest changes in AI search advertising today?\nPlease give three practical ways to improve B2B marketing em\nWhat are the latest chan"
+    },
+    {
+      "name": "screenshot",
+      "path": ".gstack\\qa-reports\\aimarketingsite-consulting-advisor-prod-auth-2026-04-27.png"
+    }
+  ]
+}
