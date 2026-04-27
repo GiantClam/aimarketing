@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "name": "company-search",
+      "url": "http://localhost:3017/dashboard/advisor/company-search/207",
+      "xlsxLinks": [
+        {
+          "text": "VBUY_company_search_20260427_021017_8d657737-7260-4dc7-bf9b-f5d092ab6bb3.xlsx\nXLSX · vbuy-xlsx-exporter.0086studios.workers.dev",
+          "href": "https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2FVBUY_company_search_20260427_021017_8d657737-7260-4dc7-bf9b-f5d092ab6bb3.xlsx&expires=1777860622&sig=0e8b62fe3146399e12f5be72adca3b72861c6068eaef295545fe003ad49440a9",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "my-1 inline-flex max-w-full items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm text-foreground no-underline shadow-sm transition hover:border-primary/60 hover:bg-primary/5"
+        }
+      ],
+      "cardCount": 1,
+      "screenshot": ".gstack\\qa-reports\\screenshots\\company-search-real-card-recheck.png"
+    },
+    {
+      "name": "contact-mining",
+      "url": "http://localhost:3017/dashboard/advisor/contact-mining/208",
+      "xlsxLinks": [
+        {
+          "text": "contact-5d2caf3561_6a3c8027-ad77-4117-ac2e-d517bf7302e4.xlsx\nXLSX · vbuy-xlsx-exporter.0086studios.workers.dev",
+          "href": "https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2Fcontact-5d2caf3561_6a3c8027-ad77-4117-ac2e-d517bf7302e4.xlsx&expires=1777860662&sig=de75cc5b05f7f7750030734f8852d59e47c10ba61b175051fe869c2a30980952",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "my-1 inline-flex max-w-full items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm text-foreground no-underline shadow-sm transition hover:border-primary/60 hover:bg-primary/5"
+        }
+      ],
+      "cardCount": 1,
+      "screenshot": ".gstack\\qa-reports\\screenshots\\contact-mining-real-card-recheck.png"
+    }
+  ]
+}

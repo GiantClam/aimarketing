@@ -1,0 +1,453 @@
+{
+  "baseUrl": "http://localhost:3017",
+  "previousReport": ".gstack/qa-reports/real-vbuy-dify-acceptance-2026-04-27.json",
+  "login": {
+    "email": "vbuy.admin@example.com",
+    "ok": true
+  },
+  "results": [
+    {
+      "name": "company-search",
+      "url_after": "http://localhost:3017/dashboard/advisor/company-search/207",
+      "status": "completed_with_file_link",
+      "screenshot": ".gstack\\qa-reports\\screenshots\\company-search-real-followup-result.png",
+      "total_links": 7,
+      "file_links": [
+        {
+          "text": "https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2FVBUY_company_search_20260427_021017_8d657737-7260-4dc7-bf9b-f5d092ab6bb3.xlsx&expires=1777860622&sig=0e8b62fe3146399e12f5be72adca3b72861c6068eaef295545fe003ad49440a9",
+          "href": "https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2FVBUY_company_search_20260427_021017_8d657737-7260-4dc7-bf9b-f5d092ab6bb3.xlsx&expires=1777860622&sig=0e8b62fe3146399e12f5be72adca3b72861c6068eaef295545fe003ad49440a9",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        }
+      ],
+      "normal_links_sample": [
+        {
+          "text": "Real acceptance test. Search 3 B2B SaaS companies in marketi",
+          "href": "http://localhost:3017/dashboard/advisor/company-search/207",
+          "target": "",
+          "rel": "",
+          "classes": "block w-full min-w-0 max-w-full overflow-hidden",
+          "is_card": false,
+          "opens_new_window": false,
+          "safe_rel": false
+        },
+        {
+          "text": "用户设置",
+          "href": "http://localhost:3017/dashboard/settings",
+          "target": "",
+          "rel": "",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": false,
+          "safe_rel": false
+        },
+        {
+          "text": "https://www.turian.ai",
+          "href": "https://www.turian.ai/",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "https://www.zoey.com",
+          "href": "https://www.zoey.com/",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "https://pipeline.zoominfo.com/sales/top-sales-intelligence-tools",
+          "href": "https://pipeline.zoominfo.com/sales/top-sales-intelligence-tools",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "https://www.joor.com/",
+          "href": "https://www.joor.com/",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        }
+      ],
+      "text_tail": "ai\nWORKSPACE\nAI Marketing\n\nVBUY (vbuy)\n\nAI 对话\n专家 AGENT\n咨询专家\n品牌战略顾问\n增长顾问\n海外猎客\n公司搜索\n新建会话\nReal acceptance test. Search 3 B2B SaaS companies in marketi\n客户画像\n联系人挖掘\n创作工作台\n多平台图文写作\n图片设计助手\n用户设置\n\nVBUY Admin\n\nvbuy.admin@example.com\n\n你\n\nReal acceptance test. Search 3 B2B SaaS companies in marketing automation or sales lead generation. Return company name, website, source URL, short description, and include a downloadable file link to the result if the workflow supports files.\n\n公司搜索\n复制回复\n\n我先帮你把信息补齐，这样后面的搜索结果会更准确：1.请确认优先搜索的目标市场国家或区域，例如US/CA/UK/DE/Europe。\n\n你\n\nTarget market: United States. Industry: B2B SaaS, marketing automation and sales intelligence. Please proceed with the search now. Return 3 companies with official website and source URL, and include a downloadable file link if available.\n\n公司搜索\n复制回复\n\n基于本次针对美国市场的B2B SaaS、营销自动化与销售智能品类的公司搜寻，已完成对15家候选公司的初步评估。\n\n结果概述 本次共识别出9家合格候选公司（合格率60%），其中包括2家高优先级公司及7家中优先级公司。另有6家公司被筛选排除。\n\n合格公司分析 (Qualified Companies: 9) 所有合格候选人均通过Web渠道发现，主体证据均为官方网站或产品页面，符合B2B SaaS公司的基本特征。\n\n高优先级 (High Priority: 2家)：这两家公司主体可信度高，产品线明确指向B2B流程自动化、营销自动化或批发平台SaaS，与目标品类匹配度高，是理想的背景研究与联系人补全对象。\n\nturian (Uify Technologies GmbH)：提供AI驱动的B2B流程自动化SaaS，产品（销售订单自动化）与“销售智能”品类高度相关。\nZoey, Inc.：提供现代B2B批发平台SaaS，产品聚焦明确，官网信息完整。\n\n中优先级 (Medium Priority: 7家)：这些公司主体或产品类别符合方向，但证据存在缺口（例如未明确客户类型、页面信息不完整或品类相关性稍弱），仍需人工复核以确认其精准匹配度。主要包括提供营销自动化平台（如Juvlon，Smarketing Cloud，Us）、销售智能工具（如GuruSup）及大型CRM厂商的相关产品页面（如Salesforce的B2B批发零售软件页面）。\n\n被排除公司分析 (Rejected Companies: 6) 淘汰主要基于以下模式：\n\n媒体/博客内容 (Media/Blog: 4家)：搜索结果指向行业文章、博客或社区（如ZoomInfo博客、CMO Alliance文章、Dribbble设计社区），并非独立运营的B2B SaaS公司实体。\n市场平台 (Marketplace: 1家)：JOOR是连接品牌与零售商的B2B批发市场，其商业模式与目标软件即服务（SaaS）供应商不符。\n品类不匹配 (Product-Mismatch: 1家)：Zoey（来自buyer_type_queries查询结果）虽为B2B SaaS平台，但其产品（电商平台、订单管理）与核心聚焦的“营销自动化”及“销售智能”品类相关性较低。\n\n后续行动建议\n\n建议优先对2家高优先级公司（turian, Zoey, Inc.）进行深入的背景研究，并启动联系人信息挖掘。\n对7家中优先级公司进行人工复核，重点验证其官网描述的产品功能是否严格属于营销自动化或销售智能范畴，并补充其客户类型与市场定位信息。\n本次搜索仅使用了Web渠道，未启用Maps或Customs查询作为实体与贸易线索的补充。若需对候选公司进行更全面的验证，可考虑在后续阶段开启这些补充渠道。\n\n总结：本次搜寻在既定方向下定位到数个潜在目标，其中两家公司证据充分，可作为首要跟进对象。\n\n结果概览：\n\n合格候选：9\n排除候选：6\nhigh_priority：2\nmedium_priority：7\n\n重点合格候选摘要：\n\nturian (Uify Technologies GmbH)｜类型：company_entity｜优先级：high_priority 官网：https://www.turian.ai 判断：公司提供明确针对批发和分销行业的B2B AI自动化SaaS，与营销自动化和销售智能品类高度匹配。\nZoey, Inc.｜类型：company_entity｜优先级：high_priority 官网：https://www.zoey.com 判断：目标市场匹配，产品类别高度相关（B2B批发平台SaaS），有明确官网和SaaS产品证据。\n\n重点排除候选摘要：\n\n未识别公司名｜类型：media 官网：https://pipeline.zoominfo.com/sales/top-sales-intelligence-tools 判断：media_or_blog\nJOOR｜类型：marketplace 官网：https://www.joor.com/ 判断：marketplace\n\nExcel 文件下载：\n\n文件名：VBUY_company_search_20260427_021017.xlsx\n下载链接：https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2FVBUY_company_search_20260427_021017_8d657737-7260-4dc7-bf9b-f5d092ab6bb3.xlsx&expires=1777860622&sig=0e8b62fe3146399e12f5be72adca3b72861c6068eaef295545fe003ad49440a9\n有效期至：2026-05-04T02:10:22.000Z\n\nEnter 发送，Shift + Enter 换行\n\n上下文已激活\n发送",
+      "samples": [
+        {
+          "elapsed": 145.4,
+          "message_len": 374,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 150.4,
+          "message_len": 386,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 155.4,
+          "message_len": 386,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 160.4,
+          "message_len": 386,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 165.4,
+          "message_len": 386,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 170.5,
+          "message_len": 360,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 175.5,
+          "message_len": 386,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 180.5,
+          "message_len": 386,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 185.5,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 190.5,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 195.5,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 200.5,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 205.5,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 210.6,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 215.6,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 220.6,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 225.6,
+          "message_len": 367,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 230.6,
+          "message_len": 382,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 235.6,
+          "message_len": 377,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 240.6,
+          "message_len": 2318,
+          "links": 7,
+          "file_links": 1,
+          "disabled_textareas": 0
+        }
+      ]
+    },
+    {
+      "name": "contact-mining",
+      "url_after": "http://localhost:3017/dashboard/advisor/contact-mining/208",
+      "status": "completed_with_file_link",
+      "screenshot": ".gstack\\qa-reports\\screenshots\\contact-mining-real-followup-result.png",
+      "total_links": 21,
+      "file_links": [
+        {
+          "text": "https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2Fcontact-5d2caf3561_6a3c8027-ad77-4117-ac2e-d517bf7302e4.xlsx&expires=1777860662&sig=de75cc5b05f7f7750030734f8852d59e47c10ba61b175051fe869c2a30980952",
+          "href": "https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2Fcontact-5d2caf3561_6a3c8027-ad77-4117-ac2e-d517bf7302e4.xlsx&expires=1777860662&sig=de75cc5b05f7f7750030734f8852d59e47c10ba61b175051fe869c2a30980952",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        }
+      ],
+      "normal_links_sample": [
+        {
+          "text": "Real acceptance test. Find 3 marketing or growth leaders at",
+          "href": "http://localhost:3017/dashboard/advisor/contact-mining/208",
+          "target": "",
+          "rel": "",
+          "classes": "block w-full min-w-0 max-w-full overflow-hidden",
+          "is_card": false,
+          "opens_new_window": false,
+          "safe_rel": false
+        },
+        {
+          "text": "用户设置",
+          "href": "http://localhost:3017/dashboard/settings",
+          "target": "",
+          "rel": "",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": false,
+          "safe_rel": false
+        },
+        {
+          "text": "https://www.hubspot.com",
+          "href": "https://www.hubspot.com/",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "https://www.hubspot.com",
+          "href": "https://www.hubspot.com/",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "billing@hubspot.com",
+          "href": "mailto:billing@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "dharmesh.shah@hubspot.com",
+          "href": "mailto:dharmesh.shah@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "d.shah@hubspot.com",
+          "href": "mailto:d.shah@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "dshah@hubspot.com",
+          "href": "mailto:dshah@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "dharmeshshah@hubspot.com",
+          "href": "mailto:dharmeshshah@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "dharmesh@hubspot.com",
+          "href": "mailto:dharmesh@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "katie.early@hubspot.com",
+          "href": "mailto:katie.early@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        },
+        {
+          "text": "k.early@hubspot.com",
+          "href": "mailto:k.early@hubspot.com",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "classes": "",
+          "is_card": false,
+          "opens_new_window": true,
+          "safe_rel": true
+        }
+      ],
+      "text_tail": "ai\nWORKSPACE\nAI Marketing\n\nVBUY (vbuy)\n\nAI 对话\n专家 AGENT\n咨询专家\n品牌战略顾问\n增长顾问\n海外猎客\n公司搜索\n客户画像\n联系人挖掘\n新建会话\nReal acceptance test. Find 3 marketing or growth leaders at\n创作工作台\n多平台图文写作\n图片设计助手\n用户设置\n\nVBUY Admin\n\nvbuy.admin@example.com\n\n你\n\nReal acceptance test. Find 3 marketing or growth leaders at B2B SaaS companies. Return name, title, company, public source URL, and include a downloadable file link to the result if the workflow supports files.\n\n联系人挖掘\n复制回复\n\n请提供公司名称或公司官网网址，以便我为您搜索联系人信息。\n\n你\n\nCompany: HubSpot. Website: https://www.hubspot.com. Target roles: marketing, growth, demand generation, sales leadership in the United States. Please proceed with the contact search and include a downloadable file link if available.\n\n联系人挖掘\n复制回复\n\n公司：HubSpot 官网：https://www.hubspot.com 官方域名：hubspot.com\n\n公开联系通用邮箱：billing@hubspot.com\n\n个人联系人候选：\n\nDharmesh Shah | Founder | dharmesh.shah@hubspot.com | inferred_person_email | 置信度 medium；备选：d.shah@hubspot.com, dshah@hubspot.com, dharmeshshah@hubspot.com, dharmesh@hubspot.com\nKatie Early | Director | katie.early@hubspot.com | inferred_person_email | 置信度 medium；备选：k.early@hubspot.com, kearly@hubspot.com, katieearly@hubspot.com, katie@hubspot.com\nJoe Giaquinto | Director | joe.giaquinto@hubspot.com | inferred_person_email | 置信度 medium；备选：j.giaquinto@hubspot.com, jgiaquinto@hubspot.com, joegiaquinto@hubspot.com, joe@hubspot.com\n\n公开链路评估：sufficient 是否建议后续接入 API 增强：否\n\nExcel 文件下载：\n\n文件名：VBUY_contacts_contact-5d2caf3561.xlsx\n下载链接：https://vbuy-xlsx-exporter.0086studios.workers.dev/download?key=exports%2F2026-04-27%2Fcontact-5d2caf3561_6a3c8027-ad77-4117-ac2e-d517bf7302e4.xlsx&expires=1777860662&sig=de75cc5b05f7f7750030734f8852d59e47c10ba61b175051fe869c2a30980952\n有效期至：2026-05-04T02:11:02.000Z\n\nEnter 发送，Shift + Enter 换行\n\n上下文已激活\n发送",
+      "samples": [
+        {
+          "elapsed": 0.0,
+          "message_len": 272,
+          "links": 3,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 5.0,
+          "message_len": 354,
+          "links": 3,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 10.0,
+          "message_len": 373,
+          "links": 3,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 15.0,
+          "message_len": 390,
+          "links": 3,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 20.1,
+          "message_len": 377,
+          "links": 3,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 25.1,
+          "message_len": 377,
+          "links": 3,
+          "file_links": 0,
+          "disabled_textareas": 1
+        },
+        {
+          "elapsed": 30.1,
+          "message_len": 1244,
+          "links": 21,
+          "file_links": 1,
+          "disabled_textareas": 0
+        }
+      ]
+    }
+  ],
+  "consoleMessagesTail": [
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "error",
+      "text": "advisor.fetch-messages.failed Error: Conversation not found\n    at fetchJson (webpack-internal:///(app-pages-browser)/./lib/query/workspace-cache.ts:25:15)"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    }
+  ]
+}

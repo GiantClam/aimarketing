@@ -288,6 +288,18 @@ export async function getSessionUser(request: NextRequest) {
   if (rows.length === 0) return null
 
   const session = rows[0]
+  if (session.enterpriseStatus === "suspended" || session.enterpriseStatus === "removed") {
+    void withSessionDbRetry("get-session-user.delete-inactive", async () => {
+      await db.delete(userSessions).where(eq(userSessions.id, session.sessionId))
+    }).catch((error) => {
+      console.warn("auth.session.delete_inactive.failed", {
+        sessionId: session.sessionId,
+        message: getErrorMessage(error),
+      })
+    })
+    return null
+  }
+
   const permissionRows = await withSessionDbRetry("get-session-user.permissions", async () =>
     db
       .select({

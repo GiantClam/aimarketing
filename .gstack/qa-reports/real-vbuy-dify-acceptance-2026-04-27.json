@@ -1,0 +1,514 @@
+{
+  "baseUrl": "http://localhost:3017",
+  "login": {
+    "email": "vbuy.admin@example.com",
+    "ok": true,
+    "user": {
+      "id": 59,
+      "email": "vbuy.admin@example.com",
+      "name": "VBUY Admin",
+      "isDemo": false,
+      "enterpriseId": 45,
+      "enterpriseCode": "vbuy",
+      "enterpriseName": "VBUY",
+      "enterpriseRole": "admin",
+      "enterpriseStatus": "active",
+      "permissions": {
+        "expert_advisor": true,
+        "customer_profile_entry": true,
+        "website_generation": true,
+        "video_generation": true,
+        "copywriting_generation": true,
+        "image_design_generation": true
+      }
+    }
+  },
+  "advisorConfigApi": {
+    "status": 200,
+    "body": {
+      "data": {
+        "defaults": {
+          "baseUrl": "https://dify-api.o3-tools.com/v1",
+          "brandStrategy": {
+            "configured": true,
+            "baseUrl": "https://dify-api.o3-tools.com/v1"
+          },
+          "growth": {
+            "configured": true,
+            "baseUrl": "https://dify-api.o3-tools.com/v1"
+          },
+          "leadHunter": {
+            "configured": false,
+            "baseUrl": null
+          },
+          "companySearch": {
+            "configured": false,
+            "baseUrl": null
+          },
+          "contactMining": {
+            "configured": false,
+            "baseUrl": null
+          }
+        },
+        "overrides": [
+          {
+            "id": 31,
+            "enterpriseId": 45,
+            "advisorType": "lead-hunter",
+            "executionMode": "skill",
+            "baseUrl": "skill://lead-hunter",
+            "enabled": true,
+            "hasApiKey": true,
+            "apiKeyMasked": "ma****ed"
+          },
+          {
+            "id": 6,
+            "enterpriseId": 45,
+            "advisorType": "contact-mining",
+            "executionMode": "dify",
+            "baseUrl": "https://dify-api.o3-tools.com/v1",
+            "enabled": true,
+            "hasApiKey": true,
+            "apiKeyMasked": "app-****AYbt"
+          },
+          {
+            "id": 5,
+            "enterpriseId": 45,
+            "advisorType": "company-search",
+            "executionMode": "dify",
+            "baseUrl": "https://dify-api.o3-tools.com/v1",
+            "enabled": true,
+            "hasApiKey": true,
+            "apiKeyMasked": "app-****k0Gf"
+          },
+          {
+            "id": 8,
+            "enterpriseId": 45,
+            "advisorType": "growth",
+            "executionMode": "dify",
+            "baseUrl": "https://dify-api.o3-tools.com/v1",
+            "enabled": true,
+            "hasApiKey": true,
+            "apiKeyMasked": "app-****PjcI"
+          },
+          {
+            "id": 7,
+            "enterpriseId": 45,
+            "advisorType": "brand-strategy",
+            "executionMode": "dify",
+            "baseUrl": "https://dify-api.o3-tools.com/v1",
+            "enabled": true,
+            "hasApiKey": true,
+            "apiKeyMasked": "app-****Qai4"
+          }
+        ]
+      }
+    }
+  },
+  "results": [
+    {
+      "name": "company-search",
+      "url_after": "http://localhost:3017/dashboard/advisor/company-search/207",
+      "status": "timeout",
+      "screenshot": ".gstack\\qa-reports\\screenshots\\company-search-real-result.png",
+      "total_links": 2,
+      "file_links": [],
+      "normal_links_sample": [
+        {
+          "text": "Real acceptance test. Search 3 B2B SaaS companies in marketi",
+          "href": "http://localhost:3017/dashboard/advisor/company-search/207",
+          "target": "",
+          "rel": "",
+          "classes": "block w-full min-w-0 max-w-full overflow-hidden",
+          "is_card": false
+        },
+        {
+          "text": "用户设置",
+          "href": "http://localhost:3017/dashboard/settings",
+          "target": "",
+          "rel": "",
+          "classes": "",
+          "is_card": false
+        }
+      ],
+      "text_tail": "ai\nWORKSPACE\nAI Marketing\n\nVBUY (vbuy)\n\nAI 对话\n专家 AGENT\n咨询专家\n品牌战略顾问\n增长顾问\n海外猎客\n公司搜索\n新建会话\nReal acceptance test. Search 3 B2B SaaS companies in marketi\n客户画像\n联系人挖掘\n创作工作台\n多平台图文写作\n图片设计助手\n用户设置\n\nVBUY Admin\n\nvbuy.admin@example.com\n\n你\n\nReal acceptance test. Search 3 B2B SaaS companies in marketing automation or sales lead generation. Return company name, website, source URL, short description, and include a downloadable file link to the result if the workflow supports files.\n\n公司搜索\n复制回复\n\n我先帮你把信息补齐，这样后面的搜索结果会更准确：1.请确认优先搜索的目标市场国家或区域，例如US/CA/UK/DE/Europe。\n\nEnter 发送，Shift + Enter 换行\n\n上下文已激活\n发送",
+      "samples": [
+        {
+          "elapsed": 340.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 345.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 350.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 355.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 360.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 365.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 370.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 375.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 380.7,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 385.8,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 390.8,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 395.8,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 400.8,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 405.8,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 410.8,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 415.8,
+          "message_len": 209,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        }
+      ]
+    },
+    {
+      "name": "contact-mining",
+      "url_after": "http://localhost:3017/dashboard/advisor/contact-mining/208",
+      "status": "timeout",
+      "screenshot": ".gstack\\qa-reports\\screenshots\\contact-mining-real-result.png",
+      "total_links": 2,
+      "file_links": [],
+      "normal_links_sample": [
+        {
+          "text": "Real acceptance test. Find 3 marketing or growth leaders at",
+          "href": "http://localhost:3017/dashboard/advisor/contact-mining/208",
+          "target": "",
+          "rel": "",
+          "classes": "block w-full min-w-0 max-w-full overflow-hidden",
+          "is_card": false
+        },
+        {
+          "text": "用户设置",
+          "href": "http://localhost:3017/dashboard/settings",
+          "target": "",
+          "rel": "",
+          "classes": "",
+          "is_card": false
+        }
+      ],
+      "text_tail": "ai\nWORKSPACE\nAI Marketing\n\nVBUY (vbuy)\n\nAI 对话\n专家 AGENT\n咨询专家\n品牌战略顾问\n增长顾问\n海外猎客\n公司搜索\n客户画像\n联系人挖掘\n新建会话\nReal acceptance test. Find 3 marketing or growth leaders at\n创作工作台\n多平台图文写作\n图片设计助手\n用户设置\n\nVBUY Admin\n\nvbuy.admin@example.com\n\n你\n\nReal acceptance test. Find 3 marketing or growth leaders at B2B SaaS companies. Return name, title, company, public source URL, and include a downloadable file link to the result if the workflow supports files.\n\n联系人挖掘\n复制回复\n\n请提供公司名称或公司官网网址，以便我为您搜索联系人信息。\n\nEnter 发送，Shift + Enter 换行\n\n上下文已激活\n发送",
+      "samples": [
+        {
+          "elapsed": 340.6,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 345.6,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 350.6,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 355.6,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 360.6,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 365.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 370.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 375.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 380.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 385.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 390.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 395.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 400.7,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 405.8,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 410.8,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        },
+        {
+          "elapsed": 415.8,
+          "message_len": 139,
+          "links": 2,
+          "file_links": 0,
+          "disabled_textareas": 0
+        }
+      ]
+    }
+  ],
+  "consoleMessagesTail": [
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 400ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 801ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 433ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 755ms"
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 340ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 454ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 647ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 604ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 786ms"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "error",
+      "text": "advisor.fetch-messages.failed Error: Conversation not found\n    at fetchJson (webpack-internal:///(app-pages-browser)/./lib/query/workspace-cache.ts:25:15)"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 541ms"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] rebuilding"
+    },
+    {
+      "type": "log",
+      "text": "[Fast Refresh] done in 739ms"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "type": "error",
+      "text": "advisor.fetch-messages.failed Error: Conversation not found\n    at fetchJson (webpack-internal:///(app-pages-browser)/./lib/query/workspace-cache.ts:25:15)"
+    }
+  ]
+}

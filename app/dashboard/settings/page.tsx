@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertTriangle, Bot, Building2, Check, Clock3, Database, LogOut, Save, Shield, Sparkles, User, Users, Workflow, X, type LucideIcon } from "lucide-react"
+import { AlertTriangle, Bot, Building2, Check, Clock3, Database, KeyRound, LogOut, PauseCircle, PlayCircle, Save, Shield, Sparkles, User, UserX, Users, Workflow, X, type LucideIcon } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
 import { useI18n } from "@/components/locale-provider"
@@ -124,6 +124,14 @@ function OverviewMetric({ icon: Icon, label, value, hint, tone = "warm" }: Overv
   )
 }
 
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="inline-flex rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground">
+      {children}
+    </p>
+  )
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const { locale } = useI18n()
@@ -164,6 +172,8 @@ export default function SettingsPage() {
   const [requests, setRequests] = useState<PendingRequest[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [loadingAdminData, setLoadingAdminData] = useState(false)
+  const [memberActionMessage, setMemberActionMessage] = useState("")
+  const [actingMemberId, setActingMemberId] = useState<number | null>(null)
   const [permissionDrafts, setPermissionDrafts] = useState<Record<number, PermissionMap>>({})
   const [difyBaseUrl, setDifyBaseUrl] = useState("")
   const [difyApiKeyMasked, setDifyApiKeyMasked] = useState("")
@@ -408,6 +418,61 @@ export default function SettingsPage() {
     }
   }
 
+  const updateMemberAccount = async (
+    targetUserId: number,
+    action: "suspend" | "reactivate" | "remove" | "reset_password",
+    temporaryPassword?: string,
+  ) => {
+    setActingMemberId(targetUserId)
+    setMemberActionMessage("")
+    try {
+      const res = await fetch(`/api/enterprise/members/${targetUserId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, temporaryPassword }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(json?.error || "member_update_failed")
+      }
+      await loadAdminData()
+      setMemberActionMessage(
+        action === "reset_password"
+          ? t("密码已重置，该成员需要使用新密码重新登录。", "Password reset. The member must sign in again with the new password.")
+          : t("成员状态已更新。", "Member status updated."),
+      )
+    } catch (error) {
+      setMemberActionMessage(error instanceof Error ? error.message : t("成员操作失败。", "Member action failed."))
+    } finally {
+      setActingMemberId(null)
+    }
+  }
+
+  const requestSuspendMember = (member: Member) => {
+    const confirmed = window.confirm(t(`确认停用 ${member.name || member.email}？该成员会被退出登录。`, `Suspend ${member.name || member.email}? The member will be signed out.`))
+    if (confirmed) void updateMemberAccount(member.id, "suspend")
+  }
+
+  const requestReactivateMember = (member: Member) => {
+    void updateMemberAccount(member.id, "reactivate")
+  }
+
+  const requestRemoveMember = (member: Member) => {
+    const confirmed = window.confirm(t(`确认移出 ${member.name || member.email}？该账号将不再绑定当前企业。`, `Remove ${member.name || member.email}? The account will no longer be bound to this company.`))
+    if (confirmed) void updateMemberAccount(member.id, "remove")
+  }
+
+  const requestResetPassword = (member: Member) => {
+    const password = window.prompt(t(`请输入 ${member.name || member.email} 的临时新密码（至少 8 位）。`, `Enter a temporary new password for ${member.name || member.email} (at least 8 characters).`))
+    if (password == null) return
+    const normalized = password.trim()
+    if (normalized.length < 8) {
+      window.alert(t("临时密码至少需要 8 位。", "Temporary password must be at least 8 characters."))
+      return
+    }
+    void updateMemberAccount(member.id, "reset_password", normalized)
+  }
+
   const updateEnterpriseDifyEnabled = async (nextEnabled: boolean) => {
     if (!canManageEnterpriseDify) return
 
@@ -517,6 +582,8 @@ export default function SettingsPage() {
     if (user.enterpriseStatus === "pending") return t("待审核", "Pending")
     if (user.enterpriseStatus === "active") return t("已激活", "Active")
     if (user.enterpriseStatus === "rejected") return t("已拒绝", "Rejected")
+    if (user.enterpriseStatus === "suspended") return t("已停用", "Suspended")
+    if (user.enterpriseStatus === "removed") return t("已移出", "Removed")
     return user.enterpriseStatus
   }, [t, user?.enterpriseStatus])
 
@@ -583,8 +650,8 @@ export default function SettingsPage() {
       {
         icon: Users,
         label: t("企业治理", "Company governance"),
-        value: isEnterpriseAdmin ? `${members.length}` : t("只读", "Read only"),
-        hint: isEnterpriseAdmin ? t(`成员 ${members.length} 人，待审核 ${requests.length} 项。`, `${members.length} members, ${requests.length} pending requests.`) : t("仅企业管理员可处理成员与权限配置。", "Only enterprise admins can manage members and permissions."),
+        value: isEnterpriseAdmin ? `${members.length}` : t("已同步", "Synced"),
+        hint: isEnterpriseAdmin ? t(`成员 ${members.length} 人，待审核 ${requests.length} 项。`, `${members.length} members, ${requests.length} pending requests.`) : t("当前账号可查看团队配置状态。", "This account can view team configuration status."),
         tone: "teal" as const,
       },
       {
@@ -598,7 +665,7 @@ export default function SettingsPage() {
         icon: Bot,
         label: t("顾问工作流", "Advisor workflows"),
         value: `${advisorCards.length}`,
-        hint: isEnterpriseAdmin ? t("展示当前可见的顾问 workflow 条目。", "Shows visible advisor workflow entries.") : t("顾问 workflow 详情仅向企业管理员开放。", "Advisor workflow details are available to enterprise admins only."),
+        hint: isEnterpriseAdmin ? t("展示当前可见的顾问 workflow 条目。", "Shows visible advisor workflow entries.") : t("当前账号显示已启用的顾问能力。", "This account shows enabled advisor capabilities."),
         tone: "warm" as const,
       },
     ],
@@ -644,7 +711,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="rounded-[28px] border-2 border-border bg-background p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">{t("身份摘要", "Identity Brief")}</p>
+              <SectionEyebrow>{t("身份摘要", "Identity Brief")}</SectionEyebrow>
               <h2 className="mt-2 text-xl font-semibold text-foreground">{user?.name || t("未命名成员", "Unnamed member")}</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{user?.email || t("未绑定邮箱", "No email bound")}</p>
 
@@ -660,7 +727,7 @@ export default function SettingsPage() {
                     {canViewEnterpriseDify ? t("已连接企业知识资源", "Enterprise knowledge connected") : t("等待企业激活或配置", "Waiting for enterprise activation/configuration")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {isEnterpriseAdmin ? t("你可以管理成员权限和顾问配置。", "You can manage member permissions and advisor config.") : t("你当前拥有只读或有限配置权限。", "You currently have read-only or limited configuration permission.")}
+                    {isEnterpriseAdmin ? t("你可以管理成员权限和顾问配置。", "You can manage member permissions and advisor config.") : t("当前账号已同步团队配置状态。", "This account is synced with team configuration status.")}
                   </p>
                 </div>
               </div>
@@ -684,7 +751,7 @@ export default function SettingsPage() {
           <div className="space-y-8">
             <section className="space-y-4">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("个人设置", "Personal settings")}</p>
+                <SectionEyebrow>{t("个人设置", "Personal settings")}</SectionEyebrow>
                 <h2 className="font-sans text-2xl font-semibold text-foreground">{t("账号与企业身份", "Account and enterprise identity")}</h2>
                 <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("优先保证账号基础资料、企业归属和身份状态清晰，避免后续工作台入口与权限判断出现偏差。", "Keep account basics, enterprise ownership, and identity status clear to avoid later access confusion.")}</p>
               </div>
@@ -692,7 +759,7 @@ export default function SettingsPage() {
               <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 font-sans text-xl"><User className="h-5 w-5 text-primary" />{t("账号信息", "Account profile")}</CardTitle>
-                  <CardDescription>{t("可修改显示名称。企业信息由企业管理员维护。", "You can edit display name. Enterprise info is managed by company admins.")}</CardDescription>
+                  <CardDescription>{t("可修改显示名称。企业信息由团队统一维护。", "You can edit display name. Company info is maintained by the team.")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
                   <div className="grid gap-4 md:grid-cols-2">
@@ -755,7 +822,7 @@ export default function SettingsPage() {
             {isEnterpriseAdmin && (
               <section className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("企业治理", "Enterprise governance")}</p>
+                  <SectionEyebrow>{t("企业治理", "Enterprise governance")}</SectionEyebrow>
                   <h2 className="font-sans text-2xl font-semibold text-foreground">{t("成员审核与权限分配", "Member reviews and permissions")}</h2>
                   <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("把待审核申请和成员权限放在同一段，先处理准入，再决定每个成员可进入哪些工作台。", "Handle access reviews and permission allocation in one place.")}</p>
                 </div>
@@ -787,14 +854,21 @@ export default function SettingsPage() {
                 <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />{t("成员功能权限", "Member feature permissions")}</CardTitle>
-                    <CardDescription>{t("配置成员可访问的功能模块。专家顾问与客户画像入口可分别授权；企业管理员始终可见。", "Configure feature access for members. Expert Advisor and Customer Profile entry can be granted independently; enterprise admins always can.")}</CardDescription>
+                    <CardDescription>{t("配置成员可访问的功能模块，并管理成员账号状态。专家顾问与客户画像入口可分别授权。", "Configure feature access and manage member account status. Expert Advisor and Customer Profile entry can be granted independently.")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+              {memberActionMessage ? (
+                <p className="text-sm text-muted-foreground">{memberActionMessage}</p>
+              ) : null}
               {members.length === 0 && !loadingAdminData ? (
                 <p className="text-sm text-muted-foreground">{t("当前没有可配置权限的企业成员。", "No enterprise members available for permission configuration.")}</p>
               ) : null}
               {members.map((member) => {
                 const draft = permissionDrafts[member.id] || buildPermissionMap(false)
+                const isCurrentUser = member.id === userId
+                const isSuspended = member.enterpriseStatus === "suspended"
+                const isActiveMember = member.enterpriseStatus === "active"
+                const actionDisabled = actingMemberId === member.id
                 return (
                   <div key={member.id} className="space-y-4 rounded-2xl border border-border/70 bg-background/70 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -802,7 +876,16 @@ export default function SettingsPage() {
                         <p className="text-sm font-medium text-foreground">{member.name}（{member.email}）</p>
                         <p className="mt-1 text-xs text-muted-foreground">{t("角色：", "Role: ")}{member.enterpriseRole || "member"} / {t("状态：", "Status: ")}{member.enterpriseStatus || "unknown"}</p>
                       </div>
-                      <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={member.enterpriseStatus !== "active"} className="rounded-full">{t("保存权限", "Save permissions")}</Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={actionDisabled || !isActiveMember} className="rounded-full">{t("保存权限", "Save permissions")}</Button>
+                        <Button size="sm" variant="outline" onClick={() => requestResetPassword(member)} disabled={actionDisabled || member.enterpriseStatus === "removed"} className="rounded-full"><KeyRound className="mr-1 h-4 w-4" />{t("重置密码", "Reset password")}</Button>
+                        {isSuspended ? (
+                          <Button size="sm" variant="outline" onClick={() => requestReactivateMember(member)} disabled={actionDisabled} className="rounded-full"><PlayCircle className="mr-1 h-4 w-4" />{t("恢复", "Reactivate")}</Button>
+                        ) : (
+                          <Button size="sm" variant="outline" onClick={() => requestSuspendMember(member)} disabled={actionDisabled || isCurrentUser || !isActiveMember} className="rounded-full"><PauseCircle className="mr-1 h-4 w-4" />{t("停用", "Suspend")}</Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => requestRemoveMember(member)} disabled={actionDisabled || isCurrentUser} className="rounded-full border-destructive/40 text-destructive hover:text-destructive"><UserX className="mr-1 h-4 w-4" />{t("移出", "Remove")}</Button>
+                      </div>
                     </div>
 
                     <div className="grid gap-2 md:grid-cols-2">
@@ -812,6 +895,7 @@ export default function SettingsPage() {
                             type="checkbox"
                             className="rounded border-border"
                             checked={Boolean(draft[feature])}
+                            disabled={!isActiveMember}
                             onChange={(event) => {
                               setPermissionDrafts((prev) => ({
                                 ...prev,
@@ -837,7 +921,7 @@ export default function SettingsPage() {
             {(canViewEnterpriseDify || isEnterpriseAdmin) && (
               <section className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("AI 资源配置", "AI resource configuration")}</p>
+                  <SectionEyebrow>{t("AI 资源配置", "AI resource configuration")}</SectionEyebrow>
                   <h2 className="font-sans text-2xl font-semibold text-foreground">{t("企业知识库与顾问工作流", "Enterprise knowledge and advisor workflows")}</h2>
                   <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("把知识检索和顾问 workflow 放在同一层，便于判断当前企业到底拥有哪些 AI 能力，以及哪些只是系统默认兜底。", "View knowledge retrieval and advisor workflows in one place to separate enterprise capabilities from system defaults.")}</p>
                 </div>
@@ -848,7 +932,7 @@ export default function SettingsPage() {
                       <CardTitle className="flex items-center gap-2 font-sans text-xl"><Database className="h-5 w-5 text-primary" />{t("Dify 企业知识库", "Dify enterprise knowledge")}</CardTitle>
                       <CardDescription>
                 {hasEnterpriseKnowledgeBinding
-                  ? t("当前企业已配置专属 Dify 知识库。设置页展示数据库中的绑定信息；只有企业管理员可启用或停用企业知识库。", "Enterprise-specific Dify knowledge is configured. This page shows database bindings; only enterprise admins can toggle it.")
+                  ? t("当前企业已配置专属 Dify 知识库。设置页展示数据库中的绑定信息；知识库状态由团队统一维护。", "Enterprise-specific Dify knowledge is configured. This page shows database bindings; knowledge base status is maintained by the team.")
                   : t("当前企业还没有配置 Dify 企业知识库。", "No enterprise Dify knowledge is configured yet.")}
                       </CardDescription>
                     </CardHeader>
@@ -893,7 +977,7 @@ export default function SettingsPage() {
                       disabled={!canManageEnterpriseDify || savingDifyConfig}
                       onChange={(event) => void updateEnterpriseDifyEnabled(event.target.checked)}
                     />
-                    <span>{t("启用企业统一知识检索", "Enable enterprise knowledge retrieval")}{!canManageEnterpriseDify ? t("（仅企业管理员可修改）", " (admins only)") : ""}</span>
+                    <span>{t("启用企业统一知识检索", "Enable enterprise knowledge retrieval")}{!canManageEnterpriseDify ? t("（由团队统一维护）", " (maintained by the team)") : ""}</span>
                   </label>
 
                   <div className="flex flex-wrap items-center gap-3">
@@ -1119,7 +1203,7 @@ export default function SettingsPage() {
 
             <section className="space-y-4">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("个性化记忆", "Personalization memory")}</p>
+                <SectionEyebrow>{t("个性化记忆", "Personalization memory")}</SectionEyebrow>
                 <h2 className="font-sans text-2xl font-semibold text-foreground">{t("写作记忆与风格", "Writer memory and style")}</h2>
                 <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("仅在 Settings 提供管理入口。该区块当前展示 writer 作用域下的跨会话记忆。", "Management entry exists only in Settings. This section currently shows cross-session memory in writer scope.")}</p>
               </div>
@@ -1128,7 +1212,7 @@ export default function SettingsPage() {
 
             <section className="space-y-4">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">{t("危险操作", "Danger zone")}</p>
+                <SectionEyebrow>{t("危险操作", "Danger zone")}</SectionEyebrow>
                 <h2 className="font-sans text-2xl font-semibold text-foreground">{t("会话与退出", "Session and logout")}</h2>
                 <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("单独放出退出操作，避免与普通配置动作并排出现导致误触。", "Keep logout separate from normal configuration actions to avoid accidental clicks.")}</p>
               </div>
@@ -1148,7 +1232,7 @@ export default function SettingsPage() {
 
           <aside className="space-y-4 xl:sticky xl:top-8 xl:self-start">
             <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-48px_rgba(31,41,55,0.5)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">{t("管理摘要", "Management brief")}</p>
+              <SectionEyebrow>{t("管理摘要", "Management brief")}</SectionEyebrow>
               <h2 className="mt-2 font-sans text-xl font-semibold text-foreground">{t("当前配置摘要", "Current configuration summary")}</h2>
               <p className="mt-2 text-sm leading-7 text-muted-foreground">{t("右侧摘要不承载操作，只帮助管理员快速确认企业状态、资源规模和治理负载。", "The side summary is read-only and helps admins quickly verify enterprise status, resource scale, and governance workload.")}</p>
             </div>

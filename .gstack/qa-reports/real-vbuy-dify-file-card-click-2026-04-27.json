@@ -1,0 +1,20 @@
+{
+  "results": [
+    {
+      "name": "company-search",
+      "beforeUrl": "http://localhost:3017/dashboard/advisor/company-search/207",
+      "cardVisible": true,
+      "popupOpened": true,
+      "popupUrl": "",
+      "mainUrlAfterClick": "http://localhost:3017/dashboard/advisor/company-search/207"
+    },
+    {
+      "name": "contact-mining",
+      "beforeUrl": "http://localhost:3017/dashboard/advisor/contact-mining/208",
+      "cardVisible": true,
+      "popupOpened": true,
+      "popupUrl": ":",
+      "mainUrlAfterClick": "http://localhost:3017/dashboard/advisor/contact-mining/208"
+    }
+  ]
+}

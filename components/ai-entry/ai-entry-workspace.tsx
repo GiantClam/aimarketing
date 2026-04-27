@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, Bot, Check, Copy, Loader2, Send, Sparkles } from "lucide-react"
+import { ArrowRight, Bot, Check, Copy, ImageIcon, Loader2, Paperclip, Send, Sparkles, X } from "lucide-react"
 
 import {
   Message,
@@ -43,7 +43,15 @@ import {
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { cn } from "@/lib/utils"
 
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string }
+type ChatAttachment = {
+  id: string
+  name: string
+  mediaType: string
+  size: number
+  dataUrl?: string
+  text?: string
+}
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; attachments?: ChatAttachment[] }
 type ModelOption = {
   id: string
   name: string
@@ -82,6 +90,14 @@ type ChatStreamApiResponse = {
     snippetCount?: number
     datasetCount?: number
     message?: string
+    args?: {
+      query?: string
+      intent?: string
+    }
+    result?: {
+      query?: string
+      results?: Array<{ title?: string; url?: string; snippet?: string; provider?: string }>
+    }
   } | null
 }
 type ModelApiResponse = {
@@ -113,6 +129,8 @@ type AgentApiResponse = {
 }
 
 const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
+const AI_ENTRY_MAX_ATTACHMENTS = 4
+const AI_ENTRY_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 
 function readInitialAgentFromLocation() {
   if (typeof window === "undefined") return null
@@ -184,6 +202,43 @@ function dedupeModelsById(models: ModelOption[]) {
     if (seen.has(item.id)) return false
     seen.add(item.id)
     return true
+  })
+}
+
+function isTextLikeFile(file: File) {
+  return (
+    file.type.startsWith("text/") ||
+    file.type.includes("json") ||
+    file.type.includes("csv") ||
+    /\.(txt|md|csv|json)$/i.test(file.name)
+  )
+}
+
+function modelSupportsImageInput(model: ModelOption | null) {
+  const normalized = [model?.id, model?.runtimeId, model?.canonicalId, ...(model?.aliases || [])]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+  if (!normalized) return false
+  return (
+    normalized.includes("gemini") ||
+    normalized.includes("claude") ||
+    normalized.includes("gpt-4") ||
+    normalized.includes("gpt-5") ||
+    normalized.includes("o3") ||
+    normalized.includes("o4") ||
+    normalized.includes("vision") ||
+    normalized.includes("vl") ||
+    normalized.includes("pixtral")
+  )
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(reader.error || new Error("file_read_failed"))
+    reader.readAsDataURL(file)
   })
 }
 
@@ -301,6 +356,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -324,6 +380,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const [initialAgentFromQuery] = useState<string | null>(() => readInitialAgentFromLocation())
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const search = searchParams.toString()
   const routeEntryMode = (searchParams.get("entry") || "").trim()
   const shouldLockModel = useMemo(
@@ -739,22 +796,88 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     }
   }, [])
 
+  const removeAttachment = useCallback((attachmentId: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+  }, [])
+
+  const handleAttachmentFiles = useCallback(
+    async (fileList: FileList | null) => {
+      const files = Array.from(fileList || [])
+      if (!files.length) return
+
+      if (attachments.length + files.length > AI_ENTRY_MAX_ATTACHMENTS) {
+        setErrorMessage(isZh ? "一次最多上传 4 个附件。" : "You can upload up to 4 attachments at a time.")
+        return
+      }
+
+      try {
+        const nextAttachments: ChatAttachment[] = []
+        for (const file of files) {
+          if (file.size > AI_ENTRY_MAX_ATTACHMENT_BYTES) {
+            setErrorMessage(isZh ? "单个附件不能超过 4MB。" : "Each attachment must be 4MB or smaller.")
+            continue
+          }
+
+          if (file.type.startsWith("image/")) {
+            nextAttachments.push({
+              id: `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              name: file.name,
+              mediaType: file.type,
+              size: file.size,
+              dataUrl: await readFileAsDataUrl(file),
+            })
+            continue
+          }
+
+          if (isTextLikeFile(file)) {
+            nextAttachments.push({
+              id: `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              name: file.name,
+              mediaType: file.type || "text/plain",
+              size: file.size,
+              text: await file.text(),
+            })
+            continue
+          }
+
+          setErrorMessage(isZh ? "当前对话暂不支持该文件类型，请上传图片或文本文件。" : "This chat does not support that file type yet. Upload an image or text file.")
+        }
+
+        if (nextAttachments.length > 0) {
+          setAttachments((current) => [...current, ...nextAttachments].slice(0, AI_ENTRY_MAX_ATTACHMENTS))
+          setErrorMessage(null)
+        }
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = ""
+      }
+    },
+    [attachments.length, isZh],
+  )
+
   const handleSend = useCallback(async () => {
     const prompt = input.trim()
-    if (!prompt || isLoading || isConversationLoading) return
+    if ((!prompt && attachments.length === 0) || isLoading || isConversationLoading) return
+    const hasImageAttachments = attachments.some((attachment) => attachment.mediaType.startsWith("image/"))
+    if (hasImageAttachments && !modelSupportsImageInput(selectedModel)) {
+      setErrorMessage(isZh ? "当前所选模型不支持图片上传或识别，请切换到支持视觉的模型后再发送。" : "The selected model does not support image upload or recognition. Switch to a vision-capable model before sending.")
+      return
+    }
     const requestedAgentId =
       typeof selectedAgentId === "string" && selectedAgentId.trim()
         ? selectedAgentId.trim()
         : null
 
-    const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: "user", content: prompt }
+    const sentAttachments = attachments
+    const userMessageContent = prompt || (isZh ? "请识别附件内容。" : "Please analyze the attached content.")
+    const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: "user", content: userMessageContent, attachments: sentAttachments }
     const assistantMessageId = `assistant-${Date.now()}`
     const contextMessages = [
       ...messages.filter((message) => message.content.trim()).map((message) => ({ role: message.role, content: message.content })),
-      { role: "user" as const, content: prompt },
+      { role: "user" as const, content: userMessageContent },
     ]
 
     setInput("")
+    setAttachments([])
     setErrorMessage(null)
     setPendingTaskEvents([
       {
@@ -778,6 +901,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         body: JSON.stringify({
           stream: true,
           messages: contextMessages,
+          attachments: sentAttachments,
           conversationId,
           conversationScope: shouldLockModel ? "consulting" : "chat",
           modelConfig: modelProviderId && selectedModelId ? { providerId: modelProviderId, modelId: selectedModelId } : undefined,
@@ -896,9 +1020,11 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           if (event.event === "tool_call") {
             const toolName = event.data?.toolName || "tool"
             const toolId = event.data?.toolCallId || toolName
+            const isWebSearch = toolName === "web_search"
             upsertTaskEvent({
               type: `tool:${toolId}`,
-              label: `Tool: ${toolName}`,
+              label: isWebSearch ? (isZh ? "正在搜索网页" : "Searching the web") : `Tool: ${toolName}`,
+              detail: isWebSearch ? event.data?.args?.query : undefined,
               status: "running",
               at: now,
             })
@@ -908,9 +1034,17 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           if (event.event === "tool_result") {
             const toolName = event.data?.toolName || "tool"
             const toolId = event.data?.toolCallId || toolName
+            const isWebSearch = toolName === "web_search"
+            const sources = Array.isArray(event.data?.result?.results)
+              ? event.data.result.results.filter((source) => typeof source?.url === "string" && source.url.trim())
+              : []
+            const sourceDetail = sources.length
+              ? `${sources.length} ${isZh ? "个来源" : "sources"}: ${sources.slice(0, 2).map((source) => source.title || source.url).filter(Boolean).join(" / ")}`
+              : undefined
             upsertTaskEvent({
               type: `tool:${toolId}`,
-              label: `Tool: ${toolName}`,
+              label: isWebSearch ? (isZh ? "网页搜索完成" : "Web search completed") : `Tool: ${toolName}`,
+              detail: isWebSearch ? sourceDetail : undefined,
               status: "completed",
               at: now,
             })
@@ -1053,15 +1187,18 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       setIsLoading(false)
     }
   }, [
+    attachments,
     conversationId,
     copy,
     input,
     isConversationLoading,
     isLoading,
+    isZh,
     messages,
     modelProviderId,
     models,
     selectedAgentId,
+    selectedModel,
     selectedModelId,
     shouldLockModel,
   ])
@@ -1095,6 +1232,61 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       </Select>
       )}
     </div>
+  )
+
+  const renderSelectedAttachments = () => {
+    if (attachments.length === 0) return null
+    return (
+      <div className="flex flex-wrap gap-2 px-1 pb-2">
+        {attachments.map((attachment) => {
+          const isImage = attachment.mediaType.startsWith("image/")
+          return (
+            <div key={attachment.id} className="inline-flex max-w-[260px] items-center gap-2 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground">
+              {isImage ? <ImageIcon className="h-3.5 w-3.5 shrink-0" /> : <Paperclip className="h-3.5 w-3.5 shrink-0" />}
+              <span className="truncate" title={attachment.name}>{attachment.name}</span>
+              <button
+                type="button"
+                className="rounded-full p-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                aria-label={isZh ? "移除附件" : "Remove attachment"}
+                onClick={() => removeAttachment(attachment.id)}
+                disabled={isLoading}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const renderMessageAttachments = (items: ChatAttachment[] | undefined) => {
+    if (!items?.length) return null
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        {items.map((attachment) => (
+          <div key={attachment.id} className="inline-flex max-w-[240px] items-center gap-2 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground">
+            {attachment.mediaType.startsWith("image/") ? <ImageIcon className="h-3.5 w-3.5 shrink-0" /> : <Paperclip className="h-3.5 w-3.5 shrink-0" />}
+            <span className="truncate" title={attachment.name}>{attachment.name}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const renderAttachmentPicker = () => (
+    <PromptInputAction tooltip={isZh ? "上传图片或文本附件" : "Upload image or text attachment"}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-9 rounded-full px-3"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isLoading || isConversationLoading || attachments.length >= AI_ENTRY_MAX_ATTACHMENTS}
+      >
+        <Paperclip className="h-3.5 w-3.5" />
+      </Button>
+    </PromptInputAction>
   )
 
   const renderRecommendedAgents = (size: "landing" | "inline") => {
@@ -1159,11 +1351,21 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                   {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
                 </div>
               ) : null}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.txt,.md,.csv,.json,text/*,application/json,text/csv"
+                className="hidden"
+                onChange={(event) => void handleAttachmentFiles(event.target.files)}
+              />
+              {renderSelectedAttachments()}
               <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
               <PromptInputActions>
                 {renderSelectors("h-10")}
+                {renderAttachmentPicker()}
                 <PromptInputAction tooltip={copy.send}>
-                  <Button type="button" size="sm" className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && !isLoading) || isConversationLoading || modelsLoading}>
+                  <Button type="button" size="sm" className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
                     {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
                     {copy.send}
                   </Button>
@@ -1211,6 +1413,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                     {isAssistant ? <MessageAvatar alt="AI" fallback="AI" /> : null}
                     <div className={cn("flex max-w-[min(80ch,88%)] flex-col gap-1.5", isAssistant ? "items-start" : "items-end")}>
                       <MessageContent markdown={isAssistant} role={isAssistant ? "assistant" : "user"}>{message.content || (isAssistant && isLoading ? copy.loading : "")}</MessageContent>
+                      {!isAssistant ? renderMessageAttachments(message.attachments) : null}
                       {isAssistant && isLoading && index === messages.length - 1 ? (
                         <div className="w-full rounded-xl border border-border/70 bg-card/70 p-3">
                           <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -1275,11 +1478,21 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                   {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
                 </div>
               ) : null}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.txt,.md,.csv,.json,text/*,application/json,text/csv"
+                className="hidden"
+                onChange={(event) => void handleAttachmentFiles(event.target.files)}
+              />
+              {renderSelectedAttachments()}
               <PromptInputTextarea placeholder={copy.placeholder} />
               <PromptInputActions>
                 {renderSelectors("h-9")}
+                {renderAttachmentPicker()}
                 <PromptInputAction tooltip={copy.send}>
-                  <Button type="button" size="sm" className="h-9 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && !isLoading) || isConversationLoading || modelsLoading}>
+                  <Button type="button" size="sm" className="h-9 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
                     {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                     {copy.send}
                   </Button>

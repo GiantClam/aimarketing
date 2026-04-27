@@ -33,6 +33,7 @@ import {
   runAiEntryConsultingBlocking,
   runAiEntryConsultingStreaming,
 } from "@/lib/skills/runtime/ai-entry-executor"
+import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 
 export const runtime = "nodejs"
 
@@ -41,9 +42,22 @@ type IncomingMessage = {
   content?: unknown
 }
 
+type IncomingAttachment = {
+  name?: unknown
+  mediaType?: unknown
+  dataUrl?: unknown
+  text?: unknown
+  size?: unknown
+}
+
+type AttachmentContextPart =
+  | { type: "text"; text: string }
+  | { type: "image"; image: string; mediaType: string }
+
 type ChatRequestBody = {
   messages?: IncomingMessage[]
   message?: string
+  attachments?: IncomingAttachment[]
   conversationId?: string | null
   conversationScope?: "chat" | "consulting"
   stream?: boolean
@@ -77,12 +91,83 @@ function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
 }
 
-function normalizeMessages(messages: IncomingMessage[]) {
+function normalizeAttachmentList(input: unknown) {
+  if (!Array.isArray(input)) return []
+  return input
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null
+      const source = item as IncomingAttachment
+      const name = typeof source.name === "string" ? source.name.trim().slice(0, 180) : "attachment"
+      const mediaType = typeof source.mediaType === "string" ? source.mediaType.trim().toLowerCase() : ""
+      const dataUrl = typeof source.dataUrl === "string" ? source.dataUrl.trim() : ""
+      const text = typeof source.text === "string" ? source.text.slice(0, 80_000) : ""
+      const size = typeof source.size === "number" && Number.isFinite(source.size) ? source.size : 0
+      if (!mediaType || (!dataUrl && !text)) return null
+      return { name, mediaType, dataUrl, text, size }
+    })
+    .filter((item): item is { name: string; mediaType: string; dataUrl: string; text: string; size: number } => Boolean(item))
+    .slice(0, 4)
+}
+
+function extractDataUrlPayload(dataUrl: string) {
+  const match = /^data:([^;,]+);base64,(.+)$/i.exec(dataUrl)
+  if (!match) return null
+  return {
+    mediaType: match[1].toLowerCase(),
+    data: match[2],
+  }
+}
+
+function modelSupportsImageInput(modelId: string | null | undefined) {
+  const normalized = typeof modelId === "string" ? modelId.toLowerCase() : ""
+  if (!normalized) return false
+  if (normalized.includes("gemini")) return true
+  if (normalized.includes("claude")) return true
+  if (normalized.includes("gpt-4") || normalized.includes("gpt-5") || normalized.includes("o3") || normalized.includes("o4")) return true
+  if (normalized.includes("vision") || normalized.includes("vl") || normalized.includes("pixtral")) return true
+  return false
+}
+
+function buildAttachmentContextParts(attachments: ReturnType<typeof normalizeAttachmentList>): AttachmentContextPart[] {
+  const parts: AttachmentContextPart[] = []
+  for (const attachment of attachments) {
+    if (attachment.mediaType.startsWith("text/") || attachment.mediaType.includes("json") || attachment.mediaType.includes("csv")) {
+      parts.push({
+        type: "text",
+        text: `\n\n[Uploaded file: ${attachment.name} / ${attachment.mediaType}]\n${attachment.text || "(No readable text content was provided.)"}`,
+      })
+      continue
+    }
+
+    if (attachment.mediaType.startsWith("image/")) {
+      const payload = extractDataUrlPayload(attachment.dataUrl)
+      if (!payload) continue
+      parts.push({
+        type: "image",
+        image: payload.data,
+        mediaType: payload.mediaType,
+      })
+    }
+  }
+  return parts
+}
+
+function normalizeMessages(messages: IncomingMessage[], attachments: ReturnType<typeof normalizeAttachmentList> = []) {
   const normalized: CoreMessage[] = []
-  for (const item of messages) {
+  for (const [index, item] of messages.entries()) {
     const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
     const content = typeof item?.content === "string" ? item.content.trim() : ""
     if (!role || !content) continue
+    if (role === "user" && index === messages.length - 1 && attachments.length > 0) {
+      normalized.push({
+        role,
+        content: [
+          { type: "text", text: content },
+          ...buildAttachmentContextParts(attachments),
+        ],
+      } as CoreMessage)
+      continue
+    }
     normalized.push({ role, content })
   }
   return normalized
@@ -178,6 +263,7 @@ function buildAiEntrySystemPrompt(
   agentInstruction: string,
   latestUserPrompt: string,
   forcedReplyLanguage: "zh" | "en" | null,
+  webSearchAvailable = false,
 ) {
   const normalizedPrompt = latestUserPrompt.trim()
   const inferredLanguage = /[\u4e00-\u9fff]/.test(normalizedPrompt)
@@ -208,8 +294,11 @@ function buildAiEntrySystemPrompt(
     ...languageDirectives,
     "Provide concise but actionable answers with structured bullets when useful.",
     "When tools are available, call them only if they materially improve correctness.",
+    webSearchAvailable
+      ? "Web search tool rule: a web_search tool is available. Decide from the user's intent whether fresh external evidence is needed; do not rely on fixed trigger words. If you call web_search, cite the result URLs that shaped the answer."
+      : "",
     "Ground answers in the user's question and sound consulting practice; do not invent company-specific facts, figures, or policies unless they come from the user or from retrieved enterprise knowledge below.",
-  ].join("\n")
+  ].filter(Boolean).join("\n")
   const sections = [base]
   if (agentInstruction.trim()) {
     sections.push(`## Agent mode\n${agentInstruction.trim()}`)
@@ -471,7 +560,8 @@ export async function POST(request: NextRequest) {
     const currentUser = auth.user
 
     const body = (await request.json()) as ChatRequestBody
-    const requestedMessages = normalizeMessages(Array.isArray(body.messages) ? body.messages : [])
+    const attachments = normalizeAttachmentList(body.attachments)
+    const requestedMessages = normalizeMessages(Array.isArray(body.messages) ? body.messages : [], attachments)
     const fallbackPrompt = typeof body.message === "string" ? body.message.trim() : ""
 
     if (!requestedMessages.length && !fallbackPrompt) {
@@ -490,6 +580,15 @@ export async function POST(request: NextRequest) {
     const modelConfig = await resolveModelConfig(parseModelConfig(body.modelConfig), {
       forceSonnet46: agentConfig.lockModelToSonnet46,
     })
+    if (attachments.some((attachment) => attachment.mediaType.startsWith("image/"))) {
+      const resolvedModelId = modelConfig?.providerModelId || modelConfig?.modelId || null
+      if (!modelSupportsImageInput(resolvedModelId)) {
+        return NextResponse.json({ error: "unsupported_image_upload" }, { status: 400 })
+      }
+    }
+    if (attachments.some((attachment) => !attachment.mediaType.startsWith("image/") && !attachment.mediaType.startsWith("text/") && !attachment.mediaType.includes("json") && !attachment.mediaType.includes("csv"))) {
+      return NextResponse.json({ error: "unsupported_attachment_type" }, { status: 400 })
+    }
     let persistenceEnabled = true
     let conversationId = ""
     try {
@@ -594,13 +693,18 @@ export async function POST(request: NextRequest) {
       routeDecision,
       resolvedInstruction,
       selectedTools,
-      selectedToolIds,
       closeTools: loadedCloseTools,
       toolLoadWarning,
     } = consultingRuntime
     if (loadedCloseTools) {
       closeTools = loadedCloseTools
     }
+    const webSearchTools = buildAiEntryWebSearchTools()
+    const effectiveSelectedTools = {
+      ...(selectedTools || {}),
+      ...webSearchTools,
+    }
+    const effectiveSelectedToolIds = Object.keys(effectiveSelectedTools)
 
     if (toolLoadWarning) {
       console.warn("ai-entry.chat.mcp-tools.load.failed", {
@@ -619,7 +723,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const maxStepCount = selectedToolIds.length > 0 ? 8 : 1
+    const maxStepCount = effectiveSelectedToolIds.length > 0 ? 8 : 1
     const stopWhen = stepCountIs(maxStepCount)
     const providerOptions = modelConfig
       ? {
@@ -647,6 +751,8 @@ export async function POST(request: NextRequest) {
       modelProviderId: modelConfig?.providerId || null,
       modelId: modelConfig?.modelId || null,
       providerModelId: modelConfig?.providerModelId || null,
+      attachmentCount: attachments.length,
+      selectedToolIds: effectiveSelectedToolIds,
     })
 
     if (!stream) {
@@ -656,11 +762,12 @@ export async function POST(request: NextRequest) {
         resolvedInstruction,
         latestUserPrompt,
         forcedReplyLanguage,
+        Boolean(webSearchTools.web_search),
       )
       const execution = await runAiEntryConsultingBlocking({
         systemPrompt,
         messages: normalizedMessages,
-        selectedTools,
+        selectedTools: effectiveSelectedTools,
         stopWhen,
         providerOptions,
         onProviderAttempt: (providerRun) => {
@@ -746,7 +853,7 @@ export async function POST(request: NextRequest) {
           sendEvent({
             event: "conversation_init",
             conversation_id: conversationId,
-            enabled_tools: selectedToolIds,
+            enabled_tools: effectiveSelectedToolIds,
             skills_enabled: skillsEnabled,
             persisted: persistenceEnabled,
             agent_id: effectiveAgentId,
@@ -764,12 +871,13 @@ export async function POST(request: NextRequest) {
             resolvedInstruction,
             latestUserPrompt,
             forcedReplyLanguage,
+            Boolean(webSearchTools.web_search),
           )
 
           const execution = await runAiEntryConsultingStreaming({
             systemPrompt,
             messages: normalizedMessages,
-            selectedTools,
+            selectedTools: effectiveSelectedTools,
             stopWhen,
             providerOptions,
             onProviderAttempt: (providerRun) => {

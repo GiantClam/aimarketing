@@ -28,6 +28,13 @@ function MarkdownComponent({ children, className }: MarkdownProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          a({ href, children, ...props }) {
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                {children}
+              </a>
+            )
+          },
           code({ className: codeClassName, children: codeChildren, ...props }) {
             const match = /language-(\w+)/.exec(codeClassName || "")
             const code = String(codeChildren).replace(/\n$/, "")

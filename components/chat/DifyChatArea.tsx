@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, History, Loader2, MessageSquare, Radar, Send, Sparkles, Target, TrendingUp } from "lucide-react";
+import { Copy, ExternalLink, FileText, History, Loader2, MessageSquare, Paperclip, Radar, Send, Sparkles, Target, TrendingUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -402,6 +402,83 @@ function getObjectRecord(value: unknown) {
     : null;
 }
 
+const FILE_LINK_EXTENSIONS = new Set([
+  "csv",
+  "doc",
+  "docx",
+  "json",
+  "pdf",
+  "ppt",
+  "pptx",
+  "txt",
+  "xls",
+  "xlsx",
+  "zip",
+])
+
+function getLinkText(children: ReactNode): string {
+  if (typeof children === "string" || typeof children === "number") return String(children)
+  if (Array.isArray(children)) return children.map(getLinkText).join("")
+  return ""
+}
+
+function getFileExtensionFromPathname(pathname: string) {
+  const match = /\.([a-z0-9]{2,8})$/i.exec(pathname)
+  return match?.[1]?.toLowerCase() || ""
+}
+
+function getFileNameFromPath(path: string) {
+  const decodedPath = decodeURIComponent(path)
+  return decodedPath.split(/[\\/]/).filter(Boolean).at(-1) || ""
+}
+
+function getFileNameFromSearchParams(searchParams: URLSearchParams) {
+  for (const key of ["filename", "file", "key", "name", "download"]) {
+    const value = searchParams.get(key)
+    if (!value) continue
+    const fileName = getFileNameFromPath(value)
+    if (fileName) return fileName
+  }
+  return ""
+}
+
+function buildFileLinkMeta(href: unknown, label: string) {
+  if (typeof href !== "string" || !href.trim()) return null
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return null
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null
+
+  const decodedPathname = decodeURIComponent(url.pathname)
+  const pathName = getFileNameFromPath(decodedPathname)
+  const searchParamFileName = getFileNameFromSearchParams(url.searchParams)
+  const labelName = label.trim()
+  const extension =
+    getFileExtensionFromPathname(decodedPathname) ||
+    getFileExtensionFromPathname(searchParamFileName) ||
+    getFileExtensionFromPathname(labelName)
+  const looksLikeFile =
+    FILE_LINK_EXTENSIONS.has(extension) ||
+    /(^|\/)(files?|attachments?|downloads?)(\/|$)/i.test(url.pathname) ||
+    url.searchParams.has("filename") ||
+    url.searchParams.has("download") ||
+    Boolean(searchParamFileName && FILE_LINK_EXTENSIONS.has(getFileExtensionFromPathname(searchParamFileName)))
+
+  if (!looksLikeFile) return null
+
+  return {
+    fileName:
+      labelName && labelName !== href && !/^https?:\/\//i.test(labelName)
+        ? labelName
+        : searchParamFileName || pathName || url.hostname,
+    extension: extension ? extension.toUpperCase() : "FILE",
+    host: url.hostname,
+  }
+}
+
 function getDifyWorkflowFinishedOutput(payload: Record<string, unknown>) {
   const event = typeof payload.event === "string" ? payload.event : "";
   if (event !== "workflow_finished") return "";
@@ -525,10 +602,26 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<Message[]>([]);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const unsupportedAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const getViewport = useCallback(
     () => scrollRef.current?.querySelector("[data-slot='scroll-area-viewport']") as HTMLElement | null,
     [],
   );
+
+  const handleUnsupportedAttachment = useCallback((fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    if (unsupportedAttachmentInputRef.current) unsupportedAttachmentInputRef.current.value = "";
+    setMessagesState((prev) => [
+      ...prev,
+      {
+        id: `advisor_attachment_unsupported_${Date.now()}`,
+        conversation_id: conversationId || "",
+        role: "assistant",
+        content: localeKey === "zh" ? "当前顾问工作流暂不支持附件上传或识别，请改用文字描述。" : "This advisor workflow does not support file upload or recognition yet. Please describe the content in text.",
+        agentName: meta.title,
+      },
+    ]);
+  }, [conversationId, localeKey, meta.title]);
 
   useEffect(() => {
     messagesRef.current = messagesState;
@@ -1150,7 +1243,40 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                       ) : (
                         <div className={cn("rounded-[24px] border-2 px-4 py-3.5", isAssistant ? "border-border bg-background text-foreground" : "border-primary bg-primary text-primary-foreground")}>
                           <div className={cn("break-words leading-7 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_h1]:my-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-2 [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:p-3 [&_ul]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0", isAssistant ? "text-foreground [&_code]:bg-accent/6 [&_pre]:bg-accent [&_pre]:text-accent-foreground" : "text-primary-foreground [&_code]:bg-black/10 [&_pre]:bg-black/10 [&_pre]:text-primary-foreground")}>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code({ className, children, ...props }) { const match = /language-(\w+)/.exec(className || ""); if (!match && !className) return <code className={className} {...props}>{children}</code>; return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, "")}</CodeBlock>; } }}>{message.content}</ReactMarkdown>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                a({ href, children, ...props }) {
+                                  const fileLink = buildFileLinkMeta(href, getLinkText(children));
+                                  if (fileLink) {
+                                    return (
+                                      <a
+                                        href={href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="my-1 inline-flex max-w-full items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2 text-sm text-foreground no-underline shadow-sm transition hover:border-primary/60 hover:bg-primary/5"
+                                        {...props}
+                                      >
+                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                                          <FileText className="h-4 w-4" />
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block truncate font-medium">{fileLink.fileName}</span>
+                                          <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+                                            {fileLink.extension} · {fileLink.host}
+                                          </span>
+                                        </span>
+                                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                      </a>
+                                    );
+                                  }
+                                  return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+                                },
+                                code({ className, children, ...props }) { const match = /language-(\w+)/.exec(className || ""); if (!match && !className) return <code className={className} {...props}>{children}</code>; return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, "")}</CodeBlock>; },
+                              }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
                           </div>
                         </div>
                       )}
@@ -1182,11 +1308,28 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
                   <p className="text-[11px] leading-5 text-muted-foreground">{ui.enterToSendHint}</p>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] text-foreground">{conversationId ? ui.contextActive : ui.newThread}</Badge>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 rounded-full px-3"
+                      onClick={() => unsupportedAttachmentInputRef.current?.click()}
+                      disabled={isLoading}
+                      aria-label={localeKey === "zh" ? "上传附件" : "Upload attachment"}
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
                     <Button className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={!inputVal.trim() || isLoading}>{isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}{ui.send}</Button>
                   </div>
                 </>
               }
             >
+              <input
+                ref={unsupportedAttachmentInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(event) => handleUnsupportedAttachment(event.target.files)}
+              />
               <Textarea ref={composerRef} value={inputVal} onChange={(event) => setInputVal(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder={meta.composerPlaceholder} disabled={isLoading} className="min-h-[80px] border-0 bg-transparent px-2 py-2 text-[14px] leading-6 shadow-none focus-visible:ring-0" />
             </WorkspaceComposerPanel>
           </div>

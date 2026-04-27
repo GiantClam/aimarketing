@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
+    if (payload.enterpriseStatus === "suspended" || payload.enterpriseStatus === "removed") {
+      logAuditEvent(request, "auth.login.enterprise_inactive", { userId: user.id, status: payload.enterpriseStatus })
+      return NextResponse.json({ error: "account_inactive" }, { status: 403 })
+    }
+
     if (!payload.enterpriseId) {
       logAuditEvent(request, "auth.login.enterprise_missing", { userId: user.id })
       return NextResponse.json({ error: "User is not bound to any enterprise" }, { status: 403 })
