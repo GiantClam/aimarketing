@@ -3,15 +3,21 @@ import { eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { enterprises, enterpriseJoinRequests, userFeaturePermissions, users } from "@/lib/db/schema"
-import { applySessionCookie, createUserSession } from "@/lib/auth/session"
-import { ensurePermissions, generateEnterpriseCode, getUserAuthPayload, hashPassword } from "@/lib/enterprise/server"
+import {
+  ensureEnterpriseAuthTables,
+  ensurePermissions,
+  generateEnterpriseCode,
+  hashPassword,
+} from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
+import { buildEmailVerificationUrl, resendEmailVerification } from "@/lib/auth/email-verification"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureEnterpriseAuthTables()
     const rateLimit = await checkRateLimit({
       key: `auth:register:${getRequestIp(request)}`,
       limit: 6,
@@ -82,6 +88,7 @@ export async function POST(request: NextRequest) {
             name: String(name).trim(),
             email: normalizedEmail,
             password: hashPassword(String(password)),
+            emailVerified: false,
             enterpriseId: enterprise.id,
             enterpriseRole: "admin",
             enterpriseStatus: "active",
@@ -94,19 +101,21 @@ export async function POST(request: NextRequest) {
         userId = user.id
         await db.update(enterprises).set({ createdBy: user.id, updatedAt: new Date() }).where(eq(enterprises.id, enterprise.id))
         await ensurePermissions(user.id, true)
+        await resendEmailVerification({
+          userId: user.id,
+          email: normalizedEmail,
+          name: String(name).trim(),
+          verificationUrlBuilder: (token) => buildEmailVerificationUrl(request, token),
+        })
 
-        const payload = await getUserAuthPayload(user.id)
-        if (!payload) {
-          throw new Error("Failed to build user payload")
-        }
-
-        const { sessionToken, expiresAt } = await createUserSession(user.id, request)
         logAuditEvent(request, "auth.register.enterprise_created", {
           userId: user.id,
           enterpriseId: enterprise.id,
         })
-        const response = NextResponse.json({ user: payload, requiresApproval: false })
-        return applySessionCookie(response, sessionToken, expiresAt, request)
+        return NextResponse.json({
+          requiresEmailVerification: true,
+          email: normalizedEmail,
+        })
       } catch (error) {
         if (userId) {
           await db.delete(userFeaturePermissions).where(eq(userFeaturePermissions.userId, userId))
@@ -141,6 +150,7 @@ export async function POST(request: NextRequest) {
           name: String(name).trim(),
           email: normalizedEmail,
           password: hashPassword(String(password)),
+          emailVerified: false,
           enterpriseId: targetEnterprise.id,
           enterpriseRole: "member",
           enterpriseStatus: "pending",
@@ -162,19 +172,21 @@ export async function POST(request: NextRequest) {
       })
 
       await ensurePermissions(user.id, false)
+      await resendEmailVerification({
+        userId: user.id,
+        email: normalizedEmail,
+        name: String(name).trim(),
+        verificationUrlBuilder: (token) => buildEmailVerificationUrl(request, token),
+      })
 
-      const payload = await getUserAuthPayload(user.id)
-      if (!payload) {
-        throw new Error("Failed to build user payload")
-      }
-
-      const { sessionToken, expiresAt } = await createUserSession(user.id, request)
       logAuditEvent(request, "auth.register.join_requested", {
         userId: user.id,
         enterpriseId: targetEnterprise.id,
       })
-      const response = NextResponse.json({ user: payload, requiresApproval: true })
-      return applySessionCookie(response, sessionToken, expiresAt, request)
+      return NextResponse.json({
+        requiresEmailVerification: true,
+        email: normalizedEmail,
+      })
     } catch (error) {
       if (createdUserId) {
         await db.delete(userFeaturePermissions).where(eq(userFeaturePermissions.userId, createdUserId))

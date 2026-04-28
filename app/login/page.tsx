@@ -18,6 +18,8 @@ export default function LoginPage() {
   const { messages, locale } = useI18n()
   const router = useRouter()
   const [error, setError] = useState("")
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState("")
+  const [needsEmailVerification, setNeedsEmailVerification] = useState(false)
   const isZh = locale === "zh"
   const t = (zh: string, en: string) => (isZh ? zh : en)
 
@@ -33,16 +35,24 @@ export default function LoginPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError("")
+    setNeedsEmailVerification(false)
 
     const formData = new FormData(event.currentTarget)
     const email = String(formData.get("email") || "")
     const password = String(formData.get("password") || "")
+    setPendingVerificationEmail(email.trim())
 
     try {
       await login(email, password)
       router.push(getNextPath())
     } catch (err) {
-      setError(err instanceof Error ? err.message : messages.login.loginFailed)
+      const message = err instanceof Error ? err.message : messages.login.loginFailed
+      if (message === "email_not_verified") {
+        setNeedsEmailVerification(true)
+        setError(t("邮箱尚未验证，请先查收验证邮件。", "Your email address is not verified yet. Please check your inbox."))
+        return
+      }
+      setError(message)
     }
   }
 
@@ -132,6 +142,16 @@ export default function LoginPage() {
             {error ? (
               <div className="mb-6 rounded-[20px] border-2 border-destructive bg-red-50 p-3">
                 <p className="text-sm text-red-600">{error}</p>
+                {needsEmailVerification && pendingVerificationEmail ? (
+                  <div className="mt-3 text-sm text-red-700">
+                    <Link
+                      href={`/verify-email?email=${encodeURIComponent(pendingVerificationEmail)}`}
+                      className="font-medium underline underline-offset-4"
+                    >
+                      {t("前往验证邮箱", "Go to email verification")}
+                    </Link>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -184,6 +204,12 @@ export default function LoginPage() {
               {messages.login.noAccount}{" "}
               <Link href="/register" className="font-medium text-foreground underline underline-offset-4">
                 {messages.login.registerNow}
+              </Link>
+            </div>
+
+            <div className="text-sm text-muted-foreground">
+              <Link href="/forgot-password" className="font-medium text-foreground underline underline-offset-4">
+                {t("忘记密码？", "Forgot password?")}
               </Link>
             </div>
           </section>

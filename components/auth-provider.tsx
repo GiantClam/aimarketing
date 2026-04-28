@@ -32,10 +32,16 @@ type RegisterPayload = {
   joinNote?: string
 }
 
+type RegisterResult = {
+  requiresApproval: boolean
+  requiresEmailVerification: boolean
+  email?: string
+}
+
 interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<void>
-  register: (payload: RegisterPayload) => Promise<{ requiresApproval: boolean }>
+  register: (payload: RegisterPayload) => Promise<RegisterResult>
   logout: () => Promise<void>
   refreshProfile: () => Promise<void>
   updateProfile: (updates: Partial<Pick<User, "name">>) => Promise<void>
@@ -215,10 +221,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(payload),
       })
 
-      const { data, user: normalized } = await parseUserResponse(res)
-      hasBootstrappedRef.current = true
-      applyUser(normalized)
-      return { requiresApproval: Boolean(data.requiresApproval) }
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || "Request failed")
+      }
+
+      const normalized = normalizeUser(data.user)
+      if (normalized) {
+        hasBootstrappedRef.current = true
+        applyUser(normalized)
+      }
+
+      return {
+        requiresApproval: Boolean(data.requiresApproval),
+        requiresEmailVerification: Boolean(data.requiresEmailVerification),
+        email: typeof data.email === "string" ? data.email : undefined,
+      }
     } finally {
       setLoading(false)
     }

@@ -18,6 +18,7 @@ export const users = pgTable(withPrefix("users"), {
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
   password: varchar("password", { length: 255 }),
+  emailVerified: boolean("email_verified").default(true).notNull(),
   enterpriseId: integer("enterprise_id").references(() => enterprises.id),
   enterpriseRole: varchar("enterprise_role", { length: 20 }).default("member"), // admin, member
   enterpriseStatus: varchar("enterprise_status", { length: 20 }).default("active"), // active, pending, rejected
@@ -43,6 +44,26 @@ export const userSessions = pgTable(
   },
   (table) => ({
     tokenHashUnique: uniqueIndex(withPrefix("user_sessions_token_hash_idx")).on(table.tokenHash),
+  }),
+)
+
+export const passwordResetTokens = pgTable(
+  withPrefix("password_reset_tokens"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    requestedIp: varchar("requested_ip", { length: 64 }),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    tokenHashUnique: uniqueIndex(withPrefix("password_reset_tokens_token_hash_idx")).on(table.tokenHash),
   }),
 )
 
@@ -260,6 +281,24 @@ export const leadHunterMessages = pgTable(
     answer: text("answer").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
   },
+)
+
+export const emailVerificationTokens = pgTable(
+  withPrefix("email_verification_tokens"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    tokenHashUnique: uniqueIndex(withPrefix("email_verification_tokens_token_hash_idx")).on(table.tokenHash),
+  }),
 )
 
 export const leadHunterEvidences = pgTable(

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { AlertTriangle, Bot, Building2, Check, Clock3, Database, KeyRound, LogOut, PauseCircle, PlayCircle, Save, Shield, Sparkles, User, UserX, Users, Workflow, X, type LucideIcon } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
+import { toast } from "sonner"
 import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -92,6 +93,17 @@ function formatEnterpriseSwitchMessage(error: unknown, fallback: string, locale:
   return message || fallback
 }
 
+function formatPasswordChangeMessage(error: unknown, fallback: string, locale: AppLocale) {
+  const isZh = locale === "zh"
+  const message = error instanceof Error ? error.message : ""
+  if (message === "current_password_required") return isZh ? "请输入当前密码。" : "Please enter your current password."
+  if (message === "current_password_invalid") return isZh ? "当前密码不正确。" : "The current password is incorrect."
+  if (message === "new_password_invalid") return isZh ? "新密码至少需要 8 位。" : "New password must be at least 8 characters."
+  if (message === "passwords_do_not_match") return isZh ? "两次输入的新密码不一致。" : "The new passwords do not match."
+  if (message === "demo_account_password_locked") return isZh ? "体验账号不支持修改密码。" : "Demo accounts cannot change password."
+  return message || fallback
+}
+
 type OverviewMetricProps = {
   icon: LucideIcon
   label: string
@@ -165,6 +177,11 @@ export default function SettingsPage() {
   const [name, setName] = useState("")
   const [saveMessage, setSaveMessage] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordMessage, setPasswordMessage] = useState("")
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [switchEnterpriseCode, setSwitchEnterpriseCode] = useState("")
   const [switchEnterpriseMessage, setSwitchEnterpriseMessage] = useState("")
   const [isSwitchingEnterprise, setIsSwitchingEnterprise] = useState(false)
@@ -338,6 +355,53 @@ export default function SettingsPage() {
       setSaveMessage(err instanceof Error ? err.message : t("保存失败", "Save failed."))
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    setPasswordMessage("")
+
+    if (!currentPassword) {
+      setPasswordMessage(t("请输入当前密码。", "Please enter your current password."))
+      return
+    }
+    if (!newPassword || newPassword.length < 8) {
+      setPasswordMessage(t("新密码至少需要 8 位。", "New password must be at least 8 characters."))
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage(t("两次输入的新密码不一致。", "The new passwords do not match."))
+      return
+    }
+
+    setIsChangingPassword(true)
+    try {
+      const response = await fetch("/api/auth/password/change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          confirmPassword,
+        }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(json?.error || "password_change_failed")
+      }
+
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      await refreshProfile()
+      setPasswordMessage(t("密码已更新，旧会话已失效。", "Password updated. Old sessions have been invalidated."))
+      toast.success(t("密码已更新，系统已重新登录。", "Password updated. You have been signed in again."))
+    } catch (error) {
+      setPasswordMessage(formatPasswordChangeMessage(error, t("修改密码失败", "Failed to change password."), locale))
+      toast.error(t("修改密码失败，请检查当前密码后重试。", "Failed to change password. Check your current password and try again."))
+    } finally {
+      setIsChangingPassword(false)
     }
   }
 
@@ -814,6 +878,55 @@ export default function SettingsPage() {
                   <div className="flex flex-wrap items-center gap-3">
                     <Button onClick={handleSaveProfile} disabled={isSaving} className="rounded-full px-5"><Save className="mr-2 h-4 w-4" />{isSaving ? t("保存中...", "Saving...") : t("保存设置", "Save settings")}</Button>
                     {saveMessage && <span className="text-sm text-muted-foreground">{saveMessage}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 font-sans text-xl"><KeyRound className="h-5 w-5 text-primary" />{t("修改密码", "Change password")}</CardTitle>
+                  <CardDescription>{t("输入当前密码后设置新密码。完成后旧会话会全部失效。", "Enter your current password and set a new one. Old sessions will be invalidated.")}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="current-password">{t("当前密码", "Current password")}</Label>
+                      <Input
+                        id="current-password"
+                        type="password"
+                        value={currentPassword}
+                        onChange={(event) => setCurrentPassword(event.target.value)}
+                        placeholder={t("请输入当前密码", "Enter current password")}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="new-password">{t("新密码", "New password")}</Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
+                        placeholder={t("至少 8 位", "At least 8 characters")}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="confirm-password">{t("确认新密码", "Confirm new password")}</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        placeholder={t("再次输入新密码", "Enter the new password again")}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button onClick={handleChangePassword} disabled={isChangingPassword} className="rounded-full px-5">
+                      <KeyRound className="mr-2 h-4 w-4" />
+                      {isChangingPassword ? t("更新中...", "Updating...") : t("确认修改密码", "Change password")}
+                    </Button>
+                    {passwordMessage && <span className="text-sm text-muted-foreground">{passwordMessage}</span>}
                   </div>
                 </CardContent>
               </Card>

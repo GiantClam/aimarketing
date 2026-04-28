@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers"
 import { Fira_Code, Fira_Sans, Manrope } from "next/font/google"
 
 import { AuthProvider } from "@/components/auth-provider"
+import { AppToaster } from "@/components/app-toaster"
 import { LocaleProvider } from "@/components/locale-provider"
 import { QueryProvider } from "@/components/query-provider"
 import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
@@ -52,7 +53,10 @@ export default async function RootLayout({
       <body suppressHydrationWarning>
         <LocaleProvider initialLocale={locale}>
           <QueryProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              {children}
+              <AppToaster />
+            </AuthProvider>
           </QueryProvider>
         </LocaleProvider>
       </body>

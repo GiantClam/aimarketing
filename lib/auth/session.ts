@@ -181,6 +181,12 @@ export async function createUserSession(userId: number, request?: NextRequest) {
   return { sessionToken, expiresAt }
 }
 
+export async function deleteUserSessions(userId: number) {
+  await withSessionDbRetry("delete-user-sessions", async () => {
+    await db.delete(userSessions).where(eq(userSessions.userId, userId))
+  })
+}
+
 export async function getSessionUser(request: NextRequest) {
   const demoCookie = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
   if (parseDemoCookieValue(demoCookie)) {
@@ -265,17 +271,18 @@ export async function getSessionUser(request: NextRequest) {
   const now = new Date()
   const rows = await withSessionDbRetry("get-session-user.select", async () =>
     db
-      .select({
-        sessionId: userSessions.id,
-        userId: users.id,
-        lastSeenAt: userSessions.lastSeenAt,
-        email: users.email,
-        name: users.name,
-        isDemo: users.isDemo,
-        enterpriseId: users.enterpriseId,
-        enterpriseRole: users.enterpriseRole,
-        enterpriseStatus: users.enterpriseStatus,
-        enterpriseCode: enterprises.enterpriseCode,
+        .select({
+          sessionId: userSessions.id,
+          userId: users.id,
+          lastSeenAt: userSessions.lastSeenAt,
+          email: users.email,
+          name: users.name,
+          emailVerified: users.emailVerified,
+          isDemo: users.isDemo,
+          enterpriseId: users.enterpriseId,
+          enterpriseRole: users.enterpriseRole,
+          enterpriseStatus: users.enterpriseStatus,
+          enterpriseCode: enterprises.enterpriseCode,
         enterpriseName: enterprises.name,
       })
       .from(userSessions)
@@ -293,6 +300,18 @@ export async function getSessionUser(request: NextRequest) {
       await db.delete(userSessions).where(eq(userSessions.id, session.sessionId))
     }).catch((error) => {
       console.warn("auth.session.delete_inactive.failed", {
+        sessionId: session.sessionId,
+        message: getErrorMessage(error),
+      })
+    })
+    return null
+  }
+
+  if (session.emailVerified === false) {
+    void withSessionDbRetry("get-session-user.delete-unverified", async () => {
+      await db.delete(userSessions).where(eq(userSessions.id, session.sessionId))
+    }).catch((error) => {
+      console.warn("auth.session.delete_unverified.failed", {
         sessionId: session.sessionId,
         message: getErrorMessage(error),
       })

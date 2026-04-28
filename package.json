@@ -36,6 +36,7 @@
     "test:ai-entry:agent-selection": "node scripts/ai_entry_agent_selection_smoke_test.js",
     "test:ai-entry:consulting-route": "node scripts/ai_entry_consulting_agent_route_validation.js",
     "test:ai-entry:routing-nightly": "tsx scripts/ai_entry_routing_nightly_check.ts",
+    "test:auth:smoke": "python scripts/auth_local_smoke.py",
     "test:e2e:ai-entry:agent-selection:ui": "python scripts/ai_entry_agent_selection_ui_e2e.py",
     "test:e2e:ai-entry:consulting-model-lock:ui": "python scripts/ai_entry_consulting_model_lock_ui_e2e.py",
     "test:upstream:credentials": "node scripts/verify_upstream_credentials.js",

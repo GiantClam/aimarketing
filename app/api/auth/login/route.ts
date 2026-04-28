@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
+import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
 import { applySessionCookie, createUserSession, withSessionDbRetry } from "@/lib/auth/session"
 import { getUserAuthPayload, verifyPassword } from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
@@ -12,6 +13,7 @@ export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureEnterpriseAuthTables()
     const rateLimit = await checkRateLimit({
       key: `auth:login:${getRequestIp(request)}`,
       limit: 10,
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     const rows = await withSessionDbRetry("auth.login.user-select", async () =>
       db
-        .select({ id: users.id, password: users.password })
+        .select({ id: users.id, password: users.password, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, String(email).trim().toLowerCase()))
         .limit(1),
@@ -46,6 +48,11 @@ export async function POST(request: NextRequest) {
     if (!verifyPassword(String(password), user.password)) {
       logAuditEvent(request, "auth.login.invalid_password", { userId: user.id })
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
+
+    if (!user.emailVerified) {
+      logAuditEvent(request, "auth.login.email_not_verified", { userId: user.id })
+      return NextResponse.json({ error: "email_not_verified" }, { status: 403 })
     }
 
     const payload = await withSessionDbRetry("auth.login.user-payload", async () => getUserAuthPayload(user.id))

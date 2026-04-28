@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { and, eq, ne } from "drizzle-orm"
 
-import { getSessionUser } from "@/lib/auth/session"
+import { deleteUserSessions, getSessionUser } from "@/lib/auth/session"
 import { db } from "@/lib/db"
-import { userFeaturePermissions, userSessions, users } from "@/lib/db/schema"
+import { userFeaturePermissions, users } from "@/lib/db/schema"
 import { hashPassword, isEnterpriseAdmin } from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
 
@@ -139,7 +139,7 @@ export async function PATCH(
         .update(users)
         .set({ password: hashPassword(temporaryPassword), updatedAt: new Date() })
         .where(eq(users.id, targetUserId))
-      await db.delete(userSessions).where(eq(userSessions.userId, targetUserId))
+      await deleteUserSessions(targetUserId)
     }
 
     logAuditEvent(request, "enterprise.member.updated", {

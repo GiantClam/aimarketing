@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
               name: "体验用户",
               email,
               password: hashPassword("demo123456"),
+              emailVerified: true,
               enterpriseId: enterprise.id,
               enterpriseRole: "admin",
               enterpriseStatus: "active",
@@ -75,6 +76,7 @@ export async function POST(request: NextRequest) {
             .set({
               name: "体验用户",
               password: hashPassword("demo123456"),
+              emailVerified: true,
               enterpriseId: enterprise.id,
               enterpriseRole: "admin",
               enterpriseStatus: "active",

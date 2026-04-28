@@ -82,6 +82,11 @@ export default function RegisterPage() {
         joinNote: enterpriseAction === "join" ? joinNote : undefined,
       })
 
+      if (result.requiresEmailVerification) {
+        router.push(`/verify-email?email=${encodeURIComponent(result.email || email)}&sent=1`)
+        return
+      }
+
       if (result.requiresApproval) {
         router.push("/dashboard/settings")
         return

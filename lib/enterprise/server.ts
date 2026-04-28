@@ -50,6 +50,7 @@ export async function ensureEnterpriseAuthTables() {
           email VARCHAR(255) NOT NULL UNIQUE,
           name VARCHAR(255) NOT NULL,
           password VARCHAR(255),
+          email_verified BOOLEAN NOT NULL DEFAULT TRUE,
           is_demo BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -78,6 +79,10 @@ export async function ensureEnterpriseAuthTables() {
       await db.execute(sql`
         ALTER TABLE "AI_MARKETING_users"
         ADD COLUMN IF NOT EXISTS enterprise_status VARCHAR(20) DEFAULT 'active'
+      `)
+      await db.execute(sql`
+        ALTER TABLE "AI_MARKETING_users"
+        ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE
       `)
       await db.execute(sql`
         ALTER TABLE "AI_MARKETING_users"
@@ -129,6 +134,40 @@ export async function ensureEnterpriseAuthTables() {
       await db.execute(sql`
         CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_user_sessions_token_hash_idx"
         ON "AI_MARKETING_user_sessions"(token_hash)
+      `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AI_MARKETING_email_verification_tokens" (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+          token_hash VARCHAR(64) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_email_verification_tokens_token_hash_idx"
+        ON "AI_MARKETING_email_verification_tokens"(token_hash)
+      `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AI_MARKETING_password_reset_tokens" (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES "AI_MARKETING_users"(id) ON DELETE CASCADE,
+          token_hash VARCHAR(64) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used_at TIMESTAMP,
+          requested_ip VARCHAR(64),
+          user_agent TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "AI_MARKETING_password_reset_tokens_token_hash_idx"
+        ON "AI_MARKETING_password_reset_tokens"(token_hash)
       `)
     })().catch((error) => {
       ensureEnterpriseAuthTablesPromise = null
