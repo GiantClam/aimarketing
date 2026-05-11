@@ -125,6 +125,7 @@ export type AiEntryModelCatalog = {
   providerId: AiEntryProviderId | null
   providerBaseUrl: string | null
   selectedModelId: string | null
+  selectedProviderId: AiEntryProviderId | null
   models: AiEntryModelOption[]
   modelGroups: AiEntryModelGroup[]
   cached: boolean
@@ -739,6 +740,7 @@ function buildFallbackCatalog(
     providerId: provider?.id || null,
     providerBaseUrl: provider?.baseURL || null,
     selectedModelId: models[0]?.id || null,
+    selectedProviderId: provider?.id || null,
     models,
     modelGroups,
     cached,
@@ -880,6 +882,7 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
         providerId: provider.id,
         providerBaseUrl: provider.baseURL,
         selectedModelId,
+        selectedProviderId: provider.id,
         models: grouped.flattened,
         modelGroups: grouped.groups,
         cached: false,

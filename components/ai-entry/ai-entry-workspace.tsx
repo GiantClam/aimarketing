@@ -102,6 +102,7 @@ type ChatStreamApiResponse = {
 }
 type ModelApiResponse = {
   providerId?: string | null
+  selectedProviderId?: string | null
   providers?: Array<{ id?: string; label?: string }>
   selectedModelId?: string | null
   modelGroups?: Array<{
@@ -244,6 +245,44 @@ function dedupeModelsById(models: ModelOption[]) {
     seen.add(item.id)
     return true
   })
+}
+
+function inferProviderFamilyFromModel(model: ModelOption | null) {
+  const text = [
+    model?.id,
+    model?.runtimeId,
+    model?.canonicalId,
+    ...(model?.aliases || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+
+  if (!text) return null
+  if (text.includes("claude") || text.includes("anthropic")) return "anthropic"
+  if (text.includes("gemini") || text.includes("google")) return "gemini"
+  if (text.includes("minimax") || text.includes("abab")) return "minimax"
+  if (
+    text.includes("gpt") ||
+    text.includes("openai") ||
+    /\bo[1345]\b/.test(text)
+  ) {
+    return "openai"
+  }
+  return null
+}
+
+function resolvePreferredProviderForModel(input: {
+  selectedModel: ModelOption | null
+  selectedProviderId: string | null
+  fallbackProviderId: string | null
+}) {
+  const family = inferProviderFamilyFromModel(input.selectedModel)
+  if (family === "openai") return "pptoken"
+  if (family === "anthropic" || family === "gemini" || family === "minimax") {
+    return "aiberm"
+  }
+  return input.selectedProviderId || input.fallbackProviderId || null
 }
 
 function isTextLikeFile(file: File) {
@@ -418,6 +457,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const [agents, setAgents] = useState<AgentOption[]>([])
   const [agentGroups, setAgentGroups] = useState<AgentGroupOption[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
+  const [isAgentSelectionExplicit, setIsAgentSelectionExplicit] = useState(false)
   const [agentQueryReady, setAgentQueryReady] = useState(false)
   const [initialAgentFromQuery] = useState<string | null>(() => readInitialAgentFromLocation())
 
@@ -482,6 +522,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     () => agents.find((item) => item.id === selectedAgentId) || null,
     [agents, selectedAgentId],
   )
+  const handleAgentSelectionChange = useCallback((nextAgentId: string | null) => {
+    setSelectedAgentId(nextAgentId)
+    setIsAgentSelectionExplicit(Boolean(nextAgentId))
+  }, [])
   const loadingEventSummary = useMemo(() => {
     const totalCount = pendingTaskEvents.length
     const completedCount = pendingTaskEvents.filter((item) => item.status === "completed").length
@@ -527,10 +571,12 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     if (!agentQueryReady) return
     const fromRoute = (searchParams.get("agent") || "").trim() || null
     setSelectedAgentId((current) => (current === fromRoute ? current : fromRoute))
+    setIsAgentSelectionExplicit(Boolean(fromRoute))
   }, [agentQueryReady, searchParams])
 
   useEffect(() => {
     if (!agentQueryReady) return
+    if (!isAgentSelectionExplicit) return
     if (
       pendingFirstConversationRouteRef.current &&
       latestConversationIdRef.current &&
@@ -548,17 +594,22 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     }
     const nextSearch = params.toString()
     if (nextSearch !== search) router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname)
-  }, [agentQueryReady, pathname, router, search, selectedAgentId, shouldLockModel])
+  }, [
+    agentQueryReady,
+    isAgentSelectionExplicit,
+    pathname,
+    router,
+    search,
+    selectedAgentId,
+    shouldLockModel,
+  ])
 
   useEffect(() => {
     let cancelled = false
     const loadModels = async () => {
       setModelsLoading(true)
       try {
-        const query = modelProviderId
-          ? `?providerId=${encodeURIComponent(modelProviderId)}`
-          : ""
-        const response = await fetch(`/api/ai/models${query}`, { cache: "no-store", credentials: "same-origin" })
+        const response = await fetch("/api/ai/models", { cache: "no-store", credentials: "same-origin" })
         const payload = (await response.json().catch(() => null)) as ModelApiResponse | null
         if (cancelled) return
         if (!response.ok) throw new Error(`http_${response.status}`)
@@ -615,7 +666,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             : (payload?.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item)),
         )
 
-        setModelProviderId(typeof payload?.providerId === "string" ? payload.providerId : null)
+        const selectedProviderId =
+          typeof payload?.selectedProviderId === "string" && payload.selectedProviderId.trim()
+            ? payload.selectedProviderId.trim()
+            : typeof payload?.providerId === "string" && payload.providerId.trim()
+              ? payload.providerId.trim()
+              : null
+        setModelProviderId(selectedProviderId)
         setModels(normalizedModels)
         setModelGroups(
           normalizedGroups.length > 0
@@ -668,7 +725,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return () => {
       cancelled = true
     }
-  }, [isZh, modelProviderId, shouldLockModel])
+  }, [isZh, shouldLockModel])
 
   useEffect(() => {
     let cancelled = false
@@ -717,12 +774,14 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         setAgents(normalizedAgents)
         setAgentGroups(groups)
         setSelectedAgentId(fromQuery)
+        setIsAgentSelectionExplicit(Boolean(fromQuery))
       } catch (error) {
         if (cancelled) return
         console.error("ai-entry.agents.load.failed", error)
         setAgents([])
         setAgentGroups([])
         setSelectedAgentId(null)
+        setIsAgentSelectionExplicit(false)
       } finally {
         if (!cancelled) {
           setAgentLoading(false)
@@ -920,11 +979,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       setErrorMessage(isZh ? "当前所选模型不支持图片上传或识别，请切换到支持视觉的模型后再发送。" : "The selected model does not support image upload or recognition. Switch to a vision-capable model before sending.")
       return
     }
-    const requestedAgentId =
-      typeof selectedAgentId === "string" && selectedAgentId.trim()
-        ? selectedAgentId.trim()
-        : null
-
     const sentAttachments = attachments
     const userMessageContent = prompt || (isZh ? "请识别附件内容。" : "Please analyze the attached content.")
     const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: "user", content: userMessageContent, attachments: sentAttachments }
@@ -965,11 +1019,24 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           attachments: sentAttachments,
           conversationId,
           conversationScope: shouldLockModel ? "consulting" : "chat",
-          modelConfig: modelProviderId && selectedModelId ? { providerId: modelProviderId, modelId: selectedModelId } : undefined,
-          agentConfig:
-            selectedAgentId || shouldLockModel
+          modelConfig:
+            selectedModelId
               ? {
-                  ...(!shouldLockModel && selectedAgentId ? { agentId: selectedAgentId } : {}),
+                  providerId:
+                    resolvePreferredProviderForModel({
+                      selectedModel,
+                      selectedProviderId: modelProviderId,
+                      fallbackProviderId: modelProviderId,
+                    }) || undefined,
+                  modelId: selectedModelId,
+                }
+              : undefined,
+          agentConfig:
+            (isAgentSelectionExplicit && selectedAgentId) || shouldLockModel
+              ? {
+                  ...(!shouldLockModel && isAgentSelectionExplicit && selectedAgentId
+                    ? { agentId: selectedAgentId }
+                    : {}),
                   ...(shouldLockModel
                     ? {
                         entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
@@ -1024,9 +1091,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           }
 
           if (event.event === "conversation_init") {
-            if (!requestedAgentId && event.agent_id && typeof event.agent_id === "string") {
-              setSelectedAgentId(event.agent_id)
-            }
             upsertTaskEvent({
               type: "conversation_init",
               label: "Conversation ready",
@@ -1147,10 +1211,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               ? event.answer.trim()
               : streamedText.trim()
 
-            if (!requestedAgentId && event.agent_id && typeof event.agent_id === "string") {
-              setSelectedAgentId(event.agent_id)
-            }
-
             const resolvedProviderModelId = resolveDisplayModelId(
               typeof event.provider_model === "string" ? event.provider_model : null,
               models,
@@ -1245,9 +1305,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           savePendingConversationMessages(payload.conversationId, completedMessages)
           setConversationId(payload.conversationId)
         }
-        if (!requestedAgentId && typeof payload?.agentId === "string" && payload.agentId.trim()) {
-          setSelectedAgentId(payload.agentId.trim())
-        }
         setPendingTaskEvents((current) => [
           ...current.filter((event) => event.type !== "request_start"),
           {
@@ -1290,6 +1347,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     messages,
     modelProviderId,
     models,
+    isAgentSelectionExplicit,
     selectedAgentId,
     selectedModel,
     selectedModelId,
@@ -1407,7 +1465,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                   <button
                     key={agent.id}
                     type="button"
-                    onClick={() => setSelectedAgentId((current) => (current === agent.id ? null : agent.id))}
+                    onClick={() =>
+                      handleAgentSelectionChange(selectedAgentId === agent.id ? null : agent.id)
+                    }
                     className={cn(
                       "inline-flex items-center border transition",
                       tabClassName,
@@ -1439,7 +1499,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
           <div className="mx-auto mt-10 max-w-5xl rounded-[30px] border border-border bg-card p-4 shadow-sm">
             <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
-              {selectedAgent ? (
+              {isAgentSelectionExplicit && selectedAgent ? (
                 <div className="px-1 pb-2 text-xs text-muted-foreground">
                   {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
                 </div>
@@ -1455,14 +1515,18 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               {renderSelectedAttachments()}
               <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
               <PromptInputActions>
-                {renderSelectors("h-10")}
-                {renderAttachmentPicker()}
-                <PromptInputAction tooltip={copy.send}>
-                  <Button type="button" size="sm" className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
-                    {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
-                    {copy.send}
-                  </Button>
-                </PromptInputAction>
+                <div className="flex items-center gap-2">
+                  {renderAttachmentPicker()}
+                </div>
+                <div className="flex items-center gap-2">
+                  {renderSelectors("h-10")}
+                  <PromptInputAction tooltip={copy.send}>
+                    <Button type="button" size="sm" className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                      {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
+                      {copy.send}
+                    </Button>
+                  </PromptInputAction>
+                </div>
               </PromptInputActions>
             </PromptInput>
           </div>
@@ -1516,7 +1580,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                           {loadingEventSummary.totalCount > 0 ? (
                             <div className="mb-2 rounded-lg border border-border/70 bg-background/70 px-2.5 py-2">
                               <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                                <span className="truncate">Processing</span>
+                                <span className="truncate">{isZh ? "处理中" : "Processing"}</span>
                                 <span>{`${loadingEventSummary.completedCount}/${loadingEventSummary.totalCount}`}</span>
                               </div>
                               <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -1566,7 +1630,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             ) : null}
 
             <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-2">
-              {selectedAgent ? (
+              {isAgentSelectionExplicit && selectedAgent ? (
                 <div className="px-1 pb-2 text-xs text-muted-foreground">
                   {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
                 </div>
@@ -1582,14 +1646,18 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               {renderSelectedAttachments()}
               <PromptInputTextarea placeholder={copy.placeholder} />
               <PromptInputActions>
-                {renderSelectors("h-9")}
-                {renderAttachmentPicker()}
-                <PromptInputAction tooltip={copy.send}>
-                  <Button type="button" size="sm" className="h-9 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
-                    {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-                    {copy.send}
-                  </Button>
-                </PromptInputAction>
+                <div className="flex items-center gap-2">
+                  {renderAttachmentPicker()}
+                </div>
+                <div className="flex items-center gap-2">
+                  {renderSelectors("h-9")}
+                  <PromptInputAction tooltip={copy.send}>
+                    <Button type="button" size="sm" className="h-9 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                      {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+                      {copy.send}
+                    </Button>
+                  </PromptInputAction>
+                </div>
               </PromptInputActions>
             </PromptInput>
 

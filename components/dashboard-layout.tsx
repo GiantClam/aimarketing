@@ -131,7 +131,9 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 </div>
                 {!sidebarCollapsed && (
                   <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">workspace</div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {locale === "zh" ? "工作台" : "Workspace"}
+                    </div>
                     <h1 className="truncate text-lg font-semibold text-sidebar-foreground">{messages.shared.appName}</h1>
                   </div>
                 )}
@@ -376,10 +378,10 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
                 }
                 size="sm"
-                title={locale === "zh" ? "会员与积分" : "Billing"}
+                title={messages.billing.navLabel}
               >
                 <CreditCard className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
-                {!sidebarCollapsed && (locale === "zh" ? "会员与积分" : "Billing")}
+                {!sidebarCollapsed && messages.billing.navLabel}
               </Button>
             </Link>
             <Separator className="my-2" />
@@ -440,5 +442,6 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     </div>
   )
 }
+
 
 

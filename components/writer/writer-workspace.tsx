@@ -865,6 +865,16 @@ function PlatformPreview({
   onEditCommit?: () => void
   saveState?: "idle" | "saving" | "saved" | "error"
 }) {
+  const { locale } = useI18n()
+  const isZh = locale === "zh"
+  const previewAccountName = isZh ? "AI Marketing 周刊" : "AI Marketing Weekly"
+  const socialAccountName = "AI Marketing Site"
+  const socialFollowLabel = isZh ? "关注" : "Follow"
+  const socialNowLabel = isZh ? "刚刚" : "Just now"
+  const socialWeiboLabel = isZh ? "微博" : "Weibo"
+  const threadLabel = isZh ? "线程" : "Thread"
+  const postLabel = isZh ? "帖子" : "Post"
+  const genericPreviewType = platform === "generic" ? (isZh ? "文档" : "Document") : isZh ? "脚本" : "Script"
   const lead = extractLead(markdown, copy)
   const threadPosts = mode === "thread" ? parseThread(markdown) : []
   const renderArticleBody = (value: string, className?: string) =>
@@ -883,7 +893,7 @@ function PlatformPreview({
           </div>
           <p className="text-xs uppercase tracking-[0.28em] text-emerald-700">{copy.wechatPreview}</p>
           <div className="mt-4 flex items-center justify-center gap-3 text-xs text-slate-400">
-            <span>AI Marketing Weekly</span>
+            <span>{previewAccountName}</span>
             <span>路</span>
             <span>{estimateReadingTime(markdown, copy)}</span>
           </div>
@@ -930,10 +940,12 @@ function PlatformPreview({
               <div className="mt-1 h-11 w-11 rounded-full bg-slate-900" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-black">AI Marketing Site</p>
+                  <p className="font-semibold text-black">{socialAccountName}</p>
                   <p className="text-xs text-slate-500">{platform === "weibo" ? "@aimarketing" : "@aimarketingsite"}</p>
                   <span className="text-slate-300">路</span>
-                  <p className="text-xs text-slate-500">{mode === "thread" ? `Thread ${index + 1}` : platform === "weibo" ? "Weibo" : "Just now"}</p>
+                  <p className="text-xs text-slate-500">
+                    {mode === "thread" ? `${threadLabel} ${index + 1}` : platform === "weibo" ? socialWeiboLabel : socialNowLabel}
+                  </p>
                 </div>
                 {mode === "article" && index === 0 ? <p className="mt-2 text-xs text-slate-500">{lead}</p> : null}
                 <div className="mt-4" data-writer-copy-root="true">
@@ -976,7 +988,7 @@ function PlatformPreview({
           <div className="mt-3 flex items-center gap-3 text-xs text-slate-400">
             <span>{estimateReadingTime(markdown, copy)}</span>
             <span>/</span>
-            <span>{platform === "generic" ? "Document" : "Script"}</span>
+            <span>{genericPreviewType}</span>
           </div>
         </div>
         <div data-writer-copy-root="true">
@@ -998,10 +1010,12 @@ function PlatformPreview({
             <div className="mt-1 h-11 w-11 rounded-full bg-blue-600/90" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="font-semibold text-black">AI Marketing Site</p>
-                <p className="text-xs text-slate-500">Follow</p>
+                <p className="font-semibold text-black">{socialAccountName}</p>
+                <p className="text-xs text-slate-500">{socialFollowLabel}</p>
                 <span className="text-slate-300">路</span>
-                <p className="text-xs text-slate-500">{mode === "thread" ? `Post ${index + 1}` : estimateReadingTime(post, copy)}</p>
+                <p className="text-xs text-slate-500">
+                  {mode === "thread" ? `${postLabel} ${index + 1}` : estimateReadingTime(post, copy)}
+                </p>
               </div>
               <p className="mt-1 text-xs text-slate-500">{index === 0 ? lead : copy.multiPostPreview}</p>
               <div className="mt-4" data-writer-copy-root="true">

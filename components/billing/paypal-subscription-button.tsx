@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 
+import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 
 declare global {
@@ -22,6 +23,32 @@ type PayPalSubscriptionButtonProps = {
   planCode: string
   disabled?: boolean
   onApproved?: () => void
+}
+
+function translateBillingError(code: string, billing: {
+  errorCreateSubscription: string
+  errorSaveSubscription: string
+  errorLoadPaypalSdk: string
+  errorMissingSubscriptionId: string
+  errorPaypalFailed: string
+  errorPaypalButtonRender: string
+}) {
+  switch (code) {
+    case "paypal_create_subscription_failed":
+      return billing.errorCreateSubscription
+    case "billing_subscription_save_failed":
+      return billing.errorSaveSubscription
+    case "paypal_sdk_load_failed":
+      return billing.errorLoadPaypalSdk
+    case "paypal_subscription_id_missing":
+      return billing.errorMissingSubscriptionId
+    case "paypal_subscription_failed":
+      return billing.errorPaypalFailed
+    case "paypal_button_render_failed":
+      return billing.errorPaypalButtonRender
+    default:
+      return code
+  }
 }
 
 function getApprovalUrl(subscription: any) {
@@ -60,6 +87,8 @@ async function savePendingSubscription(planCode: string, paypalSubscriptionId: s
 }
 
 export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: PayPalSubscriptionButtonProps) {
+  const { messages } = useI18n()
+  const billing = messages.billing
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -141,7 +170,7 @@ export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: Pay
     return (
       <div className="space-y-2">
         <div ref={containerRef} className={disabled ? "pointer-events-none opacity-50" : ""} />
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        {error ? <p className="text-xs text-destructive">{translateBillingError(error, billing)}</p> : null}
       </div>
     )
   }
@@ -149,9 +178,9 @@ export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: Pay
   return (
     <div className="space-y-2">
       <Button className="w-full rounded-full" disabled={disabled || loading} onClick={() => void handleFallbackSubscribe()}>
-        {loading ? "Creating subscription..." : "Subscribe with PayPal"}
+        {loading ? billing.creatingSubscription : billing.subscribeWithPaypal}
       </Button>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-xs text-destructive">{translateBillingError(error, billing)}</p> : null}
     </div>
   )
 }

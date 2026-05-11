@@ -1061,7 +1061,7 @@ export default function SettingsPage() {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="grid gap-2">
-                      <Label htmlFor="dify-base-url">Dify API Base URL</Label>
+                      <Label htmlFor="dify-base-url">{t("Dify API 基础地址", "Dify API Base URL")}</Label>
                       <Input
                         id="dify-base-url"
                         value={difyBaseUrl || t("未在数据库中配置", "Not configured in database")}
@@ -1070,7 +1070,7 @@ export default function SettingsPage() {
                       <p className="text-xs text-muted-foreground">{t("只读展示当前数据库中的企业 Dify Base URL；如需修改，请直接更新数据库。", "Read-only display of enterprise Dify Base URL from database. Update database directly to change it.")}</p>
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="dify-api-key">Dify API Key</Label>
+                      <Label htmlFor="dify-api-key">{t("Dify API 密钥", "Dify API Key")}</Label>
                       <Input
                         id="dify-api-key"
                         value={difyHasApiKey ? difyApiKeyMasked : t("未在数据库中配置", "Not configured in database")}
@@ -1247,7 +1247,7 @@ export default function SettingsPage() {
                                       }
                                       disabled={isSavingLeadHunterMode}
                                     />
-                                    <span>Dify</span>
+                                    <span>{t("Dify", "Dify")}</span>
                                   </label>
                                   <label className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-sm text-foreground">
                                     <input
@@ -1260,7 +1260,7 @@ export default function SettingsPage() {
                                       }
                                       disabled={isSavingLeadHunterMode}
                                     />
-                                    <span>Skill</span>
+                                    <span>{t("技能", "Skill")}</span>
                                   </label>
                                 </div>
                                 <div className="flex items-center gap-3">

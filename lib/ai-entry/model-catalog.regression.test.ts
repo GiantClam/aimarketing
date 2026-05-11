@@ -530,6 +530,103 @@ test("model catalog can load crazyroute and inject verified whitelist models", a
   )
 })
 
+test("model catalog can be aggregated across configured providers", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "pptoken-key",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "gpt-5.4",
+      AI_ENTRY_AIBERM_API_KEY: "aiberm-key",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4.6",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "crazy-key",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "gemini-3.1-pro-preview",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async (input) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url
+
+        if (url.startsWith("https://pptoken.example/v1/models")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [
+                { id: "gpt-5.4", owned_by: "openai" },
+                { id: "gpt-5.5", owned_by: "openai" },
+              ],
+            }),
+          } as Response
+        }
+
+        if (url.startsWith("https://aiberm.example/v1/models")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [
+                { id: "claude-sonnet-4.6", owned_by: "anthropic" },
+                { id: "MiniMax-M2.7", owned_by: "minimax" },
+              ],
+            }),
+          } as Response
+        }
+
+        if (url.startsWith("https://crazy.example/v1/models")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [
+                { id: "gemini-3.1-pro-preview", owned_by: "google" },
+              ],
+            }),
+          } as Response
+        }
+
+        return {
+          ok: false,
+          status: 404,
+          text: async () => "not_found",
+          json: async () => ({ error: "not_found" }),
+        } as Response
+      }) as typeof fetch
+
+      try {
+        const [pptokenCatalog, aibermCatalog, crazyrouteCatalog] = await Promise.all([
+          getAiEntryModelCatalog({ providerId: "pptoken" }),
+          getAiEntryModelCatalog({ providerId: "aiberm" }),
+          getAiEntryModelCatalog({ providerId: "crazyroute" }),
+        ])
+
+        const mergedGroups = new Map<string, Set<string>>()
+        for (const catalog of [pptokenCatalog, aibermCatalog, crazyrouteCatalog]) {
+          for (const group of catalog.modelGroups) {
+            const current = mergedGroups.get(group.family) || new Set<string>()
+            for (const model of group.models) current.add(model.id)
+            mergedGroups.set(group.family, current)
+          }
+        }
+
+        assert.deepEqual([...mergedGroups.keys()], ["openai", "anthropic", "gemini", "minimax"])
+        assert.equal(mergedGroups.get("openai")?.has("gpt-5.4"), true)
+        assert.equal(mergedGroups.get("anthropic")?.has("claude-sonnet-4.6"), true)
+        assert.equal(mergedGroups.get("gemini")?.has("gemini-3.1-pro-preview"), true)
+        assert.equal(mergedGroups.get("minimax")?.has("MiniMax-M2.7"), true)
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
+
 test("model catalog keeps canonical bare id when provider and separator variants coexist", async () => {
   await withProviderEnv(
     {

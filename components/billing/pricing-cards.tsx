@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Check, ShieldCheck } from "lucide-react"
 
 import { PayPalSubscriptionButton } from "@/components/billing/paypal-subscription-button"
+import { useI18n } from "@/components/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -20,37 +21,79 @@ type BillingPlan = {
   features: Record<string, unknown>
 }
 
-function formatPrice(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`
+function formatPrice(cents: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "USD",
+  }).format((cents || 0) / 100)
 }
 
-function formatCredits(credits: number) {
-  return new Intl.NumberFormat("en-US").format(credits)
+function formatCredits(credits: number, locale: string) {
+  return new Intl.NumberFormat(locale).format(credits)
 }
 
-function featureLines(plan: BillingPlan) {
+function formatTemplate(template: string, values: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ""))
+}
+
+function featureLines(
+  plan: BillingPlan,
+  billing: {
+    freeTrialLine: string
+    sharedCreditsLine: string
+    sharedMembersLine: string
+    imageQualityLine: string
+    maskEditLine: string
+    priorityQueue: string
+    standardQueue: string
+  },
+  locale: string,
+) {
   const quality = Array.isArray(plan.features?.imageQuality)
     ? plan.features.imageQuality.join("/")
     : "standard"
   return [
     plan.code === "free"
-      ? `${formatCredits(plan.trialCredits)} trial credits for ${plan.trialDays || 0} days`
-      : `${formatCredits(plan.monthlyCredits)} shared credits / month`,
-    `${plan.sharedMemberLimit} shared workspace members`,
-    `GPT Image 2 ${quality} quality`,
-    `Mask edit: ${String(plan.features?.maskEdit || "standard")}`,
-    plan.features?.priorityQueue ? "Priority image queue" : "Standard queue",
+      ? formatTemplate(billing.freeTrialLine, { credits: formatCredits(plan.trialCredits, locale), days: plan.trialDays || 0 })
+      : formatTemplate(billing.sharedCreditsLine, { credits: formatCredits(plan.monthlyCredits, locale) }),
+    formatTemplate(billing.sharedMembersLine, { count: plan.sharedMemberLimit }),
+    formatTemplate(billing.imageQualityLine, { quality }),
+    formatTemplate(billing.maskEditLine, { level: String(plan.features?.maskEdit || "standard") }),
+    plan.features?.priorityQueue ? billing.priorityQueue : billing.standardQueue,
   ]
 }
 
-function planAvailabilityMessage(plan: BillingPlan) {
+function planAvailabilityMessage(
+  plan: BillingPlan,
+  billing: {
+    freePlanMessage: string
+    paidPlanMessage: string
+  },
+  locale: string,
+) {
   if (plan.code === "free") {
-    return `Default plan for new workspaces. Includes ${formatCredits(plan.trialCredits)} credits for ${plan.trialDays || 0} days.`
+    return formatTemplate(billing.freePlanMessage, {
+      credits: formatCredits(plan.trialCredits, locale),
+      days: plan.trialDays || 0,
+    })
   }
-  return "Paid membership packages are visible now and will be tested separately before checkout is enabled."
+  return billing.paidPlanMessage
+}
+
+function translateBillingError(code: string, billing: {
+  errorLoadPlans: string
+}) {
+  switch (code) {
+    case "billing_plans_failed":
+      return billing.errorLoadPlans
+    default:
+      return code
+  }
 }
 
 export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
+  const { messages, locale } = useI18n()
+  const billing = messages.billing
   const [plans, setPlans] = useState<BillingPlan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -78,11 +121,15 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
   }, [])
 
   if (loading) {
-    return <div className="rounded-[2rem] border bg-white/80 p-6 text-sm text-muted-foreground">Loading plans...</div>
+    return <div className="rounded-[2rem] border bg-white/80 p-6 text-sm text-muted-foreground">{billing.loadingPlans}</div>
   }
 
   if (error) {
-    return <div className="rounded-[2rem] border border-destructive/20 bg-destructive/10 p-6 text-sm text-destructive">{error}</div>
+    return (
+      <div className="rounded-[2rem] border border-destructive/20 bg-destructive/10 p-6 text-sm text-destructive">
+        {translateBillingError(error, billing)}
+      </div>
+    )
   }
 
   return (
@@ -99,11 +146,11 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
           >
             {highlighted ? (
               <div className="absolute right-4 top-4">
-                <Badge className="rounded-full bg-slate-950 text-white">Recommended</Badge>
+                <Badge className="rounded-full bg-slate-950 text-white">{billing.recommended}</Badge>
               </div>
             ) : isFree ? (
               <div className="absolute right-4 top-4">
-                <Badge className="rounded-full bg-teal-600 text-white">Default</Badge>
+                <Badge className="rounded-full bg-teal-600 text-white">{billing.defaultBadge}</Badge>
               </div>
             ) : null}
             <CardHeader>
@@ -112,13 +159,13 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
                 {plan.name}
               </CardTitle>
               <div className="mt-5">
-                <span className="text-5xl font-semibold tracking-tight">{formatPrice(plan.priceUsdCents)}</span>
-                <span className="ml-2 text-sm text-muted-foreground">/ month</span>
+                <span className="text-5xl font-semibold tracking-tight">{formatPrice(plan.priceUsdCents, locale)}</span>
+                <span className="ml-2 text-sm text-muted-foreground">{billing.perMonth}</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-3">
-                {featureLines(plan).map((line) => (
+                {featureLines(plan, billing, locale).map((line) => (
                   <div key={line} className="flex items-start gap-3 text-sm">
                     <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700">
                       <Check className="h-3.5 w-3.5" />
@@ -132,8 +179,8 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
                 disabled={isFree || !plan.checkoutEnabled || !plan.paypalPlanId}
                 onApproved={onSubscribed}
               />
-              {planAvailabilityMessage(plan) ? (
-                <p className="text-xs text-muted-foreground">{planAvailabilityMessage(plan)}</p>
+              {planAvailabilityMessage(plan, billing, locale) ? (
+                <p className="text-xs text-muted-foreground">{planAvailabilityMessage(plan, billing, locale)}</p>
               ) : null}
             </CardContent>
           </Card>

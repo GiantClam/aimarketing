@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { CreditCard, RefreshCw } from "lucide-react"
 
+import { useI18n } from "@/components/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,11 +32,64 @@ type SubscriptionState = {
   } | null
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(Math.max(0, Math.floor(value || 0)))
+function formatNumber(value: number, locale: string) {
+  return new Intl.NumberFormat(locale).format(Math.max(0, Math.floor(value || 0)))
+}
+
+function translateBillingError(code: string, billing: {
+  errorLoadCredits: string
+  errorLoadSubscription: string
+  errorLoadBilling: string
+  statusActive: string
+  statusPending: string
+  statusCancelled: string
+  statusSuspended: string
+  statusExpired: string
+  statusInactive: string
+  statusUnknown: string
+}) {
+  switch (code) {
+    case "billing_credits_failed":
+      return billing.errorLoadCredits
+    case "billing_subscription_failed":
+      return billing.errorLoadSubscription
+    case "billing_load_failed":
+      return billing.errorLoadBilling
+    default:
+      return code
+  }
+}
+
+function translateStatus(status: string, billing: {
+  statusActive: string
+  statusPending: string
+  statusCancelled: string
+  statusSuspended: string
+  statusExpired: string
+  statusInactive: string
+  statusUnknown: string
+}) {
+  switch (status.toLowerCase()) {
+    case "active":
+      return billing.statusActive
+    case "pending":
+      return billing.statusPending
+    case "cancelled":
+      return billing.statusCancelled
+    case "suspended":
+      return billing.statusSuspended
+    case "expired":
+      return billing.statusExpired
+    case "inactive":
+      return billing.statusInactive
+    default:
+      return billing.statusUnknown
+  }
 }
 
 export function CreditBalance() {
+  const { messages, locale } = useI18n()
+  const billing = messages.billing
   const [credits, setCredits] = useState<CreditState | null>(null)
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -77,34 +131,38 @@ export function CreditBalance() {
         <div>
           <CardTitle className="flex items-center gap-2 text-xl">
             <CreditCard className="h-5 w-5" />
-            Shared credits
+            {billing.sharedCreditsTitle}
           </CardTitle>
           <p className="mt-2 text-sm text-muted-foreground">
-            Enterprise/workspace shared balance with per-user usage attribution.
+            {billing.sharedCreditsDescription}
           </p>
         </div>
         <Button variant="outline" size="sm" className="rounded-full" onClick={() => void load()} disabled={loading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
+          {billing.refresh}
         </Button>
       </CardHeader>
       <CardContent>
-        {error ? <p className="mb-4 rounded-2xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <p className="mb-4 rounded-2xl bg-destructive/10 p-3 text-sm text-destructive">
+            {translateBillingError(error, billing)}
+          </p>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[1.5rem] border bg-slate-950 p-5 text-white">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/60">Available</p>
-            <p className="mt-3 text-4xl font-semibold">{formatNumber(credits?.availableCredits || 0)}</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/60">{billing.available}</p>
+            <p className="mt-3 text-4xl font-semibold">{formatNumber(credits?.availableCredits || 0, locale)}</p>
           </div>
           <div className="rounded-[1.5rem] border bg-orange-50 p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Reserved</p>
-            <p className="mt-3 text-3xl font-semibold">{formatNumber(credits?.reservedBalance || 0)}</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{billing.reserved}</p>
+            <p className="mt-3 text-3xl font-semibold">{formatNumber(credits?.reservedBalance || 0, locale)}</p>
           </div>
           <div className="rounded-[1.5rem] border bg-teal-50 p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Plan</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{billing.plan}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge className="rounded-full">{planCode}</Badge>
               <Badge variant={status === "active" ? "default" : "secondary"} className="rounded-full">
-                {status}
+                {translateStatus(status, billing)}
               </Badge>
             </div>
           </div>
