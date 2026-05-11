@@ -36,6 +36,7 @@ function request(method, url, headers = {}, payload) {
       {
         method,
         hostname: target.hostname,
+        port: target.port || undefined,
         path: `${target.pathname}${target.search}`,
         headers: {
           ...headers,
@@ -75,21 +76,6 @@ function request(method, url, headers = {}, payload) {
   })
 }
 
-function buildOpenRouterHeaders() {
-  const apiKey = process.env.OPENROUTER_API_KEY || ""
-  const appUrl =
-    process.env.OPENROUTER_APP_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost")
-  const appName = process.env.OPENROUTER_APP_NAME || "AI Marketing"
-
-  return {
-    Authorization: `Bearer ${apiKey}`,
-    "HTTP-Referer": appUrl,
-    "X-Title": appName,
-  }
-}
-
 function summarizeResult(name, result) {
   return {
     name,
@@ -100,65 +86,63 @@ function summarizeResult(name, result) {
   }
 }
 
-async function verifyOpenRouter() {
-  const apiKey = process.env.OPENROUTER_API_KEY || ""
-  const baseUrl = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "")
-  const textModel = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-3-flash-preview"
-  const imageModel = process.env.OPENROUTER_IMAGE_MODEL || "google/gemini-3.1-flash-image-preview"
+async function verifyOpenAiCompatibleProvider(input) {
+  const apiKey = input.apiKey || ""
+  const baseUrl = (input.baseUrl || "").replace(/\/$/, "")
+  const model = input.model || "gpt-4-mini"
 
   if (!apiKey) {
-    return [
-      {
-        name: "openrouter.text",
-        status: -1,
-        ok: false,
-        unauthorized: false,
-        bodyPreview: "OPENROUTER_API_KEY is missing",
-      },
-      {
-        name: "openrouter.image",
-        status: -1,
-        ok: false,
-        unauthorized: false,
-        bodyPreview: "OPENROUTER_API_KEY is missing",
-      },
-    ]
+    return {
+      name: input.name,
+      status: -1,
+      ok: false,
+      unauthorized: false,
+      bodyPreview: `${input.envKeyName} is missing`,
+    }
   }
 
-  const headers = buildOpenRouterHeaders()
-  const textResult = await request(
+  const result = await request(
     "POST",
     `${baseUrl}/chat/completions`,
-    headers,
     {
-      model: textModel,
+      Authorization: `Bearer ${apiKey}`,
+    },
+    {
+      model,
       messages: [{ role: "user", content: "Reply with OK only." }],
       max_tokens: 16,
     },
   )
-  const imageResult = await request(
-    "POST",
-    `${baseUrl}/chat/completions`,
-    headers,
-    {
-      model: imageModel,
-      modalities: ["image", "text"],
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: "Generate a minimal blue banner image, 16:9." }],
-        },
-      ],
-      image_config: {
-        aspect_ratio: "16:9",
-      },
-    },
-  )
 
-  return [
-    summarizeResult("openrouter.text", textResult),
-    summarizeResult("openrouter.image", imageResult),
-  ]
+  return summarizeResult(input.name, result)
+}
+
+async function verifyAiberm() {
+  return verifyOpenAiCompatibleProvider({
+    name: "aiberm.text",
+    envKeyName: "AIBERM_API_KEY",
+    apiKey: process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || "",
+    baseUrl: process.env.AIBERM_BASE_URL || "https://aiberm.com/v1",
+    model: process.env.WRITER_TEXT_MODEL || process.env.AI_ENTRY_AIBERM_MODEL || "gpt-4-mini",
+  })
+}
+
+async function verifyCrazyroute() {
+  return verifyOpenAiCompatibleProvider({
+    name: "crazyroute.text",
+    envKeyName: "CRAZYROUTE_API_KEY",
+    apiKey:
+      process.env.CRAZYROUTE_API_KEY ||
+      process.env.CRAZYROUTER_API_KEY ||
+      process.env.AI_ENTRY_CRAZYROUTE_API_KEY ||
+      "",
+    baseUrl:
+      process.env.CRAZYROUTE_BASE_URL ||
+      process.env.CRAZYROUTER_BASE_URL ||
+      process.env.AI_ENTRY_CRAZYROUTE_BASE_URL ||
+      "https://api.crazyroute.com/v1",
+    model: process.env.AI_ENTRY_CRAZYROUTE_MODEL || "gpt-4-mini",
+  })
 }
 
 async function verifyDify() {
@@ -231,8 +215,12 @@ async function verifyDify() {
 async function run() {
   loadDotEnv(path.resolve(process.cwd(), ".env"))
 
-  const [openRouterChecks, difyChecks] = await Promise.all([verifyOpenRouter(), verifyDify()])
-  const results = [...openRouterChecks, ...difyChecks]
+  const [aibermCheck, crazyrouteCheck, difyChecks] = await Promise.all([
+    verifyAiberm(),
+    verifyCrazyroute(),
+    verifyDify(),
+  ])
+  const results = [aibermCheck, crazyrouteCheck, ...difyChecks]
 
   const hasUnauthorized = results.some((item) => item.unauthorized)
   const hasFailure = results.some((item) => !item.ok)

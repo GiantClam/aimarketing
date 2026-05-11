@@ -31,7 +31,9 @@ function clearLegacyKeys(legacyKeys?: LegacyStorageKey[]) {
   for (const item of legacyKeys) {
     try {
       getStorage(item.area)?.removeItem(item.key)
-    } catch {}
+    } catch {
+      // Ignore storage cleanup failures.
+    }
   }
 }
 
@@ -95,7 +97,7 @@ export function writeStorageRecordStore<TValue>(
   const storage = getStorage(area)
   if (!storage) return false
 
-  let nextStore = pruneRecordStoreByUpdatedAt(store, options.maxEntries, options.getUpdatedAt)
+  const nextStore = pruneRecordStoreByUpdatedAt(store, options.maxEntries, options.getUpdatedAt)
 
   while (Object.keys(nextStore).length > 0) {
     try {
@@ -120,7 +122,9 @@ export function writeStorageRecordStore<TValue>(
 
   try {
     storage.removeItem(key)
-  } catch {}
+  } catch {
+    // Ignore storage cleanup failures.
+  }
   clearLegacyKeys(options.legacyKeys)
   return false
 }

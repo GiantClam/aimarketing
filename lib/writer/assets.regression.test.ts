@@ -57,7 +57,7 @@ test("resolved markdown stores managed asset blocks and can round-trip assets", 
     ...asset,
     url: `https://cdn.example.com/${asset.id}-${index + 1}.png`,
     status: "ready",
-    provider: "gemini",
+    provider: "aiberm",
   }))
 
   const resolved = resolveWriterAssetMarkdown(LONG_WECHAT_DRAFT, assets, "wechat", "article")
@@ -248,7 +248,7 @@ test("extra generated assets are not appended to article tail when no slot exist
       prompt: "cover prompt",
       url: "https://cdn.example.com/cover.png",
       status: "ready",
-      provider: "gemini",
+      provider: "aiberm",
     },
     {
       id: "inline-1",
@@ -257,7 +257,7 @@ test("extra generated assets are not appended to article tail when no slot exist
       prompt: "inline prompt",
       url: "https://cdn.example.com/inline-1.png",
       status: "ready",
-      provider: "gemini",
+      provider: "aiberm",
     },
   ]
 

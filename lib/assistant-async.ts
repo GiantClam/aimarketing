@@ -7,6 +7,13 @@ import {
   updateTaskStatus,
 } from "@/lib/services/tasks"
 import { getMessages, sendMessage } from "@/lib/dify/client"
+import { estimateTextCredits } from "@/lib/billing/costing"
+import {
+  finalizeReservedCredits,
+  releaseReservedCredits,
+  reserveFeatureCredits,
+  type BillingReservation,
+} from "@/lib/billing/runtime"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { buildDifyMemoryBridge, mergeDifyInputsWithMemoryBridge } from "@/lib/dify/memory-bridge"
 import {
@@ -37,6 +44,12 @@ type AssistantTaskProgressEvent = {
   detail?: string
   status: AssistantTaskProgressStatus
   at: number
+}
+
+function normalizeAssistantTaskProgressStatus(status: unknown): AssistantTaskProgressStatus {
+  return status === "running" || status === "completed" || status === "failed" || status === "info"
+    ? status
+    : "running"
 }
 
 type WriterTurnTaskPayload = {
@@ -121,6 +134,10 @@ function parseIntWithRange(raw: string | undefined, fallback: number, min: numbe
   const parsed = Number.parseInt(raw || "", 10)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(max, Math.max(min, parsed))
+}
+
+function estimateTextTokens(text: string) {
+  return Math.max(1, Math.ceil(text.length / 4))
 }
 
 const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 180_000)
@@ -527,79 +544,162 @@ async function handleWriterTurn(taskId: number, userId: number, payload: WriterT
     at: Date.now(),
   })
 
-  const writerSkillRunner = loadWriterSkillRunner()
-  const turnResult = await withTaskTimeout(
-    writerSkillRunner.runBlocking({
-      query: payload.query,
-      preloadedBrief: payload.brief,
-      userId,
-      conversationId: payload.conversationId,
-      agentType: payload.agentType || "writer",
-      platform: payload.platform,
-      mode: payload.mode,
-      preferredLanguage: payload.language,
-      history: payload.history,
-      conversationStatus: payload.conversationStatus,
-      enterpriseId: payload.enterpriseId,
-      onProgress: async (event) => {
-        await persistProgressEvent({
-          type: event.type,
-          label: event.label,
-          detail: event.detail,
-          status: event.status,
-          at: typeof event.at === "number" && Number.isFinite(event.at) ? event.at : Date.now(),
-        })
-      },
-    }),
-    WRITER_TASK_TIMEOUT_MS,
-    "writer_task_timeout",
+  const inputTokens = estimateTextTokens(
+    [
+      payload.query,
+      ...(payload.history || []).map((entry) => `${entry.role}: ${entry.content}`),
+      payload.brief ? JSON.stringify(payload.brief) : "",
+    ].join("\n"),
   )
-
-  await updateWriterLatestAssistantMessage(userId, payload.conversationId, turnResult.answer, {
-    status: turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready",
-    imagesRequested: false,
-    language: payload.language,
-    platform: turnResult.routing.renderPlatform,
-    mode: turnResult.routing.renderMode,
-    diagnostics: turnResult.diagnostics,
+  const reserveEstimate = estimateTextCredits({
+    featureKey: "writer_copy",
+    inputTokens,
+    outputTokens: Math.max(600, inputTokens),
+    provider: "writer",
+    model: "writer-skills",
   })
+  let writerCreditReservation: BillingReservation | null = null
+  let writerCreditFinalized = false
+  try {
+    writerCreditReservation = await reserveFeatureCredits({
+      userId,
+      enterpriseId: payload.enterpriseId,
+      featureKey: reserveEstimate.featureKey,
+      amount: reserveEstimate.credits,
+      idempotencyKey: `writer-copy:async:reserve:${taskId}`,
+      metadata: {
+        taskId,
+        conversationId: payload.conversationId,
+        platform: payload.platform,
+        mode: payload.mode,
+        language: payload.language,
+      },
+    })
 
-  if (turnResult.outcome === "draft_ready") {
-    await withTaskTimeout(
-      persistWriterImplicitMemoryFromTurn({
+    const writerSkillRunner = loadWriterSkillRunner()
+    const turnResult = await withTaskTimeout(
+      writerSkillRunner.runBlocking({
         query: payload.query,
-        answer: turnResult.answer,
+        preloadedBrief: payload.brief,
         userId,
+        conversationId: payload.conversationId,
         agentType: payload.agentType || "writer",
-        conversationId: Number.parseInt(payload.conversationId, 10) || null,
-        outcome: turnResult.outcome,
+        platform: payload.platform,
+        mode: payload.mode,
+        preferredLanguage: payload.language,
+        history: payload.history,
+        conversationStatus: payload.conversationStatus,
+        enterpriseId: payload.enterpriseId,
+        onProgress: async (event) => {
+          await persistProgressEvent({
+            type: event.type,
+            label: event.label,
+            detail: event.detail,
+            status: normalizeAssistantTaskProgressStatus(event.status),
+            at: typeof event.at === "number" && Number.isFinite(event.at) ? event.at : Date.now(),
+          })
+        },
       }),
-      WRITER_MEMORY_EXTRACT_TIMEOUT_MS,
-      "writer_memory_extract_timeout",
-    ).catch((error) => {
-      console.warn("writer.memory.extract.skipped", {
+      WRITER_TASK_TIMEOUT_MS,
+      "writer_task_timeout",
+    )
+
+    await updateWriterLatestAssistantMessage(userId, payload.conversationId, turnResult.answer, {
+      status: turnResult.outcome === "needs_clarification" ? "drafting" : "text_ready",
+      imagesRequested: false,
+      language: payload.language,
+      platform: turnResult.routing.renderPlatform,
+      mode: turnResult.routing.renderMode,
+      diagnostics: turnResult.diagnostics,
+    })
+
+    const actualCost = estimateTextCredits({
+      featureKey: "writer_copy",
+      inputTokens,
+      outputTokens: estimateTextTokens(turnResult.answer),
+      provider: "writer",
+      model: "writer-skills",
+    })
+    await finalizeReservedCredits({
+      reservation: writerCreditReservation,
+      userId,
+      enterpriseId: payload.enterpriseId,
+      actualAmount: actualCost.credits,
+      idempotencyKey: `writer-copy:async:debit:${taskId}`,
+      provider: actualCost.provider,
+      model: actualCost.model,
+      officialCostUsd: actualCost.officialCostUsd,
+      costBasisUsd: actualCost.costBasisUsd,
+      usagePayload: actualCost.metadata,
+      metadata: {
+        taskId,
+        conversationId: payload.conversationId,
+        outcome: turnResult.outcome,
+      },
+    }).then(() => {
+      writerCreditFinalized = true
+    }).catch((error) => {
+      console.warn("writer.billing.finalize.skipped", {
         taskId,
         conversationId: payload.conversationId,
         message: error instanceof Error ? error.message : String(error),
       })
     })
+
+    if (turnResult.outcome === "draft_ready") {
+      await withTaskTimeout(
+        persistWriterImplicitMemoryFromTurn({
+          query: payload.query,
+          answer: turnResult.answer,
+          userId,
+          agentType: payload.agentType || "writer",
+          conversationId: Number.parseInt(payload.conversationId, 10) || null,
+          outcome: turnResult.outcome,
+        }),
+        WRITER_MEMORY_EXTRACT_TIMEOUT_MS,
+        "writer_memory_extract_timeout",
+      ).catch((error) => {
+        console.warn("writer.memory.extract.skipped", {
+          taskId,
+          conversationId: payload.conversationId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+
+    pushTaskProgressEvent(progressEvents, {
+      type: "draft_ready",
+      label: turnResult.outcome === "needs_clarification" ? "Clarification ready" : "Draft ready",
+      status: "completed",
+      at: Date.now(),
+    })
+
+    await updateTaskStatus(taskId, {
+      status: "success",
+      result: {
+        conversation_id: payload.conversationId,
+        outcome: turnResult.outcome,
+        events: progressEvents,
+      },
+    })
+  } catch (error) {
+    if (!writerCreditFinalized) {
+      await releaseReservedCredits({
+        reservation: writerCreditReservation,
+        userId,
+        enterpriseId: payload.enterpriseId,
+        idempotencyKey: `writer-copy:async:release:${taskId}`,
+        reason: error instanceof Error ? error.message : "writer_task_failed",
+      }).catch((releaseError) => {
+        console.warn("writer.billing.release.skipped", {
+          taskId,
+          conversationId: payload.conversationId,
+          message: releaseError instanceof Error ? releaseError.message : String(releaseError),
+        })
+      })
+    }
+    throw error
   }
-
-  pushTaskProgressEvent(progressEvents, {
-    type: "draft_ready",
-    label: turnResult.outcome === "needs_clarification" ? "Clarification ready" : "Draft ready",
-    status: "completed",
-    at: Date.now(),
-  })
-
-  await updateTaskStatus(taskId, {
-    status: "success",
-    result: {
-      conversation_id: payload.conversationId,
-      outcome: turnResult.outcome,
-      events: progressEvents,
-    },
-  })
 }
 
 async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
@@ -841,6 +941,10 @@ async function handleLeadHunterTurn(
   }
 
   const persistConversationArtifacts = async () => {
+    if (!payload.conversationId) {
+      return
+    }
+
     const savedMessage = await appendLeadHunterMessage(
       payload.userId,
       normalizedAdvisorType,

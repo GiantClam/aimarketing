@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Bot,
+  CreditCard,
   Globe,
   ImageIcon,
   LogOut,
@@ -366,7 +367,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 </Button>
               </Link>
             )}
-            <Link href="/dashboard/settings">
+            <Link href="/dashboard/billing">
               <Button
                 variant="ghost"
                 className={
@@ -375,30 +376,42 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
                 }
                 size="sm"
-                title={messages.shared.userSettings}
+                title={locale === "zh" ? "会员与积分" : "Billing"}
               >
-                <Settings className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
-                {!sidebarCollapsed && messages.shared.userSettings}
+                <CreditCard className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+                {!sidebarCollapsed && (locale === "zh" ? "会员与积分" : "Billing")}
               </Button>
             </Link>
-
             <Separator className="my-2" />
 
-            <div className={sidebarCollapsed ? "flex flex-col items-center gap-2 rounded-[20px] border-2 border-sidebar-border bg-card p-2" : "flex items-center gap-3 rounded-[20px] border-2 border-sidebar-border bg-card p-3"}>
-              <Avatar className="h-8 w-8">
-                <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                <AvatarFallback className="bg-accent text-xs text-primary">
-                  {isDemoMode ? messages.dashboardLayout.demoLabel : messages.shared.user}
-                </AvatarFallback>
-              </Avatar>
-              {!sidebarCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-sidebar-foreground">
-                    {isDemoMode ? messages.shared.demoAccount : user?.name || messages.shared.marketingMember}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
-                </div>
-              )}
+            <div className={sidebarCollapsed ? "flex flex-col items-center gap-2" : "flex items-center gap-2"}>
+              <Link
+                href="/dashboard/settings"
+                className={
+                  sidebarCollapsed
+                    ? "flex w-full items-center justify-center rounded-[20px] border-2 border-sidebar-border bg-card p-2 transition-colors hover:bg-primary hover:text-primary-foreground"
+                    : "flex min-w-0 flex-1 items-center gap-3 rounded-[20px] border-2 border-sidebar-border bg-card p-3 transition-colors hover:bg-primary hover:text-primary-foreground"
+                }
+                title={messages.shared.userSettings}
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/placeholder.svg?height=32&width=32" />
+                  <AvatarFallback className="bg-accent text-xs text-primary">
+                    {isDemoMode ? messages.dashboardLayout.demoLabel : messages.shared.user}
+                  </AvatarFallback>
+                </Avatar>
+                {!sidebarCollapsed && (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {isDemoMode ? messages.shared.demoAccount : user?.name || messages.shared.marketingMember}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground group-hover:text-primary-foreground/80">{userEmail}</p>
+                    </div>
+                    <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </>
+                )}
+              </Link>
               <Button variant="ghost" size="sm" className="rounded-full border border-transparent text-muted-foreground hover:bg-muted hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
                 <LogOut className="h-4 w-4" />
               </Button>

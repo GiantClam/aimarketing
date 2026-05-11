@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import {
   createRetryableDbErrorMatcher,
   getCombinedErrorMessage,
+  getErrorMessage,
   withDbRetry as withDbRetryBase,
 } from "@/lib/db/retry"
 import {

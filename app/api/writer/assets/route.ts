@@ -1,36 +1,33 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import { estimateGptImage2Credits } from "@/lib/billing/costing"
+import {
+  finalizeReservedCredits,
+  releaseReservedCredits,
+  reserveFeatureCredits,
+  type BillingReservation,
+} from "@/lib/billing/runtime"
+import {
+  generateImagesWithOpenAiCompatibleProvider,
+  getOpenAiCompatibleImageProviderConfig,
+  type OpenAiCompatibleImageProviderId,
+} from "@/lib/image-assistant/openai-compatible-image"
+import { buildImageAssistantProviderPlan } from "@/lib/image-assistant/aiberm"
 import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
 import { buildPendingWriterAssets, ensureWriterAssetOrder, markWriterAssetsFailed } from "@/lib/writer/assets"
-import {
-  generateImageWithAiberm,
-  generateImageWithOpenRouter,
-  getOpenRouterImageModel,
-  hasAibermApiKey,
-  hasOpenRouterApiKey,
-} from "@/lib/writer/aiberm"
 import { normalizeWriterMode, normalizeWriterPlatform, WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
 import {
   ensureWriterPromptDiversity,
   extractWriterPromptFocus,
 } from "@/lib/writer/prompt-similarity"
 import { updateWriterConversationMeta } from "@/lib/writer/repository"
-import { writerRequestJson } from "@/lib/writer/network"
 import { isWriterR2Available, uploadWriterImageToR2 } from "@/lib/writer/r2"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
 
-const GOOGLE_IMAGE_API_KEY =
-  process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
-const WRITER_AIBERM_IMAGE_MODEL = process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
-const WRITER_GEMINI_IMAGE_MODEL = process.env.WRITER_GEMINI_IMAGE_MODEL || process.env.WRITER_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
-const WRITER_OPENROUTER_IMAGE_MODEL = getOpenRouterImageModel()
-const WRITER_GEMINI_IMAGE_TIMEOUT_MS = Math.min(
-  300_000,
-  Math.max(30_000, Number.parseInt(process.env.WRITER_GEMINI_IMAGE_TIMEOUT_MS || "90000", 10) || 90_000),
-)
+const WRITER_IMAGE_DEFAULT_MODEL = "gpt-image-2"
 const WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS = Math.max(
   1,
   Number.parseInt(process.env.WRITER_PROMPT_DIVERSITY_MAX_ATTEMPTS || "3", 10) || 3,
@@ -40,29 +37,19 @@ const WRITER_PROMPT_SIMILARITY_MAX = Math.max(
   Math.min(1, Number.parseFloat(process.env.WRITER_PROMPT_SIMILARITY_MAX || "0.82") || 0.82),
 )
 const WRITER_ENFORCE_PROMPT_DIVERSITY = process.env.WRITER_ENFORCE_PROMPT_DIVERSITY !== "false"
-type WriterImageProvider = "aiberm" | "gemini" | "openrouter"
+type WriterImageProvider = OpenAiCompatibleImageProviderId
 type WriterPlannedAsset = ReturnType<typeof buildPendingWriterAssets>[number]
 type WriterGeneratedAsset = WriterPlannedAsset & {
   url: string
   status: "ready" | "failed"
-  provider: "aiberm" | "gemini" | "openrouter" | "error"
+  provider: WriterImageProvider | "error"
   storageKey?: string
   contentType?: string
   error?: string
 }
 
 function buildWriterImageProviderPlan() {
-  const plan: WriterImageProvider[] = []
-  if (hasAibermApiKey()) {
-    plan.push("aiberm")
-  }
-  if (hasOpenRouterApiKey()) {
-    plan.push("openrouter")
-  }
-  if (GOOGLE_IMAGE_API_KEY) {
-    plan.push("gemini")
-  }
-  return plan
+  return buildImageAssistantProviderPlan() as WriterImageProvider[]
 }
 
 function isTemporaryProviderError(error: unknown) {
@@ -120,86 +107,43 @@ function shouldUseWriterE2EFixtures() {
   return false
 }
 
-function extractInlineImageData(parts: Array<{ inlineData?: { mimeType?: string; data?: string } }> | undefined) {
-  if (!Array.isArray(parts)) return ""
-
-  for (const part of parts) {
-    const mimeType = typeof part?.inlineData?.mimeType === "string" ? part.inlineData.mimeType : ""
-    const data = typeof part?.inlineData?.data === "string" ? part.inlineData.data : ""
-    if (mimeType.startsWith("image/") && data) {
-      return `data:${mimeType};base64,${data}`
+async function generateWriterImageWithProvider(params: {
+  provider: WriterImageProvider
+  prompt: string
+  aspectRatio: string
+  signal?: AbortSignal
+}) {
+  if (shouldUseWriterE2EFixtures()) {
+    return {
+      dataUrl: createFixtureImageDataUrl(params.prompt, params.aspectRatio),
+      model: getWriterImageModelForProvider(params.provider),
     }
   }
 
-  return ""
-}
-
-async function generateGeminiImage(prompt: string, aspectRatio: string) {
-  if (shouldUseWriterE2EFixtures()) {
-    return createFixtureImageDataUrl(prompt, aspectRatio)
+  const config = getOpenAiCompatibleImageProviderConfig(params.provider)
+  if (!config) {
+    throw new Error(`writer_${params.provider}_api_key_missing`)
   }
 
-  if (!GOOGLE_IMAGE_API_KEY) {
-    throw new Error("google_image_api_key_missing")
-  }
+  const result = await generateImagesWithOpenAiCompatibleProvider({
+    config,
+    prompt: params.prompt,
+    taskType: "generate",
+    candidateCount: 1,
+    sizePreset: params.aspectRatio === "3:4" ? "3:4" : params.aspectRatio === "16:9" ? "16:9" : "1:1",
+    resolution: "1K",
+    signal: params.signal,
+  })
 
-  const response = await writerRequestJson<{
-    error?: { message?: string }
-    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> } }>
-  }>(
-    `https://generativelanguage.googleapis.com/v1beta/models/${WRITER_GEMINI_IMAGE_MODEL}:generateContent?key=${encodeURIComponent(
-      GOOGLE_IMAGE_API_KEY,
-    )}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }],
-          },
-        ],
-        generationConfig: {
-          responseModalities: ["IMAGE", "TEXT"],
-          imageConfig: {
-            aspectRatio,
-            imageSize: "1K",
-          },
-          thinkingConfig: {
-            thinkingLevel: "MINIMAL",
-          },
-        },
-        tools: [
-          {
-            googleSearch: {
-              searchTypes: {
-                webSearch: {},
-              },
-            },
-          },
-        ],
-      }),
-    },
-    { attempts: 4, timeoutMs: WRITER_GEMINI_IMAGE_TIMEOUT_MS },
-  )
-
-  if (!response.ok) {
-    throw new Error(response.data?.error?.message || response.text || "google_image_request_failed")
-  }
-
-  if (response.data?.error?.message) {
-    throw new Error(response.data.error.message)
-  }
-
-  const dataUrl = extractInlineImageData(response.data?.candidates?.[0]?.content?.parts)
+  const dataUrl = result.images[0]
   if (!dataUrl) {
-    throw new Error("google_image_missing")
+    throw new Error(`writer_${params.provider}_image_missing`)
   }
 
-  return dataUrl
+  return {
+    dataUrl,
+    model: result.model || config.model,
+  }
 }
 
 async function generateWriterImage(
@@ -217,8 +161,8 @@ async function generateWriterImage(
   if (shouldUseWriterE2EFixtures()) {
     return {
       dataUrl: createFixtureImageDataUrl(prompt, aspectRatio),
-      provider: "gemini" as const,
-      model: WRITER_GEMINI_IMAGE_MODEL,
+      provider: "aiberm" as const,
+      model: WRITER_IMAGE_DEFAULT_MODEL,
     }
   }
 
@@ -233,18 +177,9 @@ async function generateWriterImage(
   const { provider, result } = await executeImageProviderPlan({
     providerPlan,
     handlers: {
-      aiberm: async () => ({
-        dataUrl: await generateImageWithAiberm(prompt, WRITER_AIBERM_IMAGE_MODEL, aspectRatio),
-        model: WRITER_AIBERM_IMAGE_MODEL,
-      }),
-      gemini: async () => ({
-        dataUrl: await generateGeminiImage(prompt, aspectRatio),
-        model: WRITER_GEMINI_IMAGE_MODEL,
-      }),
-      openrouter: async () => ({
-        dataUrl: await generateImageWithOpenRouter(prompt, WRITER_OPENROUTER_IMAGE_MODEL, aspectRatio),
-        model: WRITER_OPENROUTER_IMAGE_MODEL,
-      }),
+      pptoken: async () => generateWriterImageWithProvider({ provider: "pptoken", prompt, aspectRatio }),
+      aiberm: async () => generateWriterImageWithProvider({ provider: "aiberm", prompt, aspectRatio }),
+      crazyroute: async () => generateWriterImageWithProvider({ provider: "crazyroute", prompt, aspectRatio }),
     },
     onProviderFailure: ({ provider, nextProvider, error }) => {
       console.warn(`writer.assets.${provider}_fallback`, {
@@ -261,25 +196,32 @@ async function generateWriterImage(
 
   return {
     ...result,
-    provider: provider as "aiberm" | "gemini" | "openrouter",
+    provider: provider as WriterImageProvider,
   }
 }
 
 function getPreferredWriterImageProvider() {
   const plan = buildWriterImageProviderPlan()
-  if (plan.includes("aiberm")) return "aiberm" as const
-  if (plan.includes("gemini")) return "gemini" as const
-  return "openrouter" as const
+  return plan[0] || "aiberm"
 }
 
 function getPreferredWriterImageModel() {
   return getWriterImageModelForProvider(getPreferredWriterImageProvider())
 }
 
-function getWriterImageModelForProvider(provider: "aiberm" | "gemini" | "openrouter") {
-  if (provider === "aiberm") return WRITER_AIBERM_IMAGE_MODEL
-  if (provider === "gemini") return WRITER_GEMINI_IMAGE_MODEL
-  return WRITER_OPENROUTER_IMAGE_MODEL
+function getWriterImageModelForProvider(provider: WriterImageProvider) {
+  return getOpenAiCompatibleImageProviderConfig(provider)?.model || WRITER_IMAGE_DEFAULT_MODEL
+}
+
+function estimateWriterImageCredits(provider: WriterImageProvider, imageCount: number) {
+  return estimateGptImage2Credits({
+    featureKey: "writer_image",
+    size: "1024x1024",
+    quality: "medium",
+    provider,
+    model: getWriterImageModelForProvider(provider),
+    imageCount,
+  })
 }
 
 function summarizeWriterAssetError(error: unknown) {
@@ -310,16 +252,14 @@ function summarizeWriterAssetError(error: unknown) {
 
 function resolveWriterImageProvider(
   assets: Array<{
-    status: "ready" | "failed"
+    status: "ready" | "failed" | "loading"
     url: string
-    provider: "aiberm" | "gemini" | "openrouter" | "error"
+    provider: WriterImageProvider | "loading" | "error"
   }>,
 ) {
   const successfulAsset = assets.find(
-    (asset): asset is { status: "ready"; url: string; provider: "aiberm" | "gemini" | "openrouter" } =>
-      asset.status === "ready" &&
-      Boolean(asset.url) &&
-      (asset.provider === "aiberm" || asset.provider === "gemini" || asset.provider === "openrouter"),
+    (asset): asset is { status: "ready"; url: string; provider: WriterImageProvider } =>
+      asset.status === "ready" && Boolean(asset.url) && asset.provider !== "error",
   )
 
   return successfulAsset?.provider || getPreferredWriterImageProvider()
@@ -356,6 +296,75 @@ function createWriterAssetSseResponse(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     },
+  })
+}
+
+async function reserveWriterImageCredits(input: {
+  userId: number
+  enterpriseId?: number | null
+  provider: WriterImageProvider
+  imageCount: number
+  idempotencyKey: string
+  conversationId: string | null
+}) {
+  const estimate = estimateWriterImageCredits(input.provider, Math.max(1, input.imageCount))
+  return reserveFeatureCredits({
+    userId: input.userId,
+    enterpriseId: input.enterpriseId,
+    featureKey: estimate.featureKey,
+    amount: estimate.credits,
+    idempotencyKey: input.idempotencyKey,
+    metadata: {
+      route: "writer.assets",
+      conversationId: input.conversationId,
+      source: estimate.source,
+      ...estimate.metadata,
+    },
+  })
+}
+
+async function finalizeWriterImageCredits(input: {
+  reservation: BillingReservation | null
+  userId: number
+  enterpriseId?: number | null
+  provider: WriterImageProvider
+  successCount: number
+  idempotencyKey: string
+  conversationId: string | null
+}) {
+  const actualCost = estimateWriterImageCredits(input.provider, Math.max(1, input.successCount))
+  return finalizeReservedCredits({
+    reservation: input.reservation,
+    userId: input.userId,
+    enterpriseId: input.enterpriseId,
+    actualAmount: actualCost.credits,
+    idempotencyKey: input.idempotencyKey,
+    provider: actualCost.provider,
+    model: actualCost.model,
+    officialCostUsd: actualCost.officialCostUsd,
+    costBasisUsd: actualCost.costBasisUsd,
+    usagePayload: actualCost.metadata,
+    metadata: {
+      route: "writer.assets",
+      conversationId: input.conversationId,
+      successCount: input.successCount,
+    },
+  })
+}
+
+async function releaseWriterImageCredits(input: {
+  reservation: BillingReservation | null
+  userId: number
+  enterpriseId?: number | null
+  idempotencyKey: string
+  reason: string
+}) {
+  return releaseReservedCredits({
+    reservation: input.reservation,
+    userId: input.userId,
+    enterpriseId: input.enterpriseId,
+    idempotencyKey: input.idempotencyKey,
+    reason: input.reason,
   })
 }
 
@@ -507,7 +516,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (baseProviderPlan.length === 0) {
-      const errorMessage = "AIBERM_API_KEY, GOOGLE_AI_API_KEY, or OPENROUTER_API_KEY is required for writer image generation"
+      const errorMessage = "Configure at least one writer image provider: pptoken, aiberm, crazyroute."
       const failedAssets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, errorMessage), platform, mode)
       if (conversationId) {
         try {
@@ -595,53 +604,132 @@ export async function POST(request: NextRequest) {
     if (streamMode) {
       return createWriterAssetSseResponse(async (emit) => {
         emit({ event: "start", total: plannedAssets.length })
-        const generatedAssets = await generateWriterAssetsBatch({
-          plannedAssets,
-          platform,
-          conversationId,
-          userId: auth.user.id,
-          providerPlan: baseProviderPlan,
-          onAsset: ({ index, total, asset, assets }) => {
-            emit({
-              event: "asset",
-              index,
-              total,
-              asset,
-              assets: ensureWriterAssetOrder(assets, platform, mode),
-            })
-          },
-        })
-
-        const orderedAssets = ensureWriterAssetOrder(generatedAssets, platform, mode)
-        const successCount = orderedAssets.filter((asset) => asset.status === "ready" && asset.url).length
-        const resolvedProvider = resolveWriterImageProvider(orderedAssets)
-        const donePayload = {
-          provider: resolvedProvider,
-          model: getWriterImageModelForProvider(resolvedProvider),
-          assets: orderedAssets,
-        }
-
-        if (conversationId) {
-          try {
-            await updateWriterConversationMeta(auth.user.id, conversationId, {
-              status: successCount > 0 ? "ready" : "failed",
-              imagesRequested: true,
-            })
-          } catch (dbError) {
-            console.warn("writer.assets.db_update_after_stream_failed", {
+        const preferredProvider = getPreferredWriterImageProvider()
+        let creditReservation: BillingReservation | null = null
+        let creditFinalized = false
+        try {
+          if (plannedAssets.length > 0) {
+            creditReservation = await reserveWriterImageCredits({
+              userId: auth.user.id,
+              enterpriseId: auth.user.enterpriseId,
+              provider: preferredProvider,
+              imageCount: plannedAssets.length,
+              idempotencyKey: `writer-image:stream:reserve:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
               conversationId,
-              error: dbError instanceof Error ? dbError.message : String(dbError),
             })
           }
-        }
 
-        emit({
-          event: "done",
-          ok: successCount > 0,
-          ...(successCount > 0 ? {} : { error: "writer_assets_failed" }),
-          data: donePayload,
-        })
+          const generatedAssets = await generateWriterAssetsBatch({
+            plannedAssets,
+            platform,
+            conversationId,
+            userId: auth.user.id,
+            providerPlan: baseProviderPlan,
+            onAsset: ({ index, total, asset, assets }) => {
+              emit({
+                event: "asset",
+                index,
+                total,
+                asset,
+                assets: ensureWriterAssetOrder(assets, platform, mode),
+              })
+            },
+          })
+
+          const orderedAssets = ensureWriterAssetOrder(generatedAssets, platform, mode)
+          const successCount = orderedAssets.filter((asset) => asset.status === "ready" && asset.url).length
+          const resolvedProvider = resolveWriterImageProvider(orderedAssets)
+          const donePayload = {
+            provider: resolvedProvider,
+            model: getWriterImageModelForProvider(resolvedProvider),
+            assets: orderedAssets,
+          }
+
+          if (conversationId) {
+            try {
+              await updateWriterConversationMeta(auth.user.id, conversationId, {
+                status: successCount > 0 ? "ready" : "failed",
+                imagesRequested: true,
+              })
+            } catch (dbError) {
+              console.warn("writer.assets.db_update_after_stream_failed", {
+                conversationId,
+                error: dbError instanceof Error ? dbError.message : String(dbError),
+              })
+            }
+          }
+
+          if (successCount > 0) {
+            await finalizeWriterImageCredits({
+              reservation: creditReservation,
+              userId: auth.user.id,
+              enterpriseId: auth.user.enterpriseId,
+              provider: resolvedProvider,
+              successCount,
+              idempotencyKey: `writer-image:stream:debit:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+              conversationId,
+            }).then(() => {
+              creditFinalized = true
+            }).catch((billingError) => {
+              console.warn("writer.assets.billing.finalize_failed", {
+                conversationId,
+                message: billingError instanceof Error ? billingError.message : String(billingError),
+              })
+            })
+          } else {
+            await releaseWriterImageCredits({
+              reservation: creditReservation,
+              userId: auth.user.id,
+              enterpriseId: auth.user.enterpriseId,
+              idempotencyKey: `writer-image:stream:release:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+              reason: "writer_assets_failed",
+            })
+          }
+
+          emit({
+            event: "done",
+            ok: successCount > 0,
+            ...(successCount > 0 ? {} : { error: "writer_assets_failed" }),
+            data: donePayload,
+          })
+        } catch (error) {
+          if (!creditFinalized) {
+            await releaseWriterImageCredits({
+              reservation: creditReservation,
+              userId: auth.user.id,
+              enterpriseId: auth.user.enterpriseId,
+              idempotencyKey: `writer-image:stream:release:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+              reason: error instanceof Error ? error.message : "writer_assets_failed",
+            }).catch((billingError) => {
+              console.warn("writer.assets.billing.release_failed", {
+                conversationId,
+                message: billingError instanceof Error ? billingError.message : String(billingError),
+              })
+            })
+          }
+          throw error
+        }
       })
+    }
+
+    const preferredProvider = getPreferredWriterImageProvider()
+    let creditReservation: BillingReservation | null = null
+    try {
+      if (plannedAssets.length > 0) {
+        creditReservation = await reserveWriterImageCredits({
+          userId: auth.user.id,
+          enterpriseId: auth.user.enterpriseId,
+          provider: preferredProvider,
+          imageCount: plannedAssets.length,
+          idempotencyKey: `writer-image:reserve:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+          conversationId,
+        })
+      }
+    } catch (billingError) {
+      if (billingError instanceof Error && billingError.message === "insufficient_credits") {
+        return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+      }
+      throw billingError
     }
 
     const generatedAssets = await generateWriterAssetsBatch({
@@ -656,6 +744,18 @@ export async function POST(request: NextRequest) {
     const resolvedProvider = resolveWriterImageProvider(orderedAssets)
 
     if (successCount === 0) {
+      await releaseWriterImageCredits({
+        reservation: creditReservation,
+        userId: auth.user.id,
+        enterpriseId: auth.user.enterpriseId,
+        idempotencyKey: `writer-image:release:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+        reason: "writer_assets_failed",
+      }).catch((billingError) => {
+        console.warn("writer.assets.billing.release_failed", {
+          conversationId,
+          message: billingError instanceof Error ? billingError.message : String(billingError),
+        })
+      })
       if (conversationId) {
         try {
           await updateWriterConversationMeta(auth.user.id, conversationId, {
@@ -679,6 +779,21 @@ export async function POST(request: NextRequest) {
         { status: 502 },
       )
     }
+
+    await finalizeWriterImageCredits({
+      reservation: creditReservation,
+      userId: auth.user.id,
+      enterpriseId: auth.user.enterpriseId,
+      provider: resolvedProvider,
+      successCount,
+      idempotencyKey: `writer-image:debit:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+      conversationId,
+    }).catch((billingError) => {
+      console.warn("writer.assets.billing.finalize_failed", {
+        conversationId,
+        message: billingError instanceof Error ? billingError.message : String(billingError),
+      })
+    })
 
     if (conversationId) {
       try {

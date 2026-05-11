@@ -11,9 +11,9 @@ function parseProviderId(value: string | null): AiEntryProviderId | null {
   const normalized = (value || "").trim().toLowerCase()
   if (normalized === "crazyrouter") return "crazyroute"
   if (
+    normalized === "pptoken" ||
     normalized === "aiberm" ||
-    normalized === "crazyroute" ||
-    normalized === "openrouter"
+    normalized === "crazyroute"
   ) {
     return normalized
   }
@@ -31,11 +31,11 @@ export async function GET(request: NextRequest) {
     const providers = getConfiguredAiEntryProviders().map((provider) => ({
       id: provider.id,
       label:
-        provider.id === "aiberm"
+        provider.id === "pptoken"
+          ? "PPTOKEN"
+          : provider.id === "aiberm"
           ? "Aiberm"
-          : provider.id === "crazyroute"
-            ? "CrazyRouter"
-            : "OpenRouter",
+          : "CrazyRouter",
     }))
     const catalog = await getAiEntryModelCatalog({ providerId })
     return NextResponse.json({

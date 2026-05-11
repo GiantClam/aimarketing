@@ -3,7 +3,7 @@ import { and, eq, ne } from "drizzle-orm"
 
 import { deleteUserSessions, getSessionUser } from "@/lib/auth/session"
 import { db } from "@/lib/db"
-import { userFeaturePermissions, users } from "@/lib/db/schema"
+import { userFeaturePermissions, userSessions, users } from "@/lib/db/schema"
 import { hashPassword, isEnterpriseAdmin } from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
 

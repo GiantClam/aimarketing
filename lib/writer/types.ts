@@ -67,6 +67,8 @@ export type WriterHistoryEntry = {
   conversation_id: string
   query: string
   answer: string
+  role?: "user" | "assistant"
+  content?: string
   diagnostics?: WriterTurnDiagnostics | null
   inputs: {
     contents: string

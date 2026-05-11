@@ -1,127 +1,25 @@
 import { writerRequestJson } from "@/lib/writer/network"
 
 const AIBERM_API_BASE = (process.env.AIBERM_BASE_URL || "https://aiberm.com/v1").replace(/\/$/, "")
-const AIBERM_IMAGE_API_BASE = (
-  process.env.AIBERM_IMAGE_API_BASE ||
-  AIBERM_API_BASE.replace(/\/v1$/i, "") ||
-  "https://aiberm.com"
-).replace(/\/$/, "")
 const AIBERM_API_KEY = process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || ""
-const AIBERM_IMAGE_SYSTEM_INSTRUCTION = process.env.AIBERM_IMAGE_SYSTEM_INSTRUCTION || "You are a helpful assistant."
-const AIBERM_IMAGE_SIZE = process.env.AIBERM_IMAGE_SIZE || "2K"
-const AIBERM_IMAGE_TIMEOUT_MS = Math.min(
-  300_000,
-  Math.max(30_000, Number.parseInt(process.env.WRITER_AIBERM_IMAGE_TIMEOUT_MS || "90000", 10) || 90_000),
-)
-const OPENROUTER_IMAGE_TIMEOUT_MS = Math.min(
-  300_000,
-  Math.max(30_000, Number.parseInt(process.env.WRITER_OPENROUTER_IMAGE_TIMEOUT_MS || "90000", 10) || 90_000),
-)
-const OPENROUTER_API_BASE = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "")
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ""
-const OPENROUTER_TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-3-flash-preview"
-const OPENROUTER_IMAGE_MODEL = process.env.OPENROUTER_IMAGE_MODEL || "google/gemini-3.1-flash-image-preview"
-const OPENROUTER_AUTH_BLOCK_WINDOW_MS =
-  Number.parseInt(process.env.OPENROUTER_AUTH_BLOCK_WINDOW_MS || "", 10) || 15 * 60 * 1000
-const OPENROUTER_APP_URL =
-  process.env.OPENROUTER_APP_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "")
-const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || "AI Marketing"
-const OPENROUTER_AUTH_BLOCKED_UNTIL_KEY = "__aimarketingOpenRouterAuthBlockedUntil__"
+
+const CRAZYROUTE_API_BASE = (
+  process.env.CRAZYROUTE_BASE_URL ||
+  process.env.CRAZYROUTER_BASE_URL ||
+  process.env.AI_ENTRY_CRAZYROUTE_BASE_URL ||
+  process.env.AI_ENTRY_CRAZYROUTER_BASE_URL ||
+  "https://api.crazyroute.com/v1"
+).replace(/\/$/, "")
+const CRAZYROUTE_API_KEY =
+  process.env.CRAZYROUTE_API_KEY ||
+  process.env.CRAZYROUTER_API_KEY ||
+  process.env.AI_ENTRY_CRAZYROUTE_API_KEY ||
+  process.env.AI_ENTRY_CRAZYROUTER_API_KEY ||
+  ""
 
 type OpenAICompatibleMessage = {
   role: "system" | "user" | "assistant"
   content: string
-}
-
-type OpenRouterMessageContentPart =
-  | {
-      type: "text"
-      text: string
-    }
-  | {
-      type: "image_url"
-      image_url: {
-        url: string
-      }
-    }
-
-export type OpenRouterInlineReferenceImage = {
-  mimeType: string
-  base64Data: string
-}
-
-function getOpenRouterAuthBlockedUntil() {
-  const globalScope = globalThis as typeof globalThis & {
-    [OPENROUTER_AUTH_BLOCKED_UNTIL_KEY]?: number
-  }
-  return globalScope[OPENROUTER_AUTH_BLOCKED_UNTIL_KEY] || 0
-}
-
-function setOpenRouterAuthBlockedUntil(blockedUntil: number) {
-  const globalScope = globalThis as typeof globalThis & {
-    [OPENROUTER_AUTH_BLOCKED_UNTIL_KEY]?: number
-  }
-  globalScope[OPENROUTER_AUTH_BLOCKED_UNTIL_KEY] = blockedUntil
-}
-
-function isOpenRouterAuthBlocked() {
-  const blockedUntil = getOpenRouterAuthBlockedUntil()
-  if (!blockedUntil) return false
-  if (blockedUntil <= Date.now()) {
-    setOpenRouterAuthBlockedUntil(0)
-    return false
-  }
-  return true
-}
-
-function markOpenRouterAuthBlocked(message: string) {
-  const blockedUntil = Date.now() + OPENROUTER_AUTH_BLOCK_WINDOW_MS
-  setOpenRouterAuthBlockedUntil(blockedUntil)
-  console.warn("writer.openrouter.auth_temporarily_blocked", {
-    message,
-    blockedUntil,
-  })
-}
-
-function toOpenRouterHttpError(status: number, data: any, fallbackMessage: string) {
-  const message = data?.error?.message || fallbackMessage
-  if (status === 401 || /user not found|unauthorized|invalid token|access token/i.test(String(message))) {
-    markOpenRouterAuthBlocked(String(message))
-  }
-  return new Error(message)
-}
-
-function buildAibermHeaders() {
-  if (!AIBERM_API_KEY) {
-    throw new Error("aiberm_api_key_missing")
-  }
-
-  return {
-    Authorization: `Bearer ${AIBERM_API_KEY}`,
-    "Content-Type": "application/json",
-  }
-}
-
-export function hasAibermApiKey() {
-  return Boolean(AIBERM_API_KEY)
-}
-
-export function hasOpenRouterApiKey() {
-  return Boolean(OPENROUTER_API_KEY) && !isOpenRouterAuthBlocked()
-}
-
-export function hasWriterTextProvider() {
-  return hasAibermApiKey() || hasOpenRouterApiKey()
-}
-
-export function getOpenRouterTextModel() {
-  return OPENROUTER_TEXT_MODEL
-}
-
-export function getOpenRouterImageModel() {
-  return OPENROUTER_IMAGE_MODEL
 }
 
 type AibermTextGenerationOptions = {
@@ -150,6 +48,40 @@ type WriterStructuredObjectParams = {
   toolDescription?: string
   jsonSchema: Record<string, unknown>
   options?: WriterStructuredObjectOptions
+}
+
+function buildAibermHeaders() {
+  if (!AIBERM_API_KEY) {
+    throw new Error("aiberm_api_key_missing")
+  }
+
+  return {
+    Authorization: `Bearer ${AIBERM_API_KEY}`,
+    "Content-Type": "application/json",
+  }
+}
+
+function buildCrazyrouteHeaders() {
+  if (!CRAZYROUTE_API_KEY) {
+    throw new Error("crazyroute_api_key_missing")
+  }
+
+  return {
+    Authorization: `Bearer ${CRAZYROUTE_API_KEY}`,
+    "Content-Type": "application/json",
+  }
+}
+
+export function hasAibermApiKey() {
+  return Boolean(AIBERM_API_KEY)
+}
+
+export function hasCrazyrouteApiKey() {
+  return Boolean(CRAZYROUTE_API_KEY)
+}
+
+export function hasWriterTextProvider() {
+  return hasAibermApiKey() || hasCrazyrouteApiKey()
 }
 
 export function extractTextFromOpenAICompatibleResponse(data: any) {
@@ -205,29 +137,6 @@ function extractToolCallArgumentsFromOpenAICompatibleResponse(data: any, toolNam
   }
 
   throw new Error("openai_compatible_tool_call_missing")
-}
-
-function buildOpenRouterHeaders() {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error("openrouter_api_key_missing")
-  }
-  if (isOpenRouterAuthBlocked()) {
-    throw new Error("openrouter_credential_temporarily_blocked")
-  }
-
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-    "Content-Type": "application/json",
-  }
-
-  if (OPENROUTER_APP_URL) {
-    headers["HTTP-Referer"] = OPENROUTER_APP_URL
-  }
-  if (OPENROUTER_APP_NAME) {
-    headers["X-Title"] = OPENROUTER_APP_NAME
-  }
-
-  return headers
 }
 
 function isAbortLikeError(error: unknown) {
@@ -313,70 +222,74 @@ function createProviderScopedAbortSignal(parentSignal?: AbortSignal, timeoutMs?:
   }
 }
 
+async function generateTextWithProvider(params: {
+  baseUrl: string
+  headers: Record<string, string>
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  options?: AibermTextGenerationOptions
+  errorPrefix: string
+}) {
+  const response = await writerRequestJson(
+    `${params.baseUrl}/chat/completions`,
+    {
+      method: "POST",
+      headers: params.headers,
+      signal: params.options?.signal,
+      body: JSON.stringify({
+        model: params.model,
+        messages: [
+          { role: "system", content: params.systemPrompt } satisfies OpenAICompatibleMessage,
+          { role: "user", content: params.userPrompt } satisfies OpenAICompatibleMessage,
+        ],
+        temperature: params.options?.temperature ?? 0.7,
+        max_tokens: params.options?.maxTokens ?? 4096,
+      }),
+    },
+    { attempts: 2, timeoutMs: params.options?.timeoutMs ?? 90_000 },
+  )
+
+  if (!response.ok) {
+    const data = response.data as any
+    throw new Error(data?.error?.message || `${params.errorPrefix}_http_${response.status}`)
+  }
+
+  return extractTextFromOpenAICompatibleResponse(response.data)
+}
+
 export async function generateTextWithAiberm(
   systemPrompt: string,
   userPrompt: string,
   model: string,
   options: AibermTextGenerationOptions = {},
 ) {
-  const response = await writerRequestJson(
-    `${AIBERM_API_BASE}/chat/completions`,
-    {
-      method: "POST",
-      headers: buildAibermHeaders(),
-      signal: options.signal,
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt } satisfies OpenAICompatibleMessage,
-          { role: "user", content: userPrompt } satisfies OpenAICompatibleMessage,
-        ],
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.maxTokens ?? 4096,
-      }),
-    },
-    { attempts: 2, timeoutMs: options.timeoutMs ?? 90_000 },
-  )
-
-  if (!response.ok) {
-    const data = response.data as any
-    throw new Error(data?.error?.message || `aiberm_text_http_${response.status}`)
-  }
-
-  return extractTextFromOpenAICompatibleResponse(response.data)
+  return generateTextWithProvider({
+    baseUrl: AIBERM_API_BASE,
+    headers: buildAibermHeaders(),
+    systemPrompt,
+    userPrompt,
+    model,
+    options,
+    errorPrefix: "aiberm_text",
+  })
 }
 
-export async function generateTextWithOpenRouter(
+export async function generateTextWithCrazyroute(
   systemPrompt: string,
   userPrompt: string,
-  model = OPENROUTER_TEXT_MODEL,
+  model: string,
   options: AibermTextGenerationOptions = {},
 ) {
-  const response = await writerRequestJson(
-    `${OPENROUTER_API_BASE}/chat/completions`,
-    {
-      method: "POST",
-      headers: buildOpenRouterHeaders(),
-      signal: options.signal,
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt } satisfies OpenAICompatibleMessage,
-          { role: "user", content: userPrompt } satisfies OpenAICompatibleMessage,
-        ],
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.maxTokens ?? 4096,
-      }),
-    },
-    { attempts: 2, timeoutMs: options.timeoutMs ?? 90_000 },
-  )
-
-  if (!response.ok) {
-    const data = response.data as any
-    throw toOpenRouterHttpError(response.status, data, `openrouter_text_http_${response.status}`)
-  }
-
-  return extractTextFromOpenAICompatibleResponse(response.data)
+  return generateTextWithProvider({
+    baseUrl: CRAZYROUTE_API_BASE,
+    headers: buildCrazyrouteHeaders(),
+    systemPrompt,
+    userPrompt,
+    model,
+    options,
+    errorPrefix: "crazyroute_text",
+  })
 }
 
 export async function generateTextWithWriterModel(
@@ -436,15 +349,15 @@ export async function generateTextWithWriterModel(
       lastError = error
       console.warn("writer.text.aiberm_fallback", {
         message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasOpenRouterApiKey() ? "openrouter" : null,
+        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : null,
       })
     }
   }
 
-  if (hasOpenRouterApiKey()) {
+  if (hasCrazyrouteApiKey()) {
     try {
       return await runTextCallWithBudget((scoped) =>
-        generateTextWithOpenRouter(systemPrompt, userPrompt, model || OPENROUTER_TEXT_MODEL, scoped),
+        generateTextWithCrazyroute(systemPrompt, userPrompt, model, scoped),
       )
     } catch (error) {
       if (options.signal?.aborted && isAbortLikeError(error)) {
@@ -457,12 +370,16 @@ export async function generateTextWithWriterModel(
   throw lastError instanceof Error ? lastError : new Error("writer_text_provider_missing")
 }
 
-async function generateStructuredObjectWithAiberm(params: WriterStructuredObjectParams) {
+async function generateStructuredObjectWithProvider(params: WriterStructuredObjectParams & {
+  baseUrl: string
+  headers: Record<string, string>
+  errorPrefix: string
+}) {
   const response = await writerRequestJson(
-    `${AIBERM_API_BASE}/chat/completions`,
+    `${params.baseUrl}/chat/completions`,
     {
       method: "POST",
-      headers: buildAibermHeaders(),
+      headers: params.headers,
       signal: params.options?.signal,
       body: JSON.stringify({
         model: params.model,
@@ -496,55 +413,28 @@ async function generateStructuredObjectWithAiberm(params: WriterStructuredObject
 
   if (!response.ok) {
     const data = response.data as any
-    throw new Error(data?.error?.message || `aiberm_structured_http_${response.status}`)
+    throw new Error(data?.error?.message || `${params.errorPrefix}_http_${response.status}`)
   }
 
   return extractToolCallArgumentsFromOpenAICompatibleResponse(response.data, params.toolName)
 }
 
-async function generateStructuredObjectWithOpenRouter(params: WriterStructuredObjectParams) {
-  const response = await writerRequestJson(
-    `${OPENROUTER_API_BASE}/chat/completions`,
-    {
-      method: "POST",
-      headers: buildOpenRouterHeaders(),
-      signal: params.options?.signal,
-      body: JSON.stringify({
-        model: params.model || OPENROUTER_TEXT_MODEL,
-        messages: [
-          { role: "system", content: params.systemPrompt } satisfies OpenAICompatibleMessage,
-          { role: "user", content: params.userPrompt } satisfies OpenAICompatibleMessage,
-        ],
-        temperature: params.options?.temperature ?? 0,
-        max_tokens: params.options?.maxTokens ?? 1024,
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: params.toolName,
-              description: params.toolDescription || "Return the structured extraction result.",
-              parameters: params.jsonSchema,
-              strict: true,
-            },
-          },
-        ],
-        tool_choice: {
-          type: "function",
-          function: {
-            name: params.toolName,
-          },
-        },
-      }),
-    },
-    { attempts: 1, timeoutMs: params.options?.timeoutMs ?? 30_000 },
-  )
+async function generateStructuredObjectWithAiberm(params: WriterStructuredObjectParams) {
+  return generateStructuredObjectWithProvider({
+    ...params,
+    baseUrl: AIBERM_API_BASE,
+    headers: buildAibermHeaders(),
+    errorPrefix: "aiberm_structured",
+  })
+}
 
-  if (!response.ok) {
-    const data = response.data as any
-    throw toOpenRouterHttpError(response.status, data, `openrouter_structured_http_${response.status}`)
-  }
-
-  return extractToolCallArgumentsFromOpenAICompatibleResponse(response.data, params.toolName)
+async function generateStructuredObjectWithCrazyroute(params: WriterStructuredObjectParams) {
+  return generateStructuredObjectWithProvider({
+    ...params,
+    baseUrl: CRAZYROUTE_API_BASE,
+    headers: buildCrazyrouteHeaders(),
+    errorPrefix: "crazyroute_structured",
+  })
 }
 
 export async function generateStructuredObjectWithWriterModel(params: WriterStructuredObjectParams) {
@@ -602,19 +492,14 @@ export async function generateStructuredObjectWithWriterModel(params: WriterStru
       lastError = error
       console.warn("writer.structured.aiberm_fallback", {
         message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasOpenRouterApiKey() ? "openrouter" : null,
+        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : null,
       })
     }
   }
 
-  if (hasOpenRouterApiKey()) {
+  if (hasCrazyrouteApiKey()) {
     try {
-      return await runStructuredCallWithBudget((scoped) =>
-        generateStructuredObjectWithOpenRouter({
-          ...scoped,
-          model: scoped.model || OPENROUTER_TEXT_MODEL,
-        }),
-      )
+      return await runStructuredCallWithBudget(generateStructuredObjectWithCrazyroute)
     } catch (error) {
       if (params.options?.signal?.aborted && isAbortLikeError(error)) {
         throw error
@@ -624,154 +509,4 @@ export async function generateStructuredObjectWithWriterModel(params: WriterStru
   }
 
   throw lastError instanceof Error ? lastError : new Error("writer_structured_provider_missing")
-}
-
-function normalizeAspectRatio(aspectRatio: string) {
-  const supportedAspectRatios = new Set(["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"])
-  return supportedAspectRatios.has(aspectRatio) ? aspectRatio : "16:9"
-}
-
-function extractInlineImageDataUrl(data: any) {
-  const parts = Array.isArray(data?.candidates?.[0]?.content?.parts) ? data.candidates[0].content.parts : []
-  for (const part of parts) {
-    const mimeType = typeof part?.inlineData?.mimeType === "string" ? part.inlineData.mimeType.trim() : ""
-    const base64Data = typeof part?.inlineData?.data === "string" ? part.inlineData.data.trim() : ""
-    if (mimeType.startsWith("image/") && base64Data) {
-      return `data:${mimeType};base64,${base64Data}`
-    }
-  }
-
-  throw new Error("aiberm_image_missing")
-}
-
-function extractOpenRouterImageDataUrls(data: any) {
-  const choice = Array.isArray(data?.choices) ? data.choices[0] : null
-  const images = Array.isArray(choice?.message?.images) ? choice.message.images : []
-  const urls = images
-    .map((image: any) => {
-      if (typeof image?.image_url?.url === "string" && image.image_url.url.trim()) {
-        return image.image_url.url.trim()
-      }
-      if (typeof image?.imageUrl?.url === "string" && image.imageUrl.url.trim()) {
-        return image.imageUrl.url.trim()
-      }
-      return ""
-    })
-    .filter(Boolean)
-
-  if (!urls.length) {
-    throw new Error("openrouter_image_missing")
-  }
-
-  return urls
-}
-
-export async function generateImageWithAiberm(prompt: string, model: string, aspectRatio: string) {
-  const response = await writerRequestJson(
-    `${AIBERM_IMAGE_API_BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: "POST",
-      headers: buildAibermHeaders(),
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }],
-          },
-        ],
-        systemInstruction: {
-          parts: [{ text: AIBERM_IMAGE_SYSTEM_INSTRUCTION }],
-        },
-        generationConfig: {
-          responseModalities: ["IMAGE"],
-          temperature: 1,
-          topP: 0.95,
-          maxOutputTokens: 8192,
-          imageConfig: {
-            aspectRatio: normalizeAspectRatio(aspectRatio),
-            imageSize: AIBERM_IMAGE_SIZE,
-          },
-        },
-      }),
-    },
-    { attempts: 1, timeoutMs: AIBERM_IMAGE_TIMEOUT_MS },
-  )
-
-  if (!response.ok) {
-    const data = response.data as any
-    throw new Error(data?.error?.message || `aiberm_image_http_${response.status}`)
-  }
-
-  return extractInlineImageDataUrl(response.data)
-}
-
-export async function generateImagesWithOpenRouter(
-  prompt: string,
-  model = OPENROUTER_IMAGE_MODEL,
-  aspectRatio = "16:9",
-  referenceImages: OpenRouterInlineReferenceImage[] = [],
-  options: { signal?: AbortSignal; timeoutMs?: number } = {},
-) {
-  const content: OpenRouterMessageContentPart[] = [
-    {
-      type: "text",
-      text: prompt,
-    },
-    ...referenceImages.map((image) => ({
-      type: "image_url" as const,
-      image_url: {
-        url: `data:${image.mimeType};base64,${image.base64Data}`,
-      },
-    })),
-  ]
-
-  const response = await writerRequestJson(
-    `${OPENROUTER_API_BASE}/chat/completions`,
-    {
-      method: "POST",
-      headers: buildOpenRouterHeaders(),
-      signal: options.signal,
-      body: JSON.stringify({
-        model,
-        modalities: ["image", "text"],
-        messages: [
-          {
-            role: "user",
-            content,
-          },
-        ],
-        image_config: {
-          aspect_ratio: normalizeAspectRatio(aspectRatio),
-        },
-      }),
-    },
-    { attempts: 2, timeoutMs: options.timeoutMs ?? OPENROUTER_IMAGE_TIMEOUT_MS },
-  )
-
-  if (!response.ok) {
-    const data = response.data as any
-    throw toOpenRouterHttpError(response.status, data, `openrouter_image_http_${response.status}`)
-  }
-
-  const textSummary = (() => {
-    try {
-      return extractTextFromOpenAICompatibleResponse(response.data)
-    } catch {
-      return ""
-    }
-  })()
-
-  return {
-    images: extractOpenRouterImageDataUrls(response.data),
-    textSummary: textSummary || "Image generation completed.",
-  }
-}
-
-export async function generateImageWithOpenRouter(
-  prompt: string,
-  model = OPENROUTER_IMAGE_MODEL,
-  aspectRatio = "16:9",
-  referenceImages: OpenRouterInlineReferenceImage[] = [],
-) {
-  const result = await generateImagesWithOpenRouter(prompt, model, aspectRatio, referenceImages)
-  return result.images[0]
 }

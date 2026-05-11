@@ -26,7 +26,7 @@ test("pickSonnet46ModelId prefers non-thinking variant across separator styles",
 test("pickSonnet46ModelId returns null when sonnet-4.6 model does not exist", () => {
   const selected = pickSonnet46ModelId([
     { id: "openai/gpt-5.4", name: "GPT 5.4" },
-    { id: "google/gemini-3-flash", name: "Gemini 3 Flash" },
+    { id: "google/gemini-3-flash-preview", name: "Gemini 3 Flash Preview" },
   ])
 
   assert.equal(selected, null)
@@ -34,7 +34,7 @@ test("pickSonnet46ModelId returns null when sonnet-4.6 model does not exist", ()
 
 test("pickConsultingModelId defaults consulting advisor to quality sonnet 4.6", () => {
   const selected = pickConsultingModelId([
-    { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+    { id: "claude-opus-4.7", name: "Claude Opus 4.7" },
     { id: "claude-sonnet-4.6-thinking", name: "Claude Sonnet 4.6 Thinking" },
     { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
   ])
@@ -45,7 +45,7 @@ test("pickConsultingModelId defaults consulting advisor to quality sonnet 4.6", 
 test("pickConsultingModelId quality mode targets sonnet 4.6", () => {
   const selected = pickConsultingModelId(
     [
-      { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+      { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
       { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
     ],
     "quality",
@@ -80,7 +80,7 @@ test("consulting entry mode detection and lock flag", () => {
     }),
     false,
   )
-  assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.5")
+  assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT)
 })

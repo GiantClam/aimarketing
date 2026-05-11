@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { createPendingWriterConversation } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
+import { estimateTextCredits } from "@/lib/billing/costing"
+import {
+  finalizeReservedCredits,
+  releaseReservedCredits,
+  reserveFeatureCredits,
+  type BillingReservation,
+} from "@/lib/billing/runtime"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 import { loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
 import { normalizeWriterLanguage, normalizeWriterMode, normalizeWriterPlatform } from "@/lib/writer/config"
@@ -45,6 +52,10 @@ function splitAnswerIntoChunks(answer: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function estimateWriterTokens(text: string) {
+  return Math.max(1, Math.ceil(text.length / 4))
 }
 
 function normalizeWriterPreloadedBrief(input: unknown): WriterPreloadedBrief | null {
@@ -95,6 +106,43 @@ export async function POST(req: NextRequest) {
     const history = conversationId
       ? (await listWriterMessages(auth.user.id, conversationId, WRITER_CHAT_HISTORY_LIMIT)).data
       : []
+    const inputTokens = estimateWriterTokens(
+      [
+        userQuery,
+        ...history.map((entry) => `${entry.role}: ${entry.content}`),
+        preloadedBrief ? JSON.stringify(preloadedBrief) : "",
+      ].join("\n"),
+    )
+    const reserveEstimate = estimateTextCredits({
+      featureKey: "writer_copy",
+      inputTokens,
+      outputTokens: Math.max(600, inputTokens),
+      provider: "writer",
+      model: "writer-skills",
+    })
+    let writerCreditReservation: BillingReservation | null = null
+    let writerCreditFinalized = false
+    try {
+      writerCreditReservation = await reserveFeatureCredits({
+        userId: auth.user.id,
+        enterpriseId: auth.user.enterpriseId,
+        featureKey: reserveEstimate.featureKey,
+        amount: reserveEstimate.credits,
+        idempotencyKey: `writer-copy:stream:reserve:${auth.user.id}:${Date.now()}`,
+        metadata: {
+          route: "writer.chat.stream",
+          platform,
+          mode,
+          language,
+          source: reserveEstimate.source,
+        },
+      })
+    } catch (billingError) {
+      if (billingError instanceof Error && billingError.message === "insufficient_credits") {
+        return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+      }
+      throw billingError
+    }
 
     const pending = await createPendingWriterConversation({
       userId: auth.user.id,
@@ -172,6 +220,38 @@ export async function POST(req: NextRequest) {
             throw new Error("writer_stream_conversation_missing")
           }
 
+          const actualCost = estimateTextCredits({
+            featureKey: "writer_copy",
+            inputTokens,
+            outputTokens: estimateWriterTokens(turnResult.answer),
+            provider: "writer",
+            model: "writer-skills",
+          })
+          await finalizeReservedCredits({
+            reservation: writerCreditReservation,
+            userId: auth.user.id,
+            enterpriseId: auth.user.enterpriseId,
+            actualAmount: actualCost.credits,
+            idempotencyKey: `writer-copy:stream:debit:${pending.conversationId}:${taskId}`,
+            provider: actualCost.provider,
+            model: actualCost.model,
+            officialCostUsd: actualCost.officialCostUsd,
+            costBasisUsd: actualCost.costBasisUsd,
+            usagePayload: actualCost.metadata,
+            metadata: {
+              route: "writer.chat.stream",
+              conversationId: pending.conversationId,
+              outcome: turnResult.outcome,
+            },
+          }).then(() => {
+            writerCreditFinalized = true
+          }).catch((billingError) => {
+            console.warn("writer.chat.stream.billing.finalize_failed", {
+              conversationId: pending.conversationId,
+              message: billingError instanceof Error ? billingError.message : String(billingError),
+            })
+          })
+
           const chunks = splitAnswerIntoChunks(turnResult.answer)
           for (const chunk of chunks) {
             sendEvent({
@@ -195,6 +275,20 @@ export async function POST(req: NextRequest) {
           controller.close()
         } catch (error) {
           console.error("writer.chat.stream.error", error)
+          if (!writerCreditFinalized) {
+            await releaseReservedCredits({
+              reservation: writerCreditReservation,
+              userId: auth.user.id,
+              enterpriseId: auth.user.enterpriseId,
+              idempotencyKey: `writer-copy:stream:release:${pending.conversationId}:${taskId}`,
+              reason: error instanceof Error ? error.message : "writer_stream_failed",
+            }).catch((billingError) => {
+              console.warn("writer.chat.stream.billing.release_failed", {
+                conversationId: pending.conversationId,
+                message: billingError instanceof Error ? billingError.message : String(billingError),
+              })
+            })
+          }
           const failedMessage = `Request failed: ${error instanceof Error ? error.message : "writer_stream_failed"}`
           await updateWriterLatestAssistantMessage(auth.user.id, pending.conversationId, failedMessage, {
             status: "failed",

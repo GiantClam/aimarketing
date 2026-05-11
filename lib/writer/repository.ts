@@ -721,6 +721,8 @@ export async function listWriterMessages(
     conversation_id: conversationId,
     query: row.user_content || "",
     answer: row.assistant_content || "",
+    role: "assistant",
+    content: row.assistant_content || "",
     diagnostics: row.assistant_diagnostics || null,
     inputs: { contents: row.user_content || "" },
     created_at: toEpochSeconds(row.user_created_at, toEpochSeconds(row.assistant_created_at, fallbackSeconds)),

@@ -16,18 +16,30 @@ import {
 } from "@/lib/ai-entry/model-policy"
 
 const CACHE_TTL_MS = 30 * 60 * 1000
-const CATALOG_FILTER_CACHE_VERSION = "v5"
-const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "gemini"] as const
+const CATALOG_FILTER_CACHE_VERSION = "v7"
+const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "gemini", "minimax"] as const
 const ALLOWED_PROVIDER_FAMILIES = [
   "anthropic",
   "openai",
   "gemini",
-  "qwen",
   "minimax",
-  "glm",
-  "kimi",
 ] as const
 const ALLOWED_PROVIDER_FAMILY_SET = new Set<string>(ALLOWED_PROVIDER_FAMILIES)
+const ALLOWED_DISPLAY_MODEL_IDS = [
+  "claude-opus-4.6",
+  "claude-opus-4.7",
+  "claude-sonnet-4.6",
+  "claude-haiku-4.5",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gemini-3.1-pro-preview",
+  "gemini-3-flash-preview",
+  "MiniMax-M2.7",
+] as const
+const ALLOWED_DISPLAY_MODEL_ID_BY_FINGERPRINT = new Map(
+  ALLOWED_DISPLAY_MODEL_IDS.map((id) => [equivalentModelFingerprint(id), id]),
+)
 const NON_CHAT_MODEL_HINTS = [
   "embedding",
   "embed-",
@@ -162,17 +174,34 @@ type RecentFilterResult = {
 }
 
 const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> = {
-  aiberm: [
+  pptoken: [
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.5",
-    "claude-opus-4-7",
+  ],
+  aiberm: [
+    "claude-opus-4.6",
+    "claude-opus-4.7",
+    "claude-sonnet-4.6",
+    "claude-haiku-4.5",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "MiniMax-M2.7",
   ],
   crazyroute: [
+    "claude-opus-4.6",
+    "claude-opus-4.7",
+    "claude-sonnet-4.6",
+    "claude-haiku-4.5",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.5",
-    "claude-opus-4-7",
+    "MiniMax-M2.7",
   ],
 }
 
@@ -511,6 +540,16 @@ function filterAllowedFamilyModels(models: ParsedModel[]) {
   return models.filter((model) => ALLOWED_PROVIDER_FAMILY_SET.has(model.family))
 }
 
+function findAllowedDisplayModelId(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const fingerprint = equivalentModelFingerprint(normalizeText(value))
+    if (!fingerprint) continue
+    const allowed = ALLOWED_DISPLAY_MODEL_ID_BY_FINGERPRINT.get(fingerprint)
+    if (allowed) return allowed
+  }
+  return null
+}
+
 function canonicalDuplicateKey(id: string) {
   const parsed = splitProviderModelId(id)
   return equivalentModelFingerprint(parsed ? parsed.suffix : id)
@@ -586,7 +625,10 @@ function dedupeEquivalentModelIds(models: ParsedModel[]) {
           .filter(Boolean),
       ),
     ]
-    const displayId = pickPreferredDisplayModelId([model.id, ...aliases]) || model.id
+    const displayId =
+      findAllowedDisplayModelId(model.id, model.name, ...aliases) ||
+      pickPreferredDisplayModelId([model.id, ...aliases]) ||
+      model.id
     return {
       ...model,
       id: displayId,
@@ -598,67 +640,8 @@ function dedupeEquivalentModelIds(models: ParsedModel[]) {
   })
 }
 
-function parseVersionAfterToken(
-  text: string,
-  token: "gpt" | "gemini" | "claude",
-) {
-  const regex = new RegExp(`${token}[^0-9]{0,16}(\\d+)(?:[._-](\\d+))?`, "i")
-  const matched = regex.exec(text)
-  if (!matched) return null
-
-  const major = Number.parseInt(matched[1] || "", 10)
-  const minor = Number.parseInt(matched[2] || "0", 10)
-  if (!Number.isFinite(major)) return null
-  return {
-    major,
-    minor: Number.isFinite(minor) ? minor : 0,
-  }
-}
-
-function versionAtLeast(
-  version: { major: number; minor: number },
-  minMajor: number,
-  minMinor: number,
-) {
-  if (version.major > minMajor) return true
-  if (version.major < minMajor) return false
-  return version.minor >= minMinor
-}
-
-function isClaudeTierVariant(text: string) {
-  if (/\b(sonnet|opus|haiku)\b/.test(text)) return true
-  const compact = text.replace(/[^a-z0-9]+/g, "")
-  return (
-    compact.includes("sonnet") ||
-    compact.includes("opus") ||
-    compact.includes("haiku")
-  )
-}
-
-function isSupportedClaudeVersion(version: { major: number; minor: number }) {
-  return version.major === 4 && version.minor >= 5
-}
-
 function isHighTierDisplayModel(input: { id: string; name: string }) {
-  const text = `${input.id} ${input.name}`.toLowerCase()
-
-  if (text.includes("claude")) {
-    if (!isClaudeTierVariant(text)) return false
-    const version = parseVersionAfterToken(text, "claude")
-    return Boolean(version && isSupportedClaudeVersion(version))
-  }
-
-  if (text.includes("gemini")) {
-    const version = parseVersionAfterToken(text, "gemini")
-    return Boolean(version && versionAtLeast(version, 3, 0))
-  }
-
-  if (text.includes("gpt")) {
-    const version = parseVersionAfterToken(text, "gpt")
-    return Boolean(version && versionAtLeast(version, 5, 3))
-  }
-
-  return false
+  return Boolean(findAllowedDisplayModelId(input.id, input.name))
 }
 
 function filterHighTierDisplayModels(models: ParsedModel[]) {

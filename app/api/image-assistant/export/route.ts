@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import {
+  finalizeReservedCredits,
+  releaseReservedCredits,
+  reserveFeatureCredits,
+  type BillingReservation,
+} from "@/lib/billing/runtime"
 import { createImageAssistantAsset, logImageAssistantExport } from "@/lib/image-assistant/repository"
 
 const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
@@ -11,11 +17,15 @@ const IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS = new Set([
 ])
 
 export async function POST(req: NextRequest) {
+  let authUser: { id: number; enterpriseId?: number | null } | null = null
+  let creditReservation: BillingReservation | null = null
+  let creditFinalized = false
   try {
     const auth = await requireSessionUser(req, "image_design_generation")
     if ("response" in auth) {
       return auth.response
     }
+    authUser = auth.user
 
     const body = await req.json().catch(() => ({}))
     const sessionId = typeof body?.sessionId === "string" ? body.sessionId : ""
@@ -28,6 +38,27 @@ export async function POST(req: NextRequest) {
 
     if (!sessionId || !dataUrl) {
       return NextResponse.json({ error: "sessionId and dataUrl are required" }, { status: 400 })
+    }
+
+    try {
+      creditReservation = await reserveFeatureCredits({
+        userId: auth.user.id,
+        enterpriseId: auth.user.enterpriseId,
+        featureKey: "image_export",
+        amount: 1,
+        idempotencyKey: `image-export:reserve:${auth.user.id}:${sessionId}:${Date.now()}`,
+        metadata: {
+          route: "image-assistant.export",
+          sessionId,
+          format,
+          sizePreset,
+        },
+      })
+    } catch (billingError) {
+      if (billingError instanceof Error && billingError.message === "insufficient_credits") {
+        return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+      }
+      throw billingError
     }
 
     const asset = await createImageAssistantAsset({
@@ -57,8 +88,48 @@ export async function POST(req: NextRequest) {
       canvasDocumentId: typeof body?.canvasDocumentId === "string" ? body.canvasDocumentId : null,
     })
 
+    await finalizeReservedCredits({
+      reservation: creditReservation,
+      userId: auth.user.id,
+      enterpriseId: auth.user.enterpriseId,
+      actualAmount: 1,
+      idempotencyKey: `image-export:debit:${auth.user.id}:${sessionId}:${asset.id}`,
+      officialCostUsd: 0.001,
+      costBasisUsd: 0.001,
+      usagePayload: {
+        fixedCredits: 1,
+      },
+      metadata: {
+        route: "image-assistant.export",
+        sessionId,
+        assetId: asset.id,
+        format,
+        sizePreset,
+      },
+    }).then(() => {
+      creditFinalized = true
+    }).catch((billingError) => {
+      console.warn("image-assistant.export.billing.finalize_failed", {
+        sessionId,
+        message: billingError instanceof Error ? billingError.message : String(billingError),
+      })
+    })
+
     return NextResponse.json({ data: asset })
   } catch (error: any) {
+    if (!creditFinalized && authUser) {
+      await releaseReservedCredits({
+        reservation: creditReservation,
+        userId: authUser.id,
+        enterpriseId: authUser.enterpriseId,
+        idempotencyKey: `image-export:release:${authUser.id}:${Date.now()}`,
+        reason: error?.message || "export_log_failed",
+      }).catch((billingError) => {
+        console.warn("image-assistant.export.billing.release_failed", {
+          message: billingError instanceof Error ? billingError.message : String(billingError),
+        })
+      })
+    }
     if (IMAGE_ASSISTANT_REFERENCE_NOT_FOUND_ERRORS.has(error?.message)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }

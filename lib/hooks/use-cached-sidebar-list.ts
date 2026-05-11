@@ -37,6 +37,7 @@ export function useCachedSidebarList<TItem>({
   ttlMs,
   isExpanded,
   activeItemId,
+  autoFetchUntilActiveItemFound = true,
   fetchPage,
   mergeItems,
   getItemId,
@@ -47,6 +48,7 @@ export function useCachedSidebarList<TItem>({
   ttlMs: number
   isExpanded: boolean
   activeItemId: string | null
+  autoFetchUntilActiveItemFound?: boolean
   fetchPage: (input: { cursor?: string | null }) => Promise<FetchPageResult<TItem>>
   mergeItems: (current: TItem[], incoming: TItem[]) => TItem[]
   getItemId: (item: TItem) => string
@@ -181,7 +183,7 @@ export function useCachedSidebarList<TItem>({
   }, [fetchItems, isExpanded, readCache, ttlMs])
 
   useEffect(() => {
-    if (!isExpanded || !activeItemId || isLoading || isLoadingMore) return
+    if (!autoFetchUntilActiveItemFound || !isExpanded || !activeItemId || isLoading || isLoadingMore) return
     if (exhaustedActiveItemIdRef.current === activeItemId) return
     if (items.some((item) => getItemIdRef.current(item) === activeItemId)) return
     if (hasMore && nextCursor) {
@@ -189,7 +191,7 @@ export function useCachedSidebarList<TItem>({
       return
     }
     void fetchItems().catch(() => {})
-  }, [activeItemId, fetchItems, hasMore, isExpanded, isLoading, isLoadingMore, items, nextCursor])
+  }, [activeItemId, autoFetchUntilActiveItemFound, fetchItems, hasMore, isExpanded, isLoading, isLoadingMore, items, nextCursor])
 
   useEffect(() => {
     if (!activeItemId) {

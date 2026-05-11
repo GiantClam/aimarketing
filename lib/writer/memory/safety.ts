@@ -5,7 +5,7 @@ const WRITER_MEMORY_MAX_CONTENT_CHARS = Math.max(
 const WRITER_MEMORY_MAX_TITLE_CHARS = 160
 
 const SECRET_PATTERNS: RegExp[] = [
-  /(?:api[_-]?key|secret|token|password|passwd|credential)\s*[:=]\s*['"]?[a-z0-9_\-]{8,}/iu,
+  /(?:api[_-]?key|secret|token|password|passwd|credential)\s*[:=]\s*['"]?[a-z0-9_-]{8,}/iu,
   /\bsk-[a-z0-9]{20,}\b/iu,
   /\bAKIA[0-9A-Z]{16}\b/u,
   /\bghp_[a-z0-9]{20,}\b/iu,
@@ -47,4 +47,3 @@ export function enforceWriterMemoryContentSafety(content: string) {
   }
   return normalized
 }
-

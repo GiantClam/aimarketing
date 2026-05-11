@@ -18,6 +18,11 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
+  getImageAssistantConversationListCache,
+  mergeImageAssistantConversationSummaries,
+  upsertImageAssistantConversationSummary,
+} from "@/lib/image-assistant/session-list-store"
+import {
   deleteImageAssistantSessionContentCache,
   getImageAssistantSessionContentCache,
   IMAGE_ASSISTANT_SESSION_CACHE_TTL_MS,
@@ -31,21 +36,9 @@ import {
   getImageAssistantSessionDetail,
 } from "@/lib/query/workspace-cache"
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
+import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
-
-function mergeSessions(current: ImageAssistantConversationSummary[], incoming: ImageAssistantConversationSummary[]) {
-  const seen = new Set<string>()
-  const merged: ImageAssistantConversationSummary[] = []
-
-  for (const session of [...current, ...incoming]) {
-    if (seen.has(session.id)) continue
-    seen.add(session.id)
-    merged.push(session)
-  }
-
-  return merged
-}
 
 const IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS = 60_000
 const IMAGE_ASSISTANT_SESSION_PREFETCH_LIMIT = 0
@@ -90,6 +83,7 @@ export function ImageAssistantSidebarItem({
     ttlMs: IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS,
     isExpanded,
     activeItemId: activeSessionId,
+    autoFetchUntilActiveItemFound: false,
     fetchPage: async ({ cursor }) => {
       const params = new URLSearchParams({ limit: "20" })
       if (cursor) {
@@ -108,7 +102,7 @@ export function ImageAssistantSidebarItem({
         nextCursor: typeof data?.next_cursor === "string" ? data.next_cursor : null,
       }
     },
-    mergeItems: mergeSessions,
+    mergeItems: mergeImageAssistantConversationSummaries,
     getItemId: (session) => session.id,
   })
 
@@ -139,6 +133,27 @@ export function ImageAssistantSidebarItem({
       setIsOpen(true)
     }
   }, [isImageAssistantRoute])
+
+  useSidebarListPreheat({
+    enabled: isImageAssistantRoute,
+    ttlMs: IMAGE_ASSISTANT_CONVERSATION_CACHE_TTL_MS,
+    readCache: getImageAssistantConversationListCache,
+    fetchItems: fetchSessions,
+  })
+
+  useEffect(() => {
+    if (!isExpanded || !activeSessionId || sessions.some((session) => session.id === activeSessionId)) {
+      return
+    }
+
+    void getImageAssistantSessionDetail(activeSessionId, { mode: "summary", messageLimit: 1 })
+      .then((detail) => {
+        if (!detail?.session) return
+        upsertImageAssistantConversationSummary(detail.session)
+        updateList((current) => mergeImageAssistantConversationSummaries(current, [detail.session]))
+      })
+      .catch(() => {})
+  }, [activeSessionId, isExpanded, sessions, updateList])
 
   const { prefetchItem: warmSessionDetail } = useSidebarDetailPrefetch({
     items: sessions,
@@ -240,7 +255,8 @@ export function ImageAssistantSidebarItem({
         throw new Error("image_session_create_missing_id")
       }
 
-      updateList((current) => mergeSessions([created], current))
+      upsertImageAssistantConversationSummary(created)
+      updateList((current) => mergeImageAssistantConversationSummaries(current, [created]))
       void fetchSessions().catch(() => {})
       void warmSessionDetail(created.id).catch(() => {})
       router.push(`/dashboard/image-assistant/${created.id}`)

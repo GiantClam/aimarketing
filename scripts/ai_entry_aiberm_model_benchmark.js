@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 
 const DEFAULT_MODELS = [
-  "claude-sonnet-4.5",
-  "claude-haiku-4.5",
+  "claude-opus-4.7",
   "claude-sonnet-4.6",
+  "claude-haiku-4.5",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gemini-3.1-pro-preview",
+  "gemini-3-flash-preview",
+  "MiniMax-M2.7",
 ]
 
 function parseArgs(argv) {

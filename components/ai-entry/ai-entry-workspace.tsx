@@ -59,7 +59,6 @@ type ModelOption = {
   canonicalId?: string
   aliases?: string[]
 }
-type ModelProviderOption = { id: string; label: string }
 type ModelGroupOption = { family: string; label: string; models: ModelOption[] }
 type AgentOption = { id: string; category: string; name: string; description: string }
 type AgentGroupOption = { id: string; label: string; agents: AgentOption[] }
@@ -131,8 +130,55 @@ type AgentApiResponse = {
 }
 
 const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
+const AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-pending-conversation-v1:"
 const AI_ENTRY_MAX_ATTACHMENTS = 4
 const AI_ENTRY_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
+
+function getPendingConversationStorageKey(conversationId: string) {
+  return `${AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX}${conversationId}`
+}
+
+function readPendingConversationMessages(conversationId: string | null) {
+  if (!conversationId || typeof window === "undefined") return []
+  try {
+    const raw = window.sessionStorage.getItem(getPendingConversationStorageKey(conversationId))
+    const parsed = raw ? JSON.parse(raw) : null
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((item) => {
+        const id = typeof item?.id === "string" && item.id.trim() ? item.id : `cached-${Date.now()}`
+        const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
+        const content = typeof item?.content === "string" ? item.content : ""
+        const attachments = Array.isArray(item?.attachments) ? item.attachments : undefined
+        if (!role) return null
+        return { id, role, content, attachments } as ChatMessage
+      })
+      .filter((item): item is ChatMessage => Boolean(item))
+  } catch {
+    return []
+  }
+}
+
+function savePendingConversationMessages(conversationId: string | null, messages: ChatMessage[]) {
+  if (!conversationId || typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(
+      getPendingConversationStorageKey(conversationId),
+      JSON.stringify(messages),
+    )
+  } catch {
+    // sessionStorage is a best-effort bridge across the first route transition.
+  }
+}
+
+function clearPendingConversationMessages(conversationId: string | null) {
+  if (!conversationId || typeof window === "undefined") return
+  try {
+    window.sessionStorage.removeItem(getPendingConversationStorageKey(conversationId))
+  } catch {
+    // ignore storage cleanup failures
+  }
+}
 
 function readInitialAgentFromLocation() {
   if (typeof window === "undefined") return null
@@ -313,7 +359,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             loading: "Generating...",
             restoring: "Restoring conversation...",
             quickStart: "Quick tips",
-            providerLabel: "Provider",
             modelLabel: "Model",
             modelLoading: "Loading models...",
             modelEmpty: "No models",
@@ -349,19 +394,19 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     [isZh],
   )
 
+  const initialMessages = readPendingConversationMessages(initialConversationId)
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
+  const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId) && initialMessages.length === 0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [pendingTaskEvents, setPendingTaskEvents] = useState<PendingTaskEvent[]>([])
 
   const [modelsLoading, setModelsLoading] = useState(true)
   const [modelProviderId, setModelProviderId] = useState<string | null>(null)
-  const [modelProviders, setModelProviders] = useState<ModelProviderOption[]>([])
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelGroups, setModelGroups] = useState<ModelGroupOption[]>([])
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
@@ -378,6 +423,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const latestConversationIdRef = useRef<string | null>(initialConversationId)
+  const pendingFirstConversationRouteRef = useRef(false)
   const search = searchParams.toString()
   const routeEntryMode = (searchParams.get("entry") || "").trim()
   const shouldLockModel = useMemo(
@@ -407,6 +454,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     () => models.find((item) => item.id === selectedModelId) || null,
     [models, selectedModelId],
   )
+
+  useEffect(() => {
+    latestConversationIdRef.current = conversationId
+  }, [conversationId])
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
@@ -480,6 +531,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
   useEffect(() => {
     if (!agentQueryReady) return
+    if (
+      pendingFirstConversationRouteRef.current &&
+      latestConversationIdRef.current &&
+      pathname === "/dashboard/ai"
+    ) {
+      return
+    }
     const params = new URLSearchParams(search)
     if (shouldLockModel) {
       params.delete("agent")
@@ -557,20 +615,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             : (payload?.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item)),
         )
 
-        const normalizedProviders = (payload?.providers || [])
-          .map((provider) => {
-            const id = typeof provider?.id === "string" ? provider.id.trim() : ""
-            if (!id) return null
-            return {
-              id,
-              label:
-                typeof provider?.label === "string" && provider.label.trim()
-                  ? provider.label.trim()
-                  : id,
-            } as ModelProviderOption
-          })
-          .filter((provider): provider is ModelProviderOption => Boolean(provider))
-        setModelProviders(normalizedProviders)
         setModelProviderId(typeof payload?.providerId === "string" ? payload.providerId : null)
         setModels(normalizedModels)
         setModelGroups(
@@ -612,7 +656,6 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         if (cancelled) return
         console.error("ai-entry.models.load.failed", error)
         setModelProviderId(null)
-        setModelProviders([])
         setModels([])
         setModelGroups([])
         setSelectedModelId(null)
@@ -713,10 +756,15 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   }, [lockedConsultingModelId, models, selectedModelId, shouldLockModel])
 
   useEffect(() => {
-    setConversationId(initialConversationId)
     setErrorMessage(null)
 
     if (!initialConversationId) {
+      if (pendingFirstConversationRouteRef.current) {
+        setIsConversationLoading(false)
+        return
+      }
+      setConversationId(null)
+      latestConversationIdRef.current = null
       setMessages([])
       setIsConversationLoading(false)
       if (!shouldLockModel && models.length > 0) {
@@ -725,6 +773,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       return
     }
 
+    pendingFirstConversationRouteRef.current = false
+    setConversationId(initialConversationId)
+    latestConversationIdRef.current = initialConversationId
     let cancelled = false
     const loadMessages = async () => {
       setIsConversationLoading(true)
@@ -747,6 +798,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           .filter((item): item is ChatMessage => Boolean(item))
 
         setMessages(restored)
+        clearPendingConversationMessages(initialConversationId)
 
         const conversationModelId =
           typeof payload?.conversation?.current_model_id === "string" &&
@@ -760,7 +812,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         }
       } catch (error) {
         if (cancelled) return
-        setMessages([])
+        setMessages((current) => (current.length > 0 ? current : []))
         setErrorMessage(
           `${copy.errorPrefix}${renderAiEntryErrorMessage(
             error instanceof Error ? error.message : error,
@@ -895,6 +947,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     ])
     setMessages((previous) => [...previous, userMessage, { id: assistantMessageId, role: "assistant", content: "" }])
     setIsLoading(true)
+    if (!conversationId) {
+      pendingFirstConversationRouteRef.current = true
+    }
 
     try {
       const response = await fetch("/api/ai/chat", {
@@ -958,7 +1013,15 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             typeof event.conversation_id === "string" && event.conversation_id.trim()
               ? event.conversation_id.trim()
               : null
-          if (streamConversationId) setConversationId(streamConversationId)
+          if (streamConversationId) {
+            latestConversationIdRef.current = streamConversationId
+            savePendingConversationMessages(streamConversationId, [
+              ...messages,
+              userMessage,
+              { id: assistantMessageId, role: "assistant", content: streamedText },
+            ])
+            setConversationId(streamConversationId)
+          }
 
           if (event.event === "conversation_init") {
             if (!requestedAgentId && event.agent_id && typeof event.agent_id === "string") {
@@ -1066,11 +1129,15 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             if (!delta) return
             streamedText += delta
             setMessages((previous) =>
-              previous.map((item) =>
-                item.id === assistantMessageId
-                  ? { ...item, content: streamedText }
-                  : item,
-              ),
+              {
+                const next = previous.map((item) =>
+                  item.id === assistantMessageId
+                    ? { ...item, content: streamedText }
+                    : item,
+                )
+                savePendingConversationMessages(latestConversationIdRef.current, next)
+                return next
+              },
             )
             return
           }
@@ -1111,11 +1178,15 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
             })
 
             setMessages((previous) =>
-              previous.map((item) =>
-                item.id === assistantMessageId
-                  ? { ...item, content: finalText || copy.unknownError }
-                  : item,
-              ),
+              {
+                const next = previous.map((item) =>
+                  item.id === assistantMessageId
+                    ? { ...item, content: finalText || copy.unknownError }
+                    : item,
+                )
+                savePendingConversationMessages(latestConversationIdRef.current, next)
+                return next
+              },
             )
             return
           }
@@ -1163,8 +1234,17 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       } else {
         const payload = (await response.json().catch(() => null)) as ChatApiResponse | null
         const assistantText = (payload?.message || "").trim()
-        setMessages((previous) => previous.map((item) => item.id === assistantMessageId ? { ...item, content: assistantText || copy.unknownError } : item))
-        if (typeof payload?.conversationId === "string" && payload.conversationId) setConversationId(payload.conversationId)
+        const completedMessages = [
+          ...messages,
+          userMessage,
+          { id: assistantMessageId, role: "assistant" as const, content: assistantText || copy.unknownError },
+        ]
+        setMessages(completedMessages)
+        if (typeof payload?.conversationId === "string" && payload.conversationId) {
+          latestConversationIdRef.current = payload.conversationId
+          savePendingConversationMessages(payload.conversationId, completedMessages)
+          setConversationId(payload.conversationId)
+        }
         if (!requestedAgentId && typeof payload?.agentId === "string" && payload.agentId.trim()) {
           setSelectedAgentId(payload.agentId.trim())
         }
@@ -1194,6 +1274,9 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       setMessages((previous) => previous.map((item) => item.id === assistantMessageId ? { ...item, content: renderedError } : item))
       setPendingTaskEvents((current) => [...current, failedEvent].slice(-12))
     } finally {
+      if (!latestConversationIdRef.current) {
+        pendingFirstConversationRouteRef.current = false
+      }
       setIsLoading(false)
     }
   }, [
@@ -1225,42 +1308,21 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           </span>
         </div>
       ) : (
-        <>
-          <Select
-            value={modelProviderId ?? undefined}
-            onValueChange={(nextValue) => {
-              setModelProviderId(nextValue || null)
-              setSelectedModelId(null)
-            }}
-            disabled={isLoading || modelsLoading || modelProviders.length <= 1}
-          >
-            <SelectTrigger className={`w-[150px] max-w-[150px] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary ${buttonHeight}`}>
-              <SelectValue placeholder={isZh ? "平台" : "Provider"} />
-            </SelectTrigger>
-            <SelectContent>
-              {modelProviders.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            open={modelSelectOpen}
-            onOpenChange={setModelSelectOpen}
-            value={selectedModelId ?? undefined}
-            onValueChange={(nextValue) => {
-              setSelectedModelId(nextValue || null)
-              setModelSelectOpen(false)
-            }}
-            disabled={isLoading || modelsLoading || models.length === 0}
-          >
-            <SelectTrigger className={`w-[220px] max-w-[220px] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary ${buttonHeight}`}>
-              <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
-            </SelectTrigger>
-            <SelectContent>{renderModelSelectContent()}</SelectContent>
-          </Select>
-        </>
+        <Select
+          open={modelSelectOpen}
+          onOpenChange={setModelSelectOpen}
+          value={selectedModelId ?? undefined}
+          onValueChange={(nextValue) => {
+            setSelectedModelId(nextValue || null)
+            setModelSelectOpen(false)
+          }}
+          disabled={isLoading || modelsLoading || models.length === 0}
+        >
+          <SelectTrigger className={`w-[220px] max-w-[220px] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary ${buttonHeight}`}>
+            <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
+          </SelectTrigger>
+          <SelectContent>{renderModelSelectContent()}</SelectContent>
+        </Select>
       )}
     </div>
   )
@@ -1434,7 +1496,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         <div className="min-h-0 flex-1">
           <ScrollArea className="h-full">
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 lg:px-4">
-              {isConversationLoading ? <div className="rounded-[24px] border border-border bg-card/60 p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
+              {isConversationLoading && messages.length === 0 ? <div className="rounded-[24px] border border-border bg-card/60 p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
 
               {messages.map((message, index) => {
                 const isAssistant = message.role === "assistant"

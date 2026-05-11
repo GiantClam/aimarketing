@@ -9,7 +9,7 @@ export type WriterAsset = {
   prompt: string
   url: string
   status: "ready" | "loading" | "failed"
-  provider: "aiberm" | "gemini" | "openrouter" | "loading" | "error"
+  provider: "pptoken" | "aiberm" | "crazyroute" | "loading" | "error"
   error?: string
   storageKey?: string
   contentType?: string
@@ -806,7 +806,7 @@ export function extractWriterAssetsFromMarkdown(
         ...asset,
         url: match?.url || "",
         status: match?.url ? "ready" : "loading",
-        provider: match?.url ? ("gemini" as const) : ("loading" as const),
+        provider: match?.url ? ("aiberm" as const) : ("loading" as const),
         error: match?.url ? undefined : "writer_asset_pending",
       }
     })
@@ -821,7 +821,7 @@ export function extractWriterAssetsFromMarkdown(
     ...asset,
     url: urls[index] || "",
     status: urls[index] ? "ready" : "loading",
-    provider: urls[index] ? ("gemini" as const) : ("loading" as const),
+    provider: urls[index] ? ("aiberm" as const) : ("loading" as const),
     error: urls[index] ? undefined : "writer_asset_pending",
   }))
 }

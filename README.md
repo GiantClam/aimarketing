@@ -9,7 +9,7 @@ AI Marketing 鏄竴涓互 Next.js 涓烘牳蹇冪殑浼佷笟绾?AI 钀ラ
 - Frontend: Next.js 15, React 19, TypeScript, Tailwind CSS, shadcn/ui
 - Backend in this repo: Next.js Route Handlers / Node.js
 - Database: PostgreSQL / Neon
-- Writer models: OpenRouter + Gemini image generation
+- Writer/AI models: pptoken (OpenAI only), aiberm, crazyroute
 - Video agent: external service via `AGENT_URL`
 
 ## 褰撳墠鏋舵瀯
@@ -38,7 +38,8 @@ AGENT_URL=http://localhost:8000
 NEXT_PUBLIC_AGENT_URL=http://localhost:8000
 
 # writer
-OPENROUTER_API_KEY=...
+AIBERM_API_KEY=...
+CRAZYROUTE_API_KEY=...
 SERPER_API_KEY=...
 SERPER_API_BASE=https://google.serper.dev
 SERPER_SCRAPE_API_BASE=https://scrape.serper.dev
@@ -134,7 +135,7 @@ SERPER_API_KEY=...
 SERPER_API_BASE=https://google.serper.dev
 
 # optional model override for skill synthesis
-LEAD_HUNTER_SKILL_MODEL=google/gemini-3-flash
+LEAD_HUNTER_SKILL_MODEL=gpt-4-mini
 
 # optional legacy global default (execution_mode in DB still has priority)
 LEAD_HUNTER_ENGINE=dify

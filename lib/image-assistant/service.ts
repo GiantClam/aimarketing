@@ -1,9 +1,18 @@
 import { checkRateLimit } from "@/lib/server/rate-limit"
 import { getInlineImageMetadata, urlToInlineImage } from "@/lib/image-assistant/assets"
+import { estimateGptImage2Credits } from "@/lib/billing/costing"
+import {
+  finalizeReservedCredits,
+  releaseReservedCredits,
+  reserveFeatureCredits,
+  type BillingReservation,
+} from "@/lib/billing/runtime"
 import {
   generateOrEditImages,
   getImageAssistantAvailability,
   hasImageAssistantAibermKey,
+  hasImageAssistantCrazyrouteKey,
+  hasImageAssistantPptokenKey,
   shouldUseImageAssistantFixtures,
 } from "@/lib/image-assistant/aiberm"
 import { hasImageAssistantGoogleKey, uploadImageAssistantReferenceToGoogle } from "@/lib/image-assistant/google"
@@ -21,6 +30,7 @@ import {
   updateImageAssistantSession,
 } from "@/lib/image-assistant/repository"
 import { isImageAssistantR2Available, uploadImageAssistantDataUrl } from "@/lib/image-assistant/r2"
+import { mapGptImage2Quality, mapGptImage2Size } from "@/lib/image-assistant/openai-compatible-image"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
 import {
   buildImageAssistantTurnContent,
@@ -42,7 +52,6 @@ import type {
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
 } from "@/lib/image-assistant/types"
-import { hasOpenRouterApiKey } from "@/lib/writer/aiberm"
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
@@ -127,6 +136,12 @@ function normalizeSizePreset(value: unknown): ImageAssistantSizePreset {
   return value === "4:5" || value === "3:4" || value === "4:3" || value === "16:9" || value === "9:16" ? value : "1:1"
 }
 
+function getImageAssistantBillingFeatureKey(taskType: ImageAssistantTaskType) {
+  if (taskType === "generate") return "image_design_generate"
+  if (taskType === "mask_edit") return "image_design_mask_edit"
+  return "image_design_edit"
+}
+
 function getCachedGeminiFileMeta(asset: ImageAssistantAsset) {
   const meta = asset.meta && typeof asset.meta === "object" ? (asset.meta as Record<string, unknown>) : null
   const candidate = meta?.geminiFile
@@ -159,6 +174,7 @@ async function ensureGeminiFileReferenceForAsset(params: {
   if (cached) {
     return {
       kind: "file" as const,
+      assetId: params.asset.id,
       fileUri: cached.fileUri,
       mimeType: cached.mimeType,
     }
@@ -193,6 +209,7 @@ async function ensureGeminiFileReferenceForAsset(params: {
 
   return {
     kind: "file" as const,
+    assetId: params.asset.id,
     fileUri: uploaded.uri,
     mimeType: uploaded.mimeType,
   }
@@ -213,6 +230,7 @@ async function resolveReferenceImagesForModel(params: {
         const inline = await urlToInlineImage(asset.url!, { signal: params.signal })
         return {
           kind: "inline" as const,
+          assetId: asset.id,
           mimeType: inline.mimeType,
           base64Data: inline.base64Data,
         }
@@ -223,7 +241,10 @@ async function resolveReferenceImagesForModel(params: {
     return prepareInlineReferences()
   }
 
-  const shouldPrepareInlineReferences = hasImageAssistantAibermKey() || hasOpenRouterApiKey()
+  const shouldPrepareInlineReferences =
+    hasImageAssistantPptokenKey() ||
+    hasImageAssistantAibermKey() ||
+    hasImageAssistantCrazyrouteKey()
 
   if (hasImageAssistantGoogleKey()) {
     try {
@@ -237,7 +258,7 @@ async function resolveReferenceImagesForModel(params: {
           }),
         ),
       )
-      let inlineReferences: Array<{ kind: "inline"; mimeType: string; base64Data: string }> = []
+      let inlineReferences: Array<{ kind: "inline"; assetId?: string | null; mimeType: string; base64Data: string }> = []
       if (shouldPrepareInlineReferences) {
         try {
           inlineReferences = await prepareInlineReferences()
@@ -501,14 +522,58 @@ export async function runImageAssistantJob(params: {
     elapsedMs: Date.now() - startedAt,
   })
 
-  const generated = await generateOrEditImages({
-    prompt,
-    resolution: normalizeResolution(params.resolution),
-    sizePreset: normalizeSizePreset(params.sizePreset),
-    referenceImages,
-    candidateCount: params.candidateCount || 1,
-    signal: params.signal,
+  const normalizedResolution = normalizeResolution(params.resolution)
+  const normalizedSizePreset = normalizeSizePreset(params.sizePreset)
+  const billingFeatureKey = getImageAssistantBillingFeatureKey(params.taskType)
+  const billingEstimate = estimateGptImage2Credits({
+    featureKey: billingFeatureKey,
+    size: mapGptImage2Size(normalizedSizePreset, normalizedResolution),
+    quality: mapGptImage2Quality(normalizedResolution),
+    imageCount: params.candidateCount || 1,
+    model: "gpt-image-2",
   })
+  const reserveIdempotencyKey = `image-assistant:${sessionId}:${params.requestMessageId || startedAt}:reserve`
+  const creditReservation: BillingReservation | null = await reserveFeatureCredits({
+    userId: params.userId,
+    enterpriseId: params.enterpriseId,
+    featureKey: billingFeatureKey,
+    amount: billingEstimate.credits,
+    idempotencyKey: reserveIdempotencyKey,
+    metadata: {
+      sessionId,
+      taskType: params.taskType,
+      estimate: billingEstimate,
+    },
+  })
+
+  let generated: Awaited<ReturnType<typeof generateOrEditImages>>
+  try {
+    generated = await generateOrEditImages({
+      prompt,
+      taskType: params.taskType,
+      resolution: normalizedResolution,
+      sizePreset: normalizedSizePreset,
+      referenceImages,
+      snapshotAssetId: params.snapshotAssetId || null,
+      maskAssetId: params.maskAssetId || null,
+      candidateCount: params.candidateCount || 1,
+      signal: params.signal,
+    })
+  } catch (error) {
+    await releaseReservedCredits({
+      reservation: creditReservation,
+      userId: params.userId,
+      enterpriseId: params.enterpriseId,
+      idempotencyKey: `image-assistant:${sessionId}:${params.requestMessageId || startedAt}:release`,
+      reason: "image_generation_failed",
+    }).catch((releaseError) => {
+      console.warn("image-assistant.billing.release.failed", {
+        sessionId,
+        message: releaseError instanceof Error ? releaseError.message : String(releaseError),
+      })
+    })
+    throw error
+  }
   throwIfAborted(params.signal)
   logImageAssistantStage("job.provider.completed", {
     sessionId,
@@ -568,6 +633,29 @@ export async function runImageAssistantJob(params: {
         candidateAssetIds: persistedAssets.map((asset) => asset.id),
       })
     : null
+
+  await finalizeReservedCredits({
+    reservation: creditReservation,
+    userId: params.userId,
+    enterpriseId: params.enterpriseId,
+    actualAmount: billingEstimate.credits,
+    idempotencyKey: `image-assistant:${sessionId}:${params.requestMessageId || startedAt}:debit`,
+    provider: generated.provider,
+    model: generated.model,
+    officialCostUsd: billingEstimate.officialCostUsd,
+    costBasisUsd: billingEstimate.costBasisUsd,
+    usagePayload: billingEstimate.metadata,
+    metadata: {
+      sessionId,
+      taskType: params.taskType,
+      versionId: version?.versionId || null,
+    },
+  }).catch((error) => {
+    console.warn("image-assistant.billing.finalize.failed", {
+      sessionId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+  })
 
   await createImageAssistantMessage({
     sessionId,

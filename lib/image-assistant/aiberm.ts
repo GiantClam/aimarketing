@@ -1,32 +1,35 @@
 import { writerRequestJson } from "@/lib/writer/network"
-import {
-  generateImagesWithOpenRouter,
-  getOpenRouterImageModel,
-  hasOpenRouterApiKey,
-  type OpenRouterInlineReferenceImage,
-} from "@/lib/writer/aiberm"
 
 import {
-  generateOrEditImagesWithGoogle,
-  getImageAssistantGoogleModel,
-  hasImageAssistantGoogleKey,
   type ImageAssistantFileReference,
 } from "@/lib/image-assistant/google"
+import {
+  generateImagesWithOpenAiCompatibleProvider,
+  getOpenAiCompatibleImageProviderConfig,
+  hasOpenAiCompatibleImageProviderKey,
+  type OpenAiCompatibleImageProviderId,
+  type OpenAiCompatibleInlineImage,
+} from "@/lib/image-assistant/openai-compatible-image"
 import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
 import { isImageAssistantR2Available } from "@/lib/image-assistant/r2"
-import type { ImageAssistantResolution, ImageAssistantSizePreset } from "@/lib/image-assistant/types"
+import type { ImageAssistantResolution, ImageAssistantSizePreset, ImageAssistantTaskType } from "@/lib/image-assistant/types"
 
-type InlineReferenceImage = { kind: "inline"; mimeType: string; base64Data: string }
-type ReferenceImageInput = InlineReferenceImage | ImageAssistantFileReference
+type InlineReferenceImage = OpenAiCompatibleInlineImage
+type FileReferenceImage = ImageAssistantFileReference & { assetId?: string | null }
+type ReferenceImageInput = InlineReferenceImage | FileReferenceImage
 
 const PRIMARY_IMAGE_ASSISTANT_AIBERM_MODEL =
-  process.env.IMAGE_ASSISTANT_AIBERM_MODEL || process.env.WRITER_AIBERM_IMAGE_MODEL || "gemini-3.1-flash-image-preview"
+  process.env.IMAGE_ASSISTANT_AIBERM_MODEL || process.env.WRITER_AIBERM_IMAGE_MODEL || "gpt-image-2"
 const AIBERM_API_BASE = (
   process.env.AIBERM_IMAGE_API_BASE ||
   process.env.AIBERM_BASE_URL?.replace(/\/v1$/i, "") ||
   "https://aiberm.com"
 ).replace(/\/$/, "")
-const AIBERM_API_KEY = process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || ""
+const AIBERM_API_KEY =
+  process.env.IMAGE_ASSISTANT_AIBERM_API_KEY ||
+  process.env.AIBERM_API_KEY ||
+  process.env.WRITER_AIBERM_API_KEY ||
+  ""
 const DEFAULT_IMAGE_RESOLUTION: ImageAssistantResolution = "2K"
 const IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS = Math.max(
   30_000,
@@ -142,6 +145,14 @@ export function hasImageAssistantAibermKey() {
   return Boolean(AIBERM_API_KEY)
 }
 
+export function hasImageAssistantPptokenKey() {
+  return hasOpenAiCompatibleImageProviderKey("pptoken")
+}
+
+export function hasImageAssistantCrazyrouteKey() {
+  return hasOpenAiCompatibleImageProviderKey("crazyroute")
+}
+
 function isAbortLikeError(error: unknown) {
   return error instanceof Error && (error.name === "AbortError" || error.message === "request_aborted")
 }
@@ -185,22 +196,25 @@ function createProviderScopedAbortSignal(parentSignal?: AbortSignal, timeoutMs?:
 }
 
 export function getImageAssistantModel(_resolution: ImageAssistantResolution) {
+  if (hasImageAssistantPptokenKey()) {
+    return getOpenAiCompatibleImageProviderConfig("pptoken")?.model || "gpt-image-2"
+  }
   if (hasImageAssistantAibermKey()) {
     return IMAGE_ASSISTANT_AIBERM_MODELS[0]
   }
-  if (hasImageAssistantGoogleKey()) {
-    return getImageAssistantGoogleModel()
+  if (hasImageAssistantCrazyrouteKey()) {
+    return getOpenAiCompatibleImageProviderConfig("crazyroute")?.model || "gpt-image-2"
   }
-  return getOpenRouterImageModel()
+  return "gpt-image-2"
 }
 
 export function getImageAssistantAvailability() {
-  const preferredProvider = hasImageAssistantAibermKey()
-    ? "aiberm"
-    : hasImageAssistantGoogleKey()
-      ? "gemini"
-      : hasOpenRouterApiKey()
-        ? "openrouter"
+  const preferredProvider = hasImageAssistantPptokenKey()
+    ? "pptoken"
+    : hasImageAssistantAibermKey()
+      ? "aiberm"
+      : hasImageAssistantCrazyrouteKey()
+        ? "crazyroute"
         : "unavailable"
 
   if (shouldUseImageAssistantFixtures()) {
@@ -222,19 +236,19 @@ export function getImageAssistantAvailability() {
       provider: preferredProvider,
       models: {
         highQuality: getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
-        lowCost: hasImageAssistantAibermKey() ? IMAGE_ASSISTANT_AIBERM_MODELS[0] : getOpenRouterImageModel(),
+        lowCost: hasImageAssistantAibermKey() ? IMAGE_ASSISTANT_AIBERM_MODELS[0] : getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
       },
     }
   }
 
-  if (!hasImageAssistantAibermKey() && !hasImageAssistantGoogleKey() && !hasOpenRouterApiKey()) {
+  if (!hasImageAssistantPptokenKey() && !hasImageAssistantAibermKey() && !hasImageAssistantCrazyrouteKey()) {
     return {
       enabled: false,
       reason: "image_generation_provider_missing",
       provider: "unavailable",
       models: {
-        highQuality: getOpenRouterImageModel(),
-        lowCost: getOpenRouterImageModel(),
+        highQuality: getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
+        lowCost: getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
       },
     }
   }
@@ -245,7 +259,7 @@ export function getImageAssistantAvailability() {
     provider: preferredProvider,
     models: {
       highQuality: getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
-      lowCost: hasImageAssistantAibermKey() ? IMAGE_ASSISTANT_AIBERM_MODELS[0] : getOpenRouterImageModel(),
+      lowCost: hasImageAssistantAibermKey() ? IMAGE_ASSISTANT_AIBERM_MODELS[0] : getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
     },
   }
 }
@@ -346,34 +360,78 @@ async function requestImages(params: {
   })
 }
 
-function getProviderExecutionPlan(params: { referenceImages?: ReferenceImageInput[] }) {
-  const hasFileReferences = (params.referenceImages || []).some((image) => image.kind === "file")
+function modelUsesOpenAiImageApi(model: string | null | undefined) {
+  const normalized = String(model || "").toLowerCase()
+  return normalized.includes("gpt-image-2") || normalized.includes("openai/gpt-image-2")
+}
+
+export function buildImageAssistantProviderPlan(params?: {
+  hasPptoken?: boolean
+  hasAiberm?: boolean
+  hasCrazyroute?: boolean
+}) {
   const plan: ImageGenerationProvider[] = []
 
-  if (hasImageAssistantAibermKey()) {
+  if (params?.hasPptoken ?? hasImageAssistantPptokenKey()) {
+    plan.push("pptoken")
+  }
+  if (params?.hasAiberm ?? hasImageAssistantAibermKey()) {
     plan.push("aiberm")
   }
-  if (hasImageAssistantGoogleKey() && (hasFileReferences || !hasImageAssistantAibermKey())) {
-    plan.push("gemini")
-  }
-  if (hasOpenRouterApiKey()) {
-    plan.push("openrouter")
-  }
-  if (hasImageAssistantGoogleKey() && !plan.includes("gemini")) {
-    plan.push("gemini")
+  if (params?.hasCrazyroute ?? hasImageAssistantCrazyrouteKey()) {
+    plan.push("crazyroute")
   }
 
   return plan
 }
 
-export async function generateOrEditImages(params: {
+function getProviderExecutionPlan(_params: { referenceImages?: ReferenceImageInput[] }) {
+  return buildImageAssistantProviderPlan()
+}
+
+function requestOpenAiCompatibleImages(params: {
+  provider: OpenAiCompatibleImageProviderId
   prompt: string
-  resolution: ImageAssistantResolution
+  taskType: ImageAssistantTaskType
   sizePreset?: ImageAssistantSizePreset | null
-  referenceImages?: ReferenceImageInput[]
+  resolution: ImageAssistantResolution
+  referenceImages?: InlineReferenceImage[]
+  snapshotAssetId?: string | null
+  maskAssetId?: string | null
   candidateCount?: number
   signal?: AbortSignal
 }) {
+  const config = getOpenAiCompatibleImageProviderConfig(params.provider)
+  if (!config) {
+    throw new Error(`image_assistant_${params.provider}_api_key_missing`)
+  }
+
+  return generateImagesWithOpenAiCompatibleProvider({
+    config,
+    prompt: params.prompt,
+    taskType: params.taskType,
+    sizePreset: params.sizePreset,
+    resolution: params.resolution,
+    referenceImages: params.referenceImages,
+    snapshotAssetId: params.snapshotAssetId,
+    maskAssetId: params.maskAssetId,
+    candidateCount: params.candidateCount,
+    signal: params.signal,
+  })
+}
+
+export async function generateOrEditImages(params: {
+  prompt: string
+  resolution: ImageAssistantResolution
+  taskType?: ImageAssistantTaskType
+  sizePreset?: ImageAssistantSizePreset | null
+  referenceImages?: ReferenceImageInput[]
+  snapshotAssetId?: string | null
+  maskAssetId?: string | null
+  candidateCount?: number
+  signal?: AbortSignal
+}) {
+  const taskType = params.taskType || "generate"
   const candidateCount = Math.max(1, Math.min(params.candidateCount || 1, 4))
   const aspectRatio = normalizeAspectRatio(params.sizePreset)
   const providerDeadlineAt = Date.now() + IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS
@@ -388,9 +446,6 @@ export async function generateOrEditImages(params: {
     }
   }
 
-  const fileReferenceImages = (params.referenceImages || []).filter(
-    (image): image is ImageAssistantFileReference => image.kind === "file",
-  )
   const inlineReferenceImages = (params.referenceImages || []).filter(
     (image): image is InlineReferenceImage => image.kind === "inline",
   )
@@ -427,41 +482,59 @@ export async function generateOrEditImages(params: {
     providerPlan,
     signal: params.signal,
     handlers: {
-      gemini: () =>
-        runProviderWithBudget("gemini", (providerSignal) =>
-          generateOrEditImagesWithGoogle({
-            prompt: params.prompt,
-            resolution: params.resolution,
-            sizePreset: params.sizePreset,
-            referenceImages: fileReferenceImages,
-            signal: providerSignal,
-          }),
-        ),
       aiberm: () =>
         runProviderWithBudget("aiberm", (providerSignal) =>
-          requestImages({
+          modelUsesOpenAiImageApi(IMAGE_ASSISTANT_AIBERM_MODELS[0])
+            ? requestOpenAiCompatibleImages({
+                provider: "aiberm",
+                prompt: params.prompt,
+                taskType,
+                resolution: params.resolution,
+                sizePreset: params.sizePreset,
+                referenceImages: inlineReferenceImages,
+                snapshotAssetId: params.snapshotAssetId,
+                maskAssetId: params.maskAssetId,
+                candidateCount,
+                signal: providerSignal,
+              })
+            : requestImages({
+                prompt: params.prompt,
+                resolution: params.resolution,
+                sizePreset: params.sizePreset,
+                referenceImages: inlineReferenceImages,
+                signal: providerSignal,
+              }),
+        ),
+      pptoken: () =>
+        runProviderWithBudget("pptoken", (providerSignal) =>
+          requestOpenAiCompatibleImages({
+            provider: "pptoken",
             prompt: params.prompt,
+            taskType,
             resolution: params.resolution,
             sizePreset: params.sizePreset,
             referenceImages: inlineReferenceImages,
+            snapshotAssetId: params.snapshotAssetId,
+            maskAssetId: params.maskAssetId,
+            candidateCount,
             signal: providerSignal,
           }),
         ),
-      openrouter: () =>
-        runProviderWithBudget("openrouter", async (providerSignal) => {
-          const openRouterResult = await generateImagesWithOpenRouter(
-            params.prompt,
-            getOpenRouterImageModel(),
-            aspectRatio,
-            inlineReferenceImages as OpenRouterInlineReferenceImage[],
-            { signal: providerSignal, timeoutMs: Math.max(1_000, getRemainingProviderBudgetMs()) },
-          )
-          return {
-            model: getOpenRouterImageModel(),
-            images: openRouterResult.images,
-            textSummary: openRouterResult.textSummary,
-          }
-        }),
+      crazyroute: () =>
+        runProviderWithBudget("crazyroute", (providerSignal) =>
+          requestOpenAiCompatibleImages({
+            provider: "crazyroute",
+            prompt: params.prompt,
+            taskType,
+            resolution: params.resolution,
+            sizePreset: params.sizePreset,
+            referenceImages: inlineReferenceImages,
+            snapshotAssetId: params.snapshotAssetId,
+            maskAssetId: params.maskAssetId,
+            candidateCount,
+            signal: providerSignal,
+          }),
+        ),
     },
     onProviderFailure: ({ provider, nextProvider, error }) => {
       console.warn(`image-assistant.${provider}.generate.failed`, {

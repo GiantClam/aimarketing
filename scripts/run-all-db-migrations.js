@@ -22,6 +22,7 @@ async function main() {
   await runStep("writer migration", "scripts/run-writer-migration.js")
   await runStep("writer memory migration", "scripts/run-writer-memory-migration.js")
   await runStep("image assistant migration", "scripts/run-image-assistant-migration.js")
+  await runStep("billing subscription migration", "scripts/run-billing-subscription-migration.js")
   console.log("All database migrations completed successfully")
 }
 

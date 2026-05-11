@@ -249,7 +249,6 @@ function buildPlannerModelCandidates(primaryModel: string) {
     IMAGE_ASSISTANT_TEXT_MODEL,
     process.env.IMAGE_ASSISTANT_PLANNER_FALLBACK_MODELS,
     process.env.IMAGE_ASSISTANT_PLANNER_FALLBACK_MODEL,
-    process.env.OPENROUTER_TEXT_MODEL,
   )
 
   const maxAttempts = Math.max(1, BRIEF_PLANNER_MAX_MODEL_ATTEMPTS)

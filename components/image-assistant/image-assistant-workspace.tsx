@@ -55,6 +55,9 @@ import {
   invalidateImageAssistantSessionQueries,
 } from "@/lib/query/workspace-cache"
 import {
+  upsertImageAssistantConversationSummary,
+} from "@/lib/image-assistant/session-list-store"
+import {
   getImageAssistantSessionContentCache,
   saveImageAssistantSessionContentCache,
 } from "@/lib/image-assistant/session-store"
@@ -1815,7 +1818,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
 
   const composerAttachmentCount = pendingAttachments.length
-  const hasCanvasEditAttachment = pendingAttachments.some((attachment) => attachment.source === "canvas")
   const primaryRunKind: ImageAssistantRunKind = composerAttachmentCount > 0 ? "edit" : "generate"
   const composerModeLabel = getRunKindLabel(primaryRunKind, extraCopy)
   const latestOrchestration = useMemo(() => {
@@ -1848,11 +1850,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     return latestAssistantMessage.id
   }, [latestAssistantMessage, latestAssistantPromptQuestionId])
   const currentUsageDisplay = latestOrchestration?.brief.usage_label || "Use + ratio pending"
-  const currentOrientationDisplay = latestOrchestration?.brief.orientation
-    ? latestOrchestration.brief.orientation === "landscape"
-      ? "Landscape"
-      : "Portrait"
-    : "Direction pending"
   const currentResolutionDisplay = latestOrchestration?.brief.resolution
     ? isEnglish
       ? RESOLUTION_DISPLAY[latestOrchestration.brief.resolution].en
@@ -2494,6 +2491,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   useEffect(() => {
     if (!sessionId || !detail) return
     saveImageAssistantSessionContentCache(sessionId, detail)
+    upsertImageAssistantConversationSummary(detail.session)
   }, [detail, sessionId])
 
   useEffect(() => {
@@ -5120,16 +5118,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                 {imageCopy.statusGenerating}
                               </Button>
                             ) : null}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 rounded-full px-3 text-[11px]"
-                              data-testid="image-edit-button"
-                              onClick={() => void runJob("edit")}
-                              disabled={!canSubmit || !composerAttachmentCount}
-                            >
-                              {imageCopy.editWithImage}
-                            </Button>
                             <Button
                               size="sm"
                               className="h-8 rounded-full px-3 text-[11px]"

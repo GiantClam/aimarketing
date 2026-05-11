@@ -31,6 +31,7 @@ import {
   getAdvisorMessagesQueryKey,
 } from "@/lib/query/workspace-cache"
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
+import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
@@ -92,6 +93,7 @@ export function AdvisorSidebarItem({
     hasMore: _hasMore,
     nextCursor: _nextLastId,
     fetchItems: fetchConversations,
+    readCache,
     updateList,
     createSnapshot,
     restoreSnapshot,
@@ -168,6 +170,13 @@ export function AdvisorSidebarItem({
       setIsOpen(true)
     }
   }, [pathname, advisorType])
+
+  useSidebarListPreheat({
+    enabled: pathname.includes(`/dashboard/advisor/${advisorType}`),
+    ttlMs: ADVISOR_CONVERSATION_CACHE_TTL_MS,
+    readCache,
+    fetchItems: fetchConversations,
+  })
 
   const handleDeleteRequest = (conversation: Conversation, event: MouseEvent) => {
     event.preventDefault()

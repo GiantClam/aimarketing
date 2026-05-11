@@ -16,7 +16,6 @@ export function useSidebarDetailPrefetch<TItem>({
   prefetchItem: (itemId: string) => Promise<void>
 }) {
   const inFlightRef = useRef<Map<string, Promise<void>>>(new Map())
-  const safeItems = Array.isArray(items) ? items : []
 
   const runPrefetch = useCallback((itemId: string) => {
     const inFlight = inFlightRef.current.get(itemId)
@@ -36,6 +35,7 @@ export function useSidebarDetailPrefetch<TItem>({
 
   useEffect(() => {
     if (prefetchLimit <= 0) return
+    const safeItems = Array.isArray(items) ? items : []
 
     const targets = safeItems
       .filter((item) => getItemId(item) !== activeItemId)
@@ -44,7 +44,7 @@ export function useSidebarDetailPrefetch<TItem>({
     targets.forEach((item) => {
       void runPrefetch(getItemId(item))
     })
-  }, [activeItemId, getItemId, prefetchLimit, runPrefetch, safeItems])
+  }, [activeItemId, getItemId, items, prefetchLimit, runPrefetch])
 
   return {
     prefetchItem: runPrefetch,

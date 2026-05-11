@@ -131,6 +131,7 @@ type WriterPreviewContext = {
   routing: WriterTurnDiagnostics["routing"] | null
   assets: WriterAsset[]
   assetsLoading: boolean
+  assetsLoadingStartedAt: number | null
   assetsError: string | null
   hasDraft: boolean
   hasGeneratedImages: boolean

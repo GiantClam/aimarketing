@@ -8,7 +8,7 @@ import { z } from "zod"
 import {
   generateTextWithWriterModel,
   hasAibermApiKey,
-  hasOpenRouterApiKey,
+  hasCrazyrouteApiKey,
   hasWriterTextProvider,
 } from "@/lib/writer/aiberm"
 import {
@@ -52,7 +52,7 @@ const SERPER_API_KEY = process.env.SERPER_API_KEY || ""
 const SERPER_API_BASE = (process.env.SERPER_API_BASE || "https://google.serper.dev").replace(/\/+$/, "")
 const SERPER_SCRAPE_API_BASE = (process.env.SERPER_SCRAPE_API_BASE || "https://scrape.serper.dev").replace(/\/+$/, "")
 
-const WRITER_TEXT_MODEL = process.env.WRITER_TEXT_MODEL || "google/gemini-3-flash"
+const WRITER_TEXT_MODEL = process.env.WRITER_TEXT_MODEL || "gpt-4-mini"
 const WRITER_SKILL_MODEL = process.env.WRITER_SKILL_MODEL || "gpt-5.3-codex"
 const WRITER_ENABLE_WEB_RESEARCH = process.env.WRITER_ENABLE_WEB_RESEARCH !== "false"
 const WRITER_REQUIRE_WEB_RESEARCH = process.env.WRITER_REQUIRE_WEB_RESEARCH === "true"
@@ -4060,14 +4060,14 @@ export function isWriterSkillsAvailable() {
 
 export type WriterSkillsAvailability = {
   enabled: boolean
-  provider: "aiberm" | "openrouter" | "unavailable"
+  provider: "aiberm" | "crazyroute" | "unavailable"
   reason: "ok" | "llm_api_key_missing" | "research_config_missing" | "writer_r2_config_missing"
   requiresWebResearch: boolean
   webResearchEnabled: boolean
 }
 
 export function getWriterSkillsAvailability(): WriterSkillsAvailability {
-  const preferredProvider = hasAibermApiKey() ? "aiberm" : hasOpenRouterApiKey() ? "openrouter" : "unavailable"
+  const preferredProvider = hasAibermApiKey() ? "aiberm" : hasCrazyrouteApiKey() ? "crazyroute" : "unavailable"
 
   if (!hasWriterTextProvider()) {
     return {

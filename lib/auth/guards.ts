@@ -8,7 +8,7 @@ import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
 
 export function hasFeatureAccess(user: AuthUserPayload, feature?: FeatureKey) {
   if (!feature) return true
-  if (!isFeatureRuntimeEnabled(feature)) return false
+  if (user.enterpriseStatus !== "active") return false
   const isEnterpriseAdmin = user.enterpriseRole === "admin" && user.enterpriseStatus === "active"
   if (isEnterpriseAdmin) return true
   return Boolean(user.permissions?.[feature])

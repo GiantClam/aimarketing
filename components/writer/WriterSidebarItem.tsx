@@ -30,6 +30,7 @@ import {
   getWriterMessagesQueryKey,
 } from "@/lib/query/workspace-cache"
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
+import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { useSidebarDetailPrefetch } from "@/lib/hooks/use-sidebar-detail-prefetch"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import { WRITER_CONTENT_TYPE_CONFIG, WRITER_PLATFORM_CONFIG } from "@/lib/writer/config"
@@ -99,6 +100,7 @@ export function WriterSidebarItem({
     hasMore: _hasMore,
     nextCursor: _nextCursor,
     fetchItems: fetchConversations,
+    readCache,
     updateList,
     createSnapshot,
     restoreSnapshot,
@@ -177,6 +179,13 @@ export function WriterSidebarItem({
       setIsOpen(true)
     }
   }, [isWriterRoute])
+
+  useSidebarListPreheat({
+    enabled: isWriterRoute,
+    ttlMs: WRITER_CONVERSATION_CACHE_TTL_MS,
+    readCache,
+    fetchItems: fetchConversations,
+  })
 
   const { prefetchItem: warmConversation } = useSidebarDetailPrefetch({
     items: conversations,

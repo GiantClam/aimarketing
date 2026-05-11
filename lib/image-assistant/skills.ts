@@ -11,12 +11,12 @@ export const IMAGE_ASSISTANT_TEXT_MODEL =
   process.env.IMAGE_ASSISTANT_TEXT_MODEL ||
   process.env.WRITER_TEXT_MODEL ||
   process.env.WRITER_SKILL_MODEL ||
-  "google/gemini-3-flash-preview"
+  "gpt-4-mini"
 export const IMAGE_ASSISTANT_SKILL_MODEL =
   process.env.IMAGE_ASSISTANT_SKILL_MODEL ||
   process.env.WRITER_SKILL_MODEL ||
   process.env.WRITER_TEXT_MODEL ||
-  "google/gemini-3-flash-preview"
+  "gpt-4-mini"
 
 type ImageAssistantSkillDefinition = ImageAssistantSkillSelection & {
   description: string

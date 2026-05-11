@@ -1,5 +1,5 @@
 export const AI_ENTRY_CONSULTING_ENTRY_MODE = "consulting-advisor"
-export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.5"
+export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"

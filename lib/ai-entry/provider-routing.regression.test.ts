@@ -4,24 +4,25 @@ import test from "node:test"
 import { executeAiEntryWithProviderFailover } from "./provider-routing"
 
 const PROVIDER_ENV_KEYS = [
+  "AI_ENTRY_PPTOKEN_API_KEY",
+  "AI_ENTRY_PPTOKEN_BASE_URL",
+  "AI_ENTRY_PPTOKEN_MODEL",
   "AI_ENTRY_AIBERM_API_KEY",
   "AI_ENTRY_AIBERM_BASE_URL",
   "AI_ENTRY_AIBERM_MODEL",
   "AI_ENTRY_CRAZYROUTE_API_KEY",
   "AI_ENTRY_CRAZYROUTE_BASE_URL",
   "AI_ENTRY_CRAZYROUTE_MODEL",
-  "AI_ENTRY_OPENROUTER_API_KEY",
-  "AI_ENTRY_OPENROUTER_BASE_URL",
-  "AI_ENTRY_OPENROUTER_MODEL",
   "AI_ENTRY_NORMAL_DEFAULT_MODEL",
+  "PPTOKEN_API_KEY",
+  "PPTOKEN_BASE_URL",
+  "PPTOKEN_MODEL",
   "AIBERM_API_KEY",
   "AIBERM_BASE_URL",
   "CRAZYROUTE_API_KEY",
   "CRAZYROUTER_API_KEY",
   "CRAZYROUTE_BASE_URL",
   "CRAZYROUTER_BASE_URL",
-  "OPENROUTER_API_KEY",
-  "OPENROUTER_BASE_URL",
 ] as const
 
 function resetRoutingState() {
@@ -182,27 +183,241 @@ test("fallback chain: selected model -> same provider default -> next provider d
   )
 })
 
-test("force model across providers: fuzzy match model id for openrouter", async () => {
+test("provider order: pptoken is the default provider before aiberm and crazyroute", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "pptoken/default-chat-model",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "aiberm/default-chat-model",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "crazy/default-chat-model",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(async (params) => {
+        attempts.push(`${params.providerId}:${params.model}`)
+        return params.providerOrder
+      })
+
+      assert.equal(result.providerId, "pptoken")
+      assert.deepEqual(result.result, ["pptoken", "aiberm", "crazyroute"])
+      assert.deepEqual(attempts, ["pptoken:pptoken/default-chat-model"])
+    },
+  )
+})
+
+test("explicit preferred provider ignores degraded routing start state", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "gpt-5.4",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "gpt-5.4",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "gpt-5.4",
+    },
+    async () => {
+      const routingState = globalThis as {
+        __aiEntryProviderRoutingStateV1__?: {
+          activeIndex: number
+          degradedAccessCount: number
+        }
+      }
+      routingState.__aiEntryProviderRoutingStateV1__ = {
+        activeIndex: 1,
+        degradedAccessCount: 99,
+      }
+
+      const attempts: string[] = []
+      const result = await executeAiEntryWithProviderFailover(
+        async (params) => {
+          attempts.push(`${params.providerId}:${params.model}`)
+          return "ok"
+        },
+        {
+          preferredProviderId: "pptoken",
+          preferredModel: "gpt-5.5",
+        },
+      )
+
+      assert.equal(result.providerId, "pptoken")
+      assert.equal(result.model, "gpt-5.5")
+      assert.deepEqual(attempts, ["pptoken:gpt-5.5"])
+    },
+  )
+})
+
+test("provider fallback: pptoken degrades to aiberm then crazyroute", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "pptoken/default-chat-model",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "aiberm/default-chat-model",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "crazy/default-chat-model",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(async (params) => {
+        attempts.push(`${params.providerId}:${params.model}`)
+        if (params.providerId === "pptoken" || params.providerId === "aiberm") {
+          throw new Error("provider temporarily unavailable")
+        }
+        return "ok"
+      })
+
+      assert.equal(result.providerId, "crazyroute")
+      assert.equal(result.result, "ok")
+      assert.deepEqual(attempts, [
+        "pptoken:pptoken/default-chat-model",
+        "aiberm:aiberm/default-chat-model",
+        "crazyroute:crazy/default-chat-model",
+      ])
+    },
+  )
+})
+
+test("provider order: non-openai models skip pptoken and use aiberm then crazyroute", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_NORMAL_DEFAULT_MODEL: "google/gemini-3-flash-preview",
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "openai/gpt-5.4-mini",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "google/gemini-3-flash-preview",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "google/gemini-3-flash-preview",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(async (params) => {
+        attempts.push(`${params.providerId}:${params.model}`)
+        return params.providerOrder
+      })
+
+      assert.equal(result.providerId, "aiberm")
+      assert.deepEqual(result.result, ["aiberm", "crazyroute"])
+      assert.deepEqual(attempts, ["aiberm:google/gemini-3-flash-preview"])
+      assert.equal(attempts.some((item) => item.startsWith("pptoken:")), false)
+    },
+  )
+})
+
+test("force model across providers: gpt-image-2 matches equivalent provider model ids", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "gpt-image-2",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "gpt-image-2",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "gpt-image-2",
+    },
+    async () => {
+      await withMockFetch(
+        (async (input) => {
+          const rawUrl =
+            typeof input === "string"
+              ? input
+              : input instanceof URL
+                ? input.toString()
+                : input.url
+
+          if (rawUrl.includes("pptoken.example")) {
+            return new Response(JSON.stringify({ data: [{ id: "openai/gpt-image-2" }] }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          }
+          if (rawUrl.includes("aiberm.example")) {
+            return new Response(JSON.stringify({ data: [{ id: "gpt-image-2" }] }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          }
+          if (rawUrl.includes("crazy.example")) {
+            return new Response(JSON.stringify({ data: [{ id: "OpenAI/GPT Image 2" }] }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          }
+          return new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }) as typeof fetch,
+        async () => {
+          const attempts: string[] = []
+          const result = await executeAiEntryWithProviderFailover(
+            async (params) => {
+              attempts.push(`${params.providerId}:${params.model}`)
+              if (params.providerId !== "crazyroute") {
+                throw new Error("provider unavailable")
+              }
+              return "ok"
+            },
+            {
+              preferredProviderId: "pptoken",
+              preferredModel: "openai/gpt-image-2",
+              forceModelAcrossProviders: true,
+              disableSameProviderModelFallback: true,
+              directProviderFailoverOnError: true,
+            },
+          )
+
+          assert.equal(result.providerId, "crazyroute")
+          assert.deepEqual(attempts, [
+            "pptoken:openai/gpt-image-2",
+            "aiberm:gpt-image-2",
+            "crazyroute:OpenAI/GPT Image 2",
+          ])
+        },
+      )
+    },
+  )
+})
+
+test("force model across providers: non-openai models stay on aiberm/crazyroute only", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_AIBERM_API_KEY: "test-key-a",
       AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
-      AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.4",
-      AI_ENTRY_OPENROUTER_API_KEY: "test-key-o",
-      AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
-      AI_ENTRY_OPENROUTER_MODEL: "openai/gpt-5.3",
+      AI_ENTRY_AIBERM_MODEL: "google/gemini-3-flash-preview",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "google/gemini-3-flash-preview",
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "openai/gpt-5.4-mini",
     },
     async () => {
       await withMockFetch(
         (async (input) => {
           const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-          if (rawUrl.includes("openrouter.example")) {
+          if (rawUrl.includes("crazy.example")) {
             return new Response(
               JSON.stringify({
-                data: [
-                  { id: "anthropic/claude-sonnet-4.6" },
-                  { id: "openai/gpt-5.3" },
-                ],
+                data: [{ id: "google/gemini-3-flash-preview" }],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -211,7 +426,7 @@ test("force model across providers: fuzzy match model id for openrouter", async 
           if (rawUrl.includes("aiberm.example")) {
             return new Response(
               JSON.stringify({
-                data: [{ id: "openai/gpt-5.3-codex" }],
+                data: [{ id: "gemini-3-flash-preview" }],
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -231,24 +446,27 @@ test("force model across providers: fuzzy match model id for openrouter", async 
               if (params.providerId === "aiberm") {
                 throw new Error("not implemented")
               }
-              if (params.providerId === "openrouter") {
-                assert.equal(params.model.includes("/"), true)
-                assert.equal(isEquivalentGpt53CodexModel(params.model), true)
+              if (params.providerId === "crazyroute") {
+                assert.equal(params.model.toLowerCase().includes("gemini"), true)
                 return "ok"
               }
               throw new Error(`unexpected provider:${params.providerId}`)
             },
             {
               preferredProviderId: "aiberm",
-              preferredModel: "openai/gpt-5.3-codex",
+              preferredModel: "google/gemini-3-flash-preview",
               forceModelAcrossProviders: true,
               disableSameProviderModelFallback: true,
+              directProviderFailoverOnError: true,
             },
           )
 
-          assert.equal(result.providerId, "openrouter")
-          assert.equal(isEquivalentGpt53CodexModel(result.model), true)
-          assert.equal(attempts.some((item) => item.startsWith("openrouter:")), true)
+          assert.equal(result.providerId, "crazyroute")
+          assert.equal(attempts.some((item) => item.startsWith("pptoken:")), false)
+          assert.deepEqual(
+            attempts.map((item) => item.split(":")[0]),
+            ["aiberm", "crazyroute"],
+          )
         },
       )
     },
@@ -365,7 +583,9 @@ test("consulting model fallback: aiberm keeps gpt-5.3-codex across providers", a
           )
 
           assert.equal(result.providerId, "crazyroute")
-          assert.equal(attempts[0], "aiberm:openai/gpt-5.3-codex")
+          const [firstProvider, firstModel] = attempts[0]?.split(":") || []
+          assert.equal(firstProvider, "aiberm")
+          assert.equal(isEquivalentGpt53CodexModel(firstModel || ""), true)
         },
       )
     },
@@ -441,10 +661,14 @@ test("direct provider failover: skip same-provider model retries on error", asyn
           )
 
           assert.equal(result.providerId, "crazyroute")
-          assert.deepEqual(attempts, [
-            "aiberm:openai/gpt-5.3-codex",
-            "crazyroute:openai/gpt-5.3-codex",
-          ])
+          assert.deepEqual(
+            attempts.map((item) => item.split(":")[0]),
+            ["aiberm", "crazyroute"],
+          )
+          assert.equal(
+            attempts.every((item) => isEquivalentGpt53CodexModel(item.split(":")[1] || "")),
+            true,
+          )
         },
       )
     },
@@ -454,12 +678,12 @@ test("direct provider failover: skip same-provider model retries on error", asyn
 test("policy errors skip same-provider model variants and switch provider", async () => {
   await withProviderEnv(
     {
-      AI_ENTRY_OPENROUTER_API_KEY: "test-key-o",
-      AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
-      AI_ENTRY_OPENROUTER_MODEL: "openai/gpt-5.3",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.4",
       AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
       AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
-      AI_ENTRY_CRAZYROUTE_MODEL: "openai/gpt-5.3",
+      AI_ENTRY_CRAZYROUTE_MODEL: "openai/gpt-5.4",
     },
     async () => {
       await withMockFetch(
@@ -471,7 +695,7 @@ test("policy errors skip same-provider model variants and switch provider", asyn
                 ? input.toString()
                 : input.url
 
-          if (rawUrl.includes("openrouter.example")) {
+          if (rawUrl.includes("aiberm.example")) {
             return new Response(
               JSON.stringify({
                 data: [
@@ -498,86 +722,34 @@ test("policy errors skip same-provider model variants and switch provider", asyn
           })
         }) as typeof fetch,
         async () => {
-          const attempts: string[] = []
-
-          const result = await executeAiEntryWithProviderFailover(
-            async (params) => {
-              attempts.push(`${params.providerId}:${params.model}`)
-              if (params.providerId === "openrouter") {
-                const policyError = new Error(
-                  "The request is prohibited due to a violation of provider Terms Of Service.",
-                ) as Error & { statusCode?: number }
-                policyError.statusCode = 403
-                throw policyError
-              }
-              if (params.providerId === "crazyroute") {
-                assert.equal(isEquivalentGpt53CodexModel(params.model), true)
-                return "ok"
-              }
-              throw new Error(`unexpected provider:${params.providerId}`)
-            },
-            {
-              preferredProviderId: "openrouter",
-              preferredModel: "openai/gpt-5.3-codex",
-              forceModelAcrossProviders: true,
-              disableSameProviderModelFallback: true,
-            },
-          )
-
-          assert.equal(result.providerId, "crazyroute")
-          assert.equal(result.result, "ok")
-          assert.equal(
-            attempts.filter((item) => item.startsWith("openrouter:")).length,
-            1,
-          )
-        },
-      )
-    },
-  )
-})
-
-test("wrap-around failover: starts from openrouter and wraps back to aiberm", async () => {
-  await withProviderEnv(
-    {
-      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
-      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
-      AI_ENTRY_AIBERM_MODEL: "openai/gpt-5.4",
-      AI_ENTRY_OPENROUTER_API_KEY: "test-key-o",
-      AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
-      AI_ENTRY_OPENROUTER_MODEL: "anthropic/claude-sonnet-4.6",
-    },
-    async () => {
-      const warmup = await executeAiEntryWithProviderFailover(async (params) => {
-        if (params.providerId === "aiberm") {
-          throw new Error("warmup_not_implemented")
-        }
-        if (params.providerId === "openrouter") {
-          return "warmup_ok"
-        }
-        throw new Error(`unexpected provider:${params.providerId}`)
-      })
-      assert.equal(warmup.providerId, "openrouter")
-
       const attempts: string[] = []
       const result = await executeAiEntryWithProviderFailover(async (params) => {
         attempts.push(`${params.providerId}:${params.model}`)
-        if (params.providerId === "openrouter") {
+        if (params.providerId === "aiberm") {
           const policyError = new Error(
             "The request is prohibited due to a violation of provider Terms Of Service.",
           ) as Error & { statusCode?: number }
           policyError.statusCode = 403
           throw policyError
         }
-        if (params.providerId === "aiberm") {
+        if (params.providerId === "crazyroute") {
+          assert.equal(isEquivalentGpt53CodexModel(params.model), true)
           return "wrapped_ok"
         }
         throw new Error(`unexpected provider:${params.providerId}`)
+      }, {
+        preferredProviderId: "aiberm",
+        preferredModel: "openai/gpt-5.3-codex",
+        forceModelAcrossProviders: true,
+        disableSameProviderModelFallback: true,
       })
 
-      assert.equal(result.providerId, "aiberm")
+      assert.equal(result.providerId, "crazyroute")
       assert.equal(result.result, "wrapped_ok")
-      assert.equal(attempts[0]?.startsWith("openrouter:"), true)
-      assert.equal(attempts[1]?.startsWith("aiberm:"), true)
+      assert.equal(attempts[0]?.startsWith("aiberm:"), true)
+      assert.equal(attempts[1]?.startsWith("crazyroute:"), true)
+        },
+      )
     },
   )
 })

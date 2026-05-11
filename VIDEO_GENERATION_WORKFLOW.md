@@ -21,7 +21,7 @@
 
 - Sora2 / RunningHub 等视频 provider
 - Supabase
-- OpenRouter
+- 外部模型 / 媒体 provider 凭证
 
 这些能力都应配置在外部 video agent 服务，而不是当前仓库中。
 

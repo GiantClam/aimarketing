@@ -241,7 +241,12 @@ async function run() {
         cookie,
       ),
     )
-    const streamErrorJson = await parseJsonSafe(streamResponse.clone())
+    expect(streamResponse, "stream response missing")
+    if (!streamResponse) {
+      throw new Error("stream response missing")
+    }
+
+    const streamErrorJson = streamResponse ? await parseJsonSafe(streamResponse.clone()) : null
     expect(streamResponse.status === 200, `chat failed: ${JSON.stringify(streamErrorJson)}`)
     const contentType = streamResponse.headers.get("content-type") || ""
     expect(contentType.includes("text/event-stream"), `unexpected content-type: ${contentType}`)
@@ -250,8 +255,11 @@ async function run() {
     conversationId = Number.parseInt(conversationHeader || "", 10)
     expect(Number.isFinite(conversationId) && conversationId > 0, "invalid conversation id")
     expect(streamResponse.body, "stream response body missing")
+    if (!streamResponse.body) {
+      throw new Error("stream response body missing")
+    }
 
-    const wire = await readStreamText(streamResponse.body!)
+    const wire = await readStreamText(streamResponse.body)
     const payloads = parseSsePayloads(wire)
     expect(payloads.length > 0, "empty sse payload")
 

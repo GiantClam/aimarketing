@@ -40,6 +40,13 @@ import {
   runAiEntryConsultingStreaming,
 } from "@/lib/skills/runtime/ai-entry-executor"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
+import { estimateTextCredits } from "@/lib/billing/costing"
+import {
+  finalizeReservedCredits,
+  releaseReservedCredits,
+  reserveFeatureCredits,
+  type BillingReservation,
+} from "@/lib/billing/runtime"
 
 export const runtime = "nodejs"
 
@@ -400,6 +407,21 @@ function getLatestUserPrompt(messages: CoreMessage[]) {
   return normalizeCoreMessageContent(latest.content)
 }
 
+function estimateTextTokens(text: string) {
+  return Math.max(1, Math.ceil(text.length / 4))
+}
+
+function getAiEntryUsageTokens(rawUsage: unknown, fallbackInputText: string, fallbackOutputText: string) {
+  const usage = rawUsage && typeof rawUsage === "object" ? (rawUsage as Record<string, unknown>) : null
+  const inputTokens =
+    Number(usage?.inputTokens ?? usage?.promptTokens ?? usage?.prompt_tokens ?? 0) ||
+    estimateTextTokens(fallbackInputText)
+  const outputTokens =
+    Number(usage?.outputTokens ?? usage?.completionTokens ?? usage?.completion_tokens ?? 0) ||
+    estimateTextTokens(fallbackOutputText)
+  return { inputTokens, outputTokens }
+}
+
 function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
   const rawProviderId =
     typeof input?.providerId === "string" ? input.providerId.trim().toLowerCase() : ""
@@ -407,9 +429,9 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
   if (rawProviderId === "crazyrouter") {
     providerId = "crazyroute"
   } else if (
+    rawProviderId === "pptoken" ||
     rawProviderId === "aiberm" ||
-    rawProviderId === "crazyroute" ||
-    rawProviderId === "openrouter"
+    rawProviderId === "crazyroute"
   ) {
     providerId = rawProviderId
   }
@@ -572,6 +594,10 @@ async function persistAiEntryTurnSafe(params: {
 
 export async function POST(request: NextRequest) {
   let closeTools: (() => Promise<void>) | null = null
+  let aiEntryCreditReservation: BillingReservation | null = null
+  let aiEntryCreditFinalized = false
+  let billingUserId: number | null = null
+  let billingEnterpriseId: number | null = null
   const traceId = createChatTraceId()
   const startedAtMs = Date.now()
   try {
@@ -580,6 +606,8 @@ export async function POST(request: NextRequest) {
       return auth.response
     }
     const currentUser = auth.user
+    billingUserId = currentUser.id
+    billingEnterpriseId = currentUser.enterpriseId
 
     const body = (await request.json()) as ChatRequestBody
     const attachments = normalizeAttachmentList(body.attachments)
@@ -784,6 +812,33 @@ export async function POST(request: NextRequest) {
       selectedToolIds: effectiveSelectedToolIds,
     })
 
+    const reserveEstimate = estimateTextCredits({
+      featureKey: "ai_entry_chat",
+      inputTokens: estimateTextTokens(normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n")),
+      outputTokens: 4_000,
+      provider: modelConfig?.providerId || null,
+      model: modelConfig?.providerModelId || modelConfig?.modelId || null,
+    })
+    try {
+      aiEntryCreditReservation = await reserveFeatureCredits({
+        userId: currentUser.id,
+        enterpriseId: currentUser.enterpriseId,
+        featureKey: "ai_entry_chat",
+        amount: reserveEstimate.credits,
+        idempotencyKey: `ai-entry:${conversationId}:${traceId}:reserve`,
+        metadata: {
+          conversationId,
+          traceId,
+          estimate: reserveEstimate,
+        },
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === "insufficient_credits") {
+        return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+      }
+      throw error
+    }
+
     if (!stream) {
       const enterpriseKnowledge = await loadEnterpriseKnowledge()
       const systemPrompt = buildAiEntrySystemPrompt(
@@ -849,6 +904,38 @@ export async function POST(request: NextRequest) {
           scope: conversationScope,
         })
       }
+
+      const usageTokens = getAiEntryUsageTokens(
+        (execution.result as { usage?: unknown }).usage,
+        normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n"),
+        normalizedAssistantMessage,
+      )
+      const actualCost = estimateTextCredits({
+        featureKey: "ai_entry_chat",
+        inputTokens: usageTokens.inputTokens,
+        outputTokens: usageTokens.outputTokens,
+        provider: execution.providerId,
+        model: execution.model,
+      })
+      await finalizeReservedCredits({
+        reservation: aiEntryCreditReservation,
+        userId: currentUser.id,
+        enterpriseId: currentUser.enterpriseId,
+        actualAmount: actualCost.credits,
+        idempotencyKey: `ai-entry:${conversationId}:${traceId}:debit`,
+        provider: execution.providerId,
+        model: execution.model,
+        officialCostUsd: actualCost.officialCostUsd,
+        costBasisUsd: actualCost.costBasisUsd,
+        usagePayload: actualCost.metadata,
+        metadata: { conversationId, traceId },
+      }).catch((error) => {
+        console.warn("ai-entry.billing.finalize.failed", {
+          conversationId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
+      aiEntryCreditFinalized = true
 
       console.info("ai-entry.chat.request.done", {
         traceId,
@@ -1056,6 +1143,37 @@ export async function POST(request: NextRequest) {
               scope: conversationScope,
             })
           }
+          const usageTokens = getAiEntryUsageTokens(
+            null,
+            normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n"),
+            normalizedStreamedAnswer,
+          )
+          const actualCost = estimateTextCredits({
+            featureKey: "ai_entry_chat",
+            inputTokens: usageTokens.inputTokens,
+            outputTokens: usageTokens.outputTokens,
+            provider: execution.providerId,
+            model: execution.model,
+          })
+          await finalizeReservedCredits({
+            reservation: aiEntryCreditReservation,
+            userId: currentUser.id,
+            enterpriseId: currentUser.enterpriseId,
+            actualAmount: actualCost.credits,
+            idempotencyKey: `ai-entry:${conversationId}:${traceId}:debit`,
+            provider: execution.providerId,
+            model: execution.model,
+            officialCostUsd: actualCost.officialCostUsd,
+            costBasisUsd: actualCost.costBasisUsd,
+            usagePayload: actualCost.metadata,
+            metadata: { conversationId, traceId, streamed: true },
+          }).catch((error) => {
+            console.warn("ai-entry.billing.finalize.failed", {
+              conversationId,
+              message: error instanceof Error ? error.message : String(error),
+            })
+          })
+          aiEntryCreditFinalized = true
           console.info("ai-entry.chat.request.done", {
             traceId,
             conversationId,
@@ -1083,6 +1201,20 @@ export async function POST(request: NextRequest) {
                 : firstTextDeltaAtMs - providerSelectedAtMs,
           })
         } catch (error) {
+          if (aiEntryCreditReservation && !aiEntryCreditFinalized) {
+            await releaseReservedCredits({
+              reservation: aiEntryCreditReservation,
+              userId: currentUser.id,
+              enterpriseId: currentUser.enterpriseId,
+              idempotencyKey: `ai-entry:${conversationId}:${traceId}:release`,
+              reason: "ai_entry_stream_failed",
+            }).catch((releaseError) => {
+              console.warn("ai-entry.billing.release.failed", {
+                conversationId,
+                message: releaseError instanceof Error ? releaseError.message : String(releaseError),
+              })
+            })
+          }
           console.error("ai-entry.chat.request.failed", {
             traceId,
             conversationId,
@@ -1106,6 +1238,20 @@ export async function POST(request: NextRequest) {
 
     return new Response(responseStream, { headers: STREAM_HEADERS })
   } catch (error) {
+    if (aiEntryCreditReservation && !aiEntryCreditFinalized && billingUserId) {
+      await releaseReservedCredits({
+        reservation: aiEntryCreditReservation,
+        userId: billingUserId,
+        enterpriseId: billingEnterpriseId,
+        idempotencyKey: `ai-entry:unknown:${traceId}:release`,
+        reason: "ai_entry_request_failed",
+      }).catch((releaseError) => {
+        console.warn("ai-entry.billing.release.failed", {
+          traceId,
+          message: releaseError instanceof Error ? releaseError.message : String(releaseError),
+        })
+      })
+    }
     try {
       if (closeTools) await closeTools()
     } catch {

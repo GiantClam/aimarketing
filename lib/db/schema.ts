@@ -102,6 +102,121 @@ export const userFeaturePermissions = pgTable(
   }),
 )
 
+export const subscriptionPlans = pgTable(
+  withPrefix("subscription_plans"),
+  {
+    id: serial("id").primaryKey(),
+    code: varchar("code", { length: 32 }).notNull(),
+    name: varchar("name", { length: 80 }).notNull(),
+    priceUsdCents: integer("price_usd_cents").notNull(),
+    monthlyCredits: integer("monthly_credits").notNull(),
+    features: jsonb("features").$type<Record<string, unknown>>().default({}).notNull(),
+    paypalPlanId: varchar("paypal_plan_id", { length: 128 }),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    codeUnique: uniqueIndex(withPrefix("subscription_plans_code_idx")).on(table.code),
+    paypalPlanIdx: index(withPrefix("subscription_plans_paypal_plan_idx")).on(table.paypalPlanId),
+  }),
+)
+
+export const userSubscriptions = pgTable(
+  withPrefix("user_subscriptions"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id").references(() => enterprises.id, { onDelete: "set null" }),
+    subscribedByUserId: integer("subscribed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    planCode: varchar("plan_code", { length: 32 }).notNull(),
+    status: varchar("status", { length: 24 }).default("pending").notNull(),
+    paypalSubscriptionId: varchar("paypal_subscription_id", { length: 128 }),
+    currentPeriodStart: timestamp("current_period_start"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseStatusIdx: index(withPrefix("user_subscriptions_enterprise_status_idx")).on(table.enterpriseId, table.status),
+    paypalSubscriptionUnique: uniqueIndex(withPrefix("user_subscriptions_paypal_subscription_idx")).on(
+      table.paypalSubscriptionId,
+    ),
+  }),
+)
+
+export const creditAccounts = pgTable(
+  withPrefix("credit_accounts"),
+  {
+    id: serial("id").primaryKey(),
+    accountType: varchar("account_type", { length: 24 }).default("enterprise").notNull(),
+    enterpriseId: integer("enterprise_id").references(() => enterprises.id, { onDelete: "cascade" }),
+    ownerUserId: integer("owner_user_id").references(() => users.id, { onDelete: "cascade" }),
+    balance: integer("balance").default(0).notNull(),
+    reservedBalance: integer("reserved_balance").default(0).notNull(),
+    monthlyGrantBalance: integer("monthly_grant_balance").default(0).notNull(),
+    purchasedBalance: integer("purchased_balance").default(0).notNull(),
+    periodStart: timestamp("period_start"),
+    periodEnd: timestamp("period_end"),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseIdx: index(withPrefix("credit_accounts_enterprise_idx")).on(table.enterpriseId),
+    ownerUserIdx: index(withPrefix("credit_accounts_owner_user_idx")).on(table.ownerUserId),
+  }),
+)
+
+export const creditLedger = pgTable(
+  withPrefix("credit_ledger"),
+  {
+    id: serial("id").primaryKey(),
+    creditAccountId: integer("credit_account_id")
+      .notNull()
+      .references(() => creditAccounts.id, { onDelete: "cascade" }),
+    enterpriseId: integer("enterprise_id").references(() => enterprises.id, { onDelete: "set null" }),
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+    subscriptionId: integer("subscription_id").references(() => userSubscriptions.id, { onDelete: "set null" }),
+    entryType: varchar("entry_type", { length: 24 }).notNull(),
+    featureKey: varchar("feature_key", { length: 80 }),
+    amount: integer("amount").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
+    reservedBalanceAfter: integer("reserved_balance_after").default(0).notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 160 }).notNull(),
+    provider: varchar("provider", { length: 40 }),
+    model: varchar("model", { length: 160 }),
+    officialCostUsd: real("official_cost_usd"),
+    costBasisUsd: real("cost_basis_usd"),
+    usagePayload: jsonb("usage_payload").$type<Record<string, unknown> | null>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    idempotencyUnique: uniqueIndex(withPrefix("credit_ledger_account_idempotency_idx")).on(
+      table.creditAccountId,
+      table.idempotencyKey,
+    ),
+    accountCreatedIdx: index(withPrefix("credit_ledger_account_created_idx")).on(table.creditAccountId, table.createdAt),
+    userCreatedIdx: index(withPrefix("credit_ledger_user_created_idx")).on(table.userId, table.createdAt),
+  }),
+)
+
+export const paypalWebhookEvents = pgTable(
+  withPrefix("paypal_webhook_events"),
+  {
+    id: serial("id").primaryKey(),
+    paypalEventId: varchar("paypal_event_id", { length: 128 }).notNull(),
+    eventType: varchar("event_type", { length: 96 }).notNull(),
+    resourceId: varchar("resource_id", { length: 128 }),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    processedAt: timestamp("processed_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    paypalEventUnique: uniqueIndex(withPrefix("paypal_webhook_events_event_idx")).on(table.paypalEventId),
+    resourceIdx: index(withPrefix("paypal_webhook_events_resource_idx")).on(table.resourceId),
+  }),
+)
+
 // User files table for personal knowledge base
 export const userFiles = pgTable(withPrefix("user_files"), {
   id: serial("id").primaryKey(),

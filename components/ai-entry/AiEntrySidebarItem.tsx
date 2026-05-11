@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
+import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import {
   AI_ENTRY_CONSULTING_ENTRY_MODE,
@@ -137,6 +138,7 @@ export function AiEntrySidebarItem({
     isLoading,
     isLoadingMore,
     fetchItems: fetchConversations,
+    readCache,
     updateList,
     createSnapshot,
     restoreSnapshot,
@@ -175,6 +177,13 @@ export function AiEntrySidebarItem({
       setIsOpen(true)
     }
   }, [isAiRoute, isMatchedAgent])
+
+  useSidebarListPreheat({
+    enabled: isAiRoute && isMatchedAgent,
+    ttlMs: AI_ENTRY_CONVERSATION_CACHE_TTL_MS,
+    readCache,
+    fetchItems: fetchConversations,
+  })
 
   const handleCreateConversation = async (
     event: MouseEvent<HTMLButtonElement>,

@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai"
 
-export type AiEntryProviderId = "aiberm" | "crazyroute" | "openrouter"
+export type AiEntryProviderId = "pptoken" | "aiberm" | "crazyroute"
 
 export type AiEntryProviderConfig = {
   id: AiEntryProviderId
@@ -66,8 +66,8 @@ type ProviderModelsApiResponse = {
 }
 
 const DEFAULT_AIBERM_BASE_URL = "https://aiberm.com/v1"
-const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-const DEFAULT_MODEL = "google/gemini-2.5-flash"
+const DEFAULT_PPTOKEN_BASE_URL = "https://api.pptoken.org/v1"
+const DEFAULT_MODEL = "openai/gpt-5.4-mini"
 const PROVIDER_MODEL_LIST_CACHE_TTL_MS = parsePositiveInt(
   process.env.AI_ENTRY_PROVIDER_MODEL_LIST_CACHE_TTL_MS,
   30 * 60 * 1000,
@@ -125,6 +125,10 @@ function inferProviderPrefixFromModel(modelId: string) {
   return ""
 }
 
+function isOpenAiFamilyModel(modelId: string) {
+  return inferProviderPrefixFromModel(modelId) === "openai"
+}
+
 function buildEquivalentModelVariants(modelId: string) {
   const raw = normalizeText(modelId)
   if (!raw) return []
@@ -167,15 +171,7 @@ function compareModelCandidatePreference(
 ) {
   const aHasPrefix = a.includes("/")
   const bHasPrefix = b.includes("/")
-  const aIsDot = /(\d)\.(\d)/.test(a)
-  const bIsDot = /(\d)\.(\d)/.test(b)
-
-  if (providerId === "openrouter") {
-    if (aHasPrefix !== bHasPrefix) return aHasPrefix ? -1 : 1
-    if (aIsDot !== bIsDot) return aIsDot ? -1 : 1
-  } else {
-    if (aHasPrefix !== bHasPrefix) return aHasPrefix ? 1 : -1
-  }
+  if (aHasPrefix !== bHasPrefix) return aHasPrefix ? 1 : -1
 
   if (a.length !== b.length) return a.length - b.length
   return a.localeCompare(b, "en", { sensitivity: "base" })
@@ -326,8 +322,7 @@ function scoreModelCandidate(
   if (candidateBase === preferredBase) score += 140
   if (candidateFingerprint === preferredFingerprint) score += 160
   if (candidateBaseFingerprint === preferredBaseFingerprint) score += 180
-  if (candidate.includes("/") && providerId === "openrouter") score += 10
-  if (!candidate.includes("/") && providerId !== "openrouter") score += 10
+  if (!candidate.includes("/")) score += 10
 
   return score
 }
@@ -480,15 +475,22 @@ function getAiEntryDefaultModel() {
 
 function getRawProviderConfigs(): AiEntryProviderConfig[] {
   const fallbackModel = getAiEntryDefaultModel()
-  const openRouterAppUrl =
-    normalizeText(process.env.AI_ENTRY_OPENROUTER_APP_URL) ||
-    normalizeText(process.env.OPENROUTER_APP_URL)
-  const openRouterAppName =
-    normalizeText(process.env.AI_ENTRY_OPENROUTER_APP_NAME) ||
-    normalizeText(process.env.OPENROUTER_APP_NAME) ||
-    "AI Marketing"
 
   return [
+    {
+      id: "pptoken",
+      apiKey:
+        normalizeText(process.env.AI_ENTRY_PPTOKEN_API_KEY) ||
+        normalizeText(process.env.PPTOKEN_API_KEY),
+      baseURL:
+        normalizeText(process.env.AI_ENTRY_PPTOKEN_BASE_URL) ||
+        normalizeText(process.env.PPTOKEN_BASE_URL) ||
+        DEFAULT_PPTOKEN_BASE_URL,
+      model:
+        normalizeText(process.env.AI_ENTRY_PPTOKEN_MODEL) ||
+        normalizeText(process.env.PPTOKEN_MODEL) ||
+        fallbackModel,
+    },
     {
       id: "aiberm",
       apiKey:
@@ -518,24 +520,6 @@ function getRawProviderConfigs(): AiEntryProviderConfig[] {
         normalizeText(process.env.AI_ENTRY_CRAZYROUTER_MODEL) ||
         normalizeText(process.env.CRAZYROUTER_MODEL) ||
         fallbackModel,
-    },
-    {
-      id: "openrouter",
-      apiKey:
-        normalizeText(process.env.AI_ENTRY_OPENROUTER_API_KEY) ||
-        normalizeText(process.env.OPENROUTER_API_KEY),
-      baseURL:
-        normalizeText(process.env.AI_ENTRY_OPENROUTER_BASE_URL) ||
-        normalizeText(process.env.OPENROUTER_BASE_URL) ||
-        DEFAULT_OPENROUTER_BASE_URL,
-      model:
-        normalizeText(process.env.AI_ENTRY_OPENROUTER_MODEL) ||
-        normalizeText(process.env.OPENROUTER_TEXT_MODEL) ||
-        fallbackModel,
-      headers: {
-        ...(openRouterAppUrl ? { "HTTP-Referer": openRouterAppUrl } : {}),
-        ...(openRouterAppName ? { "X-Title": openRouterAppName } : {}),
-      },
     },
   ]
 }
@@ -568,6 +552,11 @@ async function buildProviderRuntimes(
   let configs = getConfiguredAiEntryProviders()
   if (configs.length === 0) return []
 
+  const routingModel = preferredModel || getAiEntryDefaultModel()
+  const allowPptoken = isOpenAiFamilyModel(routingModel)
+  configs = configs.filter((item) => (allowPptoken ? true : item.id !== "pptoken"))
+  if (configs.length === 0) return []
+
   if (preferredProviderId) {
     const preferred = configs.find((item) => item.id === preferredProviderId)
     if (preferred) {
@@ -576,6 +565,17 @@ async function buildProviderRuntimes(
       } else {
         configs = [preferred, ...configs.filter((item) => item.id !== preferredProviderId)]
       }
+    }
+  }
+
+  const defaultOrder: AiEntryProviderId[] = allowPptoken
+    ? ["pptoken", "aiberm", "crazyroute"]
+    : ["aiberm", "crazyroute"]
+  configs.sort((a, b) => defaultOrder.indexOf(a.id) - defaultOrder.indexOf(b.id))
+  if (preferredProviderId && !forcePreferredProvider) {
+    const preferred = configs.find((item) => item.id === preferredProviderId)
+    if (preferred) {
+      configs = [preferred, ...configs.filter((item) => item.id !== preferredProviderId)]
     }
   }
 
@@ -656,7 +656,7 @@ export async function executeAiEntryWithProviderFailover<T>(
   const providers = await buildProviderRuntimes(options)
   if (providers.length === 0) {
     throw new Error(
-      "No configured AI entry providers. Configure at least one of: aiberm, crazyroute, openrouter.",
+      "No configured AI entry providers. Configure at least one of: pptoken, aiberm, crazyroute.",
     )
   }
 
@@ -672,8 +672,14 @@ export async function executeAiEntryWithProviderFailover<T>(
     !options?.preferredProviderId &&
     state.activeIndex > 0 &&
     state.degradedAccessCount >= UPGRADE_AFTER_ACCESS
+  const explicitPreferredStartIndex = options?.preferredProviderId
+    ? providers.findIndex((item) => item.id === options.preferredProviderId)
+    : -1
   const startStateIndex = shouldTryUpgrade ? state.activeIndex - 1 : state.activeIndex
-  const startIndex = findRuntimeStartIndexByStateIndex(providers, startStateIndex)
+  const startIndex =
+    explicitPreferredStartIndex >= 0
+      ? explicitPreferredStartIndex
+      : findRuntimeStartIndexByStateIndex(providers, startStateIndex)
 
   let lastError: unknown = null
   let attempt = 0

@@ -1,4 +1,9 @@
-export type ImageGenerationProvider = "aiberm" | "gemini" | "openrouter" | "fixture"
+export type ImageGenerationProvider =
+  | "pptoken"
+  | "aiberm"
+  | "crazyroute"
+  | "gemini"
+  | "fixture"
 
 type ExecuteImageProviderPlanParams<T> = {
   providerPlan: ImageGenerationProvider[]
