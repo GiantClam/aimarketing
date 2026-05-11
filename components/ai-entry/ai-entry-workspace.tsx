@@ -1362,10 +1362,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   ])
 
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (
-    <div className="flex flex-wrap items-center gap-2 px-1">
+    <div className="flex min-w-0 items-center gap-2 px-1">
       {shouldLockModel ? (
         <div
-          className={`inline-flex max-w-[260px] items-center rounded-full border border-border bg-background px-3 text-xs text-foreground ${buttonHeight}`}
+          className={`inline-flex min-w-0 max-w-[44vw] items-center rounded-full border border-border bg-background px-3 text-xs text-foreground sm:max-w-[260px] ${buttonHeight}`}
           title={selectedModel?.name || lockedConsultingModelId}
         >
           <span className="truncate">
@@ -1383,7 +1383,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           }}
           disabled={isLoading || modelsLoading || models.length === 0}
         >
-          <SelectTrigger className={`w-[220px] max-w-[220px] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary ${buttonHeight}`}>
+          <SelectTrigger className={`min-w-0 w-[140px] max-w-[44vw] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
             <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
           </SelectTrigger>
           <SelectContent>{renderModelSelectContent()}</SelectContent>
@@ -1525,10 +1525,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                 <div className="flex items-center gap-2">
                   {renderAttachmentPicker()}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-10")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="h-10 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                    <Button type="button" size="sm" className="h-10 shrink-0 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
                       {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>
@@ -1656,10 +1656,10 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                 <div className="flex items-center gap-2">
                   {renderAttachmentPicker()}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="h-9 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                    <Button type="button" size="sm" className="h-9 shrink-0 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
                       {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>

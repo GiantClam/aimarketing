@@ -12,6 +12,7 @@ let currentUserRows: Array<{ id: number; password: string | null; emailVerified:
 let loginPayload: Record<string, unknown> | null = null
 let verifyPasswordCalls = 0
 let createUserSessionCalls = 0
+let ensureDefaultFreeBillingCalls = 0
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -63,6 +64,13 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       withSessionDbRetry: async (_label: string, operation: () => Promise<unknown>) => operation(),
     }
   }
+  if (request === "@/lib/billing/default-free-plan") {
+    return {
+      ensureDefaultFreeBillingForUser: async () => {
+        ensureDefaultFreeBillingCalls += 1
+      },
+    }
+  }
   if (request === "@/lib/enterprise/server") {
     return {
       ensureEnterpriseAuthTables: async () => {},
@@ -110,6 +118,7 @@ test.beforeEach(() => {
   loginPayload = null
   verifyPasswordCalls = 0
   createUserSessionCalls = 0
+  ensureDefaultFreeBillingCalls = 0
 })
 
 test.after(() => {
@@ -165,5 +174,6 @@ test("login allows verified users to create a session", async () => {
   assert.equal(response.body?.user?.email, "cf_x@qq.com")
   assert.equal(verifyPasswordCalls, 1)
   assert.equal(createUserSessionCalls, 1)
+  assert.equal(ensureDefaultFreeBillingCalls, 1)
   assert.equal(response.sessionCookieApplied, true)
 })

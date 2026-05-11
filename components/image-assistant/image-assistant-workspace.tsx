@@ -84,6 +84,10 @@ type Availability = {
   enabled: boolean
   reason: string | null
   provider: string
+  models?: {
+    highQuality?: string | null
+    lowCost?: string | null
+  } | null
 }
 
 type CanvasTool = "select" | "brush" | "eraser" | "shape"
@@ -1557,8 +1561,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       dialogueGuidance:
         "Describe what you want in chat. The assistant will collect the remaining design requirements through follow-up questions before generating.",
       imageOnlyPromptFallback: "Use the uploaded reference images and ask the next design question.",
+      currentModelLabel: isEnglish ? "Current model" : "当前模型",
+      modelPending: isEnglish ? "Resolving model..." : "正在解析模型...",
     }),
-    [],
+    [isEnglish],
   )
   const promptPresets = useMemo(() => [...imageCopy.promptPresets] as PromptPreset[], [imageCopy.promptPresets])
   const [availability, setAvailability] = useState<Availability | null>(null)
@@ -1857,6 +1863,30 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     : isEnglish
       ? RESOLUTION_DISPLAY[resolution].en
       : RESOLUTION_DISPLAY[resolution].zh
+  const latestAssistantModelName = useMemo(() => {
+    const responsePayload =
+      latestAssistantMessage?.response_payload && typeof latestAssistantMessage.response_payload === "object"
+        ? (latestAssistantMessage.response_payload as Record<string, unknown>)
+        : null
+    const responseModel =
+      typeof responsePayload?.model === "string" && responsePayload.model.trim()
+        ? responsePayload.model.trim()
+        : null
+    if (responseModel) return responseModel
+
+    const versionModel =
+      latestAssistantMessage?.created_version_id &&
+      versionById.get(latestAssistantMessage.created_version_id)?.model
+        ? versionById.get(latestAssistantMessage.created_version_id)?.model?.trim() || null
+        : null
+    if (versionModel) return versionModel
+
+    return null
+  }, [latestAssistantMessage, versionById])
+  const configuredImageModelName =
+    availability?.models?.highQuality || availability?.models?.lowCost || null
+  const currentImageModelDisplay =
+    latestAssistantModelName || configuredImageModelName || availability?.provider || chatComposerCopy.modelPending
   const clarificationCarryoverReferenceAssetIds = useMemo(
     () => getClarificationCarryoverReferenceAssetIds(detail?.messages || []),
     [detail?.messages],
@@ -5107,6 +5137,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                             {currentUsageDisplay}
                             {" / "}
                             {currentResolutionDisplay}
+                          </p>
+                          <p className="text-[11px] leading-5 text-muted-foreground">
+                            {chatComposerCopy.currentModelLabel}
+                            {": "}
+                            <span className="font-medium text-foreground">{currentImageModelDisplay}</span>
                             {" / "}
                             {extraCopy.uploadLimit}
                           </p>

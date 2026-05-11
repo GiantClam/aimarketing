@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 
+import { provisionDefaultBillingForUserId } from "@/lib/billing/provision"
 import { db } from "@/lib/db"
 import { enterprises, enterpriseJoinRequests, userFeaturePermissions, users } from "@/lib/db/schema"
 import {
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
         userId = user.id
         await db.update(enterprises).set({ createdBy: user.id, updatedAt: new Date() }).where(eq(enterprises.id, enterprise.id))
         await ensurePermissions(user.id, true)
+        await provisionDefaultBillingForUserId(user.id)
         await resendEmailVerification({
           userId: user.id,
           email: normalizedEmail,
@@ -172,6 +174,7 @@ export async function POST(request: NextRequest) {
       })
 
       await ensurePermissions(user.id, false)
+      await provisionDefaultBillingForUserId(user.id)
       await resendEmailVerification({
         userId: user.id,
         email: normalizedEmail,

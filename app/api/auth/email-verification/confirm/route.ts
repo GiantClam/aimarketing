@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { applySessionCookie, createUserSession } from "@/lib/auth/session"
+import { ensureDefaultFreeBillingForUser } from "@/lib/billing/default-free-plan"
 import { consumeEmailVerificationToken } from "@/lib/auth/email-verification"
 import { getUserAuthPayload, ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
 
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest) {
     if (!payload) {
       return NextResponse.json({ error: "user_not_found" }, { status: 404 })
     }
+
+    await ensureDefaultFreeBillingForUser(payload)
 
     const { sessionToken, expiresAt } = await createUserSession(verification.userId, request)
     const response = NextResponse.json({ success: true, user: payload })

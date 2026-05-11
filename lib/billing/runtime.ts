@@ -2,6 +2,7 @@ import { pool } from "@/lib/db"
 import type { PermissionMap } from "@/lib/enterprise/constants"
 
 import { ensureDefaultFreeBillingForUser } from "./default-free-plan"
+import { provisionDefaultBillingForUserId } from "./provision"
 
 export type BillingReservation = {
   creditAccountId: number
@@ -72,6 +73,8 @@ export async function reserveFeatureCredits(input: {
       enterpriseStatus: null,
       permissions: input.userPermissions,
     })
+  } else {
+    await provisionDefaultBillingForUserId(input.userId)
   }
   const client = await pool.connect()
   try {

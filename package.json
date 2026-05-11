@@ -21,6 +21,7 @@
     "migrate:all": "node scripts/run-all-db-migrations.js",
     "migrate:data": "node scripts/migrate-legacy-data-to-ai-marketing.js",
     "seed:writer:history": "node scripts/seed-writer-history.js",
+    "backfill:billing:free-plan": "tsx scripts/backfill-default-free-billing.ts",
     "seed:loadtest:lead-hunter": "node scripts/provision_lead_hunter_load_test_user.js",
     "config:lead-hunter:engine-modes": "node scripts/configure-lead-hunter-engine-modes.js",
     "test:lead-hunter:skill-stream": "pnpm test:lead-hunter:skill-stream:company",
