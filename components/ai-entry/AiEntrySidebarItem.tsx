@@ -28,7 +28,6 @@ import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import {
   AI_ENTRY_CONSULTING_ENTRY_MODE,
-  AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   isConsultingAdvisorEntryMode,
 } from "@/lib/ai-entry/model-policy"
 
@@ -42,28 +41,6 @@ type AiEntryConversationSummary = {
 
 const AI_ENTRY_CONVERSATION_LIST_CACHE_KEY = "ai-entry-conversations-cache-v1"
 const AI_ENTRY_CONVERSATION_CACHE_TTL_MS = 60_000
-const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
-
-function readPersistedAiEntrySelectedModelId() {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = window.localStorage.getItem(AI_ENTRY_SELECTED_MODEL_STORAGE_KEY)
-    const normalized = typeof raw === "string" ? raw.trim() : ""
-    return normalized || null
-  } catch {
-    return null
-  }
-}
-
-function isTransientAiEntryConversationError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || "")
-  const normalized = message.toLowerCase()
-  return (
-    normalized.includes("failed query:") ||
-    normalized.includes("auth_session_temporarily_unavailable") ||
-    normalized.includes("http 503")
-  )
-}
 
 function mergeConversations(
   current: AiEntryConversationSummary[],
@@ -99,7 +76,6 @@ export function AiEntrySidebarItem({
   const [isOpen, setIsOpen] = useState(false)
   const [editingConvId, setEditingConvId] = useState<string | null>(null)
   const [editingConvName, setEditingConvName] = useState("")
-  const [isCreatingConversation, setIsCreatingConversation] = useState(false)
   const [deletingConvId, setDeletingConvId] = useState<string | null>(null)
   const [pendingDeleteConversation, setPendingDeleteConversation] =
     useState<AiEntryConversationSummary | null>(null)
@@ -185,57 +161,12 @@ export function AiEntrySidebarItem({
     fetchItems: fetchConversations,
   })
 
-  const handleCreateConversation = async (
+  const handleCreateConversation = (
     event: MouseEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault()
     event.stopPropagation()
-    if (isCreatingConversation) return
-
-    setIsCreatingConversation(true)
-    try {
-      const persistedModelId = readPersistedAiEntrySelectedModelId()
-      const response = await fetch("/api/ai/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: messages.sidebar.newChatFallback,
-          ...(isConsultingEntry
-            ? { modelId: AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT }
-            : persistedModelId
-              ? { modelId: persistedModelId }
-              : {}),
-          ...(entryMode ? { entryMode } : {}),
-          ...(effectiveAgentId ? { agentId: effectiveAgentId } : {}),
-        }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        throw new Error(
-          typeof payload?.error === "string"
-            ? payload.error
-            : `HTTP ${response.status}`,
-        )
-      }
-
-      const created = payload?.data as AiEntryConversationSummary | undefined
-      if (!created?.id) {
-        throw new Error("ai_entry_conversation_create_missing_id")
-      }
-
-      updateList((current) => mergeConversations([created], current))
-      void fetchConversations().catch(() => {})
-      router.push(`${basePath}/${created.id}${hrefSuffix}`)
-    } catch (error) {
-      if (isTransientAiEntryConversationError(error)) {
-        console.warn("AI entry conversation create skipped due to transient backend failure")
-      } else {
-        console.error("Failed to create AI entry conversation", error)
-      }
-      router.push(`${basePath}${hrefSuffix}`)
-    } finally {
-      setIsCreatingConversation(false)
-    }
+    router.push(`${basePath}${hrefSuffix}`)
   }
 
   const handleDeleteRequest = (
@@ -334,9 +265,7 @@ export function AiEntrySidebarItem({
               href={`${basePath}${hrefSuffix}`}
               label={messages.sidebar.newSession}
               testId="ai-entry-new-session-button"
-              loading={isCreatingConversation}
-              disabled={isCreatingConversation}
-              onClick={(event) => void handleCreateConversation(event)}
+              onClick={handleCreateConversation}
             />
 
             {isLoading && conversations.length === 0 ? (

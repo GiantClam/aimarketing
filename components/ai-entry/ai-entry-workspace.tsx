@@ -561,11 +561,18 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   }, [agentGroups, agents])
 
   useEffect(() => {
+    if (!initialConversationId && pathname === "/dashboard/ai" && conversationId) {
+      setConversationId(null)
+      latestConversationIdRef.current = null
+      setIsConversationLoading(false)
+      return
+    }
+
     const targetPath = conversationId ? `/dashboard/ai/${conversationId}` : "/dashboard/ai"
     if (pathname !== targetPath) {
       router.replace(search ? `${targetPath}?${search}` : targetPath)
     }
-  }, [conversationId, pathname, router, search])
+  }, [conversationId, initialConversationId, pathname, router, search])
 
   useEffect(() => {
     if (!agentQueryReady) return
