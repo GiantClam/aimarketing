@@ -33,6 +33,9 @@ import {
   getAiEntryWebSearchSystemRule,
   shouldQueryAiEntryEnterpriseKnowledge,
 } from "@/lib/ai-entry/chat-policy"
+import {
+  normalizeAiEntryIdentity,
+} from "@/lib/ai-entry/identity"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
@@ -305,9 +308,10 @@ function buildAiEntrySystemPrompt(
             `Language hint: latest user input should be treated as ${inferredLanguage}.`,
           ]
   const base = [
-    "You are a general consulting advisor assistant for enterprise users.",
+    "You are an enterprise AI chat assistant focused on practical strategy, growth, operations, and execution support.",
     "Identity rule: never claim you are Kiro or a software-development-only assistant.",
-    "Identity rule: when asked who you are, describe yourself as a general consulting advisor assistant.",
+    "Identity rule: do not proactively introduce your role or capabilities unless the user asks who you are or asks for an introduction.",
+    "Identity rule: if the user explicitly asks who you are, describe yourself as a general consulting advisor assistant for enterprise users.",
     ...languageDirectives,
     "Prioritize a fast first useful response, then add structure, evidence, and caveats only where they improve the answer.",
     "Provide practical, high-signal answers with concrete next steps; avoid generic filler.",
@@ -327,61 +331,6 @@ function buildAiEntrySystemPrompt(
     sections.push(buildEnterpriseKnowledgePromptSection(enterpriseKnowledge))
   }
   return sections.join("\n\n")
-}
-
-function isIdentityPrompt(prompt: string) {
-  const normalized = prompt.trim()
-  if (!normalized) return false
-  return (
-    /who\s+are\s+you/i.test(normalized) ||
-    /what\s+are\s+you/i.test(normalized) ||
-    /introduce\s+yourself/i.test(normalized) ||
-    /\u4f60\u662f\u8c01/.test(normalized) ||
-    /\u4ecb\u7ecd.*\u4f60/.test(normalized)
-  )
-}
-
-function normalizeAiEntryIdentity(
-  text: string,
-  prompt: string,
-  forcedReplyLanguage: "zh" | "en" | null,
-) {
-  const trimmed = text.trim()
-  if (!trimmed) return text
-  const isIdentityQuery = isIdentityPrompt(prompt)
-  const looksChinese =
-    forcedReplyLanguage === "zh"
-      ? true
-      : forcedReplyLanguage === "en"
-        ? false
-        : /[\u4e00-\u9fff]/.test(`${prompt}\n${trimmed}`)
-  const replacement = looksChinese
-    ? "\u6211\u662f\u901a\u7528\u54a8\u8be2\u987e\u95ee\u52a9\u624b\uff0c\u4e13\u6ce8\u4e8e\u7b56\u7565\u3001\u589e\u957f\u3001\u8fd0\u8425\u4e0e\u6267\u884c\u4f18\u5316\u7b49\u4e1a\u52a1\u95ee\u9898\u3002"
-    : "I am a general consulting advisor assistant focused on strategy, growth, operations, and execution optimization."
-
-  if (isIdentityQuery) return replacement
-
-  const identityConflictPatterns = [
-    /\bkiro\b/i,
-    /\bsoftware\s+development\b/i,
-    /\bcode[, ]+debugging\b/i,
-    /\u4e3b\u8981\u4e13\u6ce8\u4e8e\u8f6f\u4ef6\u5f00\u53d1\u548c\u6280\u672f\u65b9\u9762\u7684\u5e2e\u52a9/,
-    /\u6211\u662f\s*kiro/i,
-  ]
-
-  const hasConflict = identityConflictPatterns.some((pattern) =>
-    pattern.test(trimmed),
-  )
-  if (!hasConflict) return text
-
-  return trimmed
-    .replace(/\bkiro\b/gi, "general consulting advisor assistant")
-    .replace(/software\s+development/gi, "strategy, growth, and operations consulting")
-    .replace(/code,\s*debugging/gi, "strategy and execution optimization")
-    .replace(
-      /\u4e3b\u8981\u4e13\u6ce8\u4e8e\u8f6f\u4ef6\u5f00\u53d1\u548c\u6280\u672f\u65b9\u9762\u7684\u5e2e\u52a9/g,
-      "\u4e3b\u8981\u4e13\u6ce8\u4e8e\u7b56\u7565\u3001\u589e\u957f\u4e0e\u8fd0\u8425\u6267\u884c\u4f18\u5316\u65b9\u9762\u7684\u5e2e\u52a9",
-    )
 }
 
 function normalizeCoreMessageContent(content: CoreMessage["content"]) {
