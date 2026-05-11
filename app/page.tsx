@@ -20,6 +20,7 @@ import {
 
 import { useAuth } from "@/components/auth-provider"
 import { useI18n } from "@/components/locale-provider"
+import { LocaleSwitcher } from "@/components/locale-switcher"
 import { Button } from "@/components/ui/button"
 
 const capabilityIcons = [LineChart, PenTool, PanelsTopLeft]
@@ -59,6 +60,7 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <LocaleSwitcher className="bg-background" />
             <Button variant="ghost" className="rounded-full px-5" asChild>
               <Link href="/login">{messages.shared.login}</Link>
             </Button>

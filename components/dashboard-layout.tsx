@@ -33,6 +33,7 @@ import {
 } from "@/components/dashboard-availability-provider"
 import { ImageAssistantSidebarItem } from "@/components/image-assistant/ImageAssistantSidebarItem"
 import { useI18n } from "@/components/locale-provider"
+import { LocaleSwitcher } from "@/components/locale-switcher"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -139,6 +140,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 )}
               </div>
               <div className={sidebarCollapsed ? "flex w-full flex-col items-center gap-2" : "flex items-center gap-1"}>
+                <LocaleSwitcher compact={sidebarCollapsed} className={sidebarCollapsed ? "w-full justify-center" : ""} />
                 <Button
                   variant="ghost"
                   size="sm"

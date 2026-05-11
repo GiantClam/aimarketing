@@ -172,7 +172,7 @@ test("register create provisions default billing for the new enterprise admin", 
     password: "secret",
     enterpriseAction: "create",
     enterpriseName: "New Enterprise",
-  }))
+  })) as any
 
   assert.equal(response.status, 200)
   assert.equal(response.body?.requiresEmailVerification, true)
@@ -208,7 +208,7 @@ test("register join provisions default billing for the new member", async () => 
     enterpriseAction: "join",
     enterpriseCode: "VBUY",
     joinNote: "Please approve",
-  }))
+  })) as any
 
   assert.equal(response.status, 200)
   assert.equal(response.body?.requiresEmailVerification, true)

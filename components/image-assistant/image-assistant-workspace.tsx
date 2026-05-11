@@ -1863,6 +1863,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     : isEnglish
       ? RESOLUTION_DISPLAY[resolution].en
       : RESOLUTION_DISPLAY[resolution].zh
+  const versionById = useMemo(
+    () => new Map((detail?.versions || []).map((version) => [version.id, version])),
+    [detail?.versions],
+  )
   const latestAssistantModelName = useMemo(() => {
     const responsePayload =
       latestAssistantMessage?.response_payload && typeof latestAssistantMessage.response_payload === "object"
@@ -1894,10 +1898,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   const latestPromptReferenceAssetIds = useMemo(
     () => getLatestPromptReferenceAssetIds(detail?.messages || []),
     [detail?.messages],
-  )
-  const versionById = useMemo(
-    () => new Map((detail?.versions || []).map((version) => [version.id, version])),
-    [detail?.versions],
   )
 
   const currentVersion = useMemo(
