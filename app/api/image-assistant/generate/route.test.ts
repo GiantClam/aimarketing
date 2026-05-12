@@ -28,7 +28,7 @@ type ConversationTurnParams = {
 }
 
 let runTurnCalls: ConversationTurnParams[] = []
-let enqueueCalls = 0
+let enqueueCalls: Array<{ workflowName: string; payload: ConversationTurnParams & { kind: string } }> = []
 let shouldFailSessionDetail = false
 let listVersionsCalls = 0
 
@@ -56,8 +56,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         sessionId: "s-1",
         session: { current_version_id: "v-current" },
       }),
-      enqueueAssistantTask: async () => {
-        enqueueCalls += 1
+      enqueueAssistantTask: async (input: { workflowName: string; payload: ConversationTurnParams & { kind: string } }) => {
+        enqueueCalls.push(input)
         return { id: "task-1" }
       },
     }
@@ -126,7 +126,7 @@ test.before(async () => {
 
 test.beforeEach(() => {
   runTurnCalls = []
-  enqueueCalls = 0
+  enqueueCalls = []
   shouldFailSessionDetail = false
   listVersionsCalls = 0
 })
@@ -146,9 +146,27 @@ test("generate route defaults to async queue execution when preferAsync is omitt
 
   assert.equal(response.status, 200)
   assert.equal(runTurnCalls.length, 0)
-  assert.equal(enqueueCalls, 1)
+  assert.equal(enqueueCalls.length, 1)
   assert.equal(response.body?.data?.accepted, true)
   assert.equal(typeof response.body?.data?.task_id, "string")
+})
+
+test("generate route syncs explicit prompt resolution and ratio into async payload", async () => {
+  const response = await POST({
+    json: async () => ({
+      prompt: "生成一张3D植物细胞图，纯色背景，可用于tripo3d生成模型，1k，16：9",
+      sessionId: "s-1",
+      candidateCount: 1,
+      sizePreset: "4:5",
+      resolution: "2K",
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(runTurnCalls.length, 0)
+  assert.equal(enqueueCalls.length, 1)
+  assert.equal(enqueueCalls[0].payload.sizePreset, "16:9")
+  assert.equal(enqueueCalls[0].payload.resolution, "1K")
 })
 
 test("generate route promotes explicit reference upscale prompt to edit mode", async () => {
@@ -166,7 +184,7 @@ test("generate route promotes explicit reference upscale prompt to edit mode", a
   assert.equal(runTurnCalls.length, 1)
   assert.equal(runTurnCalls[0].taskType, "edit")
   assert.deepEqual(runTurnCalls[0].referenceAssetIds, ["asset-1"])
-  assert.equal(enqueueCalls, 0)
+  assert.equal(enqueueCalls.length, 0)
 })
 
 test("generate route keeps generate mode for explicit reference prompt without edit intent", async () => {
@@ -184,7 +202,7 @@ test("generate route keeps generate mode for explicit reference prompt without e
   assert.equal(runTurnCalls.length, 1)
   assert.equal(runTurnCalls[0].taskType, "generate")
   assert.deepEqual(runTurnCalls[0].referenceAssetIds, ["asset-1"])
-  assert.equal(enqueueCalls, 0)
+  assert.equal(enqueueCalls.length, 0)
 })
 
 test("generate route keeps direct success when detail read is temporarily unavailable", async () => {
@@ -205,7 +223,7 @@ test("generate route keeps direct success when detail read is temporarily unavai
   assert.equal(response.body?.data?.accepted, true)
   assert.equal(response.body?.data?.direct, true)
   assert.equal(response.body?.data?.detail_snapshot, null)
-  assert.equal(enqueueCalls, 0)
+  assert.equal(enqueueCalls.length, 0)
 })
 
 test("generate route skips implicit history references when disableReferenceCarryover is true", async () => {
@@ -223,5 +241,5 @@ test("generate route skips implicit history references when disableReferenceCarr
   assert.equal(runTurnCalls[0].taskType, "generate")
   assert.deepEqual(runTurnCalls[0].referenceAssetIds || [], [])
   assert.equal(listVersionsCalls, 0)
-  assert.equal(enqueueCalls, 0)
+  assert.equal(enqueueCalls.length, 0)
 })

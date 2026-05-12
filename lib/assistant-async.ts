@@ -30,6 +30,7 @@ import { resolveImageAssistantMemoryBridge } from "@/lib/image-assistant/memory-
 import { loadLeadHunterSkillRunner, loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 import { persistWriterImplicitMemoryFromTurn } from "@/lib/writer/memory/extractor"
+import { withTaskTimeout } from "@/lib/task-timeout"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 import type { WriterConversationStatus, WriterHistoryEntry, WriterPreloadedBrief } from "@/lib/writer/types"
 import type { WriterAgentType } from "@/lib/writer/memory/types"
@@ -142,7 +143,7 @@ function estimateTextTokens(text: string) {
 
 const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS, 180_000)
 const WRITER_MEMORY_EXTRACT_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_MEMORY_EXTRACT_TIMEOUT_MS, 2_000, 100, 10_000)
-const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 210_000)
+const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 420_000)
 const ADVISOR_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.ADVISOR_TASK_TIMEOUT_MS, 240_000, 30_000, 300_000)
 const ASSISTANT_STALE_TASK_MS = parseTimeoutMs(process.env.ASSISTANT_STALE_TASK_MS, 45_000, 10_000, 600_000)
 const ADVISOR_RECOVERY_CHECK_MS = parseTimeoutMs(
@@ -465,27 +466,6 @@ function toSafeImageAssistantTaskErrorMessage(error: unknown) {
   return message
 }
 
-async function withTaskTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string) {
-  if (timeoutMs <= 0) {
-    return promise
-  }
-
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timer) {
-      clearTimeout(timer)
-    }
-  }
-}
-
 async function tryRecoverAdvisorAnswer(params: {
   payload: AdvisorTurnTaskPayload
   config: { baseUrl: string; apiKey: string }
@@ -716,6 +696,7 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
     prompt: payload.prompt,
   }).catch(() => null)
 
+  const imageTaskAbortController = new AbortController()
   const result = await withTaskTimeout(
     runImageAssistantConversationTurn({
       userId: payload.userId,
@@ -736,9 +717,11 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
       versionMeta: payload.versionMeta,
       guidedSelection: payload.guidedSelection,
       memoryBridge,
+      signal: imageTaskAbortController.signal,
     }),
     IMAGE_ASSISTANT_TASK_TIMEOUT_MS,
     "image_assistant_task_timeout",
+    { abortController: imageTaskAbortController },
   )
 
   await updateTaskStatus(taskId, {

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { getImageAssistantSessionDetail, listImageAssistantAssets } from "@/lib/image-assistant/repository"
+import { resolveImageAssistantRequestOptions } from "@/lib/image-assistant/request-options"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
@@ -116,6 +117,11 @@ export async function POST(req: NextRequest) {
     })
     const workflowName = shouldKeepEditMode ? "image_turn_edit" : "image_turn_generate"
     const taskType = shouldKeepEditMode ? "edit" : "generate"
+    const requestOptions = resolveImageAssistantRequestOptions({
+      prompt,
+      sizePreset: body?.sizePreset,
+      resolution: body?.resolution,
+    })
 
     if (!shouldKeepEditMode) {
       console.info("image-assistant.edit.normalized_to_generate", {
@@ -137,8 +143,8 @@ export async function POST(req: NextRequest) {
         taskType,
         referenceAssetIds,
         candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
-        sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
-        resolution: typeof body?.resolution === "string" ? body.resolution : null,
+        sizePreset: requestOptions.sizePreset,
+        resolution: requestOptions.resolution,
         parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
         guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       })
@@ -190,8 +196,8 @@ export async function POST(req: NextRequest) {
         taskType,
         referenceAssetIds,
         candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
-        sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
-        resolution: typeof body?.resolution === "string" ? body.resolution : null,
+        sizePreset: requestOptions.sizePreset,
+        resolution: requestOptions.resolution,
         parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
         guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       },

@@ -5,7 +5,7 @@ import { runAssistantTaskRecoveryPass } from "@/lib/assistant-async"
 import { db } from "@/lib/db"
 
 export const runtime = "nodejs"
-export const maxDuration = 300
+export const maxDuration = 600
 
 const RUNNER_SECRET = process.env.ASSISTANT_TASK_RUNNER_SECRET || process.env.CRON_SECRET || ""
 const RUNNER_CIRCUIT_KEY = "assistant_task_runner:circuit"
@@ -28,7 +28,7 @@ const RUNNER_CIRCUIT_FALLBACK_STATE_KEY = "__assistantTaskRunnerCircuitState__"
 const RUNNER_WAIT_FOR_COMPLETION = process.env.ASSISTANT_TASK_RUNNER_WAIT_FOR_COMPLETION === "false" ? false : true
 const RUNNER_COMPLETION_TIMEOUT_MS = Math.max(
   5_000,
-  Math.min(280_000, Number.parseInt(process.env.ASSISTANT_TASK_RUNNER_COMPLETION_TIMEOUT_MS || "", 10) || 240_000),
+  Math.min(580_000, Number.parseInt(process.env.ASSISTANT_TASK_RUNNER_COMPLETION_TIMEOUT_MS || "", 10) || 480_000),
 )
 const RUNNER_INLINE_DEFAULT_LIMIT = Math.max(
   1,

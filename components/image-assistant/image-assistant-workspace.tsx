@@ -341,7 +341,7 @@ const IMAGE_ASSISTANT_CANDIDATE_PREVIEW_CACHE_LIMIT = 24
 const IMAGE_ASSISTANT_TASK_POLL_INTERVAL_MS = 450
 const IMAGE_ASSISTANT_TASK_POLL_MAX_DURATION_MS = (() => {
   const parsed = Number.parseInt(process.env.NEXT_PUBLIC_IMAGE_ASSISTANT_TASK_POLL_MAX_DURATION_MS || "", 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) return 240_000
+  if (!Number.isFinite(parsed) || parsed <= 0) return 480_000
   return Math.max(60_000, Math.min(600_000, parsed))
 })()
 const IMAGE_ASSISTANT_TASK_POLL_MAX_FAILURES = 8

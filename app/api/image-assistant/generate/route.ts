@@ -4,6 +4,7 @@ import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/
 import { requireSessionUser } from "@/lib/auth/guards"
 import { looksLikeReferenceEditIntent } from "@/lib/image-assistant/intent"
 import { getImageAssistantSessionDetail, listImageAssistantVersions } from "@/lib/image-assistant/repository"
+import { resolveImageAssistantRequestOptions } from "@/lib/image-assistant/request-options"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import { getFallbackReferenceAssetIdsFromVersions, shouldUseImplicitEditMode } from "@/lib/image-assistant/turn-routing"
 import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
@@ -136,6 +137,11 @@ export async function POST(req: NextRequest) {
       ? explicitReferenceAssetIds
       : implicitReferenceAssetIds) as string[]
     const effectiveWorkflowName = shouldPromoteToEdit ? "image_turn_edit" : "image_turn_generate"
+    const requestOptions = resolveImageAssistantRequestOptions({
+      prompt,
+      sizePreset: body?.sizePreset,
+      resolution: body?.resolution,
+    })
 
     if (shouldPromoteToEdit) {
       console.info("image-assistant.generate.promoted_to_edit", {
@@ -161,8 +167,8 @@ export async function POST(req: NextRequest) {
         taskType: effectiveTaskType,
         referenceAssetIds: effectiveReferenceAssetIds,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
-        sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
-        resolution: typeof body?.resolution === "string" ? body.resolution : null,
+        sizePreset: requestOptions.sizePreset,
+        resolution: requestOptions.resolution,
         parentVersionId,
         guidedSelection,
       })
@@ -214,8 +220,8 @@ export async function POST(req: NextRequest) {
         taskType: effectiveTaskType,
         referenceAssetIds: effectiveReferenceAssetIds,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
-        sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
-        resolution: typeof body?.resolution === "string" ? body.resolution : null,
+        sizePreset: requestOptions.sizePreset,
+        resolution: requestOptions.resolution,
         parentVersionId,
         guidedSelection,
       },
