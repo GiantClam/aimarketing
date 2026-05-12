@@ -95,3 +95,5 @@ tests/screenshots/
 artifacts/
 
 .playwright-cli/
+
+docs/

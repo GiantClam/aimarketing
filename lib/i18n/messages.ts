@@ -3,12 +3,12 @@ import type { AppLocale } from "@/lib/i18n/config"
 const en = {
     shared: {
       appName: "AI Marketing",
-      appTagline: "Enterprise AI marketing workspace",
+      appTagline: "AI marketing workspace for small teams",
       collapseSidebar: "Collapse sidebar",
       expandSidebar: "Expand sidebar",
       login: "Log in",
       logout: "Log out",
-      register: "Create company account",
+      register: "Start team workspace",
       backToHome: "Back to home",
       demoMode: "Demo mode",
       demoAccount: "Demo account",
@@ -176,9 +176,9 @@ const en = {
     },
     dashboardPage: {
       eyebrow: "AI Marketing Workspace",
-      title: "Enterprise AI marketing workspace",
+      title: "AI marketing workspace for small teams",
       description:
-        "The workspace is organized by capability. Advisors cover strategy and growth, writing handles multi-platform content production, and the image assistant handles conversational image generation and refinement.",
+        "The workspace is organized around small-team marketing execution. Advisors cover strategy and growth, writing handles multi-platform content production, and the image assistant handles conversational image generation and refinement.",
       emptyTitle: "No marketing capabilities are currently enabled",
       emptyDescription:
         "Your account can access the workspace, but your company has not enabled advisor, writing, or image-design permissions yet. Contact your company administrator.",

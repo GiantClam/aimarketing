@@ -1,39 +1,38 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { cookies, headers } from "next/headers"
-import { Fira_Code, Fira_Sans, Manrope } from "next/font/google"
+import { Analytics } from "@vercel/analytics/react"
 
 import { AuthProvider } from "@/components/auth-provider"
 import { AppToaster } from "@/components/app-toaster"
+import { GoogleAnalytics } from "@/components/google-analytics"
 import { LocaleProvider } from "@/components/locale-provider"
 import { QueryProvider } from "@/components/query-provider"
+import { getAppBaseUrl } from "@/lib/app-url"
 import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
 import "./globals.css"
 
-const firaSans = Fira_Sans({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-fira-sans",
-})
-
-const firaCode = Fira_Code({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-fira-code",
-})
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-manrope",
-})
-
 export const metadata: Metadata = {
+  metadataBase: new URL(getAppBaseUrl()),
   title: {
-    default: "AI Marketing | Enterprise AI Marketing Workspace",
+    default: "AI Marketing | AI Marketing Workspace for Small Teams",
     template: "%s | AI Marketing",
   },
   description:
-    "Enterprise AI marketing workspace for expert advisors, writing, image design, website generation, and collaborative execution.",
+    "Use multiple AI models, marketing agents, shared company context, and team permissions in one affordable AI marketing workspace for small teams.",
+  openGraph: {
+    title: "AI Marketing | AI Marketing Workspace for Small Teams",
+    description:
+      "Use multiple AI models, marketing agents, shared company context, and team permissions in one affordable AI marketing workspace for small teams.",
+    siteName: "AI Marketing",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AI Marketing | AI Marketing Workspace for Small Teams",
+    description:
+      "Use multiple AI models, marketing agents, shared company context, and team permissions in one affordable AI marketing workspace for small teams.",
+  },
 }
 
 export default async function RootLayout({
@@ -49,13 +48,15 @@ export default async function RootLayout({
   )
 
   return (
-    <html lang={locale === "zh" ? "zh-CN" : "en"} className={`${firaSans.variable} ${firaCode.variable} ${manrope.variable} antialiased`}>
+    <html lang={locale === "zh" ? "zh-CN" : "en"} className="antialiased">
       <body suppressHydrationWarning>
         <LocaleProvider initialLocale={locale}>
           <QueryProvider>
             <AuthProvider>
               {children}
               <AppToaster />
+              <Analytics />
+              <GoogleAnalytics />
             </AuthProvider>
           </QueryProvider>
         </LocaleProvider>
