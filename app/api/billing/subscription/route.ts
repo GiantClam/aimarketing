@@ -2,13 +2,202 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { ensureDefaultFreeBillingForUser } from "@/lib/billing/default-free-plan"
-import { isPayPalSubscriptionEnabledForEmail } from "@/lib/billing/paypal"
+import {
+  buildPayPalGrantIdempotencyKey,
+  getPayPalSubscriptionDetails,
+  isPayPalSubscriptionEnabledForEmail,
+} from "@/lib/billing/paypal"
 import { getBillingPlan } from "@/lib/billing/plans"
 import { getWorkspaceBillingSnapshot } from "@/lib/billing/workspace"
 import { pool } from "@/lib/db"
 import type { AuthUserPayload } from "@/lib/enterprise/server"
 
 export const runtime = "nodejs"
+
+function normalizeText(raw: unknown) {
+  return typeof raw === "string" ? raw.trim() : ""
+}
+
+function getRecord(raw: unknown) {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null
+}
+
+function inferPlanCodeFromCustomId(customId: string, fallbackPlanCode: string | null | undefined) {
+  const normalized = normalizeText(customId).toLowerCase()
+  if (normalized.includes("starter")) return "starter"
+  if (normalized.includes("creator")) return "creator"
+  if (normalized.includes("studio")) return "studio"
+  return normalizeText(fallbackPlanCode) || null
+}
+
+async function ensureCreditAccount(client: { query: typeof pool.query }, enterpriseId: number | null, ownerUserId: number | null) {
+  const existing = await client.query(
+    `
+      SELECT id FROM "AI_MARKETING_credit_accounts"
+      WHERE
+        ($1::integer IS NOT NULL AND enterprise_id = $1)
+        OR ($1::integer IS NULL AND owner_user_id = $2)
+      ORDER BY id ASC
+      LIMIT 1
+    `,
+    [enterpriseId, ownerUserId],
+  )
+  if (existing.rows[0]?.id) return Number(existing.rows[0].id)
+
+  const created = await client.query(
+    `
+      INSERT INTO "AI_MARKETING_credit_accounts" (account_type, enterprise_id, owner_user_id)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `,
+    [enterpriseId ? "enterprise" : "personal", enterpriseId, enterpriseId ? null : ownerUserId],
+  )
+  return Number(created.rows[0].id)
+}
+
+async function grantCreditsForRemoteSubscription(
+  client: { query: typeof pool.query },
+  input: {
+    enterpriseId: number | null
+    ownerUserId: number | null
+    planCode: string
+    paypalSubscriptionId: string
+    subscriptionRowId: number | null
+    remoteSubscription: Record<string, unknown>
+  },
+) {
+  const plan = getBillingPlan(input.planCode)
+  if (!plan) return
+
+  const creditAccountId = await ensureCreditAccount(client, input.enterpriseId, input.ownerUserId)
+  const account = await client.query(
+    `SELECT balance, reserved_balance FROM "AI_MARKETING_credit_accounts" WHERE id = $1 FOR UPDATE`,
+    [creditAccountId],
+  )
+  const currentBalance = Number(account.rows[0]?.balance || 0)
+  const nextBalance = currentBalance + plan.monthlyCredits
+  const idempotencyKey = buildPayPalGrantIdempotencyKey(
+    input.paypalSubscriptionId,
+    input.remoteSubscription,
+    `subscription:${input.paypalSubscriptionId}`,
+  )
+
+  const inserted = await client.query(
+    `
+      INSERT INTO "AI_MARKETING_credit_ledger" (
+        credit_account_id,
+        enterprise_id,
+        subscription_id,
+        entry_type,
+        feature_key,
+        amount,
+        balance_after,
+        reserved_balance_after,
+        idempotency_key,
+        metadata
+      ) VALUES ($1, $2, $3, 'grant', 'subscription_monthly_grant', $4, $5, $6, $7, $8::jsonb)
+      ON CONFLICT (credit_account_id, idempotency_key) DO NOTHING
+      RETURNING id
+    `,
+    [
+      creditAccountId,
+      input.enterpriseId,
+      input.subscriptionRowId,
+      plan.monthlyCredits,
+      nextBalance,
+      Number(account.rows[0]?.reserved_balance || 0),
+      idempotencyKey,
+      JSON.stringify({ paypalSubscriptionId: input.paypalSubscriptionId, planCode: input.planCode }),
+    ],
+  )
+
+  if (inserted.rows[0]?.id) {
+    await client.query(
+      `
+        UPDATE "AI_MARKETING_credit_accounts"
+        SET balance = $2,
+            monthly_grant_balance = monthly_grant_balance + $3,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `,
+      [creditAccountId, nextBalance, plan.monthlyCredits],
+    )
+  }
+}
+
+async function reconcilePayPalSubscriptionIfNeeded(localSubscription: Record<string, unknown>) {
+  const paypalSubscriptionId = normalizeText(localSubscription.paypal_subscription_id)
+  if (!paypalSubscriptionId) return localSubscription
+
+  const remoteSubscription = await getPayPalSubscriptionDetails(paypalSubscriptionId)
+  const remoteStatus = normalizeText(remoteSubscription.status).toLowerCase()
+  if (!remoteStatus) return localSubscription
+
+  const remoteBillingInfo = getRecord(remoteSubscription.billing_info)
+  const remotePlanCode = inferPlanCodeFromCustomId(
+    normalizeText(remoteSubscription.custom_id),
+    normalizeText(localSubscription.plan_code),
+  )
+
+  if (!["active", "suspended", "cancelled", "expired"].includes(remoteStatus)) {
+    return localSubscription
+  }
+
+  const nextStatus =
+    remoteStatus === "active"
+      ? "active"
+      : remoteStatus === "suspended"
+        ? "suspended"
+        : remoteStatus === "cancelled"
+          ? "cancelled"
+          : "expired"
+
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+    const updated = await client.query(
+      `
+        UPDATE "AI_MARKETING_user_subscriptions"
+        SET plan_code = COALESCE($2, plan_code),
+            status = $3,
+            current_period_start = COALESCE(NULLIF($4, '')::timestamp, current_period_start),
+            current_period_end = COALESCE(NULLIF($5, '')::timestamp, current_period_end),
+            cancel_at_period_end = CASE WHEN $3 = 'cancelled' THEN TRUE ELSE cancel_at_period_end END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE paypal_subscription_id = $1
+        RETURNING id, enterprise_id, subscribed_by_user_id, plan_code, status, paypal_subscription_id,
+                  current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
+      `,
+      [
+        paypalSubscriptionId,
+        remotePlanCode,
+        nextStatus,
+        normalizeText(remoteSubscription.start_time),
+        normalizeText(remoteBillingInfo?.next_billing_time),
+      ],
+    )
+
+    const row = updated.rows[0] || localSubscription
+    if (nextStatus === "active" && remotePlanCode) {
+      await grantCreditsForRemoteSubscription(client, {
+        enterpriseId: Number(row.enterprise_id || 0) || null,
+        ownerUserId: Number(row.subscribed_by_user_id || 0) || null,
+        planCode: remotePlanCode,
+        paypalSubscriptionId,
+        subscriptionRowId: Number(row.id || 0) || null,
+        remoteSubscription,
+      })
+    }
+
+    await client.query("COMMIT")
+    return row
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireSessionUser(request)
@@ -30,7 +219,17 @@ export async function GET(request: NextRequest) {
       [user.enterpriseId, user.id],
     )
 
-    const subscription = result.rows[0] || null
+    let subscription = result.rows[0] || null
+    if (subscription?.paypal_subscription_id && subscription.status === "pending") {
+      try {
+        subscription = await reconcilePayPalSubscriptionIfNeeded(subscription)
+      } catch (error) {
+        console.warn("billing.subscription.paypal_reconcile_failed", {
+          message: error instanceof Error ? error.message : String(error),
+          paypalSubscriptionId: subscription.paypal_subscription_id,
+        })
+      }
+    }
     const workspaceSnapshot = user.enterpriseId
       ? await getWorkspaceBillingSnapshot(user.enterpriseId)
       : null

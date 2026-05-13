@@ -33,6 +33,10 @@ function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
 }
 
+function getRecord(raw: unknown) {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null
+}
+
 function normalizeEmail(raw: unknown) {
   return normalizeText(raw).toLowerCase()
 }
@@ -144,11 +148,54 @@ export async function createPayPalBrowserSafeClientToken() {
   if (!response.ok) {
     throw new Error(`paypal_client_token_http_${response.status}`)
   }
-  const clientToken = normalizeText(payload?.client_token)
+  const clientTokenFromAccessToken = normalizeText(payload?.access_token)
+  const clientToken =
+    (clientTokenFromAccessToken.startsWith("eyJ") ? clientTokenFromAccessToken : "") ||
+    normalizeText(payload?.client_token)
   if (!clientToken) {
     throw new Error("paypal_client_token_missing")
   }
   return clientToken
+}
+
+export async function getPayPalSubscriptionDetails(paypalSubscriptionId: string) {
+  const normalizedSubscriptionId = normalizeText(paypalSubscriptionId)
+  if (!normalizedSubscriptionId) {
+    throw new Error("paypal_subscription_id_missing")
+  }
+
+  const accessToken = await getPayPalAccessToken()
+  const response = await fetch(`${getPayPalApiBase()}/v1/billing/subscriptions/${normalizedSubscriptionId}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  })
+  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+  if (!response.ok) {
+    throw new Error(`paypal_get_subscription_http_${response.status}`)
+  }
+  return payload || {}
+}
+
+export function buildPayPalGrantIdempotencyKey(
+  paypalSubscriptionId: string,
+  resource: Record<string, unknown> | null | undefined,
+  fallbackRef: string,
+) {
+  const billingInfo = getRecord(resource?.billing_info)
+  const lastPayment = getRecord(billingInfo?.last_payment)
+  const cycleRef =
+    normalizeText(lastPayment?.time) ||
+    normalizeText(billingInfo?.next_billing_time) ||
+    normalizeText(resource?.create_time) ||
+    normalizeText(resource?.update_time) ||
+    normalizeText(resource?.start_time) ||
+    normalizeText(resource?.id) ||
+    normalizeText(fallbackRef)
+
+  return `paypal-grant:${normalizeText(paypalSubscriptionId)}:${cycleRef || "fallback"}`
 }
 
 export async function createPayPalSubscription(input: {

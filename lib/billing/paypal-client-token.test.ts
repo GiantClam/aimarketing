@@ -29,7 +29,7 @@ test("paypal browser-safe client token helper requests sdk_init token for app do
     return {
       ok: true,
       status: 200,
-      json: async () => ({ client_token: "client-token-456" }),
+      json: async () => ({ access_token: "eyJ.client-token-456.signature" }),
     } as Response
   }) as typeof global.fetch
 
@@ -42,7 +42,7 @@ test("paypal browser-safe client token helper requests sdk_init token for app do
   try {
     const token = await createPayPalBrowserSafeClientToken()
 
-    assert.equal(token, "client-token-456")
+    assert.equal(token, "eyJ.client-token-456.signature")
     assert.equal(calls.length, 2)
     assert.match(calls[0]?.url || "", /api-m\.sandbox\.paypal\.com\/v1\/oauth2\/token$/)
     assert.match(calls[1]?.url || "", /api-m\.sandbox\.paypal\.com\/v1\/oauth2\/token$/)
@@ -59,5 +59,46 @@ test("paypal browser-safe client token helper requests sdk_init token for app do
     process.env.PAYPAL_ENV = originalEnv.PAYPAL_ENV
     process.env.NEXT_PUBLIC_APP_URL = originalEnv.NEXT_PUBLIC_APP_URL
     process.env.APP_URL = originalEnv.APP_URL
+  }
+})
+
+test("paypal browser-safe client token helper falls back to legacy client_token field", async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID,
+    PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET,
+    PAYPAL_ENV: process.env.PAYPAL_ENV,
+  }
+
+  let callCount = 0
+  global.fetch = (async () => {
+    callCount += 1
+    if (callCount === 1) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: "access-token-123" }),
+      } as Response
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ client_token: "legacy-client-token-789" }),
+    } as Response
+  }) as typeof global.fetch
+
+  process.env.PAYPAL_CLIENT_ID = "client-id"
+  process.env.PAYPAL_CLIENT_SECRET = "client-secret"
+  process.env.PAYPAL_ENV = "sandbox"
+
+  try {
+    const token = await createPayPalBrowserSafeClientToken()
+    assert.equal(token, "legacy-client-token-789")
+  } finally {
+    global.fetch = originalFetch
+    process.env.PAYPAL_CLIENT_ID = originalEnv.PAYPAL_CLIENT_ID
+    process.env.PAYPAL_CLIENT_SECRET = originalEnv.PAYPAL_CLIENT_SECRET
+    process.env.PAYPAL_ENV = originalEnv.PAYPAL_ENV
   }
 })

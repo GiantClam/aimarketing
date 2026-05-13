@@ -50,6 +50,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/billing/paypal") {
     return {
       verifyPayPalWebhookSignature: async () => verifyResult,
+      buildPayPalGrantIdempotencyKey: () => "paypal-grant:I-SUB-3:2026-05-07T00:00:00Z",
     }
   }
   if (request === "@/lib/billing/plans") {

@@ -130,7 +130,11 @@ export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: Pay
           })
         }
       } catch (sdkError) {
-        if (!cancelled) setError(sdkError instanceof Error ? sdkError.message : "paypal_sdk_load_failed")
+        // The current checkout path can continue through the server-side approval URL
+        // even if the optional v6 SDK bootstrap fails in the browser.
+        if (!cancelled) {
+          console.warn("billing.paypal.sdk_init_failed", sdkError)
+        }
       }
     }
 

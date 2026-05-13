@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { verifyPayPalWebhookSignature, type PayPalWebhookEvent } from "@/lib/billing/paypal"
+import {
+  buildPayPalGrantIdempotencyKey,
+  verifyPayPalWebhookSignature,
+  type PayPalWebhookEvent,
+} from "@/lib/billing/paypal"
 import { getBillingPlan, type BillingPlanCode } from "@/lib/billing/plans"
 import { pool } from "@/lib/db"
 
@@ -67,7 +71,8 @@ async function grantCreditsForSubscription(client: { query: typeof pool.query },
   enterpriseId: number | null
   ownerUserId: number | null
   paypalSubscriptionId: string
-  eventId: string
+  grantResource: Record<string, unknown>
+  fallbackGrantRef: string
   planCode: BillingPlanCode
   subscriptionRowId?: number | null
 }) {
@@ -80,7 +85,11 @@ async function grantCreditsForSubscription(client: { query: typeof pool.query },
   )
   const currentBalance = Number(account.rows[0]?.balance || 0)
   const nextBalance = currentBalance + plan.monthlyCredits
-  const idempotencyKey = `paypal-grant:${input.paypalSubscriptionId}:${input.eventId}`
+  const idempotencyKey = buildPayPalGrantIdempotencyKey(
+    input.paypalSubscriptionId,
+    input.grantResource,
+    input.fallbackGrantRef,
+  )
 
   const inserted = await client.query(
     `
@@ -186,7 +195,8 @@ async function applyPayPalEvent(event: PayPalWebhookEvent) {
         enterpriseId,
         ownerUserId: subscribedByUserId,
         paypalSubscriptionId,
-        eventId: event.id,
+        grantResource: resource,
+        fallbackGrantRef: event.id,
         planCode,
         subscriptionRowId: upserted.rows[0]?.id || null,
       })
@@ -195,7 +205,8 @@ async function applyPayPalEvent(event: PayPalWebhookEvent) {
         enterpriseId,
         ownerUserId: subscribedByUserId,
         paypalSubscriptionId,
-        eventId: event.id,
+        grantResource: resource,
+        fallbackGrantRef: event.id,
         planCode,
         subscriptionRowId: existing.rows[0]?.id || null,
       })

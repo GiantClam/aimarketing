@@ -14,10 +14,48 @@ let requireSessionUserResult: { user?: { id: number; email: string; enterpriseId
 let subscriptionRows: any[] = []
 let lastInsertParams: any[] | null = null
 let ensureDefaultFreeBillingCalls = 0
+let clientQueryCalls: Array<{ sql: string; params: any[] }> = []
+let paypalRemoteSubscription: Record<string, unknown> | null = null
 let workspaceSnapshot = {
   activeMemberCount: 3,
   seatLimit: 5,
   seatsRemaining: 2,
+}
+
+const mockClient = {
+  query: async (sql: string, params: any[] = []) => {
+    clientQueryCalls.push({ sql, params })
+    if (sql.includes('UPDATE "AI_MARKETING_user_subscriptions"')) {
+      return {
+        rows: [
+          {
+            id: subscriptionRows[0]?.id || 10,
+            enterprise_id: 11,
+            subscribed_by_user_id: 7,
+            plan_code: "creator",
+            status: "active",
+            paypal_subscription_id: "I-SUB-123",
+            current_period_start: "2026-05-07T00:00:00Z",
+            current_period_end: "2026-06-07T00:00:00Z",
+            cancel_at_period_end: false,
+            created_at: "2026-05-07T00:00:00Z",
+            updated_at: "2026-05-07T00:00:00Z",
+          },
+        ],
+      }
+    }
+    if (sql.includes('SELECT id FROM "AI_MARKETING_credit_accounts"')) {
+      return { rows: [{ id: 5 }] }
+    }
+    if (sql.includes('SELECT balance, reserved_balance FROM "AI_MARKETING_credit_accounts"')) {
+      return { rows: [{ balance: 0, reserved_balance: 0 }] }
+    }
+    if (sql.includes('INSERT INTO "AI_MARKETING_credit_ledger"')) {
+      return { rows: [{ id: 22 }] }
+    }
+    return { rows: [] }
+  },
+  release: () => {},
 }
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
@@ -45,6 +83,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/billing/paypal") {
     return {
       isPayPalSubscriptionEnabledForEmail: (email: string) => email === "liulanggoukk@gmail.com",
+      getPayPalSubscriptionDetails: async () => paypalRemoteSubscription || {},
+      buildPayPalGrantIdempotencyKey: () => "paypal-grant:I-SUB-123:2026-05-07T00:00:00Z",
     }
   }
   if (request === "@/lib/billing/default-free-plan") {
@@ -76,6 +116,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           lastInsertParams = params
           return { rows: subscriptionRows }
         },
+        connect: async () => mockClient,
       },
     }
   }
@@ -97,6 +138,8 @@ test.beforeEach(() => {
   subscriptionRows = []
   lastInsertParams = null
   ensureDefaultFreeBillingCalls = 0
+  clientQueryCalls = []
+  paypalRemoteSubscription = null
   workspaceSnapshot = {
     activeMemberCount: 3,
     seatLimit: 5,
@@ -119,6 +162,43 @@ test("billing subscription route returns latest subscription", async () => {
   assert.equal(response.body?.subscription?.seat_limit, 5)
   assert.equal(response.body?.subscription?.active_member_count, 3)
   assert.equal(response.body?.subscription?.seats_remaining, 2)
+})
+
+test("billing subscription route reconciles pending PayPal subscriptions that are already active remotely", async () => {
+  subscriptionRows = [
+    {
+      id: 10,
+      enterprise_id: 11,
+      subscribed_by_user_id: 7,
+      plan_code: "creator",
+      status: "pending",
+      paypal_subscription_id: "I-SUB-123",
+    },
+  ]
+  paypalRemoteSubscription = {
+    id: "I-SUB-123",
+    status: "ACTIVE",
+    custom_id: "enterprise:11:user:7:plan:creator",
+    start_time: "2026-05-07T00:00:00Z",
+    billing_info: {
+      next_billing_time: "2026-06-07T00:00:00Z",
+      last_payment: { time: "2026-05-07T00:00:00Z" },
+    },
+  }
+
+  const response = (await GET({} as any)) as any
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.subscription?.status, "active")
+  assert.equal(response.body?.subscription?.plan_code, "creator")
+  assert.equal(
+    clientQueryCalls.some((entry) => entry.sql.includes('UPDATE "AI_MARKETING_user_subscriptions"')),
+    true,
+  )
+  assert.equal(
+    clientQueryCalls.some((entry) => entry.sql.includes('INSERT INTO "AI_MARKETING_credit_ledger"')),
+    true,
+  )
 })
 
 test("billing subscription route initializes default free subscription when none exists", async () => {
