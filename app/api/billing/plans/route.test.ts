@@ -9,8 +9,9 @@ const nodeModule = require("node:module") as {
 const originalLoad = nodeModule._load
 
 let requireSessionUserResult: { user?: Record<string, unknown>; response?: { status: number; body: any } } = {
-  user: { id: 7, enterpriseId: 1 },
+  user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 1 },
 }
+let paypalEnabled = false
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -33,13 +34,13 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       listBillingPlans: () => [
         { code: "free", name: "Free", priceUsdCents: 0, monthlyCredits: 0, sharedMemberLimit: 1, trialDays: 30, trialCredits: 300, checkoutEnabled: false, features: {} },
         { code: "starter", name: "Starter", priceUsdCents: 990, monthlyCredits: 3000, sharedMemberLimit: 2, trialDays: null, trialCredits: 0, checkoutEnabled: false, features: {} },
-        { code: "creator", name: "Creator", priceUsdCents: 1990, monthlyCredits: 10000, sharedMemberLimit: 5, trialDays: null, trialCredits: 0, checkoutEnabled: false, features: {} },
+        { code: "creator", name: "Creator", priceUsdCents: 1990, monthlyCredits: 10000, sharedMemberLimit: 5, trialDays: null, trialCredits: 0, checkoutEnabled: true, features: {} },
       ],
     }
   }
   if (request === "@/lib/billing/paypal") {
     return {
-      isPayPalSubscriptionEnabled: () => false,
+      isPayPalSubscriptionEnabledForEmail: (email: string) => paypalEnabled && email === "liulanggoukk@gmail.com",
       getPayPalPlanId: (code: string) => (code === "creator" ? "P-CREATOR" : null),
     }
   }
@@ -55,7 +56,8 @@ test.before(async () => {
 })
 
 test.beforeEach(() => {
-  requireSessionUserResult = { user: { id: 7, enterpriseId: 1 } }
+  requireSessionUserResult = { user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 1 } }
+  paypalEnabled = false
 })
 
 test.after(() => {
@@ -80,4 +82,24 @@ test("billing plans route returns auth response when unauthenticated", async () 
 
   assert.equal(response.status, 401)
   assert.equal(response.body?.error, "Authentication required")
+})
+
+test("billing plans route exposes paypal ids for enabled paid plans", async () => {
+  paypalEnabled = true
+
+  const response = await GET({})
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.plans?.[1]?.paypalPlanId, null)
+  assert.equal(response.body?.plans?.[2]?.paypalPlanId, "P-CREATOR")
+})
+
+test("billing plans route hides paypal ids for non-allowlisted users", async () => {
+  paypalEnabled = true
+  requireSessionUserResult = { user: { id: 8, email: "other@example.com", enterpriseId: 1 } }
+
+  const response = await GET({})
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.plans?.[2]?.paypalPlanId, null)
 })

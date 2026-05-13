@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { cookies, headers } from "next/headers"
+import { cookies } from "next/headers"
 import { Analytics } from "@vercel/analytics/react"
 
 import { AuthProvider } from "@/components/auth-provider"
@@ -9,7 +9,7 @@ import { GoogleAnalytics } from "@/components/google-analytics"
 import { LocaleProvider } from "@/components/locale-provider"
 import { QueryProvider } from "@/components/query-provider"
 import { getAppBaseUrl } from "@/lib/app-url"
-import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
+import { LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -41,11 +41,7 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   const cookieStore = await cookies()
-  const headerStore = await headers()
-  const locale = resolveRequestLocale(
-    cookieStore.get(LOCALE_COOKIE_NAME)?.value,
-    headerStore.get("accept-language"),
-  )
+  const locale = normalizeLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value) || "en"
 
   return (
     <html lang={locale === "zh" ? "zh-CN" : "en"} className="antialiased">

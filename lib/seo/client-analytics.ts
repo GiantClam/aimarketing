@@ -10,17 +10,22 @@ declare global {
 }
 
 type AnalyticsPayload = Record<string, string | number | boolean | null | undefined>
+type AnalyticsValue = string | number | boolean | null
 
 function hasGoogleAnalytics() {
   return typeof window !== "undefined" && typeof window.gtag === "function"
 }
 
 export function trackAnalyticsEvent(eventName: string, eventData?: AnalyticsPayload) {
-  trackVercelEvent(eventName, eventData)
+  const sanitizedEventData = eventData
+    ? Object.fromEntries(Object.entries(eventData).filter(([, value]) => value !== undefined)) as Record<string, AnalyticsValue>
+    : undefined
+
+  trackVercelEvent(eventName, sanitizedEventData)
 
   if (!hasGoogleAnalytics()) return
 
-  window.gtag!("event", eventName, eventData || {})
+  window.gtag!("event", eventName, sanitizedEventData || {})
 }
 
 export function trackGooglePageView(url: string, title?: string) {

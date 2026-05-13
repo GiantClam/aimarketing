@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { createPayPalSubscription, isPayPalSubscriptionEnabled } from "@/lib/billing/paypal"
+import { createPayPalSubscription, isPayPalSubscriptionEnabledForEmail } from "@/lib/billing/paypal"
 import { getBillingPlan } from "@/lib/billing/plans"
 
 export const runtime = "nodejs"
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireSessionUser(request)
   if ("response" in auth) return auth.response
 
-  if (!isPayPalSubscriptionEnabled()) {
+  if (!isPayPalSubscriptionEnabledForEmail(auth.user.email)) {
     return NextResponse.json({ error: "paypal_subscriptions_disabled" }, { status: 503 })
   }
 

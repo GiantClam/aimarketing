@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { getPayPalPlanId, isPayPalSubscriptionEnabled } from "@/lib/billing/paypal"
+import { getPayPalPlanId, isPayPalSubscriptionEnabledForEmail } from "@/lib/billing/paypal"
 import { listBillingPlans } from "@/lib/billing/plans"
 
 export async function GET(request: NextRequest) {
   const auth = await requireSessionUser(request)
   if ("response" in auth) return auth.response
 
-  const paypalEnabled = isPayPalSubscriptionEnabled()
+  const paypalEnabled = isPayPalSubscriptionEnabledForEmail(auth.user.email)
 
   return NextResponse.json({
     plans: listBillingPlans().map((plan) => ({

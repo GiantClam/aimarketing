@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq } from "drizzle-orm"
 
 import { getSessionUser } from "@/lib/auth/session"
+import { getWorkspaceBillingSnapshot, hasAvailableWorkspaceSeat } from "@/lib/billing/workspace"
 import { db } from "@/lib/db"
 import { enterpriseJoinRequests, users } from "@/lib/db/schema"
 import { buildPermissionMap, type PermissionMap } from "@/lib/enterprise/constants"
@@ -73,6 +74,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         userId: currentUser.id,
       })
       return NextResponse.json({ error: "admin cannot review request from other enterprise" }, { status: 403 })
+    }
+
+    if (action === "approve") {
+      const workspaceBilling = await getWorkspaceBillingSnapshot(joinRequest.enterpriseId)
+      if (!hasAvailableWorkspaceSeat(workspaceBilling)) {
+        return NextResponse.json(
+          {
+            error: "billing_member_limit_reached",
+            activeMemberCount: workspaceBilling.activeMemberCount,
+            seatLimit: workspaceBilling.seatLimit,
+            planCode: workspaceBilling.effectivePlan.code,
+          },
+          { status: 409 },
+        )
+      }
     }
 
     await db

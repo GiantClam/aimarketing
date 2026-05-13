@@ -8,12 +8,17 @@ const nodeModule = require("node:module") as {
 }
 const originalLoad = nodeModule._load
 
-let requireSessionUserResult: { user?: { id: number; enterpriseId: number | null }; response?: { status: number; body: any } } = {
-  user: { id: 7, enterpriseId: 11 },
+let requireSessionUserResult: { user?: { id: number; email: string; enterpriseId: number | null }; response?: { status: number; body: any } } = {
+  user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 11 },
 }
 let subscriptionRows: any[] = []
 let lastInsertParams: any[] | null = null
 let ensureDefaultFreeBillingCalls = 0
+let workspaceSnapshot = {
+  activeMemberCount: 3,
+  seatLimit: 5,
+  seatsRemaining: 2,
+}
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -37,6 +42,11 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         code === "creator" ? { code: "creator", name: "Creator", monthlyCredits: 10000 } : null,
     }
   }
+  if (request === "@/lib/billing/paypal") {
+    return {
+      isPayPalSubscriptionEnabledForEmail: (email: string) => email === "liulanggoukk@gmail.com",
+    }
+  }
   if (request === "@/lib/billing/default-free-plan") {
     return {
       ensureDefaultFreeBillingForUser: async () => {
@@ -52,6 +62,11 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           },
         }
       },
+    }
+  }
+  if (request === "@/lib/billing/workspace") {
+    return {
+      getWorkspaceBillingSnapshot: async () => workspaceSnapshot,
     }
   }
   if (request === "@/lib/db") {
@@ -78,10 +93,15 @@ test.before(async () => {
 })
 
 test.beforeEach(() => {
-  requireSessionUserResult = { user: { id: 7, enterpriseId: 11 } }
+  requireSessionUserResult = { user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 11 } }
   subscriptionRows = []
   lastInsertParams = null
   ensureDefaultFreeBillingCalls = 0
+  workspaceSnapshot = {
+    activeMemberCount: 3,
+    seatLimit: 5,
+    seatsRemaining: 2,
+  }
 })
 
 test.after(() => {
@@ -96,6 +116,9 @@ test("billing subscription route returns latest subscription", async () => {
   assert.equal(response.status, 200)
   assert.equal(response.body?.subscription?.id, 8)
   assert.equal(response.body?.subscription?.plan_code, "creator")
+  assert.equal(response.body?.subscription?.seat_limit, 5)
+  assert.equal(response.body?.subscription?.active_member_count, 3)
+  assert.equal(response.body?.subscription?.seats_remaining, 2)
 })
 
 test("billing subscription route initializes default free subscription when none exists", async () => {
@@ -105,6 +128,9 @@ test("billing subscription route initializes default free subscription when none
   assert.equal(response.body?.subscription?.plan_code, "free")
   assert.equal(response.body?.subscription?.status, "active")
   assert.equal(ensureDefaultFreeBillingCalls, 1)
+  assert.equal(response.body?.subscription?.seat_limit, 5)
+  assert.equal(response.body?.subscription?.active_member_count, 3)
+  assert.equal(response.body?.subscription?.seats_remaining, 2)
 })
 
 test("billing subscription route validates required fields", async () => {
@@ -140,4 +166,19 @@ test("billing subscription route stores a pending subscription", async () => {
   assert.equal(response.status, 200)
   assert.equal(response.body?.subscription?.paypal_subscription_id, "I-SUB-123")
   assert.deepEqual(lastInsertParams, [11, 7, "creator", "I-SUB-123"])
+})
+
+test("billing subscription route blocks pending sandbox records for non-allowlisted users", async () => {
+  requireSessionUserResult = { user: { id: 8, email: "other@example.com", enterpriseId: 11 } }
+
+  const response = (await POST({
+    json: async () => ({
+      planCode: "creator",
+      paypalSubscriptionId: "I-SUB-999",
+    }),
+  } as any)) as any
+
+  assert.equal(response.status, 403)
+  assert.equal(response.body?.error, "paypal_subscriptions_disabled")
+  assert.equal(lastInsertParams, null)
 })

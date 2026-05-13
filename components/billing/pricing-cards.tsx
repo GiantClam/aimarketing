@@ -68,6 +68,7 @@ function planAvailabilityMessage(
   billing: {
     freePlanMessage: string
     paidPlanMessage: string
+    paidPlanUnavailableMessage: string
   },
   locale: string,
 ) {
@@ -76,6 +77,9 @@ function planAvailabilityMessage(
       credits: formatCredits(plan.trialCredits, locale),
       days: plan.trialDays || 0,
     })
+  }
+  if (!plan.checkoutEnabled || !plan.paypalPlanId) {
+    return billing.paidPlanUnavailableMessage
   }
   return billing.paidPlanMessage
 }

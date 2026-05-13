@@ -33,8 +33,49 @@ function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
 }
 
+function normalizeEmail(raw: unknown) {
+  return normalizeText(raw).toLowerCase()
+}
+
+function getConfiguredAppUrl() {
+  return normalizeText(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL)
+}
+
+function getHostname(urlOrHost: string) {
+  if (!urlOrHost) return ""
+  try {
+    return new URL(urlOrHost).hostname.toLowerCase()
+  } catch {
+    return urlOrHost.toLowerCase().split(":")[0] || ""
+  }
+}
+
+function getBrowserSafeClientTokenDomains() {
+  const hostname = getHostname(getConfiguredAppUrl())
+  if (!hostname || hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+    return hostname ? [hostname] : []
+  }
+  const parts = hostname.split(".")
+  if (parts.length <= 2) return [hostname]
+  return [parts.slice(-2).join(".")]
+}
+
 export function isPayPalSubscriptionEnabled() {
   return process.env.BILLING_PAYPAL_SUBSCRIPTIONS_ENABLED === "true"
+}
+
+export function getPayPalAllowedEmails() {
+  return String(process.env.BILLING_PAYPAL_ALLOWED_EMAILS || "")
+    .split(",")
+    .map((email) => normalizeEmail(email))
+    .filter(Boolean)
+}
+
+export function isPayPalSubscriptionEnabledForEmail(email: string | null | undefined) {
+  if (!isPayPalSubscriptionEnabled()) return false
+  const allowedEmails = getPayPalAllowedEmails()
+  if (allowedEmails.length === 0) return true
+  return allowedEmails.includes(normalizeEmail(email))
 }
 
 export function getPayPalEnv(): PayPalEnv {
@@ -43,6 +84,10 @@ export function getPayPalEnv(): PayPalEnv {
 
 export function getPayPalApiBase(env: PayPalEnv = getPayPalEnv()) {
   return env === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com"
+}
+
+export function getPayPalWebSdkBase(env: PayPalEnv = getPayPalEnv()) {
+  return env === "live" ? "https://www.paypal.com" : "https://sandbox.paypal.com"
 }
 
 export function getPayPalPlanId(planCode: BillingPlanCode) {
@@ -74,6 +119,36 @@ async function getPayPalAccessToken() {
     throw new Error("paypal_access_token_missing")
   }
   return accessToken
+}
+
+export async function createPayPalBrowserSafeClientToken() {
+  const accessToken = await getPayPalAccessToken()
+  const params = new URLSearchParams()
+  params.set("grant_type", "client_credentials")
+  params.set("response_type", "client_token")
+  params.set("intent", "sdk_init")
+
+  for (const domain of getBrowserSafeClientTokenDomains()) {
+    params.append("domains[]", domain)
+  }
+
+  const response = await fetch(`${getPayPalApiBase()}/v1/oauth2/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  })
+  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+  if (!response.ok) {
+    throw new Error(`paypal_client_token_http_${response.status}`)
+  }
+  const clientToken = normalizeText(payload?.client_token)
+  if (!clientToken) {
+    throw new Error("paypal_client_token_missing")
+  }
+  return clientToken
 }
 
 export async function createPayPalSubscription(input: {

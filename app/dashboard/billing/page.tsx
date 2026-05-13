@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { ReceiptText } from "lucide-react"
 
 import { CreditBalance } from "@/components/billing/credit-balance"
@@ -11,6 +12,15 @@ export default function BillingPage() {
   const [balanceKey, setBalanceKey] = useState(0)
   const { messages } = useI18n()
   const billing = messages.billing
+  const searchParams = useSearchParams()
+  const paypalState = searchParams.get("paypal")
+
+  const paypalNotice =
+    paypalState === "approved"
+      ? billing.paypalApprovedNotice
+      : paypalState === "cancelled"
+        ? billing.paypalCancelledNotice
+        : ""
 
   return (
     <div className="h-full overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.18),transparent_32%),linear-gradient(135deg,#fff7ed_0%,#f8fafc_45%,#ecfeff_100%)]">
@@ -36,6 +46,12 @@ export default function BillingPage() {
             </div>
           </div>
         </section>
+
+        {paypalNotice ? (
+          <section className="rounded-[1.8rem] border border-teal-200 bg-teal-50/80 px-5 py-4 text-sm text-teal-950 shadow-sm">
+            {paypalNotice}
+          </section>
+        ) : null}
 
         <CreditBalance key={balanceKey} />
         <PricingCards onSubscribed={() => setBalanceKey((current) => current + 1)} />

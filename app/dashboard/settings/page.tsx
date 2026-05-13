@@ -93,6 +93,20 @@ function formatEnterpriseSwitchMessage(error: unknown, fallback: string, locale:
   return message || fallback
 }
 
+function formatEnterpriseReviewMessage(payload: { error?: string; activeMemberCount?: number; seatLimit?: number; planCode?: string } | null | undefined, fallback: string, locale: AppLocale) {
+  const isZh = locale === "zh"
+  const message = typeof payload?.error === "string" ? payload.error : ""
+  if (message === "billing_member_limit_reached") {
+    const activeMemberCount = Number(payload?.activeMemberCount || 0)
+    const seatLimit = Number(payload?.seatLimit || 0)
+    const planCode = String(payload?.planCode || "").toLowerCase()
+    return isZh
+      ? `当前 ${planCode || "workspace"} 套餐最多支持 ${seatLimit} 位活跃成员，现有 ${activeMemberCount} 位。请先升级套餐后再通过申请。`
+      : `The current ${planCode || "workspace"} plan supports up to ${seatLimit} active members and already has ${activeMemberCount}. Upgrade the plan before approving this request.`
+  }
+  return message || fallback
+}
+
 function formatPasswordChangeMessage(error: unknown, fallback: string, locale: AppLocale) {
   const isZh = locale === "zh"
   const message = error instanceof Error ? error.message : ""
@@ -454,7 +468,7 @@ export default function SettingsPage() {
 
     const json = await res.json()
     if (!res.ok) {
-      window.alert(json.error || t("审核失败", "Review failed."))
+      window.alert(formatEnterpriseReviewMessage(json, t("审核失败", "Review failed."), locale))
       return
     }
 

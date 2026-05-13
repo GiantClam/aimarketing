@@ -29,11 +29,18 @@ type SubscriptionState = {
     paypal_subscription_id: string | null
     current_period_start: string | null
     current_period_end: string | null
+    seat_limit?: number | null
+    active_member_count?: number | null
+    seats_remaining?: number | null
   } | null
 }
 
 function formatNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale).format(Math.max(0, Math.floor(value || 0)))
+}
+
+function formatTemplate(template: string, values: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ""))
 }
 
 function translateBillingError(code: string, billing: {
@@ -124,6 +131,8 @@ export function CreditBalance() {
 
   const planCode = subscription?.subscription?.plan_code || "free"
   const status = subscription?.subscription?.status || "active"
+  const seatLimit = subscription?.subscription?.seat_limit
+  const activeMemberCount = subscription?.subscription?.active_member_count
 
   return (
     <Card className="overflow-hidden rounded-[2rem] border-2 border-slate-200 bg-white/85 shadow-sm">
@@ -165,6 +174,14 @@ export function CreditBalance() {
                 {translateStatus(status, billing)}
               </Badge>
             </div>
+            {typeof seatLimit === "number" && typeof activeMemberCount === "number" ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                {formatTemplate(billing.membersUsage, {
+                  used: formatNumber(activeMemberCount, locale),
+                  limit: formatNumber(seatLimit, locale),
+                })}
+              </p>
+            ) : null}
           </div>
         </div>
       </CardContent>

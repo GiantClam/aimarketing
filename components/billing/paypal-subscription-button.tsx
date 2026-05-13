@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
@@ -8,13 +8,10 @@ import { Button } from "@/components/ui/button"
 declare global {
   interface Window {
     paypal?: {
-      Buttons: (options: {
-        createSubscription: () => Promise<string>
-        onApprove: (data: { subscriptionID?: string }) => Promise<void>
-        onError?: (error: unknown) => void
-      }) => {
-        render: (selector: HTMLElement | string) => Promise<void>
-      }
+      createInstance?: (options: {
+        clientToken: string
+        components?: string[]
+      }) => Promise<unknown>
     }
   }
 }
@@ -89,59 +86,59 @@ async function savePendingSubscription(planCode: string, paypalSubscriptionId: s
 export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: PayPalSubscriptionButtonProps) {
   const { messages } = useI18n()
   const billing = messages.billing
-  const containerRef = useRef<HTMLDivElement | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [sdkReady, setSdkReady] = useState(false)
-  const publicClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ""
 
   useEffect(() => {
-    if (!publicClientId || disabled || !containerRef.current) return
-    if (window.paypal?.Buttons) {
-      setSdkReady(true)
-      return
+    if (disabled) return
+
+    let cancelled = false
+    async function initSdk() {
+      setError("")
+      try {
+        const response = await fetch("/api/paypal/browser-safe-client-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+        const json = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(json?.error || "paypal_sdk_load_failed")
+        }
+
+        const clientToken = typeof json?.clientToken === "string" ? json.clientToken : ""
+        const sdkBaseUrl = typeof json?.sdkBaseUrl === "string" ? json.sdkBaseUrl : ""
+        if (!clientToken || !sdkBaseUrl) {
+          throw new Error("paypal_sdk_load_failed")
+        }
+
+        if (!document.querySelector("script[data-paypal-web-sdk-v6='true']")) {
+          const script = document.createElement("script")
+          script.src = `${sdkBaseUrl}/web-sdk/v6/core.js`
+          script.async = true
+          script.dataset.paypalWebSdkV6 = "true"
+          await new Promise<void>((resolve, reject) => {
+            script.onload = () => resolve()
+            script.onerror = () => reject(new Error("paypal_sdk_load_failed"))
+            document.body.appendChild(script)
+          })
+        }
+
+        if (window.paypal?.createInstance) {
+          await window.paypal.createInstance({
+            clientToken,
+            components: ["paypal-payments"],
+          })
+        }
+      } catch (sdkError) {
+        if (!cancelled) setError(sdkError instanceof Error ? sdkError.message : "paypal_sdk_load_failed")
+      }
     }
 
-    const existing = document.querySelector<HTMLScriptElement>("script[data-paypal-subscription-sdk='true']")
-    if (existing) {
-      existing.addEventListener("load", () => setSdkReady(true), { once: true })
-      return
+    void initSdk()
+    return () => {
+      cancelled = true
     }
-
-    const script = document.createElement("script")
-    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(publicClientId)}&vault=true&intent=subscription`
-    script.async = true
-    script.dataset.paypalSubscriptionSdk = "true"
-    script.onload = () => setSdkReady(true)
-    script.onerror = () => setError("paypal_sdk_load_failed")
-    document.body.appendChild(script)
-  }, [disabled, publicClientId])
-
-  useEffect(() => {
-    if (!sdkReady || !publicClientId || disabled || !containerRef.current || !window.paypal?.Buttons) return
-    const container = containerRef.current
-    container.innerHTML = ""
-    window.paypal.Buttons({
-      createSubscription: async () => {
-        setError("")
-        const subscription = await createSubscription(planCode)
-        const id = typeof subscription?.id === "string" ? subscription.id : ""
-        if (!id) throw new Error("paypal_subscription_id_missing")
-        return id
-      },
-      onApprove: async (data) => {
-        const subscriptionId = data.subscriptionID || ""
-        if (!subscriptionId) throw new Error("paypal_subscription_id_missing")
-        await savePendingSubscription(planCode, subscriptionId)
-        onApproved?.()
-      },
-      onError: (paypalError) => {
-        setError(paypalError instanceof Error ? paypalError.message : "paypal_subscription_failed")
-      },
-    }).render(container).catch((renderError) => {
-      setError(renderError instanceof Error ? renderError.message : "paypal_button_render_failed")
-    })
-  }, [disabled, onApproved, planCode, publicClientId, sdkReady])
+  }, [disabled])
 
   const handleFallbackSubscribe = async () => {
     if (disabled || loading) return
@@ -164,15 +161,6 @@ export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: Pay
     } finally {
       setLoading(false)
     }
-  }
-
-  if (publicClientId) {
-    return (
-      <div className="space-y-2">
-        <div ref={containerRef} className={disabled ? "pointer-events-none opacity-50" : ""} />
-        {error ? <p className="text-xs text-destructive">{translateBillingError(error, billing)}</p> : null}
-      </div>
-    )
   }
 
   return (
