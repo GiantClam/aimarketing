@@ -8,6 +8,9 @@ type Props = {
   params: Promise<{ slug: string }>
 }
 
+export const dynamic = "force-static"
+export const dynamicParams = false
+
 export function generateStaticParams() {
   return getSeoPagesByGroup("prompts").map((page) => ({ slug: page.slug }))
 }
