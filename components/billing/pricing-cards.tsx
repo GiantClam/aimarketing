@@ -21,6 +21,14 @@ type BillingPlan = {
   features: Record<string, unknown>
 }
 
+type SubscriptionState = {
+  subscription: {
+    plan_code: string
+    next_plan_code?: string | null
+    status: string
+  } | null
+}
+
 function formatPrice(cents: number, locale: string) {
   return new Intl.NumberFormat(locale, {
     style: "currency",
@@ -86,19 +94,29 @@ function planAvailabilityMessage(
 
 function translateBillingError(code: string, billing: {
   errorLoadPlans: string
+  errorLoadSubscription: string
 }) {
   switch (code) {
     case "billing_plans_failed":
       return billing.errorLoadPlans
+    case "billing_subscription_failed":
+      return billing.errorLoadSubscription
     default:
       return code
   }
 }
 
-export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
+export function PricingCards({
+  onSubscribed,
+  refreshKey = 0,
+}: {
+  onSubscribed?: () => void
+  refreshKey?: number
+}) {
   const { messages, locale } = useI18n()
   const billing = messages.billing
   const [plans, setPlans] = useState<BillingPlan[]>([])
+  const [subscription, setSubscription] = useState<SubscriptionState["subscription"]>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
@@ -108,10 +126,20 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
       setLoading(true)
       setError("")
       try {
-        const response = await fetch("/api/billing/plans", { cache: "no-store" })
-        const json = await response.json().catch(() => null)
-        if (!response.ok) throw new Error(json?.error || "billing_plans_failed")
-        if (!cancelled) setPlans(Array.isArray(json?.plans) ? json.plans : [])
+        const [plansResponse, subscriptionResponse] = await Promise.all([
+          fetch("/api/billing/plans", { cache: "no-store" }),
+          fetch("/api/billing/subscription", { cache: "no-store" }),
+        ])
+        const [plansJson, subscriptionJson] = await Promise.all([
+          plansResponse.json().catch(() => null),
+          subscriptionResponse.json().catch(() => null),
+        ])
+        if (!plansResponse.ok) throw new Error(plansJson?.error || "billing_plans_failed")
+        if (!subscriptionResponse.ok) throw new Error(subscriptionJson?.error || "billing_subscription_failed")
+        if (!cancelled) {
+          setPlans(Array.isArray(plansJson?.plans) ? plansJson.plans : [])
+          setSubscription(subscriptionJson?.subscription ?? null)
+        }
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "billing_plans_failed")
       } finally {
@@ -122,7 +150,7 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshKey])
 
   if (loading) {
     return <div className="rounded-[2rem] border bg-white/80 p-6 text-sm text-muted-foreground">{billing.loadingPlans}</div>
@@ -141,6 +169,16 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
       {plans.map((plan) => {
         const highlighted = plan.code === "creator"
         const isFree = plan.code === "free"
+        const currentPlanCode = subscription?.plan_code || "free"
+        const nextPlanCode = subscription?.next_plan_code || null
+        const currentStatus = String(subscription?.status || "active").toLowerCase()
+        const isCurrentPlan = currentPlanCode === plan.code
+        const isScheduledPlan = nextPlanCode === plan.code
+        const hasPendingPaidSubscription = currentStatus === "pending" && currentPlanCode !== "free"
+        const blocksDuplicateSubscription =
+          (isCurrentPlan || isScheduledPlan) &&
+          ["active", "pending", "suspended", "cancelled"].includes(currentStatus)
+
         return (
           <Card
             key={plan.code}
@@ -148,15 +186,19 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
               highlighted ? "border-slate-950" : "border-slate-200"
             }`}
           >
-            {highlighted ? (
-              <div className="absolute right-4 top-4">
+            <div className="absolute right-4 top-4 flex flex-wrap justify-end gap-2">
+              {isCurrentPlan ? (
+                <Badge className="rounded-full bg-emerald-600 text-white">{billing.currentPlanBadge}</Badge>
+              ) : null}
+              {isScheduledPlan ? (
+                <Badge className="rounded-full bg-amber-500 text-white">{billing.scheduledPlanBadge}</Badge>
+              ) : null}
+              {highlighted ? (
                 <Badge className="rounded-full bg-slate-950 text-white">{billing.recommended}</Badge>
-              </div>
-            ) : isFree ? (
-              <div className="absolute right-4 top-4">
+              ) : isFree ? (
                 <Badge className="rounded-full bg-teal-600 text-white">{billing.defaultBadge}</Badge>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl">
                 <ShieldCheck className="h-5 w-5" />
@@ -180,10 +222,22 @@ export function PricingCards({ onSubscribed }: { onSubscribed?: () => void }) {
               </div>
               <PayPalSubscriptionButton
                 planCode={plan.code}
-                disabled={isFree || !plan.checkoutEnabled || !plan.paypalPlanId}
+                disabled={
+                  isFree ||
+                  !plan.checkoutEnabled ||
+                  !plan.paypalPlanId ||
+                  blocksDuplicateSubscription ||
+                  hasPendingPaidSubscription
+                }
                 onApproved={onSubscribed}
               />
-              {planAvailabilityMessage(plan, billing, locale) ? (
+              {hasPendingPaidSubscription && !isCurrentPlan ? (
+                <p className="text-xs text-muted-foreground">{billing.pendingApprovalMessage}</p>
+              ) : isScheduledPlan ? (
+                <p className="text-xs text-muted-foreground">{billing.scheduledPlanMessage}</p>
+              ) : blocksDuplicateSubscription ? (
+                <p className="text-xs text-muted-foreground">{billing.currentPlanMessage}</p>
+              ) : planAvailabilityMessage(plan, billing, locale) ? (
                 <p className="text-xs text-muted-foreground">{planAvailabilityMessage(plan, billing, locale)}</p>
               ) : null}
             </CardContent>

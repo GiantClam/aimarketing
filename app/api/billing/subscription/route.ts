@@ -5,6 +5,7 @@ import { ensureDefaultFreeBillingForUser } from "@/lib/billing/default-free-plan
 import {
   buildPayPalGrantIdempotencyKey,
   getPayPalSubscriptionDetails,
+  getPlanCodeForPayPalPlanId,
   isPayPalSubscriptionEnabledForEmail,
 } from "@/lib/billing/paypal"
 import { getBillingPlan } from "@/lib/billing/plans"
@@ -28,6 +29,42 @@ function inferPlanCodeFromCustomId(customId: string, fallbackPlanCode: string | 
   if (normalized.includes("creator")) return "creator"
   if (normalized.includes("studio")) return "studio"
   return normalizeText(fallbackPlanCode) || null
+}
+
+function inferPlanCodeFromRemoteSubscription(
+  remoteSubscription: Record<string, unknown>,
+  fallbackPlanCode: string | null | undefined,
+) {
+  return (
+    getPlanCodeForPayPalPlanId(normalizeText(remoteSubscription.plan_id)) ||
+    inferPlanCodeFromCustomId(normalizeText(remoteSubscription.custom_id), fallbackPlanCode)
+  )
+}
+
+function hasFuturePeriodEnd(value: unknown) {
+  const normalized = normalizeText(value)
+  if (!normalized) return false
+  const time = Date.parse(normalized)
+  return Number.isFinite(time) && time > Date.now()
+}
+
+function blocksDuplicatePlanSubscription(subscription: Record<string, unknown> | null, planCode: string) {
+  if (!subscription) return false
+  const normalizedPlanCode = planCode.toLowerCase()
+  const currentPlanCode = normalizeText(subscription.plan_code).toLowerCase()
+  const nextPlanCode = normalizeText(subscription.next_plan_code).toLowerCase()
+  if (currentPlanCode !== normalizedPlanCode && nextPlanCode !== normalizedPlanCode) return false
+
+  const status = normalizeText(subscription.status).toLowerCase()
+  if (["active", "pending", "suspended"].includes(status)) return true
+  if (status === "cancelled" && hasFuturePeriodEnd(subscription.current_period_end)) return true
+  return false
+}
+
+function hasCompletedBillingCycle(periodEnd: unknown, lastPaymentTime: unknown) {
+  const periodEndValue = Date.parse(normalizeText(periodEnd))
+  const lastPaymentValue = Date.parse(normalizeText(lastPaymentTime))
+  return Number.isFinite(periodEndValue) && Number.isFinite(lastPaymentValue) && lastPaymentValue >= periodEndValue
 }
 
 async function ensureCreditAccount(client: { query: typeof pool.query }, enterpriseId: number | null, ownerUserId: number | null) {
@@ -134,10 +171,8 @@ async function reconcilePayPalSubscriptionIfNeeded(localSubscription: Record<str
   if (!remoteStatus) return localSubscription
 
   const remoteBillingInfo = getRecord(remoteSubscription.billing_info)
-  const remotePlanCode = inferPlanCodeFromCustomId(
-    normalizeText(remoteSubscription.custom_id),
-    normalizeText(localSubscription.plan_code),
-  )
+  const remoteLastPayment = getRecord(remoteBillingInfo?.last_payment)
+  const remotePlanCode = inferPlanCodeFromRemoteSubscription(remoteSubscription, normalizeText(localSubscription.plan_code))
 
   if (!["active", "suspended", "cancelled", "expired"].includes(remoteStatus)) {
     return localSubscription
@@ -155,34 +190,49 @@ async function reconcilePayPalSubscriptionIfNeeded(localSubscription: Record<str
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+    const localNextPlanCode = normalizeText(localSubscription.next_plan_code)
+    const shouldApplyScheduledPlanChange =
+      localNextPlanCode &&
+      remotePlanCode === localNextPlanCode &&
+      hasCompletedBillingCycle(localSubscription.current_period_end, remoteLastPayment?.time)
+
+    const nextPlanCode = shouldApplyScheduledPlanChange ? null : localNextPlanCode || null
+    const effectivePlanCode = localNextPlanCode
+      ? shouldApplyScheduledPlanChange
+        ? localNextPlanCode
+        : normalizeText(localSubscription.plan_code) || remotePlanCode
+      : remotePlanCode
+
     const updated = await client.query(
       `
         UPDATE "AI_MARKETING_user_subscriptions"
         SET plan_code = COALESCE($2, plan_code),
-            status = $3,
+            next_plan_code = $3,
+            status = $6,
             current_period_start = COALESCE(NULLIF($4, '')::timestamp, current_period_start),
             current_period_end = COALESCE(NULLIF($5, '')::timestamp, current_period_end),
-            cancel_at_period_end = CASE WHEN $3 = 'cancelled' THEN TRUE ELSE cancel_at_period_end END,
+            cancel_at_period_end = CASE WHEN $6 = 'cancelled' THEN TRUE ELSE cancel_at_period_end END,
             updated_at = CURRENT_TIMESTAMP
         WHERE paypal_subscription_id = $1
         RETURNING id, enterprise_id, subscribed_by_user_id, plan_code, status, paypal_subscription_id,
-                  current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
+                  next_plan_code, current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
       `,
       [
         paypalSubscriptionId,
-        remotePlanCode,
-        nextStatus,
-        normalizeText(remoteSubscription.start_time),
+        effectivePlanCode,
+        nextPlanCode,
+        shouldApplyScheduledPlanChange ? normalizeText(remoteLastPayment?.time) : normalizeText(remoteSubscription.start_time),
         normalizeText(remoteBillingInfo?.next_billing_time),
+        nextStatus,
       ],
     )
 
     const row = updated.rows[0] || localSubscription
-    if (nextStatus === "active" && remotePlanCode) {
+    if (nextStatus === "active" && effectivePlanCode && (!localNextPlanCode || shouldApplyScheduledPlanChange)) {
       await grantCreditsForRemoteSubscription(client, {
         enterpriseId: Number(row.enterprise_id || 0) || null,
         ownerUserId: Number(row.subscribed_by_user_id || 0) || null,
-        planCode: remotePlanCode,
+        planCode: effectivePlanCode,
         paypalSubscriptionId,
         subscriptionRowId: Number(row.id || 0) || null,
         remoteSubscription,
@@ -208,7 +258,7 @@ export async function GET(request: NextRequest) {
     const result = await pool.query(
       `
         SELECT id, enterprise_id, subscribed_by_user_id, plan_code, status, paypal_subscription_id,
-               current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
+               next_plan_code, current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
         FROM "AI_MARKETING_user_subscriptions"
         WHERE
           ($1::integer IS NOT NULL AND enterprise_id = $1)
@@ -220,7 +270,7 @@ export async function GET(request: NextRequest) {
     )
 
     let subscription = result.rows[0] || null
-    if (subscription?.paypal_subscription_id && subscription.status === "pending") {
+    if (subscription?.paypal_subscription_id && (subscription.status === "pending" || subscription.next_plan_code)) {
       try {
         subscription = await reconcilePayPalSubscriptionIfNeeded(subscription)
       } catch (error) {
@@ -259,6 +309,7 @@ export async function GET(request: NextRequest) {
         current_period_start: freeState.subscription.currentPeriodStart,
         current_period_end: freeState.subscription.currentPeriodEnd,
         cancel_at_period_end: false,
+        next_plan_code: null,
         seat_limit: nextWorkspaceSnapshot?.seatLimit ?? null,
         active_member_count: nextWorkspaceSnapshot?.activeMemberCount ?? null,
         seats_remaining: nextWorkspaceSnapshot?.seatsRemaining ?? null,
@@ -291,6 +342,39 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const existingSubscriptionResult = await pool.query(
+      `
+        SELECT id, plan_code, status, current_period_end, paypal_subscription_id, next_plan_code
+        FROM "AI_MARKETING_user_subscriptions"
+        WHERE
+          ($1::integer IS NOT NULL AND enterprise_id = $1)
+          OR ($1::integer IS NULL AND subscribed_by_user_id = $2)
+        ORDER BY updated_at DESC NULLS LAST, id DESC
+        LIMIT 1
+      `,
+      [user.enterpriseId, user.id],
+    )
+    const existingSubscription = existingSubscriptionResult.rows[0] || null
+    if (blocksDuplicatePlanSubscription(existingSubscription, plan.code)) {
+      return NextResponse.json({ error: "billing_plan_already_subscribed" }, { status: 409 })
+    }
+
+    const existingPayPalSubscriptionId = normalizeText(existingSubscription?.paypal_subscription_id)
+    if (existingSubscription?.id && existingPayPalSubscriptionId && existingPayPalSubscriptionId === paypalSubscriptionId) {
+      const revised = await pool.query(
+        `
+          UPDATE "AI_MARKETING_user_subscriptions"
+          SET next_plan_code = $2,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+          RETURNING id, enterprise_id, subscribed_by_user_id, plan_code, status, paypal_subscription_id, next_plan_code
+        `,
+        [existingSubscription.id, plan.code],
+      )
+
+      return NextResponse.json({ subscription: revised.rows[0] })
+    }
+
     const result = await pool.query(
       `
         INSERT INTO "AI_MARKETING_user_subscriptions" (
@@ -298,14 +382,16 @@ export async function POST(request: NextRequest) {
           subscribed_by_user_id,
           plan_code,
           status,
-          paypal_subscription_id
-        ) VALUES ($1, $2, $3, 'pending', $4)
+          paypal_subscription_id,
+          next_plan_code
+        ) VALUES ($1, $2, $3, 'pending', $4, NULL)
         ON CONFLICT (paypal_subscription_id) DO UPDATE SET
           enterprise_id = EXCLUDED.enterprise_id,
           subscribed_by_user_id = EXCLUDED.subscribed_by_user_id,
           plan_code = EXCLUDED.plan_code,
+          next_plan_code = NULL,
           updated_at = CURRENT_TIMESTAMP
-        RETURNING id, enterprise_id, subscribed_by_user_id, plan_code, status, paypal_subscription_id
+        RETURNING id, enterprise_id, subscribed_by_user_id, plan_code, status, paypal_subscription_id, next_plan_code
       `,
       [user.enterpriseId, user.id, plan.code, paypalSubscriptionId],
     )

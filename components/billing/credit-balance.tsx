@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { CreditCard, RefreshCw } from "lucide-react"
 
 import { useI18n } from "@/components/locale-provider"
@@ -25,6 +25,7 @@ type CreditState = {
 type SubscriptionState = {
   subscription: {
     plan_code: string
+    next_plan_code?: string | null
     status: string
     paypal_subscription_id: string | null
     current_period_start: string | null
@@ -33,6 +34,11 @@ type SubscriptionState = {
     active_member_count?: number | null
     seats_remaining?: number | null
   } | null
+}
+
+type CreditBalanceProps = {
+  refreshKey?: number
+  onSubscriptionLoaded?: (subscription: SubscriptionState["subscription"]) => void
 }
 
 function formatNumber(value: number, locale: string) {
@@ -94,7 +100,7 @@ function translateStatus(status: string, billing: {
   }
 }
 
-export function CreditBalance() {
+export function CreditBalance({ refreshKey = 0, onSubscriptionLoaded }: CreditBalanceProps) {
   const { messages, locale } = useI18n()
   const billing = messages.billing
   const [credits, setCredits] = useState<CreditState | null>(null)
@@ -102,7 +108,7 @@ export function CreditBalance() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError("")
     try {
@@ -118,21 +124,23 @@ export function CreditBalance() {
       if (!subscriptionResponse.ok) throw new Error(subscriptionJson?.error || "billing_subscription_failed")
       setCredits(creditsJson)
       setSubscription(subscriptionJson)
+      onSubscriptionLoaded?.(subscriptionJson?.subscription ?? null)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "billing_load_failed")
     } finally {
       setLoading(false)
     }
-  }
+  }, [onSubscriptionLoaded])
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [load, refreshKey])
 
   const planCode = subscription?.subscription?.plan_code || "free"
   const status = subscription?.subscription?.status || "active"
   const seatLimit = subscription?.subscription?.seat_limit
   const activeMemberCount = subscription?.subscription?.active_member_count
+  const nextPlanCode = subscription?.subscription?.next_plan_code
 
   return (
     <Card className="overflow-hidden rounded-[2rem] border-2 border-slate-200 bg-white/85 shadow-sm">
@@ -173,7 +181,15 @@ export function CreditBalance() {
               <Badge variant={status === "active" ? "default" : "secondary"} className="rounded-full">
                 {translateStatus(status, billing)}
               </Badge>
+              {nextPlanCode ? (
+                <Badge variant="secondary" className="rounded-full">
+                  {`${billing.scheduledPlanBadge}: ${nextPlanCode}`}
+                </Badge>
+              ) : null}
             </div>
+            {nextPlanCode ? (
+              <p className="mt-3 text-sm text-muted-foreground">{billing.nextPlanMessage}</p>
+            ) : null}
             {typeof seatLimit === "number" && typeof activeMemberCount === "number" ? (
               <p className="mt-3 text-sm text-muted-foreground">
                 {formatTemplate(billing.membersUsage, {

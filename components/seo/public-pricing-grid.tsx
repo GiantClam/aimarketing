@@ -1,42 +1,20 @@
+"use client"
+
 import { TrackedCtaLink } from "@/components/seo/tracked-cta-link"
+import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { listBillingPlans } from "@/lib/billing/plans"
+import { getPublicCopy } from "@/lib/i18n/public-copy"
 import { SEO_EVENT } from "@/lib/seo/analytics"
 
-function formatPrice(cents: number) {
-  if (cents === 0) return "Free"
+function formatPrice(cents: number, locale: "zh" | "en", freeLabel: string) {
+  if (cents === 0) return freeLabel
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(locale === "zh" ? "zh-CN" : "en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(cents / 100)
-}
-
-function formatCredits(value: number) {
-  return new Intl.NumberFormat("en-US").format(value)
-}
-
-function featureSummary(plan: ReturnType<typeof listBillingPlans>[number]) {
-  const imageQuality = Array.isArray(plan.features.imageQuality)
-    ? plan.features.imageQuality.join(" / ")
-    : "standard"
-
-  const summary = [
-    `${plan.sharedMemberLimit} workspace member${plan.sharedMemberLimit > 1 ? "s" : ""}`,
-    plan.monthlyCredits > 0 ? `${formatCredits(plan.monthlyCredits)} monthly credits` : `${formatCredits(plan.trialCredits)} trial credits`,
-    `Image quality: ${imageQuality}`,
-  ]
-
-  if (plan.features.priorityQueue) {
-    summary.push("Priority image queue")
-  }
-
-  if (typeof plan.features.videoGeneration === "string") {
-    summary.push(`Video generation: ${plan.features.videoGeneration}`)
-  }
-
-  return summary
 }
 
 export function PublicPricingGrid({
@@ -46,6 +24,8 @@ export function PublicPricingGrid({
   compact?: boolean
   showActions?: boolean
 }) {
+  const { locale } = useI18n()
+  const copy = getPublicCopy(locale)
   const plans = listBillingPlans()
 
   return (
@@ -66,20 +46,22 @@ export function PublicPricingGrid({
             </div>
             {plan.code === "creator" ? (
               <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                Recommended
+                {copy.pricingGrid.recommended}
               </span>
             ) : null}
           </div>
 
           <div className="mt-5">
-            <div className="text-4xl font-semibold text-foreground">{formatPrice(plan.priceUsdCents)}</div>
+            <div className="text-4xl font-semibold text-foreground">
+              {formatPrice(plan.priceUsdCents, locale, copy.pricingGrid.free)}
+            </div>
             <div className="mt-1 text-sm text-muted-foreground">
-              {plan.priceUsdCents === 0 ? "Starter access" : "per month"}
+              {plan.priceUsdCents === 0 ? copy.pricingGrid.starterAccess : copy.pricingGrid.perMonth}
             </div>
           </div>
 
           <div className="mt-5 space-y-3">
-            {featureSummary(plan).map((item) => (
+            {buildFeatureSummary(plan, locale, copy.pricingGrid).map((item) => (
               <div key={item} className="text-sm leading-6 text-muted-foreground">
                 {item}
               </div>
@@ -88,14 +70,13 @@ export function PublicPricingGrid({
 
           {!compact && plan.code === "free" ? (
             <p className="mt-5 text-xs leading-5 text-muted-foreground">
-              Includes a time-limited trial with starter credits so teams can test the workspace before upgrading.
+              {copy.pricingGrid.freePlanNote}
             </p>
           ) : null}
 
           {!compact && plan.code !== "free" ? (
             <p className="mt-5 text-xs leading-5 text-muted-foreground">
-              Shared-credit plans are designed for small-team production. Heavy usage can upgrade or connect provider
-              keys where supported.
+              {copy.pricingGrid.paidPlanNote}
             </p>
           ) : null}
 
@@ -111,7 +92,7 @@ export function PublicPricingGrid({
                     placement: compact ? "compact_grid" : "full_grid",
                   }}
                 >
-                  Start workspace
+                  {copy.pricingGrid.startWorkspace}
                 </TrackedCtaLink>
               </Button>
             </div>
@@ -120,4 +101,30 @@ export function PublicPricingGrid({
       ))}
     </div>
   )
+}
+
+function buildFeatureSummary(
+  plan: ReturnType<typeof listBillingPlans>[number],
+  locale: "zh" | "en",
+  copy: ReturnType<typeof getPublicCopy>["pricingGrid"],
+) {
+  const imageQuality = Array.isArray(plan.features.imageQuality)
+    ? plan.features.imageQuality.join(" / ")
+    : "standard"
+
+  const summary = [
+    copy.workspaceMember(plan.sharedMemberLimit),
+    copy.creditsLine(plan.monthlyCredits, plan.trialCredits),
+    copy.imageQuality(imageQuality),
+  ]
+
+  if (plan.features.priorityQueue) {
+    summary.push(copy.priorityQueue)
+  }
+
+  if (typeof plan.features.videoGeneration === "string") {
+    summary.push(copy.videoGeneration(plan.features.videoGeneration))
+  }
+
+  return summary.map((item) => (locale === "zh" ? item.replace("standard", "标准") : item))
 }

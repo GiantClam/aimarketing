@@ -13,9 +13,11 @@ let requireSessionUserResult: { user?: { id: number; email: string; enterpriseId
 }
 let subscriptionRows: any[] = []
 let lastInsertParams: any[] | null = null
+let lastUpdateParams: any[] | null = null
 let ensureDefaultFreeBillingCalls = 0
 let clientQueryCalls: Array<{ sql: string; params: any[] }> = []
 let paypalRemoteSubscription: Record<string, unknown> | null = null
+let existingSubscriptionRows: any[] = []
 let workspaceSnapshot = {
   activeMemberCount: 3,
   seatLimit: 5,
@@ -35,6 +37,7 @@ const mockClient = {
             plan_code: "creator",
             status: "active",
             paypal_subscription_id: "I-SUB-123",
+            next_plan_code: null,
             current_period_start: "2026-05-07T00:00:00Z",
             current_period_end: "2026-06-07T00:00:00Z",
             cancel_at_period_end: false,
@@ -77,7 +80,11 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/billing/plans") {
     return {
       getBillingPlan: (code: string) =>
-        code === "creator" ? { code: "creator", name: "Creator", monthlyCredits: 10000 } : null,
+        code === "creator"
+          ? { code: "creator", name: "Creator", monthlyCredits: 10000 }
+          : code === "starter"
+            ? { code: "starter", name: "Starter", monthlyCredits: 3000 }
+            : null,
     }
   }
   if (request === "@/lib/billing/paypal") {
@@ -85,6 +92,11 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       isPayPalSubscriptionEnabledForEmail: (email: string) => email === "liulanggoukk@gmail.com",
       getPayPalSubscriptionDetails: async () => paypalRemoteSubscription || {},
       buildPayPalGrantIdempotencyKey: () => "paypal-grant:I-SUB-123:2026-05-07T00:00:00Z",
+      getPlanCodeForPayPalPlanId: (planId: string) => {
+        if (planId === "P-CREATOR") return "creator"
+        if (planId === "P-STARTER") return "starter"
+        return null
+      },
     }
   }
   if (request === "@/lib/billing/default-free-plan") {
@@ -112,8 +124,18 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/db") {
     return {
       pool: {
-        query: async (_sql: string, params: any[]) => {
-          lastInsertParams = params
+        query: async (sql: string, params: any[]) => {
+          if (sql.includes('INSERT INTO "AI_MARKETING_user_subscriptions"')) {
+            lastInsertParams = params
+            return { rows: subscriptionRows }
+          }
+          if (sql.includes('UPDATE "AI_MARKETING_user_subscriptions"')) {
+            lastUpdateParams = params
+            return { rows: subscriptionRows }
+          }
+          if (sql.includes('SELECT id, plan_code, status, current_period_end, paypal_subscription_id, next_plan_code')) {
+            return { rows: existingSubscriptionRows }
+          }
           return { rows: subscriptionRows }
         },
         connect: async () => mockClient,
@@ -137,9 +159,11 @@ test.beforeEach(() => {
   requireSessionUserResult = { user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 11 } }
   subscriptionRows = []
   lastInsertParams = null
+  lastUpdateParams = null
   ensureDefaultFreeBillingCalls = 0
   clientQueryCalls = []
   paypalRemoteSubscription = null
+  existingSubscriptionRows = []
   workspaceSnapshot = {
     activeMemberCount: 3,
     seatLimit: 5,
@@ -173,6 +197,7 @@ test("billing subscription route reconciles pending PayPal subscriptions that ar
       plan_code: "creator",
       status: "pending",
       paypal_subscription_id: "I-SUB-123",
+      next_plan_code: null,
     },
   ]
   paypalRemoteSubscription = {
@@ -233,6 +258,7 @@ test("billing subscription route stores a pending subscription", async () => {
       plan_code: "creator",
       status: "pending",
       paypal_subscription_id: "I-SUB-123",
+      next_plan_code: null,
     },
   ]
 
@@ -261,4 +287,53 @@ test("billing subscription route blocks pending sandbox records for non-allowlis
   assert.equal(response.status, 403)
   assert.equal(response.body?.error, "paypal_subscriptions_disabled")
   assert.equal(lastInsertParams, null)
+})
+
+test("billing subscription route blocks saving a duplicate current plan subscription", async () => {
+  existingSubscriptionRows = [{ id: 10, plan_code: "creator", status: "active", current_period_end: null, next_plan_code: null }]
+
+  const response = (await POST({
+    json: async () => ({
+      planCode: "creator",
+      paypalSubscriptionId: "I-SUB-456",
+    }),
+  } as any)) as any
+
+  assert.equal(response.status, 409)
+  assert.equal(response.body?.error, "billing_plan_already_subscribed")
+})
+
+test("billing subscription route schedules a revised plan on the current subscription", async () => {
+  existingSubscriptionRows = [
+    {
+      id: 10,
+      plan_code: "starter",
+      status: "active",
+      current_period_end: "2026-06-01T00:00:00Z",
+      paypal_subscription_id: "I-SUB-123",
+      next_plan_code: null,
+    },
+  ]
+  subscriptionRows = [
+    {
+      id: 10,
+      enterprise_id: 11,
+      subscribed_by_user_id: 7,
+      plan_code: "starter",
+      status: "active",
+      paypal_subscription_id: "I-SUB-123",
+      next_plan_code: "creator",
+    },
+  ]
+
+  const response = (await POST({
+    json: async () => ({
+      planCode: "creator",
+      paypalSubscriptionId: "I-SUB-123",
+    }),
+  } as any)) as any
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.subscription?.next_plan_code, "creator")
+  assert.deepEqual(lastUpdateParams, [10, "creator"])
 })

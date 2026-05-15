@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
 import { LOCALE_COOKIE_NAME, type AppLocale } from "@/lib/i18n/config"
 import { messages } from "@/lib/i18n/messages"
@@ -22,10 +22,19 @@ export function LocaleProvider({
 }) {
   const [locale, setLocaleState] = useState<AppLocale>(initialLocale)
 
-  const setLocale = (nextLocale: AppLocale) => {
+  useEffect(() => {
+    setLocaleState(initialLocale)
+  }, [initialLocale])
+
+  useEffect(() => {
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"
+  }, [locale])
+
+  const setLocale = useCallback((nextLocale: AppLocale) => {
     setLocaleState(nextLocale)
     document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; path=/; max-age=31536000; samesite=lax`
-  }
+    document.documentElement.lang = nextLocale === "zh" ? "zh-CN" : "en"
+  }, [])
 
   const value = useMemo(
     () => ({
@@ -33,7 +42,7 @@ export function LocaleProvider({
       messages: messages[locale],
       setLocale,
     }),
-    [locale],
+    [locale, setLocale],
   )
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>

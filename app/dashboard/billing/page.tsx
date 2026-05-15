@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { ReceiptText } from "lucide-react"
 
@@ -9,15 +9,88 @@ import { PricingCards } from "@/components/billing/pricing-cards"
 import { useI18n } from "@/components/locale-provider"
 
 export default function BillingPage() {
-  const [balanceKey, setBalanceKey] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [syncComplete, setSyncComplete] = useState(false)
+  const [approvalSaved, setApprovalSaved] = useState(false)
   const { messages } = useI18n()
   const billing = messages.billing
   const searchParams = useSearchParams()
   const paypalState = searchParams.get("paypal")
+  const approvedPlanCode = searchParams.get("planCode")
+  const approvedSubscriptionId =
+    searchParams.get("subscription_id") || searchParams.get("ba_token") || searchParams.get("token")
+
+  useEffect(() => {
+    if (paypalState !== "approved") {
+      setApprovalSaved(false)
+      return
+    }
+    if (!approvedPlanCode || !approvedSubscriptionId || approvalSaved) {
+      return
+    }
+
+    let cancelled = false
+    async function confirmApprovedSubscription() {
+      try {
+        const response = await fetch("/api/billing/subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planCode: approvedPlanCode,
+            paypalSubscriptionId: approvedSubscriptionId,
+          }),
+        })
+        const json = await response.json().catch(() => null)
+        if (!response.ok && !(response.status === 409 && json?.error === "billing_plan_already_subscribed")) {
+          throw new Error(json?.error || "billing_subscription_save_failed")
+        }
+        if (!cancelled) {
+          setApprovalSaved(true)
+          setRefreshKey((current) => current + 1)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("billing.subscription.approval_save_failed", error)
+        }
+      }
+    }
+
+    void confirmApprovedSubscription()
+    return () => {
+      cancelled = true
+    }
+  }, [paypalState, approvedPlanCode, approvedSubscriptionId, approvalSaved])
+
+  useEffect(() => {
+    if (paypalState !== "approved") {
+      setSyncComplete(false)
+      return
+    }
+    if (syncComplete) {
+      return
+    }
+
+    let attempts = 0
+    setSyncComplete(false)
+    setRefreshKey((current) => current + 1)
+    const timer = window.setInterval(() => {
+      attempts += 1
+      setRefreshKey((current) => current + 1)
+      if (attempts >= 9) {
+        window.clearInterval(timer)
+      }
+    }, 2500)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [paypalState, syncComplete])
 
   const paypalNotice =
     paypalState === "approved"
-      ? billing.paypalApprovedNotice
+      ? syncComplete
+        ? billing.paypalApprovedNotice
+        : billing.paypalSyncingNotice
       : paypalState === "cancelled"
         ? billing.paypalCancelledNotice
         : ""
@@ -53,8 +126,21 @@ export default function BillingPage() {
           </section>
         ) : null}
 
-        <CreditBalance key={balanceKey} />
-        <PricingCards onSubscribed={() => setBalanceKey((current) => current + 1)} />
+        <CreditBalance
+          refreshKey={refreshKey}
+          onSubscriptionLoaded={(subscription) => {
+            if (
+              paypalState === "approved" &&
+              (String(subscription?.status || "").toLowerCase() === "active" || Boolean(subscription?.next_plan_code))
+            ) {
+              setSyncComplete(true)
+            }
+          }}
+        />
+        <PricingCards
+          refreshKey={refreshKey}
+          onSubscribed={() => setRefreshKey((current) => current + 1)}
+        />
       </div>
     </div>
   )

@@ -1,10 +1,23 @@
+const PREFERRED_PUBLIC_HOSTS: Record<string, string> = {
+  "aimarketingsite.com": "www.aimarketingsite.com",
+}
+
 function normalizeBaseUrl(value?: string | null) {
   const trimmed = value?.trim()
   if (!trimmed) return null
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed.replace(/\/+$/, "")
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+
+  try {
+    const normalized = new URL(withProtocol)
+    const preferredHost = PREFERRED_PUBLIC_HOSTS[normalized.hostname.toLowerCase()]
+    if (preferredHost) {
+      normalized.hostname = preferredHost
+    }
+    return normalized.toString().replace(/\/+$/, "")
+  } catch {
+    return withProtocol.replace(/\/+$/, "")
   }
-  return `https://${trimmed.replace(/\/+$/, "")}`
 }
 
 export function getAppBaseUrl(fallback?: string | null) {

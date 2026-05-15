@@ -131,6 +131,7 @@ export const userSubscriptions = pgTable(
     planCode: varchar("plan_code", { length: 32 }).notNull(),
     status: varchar("status", { length: 24 }).default("pending").notNull(),
     paypalSubscriptionId: varchar("paypal_subscription_id", { length: 128 }),
+    nextPlanCode: varchar("next_plan_code", { length: 32 }),
     currentPeriodStart: timestamp("current_period_start"),
     currentPeriodEnd: timestamp("current_period_end"),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),

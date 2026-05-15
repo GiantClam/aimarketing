@@ -18,6 +18,7 @@
     "migrate:lead-hunter:evidence": "node scripts/run-lead-hunter-evidence-migration.js",
     "migrate:writer": "node scripts/run-writer-migration.js",
     "migrate:billing": "node scripts/run-billing-subscription-migration.js",
+    "migrate:billing:plan-change": "node scripts/run-billing-plan-change-migration.js",
     "migrate:all": "node scripts/run-all-db-migrations.js",
     "migrate:data": "node scripts/migrate-legacy-data-to-ai-marketing.js",
     "paypal:create-plans": "node scripts/create-paypal-subscription-plans.js",

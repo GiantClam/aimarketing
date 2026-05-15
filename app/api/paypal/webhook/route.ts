@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 
 import {
   buildPayPalGrantIdempotencyKey,
+  getPayPalSubscriptionDetails,
+  getPlanCodeForPayPalPlanId,
   verifyPayPalWebhookSignature,
   type PayPalWebhookEvent,
 } from "@/lib/billing/paypal"
@@ -27,7 +29,30 @@ function inferPlanCode(resource: Record<string, unknown>): BillingPlanCode | nul
   if (raw.includes("starter")) return "starter"
   if (raw.includes("creator")) return "creator"
   if (raw.includes("studio")) return "studio"
-  return null
+  return getPlanCodeForPayPalPlanId(normalizeText(resource.plan_id))
+}
+
+function getRecord(raw: unknown) {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null
+}
+
+function hasCompletedBillingCycle(periodEnd: unknown, lastPaymentTime: unknown) {
+  const periodEndValue = Date.parse(normalizeText(periodEnd))
+  const lastPaymentValue = Date.parse(normalizeText(lastPaymentTime))
+  return Number.isFinite(periodEndValue) && Number.isFinite(lastPaymentValue) && lastPaymentValue >= periodEndValue
+}
+
+async function readRemoteSubscriptionSnapshot(paypalSubscriptionId: string) {
+  try {
+    const remoteSubscription = await getPayPalSubscriptionDetails(paypalSubscriptionId)
+    const remoteBillingInfo = getRecord(remoteSubscription.billing_info)
+    const remotePlanCode =
+      inferPlanCode(remoteSubscription) ||
+      inferPlanCode({ custom_id: remoteSubscription.custom_id } as Record<string, unknown>)
+    return { remoteSubscription, remoteBillingInfo, remotePlanCode }
+  } catch {
+    return { remoteSubscription: null, remoteBillingInfo: null, remotePlanCode: null }
+  }
 }
 
 function inferEnterpriseId(resource: Record<string, unknown>) {
@@ -147,7 +172,7 @@ async function applyPayPalEvent(event: PayPalWebhookEvent) {
     let planCode = inferPlanCode(resource)
     const existing = await client.query(
       `
-        SELECT id, enterprise_id, subscribed_by_user_id, plan_code
+        SELECT id, enterprise_id, subscribed_by_user_id, plan_code, next_plan_code, current_period_end
         FROM "AI_MARKETING_user_subscriptions"
         WHERE paypal_subscription_id = $1
         LIMIT 1
@@ -169,13 +194,15 @@ async function applyPayPalEvent(event: PayPalWebhookEvent) {
             plan_code,
             status,
             paypal_subscription_id,
+            next_plan_code,
             current_period_start,
             current_period_end
-          ) VALUES ($1, $2, $3, 'active', $4, NULLIF($5, '')::timestamp, NULLIF($6, '')::timestamp)
+          ) VALUES ($1, $2, $3, 'active', $4, NULL, NULLIF($5, '')::timestamp, NULLIF($6, '')::timestamp)
           ON CONFLICT (paypal_subscription_id) DO UPDATE SET
             enterprise_id = EXCLUDED.enterprise_id,
             subscribed_by_user_id = COALESCE(EXCLUDED.subscribed_by_user_id, "AI_MARKETING_user_subscriptions".subscribed_by_user_id),
             plan_code = EXCLUDED.plan_code,
+            next_plan_code = NULL,
             status = 'active',
             current_period_start = COALESCE(EXCLUDED.current_period_start, "AI_MARKETING_user_subscriptions".current_period_start),
             current_period_end = COALESCE(EXCLUDED.current_period_end, "AI_MARKETING_user_subscriptions".current_period_end),
@@ -200,19 +227,68 @@ async function applyPayPalEvent(event: PayPalWebhookEvent) {
         planCode,
         subscriptionRowId: upserted.rows[0]?.id || null,
       })
-    } else if (event.event_type === "PAYMENT.SALE.COMPLETED" && planCode) {
-      await grantCreditsForSubscription(client, {
-        enterpriseId,
-        ownerUserId: subscribedByUserId,
-        paypalSubscriptionId,
-        grantResource: resource,
-        fallbackGrantRef: event.id,
-        planCode,
-        subscriptionRowId: existing.rows[0]?.id || null,
-      })
+    } else if (event.event_type === "PAYMENT.SALE.COMPLETED") {
+      const existingSubscription = existing.rows[0] || null
+      const remoteSnapshot = await readRemoteSubscriptionSnapshot(paypalSubscriptionId)
+      const remoteLastPayment = getRecord(remoteSnapshot.remoteBillingInfo?.last_payment)
+      const effectivePlanCode =
+        normalizeText(existingSubscription?.next_plan_code) ||
+        remoteSnapshot.remotePlanCode ||
+        planCode ||
+        existingSubscription?.plan_code ||
+        null
+      const shouldApplyScheduledPlanChange =
+        normalizeText(existingSubscription?.next_plan_code) &&
+        hasCompletedBillingCycle(existingSubscription?.current_period_end, remoteLastPayment?.time)
+
+      if (existingSubscription?.id) {
+        await client.query(
+          `
+            UPDATE "AI_MARKETING_user_subscriptions"
+            SET plan_code = COALESCE($2, plan_code),
+                next_plan_code = CASE WHEN $3 THEN NULL ELSE next_plan_code END,
+                status = 'active',
+                current_period_start = COALESCE(NULLIF($4, '')::timestamp, current_period_start),
+                current_period_end = COALESCE(NULLIF($5, '')::timestamp, current_period_end),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `,
+          [
+            existingSubscription.id,
+            effectivePlanCode,
+            Boolean(shouldApplyScheduledPlanChange),
+            normalizeText(remoteLastPayment?.time),
+            normalizeText(remoteSnapshot.remoteBillingInfo?.next_billing_time),
+          ],
+        )
+      }
+
+      if (effectivePlanCode) {
+        await grantCreditsForSubscription(client, {
+          enterpriseId,
+          ownerUserId: subscribedByUserId,
+          paypalSubscriptionId,
+          grantResource: remoteSnapshot.remoteSubscription || resource,
+          fallbackGrantRef: event.id,
+          planCode: effectivePlanCode as BillingPlanCode,
+          subscriptionRowId: existing.rows[0]?.id || null,
+        })
+      }
+    } else if (event.event_type === "BILLING.SUBSCRIPTION.UPDATED" && planCode && existing.rows[0]?.id) {
+      const currentPlanCode = normalizeText(existing.rows[0].plan_code)
+      const nextPlanCode = currentPlanCode !== planCode ? planCode : null
+      await client.query(
+        `
+          UPDATE "AI_MARKETING_user_subscriptions"
+          SET next_plan_code = $2,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+        `,
+        [existing.rows[0].id, nextPlanCode],
+      )
     } else if (event.event_type === "BILLING.SUBSCRIPTION.CANCELLED") {
       await client.query(
-        `UPDATE "AI_MARKETING_user_subscriptions" SET status = 'cancelled', cancel_at_period_end = TRUE, updated_at = CURRENT_TIMESTAMP WHERE paypal_subscription_id = $1`,
+        `UPDATE "AI_MARKETING_user_subscriptions" SET status = 'cancelled', cancel_at_period_end = TRUE, next_plan_code = NULL, updated_at = CURRENT_TIMESTAMP WHERE paypal_subscription_id = $1`,
         [paypalSubscriptionId],
       )
     } else if (

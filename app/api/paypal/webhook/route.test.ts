@@ -51,6 +51,15 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       verifyPayPalWebhookSignature: async () => verifyResult,
       buildPayPalGrantIdempotencyKey: () => "paypal-grant:I-SUB-3:2026-05-07T00:00:00Z",
+      getPayPalSubscriptionDetails: async () => ({
+        id: "I-SUB-3",
+        plan_id: "P-CREATOR",
+        billing_info: {
+          next_billing_time: "2026-06-07T00:00:00Z",
+          last_payment: { time: "2026-05-07T00:00:00Z" },
+        },
+      }),
+      getPlanCodeForPayPalPlanId: (planId: string) => (planId === "P-CREATOR" ? "creator" : null),
     }
   }
   if (request === "@/lib/billing/plans") {

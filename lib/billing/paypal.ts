@@ -99,6 +99,18 @@ export function getPayPalPlanId(planCode: BillingPlanCode) {
   return normalizeText(process.env[envName])
 }
 
+export function getPlanCodeForPayPalPlanId(planId: string | null | undefined): BillingPlanCode | null {
+  const normalizedPlanId = normalizeText(planId)
+  if (!normalizedPlanId) return null
+
+  for (const planCode of ["starter", "creator", "studio"] as const) {
+    if (getPayPalPlanId(planCode) === normalizedPlanId) {
+      return planCode
+    }
+  }
+  return null
+}
+
 async function getPayPalAccessToken() {
   const clientId = normalizeText(process.env.PAYPAL_CLIENT_ID)
   const clientSecret = normalizeText(process.env.PAYPAL_CLIENT_SECRET)
@@ -234,6 +246,43 @@ export async function createPayPalSubscription(input: {
   return payload
 }
 
+export async function revisePayPalSubscription(input: {
+  paypalSubscriptionId: string
+  planCode: BillingPlanCode
+  returnUrl?: string | null
+  cancelUrl?: string | null
+}) {
+  const normalizedSubscriptionId = normalizeText(input.paypalSubscriptionId)
+  if (!normalizedSubscriptionId) throw new Error("paypal_subscription_id_missing")
+
+  const plan = getBillingPlan(input.planCode)
+  if (!plan) throw new Error("billing_plan_not_found")
+  const paypalPlanId = getPayPalPlanId(plan.code)
+  if (!paypalPlanId) throw new Error("paypal_plan_id_missing")
+
+  const accessToken = await getPayPalAccessToken()
+  const response = await fetch(`${getPayPalApiBase()}/v1/billing/subscriptions/${normalizedSubscriptionId}/revise`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      plan_id: paypalPlanId,
+      application_context: {
+        brand_name: "AI Marketing",
+        return_url: input.returnUrl || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL,
+        cancel_url: input.cancelUrl || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL,
+      },
+    }),
+  })
+  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+  if (!response.ok) {
+    throw new Error(`paypal_revise_subscription_http_${response.status}`)
+  }
+  return payload
+}
+
 export async function verifyPayPalWebhookSignature(input: {
   headers: Headers
   rawBody: string
@@ -283,11 +332,7 @@ function inferPlanCode(resource: Record<string, unknown> | null | undefined): Bi
   if (raw.includes("starter")) return "starter"
   if (raw.includes("creator")) return "creator"
   if (raw.includes("studio")) return "studio"
-  const planId = normalizeText(resource?.plan_id)
-  for (const planCode of ["starter", "creator", "studio"] as const) {
-    if (planId && planId === getPayPalPlanId(planCode)) return planCode
-  }
-  return null
+  return getPlanCodeForPayPalPlanId(normalizeText(resource?.plan_id))
 }
 
 function grantSubscriptionCredits(

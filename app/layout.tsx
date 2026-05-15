@@ -9,7 +9,7 @@ import { GoogleAnalytics } from "@/components/google-analytics"
 import { LocaleProvider } from "@/components/locale-provider"
 import { QueryProvider } from "@/components/query-provider"
 import { getAppBaseUrl } from "@/lib/app-url"
-import { LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
+import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -41,7 +41,7 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   const cookieStore = await cookies()
-  const locale = normalizeLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value) || "en"
+  const locale = normalizeLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value) || DEFAULT_LOCALE
 
   return (
     <html lang={locale === "zh" ? "zh-CN" : "en"} className="antialiased">

@@ -29,10 +29,16 @@ function translateBillingError(code: string, billing: {
   errorMissingSubscriptionId: string
   errorPaypalFailed: string
   errorPaypalButtonRender: string
+  errorDuplicateSubscription: string
+  errorPendingSubscription: string
 }) {
   switch (code) {
     case "paypal_create_subscription_failed":
       return billing.errorCreateSubscription
+    case "billing_plan_already_subscribed":
+      return billing.errorDuplicateSubscription
+    case "billing_subscription_pending_approval":
+      return billing.errorPendingSubscription
     case "billing_subscription_save_failed":
       return billing.errorSaveSubscription
     case "paypal_sdk_load_failed":
@@ -55,31 +61,30 @@ function getApprovalUrl(subscription: any) {
 }
 
 async function createSubscription(planCode: string) {
+  const approvedUrl = new URL(`${window.location.origin}/dashboard/billing`)
+  approvedUrl.searchParams.set("paypal", "approved")
+  approvedUrl.searchParams.set("planCode", planCode)
+
+  const cancelledUrl = new URL(`${window.location.origin}/dashboard/billing`)
+  cancelledUrl.searchParams.set("paypal", "cancelled")
+  cancelledUrl.searchParams.set("planCode", planCode)
+
   const response = await fetch("/api/paypal/create-subscription", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       planCode,
-      returnUrl: `${window.location.origin}/dashboard/billing?paypal=approved`,
-      cancelUrl: `${window.location.origin}/dashboard/billing?paypal=cancelled`,
+      returnUrl: approvedUrl.toString(),
+      cancelUrl: cancelledUrl.toString(),
     }),
   })
   const json = await response.json().catch(() => null)
   if (!response.ok) {
     throw new Error(json?.error || "paypal_create_subscription_failed")
   }
-  return json?.subscription
-}
-
-async function savePendingSubscription(planCode: string, paypalSubscriptionId: string) {
-  const response = await fetch("/api/billing/subscription", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ planCode, paypalSubscriptionId }),
-  })
-  const json = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new Error(json?.error || "billing_subscription_save_failed")
+  return {
+    operation: typeof json?.operation === "string" ? json.operation : "create",
+    subscription: json?.subscription,
   }
 }
 
@@ -149,11 +154,7 @@ export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: Pay
     setLoading(true)
     setError("")
     try {
-      const subscription = await createSubscription(planCode)
-      const subscriptionId = typeof subscription?.id === "string" ? subscription.id : ""
-      if (subscriptionId) {
-        await savePendingSubscription(planCode, subscriptionId)
-      }
+      const { subscription } = await createSubscription(planCode)
       const approvalUrl = getApprovalUrl(subscription)
       if (approvalUrl) {
         window.location.assign(approvalUrl)
