@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { CheckCircle2 } from "lucide-react"
 
 import type { SeoPage } from "@/lib/seo/pages"
@@ -76,11 +77,7 @@ export function SeoLandingPage({ page }: { page: SeoPage }) {
       <section className="border-y border-border bg-card">
         <div className="mx-auto max-w-7xl px-6 py-14">
           <div className="grid gap-4 md:grid-cols-3">
-            {[
-              "Multiple AI models in one shared workspace",
-              "Marketing agents for brand, growth, copy, website, video, and images",
-              "Team permissions, company context, and shared credits",
-            ].map((item) => (
+            {page.highlights.map((item) => (
               <div key={item} className="rounded-[22px] border-2 border-border bg-background p-5 text-sm font-medium leading-6">
                 {item}
               </div>
@@ -125,6 +122,26 @@ export function SeoLandingPage({ page }: { page: SeoPage }) {
           </div>
         ) : null}
       </section>
+
+      {page.relatedLinks.length > 0 ? (
+        <section className="mx-auto max-w-7xl px-6 pb-4">
+          <div className="rounded-[28px] border-2 border-border bg-card p-6 sm:p-8">
+            <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">Related pages</p>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              {page.relatedLinks.map((link) => (
+                <Link
+                  key={`${page.slug}-${link.href}`}
+                  href={link.href}
+                  className="rounded-[20px] border border-border bg-background p-5 transition hover:border-foreground/20 hover:bg-muted/40"
+                >
+                  <div className="text-base font-semibold text-foreground">{link.label}</div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{link.description}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <SeoFaqList faqs={page.faqs} />
 
