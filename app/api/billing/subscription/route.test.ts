@@ -19,6 +19,7 @@ let clientQueryCalls: Array<{ sql: string; params: any[] }> = []
 let paypalRemoteSubscription: Record<string, unknown> | null = null
 let existingSubscriptionRows: any[] = []
 let workspaceSnapshot = {
+  effectivePlan: { code: "creator" },
   activeMemberCount: 3,
   seatLimit: 5,
   seatsRemaining: 2,
@@ -165,6 +166,7 @@ test.beforeEach(() => {
   paypalRemoteSubscription = null
   existingSubscriptionRows = []
   workspaceSnapshot = {
+    effectivePlan: { code: "creator" },
     activeMemberCount: 3,
     seatLimit: 5,
     seatsRemaining: 2,
@@ -183,6 +185,7 @@ test("billing subscription route returns latest subscription", async () => {
   assert.equal(response.status, 200)
   assert.equal(response.body?.subscription?.id, 8)
   assert.equal(response.body?.subscription?.plan_code, "creator")
+  assert.equal(response.body?.subscription?.effective_plan_code, "creator")
   assert.equal(response.body?.subscription?.seat_limit, 5)
   assert.equal(response.body?.subscription?.active_member_count, 3)
   assert.equal(response.body?.subscription?.seats_remaining, 2)
@@ -227,10 +230,18 @@ test("billing subscription route reconciles pending PayPal subscriptions that ar
 })
 
 test("billing subscription route initializes default free subscription when none exists", async () => {
+  workspaceSnapshot = {
+    effectivePlan: { code: "free" },
+    activeMemberCount: 3,
+    seatLimit: 5,
+    seatsRemaining: 2,
+  }
+
   const response = (await GET({} as any)) as any
 
   assert.equal(response.status, 200)
   assert.equal(response.body?.subscription?.plan_code, "free")
+  assert.equal(response.body?.subscription?.effective_plan_code, "free")
   assert.equal(response.body?.subscription?.status, "active")
   assert.equal(ensureDefaultFreeBillingCalls, 1)
   assert.equal(response.body?.subscription?.seat_limit, 5)

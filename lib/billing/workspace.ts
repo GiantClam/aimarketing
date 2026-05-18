@@ -1,10 +1,11 @@
 import { pool } from "@/lib/db"
 
-import { getBillingPlan, type BillingPlan, type BillingPlanCode } from "./plans"
+import { getBillingPlan, isPlanUpgrade, type BillingPlan, type BillingPlanCode } from "./plans"
 
 type SubscriptionRow = {
   id: number
   plan_code: string
+  next_plan_code?: string | null
   status: string
   current_period_start: string | Date | null
   current_period_end: string | Date | null
@@ -15,6 +16,7 @@ export type WorkspaceBillingSnapshot = {
   subscription: {
     id: number
     planCode: BillingPlanCode
+    nextPlanCode: BillingPlanCode | null
     status: string
     currentPeriodStart: string | null
     currentPeriodEnd: string | null
@@ -50,15 +52,19 @@ function getEffectivePlan(subscription: SubscriptionRow | null) {
   }
   if (!subscription) return freePlan
 
-  const plan = getBillingPlan(subscription.plan_code)
-  if (!plan) return freePlan
+  const currentPlan = getBillingPlan(subscription.plan_code)
+  const nextPlan = getBillingPlan(subscription.next_plan_code || null)
+  if (!currentPlan) return freePlan
 
   const status = String(subscription.status || "").trim().toLowerCase()
+  const accessPlan =
+    nextPlan && isPlanUpgrade(subscription.plan_code, subscription.next_plan_code) ? nextPlan : currentPlan
+
   if (status === "active" || status === "pending") {
-    return plan
+    return accessPlan
   }
   if (status === "cancelled" && isFutureDate(subscription.current_period_end)) {
-    return plan
+    return accessPlan
   }
   return freePlan
 }
@@ -68,6 +74,7 @@ export async function getWorkspaceBillingSnapshot(enterpriseId: number): Promise
     pool.query(
       `
         SELECT id, plan_code, status, current_period_start, current_period_end, cancel_at_period_end
+               , next_plan_code
         FROM "AI_MARKETING_user_subscriptions"
         WHERE enterprise_id = $1
         ORDER BY updated_at DESC NULLS LAST, id DESC
@@ -96,6 +103,8 @@ export async function getWorkspaceBillingSnapshot(enterpriseId: number): Promise
           id: Number(subscriptionRow.id),
           planCode: (getBillingPlan(subscriptionRow.plan_code)?.code || "free") as BillingPlanCode,
           status: String(subscriptionRow.status || "pending"),
+          nextPlanCode:
+            (getBillingPlan(subscriptionRow.next_plan_code || null)?.code || null) as BillingPlanCode | null,
           currentPeriodStart: toIsoOrNull(subscriptionRow.current_period_start),
           currentPeriodEnd: toIsoOrNull(subscriptionRow.current_period_end),
           cancelAtPeriodEnd: Boolean(subscriptionRow.cancel_at_period_end),

@@ -2,7 +2,7 @@ import { pool } from "@/lib/db"
 import type { AuthUserPayload } from "@/lib/enterprise/server"
 
 import { ensureDefaultFreeBillingForUser } from "./default-free-plan"
-import { getBillingPlan, type BillingPlan, type BillingPlanCode } from "./plans"
+import { getBillingPlan, isPlanUpgrade, type BillingPlan, type BillingPlanCode } from "./plans"
 
 export type BillingSubscriptionStatus = "pending" | "active" | "suspended" | "cancelled" | "expired"
 
@@ -11,6 +11,7 @@ export type BillingEntitlement = {
   subscription: {
     id: number
     planCode: BillingPlanCode
+    nextPlanCode?: BillingPlanCode | null
     status: BillingSubscriptionStatus
     currentPeriodStart: string | null
     currentPeriodEnd: string | null
@@ -35,11 +36,19 @@ export function canSpendFromBillingEntitlement(entitlement: Pick<BillingEntitlem
   return isActiveBillingSubscriptionStatus(entitlement.subscription?.status)
 }
 
+function getEffectiveEntitlementPlan(subscriptionRow: Record<string, unknown> | null) {
+  const currentPlan = getBillingPlan(String(subscriptionRow?.plan_code || ""))
+  const nextPlan = getBillingPlan(String(subscriptionRow?.next_plan_code || ""))
+  if (!currentPlan) return getBillingPlan("free")
+  return nextPlan && isPlanUpgrade(currentPlan.code, nextPlan.code) ? nextPlan : currentPlan
+}
+
 export async function getBillingEntitlementForUser(user: AuthUserPayload): Promise<BillingEntitlement> {
   const [subscriptionResult, accountResult] = await Promise.all([
     pool.query(
       `
         SELECT id, plan_code, status, current_period_start, current_period_end, cancel_at_period_end
+               , next_plan_code
         FROM "AI_MARKETING_user_subscriptions"
         WHERE
           ($1::integer IS NOT NULL AND enterprise_id = $1)
@@ -77,11 +86,14 @@ export async function getBillingEntitlementForUser(user: AuthUserPayload): Promi
       }),
     }
   }
-  const plan = getBillingPlan(subscriptionRow?.plan_code) || null
+  const plan = getEffectiveEntitlementPlan(subscriptionRow) || null
+  const currentPlan = getBillingPlan(subscriptionRow?.plan_code) || null
+  const nextPlan = getBillingPlan(subscriptionRow?.next_plan_code) || null
   const subscription = subscriptionRow
     ? {
         id: Number(subscriptionRow.id),
-        planCode: plan?.code || (String(subscriptionRow.plan_code) as BillingPlanCode),
+        planCode: (currentPlan?.code || String(subscriptionRow.plan_code) || "free") as BillingPlanCode,
+        nextPlanCode: nextPlan?.code || null,
         status: String(subscriptionRow.status || "pending") as BillingSubscriptionStatus,
         currentPeriodStart: subscriptionRow.current_period_start
           ? new Date(subscriptionRow.current_period_start).toISOString()

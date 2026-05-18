@@ -12,6 +12,8 @@ export type BillingPlan = {
   features: Record<string, unknown>
 }
 
+const BILLING_PLAN_ORDER: BillingPlanCode[] = ["free", "starter", "creator", "studio"]
+
 const DEFAULT_FREE_TRIAL_DAYS = 30
 const DEFAULT_FREE_TRIAL_CREDITS = 300
 
@@ -111,4 +113,14 @@ export function getBillingPlan(code: string | null | undefined) {
 
 export function isFreeBillingPlanCode(code: string | null | undefined) {
   return String(code || "").trim().toLowerCase() === "free"
+}
+
+export function getBillingPlanRank(code: string | null | undefined) {
+  const normalized = String(code || "").trim().toLowerCase() as BillingPlanCode
+  const index = BILLING_PLAN_ORDER.indexOf(normalized)
+  return index >= 0 ? index : 0
+}
+
+export function isPlanUpgrade(currentPlanCode: string | null | undefined, nextPlanCode: string | null | undefined) {
+  return getBillingPlanRank(nextPlanCode) > getBillingPlanRank(currentPlanCode)
 }

@@ -287,6 +287,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         subscription: {
           ...subscription,
+          effective_plan_code: workspaceSnapshot?.effectivePlan?.code || normalizeText(subscription.plan_code) || "free",
           seat_limit: workspaceSnapshot?.seatLimit ?? null,
           active_member_count: workspaceSnapshot?.activeMemberCount ?? null,
           seats_remaining: workspaceSnapshot?.seatsRemaining ?? null,
@@ -306,6 +307,7 @@ export async function GET(request: NextRequest) {
         plan_code: freeState.subscription.planCode,
         status: freeState.subscription.status,
         paypal_subscription_id: null,
+        effective_plan_code: nextWorkspaceSnapshot?.effectivePlan?.code || freeState.subscription.planCode,
         current_period_start: freeState.subscription.currentPeriodStart,
         current_period_end: freeState.subscription.currentPeriodEnd,
         cancel_at_period_end: false,

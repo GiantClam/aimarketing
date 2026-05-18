@@ -24,6 +24,7 @@ type BillingPlan = {
 type SubscriptionState = {
   subscription: {
     plan_code: string
+    effective_plan_code?: string | null
     next_plan_code?: string | null
     status: string
   } | null
@@ -169,11 +170,13 @@ export function PricingCards({
       {plans.map((plan) => {
         const highlighted = plan.code === "creator"
         const isFree = plan.code === "free"
-        const currentPlanCode = subscription?.plan_code || "free"
+        const billedPlanCode = subscription?.plan_code || "free"
+        const currentPlanCode = subscription?.effective_plan_code || billedPlanCode
         const nextPlanCode = subscription?.next_plan_code || null
         const currentStatus = String(subscription?.status || "active").toLowerCase()
         const isCurrentPlan = currentPlanCode === plan.code
         const isScheduledPlan = nextPlanCode === plan.code
+        const hasImmediateUpgradeAccess = billedPlanCode !== currentPlanCode && nextPlanCode === currentPlanCode
         const hasPendingPaidSubscription = currentStatus === "pending" && currentPlanCode !== "free"
         const blocksDuplicateSubscription =
           (isCurrentPlan || isScheduledPlan) &&
@@ -190,7 +193,7 @@ export function PricingCards({
               {isCurrentPlan ? (
                 <Badge className="rounded-full bg-emerald-600 text-white">{billing.currentPlanBadge}</Badge>
               ) : null}
-              {isScheduledPlan ? (
+              {isScheduledPlan && !hasImmediateUpgradeAccess ? (
                 <Badge className="rounded-full bg-amber-500 text-white">{billing.scheduledPlanBadge}</Badge>
               ) : null}
               {highlighted ? (
@@ -233,6 +236,8 @@ export function PricingCards({
               />
               {hasPendingPaidSubscription && !isCurrentPlan ? (
                 <p className="text-xs text-muted-foreground">{billing.pendingApprovalMessage}</p>
+              ) : hasImmediateUpgradeAccess && isCurrentPlan ? (
+                <p className="text-xs text-muted-foreground">{billing.immediateUpgradeMessage}</p>
               ) : isScheduledPlan ? (
                 <p className="text-xs text-muted-foreground">{billing.scheduledPlanMessage}</p>
               ) : blocksDuplicateSubscription ? (

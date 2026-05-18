@@ -25,6 +25,7 @@ type CreditState = {
 type SubscriptionState = {
   subscription: {
     plan_code: string
+    effective_plan_code?: string | null
     next_plan_code?: string | null
     status: string
     paypal_subscription_id: string | null
@@ -136,11 +137,13 @@ export function CreditBalance({ refreshKey = 0, onSubscriptionLoaded }: CreditBa
     void load()
   }, [load, refreshKey])
 
-  const planCode = subscription?.subscription?.plan_code || "free"
+  const billedPlanCode = subscription?.subscription?.plan_code || "free"
+  const planCode = subscription?.subscription?.effective_plan_code || billedPlanCode
   const status = subscription?.subscription?.status || "active"
   const seatLimit = subscription?.subscription?.seat_limit
   const activeMemberCount = subscription?.subscription?.active_member_count
   const nextPlanCode = subscription?.subscription?.next_plan_code
+  const hasImmediateUpgradeAccess = billedPlanCode !== planCode && nextPlanCode === planCode
 
   return (
     <Card className="overflow-hidden rounded-[2rem] border-2 border-slate-200 bg-white/85 shadow-sm">
@@ -181,13 +184,15 @@ export function CreditBalance({ refreshKey = 0, onSubscriptionLoaded }: CreditBa
               <Badge variant={status === "active" ? "default" : "secondary"} className="rounded-full">
                 {translateStatus(status, billing)}
               </Badge>
-              {nextPlanCode ? (
+              {nextPlanCode && nextPlanCode !== planCode ? (
                 <Badge variant="secondary" className="rounded-full">
                   {`${billing.scheduledPlanBadge}: ${nextPlanCode}`}
                 </Badge>
               ) : null}
             </div>
-            {nextPlanCode ? (
+            {hasImmediateUpgradeAccess ? (
+              <p className="mt-3 text-sm text-muted-foreground">{billing.immediateUpgradeMessage}</p>
+            ) : nextPlanCode ? (
               <p className="mt-3 text-sm text-muted-foreground">{billing.nextPlanMessage}</p>
             ) : null}
             {typeof seatLimit === "number" && typeof activeMemberCount === "number" ? (
