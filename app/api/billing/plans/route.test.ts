@@ -11,7 +11,7 @@ const originalLoad = nodeModule._load
 let requireSessionUserResult: { user?: Record<string, unknown>; response?: { status: number; body: any } } = {
   user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 1 },
 }
-let paypalEnabled = false
+let plansResponse: any[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -29,19 +29,9 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       requireSessionUser: async () => requireSessionUserResult.response ? requireSessionUserResult : { user: requireSessionUserResult.user },
     }
   }
-  if (request === "@/lib/billing/plans") {
+  if (request === "@/lib/billing/catalog") {
     return {
-      listBillingPlans: () => [
-        { code: "free", name: "Free", priceUsdCents: 0, monthlyCredits: 0, sharedMemberLimit: 1, trialDays: 30, trialCredits: 300, checkoutEnabled: false, features: {} },
-        { code: "starter", name: "Starter", priceUsdCents: 990, monthlyCredits: 3000, sharedMemberLimit: 2, trialDays: null, trialCredits: 0, checkoutEnabled: false, features: {} },
-        { code: "creator", name: "Creator", priceUsdCents: 1990, monthlyCredits: 10000, sharedMemberLimit: 5, trialDays: null, trialCredits: 0, checkoutEnabled: true, features: {} },
-      ],
-    }
-  }
-  if (request === "@/lib/billing/paypal") {
-    return {
-      isPayPalSubscriptionEnabledForEmail: (email: string) => paypalEnabled && email === "liulanggoukk@gmail.com",
-      getPayPalPlanId: (code: string) => (code === "creator" ? "P-CREATOR" : null),
+      listCheckoutPlansForEmail: () => plansResponse,
     }
   }
 
@@ -57,7 +47,11 @@ test.before(async () => {
 
 test.beforeEach(() => {
   requireSessionUserResult = { user: { id: 7, email: "liulanggoukk@gmail.com", enterpriseId: 1 } }
-  paypalEnabled = false
+  plansResponse = [
+    { code: "free", name: "Free", priceUsdCents: 0, monthlyCredits: 0, sharedMemberLimit: 1, trialDays: 30, trialCredits: 300, checkoutEnabled: false, features: {}, paypalPlanId: null, stripePriceId: null },
+    { code: "starter", name: "Starter", priceUsdCents: 990, monthlyCredits: 3000, sharedMemberLimit: 2, trialDays: null, trialCredits: 0, checkoutEnabled: false, features: {}, paypalPlanId: null, stripePriceId: null },
+    { code: "creator", name: "Creator", priceUsdCents: 1990, monthlyCredits: 10000, sharedMemberLimit: 5, trialDays: null, trialCredits: 0, checkoutEnabled: true, features: {}, paypalPlanId: null, stripePriceId: null },
+  ]
 })
 
 test.after(() => {
@@ -85,7 +79,7 @@ test("billing plans route returns auth response when unauthenticated", async () 
 })
 
 test("billing plans route exposes paypal ids for enabled paid plans", async () => {
-  paypalEnabled = true
+  plansResponse[2].paypalPlanId = "P-CREATOR"
 
   const response = await GET({})
 
@@ -95,8 +89,8 @@ test("billing plans route exposes paypal ids for enabled paid plans", async () =
 })
 
 test("billing plans route hides paypal ids for non-allowlisted users", async () => {
-  paypalEnabled = true
   requireSessionUserResult = { user: { id: 8, email: "other@example.com", enterpriseId: 1 } }
+  plansResponse[2].paypalPlanId = null
 
   const response = await GET({})
 

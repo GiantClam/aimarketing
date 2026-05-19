@@ -4,7 +4,7 @@ export const SUPPORTED_LOCALES = ["zh", "en"] as const
 
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number]
 
-export const DEFAULT_LOCALE: AppLocale = "zh"
+export const DEFAULT_LOCALE: AppLocale = "en"
 
 export function normalizeLocale(value: string | null | undefined): AppLocale | null {
   if (!value) return null
@@ -26,7 +26,7 @@ export function detectLocaleFromAcceptLanguage(headerValue: string | null | unde
   return DEFAULT_LOCALE
 }
 
-export function resolveRequestLocale(cookieLocale?: string | null, acceptLanguage?: string | null): AppLocale {
-  return normalizeLocale(cookieLocale) || detectLocaleFromAcceptLanguage(acceptLanguage) || DEFAULT_LOCALE
+export function resolveRequestLocale(cookieLocale?: string | null, _acceptLanguage?: string | null): AppLocale {
+  return normalizeLocale(cookieLocale) || DEFAULT_LOCALE
 }
 

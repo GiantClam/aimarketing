@@ -17,7 +17,7 @@ let lastUpdateParams: any[] | null = null
 let ensureDefaultFreeBillingCalls = 0
 let clientQueryCalls: Array<{ sql: string; params: any[] }> = []
 let paypalRemoteSubscription: Record<string, unknown> | null = null
-let existingSubscriptionRows: any[] = []
+let latestSubscriptionRow: any = null
 let workspaceSnapshot = {
   effectivePlan: { code: "creator" },
   activeMemberCount: 3,
@@ -122,6 +122,19 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       getWorkspaceBillingSnapshot: async () => workspaceSnapshot,
     }
   }
+  if (request === "@/lib/billing/subscription-store") {
+    return {
+      getLatestBillingSubscription: async () => latestSubscriptionRow,
+      scheduleSubscriptionPlanChange: async (subscriptionId: number, planCode: string) => {
+        lastUpdateParams = [subscriptionId, planCode]
+        return subscriptionRows[0] || null
+      },
+      savePendingPayPalSubscription: async (input: any) => {
+        lastInsertParams = [input.enterpriseId, input.userId, input.planCode, input.paypalSubscriptionId]
+        return subscriptionRows[0] || null
+      },
+    }
+  }
   if (request === "@/lib/db") {
     return {
       pool: {
@@ -133,9 +146,6 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           if (sql.includes('UPDATE "AI_MARKETING_user_subscriptions"')) {
             lastUpdateParams = params
             return { rows: subscriptionRows }
-          }
-          if (sql.includes('SELECT id, plan_code, status, current_period_end, paypal_subscription_id, next_plan_code')) {
-            return { rows: existingSubscriptionRows }
           }
           return { rows: subscriptionRows }
         },
@@ -164,7 +174,7 @@ test.beforeEach(() => {
   ensureDefaultFreeBillingCalls = 0
   clientQueryCalls = []
   paypalRemoteSubscription = null
-  existingSubscriptionRows = []
+  latestSubscriptionRow = null
   workspaceSnapshot = {
     effectivePlan: { code: "creator" },
     activeMemberCount: 3,
@@ -301,7 +311,7 @@ test("billing subscription route blocks pending sandbox records for non-allowlis
 })
 
 test("billing subscription route blocks saving a duplicate current plan subscription", async () => {
-  existingSubscriptionRows = [{ id: 10, plan_code: "creator", status: "active", current_period_end: null, next_plan_code: null }]
+  latestSubscriptionRow = { id: 10, plan_code: "creator", status: "active", current_period_end: null, next_plan_code: null }
 
   const response = (await POST({
     json: async () => ({
@@ -315,7 +325,7 @@ test("billing subscription route blocks saving a duplicate current plan subscrip
 })
 
 test("billing subscription route schedules a revised plan on the current subscription", async () => {
-  existingSubscriptionRows = [
+  latestSubscriptionRow = [
     {
       id: 10,
       plan_code: "starter",
@@ -324,7 +334,7 @@ test("billing subscription route schedules a revised plan on the current subscri
       paypal_subscription_id: "I-SUB-123",
       next_plan_code: null,
     },
-  ]
+  ][0]
   subscriptionRows = [
     {
       id: 10,

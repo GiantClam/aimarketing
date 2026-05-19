@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { detectLocaleFromAcceptLanguage, LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
+import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
 
 const PUBLIC_PATHS = new Set(["/login", "/register"])
 const SESSION_COOKIE_NAME = "aimarketing_session"
@@ -18,7 +18,7 @@ function applySecurityHeaders(response: NextResponse) {
 
 function applyLocaleCookie(request: NextRequest, response: NextResponse) {
   const existing = normalizeLocale(request.cookies.get(LOCALE_COOKIE_NAME)?.value)
-  const locale = existing || detectLocaleFromAcceptLanguage(request.headers.get("accept-language"))
+  const locale = existing || DEFAULT_LOCALE
   if (!existing) {
     response.cookies.set(LOCALE_COOKIE_NAME, locale, {
       path: "/",

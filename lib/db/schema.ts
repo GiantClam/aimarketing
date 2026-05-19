@@ -112,6 +112,7 @@ export const subscriptionPlans = pgTable(
     monthlyCredits: integer("monthly_credits").notNull(),
     features: jsonb("features").$type<Record<string, unknown>>().default({}).notNull(),
     paypalPlanId: varchar("paypal_plan_id", { length: 128 }),
+    stripePriceId: varchar("stripe_price_id", { length: 128 }),
     active: boolean("active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
@@ -119,6 +120,7 @@ export const subscriptionPlans = pgTable(
   (table) => ({
     codeUnique: uniqueIndex(withPrefix("subscription_plans_code_idx")).on(table.code),
     paypalPlanIdx: index(withPrefix("subscription_plans_paypal_plan_idx")).on(table.paypalPlanId),
+    stripePriceIdx: index(withPrefix("subscription_plans_stripe_price_idx")).on(table.stripePriceId),
   }),
 )
 
@@ -130,7 +132,11 @@ export const userSubscriptions = pgTable(
     subscribedByUserId: integer("subscribed_by_user_id").references(() => users.id, { onDelete: "set null" }),
     planCode: varchar("plan_code", { length: 32 }).notNull(),
     status: varchar("status", { length: 24 }).default("pending").notNull(),
+    paymentProvider: varchar("payment_provider", { length: 24 }),
     paypalSubscriptionId: varchar("paypal_subscription_id", { length: 128 }),
+    stripeCustomerId: varchar("stripe_customer_id", { length: 128 }),
+    stripeSubscriptionId: varchar("stripe_subscription_id", { length: 128 }),
+    stripeCheckoutSessionId: varchar("stripe_checkout_session_id", { length: 128 }),
     nextPlanCode: varchar("next_plan_code", { length: 32 }),
     currentPeriodStart: timestamp("current_period_start"),
     currentPeriodEnd: timestamp("current_period_end"),
@@ -140,8 +146,15 @@ export const userSubscriptions = pgTable(
   },
   (table) => ({
     enterpriseStatusIdx: index(withPrefix("user_subscriptions_enterprise_status_idx")).on(table.enterpriseId, table.status),
+    providerIdx: index(withPrefix("user_subscriptions_provider_idx")).on(table.paymentProvider),
     paypalSubscriptionUnique: uniqueIndex(withPrefix("user_subscriptions_paypal_subscription_idx")).on(
       table.paypalSubscriptionId,
+    ),
+    stripeSubscriptionUnique: uniqueIndex(withPrefix("user_subscriptions_stripe_subscription_idx")).on(
+      table.stripeSubscriptionId,
+    ),
+    stripeCheckoutSessionUnique: uniqueIndex(withPrefix("user_subscriptions_stripe_checkout_session_idx")).on(
+      table.stripeCheckoutSessionId,
     ),
   }),
 )
@@ -215,6 +228,23 @@ export const paypalWebhookEvents = pgTable(
   (table) => ({
     paypalEventUnique: uniqueIndex(withPrefix("paypal_webhook_events_event_idx")).on(table.paypalEventId),
     resourceIdx: index(withPrefix("paypal_webhook_events_resource_idx")).on(table.resourceId),
+  }),
+)
+
+export const stripeWebhookEvents = pgTable(
+  withPrefix("stripe_webhook_events"),
+  {
+    id: serial("id").primaryKey(),
+    stripeEventId: varchar("stripe_event_id", { length: 128 }).notNull(),
+    eventType: varchar("event_type", { length: 96 }).notNull(),
+    resourceId: varchar("resource_id", { length: 128 }),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    processedAt: timestamp("processed_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    stripeEventUnique: uniqueIndex(withPrefix("stripe_webhook_events_event_idx")).on(table.stripeEventId),
+    resourceIdx: index(withPrefix("stripe_webhook_events_resource_idx")).on(table.resourceId),
   }),
 )
 

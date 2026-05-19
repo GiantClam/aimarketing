@@ -12,6 +12,7 @@ export default tseslint.config(
       ".agents/**",
       ".opencode/**",
       "artifacts/**",
+      "modules/billing-kit/scripts/**",
       "scripts/**",
       "tests/**",
       "coverage/**",
@@ -24,7 +25,12 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["app/**/*.{js,mjs,cjs,ts,tsx}", "components/**/*.{js,mjs,cjs,ts,tsx}", "lib/**/*.{js,mjs,cjs,ts,tsx}"],
+    files: [
+      "app/**/*.{js,mjs,cjs,ts,tsx}",
+      "components/**/*.{js,mjs,cjs,ts,tsx}",
+      "lib/**/*.{js,mjs,cjs,ts,tsx}",
+      "modules/**/*.{js,mjs,cjs,ts,tsx}",
+    ],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

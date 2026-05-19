@@ -1,19 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
-
-import { requireSessionUser } from "@/lib/auth/guards"
-import { getPayPalPlanId, isPayPalSubscriptionEnabledForEmail } from "@/lib/billing/paypal"
-import { listBillingPlans } from "@/lib/billing/plans"
+import { NextRequest } from "next/server"
+import { handleBillingPlansGet } from "@/modules/billing-kit/server/plans-route"
 
 export async function GET(request: NextRequest) {
-  const auth = await requireSessionUser(request)
-  if ("response" in auth) return auth.response
-
-  const paypalEnabled = isPayPalSubscriptionEnabledForEmail(auth.user.email)
-
-  return NextResponse.json({
-    plans: listBillingPlans().map((plan) => ({
-      ...plan,
-      paypalPlanId: plan.checkoutEnabled && paypalEnabled ? getPayPalPlanId(plan.code) || null : null,
-    })),
-  })
+  return handleBillingPlansGet(request)
 }

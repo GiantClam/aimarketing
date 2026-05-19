@@ -1,34 +1,8 @@
-import { NextRequest, NextResponse } from "next/server"
-
-import { requireSessionUser } from "@/lib/auth/guards"
-import {
-  createPayPalBrowserSafeClientToken,
-  getPayPalEnv,
-  getPayPalWebSdkBase,
-  isPayPalSubscriptionEnabledForEmail,
-} from "@/lib/billing/paypal"
+import { NextRequest } from "next/server"
+import { handlePayPalBrowserSafeClientTokenPost } from "@/modules/billing-kit/server/paypal-browser-safe-client-token-route"
 
 export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
-  const auth = await requireSessionUser(request)
-  if ("response" in auth) return auth.response
-
-  if (!isPayPalSubscriptionEnabledForEmail(auth.user.email)) {
-    return NextResponse.json({ error: "paypal_subscriptions_disabled" }, { status: 503 })
-  }
-
-  try {
-    const clientToken = await createPayPalBrowserSafeClientToken()
-    return NextResponse.json({
-      clientToken,
-      sdkBaseUrl: getPayPalWebSdkBase(getPayPalEnv()),
-      env: getPayPalEnv(),
-    })
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "paypal_browser_safe_client_token_failed" },
-      { status: 500 },
-    )
-  }
+  return handlePayPalBrowserSafeClientTokenPost(request)
 }
