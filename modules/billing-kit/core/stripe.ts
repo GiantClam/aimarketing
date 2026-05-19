@@ -120,7 +120,6 @@ export async function createStripeCheckoutSession(input: {
         planCode: plan.code,
         provider: "stripe",
       },
-      proration_behavior: "none",
     },
   })
 }
