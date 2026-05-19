@@ -11,6 +11,7 @@ import {
   inferStripePlanCode,
   parseStripeClientReferenceId,
 } from "@/lib/billing/stripe"
+import { upsertActiveStripeSubscription } from "@/lib/billing/subscription-store"
 
 function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
@@ -23,7 +24,30 @@ function toIsoOrNull(value: number | null | undefined) {
 
 function readStripeTimestamp(record: Record<string, unknown>, key: string) {
   const value = record[key]
-  return typeof value === "number" ? value : null
+  if (typeof value === "number") return value
+
+  const firstItem = Array.isArray((record.items as { data?: unknown[] } | undefined)?.data)
+    ? ((record.items as { data?: Record<string, unknown>[] } | undefined)?.data?.[0] as
+        | Record<string, unknown>
+        | undefined)
+    : undefined
+  const nestedValue = firstItem?.[key]
+  return typeof nestedValue === "number" ? nestedValue : null
+}
+
+function parseStripeSubscriptionReference(subscription: Stripe.Subscription | null | undefined) {
+  const metadata = subscription?.metadata || {}
+  const rawClientReferenceId = normalizeText(metadata.client_reference_id)
+  if (rawClientReferenceId) {
+    return parseStripeClientReferenceId(rawClientReferenceId)
+  }
+
+  return {
+    enterpriseId: Number.parseInt(normalizeText(metadata.enterpriseId), 10) || null,
+    userId: Number.parseInt(normalizeText(metadata.userId), 10) || null,
+    planCode: normalizeText(metadata.planCode).toLowerCase() || null,
+    provider: normalizeText(metadata.provider).toLowerCase() || null,
+  }
 }
 
 function mapStripeStatus(status: string | null | undefined) {
@@ -208,12 +232,17 @@ async function handleCheckoutCompleted(client: { query: typeof pool.query }, ses
   if (!stripeSubscriptionId) return
 
   const subscription = await getStripeSubscriptionDetails(stripeSubscriptionId)
-  const refs = parseStripeClientReferenceId(session.client_reference_id)
-  await upsertStripeSubscriptionStatus(client, {
-    enterpriseId: refs.enterpriseId,
-    ownerUserId: refs.userId,
-    planCode: inferStripePlanCode(subscription),
-    status: mapStripeStatus(subscription.status),
+  const sessionRefs = parseStripeClientReferenceId(session.client_reference_id)
+  const subscriptionRefs = parseStripeSubscriptionReference(subscription)
+  const enterpriseId = sessionRefs.enterpriseId || subscriptionRefs.enterpriseId || null
+  const userId = sessionRefs.userId || subscriptionRefs.userId || null
+  const planCode = inferStripePlanCode(subscription) || sessionRefs.planCode || subscriptionRefs.planCode || null
+  if (!userId || !planCode) return
+
+  await upsertActiveStripeSubscription({
+    enterpriseId,
+    userId,
+    planCode,
     stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : null,
     stripeSubscriptionId: subscription.id,
     stripeCheckoutSessionId: session.id,
@@ -227,7 +256,7 @@ async function handleCheckoutCompleted(client: { query: typeof pool.query }, ses
 }
 
 async function handleSubscriptionUpdated(client: { query: typeof pool.query }, subscription: Stripe.Subscription) {
-  const refs = parseStripeClientReferenceId(normalizeText(subscription.metadata?.client_reference_id))
+  const refs = parseStripeSubscriptionReference(subscription)
   await upsertStripeSubscriptionStatus(client, {
     enterpriseId: refs.enterpriseId || null,
     ownerUserId: refs.userId || null,
@@ -258,7 +287,7 @@ async function handleInvoicePaid(client: { query: typeof pool.query }, invoice: 
   if (!stripeSubscriptionId) return
 
   const subscription = await getStripeSubscriptionDetails(stripeSubscriptionId)
-  const refs = parseStripeClientReferenceId(normalizeText(subscription.metadata?.client_reference_id))
+  const refs = parseStripeSubscriptionReference(subscription)
   const planCode = inferStripePlanCode(subscription)
   const row = await upsertStripeSubscriptionStatus(client, {
     enterpriseId: refs.enterpriseId || null,

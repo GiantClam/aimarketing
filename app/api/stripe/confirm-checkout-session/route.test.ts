@@ -125,3 +125,20 @@ test("stripe confirm-checkout-session route validates session id", async () => {
   assert.equal(response.status, 400)
   assert.equal(response.body?.error, "stripe_checkout_session_id_missing")
 })
+
+test("stripe confirm-checkout-session route falls back to subscription item periods", async () => {
+  stripeSubscription = {
+    id: "sub_123",
+    customer: "cus_123",
+    metadata: { planCode: "creator" },
+    items: { data: [{ price: { id: "price_creator" }, current_period_start: 1770000000, current_period_end: 1772600000 }] },
+  }
+
+  const response = (await POST({
+    json: async () => ({ sessionId: "cs_test_123" }),
+  } as any)) as any
+
+  assert.equal(response.status, 200)
+  assert.equal(upsertArgs[0]?.currentPeriodStart, "2026-02-02T02:40:00.000Z")
+  assert.equal(upsertArgs[0]?.currentPeriodEnd, "2026-03-04T04:53:20.000Z")
+})

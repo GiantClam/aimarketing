@@ -10,12 +10,19 @@ import {
   getPlanCodeForPayPalPlanId,
   isPayPalSubscriptionEnabledForEmail,
 } from "@/lib/billing/paypal"
+import {
+  buildStripeGrantIdempotencyKey,
+  getStripeCheckoutSession,
+  getStripeSubscriptionDetails,
+  inferStripePlanCode,
+} from "@/lib/billing/stripe"
 import { getBillingPlan } from "@/lib/billing/plans"
 import { blocksDuplicatePlanSubscription } from "@/lib/billing/provider"
 import {
   getLatestBillingSubscription,
   savePendingPayPalSubscription,
   scheduleSubscriptionPlanChange,
+  upsertActiveStripeSubscription,
 } from "@/lib/billing/subscription-store"
 import { getWorkspaceBillingSnapshot } from "@/lib/billing/workspace"
 
@@ -49,6 +56,24 @@ function hasCompletedBillingCycle(periodEnd: unknown, lastPaymentTime: unknown) 
   const periodEndValue = Date.parse(normalizeText(periodEnd))
   const lastPaymentValue = Date.parse(normalizeText(lastPaymentTime))
   return Number.isFinite(periodEndValue) && Number.isFinite(lastPaymentValue) && lastPaymentValue >= periodEndValue
+}
+
+function toIsoOrNull(value: number | null | undefined) {
+  if (!value) return null
+  return new Date(value * 1000).toISOString()
+}
+
+function readStripeTimestamp(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  if (typeof value === "number") return value
+
+  const firstItem = Array.isArray((record.items as { data?: unknown[] } | undefined)?.data)
+    ? ((record.items as { data?: Record<string, unknown>[] } | undefined)?.data?.[0] as
+        | Record<string, unknown>
+        | undefined)
+    : undefined
+  const nestedValue = firstItem?.[key]
+  return typeof nestedValue === "number" ? nestedValue : null
 }
 
 async function ensureCreditAccount(
@@ -133,6 +158,77 @@ async function grantCreditsForRemoteSubscription(
       Number(account.rows[0]?.reserved_balance || 0),
       idempotencyKey,
       JSON.stringify({ paypalSubscriptionId: input.paypalSubscriptionId, planCode: input.planCode }),
+    ],
+  )
+
+  if (inserted.rows[0]?.id) {
+    await client.query(
+      `
+        UPDATE "AI_MARKETING_credit_accounts"
+        SET balance = $2,
+            monthly_grant_balance = monthly_grant_balance + $3,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `,
+      [creditAccountId, nextBalance, plan.monthlyCredits],
+    )
+  }
+}
+
+async function grantCreditsForStripeSubscriptionIfNeeded(
+  client: { query: typeof pool.query },
+  input: {
+    enterpriseId: number | null
+    ownerUserId: number | null
+    planCode: string
+    stripeSubscriptionId: string
+    subscriptionRowId: number | null
+    invoiceId: string | null
+    periodEnd: string | null
+  },
+) {
+  const plan = getBillingPlan(input.planCode)
+  if (!plan) return
+
+  const creditAccountId = await ensureCreditAccount(client, input.enterpriseId, input.ownerUserId)
+  const account = await client.query(
+    `SELECT balance, reserved_balance FROM "AI_MARKETING_credit_accounts" WHERE id = $1 FOR UPDATE`,
+    [creditAccountId],
+  )
+  const currentBalance = Number(account.rows[0]?.balance || 0)
+  const nextBalance = currentBalance + plan.monthlyCredits
+  const idempotencyKey = buildStripeGrantIdempotencyKey(
+    input.stripeSubscriptionId,
+    input.invoiceId,
+    input.periodEnd,
+  )
+
+  const inserted = await client.query(
+    `
+      INSERT INTO "AI_MARKETING_credit_ledger" (
+        credit_account_id,
+        enterprise_id,
+        subscription_id,
+        entry_type,
+        feature_key,
+        amount,
+        balance_after,
+        reserved_balance_after,
+        idempotency_key,
+        metadata
+      ) VALUES ($1, $2, $3, 'grant', 'subscription_monthly_grant', $4, $5, $6, $7, $8::jsonb)
+      ON CONFLICT (credit_account_id, idempotency_key) DO NOTHING
+      RETURNING id
+    `,
+    [
+      creditAccountId,
+      input.enterpriseId,
+      input.subscriptionRowId,
+      plan.monthlyCredits,
+      nextBalance,
+      Number(account.rows[0]?.reserved_balance || 0),
+      idempotencyKey,
+      JSON.stringify({ stripeSubscriptionId: input.stripeSubscriptionId, planCode: input.planCode }),
     ],
   )
 
@@ -242,6 +338,71 @@ async function reconcilePayPalSubscriptionIfNeeded(localSubscription: Record<str
   }
 }
 
+async function reconcileStripeSubscriptionIfNeeded(localSubscription: Record<string, unknown>) {
+  const stripeCheckoutSessionId = normalizeText(localSubscription.stripe_checkout_session_id)
+  let stripeSubscriptionId = normalizeText(localSubscription.stripe_subscription_id)
+
+  if (!stripeSubscriptionId && stripeCheckoutSessionId) {
+    const session = await getStripeCheckoutSession(stripeCheckoutSessionId)
+    stripeSubscriptionId = typeof session.subscription === "string" ? session.subscription : ""
+  }
+
+  if (!stripeSubscriptionId) return localSubscription
+
+  const remoteSubscription = await getStripeSubscriptionDetails(stripeSubscriptionId)
+  const remoteStatus = normalizeText(remoteSubscription.status).toLowerCase()
+  if (!["active", "trialing"].includes(remoteStatus)) {
+    return localSubscription
+  }
+
+  const planCode = inferStripePlanCode(remoteSubscription) || normalizeText(localSubscription.plan_code)
+  if (!planCode) return localSubscription
+
+  const stored = await upsertActiveStripeSubscription({
+    enterpriseId: Number(localSubscription.enterprise_id || 0) || null,
+    userId: Number(localSubscription.subscribed_by_user_id || 0) || 0,
+    planCode,
+    stripeCustomerId: typeof remoteSubscription.customer === "string" ? remoteSubscription.customer : null,
+    stripeSubscriptionId: remoteSubscription.id,
+    stripeCheckoutSessionId: stripeCheckoutSessionId || normalizeText(localSubscription.stripe_checkout_session_id),
+    currentPeriodStart: toIsoOrNull(
+      readStripeTimestamp(remoteSubscription as unknown as Record<string, unknown>, "current_period_start"),
+    ),
+    currentPeriodEnd: toIsoOrNull(
+      readStripeTimestamp(remoteSubscription as unknown as Record<string, unknown>, "current_period_end"),
+    ),
+  })
+
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+    const invoiceReference = getRecord(remoteSubscription.latest_invoice)
+    const invoiceId =
+      typeof remoteSubscription.latest_invoice === "string"
+        ? remoteSubscription.latest_invoice
+        : normalizeText(invoiceReference?.id) || null
+    await grantCreditsForStripeSubscriptionIfNeeded(client, {
+      enterpriseId: Number(stored?.enterprise_id || localSubscription.enterprise_id || 0) || null,
+      ownerUserId: Number(stored?.subscribed_by_user_id || localSubscription.subscribed_by_user_id || 0) || null,
+      planCode,
+      stripeSubscriptionId: remoteSubscription.id,
+      subscriptionRowId: Number(stored?.id || localSubscription.id || 0) || null,
+      invoiceId,
+      periodEnd: toIsoOrNull(
+        readStripeTimestamp(remoteSubscription as unknown as Record<string, unknown>, "current_period_end"),
+      ),
+    })
+    await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
+
+  return stored || localSubscription
+}
+
 export async function handleBillingSubscriptionGet(request: NextRequest) {
   const auth = await requireSessionUser(request)
   if ("response" in auth) return auth.response
@@ -271,6 +432,22 @@ export async function handleBillingSubscriptionGet(request: NextRequest) {
         console.warn("billing.subscription.paypal_reconcile_failed", {
           message: error instanceof Error ? error.message : String(error),
           paypalSubscriptionId: subscription.paypal_subscription_id,
+        })
+      }
+    }
+    if (
+      normalizeText(subscription?.payment_provider).toLowerCase() === "stripe" &&
+      (normalizeText(subscription?.status).toLowerCase() === "pending" ||
+        !subscription?.current_period_start ||
+        !subscription?.current_period_end)
+    ) {
+      try {
+        subscription = await reconcileStripeSubscriptionIfNeeded(subscription)
+      } catch (error) {
+        console.warn("billing.subscription.stripe_reconcile_failed", {
+          message: error instanceof Error ? error.message : String(error),
+          stripeCheckoutSessionId: subscription?.stripe_checkout_session_id,
+          stripeSubscriptionId: subscription?.stripe_subscription_id,
         })
       }
     }

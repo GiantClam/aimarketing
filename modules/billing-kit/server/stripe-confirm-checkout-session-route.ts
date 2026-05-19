@@ -17,7 +17,15 @@ function toIsoOrNull(value: number | null | undefined) {
 
 function readStripeTimestamp(record: Record<string, unknown>, key: string) {
   const value = record[key]
-  return typeof value === "number" ? value : null
+  if (typeof value === "number") return value
+
+  const firstItem = Array.isArray((record.items as { data?: unknown[] } | undefined)?.data)
+    ? ((record.items as { data?: Record<string, unknown>[] } | undefined)?.data?.[0] as
+        | Record<string, unknown>
+        | undefined)
+    : undefined
+  const nestedValue = firstItem?.[key]
+  return typeof nestedValue === "number" ? nestedValue : null
 }
 
 export async function handleStripeConfirmCheckoutSessionPost(request: NextRequest) {

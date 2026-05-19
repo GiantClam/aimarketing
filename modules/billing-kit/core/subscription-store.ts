@@ -121,6 +121,28 @@ export async function savePendingStripeCheckoutSession(input: {
   return (result.rows[0] || null) as BillingSubscriptionRecord | null
 }
 
+async function retireOtherActiveSubscriptions(input: {
+  currentSubscriptionId: number
+  enterpriseId: number | null
+  userId: number
+}) {
+  await pool.query(
+    `
+      UPDATE "AI_MARKETING_user_subscriptions"
+      SET status = 'expired',
+          current_period_end = COALESCE(current_period_end, CURRENT_TIMESTAMP),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id <> $1
+        AND status = 'active'
+        AND (
+          ($2::integer IS NOT NULL AND enterprise_id = $2)
+          OR ($2::integer IS NULL AND subscribed_by_user_id = $3)
+        )
+    `,
+    [input.currentSubscriptionId, input.enterpriseId, input.userId],
+  )
+}
+
 export async function upsertActiveStripeSubscription(input: {
   enterpriseId: number | null
   userId: number
@@ -163,7 +185,13 @@ export async function upsertActiveStripeSubscription(input: {
     ],
   )
   if (updatedPending.rows[0]) {
-    return updatedPending.rows[0] as BillingSubscriptionRecord
+    const updated = updatedPending.rows[0] as BillingSubscriptionRecord
+    await retireOtherActiveSubscriptions({
+      currentSubscriptionId: updated.id,
+      enterpriseId: input.enterpriseId,
+      userId: input.userId,
+    })
+    return updated
   }
 
   const inserted = await pool.query(
@@ -210,5 +238,13 @@ export async function upsertActiveStripeSubscription(input: {
       input.currentPeriodEnd,
     ],
   )
-  return (inserted.rows[0] || null) as BillingSubscriptionRecord | null
+  const stored = (inserted.rows[0] || null) as BillingSubscriptionRecord | null
+  if (stored) {
+    await retireOtherActiveSubscriptions({
+      currentSubscriptionId: stored.id,
+      enterpriseId: input.enterpriseId,
+      userId: input.userId,
+    })
+  }
+  return stored
 }

@@ -17,6 +17,9 @@ let lastUpdateParams: any[] | null = null
 let ensureDefaultFreeBillingCalls = 0
 let clientQueryCalls: Array<{ sql: string; params: any[] }> = []
 let paypalRemoteSubscription: Record<string, unknown> | null = null
+let stripeRemoteSession: Record<string, unknown> | null = null
+let stripeRemoteSubscription: Record<string, unknown> | null = null
+let upsertActiveStripeArgs: any[] = []
 let latestSubscriptionRow: any = null
 let workspaceSnapshot = {
   effectivePlan: { code: "creator" },
@@ -100,6 +103,14 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       },
     }
   }
+  if (request === "@/lib/billing/stripe") {
+    return {
+      getStripeCheckoutSession: async () => stripeRemoteSession || {},
+      getStripeSubscriptionDetails: async () => stripeRemoteSubscription || {},
+      inferStripePlanCode: () => "creator",
+      buildStripeGrantIdempotencyKey: () => "stripe-grant:sub_123:in_123",
+    }
+  }
   if (request === "@/lib/billing/default-free-plan") {
     return {
       ensureDefaultFreeBillingForUser: async () => {
@@ -132,6 +143,22 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       savePendingPayPalSubscription: async (input: any) => {
         lastInsertParams = [input.enterpriseId, input.userId, input.planCode, input.paypalSubscriptionId]
         return subscriptionRows[0] || null
+      },
+      upsertActiveStripeSubscription: async (input: any) => {
+        upsertActiveStripeArgs.push(input)
+        return {
+          id: subscriptionRows[0]?.id || 10,
+          enterprise_id: input.enterpriseId,
+          subscribed_by_user_id: input.userId,
+          plan_code: input.planCode,
+          status: "active",
+          payment_provider: "stripe",
+          stripe_subscription_id: input.stripeSubscriptionId,
+          stripe_checkout_session_id: input.stripeCheckoutSessionId,
+          current_period_start: input.currentPeriodStart,
+          current_period_end: input.currentPeriodEnd,
+          next_plan_code: null,
+        }
       },
     }
   }
@@ -174,6 +201,9 @@ test.beforeEach(() => {
   ensureDefaultFreeBillingCalls = 0
   clientQueryCalls = []
   paypalRemoteSubscription = null
+  stripeRemoteSession = null
+  stripeRemoteSubscription = null
+  upsertActiveStripeArgs = []
   latestSubscriptionRow = null
   workspaceSnapshot = {
     effectivePlan: { code: "creator" },
@@ -233,6 +263,49 @@ test("billing subscription route reconciles pending PayPal subscriptions that ar
     clientQueryCalls.some((entry) => entry.sql.includes('UPDATE "AI_MARKETING_user_subscriptions"')),
     true,
   )
+  assert.equal(
+    clientQueryCalls.some((entry) => entry.sql.includes('INSERT INTO "AI_MARKETING_credit_ledger"')),
+    true,
+  )
+})
+
+test("billing subscription route reconciles pending Stripe subscriptions that are already active remotely", async () => {
+  subscriptionRows = [
+    {
+      id: 10,
+      enterprise_id: 11,
+      subscribed_by_user_id: 7,
+      plan_code: "creator",
+      status: "pending",
+      payment_provider: "stripe",
+      stripe_checkout_session_id: "cs_test_123",
+      stripe_subscription_id: null,
+      current_period_start: null,
+      current_period_end: null,
+      next_plan_code: null,
+    },
+  ]
+  stripeRemoteSession = {
+    id: "cs_test_123",
+    subscription: "sub_123",
+  }
+  stripeRemoteSubscription = {
+    id: "sub_123",
+    status: "active",
+    customer: "cus_123",
+    latest_invoice: "in_123",
+    items: {
+      data: [{ price: { id: "price_creator" }, current_period_start: 1770000000, current_period_end: 1772600000 }],
+    },
+  }
+
+  const response = (await GET({} as any)) as any
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.subscription?.status, "active")
+  assert.equal(response.body?.subscription?.payment_provider, "stripe")
+  assert.equal(upsertActiveStripeArgs.length, 1)
+  assert.equal(upsertActiveStripeArgs[0]?.stripeSubscriptionId, "sub_123")
   assert.equal(
     clientQueryCalls.some((entry) => entry.sql.includes('INSERT INTO "AI_MARKETING_credit_ledger"')),
     true,

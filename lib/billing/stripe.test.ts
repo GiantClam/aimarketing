@@ -96,6 +96,12 @@ test("stripe checkout session omits proration behavior for new subscriptions", a
   assert.equal(FakeStripe.lastSecretKey, "sk_test_fake")
   assert.equal(FakeStripe.lastCheckoutParams?.mode, "subscription")
   assert.equal(
+    (FakeStripe.lastCheckoutParams?.subscription_data as Record<string, unknown>)?.metadata &&
+      ((FakeStripe.lastCheckoutParams?.subscription_data as Record<string, unknown>).metadata as Record<string, unknown>)
+        ?.client_reference_id,
+    "enterprise:11:user:7:plan:starter:provider:stripe",
+  )
+  assert.equal(
     (FakeStripe.lastCheckoutParams?.subscription_data as Record<string, unknown>)?.proration_behavior,
     undefined,
   )

@@ -98,6 +98,7 @@ export async function createStripeCheckoutSession(input: {
   if (!plan) throw new Error("billing_plan_not_found")
   const priceId = getStripePriceId(plan.code)
   if (!priceId) throw new Error("stripe_price_id_missing")
+  const clientReferenceId = `enterprise:${input.enterpriseId || "personal"}:user:${input.userId}:plan:${plan.code}:provider:stripe`
 
   const stripe = getStripeClient()
   return stripe.checkout.sessions.create({
@@ -105,7 +106,7 @@ export async function createStripeCheckoutSession(input: {
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
     customer_email: input.userEmail,
-    client_reference_id: `enterprise:${input.enterpriseId || "personal"}:user:${input.userId}:plan:${plan.code}:provider:stripe`,
+    client_reference_id: clientReferenceId,
     line_items: [{ price: priceId, quantity: 1 }],
     metadata: {
       enterpriseId: String(input.enterpriseId || ""),
@@ -115,6 +116,7 @@ export async function createStripeCheckoutSession(input: {
     },
     subscription_data: {
       metadata: {
+        client_reference_id: clientReferenceId,
         enterpriseId: String(input.enterpriseId || ""),
         userId: String(input.userId),
         planCode: plan.code,

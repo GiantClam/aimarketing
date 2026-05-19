@@ -9,16 +9,25 @@ const nodeModule = require("node:module") as {
 const originalLoad = nodeModule._load
 
 let insertedEvent = true
+let constructedEventType = "invoice.paid"
+let constructedEventObject: any = { id: "in_123", subscription: "sub_123" }
 const subscriptionDetails: any = {
   id: "sub_123",
   status: "active",
   customer: "cus_123",
-  metadata: { client_reference_id: "enterprise:11:user:7:plan:creator:provider:stripe", planCode: "creator" },
+  metadata: {
+    client_reference_id: "enterprise:11:user:7:plan:creator:provider:stripe",
+    enterpriseId: "11",
+    userId: "7",
+    planCode: "creator",
+    provider: "stripe",
+  },
   current_period_start: 1770000000,
   current_period_end: 1772600000,
   items: { data: [{ price: { id: "price_creator" } }] },
 }
 const queryCalls: Array<{ sql: string; params: any[] }> = []
+const upsertActiveCalls: any[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -37,8 +46,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         webhooks: {
           constructEvent: () => ({
             id: "evt_123",
-            type: "invoice.paid",
-            data: { object: { id: "in_123", subscription: "sub_123" } },
+            type: constructedEventType,
+            data: { object: constructedEventObject },
           }),
         },
       }),
@@ -47,6 +56,20 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       parseStripeClientReferenceId: () => ({ enterpriseId: 11, userId: 7, planCode: "creator", provider: "stripe" }),
       inferStripePlanCode: () => "creator",
       buildStripeGrantIdempotencyKey: () => "stripe-grant:sub_123:in_123",
+    }
+  }
+  if (request === "@/lib/billing/subscription-store") {
+    return {
+      upsertActiveStripeSubscription: async (input: any) => {
+        upsertActiveCalls.push(input)
+        return {
+          id: 12,
+          enterprise_id: input.enterpriseId,
+          subscribed_by_user_id: input.userId,
+          plan_code: input.planCode,
+          status: "active",
+        }
+      },
     }
   }
   if (request === "@/lib/billing/plans") {
@@ -91,7 +114,10 @@ test.before(async () => {
 
 test.beforeEach(() => {
   insertedEvent = true
+  constructedEventType = "invoice.paid"
+  constructedEventObject = { id: "in_123", subscription: "sub_123" }
   queryCalls.length = 0
+  upsertActiveCalls.length = 0
 })
 
 test.after(() => {
@@ -129,4 +155,25 @@ test("stripe webhook validates signature presence", async () => {
 
   assert.equal(response.status, 400)
   assert.equal(response.body?.error, "stripe_signature_missing")
+})
+
+test("stripe webhook upgrades the pending checkout session on checkout.session.completed", async () => {
+  constructedEventType = "checkout.session.completed"
+  constructedEventObject = {
+    id: "cs_test_123",
+    mode: "subscription",
+    subscription: "sub_123",
+    client_reference_id: "enterprise:11:user:7:plan:creator:provider:stripe",
+  }
+
+  const response = (await POST({
+    text: async () => JSON.stringify({ id: "evt_123" }),
+    headers: { get: (name: string) => (name === "stripe-signature" ? "sig_test" : null) },
+  } as any)) as any
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.ok, true)
+  assert.equal(upsertActiveCalls.length, 1)
+  assert.equal(upsertActiveCalls[0]?.stripeCheckoutSessionId, "cs_test_123")
+  assert.equal(upsertActiveCalls[0]?.stripeSubscriptionId, "sub_123")
 })

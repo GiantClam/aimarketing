@@ -106,7 +106,7 @@ export async function beginProviderCheckout(input: {
   const successUrl = new URL(`${input.origin}/dashboard/billing`)
   successUrl.searchParams.set("stripe", "approved")
   successUrl.searchParams.set("planCode", plan.code)
-  successUrl.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}")
+  const successUrlString = `${successUrl.toString()}&session_id={CHECKOUT_SESSION_ID}`
 
   const cancelUrl = new URL(`${input.origin}/dashboard/billing`)
   cancelUrl.searchParams.set("stripe", "cancelled")
@@ -140,7 +140,7 @@ export async function beginProviderCheckout(input: {
     userEmail: input.user.email,
     enterpriseId: input.user.enterpriseId,
     userId: input.user.id,
-    successUrl: successUrl.toString(),
+    successUrl: successUrlString,
     cancelUrl: cancelUrl.toString(),
   })
 

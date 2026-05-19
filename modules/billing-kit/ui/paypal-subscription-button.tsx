@@ -1,20 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import { useI18n } from "@/modules/billing-kit/host/locale"
 import { Button } from "@/modules/billing-kit/host/ui"
-
-declare global {
-  interface Window {
-    paypal?: {
-      createInstance?: (options: {
-        clientToken: string
-        components?: string[]
-      }) => Promise<unknown>
-    }
-  }
-}
 
 type PayPalSubscriptionButtonProps = {
   planCode: string
@@ -93,61 +82,6 @@ export function PayPalSubscriptionButton({ planCode, disabled, onApproved }: Pay
   const billing = messages.billing
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-
-  useEffect(() => {
-    if (disabled) return
-
-    let cancelled = false
-    async function initSdk() {
-      setError("")
-      try {
-        const response = await fetch("/api/paypal/browser-safe-client-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        })
-        const json = await response.json().catch(() => null)
-        if (!response.ok) {
-          throw new Error(json?.error || "paypal_sdk_load_failed")
-        }
-
-        const clientToken = typeof json?.clientToken === "string" ? json.clientToken : ""
-        const sdkBaseUrl = typeof json?.sdkBaseUrl === "string" ? json.sdkBaseUrl : ""
-        if (!clientToken || !sdkBaseUrl) {
-          throw new Error("paypal_sdk_load_failed")
-        }
-
-        if (!document.querySelector("script[data-paypal-web-sdk-v6='true']")) {
-          const script = document.createElement("script")
-          script.src = `${sdkBaseUrl}/web-sdk/v6/core.js`
-          script.async = true
-          script.dataset.paypalWebSdkV6 = "true"
-          await new Promise<void>((resolve, reject) => {
-            script.onload = () => resolve()
-            script.onerror = () => reject(new Error("paypal_sdk_load_failed"))
-            document.body.appendChild(script)
-          })
-        }
-
-        if (window.paypal?.createInstance) {
-          await window.paypal.createInstance({
-            clientToken,
-            components: ["paypal-payments"],
-          })
-        }
-      } catch (sdkError) {
-        // The current checkout path can continue through the server-side approval URL
-        // even if the optional v6 SDK bootstrap fails in the browser.
-        if (!cancelled) {
-          console.warn("billing.paypal.sdk_init_failed", sdkError)
-        }
-      }
-    }
-
-    void initSdk()
-    return () => {
-      cancelled = true
-    }
-  }, [disabled])
 
   const handleFallbackSubscribe = async () => {
     if (disabled || loading) return
