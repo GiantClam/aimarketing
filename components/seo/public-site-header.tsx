@@ -17,26 +17,30 @@ export function PublicSiteHeader({ activeKey }: { activeKey?: PublicNavKey }) {
   const copy = getPublicCopy(locale)
 
   return (
-    <header className="border-b border-border bg-card">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5">
+    <header className="border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/88">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-4">
         <Link href="/" className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-accent">
-            <span className="text-lg font-bold lowercase text-primary">ai</span>
+          <div className="flex h-11 w-11 items-center justify-center rounded-[6px] border border-primary/50 bg-primary shadow-[inset_0_0_0_1px_rgba(0,0,0,0.15)]">
+            <span className="font-display text-lg font-extrabold uppercase tracking-[0.08em] text-primary-foreground">AI</span>
           </div>
-          <div>
-            <div className="text-sm text-muted-foreground">{copy.header.productName}</div>
-            <div className="-mt-1 text-base font-semibold text-foreground">{copy.header.tagline}</div>
+          <div className="min-w-0">
+            <div className="public-kicker text-muted-foreground/80">{copy.header.productName}</div>
+            <div className="mt-1 font-display text-base font-bold uppercase tracking-[0.03em] text-foreground">
+              {copy.header.tagline}
+            </div>
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-5 text-sm lg:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {copy.header.navItems.map((item) => (
             <Link
               key={item.key}
               href={item.href}
               className={cn(
-                "transition hover:text-foreground",
-                activeKey === item.key ? "font-medium text-foreground" : "text-muted-foreground",
+                "public-system-chip public-kicker rounded-[4px] px-3 py-2 transition",
+                activeKey === item.key
+                  ? "border border-primary/40 bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {item.label}
@@ -45,11 +49,15 @@ export function PublicSiteHeader({ activeKey }: { activeKey?: PublicNavKey }) {
         </nav>
 
         <div className="flex items-center gap-3">
-          <LocaleSwitcher className="hidden bg-background sm:inline-flex" />
-          <Button variant="ghost" className="hidden rounded-full px-5 sm:inline-flex" asChild>
+          <div className="hidden items-center gap-2 lg:flex">
+            <span className="public-signal" aria-hidden="true" />
+            <span className="public-kicker text-muted-foreground">Brand Ops Ready</span>
+          </div>
+          <LocaleSwitcher className="hidden rounded-[4px] border-border bg-card sm:inline-flex" />
+          <Button variant="ghost" className="public-system-chip hidden rounded-[4px] px-4 font-display text-xs font-bold uppercase tracking-[0.08em] sm:inline-flex" asChild>
             <Link href="/login">{copy.header.login}</Link>
           </Button>
-          <Button className="rounded-full px-5" asChild>
+          <Button className="public-button-primary h-10 px-5" asChild>
             <TrackedCtaLink
               href="/register"
               eventName={SEO_EVENT.seoPageCtaClick}

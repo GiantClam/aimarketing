@@ -7,6 +7,21 @@
 :root {
   /* Radix ScrollArea overflow fix */
   --radix-scroll-area-viewport-overflow: scroll;
+  --font-display-fallback:
+    "Barlow Condensed",
+    "Arial Narrow",
+    "Noto Sans SC",
+    "Microsoft YaHei",
+    sans-serif;
+  --font-body-fallback:
+    "IBM Plex Sans",
+    "Segoe UI",
+    "Helvetica Neue",
+    Arial,
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    sans-serif;
 
   /* AIPartnerTool-aligned flat light system */
   --background: #f5f5f5;
@@ -28,8 +43,8 @@
   --border: rgba(26, 26, 26, 0.1);
   --input: rgba(26, 26, 26, 0.1);
   --input-background: #ffffff;
-  --ring: #f2f361;
-  --chart-1: #f2f361;
+  --ring: #f4ff59;
+  --chart-1: #f4ff59;
   --chart-2: #5aa100;
   --chart-3: #1a1a1a;
   --chart-4: #e8e8e8;
@@ -37,7 +52,7 @@
   --radius: 1.25rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #1a1a1a;
-  --sidebar-primary: #f2f361;
+  --sidebar-primary: #f4ff59;
   --sidebar-primary-foreground: #1a1a1a;
   --sidebar-accent: #f5f5f5;
   --sidebar-accent-foreground: #1a1a1a;
@@ -52,7 +67,7 @@
   --card-foreground: #f5f5f5;
   --popover: #1a1a1a;
   --popover-foreground: #f5f5f5;
-  --primary: #f2f361;
+  --primary: #f4ff59;
   --primary-foreground: #1a1a1a;
   --secondary: #7bc11d;
   --secondary-foreground: #0d1400;
@@ -65,15 +80,15 @@
   --border: rgba(245, 245, 245, 0.12);
   --input: #2d2d2d;
   --input-background: #1f1f1f;
-  --ring: #f2f361;
-  --chart-1: #f2f361;
+  --ring: #f4ff59;
+  --chart-1: #f4ff59;
   --chart-2: #7bc11d;
   --chart-3: #f5f5f5;
   --chart-4: #525252;
   --chart-5: #d3d3d3;
   --sidebar: #161616;
   --sidebar-foreground: #f5f5f5;
-  --sidebar-primary: #f2f361;
+  --sidebar-primary: #f4ff59;
   --sidebar-primary-foreground: #1a1a1a;
   --sidebar-accent: #1f1f1f;
   --sidebar-accent-foreground: #f5f5f5;
@@ -128,22 +143,340 @@
   body {
     @apply text-foreground;
     background-color: var(--background);
-    background-image: none;
+    background-image:
+      linear-gradient(90deg, color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px),
+      linear-gradient(color-mix(in srgb, var(--foreground) 5%, transparent) 1px, transparent 1px);
+    background-size: 72px 72px;
     color-scheme: light;
     font-family:
-      "Segoe UI",
-      "Helvetica Neue",
-      Arial,
-      "PingFang SC",
-      "Hiragino Sans GB",
-      "Microsoft YaHei",
-      sans-serif;
+      var(--font-body),
+      var(--font-body-fallback);
     text-rendering: optimizeLegibility;
   }
 
   ::selection {
     background: color-mix(in srgb, var(--primary) 82%, white 18%);
     color: var(--primary-foreground);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+  }
+
+  .font-body {
+    font-family:
+      var(--font-body),
+      var(--font-body-fallback);
+  }
+
+  .public-grid-bg {
+    background-image:
+      linear-gradient(90deg, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px),
+      linear-gradient(color-mix(in srgb, var(--foreground) 5%, transparent) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  .public-panel {
+    position: relative;
+    border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+    background: color-mix(in srgb, var(--card) 90%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--foreground) 3%, transparent),
+      0 20px 60px color-mix(in srgb, black 14%, transparent);
+  }
+
+  .public-panel::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 72px;
+    height: 2px;
+    background: color-mix(in srgb, var(--primary) 86%, white 14%);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+
+  .public-panel:hover::before {
+    width: 112px;
+    box-shadow: 0 0 24px color-mix(in srgb, var(--primary) 36%, transparent);
+  }
+
+  .public-kicker {
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  .public-display {
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 0.92;
+    text-transform: uppercase;
+  }
+
+  .public-button-primary {
+    position: relative;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--primary) 92%, black 8%);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 94%, white 6%) 0%,
+        color-mix(in srgb, var(--primary) 92%, black 8%) 100%
+      );
+    color: var(--primary-foreground);
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 0 0 1px rgba(0, 0, 0, 0.14),
+      0 10px 30px color-mix(in srgb, var(--primary) 14%, transparent);
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  }
+
+  .public-button-primary::after {
+    content: "";
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    width: 22px;
+    height: 2px;
+    background: rgba(0, 0, 0, 0.36);
+    transform: rotate(-45deg);
+    transform-origin: right center;
+    pointer-events: none;
+  }
+
+  .public-button-primary:hover {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 96%, white 4%) 0%,
+        color-mix(in srgb, var(--primary) 90%, black 10%) 100%
+      );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.38),
+      0 0 0 1px rgba(0, 0, 0, 0.16),
+      0 14px 36px color-mix(in srgb, var(--primary) 18%, transparent);
+    transform: translateY(-1px);
+  }
+
+  .public-button-secondary {
+    position: relative;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--background) 92%, white 8%) 0%,
+        color-mix(in srgb, var(--background) 86%, black 2%) 100%
+      );
+    color: var(--foreground);
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--background) 90%, white 10%),
+      0 0 0 1px color-mix(in srgb, var(--foreground) 5%, transparent);
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+
+  .public-button-secondary::after {
+    content: "";
+    position: absolute;
+    right: 8px;
+    bottom: 7px;
+    width: 18px;
+    height: 1px;
+    background: color-mix(in srgb, var(--foreground) 32%, transparent);
+    transform: rotate(-45deg);
+    transform-origin: right center;
+    pointer-events: none;
+  }
+
+  .public-button-secondary:hover {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--foreground) 5%, var(--background)) 0%,
+        color-mix(in srgb, var(--foreground) 9%, var(--background)) 100%
+      );
+    transform: translateY(-1px);
+  }
+
+  .public-tag {
+    border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+    background: color-mix(in srgb, var(--background) 88%, transparent);
+  }
+
+  .public-system-chip {
+    border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--background) 92%, white 8%) 0%,
+        color-mix(in srgb, var(--background) 88%, black 2%) 100%
+      );
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 16%, transparent);
+  }
+
+  .public-system-chip:hover {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 10%, var(--background)) 0%,
+        color-mix(in srgb, var(--primary) 4%, var(--background)) 100%
+      );
+  }
+
+  .public-signal {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--primary);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--primary) 65%, transparent);
+  }
+
+  .dashboard-shell {
+    background-image:
+      linear-gradient(90deg, color-mix(in srgb, var(--foreground) 5%, transparent) 1px, transparent 1px),
+      linear-gradient(color-mix(in srgb, var(--foreground) 4%, transparent) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .dashboard-panel {
+    position: relative;
+    border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--foreground) 3%, transparent),
+      0 16px 44px color-mix(in srgb, black 12%, transparent);
+  }
+
+  .dashboard-panel::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 56px;
+    height: 2px;
+    background: color-mix(in srgb, var(--primary) 84%, white 16%);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--primary) 24%, transparent);
+  }
+
+  .dashboard-chip {
+    border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--background) 90%, white 10%) 0%,
+        color-mix(in srgb, var(--background) 85%, black 3%) 100%
+      );
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 16%, transparent);
+  }
+
+  .dashboard-kicker {
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-title {
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-button-primary {
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--primary) 92%, black 8%);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 95%, white 5%) 0%,
+        color-mix(in srgb, var(--primary) 90%, black 10%) 100%
+      );
+    color: var(--primary-foreground);
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 0 0 1px rgba(0, 0, 0, 0.14),
+      0 10px 28px color-mix(in srgb, var(--primary) 12%, transparent);
+  }
+
+  .dashboard-button-secondary {
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--foreground) 16%, transparent);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--background) 92%, white 8%) 0%,
+        color-mix(in srgb, var(--background) 86%, black 2%) 100%
+      );
+    color: var(--foreground);
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+}
+
+@media (max-width: 900px) {
+  .public-display {
+    line-height: 0.96;
+    letter-spacing: -0.035em;
+  }
+
+  .public-button-primary,
+  .public-button-secondary {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 640px) {
+  .public-kicker {
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+  }
+
+  .public-display {
+    font-size: clamp(2.65rem, 14vw, 4.25rem);
   }
 }
 

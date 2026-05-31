@@ -62,13 +62,16 @@ export function AiCostCalculator() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px]">
-      <section className="rounded-[28px] border-2 border-border bg-card p-6 sm:p-8">
+      <section className="public-panel rounded-[12px] p-6 sm:p-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-primary">
+          <div className="flex h-12 w-12 items-center justify-center rounded-[6px] border border-primary/30 bg-primary">
             <Calculator className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-2xl font-semibold text-foreground">Estimate your current AI stack</h2>
+            <div className="public-kicker text-muted-foreground">Cost Input</div>
+            <h2 className="mt-1 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+              Estimate your current AI stack
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">Enter the number of active users for each tool type.</p>
           </div>
         </div>
@@ -82,7 +85,7 @@ export function AiCostCalculator() {
               min={1}
               value={input.teamSize}
               onChange={(event) => updateNumber("teamSize", event.target.value)}
-              className="h-12 rounded-[14px] bg-background"
+              className="h-12 rounded-[6px] border-border bg-background"
             />
           </div>
 
@@ -95,7 +98,7 @@ export function AiCostCalculator() {
                 min={0}
                 value={input[tool.key]}
                 onChange={(event) => updateNumber(tool.key, event.target.value)}
-                className="h-12 rounded-[14px] bg-background"
+                className="h-12 rounded-[6px] border-border bg-background"
               />
               <p className="text-xs text-muted-foreground">
                 Estimate: {currency(tool.monthlyLow)}-{currency(tool.monthlyHigh)} per user / month
@@ -104,7 +107,7 @@ export function AiCostCalculator() {
           ))}
         </div>
 
-        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-[18px] border-2 border-border bg-background p-4">
+        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-[8px] border border-border bg-background p-4">
           <input
             type="checkbox"
             checked={input.needsByok}
@@ -123,30 +126,30 @@ export function AiCostCalculator() {
         </label>
       </section>
 
-      <aside className="rounded-[28px] border-2 border-border bg-accent p-6 text-accent-foreground sm:p-8">
-        <p className="text-sm uppercase tracking-[0.2em] text-accent-foreground/70">Estimated cost</p>
+      <aside className="rounded-[12px] border border-border bg-accent p-6 text-accent-foreground sm:p-8">
+        <p className="public-kicker text-accent-foreground/70">Estimated cost</p>
         <div className="mt-4 space-y-5">
           <div>
             <p className="text-sm text-accent-foreground/70">Monthly AI software cost</p>
-            <p className="mt-1 text-4xl font-semibold">
+            <p className="mt-1 font-display text-5xl font-extrabold uppercase tracking-[-0.04em]">
               {currency(estimate.monthlyLow)}-{currency(estimate.monthlyHigh)}
             </p>
           </div>
           <div>
             <p className="text-sm text-accent-foreground/70">Annual AI software cost</p>
-            <p className="mt-1 text-3xl font-semibold">
+            <p className="mt-1 font-display text-4xl font-extrabold uppercase tracking-[-0.04em]">
               {currency(estimate.annualLow)}-{currency(estimate.annualHigh)}
             </p>
           </div>
-          <div className="rounded-[20px] bg-white/10 p-4">
+          <div className="rounded-[8px] border border-white/12 bg-white/10 p-4">
             <p className="text-sm text-accent-foreground/70">Potential monthly savings range</p>
-            <p className="mt-1 text-3xl font-semibold">
+            <p className="mt-1 font-display text-4xl font-extrabold uppercase tracking-[-0.04em]">
               {currency(estimate.savingsLow)}-{currency(estimate.savingsHigh)}
             </p>
           </div>
-          <div className="rounded-[20px] bg-white/10 p-4">
+          <div className="rounded-[8px] border border-white/12 bg-white/10 p-4">
             <p className="text-sm text-accent-foreground/70">Recommended starting point</p>
-            <p className="mt-1 text-xl font-semibold">{estimate.recommendedPlan}</p>
+            <p className="mt-1 font-display text-xl font-extrabold uppercase tracking-[0.02em]">{estimate.recommendedPlan}</p>
           </div>
         </div>
 
@@ -164,7 +167,7 @@ export function AiCostCalculator() {
         </div>
 
         <div className="mt-8 flex flex-col gap-3">
-          <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+          <Button className="public-button-primary h-12" asChild>
             <TrackedCtaLink
               href="/register"
               eventName={SEO_EVENT.calculatorCtaClick}
@@ -177,11 +180,7 @@ export function AiCostCalculator() {
               Start your team workspace
             </TrackedCtaLink>
           </Button>
-          <Button
-            variant="outline"
-            className="rounded-full border-2 border-accent-foreground/20 bg-transparent text-accent-foreground hover:bg-accent-foreground/10"
-            asChild
-          >
+          <Button className="h-12 rounded-[4px] border border-accent-foreground/28 bg-transparent font-display text-xs font-bold uppercase tracking-[0.08em] text-accent-foreground hover:bg-accent-foreground/10" asChild>
             <TrackedCtaLink
               href="/alternatives/chatgpt-team-alternative"
               eventName={SEO_EVENT.calculatorCtaClick}

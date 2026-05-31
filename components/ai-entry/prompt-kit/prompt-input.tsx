@@ -94,7 +94,7 @@ function PromptInput({
     <PromptInputContext.Provider value={contextValue}>
       <div
         className={cn(
-          "cursor-text rounded-3xl border border-input bg-background p-2 shadow-xs",
+          "dashboard-panel cursor-text rounded-[10px] border border-input bg-background p-2 shadow-xs",
           className,
         )}
         onClick={() => textareaRef.current?.focus()}

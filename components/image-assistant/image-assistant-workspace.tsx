@@ -4625,18 +4625,18 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   if (!availability) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="dashboard-shell flex h-full min-h-0 flex-col bg-background">
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
           <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+            <div className="dashboard-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[12px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
               <div className="min-h-0 flex-1 overflow-hidden">
                 <ScrollArea className="h-full">
                   <WorkspaceConversationSkeleton rows={3} loadingLabel={imageCopy.loadingApp} />
                 </ScrollArea>
               </div>
               <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
-                <div className="mx-auto w-full max-w-5xl rounded-[24px] border-2 border-border bg-card p-2.5">
-                  <div className="h-11 rounded-[18px] border-2 border-border bg-background/70" />
+                <div className="dashboard-panel mx-auto w-full max-w-5xl rounded-[12px] bg-card p-2.5">
+                  <div className="h-11 rounded-[8px] border border-border bg-background/70" />
                 </div>
               </div>
             </div>
@@ -4649,8 +4649,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   if (!availability.enabled) {
     return (
       <div className="flex h-full items-center justify-center p-8">
-        <div className="max-w-lg rounded-3xl border border-border bg-card p-8 shadow-sm">
-          <p className="font-sans text-2xl font-semibold text-foreground">{imageCopy.unavailableTitle}</p>
+        <div className="dashboard-panel max-w-lg rounded-[12px] bg-card p-8 shadow-sm">
+          <p className="dashboard-title text-2xl text-foreground">{imageCopy.unavailableTitle}</p>
           <p className="mt-3 text-sm text-muted-foreground">
             {imageCopy.unavailableReasonPrefix}
             {availability.reason || imageCopy.unavailableReasonFallback}
@@ -4663,10 +4663,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="dashboard-shell flex h-full min-h-0 flex-col">
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
           <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+            <div className="dashboard-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[12px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
               <div className="flex min-h-0 flex-1 bg-[#f7f7f7] px-0">
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="min-h-0 flex-1 overflow-hidden">
@@ -4681,7 +4681,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-8 rounded-full px-3 text-[11px]"
+                                      className="dashboard-button-secondary h-8 px-3 text-[11px]"
                                       onClick={() => void loadMoreMessages()}
                                       disabled={isLoadingMoreMessages}
                                     >
@@ -4730,7 +4730,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                   icon={message.role !== "user" ? <Sparkles className="h-3.5 w-3.5" /> : null}
                                   action={
                                     optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
-                                      <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px]">
+                                      <Badge
+                                        variant="outline"
+                                        className="dashboard-kicker rounded-[4px] border px-2 py-0.5 text-[9px] font-medium"
+                                      >
                                         {getRunKindLabel(pendingTurn.kind, extraCopy)}
                                       </Badge>
                                     ) : null
@@ -4739,7 +4742,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                 >
                                   <div
                                     className={cn(
-                                      "rounded-[24px] border-2 p-4 selection:bg-[#E8E8E8]",
+                                      "rounded-[10px] border p-4 selection:bg-[#E8E8E8]",
                                       message.role === "user" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background",
                                     )}
                                   >
@@ -4753,7 +4756,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                             <span
                                               key={`${message.id}:${item.label}`}
                                               className={cn(
-                                                "inline-flex items-center gap-1 rounded-full border-2 px-2.5 py-1 text-[10px] font-medium",
+                                                "dashboard-kicker inline-flex items-center gap-1 rounded-[4px] border px-2.5 py-1 text-[10px] font-medium",
                                                 message.role === "user"
                                                   ? "border-white/20 bg-primary text-primary-foreground"
                                                   : "border-border bg-card text-muted-foreground",
@@ -4774,7 +4777,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                           <span>{extraCopy.pendingImagesLabel}</span>
                                           <span
                                             className={cn(
-                                              "rounded-full border-2 px-2 py-0.5 text-[9px]",
+                                              "dashboard-kicker rounded-[4px] border px-2 py-0.5 text-[9px]",
                                               message.role === "user" ? "border-white/20 bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground",
                                             )}
                                           >
@@ -4797,7 +4800,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                 <div
                                                   key={attachment.id}
                                                   className={cn(
-                                                    "group overflow-hidden rounded-[20px] border-2",
+                                                    "group overflow-hidden rounded-[10px] border",
                                                     message.role === "user"
                                                       ? "border-white/20 bg-primary"
                                                       : "border-border bg-card",
@@ -4835,7 +4838,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                 <div
                                                   key={attachment.id}
                                                   className={cn(
-                                                    "group overflow-hidden rounded-[20px] border-2",
+                                                    "group overflow-hidden rounded-[10px] border",
                                                     message.role === "user"
                                                       ? "border-white/20 bg-primary"
                                                       : "border-border bg-card",
@@ -4871,7 +4874,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                     ) : null}
                                     {optimisticAssistantMessageId && message.id === optimisticAssistantMessageId && pendingTurn?.status === "running" ? (
                                       <WorkspaceLoadingMessage
-                                        className="rounded-[20px] border-2 border-border bg-card px-3 py-3"
+                                        className="dashboard-panel rounded-[10px] bg-card px-3 py-3"
                                         label={
                                           <>
                                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -4888,7 +4891,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                           <div
                                             key={`${message.id}:${question.id}`}
                                             data-testid={`image-prompt-question-${question.id}`}
-                                            className="rounded-[20px] border-2 border-border bg-card p-3"
+                                            className="dashboard-panel rounded-[10px] bg-card p-3"
                                           >
                                             <div className="mb-3">
                                               <p className="text-[12px] font-semibold text-foreground">{question.title}</p>
@@ -4915,9 +4918,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                   }
                                                   disabled={isBusy || isPendingTurnRunning || !isPromptQuestionMessageInteractive}
                                                   className={cn(
-                                                    "rounded-[18px] border-2 border-border text-left transition",
+                                                    "rounded-[4px] border border-border text-left transition duration-200",
                                                     isPromptQuestionMessageInteractive
-                                                      ? "hover:border-primary"
+                                                      ? "hover:border-primary hover:bg-primary/5"
                                                       : "cursor-not-allowed opacity-55",
                                                     question.display === "cards"
                                                       ? "bg-background px-4 py-3"
@@ -4946,11 +4949,11 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                               {messageVersion.candidates.map((candidate) => (
                                                 <div
                                                   key={candidate.id}
-                                                  className="overflow-hidden rounded-[20px] border-2 border-border bg-card"
+                                                  className="dashboard-panel overflow-hidden rounded-[6px] border border-border bg-card shadow-none"
                                                 >
                                                   <button
                                                     type="button"
-                                                    className="block w-full text-left transition hover:bg-muted/20"
+                                                    className="group block w-full text-left transition hover:bg-primary/5"
                                                     title={extraCopy.previewImage}
                                                     aria-label={extraCopy.previewImage}
                                                     onClick={() => {
@@ -4963,7 +4966,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                       })
                                                     }}
                                                   >
-                                                    <div className="aspect-[4/5] bg-muted/30">
+                                                    <div className="aspect-[4/5] border-b border-border bg-muted/30">
                                                       <CandidatePreviewImage
                                                         candidateId={candidate.id}
                                                         fallbackSrc={candidate.url}
@@ -4976,20 +4979,26 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                             )
                                                             : undefined
                                                         }
-                                                        className="h-full w-full object-cover"
+                                                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                                                       />
                                                     </div>
                                                   </button>
-                                                  <div className="space-y-2 px-3 py-3">
+                                                  <div className="space-y-3 px-3 py-3">
                                                     <div className="flex items-center justify-between gap-2">
-                                                      <p className="min-w-0 flex-1 text-[11px] text-muted-foreground">{extraCopy.clickImageToPreview}</p>
-                                                      <div className="ml-auto flex items-center gap-1.5">
+                                                      <p className="min-w-0 flex-1 text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
+                                                        {extraCopy.clickImageToPreview}
+                                                      </p>
+                                                      <span className="dashboard-kicker rounded-[4px] border px-2 py-0.5 text-[9px] font-medium">
+                                                        {candidate.id.slice(0, 8)}
+                                                      </span>
+                                                    </div>
+                                                    <div className="grid gap-1.5 sm:grid-cols-3">
                                                         <Button
                                                           size="sm"
                                                           type="button"
                                                           variant="outline"
                                                           data-testid={`image-export-candidate-${candidate.id}`}
-                                                          className="h-8 rounded-full px-2.5"
+                                                          className="dashboard-button-secondary h-8 justify-start px-2.5 text-[11px]"
                                                           title={extraCopy.exportImage}
                                                           aria-label={extraCopy.exportImage}
                                                           onClick={() => {
@@ -5012,7 +5021,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                           type="button"
                                                           variant="outline"
                                                           data-testid={`image-open-canvas-${candidate.id}`}
-                                                          className="h-8 rounded-full px-2.5"
+                                                          className="dashboard-button-secondary h-8 justify-start px-2.5 text-[11px]"
                                                           title={extraCopy.editImage}
                                                           aria-label={extraCopy.editImage}
                                                           onClick={() => void openCanvasFromCandidate(messageVersion, candidate.id)}
@@ -5025,7 +5034,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                           type="button"
                                                           variant="outline"
                                                           data-testid={`image-attach-candidate-${candidate.id}`}
-                                                          className="h-8 rounded-full px-2.5"
+                                                          className="dashboard-button-secondary h-8 justify-start px-2.5 text-[11px]"
                                                           title={extraCopy.addAsAttachment}
                                                           aria-label={extraCopy.addAsAttachment}
                                                           onClick={() => {
@@ -5050,7 +5059,6 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                                           <Link2 className="mr-1 h-3.5 w-3.5" />
                                                           <span className="text-[11px]">{extraCopy.addAsAttachment}</span>
                                                         </Button>
-                                                      </div>
                                                     </div>
                                                   </div>
                                                 </div>
@@ -5092,7 +5100,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       data-testid="image-composer-dropzone"
                       className={cn(
                         "relative border-none bg-transparent p-0 transition-colors",
-                        isComposerDragActive && "rounded-[24px] bg-primary/10",
+                        isComposerDragActive && "rounded-[6px] bg-primary/10",
                       )}
                       toolbarClassName="items-center"
                       toolbar={
@@ -5107,7 +5115,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           <Button
                             size="sm"
                             variant="outline"
-                            className="ml-auto h-9 rounded-full"
+                            className="dashboard-button-secondary ml-auto h-9 px-3.5 text-[11px]"
                             data-testid="image-reference-upload-button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isUploading}
@@ -5148,14 +5156,14 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] text-muted-foreground">Ctrl/Cmd + Enter</span>
                             {isBusy ? (
-                              <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
+                              <Button size="sm" variant="outline" className="dashboard-button-secondary h-8 px-3 text-[11px]" disabled>
                                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                                 {imageCopy.statusGenerating}
                               </Button>
                             ) : null}
                             <Button
                               size="sm"
-                              className="h-8 rounded-full px-3 text-[11px]"
+                              className="dashboard-button-primary h-8 px-3 text-[11px]"
                               data-testid="image-generate-button"
                               onClick={() => void runJob(primaryRunKind)}
                               disabled={!canSubmit}
@@ -5172,7 +5180,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       onDrop={handleComposerDrop}
                     >
                       {isComposerDragActive ? (
-                        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[20px] border-2 border-dashed border-primary bg-background px-4 text-center">
+                        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[6px] border border-dashed border-primary bg-background px-4 text-center">
                           <div className="space-y-1">
                             <p className="text-sm font-medium text-foreground">{extraCopy.dragDropActiveHint}</p>
                             <p className="text-xs text-muted-foreground">{extraCopy.dragDropHint}</p>
@@ -5180,9 +5188,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                         </div>
                       ) : null}
                       {pendingAttachments.length ? (
-                        <div className="mt-2 max-h-48 overflow-y-auto rounded-[20px] border-2 border-border bg-background px-3 py-2.5">
+                        <div className="mt-2 max-h-48 overflow-y-auto rounded-[6px] border border-border bg-background px-3 py-2.5">
                           <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-[11px] font-medium text-muted-foreground">
+                            <p className="dashboard-kicker text-[11px] font-medium text-muted-foreground">
                               {pendingAttachments.length}/{IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS}
                             </p>
                           </div>
@@ -5190,10 +5198,10 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                             {pendingAttachments.map((attachment) => (
                               <div
                                 key={attachment.id}
-                                className="group flex items-center gap-2 rounded-[18px] border-2 border-border bg-card px-2 py-2"
+                                className="dashboard-panel group flex items-center gap-2 rounded-[6px] border border-border/80 bg-card px-2 py-2 shadow-none"
                                 data-testid={`image-pending-attachment-${attachment.id}`}
                               >
-                                <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted">
+                                <div className="h-12 w-12 overflow-hidden rounded-[4px] border border-border/70 bg-muted">
                                   <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
                                 </div>
                                 <div className="max-w-[120px]">
@@ -5212,7 +5220,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                                   size="icon"
                                   type="button"
                                   variant="ghost"
-                                  className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
+                                  className="dashboard-chip h-7 w-7 rounded-[4px] text-muted-foreground hover:text-foreground"
                                   onClick={() => removePendingAttachment(attachment.id)}
                                   aria-label={imageCopy.removePendingImage}
                                 >
@@ -5274,9 +5282,9 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
           <DialogDescription className="sr-only">
             {`${imageCopy.editorTitle}. ${imageCopy.autoSaveHint}`}
           </DialogDescription>
-          <div className="relative grid h-full w-full grid-cols-[minmax(0,1fr)_104px] items-stretch gap-4 overflow-hidden rounded-[32px] border-2 border-border bg-muted/30 p-4 md:gap-5 md:p-5 lg:gap-6 lg:p-6">
+          <div className="dashboard-panel relative grid h-full w-full grid-cols-[minmax(0,1fr)_104px] items-stretch gap-4 overflow-hidden rounded-[12px] bg-muted/30 p-4 md:gap-5 md:p-5 lg:gap-6 lg:p-6">
 
-            <div className="relative z-10 col-start-1 row-start-1 min-w-0 overflow-hidden rounded-[28px] border-2 border-border bg-card">
+            <div className="dashboard-panel relative z-10 col-start-1 row-start-1 min-w-0 overflow-hidden rounded-[12px] bg-card">
 
               <div
                 ref={canvasViewportRef}
@@ -5286,7 +5294,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                   <div
                     ref={canvasStageRef}
                     data-testid="image-canvas-stage"
-                    className="relative overflow-hidden rounded-[32px] border-2 border-border bg-background"
+                    className="relative overflow-hidden rounded-[12px] border border-border bg-background"
                     style={{ width: canvas.width * scale, height: canvas.height * scale, flex: "0 0 auto" }}
                     onMouseDown={(event) => {
                       if (event.target === event.currentTarget) {
@@ -5344,30 +5352,30 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                     ) : null}
                   </div>
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-border bg-white/80 p-8 text-sm text-muted-foreground">{imageCopy.openImageToEdit}</div>
+                  <div className="rounded-[10px] border border-dashed border-border bg-white/80 p-8 text-sm text-muted-foreground">{imageCopy.openImageToEdit}</div>
                 )}
               </div>
 
-              <div className="absolute bottom-4 left-[calc(50%-46px)] z-20 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-[20px] border-2 border-border bg-card p-2">
-                <Button variant="outline" className="h-8 rounded-full px-3 text-[11px]" onClick={() => setZoomLevel("fit")}>
+              <div className="dashboard-panel absolute bottom-4 left-[calc(50%-46px)] z-20 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-[10px] bg-card p-2">
+                <Button variant="outline" className="dashboard-button-secondary h-8 px-3 text-[11px]" onClick={() => setZoomLevel("fit")}>
                   {imageCopy.fit}
                 </Button>
-                <Button variant="outline" className="h-8 rounded-full px-3 text-[11px]" onClick={() => setZoomLevel(1)}>
+                <Button variant="outline" className="dashboard-button-secondary h-8 px-3 text-[11px]" onClick={() => setZoomLevel(1)}>
                   100%
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-8 rounded-full px-3 text-[11px]"
+                  className="dashboard-button-secondary h-8 px-3 text-[11px]"
                   onClick={() => setZoomLevel((current) => clamp((current === "fit" ? fitScale : current) - 0.2, 0.2, 4))}
                 >
                   - {imageCopy.zoomOut}
                 </Button>
-                <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px]">
+                <Badge variant="outline" className="dashboard-kicker rounded-[4px] px-2.5 py-1 text-[10px]">
                   {zoomLabel}
                 </Badge>
                 <Button
                   variant="outline"
-                  className="h-8 rounded-full px-3 text-[11px]"
+                  className="dashboard-button-secondary h-8 px-3 text-[11px]"
                   onClick={() => setZoomLevel((current) => clamp((current === "fit" ? fitScale : current) + 0.2, 0.2, 4))}
                 >
                   + {imageCopy.zoomIn}
@@ -5376,31 +5384,31 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             </div>
 
             <div className="relative z-20 col-start-2 row-start-1 flex h-full items-center justify-center">
-              <div className="pointer-events-auto flex h-full max-h-full w-[104px] flex-col rounded-[24px] border-2 border-border bg-card px-2 py-2.5">
+              <div className="dashboard-panel pointer-events-auto flex h-full max-h-full w-[104px] flex-col rounded-[10px] bg-card px-2 py-2.5">
                 <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                  <Badge variant="outline" className="rounded-full px-2 py-1 text-[10px]">
+                  <Badge variant="outline" className="dashboard-kicker rounded-[4px] px-2 py-1 text-[10px]">
                     {dirtyCanvas ? imageCopy.unsaved : imageCopy.synced}
                   </Badge>
                   <div className="flex w-full flex-col items-center gap-1.5">
                     <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
                       {imageCopy.toolGroupLabel}
                     </p>
-                    <Button data-testid="image-select-tool" size="icon" variant={canvasTool === "select" ? "default" : "outline"} onClick={() => { setCanvasTool("select"); setPaintPreview(null); setShapeDraft(null); shapeDraftRef.current = null }} title={imageCopy.selectTool} className="h-10 w-10 rounded-full">
+                    <Button data-testid="image-select-tool" size="icon" variant={canvasTool === "select" ? "default" : "outline"} onClick={() => { setCanvasTool("select"); setPaintPreview(null); setShapeDraft(null); shapeDraftRef.current = null }} title={imageCopy.selectTool} className="h-10 w-10 rounded-[4px]">
                       <MousePointer2 className="h-4.5 w-4.5" />
                     </Button>
-                    <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setShapeDraft(null); shapeDraftRef.current = null; setCanvasTool((current) => (current === "brush" ? "select" : "brush")) }} title={imageCopy.brushTool} className="h-10 w-10 rounded-full">
+                    <Button data-testid="image-brush-tool" size="icon" variant={canvasTool === "brush" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setShapeDraft(null); shapeDraftRef.current = null; setCanvasTool((current) => (current === "brush" ? "select" : "brush")) }} title={imageCopy.brushTool} className="h-10 w-10 rounded-[4px]">
                       <Pencil className="h-4.5 w-4.5" />
                     </Button>
-                    <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setShapeDraft(null); shapeDraftRef.current = null; setCanvasTool((current) => (current === "eraser" ? "select" : "eraser")) }} title={imageCopy.eraserTool} className="h-10 w-10 rounded-full">
+                    <Button data-testid="image-eraser-tool" size="icon" variant={canvasTool === "eraser" ? "default" : "outline"} onClick={() => { stopTextLayerEditing(); setShapeDraft(null); shapeDraftRef.current = null; setCanvasTool((current) => (current === "eraser" ? "select" : "eraser")) }} title={imageCopy.eraserTool} className="h-10 w-10 rounded-[4px]">
                       <Eraser className="h-4.5 w-4.5" />
                     </Button>
-                    <Button data-testid="image-shape-tool" size="icon" variant={canvasTool === "shape" ? "default" : "outline"} onClick={toggleShapeTool} title={imageCopy.shapeTool} className="h-10 w-10 rounded-full">
+                    <Button data-testid="image-shape-tool" size="icon" variant={canvasTool === "shape" ? "default" : "outline"} onClick={toggleShapeTool} title={imageCopy.shapeTool} className="h-10 w-10 rounded-[4px]">
                       <Square className="h-4.5 w-4.5" />
                     </Button>
-                    <Button data-testid="image-text-tool" size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-10 w-10 rounded-full">
+                    <Button data-testid="image-text-tool" size="icon" variant="outline" onClick={addTextToCanvas} title={imageCopy.textTool} className="h-10 w-10 rounded-[4px]">
                       <Type className="h-4.5 w-4.5" />
                     </Button>
-                    <div className="flex flex-col items-center gap-1.5 rounded-[18px] border-2 border-border bg-background px-1.5 py-1.5">
+                    <div className="dashboard-panel flex flex-col items-center gap-1.5 rounded-[8px] bg-background px-1.5 py-1.5">
                       <Palette className="h-3.5 w-3.5 text-primary" />
                       <input
                         aria-label={imageCopy.brushColor}
@@ -5409,7 +5417,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                         onChange={(event) => updateSelectedLayerColor(event.target.value)}
                         disabled={!canAdjustSelectedLayerColor}
                         className={cn(
-                          "h-8 w-8 rounded-full border border-border bg-transparent p-0.5",
+                          "h-8 w-8 rounded-[4px] border border-border bg-transparent p-0.5",
                           canAdjustSelectedLayerColor ? "cursor-pointer" : "cursor-not-allowed opacity-50",
                         )}
                       />
@@ -5420,13 +5428,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                     <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
                       {imageCopy.historyGroupLabel}
                     </p>
-                    <Button variant="outline" size="icon" data-testid="image-canvas-undo-button" onClick={undoCanvasChange} disabled={!undoStack.length} title={imageCopy.undo} className="h-10 w-10 rounded-full">
+                    <Button variant="outline" size="icon" data-testid="image-canvas-undo-button" onClick={undoCanvasChange} disabled={!undoStack.length} title={imageCopy.undo} className="h-10 w-10 rounded-[4px]">
                       <Undo2 className="h-4.5 w-4.5" />
                     </Button>
-                    <Button variant="outline" size="icon" data-testid="image-canvas-redo-button" onClick={redoCanvasChange} disabled={!redoStack.length} title={imageCopy.redo} className="h-10 w-10 rounded-full">
+                    <Button variant="outline" size="icon" data-testid="image-canvas-redo-button" onClick={redoCanvasChange} disabled={!redoStack.length} title={imageCopy.redo} className="h-10 w-10 rounded-[4px]">
                       <Redo2 className="h-4.5 w-4.5" />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={removeSelectedLayer} disabled={!selectedLayerId || !selectedLayer || !isEditableLayer(selectedLayer)} title={imageCopy.delete} className="h-10 w-10 rounded-full">
+                    <Button variant="outline" size="icon" onClick={removeSelectedLayer} disabled={!selectedLayerId || !selectedLayer || !isEditableLayer(selectedLayer)} title={imageCopy.delete} className="h-10 w-10 rounded-[4px]">
                       <Trash2 className="h-4.5 w-4.5" />
                     </Button>
                   </div>
@@ -5439,7 +5447,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       variant="outline"
                       size="icon"
                       data-testid="image-canvas-attach-button"
-                      className="h-10 w-10 rounded-full"
+                      className="h-10 w-10 rounded-[4px]"
                       disabled={!canvas}
                       onClick={() => void handleAttachCurrentCanvas()}
                       title={extraCopy.addCurrentCanvas}
@@ -5451,13 +5459,13 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                       variant="outline"
                       size="icon"
                       data-testid="image-canvas-export-button"
-                      className="h-10 w-10 rounded-full"
+                      className="h-10 w-10 rounded-[4px]"
                       onClick={() => void exportCurrent("png")}
                       title={imageCopy.export}
                     >
                       <Download className="h-4.5 w-4.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" data-testid="image-canvas-close-button" onClick={handleCloseEditor} title={imageCopy.close} className="h-10 w-10 rounded-full">
+                    <Button variant="ghost" size="icon" data-testid="image-canvas-close-button" onClick={handleCloseEditor} title={imageCopy.close} className="h-10 w-10 rounded-[4px]">
                       <X className="h-4.5 w-4.5" />
                     </Button>
                   </div>
@@ -5471,12 +5479,12 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
       <Dialog open={Boolean(previewImage)} onOpenChange={(open) => { if (!open) setPreviewImage(null) }}>
         <DialogContent
           style={previewDialogStyle}
-          className="max-h-[98dvh] w-auto min-w-[280px] max-w-[98vw] border-2 border-border bg-card p-1 selection:bg-[#E8E8E8] sm:max-h-[96dvh] sm:max-w-[96vw] sm:p-3 lg:p-4"
+          className="dashboard-shell max-h-[98dvh] w-auto min-w-[280px] max-w-[98vw] border border-border bg-card p-1 selection:bg-[#E8E8E8] sm:max-h-[96dvh] sm:max-w-[96vw] sm:p-3 lg:p-4"
         >
           <DialogTitle className="sr-only">{previewImage?.label || extraCopy.previewImage}</DialogTitle>
           <DialogDescription className="sr-only">{extraCopy.clickImageToPreview}</DialogDescription>
           {previewImage ? (
-            <div className="flex max-h-[calc(98dvh-52px)] items-center justify-center overflow-hidden rounded-[20px] border-2 border-border bg-muted/30 sm:max-h-[calc(96dvh-72px)] sm:rounded-[24px]">
+            <div className="dashboard-panel flex max-h-[calc(98dvh-52px)] items-center justify-center overflow-hidden rounded-[6px] border border-border bg-muted/30 sm:max-h-[calc(96dvh-72px)]">
               <img
                 src={previewImage.src}
                 alt={previewImage.label}

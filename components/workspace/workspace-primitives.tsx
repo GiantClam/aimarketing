@@ -23,11 +23,11 @@ export function WorkspacePromptGrid({
   itemClassName,
 }: WorkspacePromptGridProps) {
   return (
-    <div className={cn("space-y-3 rounded-[28px] border-2 border-border bg-card p-4", className)}>
+    <div className={cn("dashboard-panel space-y-3 rounded-[12px] p-4", className)}>
       {eyebrow ? (
         <div className="flex items-center gap-2 text-foreground">
           <ChevronRight className="h-4 w-4" />
-          <span className="text-xs font-semibold uppercase tracking-[0.18em]">{eyebrow}</span>
+          <span className="dashboard-kicker">{eyebrow}</span>
         </div>
       ) : null}
       <div className={cn("grid gap-2.5", gridClassName)}>
@@ -37,7 +37,7 @@ export function WorkspacePromptGrid({
             type="button"
             onClick={() => onSelect(prompt)}
             className={cn(
-              "group rounded-[22px] border-2 border-border bg-background px-4 py-4 text-left transition-colors hover:border-primary hover:bg-primary",
+              "dashboard-panel group rounded-[10px] bg-background px-4 py-4 text-left transition-colors hover:border-primary hover:bg-primary",
               itemClassName,
             )}
           >
@@ -73,7 +73,7 @@ export function WorkspacePromptChips({
           type="button"
           onClick={() => onSelect(prompt)}
           className={cn(
-            "rounded-full border-2 border-border bg-card px-3 py-1.5 text-left text-[11px] text-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
+            "dashboard-chip dashboard-kicker rounded-[4px] px-3 py-1.5 text-left text-[11px] text-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
             chipClassName,
           )}
         >
@@ -110,17 +110,17 @@ export function WorkspaceComposerPanel({
     <section
       {...props}
       className={cn(
-        "rounded-[24px] border-2 border-border bg-card p-2.5",
+        "dashboard-panel rounded-[12px] bg-card p-2.5",
         className,
       )}
     >
       {toolbar ? <div className={cn("flex flex-wrap items-center gap-1.5", toolbarClassName)}>{toolbar}</div> : null}
-      <div className={cn("rounded-[18px] border-2 border-border bg-background", toolbar ? "mt-2.5" : "", cardClassName)}>
+      <div className={cn("rounded-[8px] border border-border bg-background", toolbar ? "mt-2.5" : "", cardClassName)}>
         <div className={bodyClassName}>{children}</div>
         {footer ? (
           <div
             className={cn(
-              "flex items-center justify-between gap-2 border-t-2 border-border px-3 py-2.5",
+              "flex items-center justify-between gap-2 border-t border-border px-3 py-2.5",
               footerClassName,
             )}
           >
@@ -154,18 +154,18 @@ export function WorkspaceEmptyState({
   className,
 }: WorkspaceEmptyStateProps) {
   return (
-    <div className={cn("w-full rounded-[28px] border-2 border-border bg-card p-5 lg:p-6", className)}>
+    <div className={cn("dashboard-panel w-full rounded-[12px] bg-card p-5 lg:p-6", className)}>
       <div className="flex flex-wrap items-start gap-4">
-        {icon ? <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-accent text-accent-foreground shadow-sm">{icon}</div> : null}
+        {icon ? <div className="flex h-14 w-14 items-center justify-center rounded-[8px] border border-primary/30 bg-primary text-primary-foreground shadow-sm">{icon}</div> : null}
         <div className="max-w-2xl">
-          <h3 className="text-2xl font-semibold text-foreground">{title}</h3>
+          <h3 className="dashboard-title text-2xl text-foreground">{title}</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
       </div>
       {checklist.length ? (
         <div className="mt-6 grid gap-3 md:grid-cols-3">
           {checklist.map((item) => (
-            <div key={item} className="rounded-[22px] border-2 border-border bg-background px-4 py-4 text-sm leading-6 text-foreground">
+            <div key={item} className="dashboard-panel rounded-[10px] bg-background px-4 py-4 text-sm leading-6 text-foreground">
               {item}
             </div>
           ))}

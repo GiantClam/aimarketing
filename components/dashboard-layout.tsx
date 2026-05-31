@@ -115,11 +115,11 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
 
   return (
-    <div className="flex h-screen bg-transparent">
+    <div className="dashboard-shell flex h-screen bg-transparent">
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static ${
+        className={`dashboard-panel fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static ${
           sidebarCollapsed ? "w-[88px]" : "w-[320px]"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
@@ -127,15 +127,15 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
           <div className={sidebarCollapsed ? "border-b border-sidebar-border p-3" : "border-b border-sidebar-border p-4"}>
             <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex items-start justify-between gap-3"}>
               <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex min-w-0 items-center gap-3"}>
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[20px] bg-accent">
-                  <span className="text-base font-bold lowercase text-primary">ai</span>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/40 bg-primary">
+                  <span className="dashboard-title text-base text-primary-foreground">AI</span>
                 </div>
                 {!sidebarCollapsed && (
                   <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                    <div className="dashboard-kicker text-muted-foreground">
                       {locale === "zh" ? "工作台" : "Workspace"}
                     </div>
-                    <h1 className="truncate text-lg font-semibold text-sidebar-foreground">{messages.shared.appName}</h1>
+                    <h1 className="dashboard-title truncate text-lg text-sidebar-foreground">{messages.shared.appName}</h1>
                   </div>
                 )}
               </div>
@@ -144,7 +144,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={sidebarCollapsed ? "hidden h-9 w-9 rounded-[14px] border border-sidebar-border bg-card p-0 lg:inline-flex" : "hidden rounded-full border border-transparent lg:inline-flex"}
+                  className={sidebarCollapsed ? "dashboard-chip hidden h-9 w-9 rounded-[4px] p-0 lg:inline-flex" : "dashboard-chip hidden rounded-[4px] lg:inline-flex"}
                   onClick={() => setSidebarCollapsed((current) => !current)}
                   title={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
                   aria-label={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
@@ -157,7 +157,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
               </div>
             </div>
             {!sidebarCollapsed && user?.enterpriseName && (
-              <p className="mt-3 rounded-full bg-muted px-3 py-1.5 text-[11px] font-medium tracking-[0.08em] text-sidebar-foreground/80">
+              <p className="dashboard-chip dashboard-kicker mt-3 rounded-[4px] px-3 py-1.5 text-sidebar-foreground/80">
                 {user.enterpriseName} ({user.enterpriseCode})
               </p>
             )}
@@ -177,13 +177,13 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
                 {showAiEntry && (
                   sidebarCollapsed ? (
-                    <Link href="/dashboard/ai">
-                      <Button
-                        variant="ghost"
-                        className="w-full justify-center border border-sidebar-border bg-card"
-                        size="sm"
-                        title={aiEntryLabel}
-                        aria-label={aiEntryLabel}
+                        <Link href="/dashboard/ai">
+                          <Button
+                            variant="ghost"
+                            className="dashboard-chip w-full justify-center rounded-[4px] bg-card"
+                            size="sm"
+                            title={aiEntryLabel}
+                            aria-label={aiEntryLabel}
                       >
                         <Bot className="h-4 w-4" />
                       </Button>
@@ -196,7 +196,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 {showAdvisorSection && (
                   <div>
                     {!sidebarCollapsed && (
-                      <h3 className="mb-2 font-sans text-[11px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/65">
+                      <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
                         {messages.dashboardLayout.advisorSection}
                       </h3>
                     )}
@@ -247,7 +247,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 {showLeadHunterSection && (
                   <div>
                     {!sidebarCollapsed && (
-                      <h3 className="mb-2 font-sans text-[11px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/65">
+                      <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
                         {messages.dashboardLayout.leadHunterSection}
                       </h3>
                     )}
@@ -304,7 +304,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 {(showWriterEntry || showImageAssistantEntry) && (
                   <div>
                     {!sidebarCollapsed && (
-                      <h3 className="mb-2 font-sans text-[11px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/65">
+                      <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
                         {messages.dashboardLayout.creativeSection}
                       </h3>
                     )}
@@ -343,8 +343,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   variant="ghost"
                   className={
                     sidebarCollapsed
-                      ? "w-full justify-center rounded-2xl border border-sidebar-border/60 bg-white/40"
-                      : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                      ? "dashboard-chip w-full justify-center rounded-[4px] bg-white/40"
+                      : "dashboard-chip dashboard-kicker h-11 w-full justify-start rounded-[4px] bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
                   }
                   size="sm"
                   title={messages.dashboardLayout.videoAgent}
@@ -360,8 +360,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   variant="ghost"
                   className={
                     sidebarCollapsed
-                      ? "w-full justify-center rounded-2xl border border-sidebar-border/60 bg-white/40"
-                      : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                      ? "dashboard-chip w-full justify-center rounded-[4px] bg-white/40"
+                      : "dashboard-chip dashboard-kicker h-11 w-full justify-start rounded-[4px] bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
                   }
                   size="sm"
                   title={messages.dashboardLayout.websiteAgent}
@@ -376,8 +376,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 variant="ghost"
                 className={
                   sidebarCollapsed
-                    ? "w-full justify-center rounded-2xl border border-sidebar-border/60 bg-white/40"
-                    : "h-11 w-full justify-start rounded-[18px] border-2 border-sidebar-border bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                    ? "dashboard-chip w-full justify-center rounded-[4px] bg-white/40"
+                    : "dashboard-chip dashboard-kicker h-11 w-full justify-start rounded-[4px] bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
                 }
                 size="sm"
                 title={messages.billing.navLabel}
@@ -393,8 +393,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 href="/dashboard/settings"
                 className={
                   sidebarCollapsed
-                    ? "flex w-full items-center justify-center rounded-[20px] border-2 border-sidebar-border bg-card p-2 transition-colors hover:bg-primary hover:text-primary-foreground"
-                    : "flex min-w-0 flex-1 items-center gap-3 rounded-[20px] border-2 border-sidebar-border bg-card p-3 transition-colors hover:bg-primary hover:text-primary-foreground"
+                    ? "dashboard-chip flex w-full items-center justify-center rounded-[4px] bg-card p-2 transition-colors hover:bg-primary hover:text-primary-foreground"
+                    : "dashboard-chip flex min-w-0 flex-1 items-center gap-3 rounded-[4px] bg-card p-3 transition-colors hover:bg-primary hover:text-primary-foreground"
                 }
                 title={messages.shared.userSettings}
               >
@@ -416,7 +416,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   </>
                 )}
               </Link>
-              <Button variant="ghost" size="sm" className="rounded-full border border-transparent text-muted-foreground hover:bg-muted hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
+              <Button variant="ghost" size="sm" className="dashboard-chip rounded-[4px] border border-transparent text-muted-foreground hover:bg-muted hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
@@ -425,16 +425,16 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-transparent">
-        <header className="border-b border-border bg-card p-4 lg:hidden">
+        <header className="dashboard-panel border-b border-border bg-card p-4 lg:hidden">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}>
               <Menu className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-[14px] bg-accent">
-                <span className="text-xs font-bold lowercase text-primary">ai</span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-[4px] border border-primary/35 bg-primary">
+                <span className="dashboard-title text-xs text-primary-foreground">AI</span>
               </div>
-              <h1 className="text-lg font-semibold text-foreground">{messages.shared.appName}</h1>
+              <h1 className="dashboard-title text-lg text-foreground">{messages.shared.appName}</h1>
             </div>
           </div>
         </header>

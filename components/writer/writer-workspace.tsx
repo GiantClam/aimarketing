@@ -556,7 +556,7 @@ function WriterAssetPlaceholder({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border-2",
+        "dashboard-panel relative overflow-hidden rounded-[8px] border",
         compact ? "h-24" : "min-h-56",
         accentClass,
       )}
@@ -565,10 +565,10 @@ function WriterAssetPlaceholder({
       <div className="absolute inset-0 opacity-60 [background-image:linear-gradient(135deg,rgba(148,163,184,0.12)_25%,transparent_25%,transparent_50%,rgba(148,163,184,0.12)_50%,rgba(148,163,184,0.12)_75%,transparent_75%,transparent)] [background-size:24px_24px]" />
       <div className="relative flex h-full flex-col justify-between p-4">
         <div className="flex items-start justify-between gap-3">
-          <Badge className={cn("rounded-full border-0 px-2.5 py-1 text-[10px] font-medium", labelClass)}>
+          <Badge className={cn("rounded-[4px] border-0 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em]", labelClass)}>
             {asset.label}
           </Badge>
-          <div className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-medium text-slate-600 backdrop-blur">
+          <div className="inline-flex items-center gap-1 rounded-[4px] border border-white/60 bg-white/80 px-2.5 py-1 text-[10px] font-medium text-slate-600 backdrop-blur">
             {isFailed ? <Sparkles className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}
             {statusLabel}
           </div>
@@ -637,7 +637,7 @@ function WriterAssetProgressPanel({
       : null
 
   return (
-    <div className="rounded-2xl border-2 border-border bg-background/80 p-4">
+    <div className="dashboard-panel rounded-[8px] border border-border bg-background/80 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-950">{copy.imageActionsTitle}</p>
@@ -648,7 +648,7 @@ function WriterAssetProgressPanel({
         <Badge
           variant="outline"
           className={cn(
-            "rounded-full border px-2.5 py-1 text-[10px] font-medium",
+            "rounded-[4px] border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em]",
             assetsLoading
               ? "border-sky-300 bg-sky-50 text-sky-700"
               : failedCount > 0
@@ -662,7 +662,7 @@ function WriterAssetProgressPanel({
       </div>
 
       {assetsError ? (
-        <div className="mt-3 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <div className="mt-3 rounded-[6px] border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           <p className="font-medium">{copy.imageGenerationFailed}</p>
           <p className="mt-1 break-words">
             {copy.imageGenerationFailedPrefix}
@@ -683,7 +683,7 @@ function WriterAssetProgressPanel({
               <div
                 key={asset.id}
                 className={cn(
-                  "rounded-xl border px-3 py-2.5",
+                  "rounded-[6px] border px-3 py-2.5",
                   isReady
                     ? "border-emerald-200 bg-emerald-50/60"
                     : isFailed
@@ -695,7 +695,7 @@ function WriterAssetProgressPanel({
                   <p className="truncate text-xs font-medium text-slate-900">{asset.label}</p>
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      "inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em]",
                       isReady
                         ? "bg-emerald-100 text-emerald-700"
                         : isFailed
@@ -747,7 +747,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
         "prose-p:my-5 prose-p:text-[17px] prose-p:leading-[2] prose-p:text-slate-900",
         "prose-li:text-slate-900 prose-strong:text-slate-950 prose-a:text-blue-600",
         "prose-blockquote:border-l-4 prose-blockquote:border-slate-300 prose-blockquote:text-slate-700",
-        "prose-hr:my-8 prose-hr:border-slate-200 prose-img:rounded-[28px]",
+        "prose-hr:my-8 prose-hr:border-slate-200 prose-img:rounded-[10px]",
         className,
       )}
     >
@@ -762,7 +762,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
               findWriterAsset(src, assets) || findRenderableWriterAsset(src, assets) || buildWriterAssetFallbackFromSrc(src)
             if (writerAsset) {
               return (
-                <figure className="my-8 overflow-hidden rounded-[28px] border-2 border-border bg-card">
+                <figure className="dashboard-panel my-8 overflow-hidden rounded-[10px] border border-border bg-card">
                   <div className="flex min-h-56 items-center justify-center bg-slate-100/60">
                     {writerAsset.url ? (
                       <img
@@ -788,7 +788,7 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
                 loading="lazy"
                 decoding="async"
                 {...props}
-                className="my-6 max-h-[420px] w-full rounded-[24px] border-2 border-border bg-slate-50 object-cover"
+                className="my-6 max-h-[420px] w-full rounded-[10px] border border-border bg-slate-50 object-cover"
               />
             )
           },
@@ -886,12 +886,12 @@ function PlatformPreview({
 
   if (platform === "wechat") {
     return (
-      <div className="mx-auto max-w-[760px] rounded-[40px] border-2 border-emerald-200 bg-card px-10 py-12">
-        <div className="border-b-2 border-emerald-100 pb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+      <div className="dashboard-panel mx-auto max-w-[760px] rounded-[10px] border border-emerald-300 bg-card px-8 py-10">
+        <div className="border-b border-emerald-200 pb-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[6px] border border-emerald-200 bg-emerald-500/10 text-emerald-600">
             <BookText className="h-6 w-6" />
           </div>
-          <p className="text-xs uppercase tracking-[0.28em] text-emerald-700">{copy.wechatPreview}</p>
+          <p className="dashboard-kicker text-xs uppercase tracking-[0.28em] text-emerald-700">{copy.wechatPreview}</p>
           <div className="mt-4 flex items-center justify-center gap-3 text-xs text-slate-400">
             <span>{previewAccountName}</span>
             <span>路</span>
@@ -910,11 +910,11 @@ function PlatformPreview({
 
   if (platform === "xiaohongshu") {
     return (
-      <div className="mx-auto max-w-[430px] rounded-[40px] border-2 border-rose-200 bg-[#fff7f6] p-4">
-        <div className="overflow-hidden rounded-[30px] border-2 border-rose-100 bg-white">
-          <div className="border-b-2 border-rose-100/80 px-5 py-5">
+      <div className="dashboard-panel mx-auto max-w-[430px] rounded-[10px] border border-rose-300 bg-[#fff7f6] p-3">
+        <div className="overflow-hidden rounded-[8px] border border-rose-200 bg-white">
+          <div className="border-b border-rose-100/80 px-5 py-5">
             <div className="mb-4 flex items-center justify-between">
-              <Badge className="rounded-full bg-rose-500 px-3 py-1 text-[11px] text-white hover:bg-rose-500">{copy.xiaohongshuPreview}</Badge>
+              <Badge className="rounded-[4px] bg-rose-500 px-3 py-1 text-[11px] text-white hover:bg-rose-500">{copy.xiaohongshuPreview}</Badge>
               <span className="text-[11px] text-slate-400">{copy.xiaohongshuBadge}</span>
             </div>
           </div>
@@ -924,7 +924,7 @@ function PlatformPreview({
               "prose-p:text-black prose-li:text-black prose-strong:text-rose-700 prose-h1:text-center prose-h2:border-0 prose-h2:pt-0 prose-blockquote:bg-rose-50 prose-blockquote:px-4 prose-blockquote:py-3 prose-blockquote:not-italic",
             )}
           </div>
-          <div className="border-t border-rose-100/80 px-5 py-3 text-xs text-slate-500">{copy.xiaohongshuFooterTags}</div>
+          <div className="border-t border-rose-100/80 px-5 py-3 text-xs tracking-[0.12em] text-slate-500 uppercase">{copy.xiaohongshuFooterTags}</div>
         </div>
       </div>
     )
@@ -935,9 +935,9 @@ function PlatformPreview({
     return (
       <div className="mx-auto max-w-[760px] space-y-4">
         {posts.map((post, index) => (
-          <div key={`${index}_${post.slice(0, 12)}`} className="rounded-[28px] border-2 border-slate-300 bg-card p-5">
+          <div key={`${index}_${post.slice(0, 12)}`} className="dashboard-panel rounded-[8px] border border-slate-300 bg-card p-5">
             <div className="flex items-start gap-3">
-              <div className="mt-1 h-11 w-11 rounded-full bg-slate-900" />
+              <div className="mt-1 h-11 w-11 rounded-[6px] border border-slate-700 bg-slate-900" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-black">{socialAccountName}</p>
@@ -982,9 +982,9 @@ function PlatformPreview({
 
   if (platform === "generic" || platform === "douyin" || platform === "tiktok") {
     return (
-      <div className="mx-auto max-w-[760px] rounded-[32px] border-2 border-slate-300 bg-card px-8 py-10">
+      <div className="dashboard-panel mx-auto max-w-[760px] rounded-[10px] border border-slate-300 bg-card px-8 py-10">
         <div className="mb-6 border-b border-slate-200 pb-4">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{copy.finalPreviewTitle}</p>
+          <p className="dashboard-kicker text-xs uppercase tracking-[0.28em] text-slate-500">{copy.finalPreviewTitle}</p>
           <div className="mt-3 flex items-center gap-3 text-xs text-slate-400">
             <span>{estimateReadingTime(markdown, copy)}</span>
             <span>/</span>
@@ -1005,9 +1005,9 @@ function PlatformPreview({
   return (
     <div className="mx-auto max-w-[760px] space-y-4">
       {posts.map((post, index) => (
-        <div key={`${index}_${post.slice(0, 12)}`} className="rounded-[28px] border-2 border-blue-200 bg-card p-5">
+        <div key={`${index}_${post.slice(0, 12)}`} className="dashboard-panel rounded-[8px] border border-blue-200 bg-card p-5">
           <div className="flex items-start gap-3">
-            <div className="mt-1 h-11 w-11 rounded-full bg-blue-600/90" />
+            <div className="mt-1 h-11 w-11 rounded-[6px] border border-blue-300 bg-blue-600/90" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-black">{socialAccountName}</p>
@@ -1259,7 +1259,7 @@ function InlineMarkdownCanvas({
 
   if (isEditing) {
     return (
-      <div className="rounded-[24px] border-2 border-border bg-card px-5 py-5">
+      <div className="dashboard-panel rounded-[8px] border border-border bg-card px-5 py-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <p className="text-xs font-medium tracking-[0.16em] text-slate-500">{copy.editContent}</p>
@@ -1275,7 +1275,7 @@ function InlineMarkdownCanvas({
             <span className="text-[11px] text-slate-400">Ctrl/Cmd + Enter</span>
             <Button
               size="sm"
-              className="h-8 rounded-full bg-slate-950 px-3 text-[11px] text-white hover:bg-slate-800"
+              className="dashboard-button-primary h-8 px-3 text-[11px]"
               onMouseDown={(event) => event.preventDefault()}
               onClick={commitDraft}
             >
@@ -1300,7 +1300,7 @@ function InlineMarkdownCanvas({
               setIsEditing(false)
             }
           }}
-          className="min-h-[320px] resize-none rounded-[20px] border-0 bg-transparent px-0 py-0 font-serif text-[18px] leading-[2.05] tracking-[0.01em] text-slate-950 shadow-none focus-visible:ring-0"
+          className="min-h-[320px] resize-none rounded-[4px] border-0 bg-transparent px-0 py-0 font-serif text-[18px] leading-[2.05] tracking-[0.01em] text-slate-950 shadow-none focus-visible:ring-0"
         />
       </div>
     )
@@ -1310,7 +1310,7 @@ function InlineMarkdownCanvas({
     <div
       role="button"
       tabIndex={0}
-      className="group block w-full rounded-[24px] border-2 border-transparent text-left transition hover:border-border hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+      className="group block w-full rounded-[8px] border border-transparent text-left transition hover:border-border hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       onClick={() => setIsEditing(true)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1322,7 +1322,7 @@ function InlineMarkdownCanvas({
     >
       <div className="pointer-events-none px-2 py-1">
         <div className="mb-2 opacity-0 transition group-hover:opacity-100">
-          <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] tracking-[0.14em] text-slate-500">
+          <span className="dashboard-kicker inline-flex rounded-[4px] border border-slate-200 bg-white px-2.5 py-1 text-[10px] tracking-[0.14em] text-slate-500">
             {copy.clickToEditArticle}
           </span>
         </div>
@@ -3075,10 +3075,10 @@ export function WriterWorkspace({
                 : "Describe the topic, audience, tone, or structure to start."
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="dashboard-shell flex h-full min-h-0 flex-col bg-background">
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
           <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+            <div className="dashboard-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[12px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
               <div className="relative min-h-0 flex-1 bg-[#f7f7f7]">
                 <ScrollArea className="h-full" ref={viewportRef}>
                 <div className="space-y-0">
@@ -3087,7 +3087,7 @@ export function WriterWorkspace({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full"
+                        className="dashboard-button-secondary px-3"
                         data-testid="writer-load-older-button"
                         onClick={() => void loadOlderMessages()}
                         disabled={isHistoryLoading}
@@ -3111,7 +3111,7 @@ export function WriterWorkspace({
 
                   {isConversationLoading ? (
                     messages.length > 0 ? (
-                      <div className="mx-3 my-3 flex items-center gap-2 rounded-[20px] border-2 border-dashed border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
+                      <div className="dashboard-panel mx-3 my-3 flex items-center gap-2 rounded-[10px] border border-dashed border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         {writerCopy.restoringConversation}
                       </div>
@@ -3137,7 +3137,7 @@ export function WriterWorkspace({
                       >
                         <div
                           className={cn(
-                            "rounded-[24px] border-2 p-4",
+                            "rounded-[10px] border p-4",
                             message.role === "user"
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-border bg-background selection:bg-[#E8E8E8]",
@@ -3156,7 +3156,7 @@ export function WriterWorkspace({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                                className="dashboard-button-secondary h-8 px-3 text-[11px]"
                                 onClick={() => openPreviewForMessage(message.id)}
                               >
                                 <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -3166,10 +3166,10 @@ export function WriterWorkspace({
                                 size="sm"
                                 variant={messagePreview.imagesRequested || messagePreview.hasGeneratedImages ? "outline" : "default"}
                                 className={cn(
-                                  "h-8 rounded-full px-3 text-[11px]",
+                                  "h-8 px-3 text-[11px]",
                                   messagePreview.imagesRequested || messagePreview.hasGeneratedImages
-                                    ? "border-2 border-border bg-card text-foreground hover:bg-muted"
-                                    : "",
+                                    ? "dashboard-button-secondary"
+                                    : "dashboard-button-primary",
                                 )}
                                 onClick={() => void handleGenerateAssets(messagePreview)}
                                 disabled={messagePreview.assetsLoading}
@@ -3188,7 +3188,7 @@ export function WriterWorkspace({
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                                      className="dashboard-button-secondary h-8 px-3 text-[11px]"
                                       onClick={() => requestRichTextCopyForMessage(message.id)}
                                     >
                                       <BookText className="mr-1.5 h-3.5 w-3.5" />
@@ -3204,7 +3204,7 @@ export function WriterWorkspace({
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                                      className="dashboard-button-secondary h-8 px-3 text-[11px]"
                                       onClick={() => void handleCopyMarkdown(messagePreview.previewMarkdown)}
                                     >
                                       <Copy className="mr-1.5 h-3.5 w-3.5" />
@@ -3290,14 +3290,14 @@ export function WriterWorkspace({
                   toolbar={
                     <>
                       {routingBadges.map((item) => (
-                        <Badge key={item} variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
+                        <Badge key={item} variant="outline" className="dashboard-kicker rounded-[4px] px-2.5 py-1 text-[10px] text-muted-foreground">
                           {item}
                         </Badge>
                       ))}
                       <select
                         value={language}
                         onChange={(event) => setLanguage(normalizeWriterLanguage(event.target.value))}
-                        className="h-9 rounded-[18px] border-2 border-border bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+                        className="dashboard-chip h-9 rounded-[4px] px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
                         disabled={composerDisabled || isLoading}
                       >
                         {WRITER_LANGUAGE_ORDER.map((item) => (
@@ -3306,14 +3306,14 @@ export function WriterWorkspace({
                           </option>
                         ))}
                       </select>
-                      <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px] text-muted-foreground">
+                      <Badge variant="outline" className="dashboard-kicker rounded-[4px] px-2.5 py-1 text-[10px] text-muted-foreground">
                         {workspaceStatus}
                       </Badge>
                       <div className="ml-auto flex items-center gap-1.5">
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-8 rounded-full px-3 text-[11px]"
+                          className="dashboard-button-secondary h-8 px-3 text-[11px]"
                           data-testid="writer-inline-new-session-trigger"
                           onClick={handleCreateConversation}
                         >
@@ -3322,7 +3322,7 @@ export function WriterWorkspace({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                          className="dashboard-button-secondary h-8 px-3 text-[11px]"
                           onClick={openLatestPreview}
                           disabled={!hasDraft}
                         >
@@ -3340,14 +3340,14 @@ export function WriterWorkspace({
                         {composerDisabled ? ` / ${writerCopy.preparingCapabilities}` : ` / ${writerCopy.supportsPreviewAndImages}`}
                       </p>
                       {isLoading ? (
-                        <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-[11px]" disabled>
+                        <Button size="sm" variant="outline" className="dashboard-button-secondary h-8 px-3 text-[11px]" disabled>
                           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                           {writerCopy.generatingDraft}
                         </Button>
                       ) : (
                         <Button
                           size="sm"
-                          className="h-8 rounded-full px-3 text-[11px]"
+                          className="dashboard-button-primary h-8 px-3 text-[11px]"
                           data-testid="writer-send-button"
                           onClick={() => void handleSend()}
                           disabled={!inputValue.trim() || composerDisabled}
@@ -3386,22 +3386,22 @@ export function WriterWorkspace({
           if (!open) setPendingRichCopyMessageId(null)
         }}
       >
-        <SheetContent side="right" className="w-full gap-0 overflow-hidden border-l-2 border-border bg-card p-0 sm:max-w-[920px]">
+        <SheetContent side="right" className="dashboard-shell w-full gap-0 overflow-hidden border-l border-border bg-card p-0 sm:max-w-[920px]">
           <div className={cn("h-full", getPlatformPreviewPalette(activePreview.platform))}>
-            <SheetHeader className="border-b-2 border-border bg-card px-4 py-3">
+            <SheetHeader className="dashboard-panel border-b border-border bg-card px-4 py-3">
               <div className="flex items-center justify-between gap-3 pr-8">
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="rounded-full border-2 border-border bg-accent px-2.5 py-1 text-[10px] font-medium text-accent-foreground">
+                  <Badge variant="secondary" className="dashboard-kicker rounded-[4px] border border-border bg-accent px-2.5 py-1 text-[10px] font-medium text-accent-foreground">
                     {activePreviewPlatformLabel}
                   </Badge>
-                  <Badge variant="outline" className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] font-medium text-slate-900">
+                  <Badge variant="outline" className="dashboard-kicker rounded-[4px] border border-border bg-background px-2.5 py-1 text-[10px] font-medium text-slate-900">
                     {estimateReadingTime(activePreview.previewMarkdown, writerCopy)}
                   </Badge>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] text-foreground hover:bg-muted"
+                  className="dashboard-button-secondary h-8 px-3 text-[11px]"
                   onClick={() => setPreviewOpen(false)}
                 >
                   <ChevronLeft className="mr-1.5 h-3.5 w-3.5" />
@@ -3415,7 +3415,7 @@ export function WriterWorkspace({
               <div className="space-y-4 p-4">
                 <div
                   className={cn(
-                    "space-y-4 rounded-[32px] border-2 p-5",
+                    "dashboard-panel space-y-4 rounded-[12px] p-5",
                     getPlatformShellClass(activePreview.platform),
                   )}
                 >
@@ -3434,10 +3434,10 @@ export function WriterWorkspace({
                           size="sm"
                           variant={activePreview.imagesRequested || activePreview.hasGeneratedImages ? "outline" : "default"}
                           className={cn(
-                            "h-8 rounded-full border-2 px-3 text-[11px] font-medium",
+                            "h-8 px-3 text-[11px] font-medium",
                             activePreview.imagesRequested || activePreview.hasGeneratedImages
-                              ? "border-border bg-card text-slate-950 hover:bg-muted"
-                              : "border-primary bg-primary text-primary-foreground hover:bg-primary/90",
+                              ? "dashboard-button-secondary"
+                              : "dashboard-button-primary",
                           )}
                           onClick={() => void handleGenerateAssets(activePreview)}
                           disabled={activePreview.assetsLoading}
@@ -3454,7 +3454,7 @@ export function WriterWorkspace({
                         <Badge
                           variant="outline"
                           className={cn(
-                            "rounded-full border-2 px-2.5 py-1 text-[10px] font-medium",
+                            "dashboard-kicker rounded-[4px] border px-2.5 py-1 text-[10px] font-medium",
                             draftSaveState === "saving"
                               ? "border-amber-300 bg-amber-50 text-amber-900"
                               : draftSaveState === "saved"
@@ -3479,7 +3479,7 @@ export function WriterWorkspace({
                             <Button
                               size="sm"
                               variant="default"
-                              className="h-8 rounded-full border-2 border-primary bg-primary px-3 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+                              className="dashboard-button-primary h-8 px-3 text-[11px] font-medium"
                               onClick={() => void handleCopyText()}
                               disabled={!activePreview.hasDraft}
                             >
@@ -3496,7 +3496,7 @@ export function WriterWorkspace({
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-8 rounded-full border-2 border-border bg-card px-3 text-[11px] font-medium text-slate-950 hover:bg-muted"
+                              className="dashboard-button-secondary h-8 px-3 text-[11px] font-medium"
                               onClick={() => void handleCopyMarkdown()}
                               disabled={!activePreview.hasDraft}
                             >
@@ -3518,7 +3518,7 @@ export function WriterWorkspace({
                     locale={locale}
                     copy={writerCopy}
                   />
-                  <div className="overflow-hidden rounded-[28px] border-2 border-border bg-card">
+                  <div className="dashboard-panel overflow-hidden rounded-[12px] bg-card">
                     <div ref={previewContentRef} className="p-6 selection:bg-[#E8E8E8]">
                       <PlatformPreview
                         copy={writerCopy}

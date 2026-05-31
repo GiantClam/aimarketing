@@ -25,7 +25,7 @@ export function SidebarSectionToggle({
     <Button
       variant="ghost"
       className={cn(
-        "box-border h-11 w-full min-w-0 justify-between rounded-[18px] border-2 border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:bg-primary hover:text-primary-foreground",
+        "box-border h-11 w-full min-w-0 justify-between rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
         expanded && "bg-primary text-primary-foreground",
       )}
       size="sm"
@@ -57,7 +57,7 @@ export function SidebarCreateLink({ href, label, testId, loading, disabled, onCl
   const button = (
     <Button
       variant="ghost"
-      className="box-border h-9 w-full min-w-0 justify-start overflow-hidden rounded-[18px] border-0 bg-sidebar-accent px-3 text-xs font-medium text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+      className="box-border h-9 w-full min-w-0 justify-start overflow-hidden rounded-[6px] border border-transparent bg-sidebar-accent px-3 text-xs font-medium text-sidebar-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground"
       data-testid={testId}
       onClick={onClick}
       disabled={disabled}
@@ -82,7 +82,7 @@ export function SidebarListState({
   label: string
 }) {
   return (
-    <div className="box-border flex w-full min-w-0 items-center overflow-hidden rounded-[18px] bg-sidebar-accent px-3 py-2.5 text-xs text-muted-foreground">
+    <div className="box-border flex w-full min-w-0 items-center overflow-hidden rounded-[6px] border border-transparent bg-sidebar-accent px-3 py-2.5 text-xs text-muted-foreground">
       {loading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
       {label}
     </div>
@@ -108,10 +108,10 @@ export function SidebarSessionLink({
     <Link href={href} onMouseEnter={onWarm} data-testid={testId} className="block w-full min-w-0 max-w-full overflow-hidden">
       <div
         className={cn(
-          "group relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-[18px] px-3 py-2.5 text-xs transition-colors",
+          "group relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-[6px] border border-transparent px-3 py-2.5 text-xs transition-colors",
           active
-            ? "bg-primary text-primary-foreground"
-            : "bg-sidebar-accent text-sidebar-foreground hover:bg-primary hover:text-primary-foreground",
+            ? "border-primary bg-primary text-primary-foreground"
+            : "bg-sidebar-accent text-sidebar-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground",
         )}
       >
         {children}

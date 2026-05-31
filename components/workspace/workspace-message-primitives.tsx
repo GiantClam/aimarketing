@@ -36,7 +36,7 @@ export function WorkspaceMessageFrame({
         : "bg-muted/45 text-foreground"
   const avatarClass =
     role === "assistant"
-      ? "bg-accent text-primary"
+      ? "bg-primary text-primary-foreground"
       : role === "user"
         ? "bg-muted text-foreground"
         : "bg-secondary text-secondary-foreground"
@@ -44,7 +44,7 @@ export function WorkspaceMessageFrame({
   return (
     <div className={cn("w-full border-b border-border px-4 py-3.5 selection:bg-[#E8E8E8]", toneClass, className)}>
       <div className="mx-auto flex w-full max-w-5xl gap-3">
-        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px]", avatarClass)}>
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] border border-border/40", avatarClass)}>
           {icon ?? <span className="text-xs font-bold">{isUser ? "U" : "AI"}</span>}
         </div>
         <div className="min-w-0 flex-1">
@@ -153,7 +153,7 @@ export function WorkspaceResultCard({
   return (
     <div
       className={cn(
-        "rounded-[24px] border-2 p-6",
+        "dashboard-panel rounded-[12px] p-6",
         tone === "success"
           ? "border-secondary bg-card"
           : "border-border bg-background",
@@ -164,7 +164,7 @@ export function WorkspaceResultCard({
         {icon ? (
           <div
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full",
+              "flex h-10 w-10 items-center justify-center rounded-[6px]",
               tone === "success" ? "bg-secondary text-secondary-foreground" : "bg-primary text-primary-foreground",
             )}
           >
@@ -197,9 +197,9 @@ export function WorkspaceSectionCard({
   className?: string
 }) {
   return (
-    <div className={cn("space-y-3 rounded-[20px] border-2 border-border bg-background p-4", className)}>
+    <div className={cn("dashboard-panel space-y-3 rounded-[10px] bg-background p-4", className)}>
       <div className="space-y-1">
-        <div className="text-sm font-semibold text-foreground">{title}</div>
+        <div className="dashboard-title text-sm text-foreground">{title}</div>
         {description ? <div className="text-xs leading-6 text-muted-foreground">{description}</div> : null}
       </div>
       {children}
@@ -215,7 +215,7 @@ export function WorkspaceActionRow({
   className?: string
 }) {
   return (
-    <div className={cn("mt-3 flex flex-wrap items-center gap-2 border-t-2 border-border pt-3", className)}>
+    <div className={cn("mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3", className)}>
       {children}
     </div>
   )

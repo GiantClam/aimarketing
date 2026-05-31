@@ -17,12 +17,19 @@ export function PublicPricingPageContent() {
     <main className="min-h-screen bg-background text-foreground">
       <PublicSiteHeader activeKey="pricing" />
 
-      <section className="mx-auto max-w-7xl px-6 py-16 lg:py-20">
-        <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">{copy.pricingPage.eyebrow}</p>
-        <h1 className="mt-4 max-w-4xl text-5xl font-semibold leading-[1.04] lg:text-6xl">{copy.pricingPage.title}</h1>
+      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="public-kicker text-muted-foreground">{copy.pricingPage.eyebrow}</p>
+          <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">Pricing Matrix</span>
+          <span className="inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
+            <span className="public-signal" aria-hidden="true" />
+            <span className="public-kicker text-muted-foreground">Shared Workspace</span>
+          </span>
+        </div>
+        <h1 className="public-display mt-4 max-w-4xl text-5xl text-foreground lg:text-6xl">{copy.pricingPage.title}</h1>
         <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">{copy.pricingPage.description}</p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Button size="lg" className="rounded-full px-7" asChild>
+          <Button size="lg" className="public-button-primary h-12 px-7" asChild>
             <TrackedCtaLink
               href="/register"
               eventName={SEO_EVENT.pricingCtaClick}
@@ -31,7 +38,7 @@ export function PublicPricingPageContent() {
               {copy.pricingPage.primaryCta}
             </TrackedCtaLink>
           </Button>
-          <Button size="lg" variant="outline" className="rounded-full border-2 border-border bg-card px-7" asChild>
+          <Button size="lg" className="public-button-secondary h-12 px-7" asChild>
             <TrackedCtaLink
               href="/resources/ai-subscription-cost-calculator"
               eventName={SEO_EVENT.pricingCtaClick}
@@ -52,11 +59,11 @@ export function PublicPricingPageContent() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 pb-18">
-        <div className="rounded-[26px] border-2 border-border bg-card p-6 sm:p-8">
-          <h2 className="text-3xl font-semibold text-foreground">{copy.pricingPage.guardrailsTitle}</h2>
+        <div className="public-panel rounded-[12px] p-6 sm:p-8">
+          <h2 className="font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">{copy.pricingPage.guardrailsTitle}</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             {copy.pricingPage.guardrails.map((item) => (
-              <div key={item.title} className="rounded-[20px] bg-background p-4 text-sm leading-7 text-muted-foreground">
+              <div key={item.title} className="rounded-[8px] border border-border bg-background p-4 text-sm leading-7 text-muted-foreground">
                 {item.description}
               </div>
             ))}

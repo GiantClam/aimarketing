@@ -33,13 +33,13 @@ export function WorkspaceHero({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-[32px] border-2 border-border bg-card",
+        "dashboard-panel overflow-hidden rounded-[10px] border border-border bg-card",
         className,
       )}
     >
       <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:p-8">
         <div className="space-y-4">
-          <div className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-foreground">
+          <div className="dashboard-kicker inline-flex items-center rounded-[4px] border border-primary/30 bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-foreground">
             {eyebrow}
           </div>
           <div className="max-w-3xl space-y-3">
@@ -50,20 +50,20 @@ export function WorkspaceHero({
               {description}
             </p>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border-2 border-border bg-background px-4 py-2 text-sm text-muted-foreground">
-            <span className="h-2.5 w-2.5 rounded-full bg-secondary" />
+          <div className="dashboard-panel inline-flex items-center gap-2 rounded-[4px] border border-border bg-background px-4 py-2 text-sm text-muted-foreground">
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-secondary" />
             <span>{status}</span>
           </div>
           {badges.length ? <div className="flex flex-wrap gap-2">{badges}</div> : null}
         </div>
 
         {(actions || stats.length) ? (
-          <div className="rounded-[28px] border-2 border-border bg-background p-4">
+          <div className="dashboard-panel rounded-[8px] border border-border bg-background p-4">
             {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
             {stats.length ? (
               <div className={cn("grid gap-3", actions ? "mt-4" : "")}>
                 {stats.map((stat) => (
-                  <div key={stat.label} className="rounded-[22px] border-2 border-border bg-card px-4 py-3">
+                  <div key={stat.label} className="dashboard-panel rounded-[6px] border border-border bg-card px-4 py-3 shadow-none">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       {stat.label}
                     </p>

@@ -10,7 +10,7 @@ import type { SeoPage } from "@/lib/seo/pages"
 export function SeoPageHeroCta({ page }: { page: SeoPage }) {
   return (
     <div className="mt-8 flex flex-wrap gap-3">
-      <Button size="lg" className="rounded-full px-7" asChild>
+      <Button size="lg" className="public-button-primary h-12 px-7" asChild>
         <TrackedCtaLink
           href={page.cta.primaryHref}
           eventName={SEO_EVENT.seoPageCtaClick}
@@ -27,7 +27,7 @@ export function SeoPageHeroCta({ page }: { page: SeoPage }) {
         </TrackedCtaLink>
       </Button>
       {page.cta.secondaryHref && page.cta.secondaryLabel ? (
-        <Button size="lg" variant="outline" className="rounded-full border-2 border-border bg-card px-7" asChild>
+        <Button size="lg" className="public-button-secondary h-12 px-7" asChild>
           <TrackedCtaLink
             href={page.cta.secondaryHref}
             eventName={SEO_EVENT.seoPageCtaClick}

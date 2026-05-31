@@ -33,37 +33,38 @@ export function PublicPricingGrid({
       {plans.map((plan) => (
         <article
           key={plan.code}
-          className={`rounded-[26px] border-2 p-6 ${
+          className={`p-6 ${
             plan.code === "creator"
-              ? "border-foreground bg-card"
-              : "border-border bg-card"
+              ? "public-panel rounded-[10px] border-primary bg-card"
+              : "public-panel rounded-[10px] border-border bg-card"
           }`}
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm uppercase tracking-[0.16em] text-muted-foreground">{plan.code}</p>
-              <h3 className="mt-2 text-2xl font-semibold text-foreground">{plan.name}</h3>
+              <p className="public-kicker text-muted-foreground">{plan.code}</p>
+              <h3 className="mt-2 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">{plan.name}</h3>
             </div>
             {plan.code === "creator" ? (
-              <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+              <span className="public-kicker rounded-[6px] border border-primary/40 bg-primary px-3 py-1 text-primary-foreground">
                 {copy.pricingGrid.recommended}
               </span>
             ) : null}
           </div>
 
           <div className="mt-5">
-            <div className="text-4xl font-semibold text-foreground">
+            <div className="font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
               {formatPrice(plan.priceUsdCents, locale, copy.pricingGrid.free)}
             </div>
-            <div className="mt-1 text-sm text-muted-foreground">
+            <div className="public-kicker mt-2 text-muted-foreground">
               {plan.priceUsdCents === 0 ? copy.pricingGrid.starterAccess : copy.pricingGrid.perMonth}
             </div>
           </div>
 
-          <div className="mt-5 space-y-3">
-            {buildFeatureSummary(plan, locale, copy.pricingGrid).map((item) => (
-              <div key={item} className="text-sm leading-6 text-muted-foreground">
-                {item}
+          <div className="mt-5 space-y-3 border-t border-border pt-5">
+            {buildFeatureSummary(plan, locale, copy.pricingGrid).map((item, index) => (
+              <div key={item} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3 text-sm leading-6 text-muted-foreground">
+                <span className="font-display text-base font-bold text-foreground/52">{String(index + 1).padStart(2, "0")}</span>
+                <span>{item}</span>
               </div>
             ))}
           </div>
@@ -82,7 +83,7 @@ export function PublicPricingGrid({
 
           {showActions ? (
             <div className="mt-6">
-              <Button className="w-full rounded-full" asChild>
+              <Button className="public-button-primary h-11 w-full" asChild>
                 <TrackedCtaLink
                   href="/register"
                   eventName={SEO_EVENT.pricingCtaClick}

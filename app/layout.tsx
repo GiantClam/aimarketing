@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import { Analytics } from "@vercel/analytics/react"
+import { Barlow_Condensed, IBM_Plex_Sans } from "next/font/google"
 
 import { AuthProvider } from "@/components/auth-provider"
 import { AppToaster } from "@/components/app-toaster"
@@ -11,6 +12,18 @@ import { QueryProvider } from "@/components/query-provider"
 import { getAppBaseUrl } from "@/lib/app-url"
 import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
 import "./globals.css"
+
+const displayFont = Barlow_Condensed({
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  variable: "--font-display",
+})
+
+const bodyFont = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-body",
+})
 
 export const metadata: Metadata = {
   metadataBase: new URL(getAppBaseUrl()),
@@ -44,7 +57,10 @@ export default async function RootLayout({
   const locale = normalizeLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value) || DEFAULT_LOCALE
 
   return (
-    <html lang={locale === "zh" ? "zh-CN" : "en"} className="antialiased">
+    <html
+      lang={locale === "zh" ? "zh-CN" : "en"}
+      className={`${displayFont.variable} ${bodyFont.variable} antialiased`}
+    >
       <body suppressHydrationWarning>
         <LocaleProvider initialLocale={locale}>
           <QueryProvider>

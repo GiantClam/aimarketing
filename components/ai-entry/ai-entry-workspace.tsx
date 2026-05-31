@@ -1365,7 +1365,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     <div className="flex min-w-0 items-center gap-2 px-1">
       {shouldLockModel ? (
         <div
-          className={`inline-flex min-w-0 max-w-[44vw] items-center rounded-full border border-border bg-background px-3 text-xs text-foreground sm:max-w-[260px] ${buttonHeight}`}
+          className={`dashboard-chip inline-flex min-w-0 max-w-[44vw] items-center rounded-[4px] px-3 text-xs text-foreground sm:max-w-[260px] ${buttonHeight}`}
           title={selectedModel?.name || lockedConsultingModelId}
         >
           <span className="truncate">
@@ -1383,7 +1383,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           }}
           disabled={isLoading || modelsLoading || models.length === 0}
         >
-          <SelectTrigger className={`min-w-0 w-[140px] max-w-[44vw] rounded-full border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
+          <SelectTrigger className={`dashboard-chip min-w-0 w-[140px] max-w-[44vw] rounded-[4px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
             <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
           </SelectTrigger>
           <SelectContent>{renderModelSelectContent()}</SelectContent>
@@ -1399,12 +1399,12 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         {attachments.map((attachment) => {
           const isImage = attachment.mediaType.startsWith("image/")
           return (
-            <div key={attachment.id} className="inline-flex max-w-[260px] items-center gap-2 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground">
+            <div key={attachment.id} className="dashboard-chip inline-flex max-w-[260px] items-center gap-2 rounded-[4px] px-2.5 py-1.5 text-xs text-muted-foreground">
               {isImage ? <ImageIcon className="h-3.5 w-3.5 shrink-0" /> : <Paperclip className="h-3.5 w-3.5 shrink-0" />}
               <span className="truncate" title={attachment.name}>{attachment.name}</span>
               <button
                 type="button"
-                className="rounded-full p-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                className="rounded-[4px] p-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
                 aria-label={isZh ? "移除附件" : "Remove attachment"}
                 onClick={() => removeAttachment(attachment.id)}
                 disabled={isLoading}
@@ -1423,7 +1423,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return (
       <div className="flex flex-wrap justify-end gap-2">
         {items.map((attachment) => (
-          <div key={attachment.id} className="inline-flex max-w-[240px] items-center gap-2 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground">
+          <div key={attachment.id} className="dashboard-chip inline-flex max-w-[240px] items-center gap-2 rounded-[4px] px-2.5 py-1.5 text-xs text-muted-foreground">
             {attachment.mediaType.startsWith("image/") ? <ImageIcon className="h-3.5 w-3.5 shrink-0" /> : <Paperclip className="h-3.5 w-3.5 shrink-0" />}
             <span className="truncate" title={attachment.name}>{attachment.name}</span>
           </div>
@@ -1438,7 +1438,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         type="button"
         size="sm"
         variant="outline"
-        className="h-9 rounded-full px-3"
+        className="dashboard-button-secondary h-9 px-3"
         onClick={() => fileInputRef.current?.click()}
         disabled={isLoading || isConversationLoading || attachments.length >= AI_ENTRY_MAX_ATTACHMENTS}
       >
@@ -1464,7 +1464,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         ) : recommendedAgents.length === 0 ? (
           <div className="text-xs text-muted-foreground">{copy.agentEmpty}</div>
         ) : (
-          <div className="rounded-2xl border border-border bg-card px-3 py-3">
+          <div className="dashboard-panel rounded-[10px] px-3 py-3">
             <div className="flex flex-wrap gap-2">
               {recommendedAgents.map((agent) => {
                 const isSelected = selectedAgentId === agent.id
@@ -1476,7 +1476,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                       handleAgentSelectionChange(selectedAgentId === agent.id ? null : agent.id)
                     }
                     className={cn(
-                      "inline-flex items-center border transition",
+                      "dashboard-kicker inline-flex items-center rounded-[4px] border px-4 transition",
                       tabClassName,
                       isSelected
                         ? "border-primary bg-primary text-primary-foreground"
@@ -1497,14 +1497,18 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
   if (showLanding) {
     return (
-      <div className="flex h-full min-h-0 justify-center overflow-y-auto bg-background">
+      <div className="dashboard-shell flex h-full min-h-0 justify-center overflow-y-auto bg-background">
         <section className="w-full max-w-6xl px-4 py-10 lg:px-8">
           <div className="mx-auto max-w-4xl text-center">
-            <h1 className="text-5xl font-semibold tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
+              <span className="public-signal" aria-hidden="true" />
+              <span className="dashboard-kicker text-muted-foreground">AI Workspace</span>
+            </div>
+            <h1 className="dashboard-title text-5xl tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
             <p className="mt-4 text-lg text-muted-foreground">{copy.landingHint}</p>
           </div>
 
-          <div className="mx-auto mt-10 max-w-5xl rounded-[30px] border border-border bg-card p-4 shadow-sm">
+          <div className="dashboard-panel mx-auto mt-10 max-w-5xl rounded-[12px] p-4 shadow-sm">
             <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
               {isAgentSelectionExplicit && selectedAgent ? (
                 <div className="px-1 pb-2 text-xs text-muted-foreground">
@@ -1528,7 +1532,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-10")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="h-10 shrink-0 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                    <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
                       {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>
@@ -1542,8 +1546,8 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
           <div className="mx-auto mt-10 grid max-w-5xl gap-3 lg:grid-cols-3">
             {quickPrompts.map((prompt) => (
-              <button key={prompt} type="button" className="rounded-2xl border border-border bg-card p-4 text-left transition hover:border-primary/60 hover:bg-primary/5" onClick={() => setInput(prompt)}>
-                <div className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <button key={prompt} type="button" className="dashboard-panel rounded-[10px] p-4 text-left transition hover:border-primary/60 hover:bg-primary/5" onClick={() => setInput(prompt)}>
+                <div className="dashboard-kicker mb-2 inline-flex items-center gap-1 text-muted-foreground">
                   <Sparkles className="h-3.5 w-3.5" />
                   {copy.quickStart}
                 </div>
@@ -1557,17 +1561,17 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   }
 
   return (
-    <div className="flex h-full min-h-0 justify-center">
-      <section className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] border-x border-b border-border/70 bg-background">
-        <header className="border-b border-border/70 bg-card/60 px-4 py-3 backdrop-blur">
-          <h1 className="flex items-center gap-2 text-base font-semibold text-foreground"><Bot className="h-4 w-4" />{workspaceTitle}</h1>
+    <div className="dashboard-shell flex h-full min-h-0 justify-center">
+      <section className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[12px] border-x border-b border-border/70 bg-background">
+        <header className="dashboard-panel border-b border-border/70 bg-card/60 px-4 py-3 backdrop-blur">
+          <h1 className="dashboard-title flex items-center gap-2 text-base text-foreground"><Bot className="h-4 w-4" />{workspaceTitle}</h1>
           <p className="text-xs text-muted-foreground">{workspaceSubtitle}</p>
         </header>
 
         <div className="min-h-0 flex-1">
           <ScrollArea className="h-full">
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 lg:px-4">
-              {isConversationLoading && messages.length === 0 ? <div className="rounded-[24px] border border-border bg-card/60 p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
+              {isConversationLoading && messages.length === 0 ? <div className="dashboard-panel rounded-[10px] p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
 
               {messages.map((message, index) => {
                 const isAssistant = message.role === "assistant"
@@ -1579,13 +1583,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                       <MessageContent markdown={isAssistant} role={isAssistant ? "assistant" : "user"}>{message.content || (isAssistant && isLoading ? copy.loading : "")}</MessageContent>
                       {!isAssistant ? renderMessageAttachments(message.attachments) : null}
                       {isAssistant && isLoading && index === messages.length - 1 ? (
-                        <div className="w-full rounded-xl border border-border/70 bg-card/70 p-3">
+                        <div className="dashboard-panel w-full rounded-[10px] p-3">
                           <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                             <TypingIndicator />
                             <span className="truncate">{loadingEventSummary.currentLabel}</span>
                           </div>
                           {loadingEventSummary.totalCount > 0 ? (
-                            <div className="mb-2 rounded-lg border border-border/70 bg-background/70 px-2.5 py-2">
+                            <div className="mb-2 rounded-[8px] border border-border/70 bg-background/70 px-2.5 py-2">
                               <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
                                 <span className="truncate">{isZh ? "处理中" : "Processing"}</span>
                                 <span>{`${loadingEventSummary.completedCount}/${loadingEventSummary.totalCount}`}</span>
@@ -1604,7 +1608,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                       {isAssistant && message.content.trim() ? (
                         <MessageActions>
                           <MessageAction tooltip={copied ? copy.copiedReply : copy.copyReply}>
-                            <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-accent/10 hover:text-foreground" onClick={() => void handleCopyMessage(message.id, message.content)}>
+                            <button type="button" className="dashboard-chip inline-flex items-center gap-1 rounded-[4px] px-2 py-1 transition hover:bg-accent/10 hover:text-foreground" onClick={() => void handleCopyMessage(message.id, message.content)}>
                               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                               <TextMorph text={copied ? copy.copied : copy.copy} />
                             </button>
@@ -1624,13 +1628,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
         </div>
 
         <div className="shrink-0 border-t border-border/70 bg-transparent px-3 py-3 lg:px-4">
-          <div className="mx-auto w-full max-w-5xl rounded-2xl bg-background/90 p-2 supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur">
+          <div className="dashboard-panel mx-auto w-full max-w-5xl rounded-[10px] bg-background/90 p-2 supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur">
             {!isConversationLoading && messages.length === 0 ? (
               <div className="mb-2">
-                <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{copy.quickStart}</div>
+                <div className="dashboard-kicker mb-1 text-muted-foreground">{copy.quickStart}</div>
                 <div className="flex flex-wrap gap-2">
                   {quickPrompts.map((prompt) => (
-                    <button key={prompt} type="button" className="max-w-[260px] truncate rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-primary" title={prompt} onClick={() => setInput(prompt)} disabled={isLoading}>{prompt}</button>
+                    <button key={prompt} type="button" className="dashboard-chip max-w-[260px] truncate rounded-[4px] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-primary" title={prompt} onClick={() => setInput(prompt)} disabled={isLoading}>{prompt}</button>
                   ))}
                 </div>
               </div>
@@ -1659,7 +1663,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="h-9 shrink-0 rounded-full px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                    <Button type="button" size="sm" className="dashboard-button-primary h-9 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
                       {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>

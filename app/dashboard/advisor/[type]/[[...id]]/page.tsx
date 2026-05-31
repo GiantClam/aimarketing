@@ -107,7 +107,7 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
       <div className="h-full min-h-0 w-full bg-transparent">
         <main className="mx-auto h-full min-h-0 max-w-[1680px] px-2 pb-2 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
           <div className="flex h-full min-h-0 justify-center">
-            <section className="flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[28px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
+            <section className="flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[12px] rounded-t-none border-x border-b border-t-0 border-border/70 bg-[#f7f7f7] shadow-none">
               <div className="min-h-0 flex-1 bg-[#f7f7f7]">
                 <ScrollArea className="h-full" viewportClassName="px-3 pb-3 pt-0 lg:px-4 lg:pb-4 lg:pt-0">
                   <WorkspaceConversationSkeleton
@@ -117,8 +117,8 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
                 </ScrollArea>
               </div>
               <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
-                <div className="mx-auto w-full max-w-5xl rounded-[24px] border-2 border-border bg-card p-2.5">
-                  <div className="h-11 rounded-[18px] border-2 border-border bg-background/70" />
+                <div className="dashboard-panel mx-auto w-full max-w-5xl rounded-[10px] border border-border bg-card p-2.5">
+                  <div className="h-11 rounded-[6px] border border-border bg-background/70" />
                 </div>
               </div>
             </section>

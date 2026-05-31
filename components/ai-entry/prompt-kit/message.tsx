@@ -29,7 +29,7 @@ type MessageAvatarProps = {
 
 function MessageAvatar({ src, alt, fallback, className }: MessageAvatarProps) {
   return (
-    <Avatar className={cn("h-8 w-8 shrink-0 border border-border", className)}>
+    <Avatar className={cn("h-8 w-8 shrink-0 rounded-[6px] border border-border", className)}>
       {src ? <AvatarImage src={src} alt={alt} /> : null}
       <AvatarFallback>{fallback || alt.slice(0, 1)}</AvatarFallback>
     </Avatar>
@@ -51,14 +51,14 @@ function MessageContent({
 }: MessageContentProps) {
   const bubbleClassName =
     role === "assistant"
-      ? "border-2 border-border bg-card text-foreground"
-      : "border-2 border-primary bg-primary text-primary-foreground"
+      ? "dashboard-panel rounded-[10px] border border-border bg-card text-foreground"
+      : "rounded-[10px] border border-primary bg-primary text-primary-foreground"
 
   if (markdown) {
     return (
       <Markdown
         className={cn(
-          "rounded-2xl px-4 py-3 leading-7",
+          "px-4 py-3 leading-7",
           bubbleClassName,
           role === "assistant"
             ? "prose-a:text-foreground"
@@ -74,7 +74,7 @@ function MessageContent({
   return (
     <div
       className={cn(
-        "rounded-2xl px-4 py-3 text-sm leading-7",
+        "px-4 py-3 text-sm leading-7",
         bubbleClassName,
         className,
       )}

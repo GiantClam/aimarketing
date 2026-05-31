@@ -155,14 +155,14 @@ export default function WebsiteGeneratorPage() {
   if (!user || !hasFeature("website_generation")) return null
 
   return (
-    <div className="flex h-full overflow-hidden bg-muted/30">
+    <div className="dashboard-shell flex h-full overflow-hidden bg-muted/30">
       <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-2 px-2 py-2 lg:px-4 lg:py-3">
         <div className="grid min-h-0 flex-1 gap-2 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border-2 border-border bg-card">
-            <div className="border-b-2 border-border px-4 py-3.5">
+          <div className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[12px] bg-card">
+            <div className="border-b border-border px-4 py-3.5">
               <div className="flex items-center gap-2 text-primary">
                 <Sparkles className="h-4 w-4" />
-                <span className="text-xs font-semibold uppercase tracking-[0.18em]">{t("提示输入", "Prompt lane")}</span>
+                <span className="dashboard-kicker">{t("提示输入", "Prompt lane")}</span>
               </div>
               <p className="mt-3 text-sm leading-7 text-muted-foreground">
                 {t(
@@ -222,7 +222,7 @@ export default function WebsiteGeneratorPage() {
               </div>
             </ScrollArea>
 
-            <div className="border-t-2 border-border bg-muted/20 p-2.5">
+            <div className="border-t border-border bg-muted/20 p-2.5">
               <WorkspaceComposerPanel
                 className="border-none bg-transparent p-0"
                 footer={
@@ -233,7 +233,7 @@ export default function WebsiteGeneratorPage() {
                         "Supports iterative updates on structure, copy direction, section order, and visual style.",
                       )}
                     </p>
-                    <Button onClick={handleSend} disabled={isGenerating || !input.trim()} size="sm" className="h-8 rounded-full px-3 text-[11px]">
+                    <Button onClick={handleSend} disabled={isGenerating || !input.trim()} size="sm" className="dashboard-button-primary h-8 px-3 text-[11px]">
                       <Send className="mr-1.5 h-3.5 w-3.5" />
                       {t("发送", "Send")}
                     </Button>
@@ -252,24 +252,24 @@ export default function WebsiteGeneratorPage() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border-2 border-border bg-card">
-            <div className="flex items-center justify-between border-b-2 border-border px-4 py-3">
+          <div className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[12px] bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-3">
-                <Badge variant="outline" className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px]">
+                <Badge variant="outline" className="dashboard-kicker flex items-center gap-1 rounded-[4px] px-2.5 py-1 text-[10px]">
                   <Layout className="h-3 w-3" />
                   {t("网站预览", "Website preview")}
                 </Badge>
-                <span className="rounded-full border-2 border-border bg-background px-2.5 py-1 text-[10px] text-muted-foreground">
+                <span className="dashboard-chip dashboard-kicker rounded-[4px] px-2.5 py-1 text-[10px] text-muted-foreground">
                   {t("预览容器", "Preview shell")}
                 </span>
               </div>
-              <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[10px]">
+              <Badge variant="secondary" className="dashboard-kicker rounded-[4px] px-2.5 py-1 text-[10px]">
                 {t("实时 iframe", "Live iframe")}
               </Badge>
             </div>
 
             <div className="min-h-0 flex-1 p-4 lg:p-6">
-              <div className="h-full w-full overflow-hidden rounded-[26px] border-2 border-border bg-white">
+              <div className="h-full w-full overflow-hidden rounded-[10px] border border-border bg-white">
                 <iframe
                   ref={iframeRef}
                   className="h-full w-full"
