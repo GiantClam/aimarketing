@@ -135,9 +135,9 @@ function OverviewMetric({ icon: Icon, label, value, hint, tone = "warm" }: Overv
         : "border-orange-200/70 bg-orange-50/90"
 
   return (
-    <div className={cn("rounded-[1.4rem] border p-4 shadow-sm", toneClassName)}>
+    <div className={cn("dashboard-panel rounded-[8px] border p-4 shadow-none", toneClassName)}>
       <div className="flex items-center gap-3">
-        <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border", tone === "ink" ? "border-white/15 bg-white/10" : "border-black/5 bg-white/70")}>
+        <div className={cn("flex h-10 w-10 items-center justify-center rounded-[6px] border", tone === "ink" ? "border-white/15 bg-white/10" : "border-black/5 bg-white/70")}>
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
@@ -152,11 +152,23 @@ function OverviewMetric({ icon: Icon, label, value, hint, tone = "warm" }: Overv
 
 function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="inline-flex rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground">
+    <p className="dashboard-kicker inline-flex rounded-[4px] border border-primary/30 bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground">
       {children}
     </p>
   )
 }
+
+const settingsSharpCardClass = "dashboard-panel rounded-[4px] border-border/80 bg-card/90 shadow-none"
+const settingsSharpShellClass = "dashboard-panel rounded-[4px] border border-border/80 bg-background/78 shadow-none"
+const settingsSharpInsetClass = "dashboard-panel rounded-[4px] border border-border/80 bg-card/88 shadow-none"
+const settingsSharpInfoClass = "dashboard-panel rounded-[4px] border border-border/80 bg-background px-4 py-2 text-sm font-medium text-foreground shadow-none"
+const settingsSharpTagClass =
+  "dashboard-chip dashboard-kicker inline-flex items-center rounded-[4px] border border-border/80 bg-background px-3 py-2 text-[11px] tracking-[0.14em] text-foreground"
+const settingsSharpToggleClass =
+  "dashboard-chip flex items-center gap-2 rounded-[4px] border border-border/80 bg-card px-3 py-2 text-sm text-foreground"
+const settingsSharpInputClass =
+  "dashboard-chip h-11 rounded-[4px] border-border/80 bg-background px-3 font-mono text-xs tracking-[0.03em] text-foreground disabled:opacity-100"
+const settingsSharpSummaryCardClass = "dashboard-panel rounded-[4px] border border-border/80 bg-card/90 p-5 shadow-none"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -765,10 +777,10 @@ export default function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto px-6 py-6 lg:px-8 lg:py-8">
       <div className="mx-auto max-w-6xl space-y-8">
-        <section className="rounded-[32px] border-2 border-border bg-card">
+        <section className="dashboard-panel rounded-[10px] border border-border bg-card">
           <div className="grid gap-8 p-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:p-10">
             <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary-foreground">
+              <div className="dashboard-kicker inline-flex items-center gap-2 rounded-[4px] border border-primary/30 bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary-foreground">
                 <Sparkles className="h-3.5 w-3.5" />
                 {t("设置控制台", "Settings Console")}
               </div>
@@ -779,27 +791,27 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <div className="rounded-full border-2 border-border bg-background px-4 py-2 text-sm font-medium text-foreground">
+                <div className={settingsSharpInfoClass}>
                   {t("企业状态", "Enterprise status")}: {statusText}
                 </div>
-                <div className="rounded-full border-2 border-border bg-background px-4 py-2 text-sm font-medium text-foreground">
+                <div className={settingsSharpInfoClass}>
                   {t("成员角色", "Member role")}: {user?.enterpriseRole || t("未绑定", "Unbound")}
                 </div>
               </div>
             </div>
 
-            <div className="rounded-[28px] border-2 border-border bg-background p-5">
+            <div className={`${settingsSharpShellClass} p-5`}>
               <SectionEyebrow>{t("身份摘要", "Identity Brief")}</SectionEyebrow>
               <h2 className="mt-2 text-xl font-semibold text-foreground">{user?.name || t("未命名成员", "Unnamed member")}</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{user?.email || t("未绑定邮箱", "No email bound")}</p>
 
               <div className="mt-5 space-y-3">
-                <div className="rounded-[22px] border-2 border-border bg-card px-4 py-3">
+                <div className={`${settingsSharpInsetClass} px-4 py-3`}>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t("企业信息", "Enterprise")}</p>
                   <p className="mt-2 text-sm text-foreground">{user?.enterpriseName || t("尚未绑定企业", "No enterprise bound")}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{user?.enterpriseCode || t("无企业 ID", "No enterprise code")}</p>
                 </div>
-                <div className="rounded-[22px] border-2 border-border bg-card px-4 py-3">
+                <div className={`${settingsSharpInsetClass} px-4 py-3`}>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t("配置状态", "Configuration")}</p>
                   <p className="mt-2 text-sm text-foreground">
                     {canViewEnterpriseDify ? t("已连接企业知识资源", "Enterprise knowledge connected") : t("等待企业激活或配置", "Waiting for enterprise activation/configuration")}
@@ -814,7 +826,7 @@ export default function SettingsPage() {
         </section>
 
         {user?.enterpriseStatus === "pending" && (
-          <div className="rounded-[1.6rem] border border-amber-300/80 bg-amber-50/90 p-5 shadow-sm">
+          <div className="dashboard-panel rounded-[4px] border border-amber-400 bg-[#fff3bf] p-5 shadow-none">
             <div className="flex items-start gap-3">
               <Clock3 className="mt-0.5 h-5 w-5 text-amber-700" />
               <div>
@@ -834,7 +846,7 @@ export default function SettingsPage() {
                 <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("优先保证账号基础资料、企业归属和身份状态清晰，避免后续工作台入口与权限判断出现偏差。", "Keep account basics, enterprise ownership, and identity status clear to avoid later access confusion.")}</p>
               </div>
 
-              <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+              <Card className={settingsSharpCardClass}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 font-sans text-xl"><User className="h-5 w-5 text-primary" />{t("账号信息", "Account profile")}</CardTitle>
                   <CardDescription>{t("可修改显示名称。企业信息由团队统一维护。", "You can edit display name. Company info is maintained by the team.")}</CardDescription>
@@ -843,23 +855,23 @@ export default function SettingsPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="grid gap-2">
                       <Label htmlFor="display-name">{t("显示名称", "Display name")}</Label>
-                      <Input id="display-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("请输入显示名称", "Enter display name")} />
+                      <Input id="display-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("请输入显示名称", "Enter display name")} className={settingsSharpInputClass} />
                     </div>
                     <div className="grid gap-2">
                       <Label>{t("邮箱", "Email")}</Label>
-                      <Input value={user?.email || ""} disabled />
+                      <Input value={user?.email || ""} disabled className={settingsSharpInputClass} />
                     </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="grid gap-2"><Label>{t("企业 ID", "Company ID")}</Label><Input value={user?.enterpriseCode || t("未绑定", "Unbound")} disabled /></div>
-                    <div className="grid gap-2"><Label>{t("企业名称", "Company name")}</Label><Input value={user?.enterpriseName || t("未绑定", "Unbound")} disabled /></div>
-                    <div className="grid gap-2"><Label>{t("企业角色", "Company role")}</Label><Input value={user?.enterpriseRole || t("未知", "Unknown")} disabled /></div>
-                    <div className="grid gap-2"><Label>{t("账号状态", "Account status")}</Label><Input value={statusText} disabled /></div>
+                    <div className="grid gap-2"><Label>{t("企业 ID", "Company ID")}</Label><Input value={user?.enterpriseCode || t("未绑定", "Unbound")} disabled className={settingsSharpInputClass} /></div>
+                    <div className="grid gap-2"><Label>{t("企业名称", "Company name")}</Label><Input value={user?.enterpriseName || t("未绑定", "Unbound")} disabled className={settingsSharpInputClass} /></div>
+                    <div className="grid gap-2"><Label>{t("企业角色", "Company role")}</Label><Input value={user?.enterpriseRole || t("未知", "Unknown")} disabled className={settingsSharpInputClass} /></div>
+                    <div className="grid gap-2"><Label>{t("账号状态", "Account status")}</Label><Input value={statusText} disabled className={settingsSharpInputClass} /></div>
                   </div>
 
                   {Boolean(user?.enterpriseId) && !isEnterpriseAdmin ? (
-                    <div className="rounded-[20px] border border-border/70 bg-background/70 p-4">
+                    <div className={`${settingsSharpShellClass} p-4`}>
                       <p className="text-sm font-medium text-foreground">{t("更换企业绑定", "Switch company binding")}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {t("输入目标企业 ID 后将发起换绑申请。审核通过前，当前企业绑定保持不变。", "Submit target company ID to request binding switch. Current binding remains unchanged until approval.")}
@@ -872,13 +884,14 @@ export default function SettingsPage() {
                             value={switchEnterpriseCode}
                             onChange={(event) => setSwitchEnterpriseCode(event.target.value)}
                             placeholder={t("请输入企业 ID", "Enter company ID")}
+                            className={settingsSharpInputClass}
                           />
                         </div>
                         <Button
                           type="button"
                           onClick={handleSwitchEnterprise}
                           disabled={isSwitchingEnterprise || !switchEnterpriseCode.trim()}
-                          className="rounded-full px-5"
+                          className="dashboard-button-primary px-5"
                         >
                           {isSwitchingEnterprise ? t("提交中...", "Submitting...") : t("提交更换申请", "Submit switch request")}
                         </Button>
@@ -890,13 +903,13 @@ export default function SettingsPage() {
                   ) : null}
 
                   <div className="flex flex-wrap items-center gap-3">
-                    <Button onClick={handleSaveProfile} disabled={isSaving} className="rounded-full px-5"><Save className="mr-2 h-4 w-4" />{isSaving ? t("保存中...", "Saving...") : t("保存设置", "Save settings")}</Button>
+                    <Button onClick={handleSaveProfile} disabled={isSaving} className="dashboard-button-primary px-5"><Save className="mr-2 h-4 w-4" />{isSaving ? t("保存中...", "Saving...") : t("保存设置", "Save settings")}</Button>
                     {saveMessage && <span className="text-sm text-muted-foreground">{saveMessage}</span>}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+              <Card className={settingsSharpCardClass}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 font-sans text-xl"><KeyRound className="h-5 w-5 text-primary" />{t("修改密码", "Change password")}</CardTitle>
                   <CardDescription>{t("输入当前密码后设置新密码。完成后旧会话会全部失效。", "Enter your current password and set a new one. Old sessions will be invalidated.")}</CardDescription>
@@ -911,6 +924,7 @@ export default function SettingsPage() {
                         value={currentPassword}
                         onChange={(event) => setCurrentPassword(event.target.value)}
                         placeholder={t("请输入当前密码", "Enter current password")}
+                        className={settingsSharpInputClass}
                       />
                     </div>
                     <div className="grid gap-2">
@@ -921,6 +935,7 @@ export default function SettingsPage() {
                         value={newPassword}
                         onChange={(event) => setNewPassword(event.target.value)}
                         placeholder={t("至少 8 位", "At least 8 characters")}
+                        className={settingsSharpInputClass}
                       />
                     </div>
                     <div className="grid gap-2">
@@ -931,12 +946,13 @@ export default function SettingsPage() {
                         value={confirmPassword}
                         onChange={(event) => setConfirmPassword(event.target.value)}
                         placeholder={t("再次输入新密码", "Enter the new password again")}
+                        className={settingsSharpInputClass}
                       />
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
-                    <Button onClick={handleChangePassword} disabled={isChangingPassword} className="rounded-full px-5">
+                    <Button onClick={handleChangePassword} disabled={isChangingPassword} className="dashboard-button-primary px-5">
                       <KeyRound className="mr-2 h-4 w-4" />
                       {isChangingPassword ? t("更新中...", "Updating...") : t("确认修改密码", "Change password")}
                     </Button>
@@ -954,7 +970,7 @@ export default function SettingsPage() {
                   <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("把待审核申请和成员权限放在同一段，先处理准入，再决定每个成员可进入哪些工作台。", "Handle access reviews and permission allocation in one place.")}</p>
                 </div>
 
-                <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                <Card className={settingsSharpCardClass}>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-sans text-xl"><Building2 className="h-5 w-5 text-primary" />{t("企业成员申请审核", "Enterprise member request review")}</CardTitle>
                     <CardDescription>{t("审核待加入企业的成员申请。", "Review pending requests to join the enterprise.")}</CardDescription>
@@ -963,22 +979,22 @@ export default function SettingsPage() {
               {loadingAdminData && <p className="text-sm text-muted-foreground">{t("加载中...", "Loading...")}</p>}
               {!loadingAdminData && requests.length === 0 && <p className="text-sm text-muted-foreground">{t("暂无待审核申请。", "No pending requests.")}</p>}
               {requests.map((request) => (
-                <div key={request.requestId} className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 md:flex-row md:items-center md:justify-between">
+                <div key={request.requestId} className={`${settingsSharpShellClass} flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between`}>
                   <div>
                     <p className="text-sm font-medium text-foreground">{request.userName}（{request.userEmail}）</p>
                     <p className="mt-1 text-xs text-muted-foreground">{t("申请时间：", "Requested at: ")}{new Date(request.createdAt).toLocaleString()}</p>
                     {request.note && <p className="mt-1 text-xs text-muted-foreground">{t("说明：", "Note: ")}{request.note}</p>}
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => reviewRequest(request.requestId, "reject")} className="rounded-full"><X className="mr-1 h-4 w-4" />{t("拒绝", "Reject")}</Button>
-                    <Button size="sm" onClick={() => reviewRequest(request.requestId, "approve")} className="rounded-full"><Check className="mr-1 h-4 w-4" />{t("通过", "Approve")}</Button>
+                    <Button size="sm" variant="outline" onClick={() => reviewRequest(request.requestId, "reject")} className="dashboard-button-secondary"><X className="mr-1 h-4 w-4" />{t("拒绝", "Reject")}</Button>
+                    <Button size="sm" onClick={() => reviewRequest(request.requestId, "approve")} className="dashboard-button-primary"><Check className="mr-1 h-4 w-4" />{t("通过", "Approve")}</Button>
                   </div>
                 </div>
               ))}
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                <Card className={settingsSharpCardClass}>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-sans text-xl"><Shield className="h-5 w-5 text-primary" />{t("成员功能权限", "Member feature permissions")}</CardTitle>
                     <CardDescription>{t("配置成员可访问的功能模块，并管理成员账号状态。专家顾问与客户画像入口可分别授权。", "Configure feature access and manage member account status. Expert Advisor and Customer Profile entry can be granted independently.")}</CardDescription>
@@ -997,30 +1013,30 @@ export default function SettingsPage() {
                 const isActiveMember = member.enterpriseStatus === "active"
                 const actionDisabled = actingMemberId === member.id
                 return (
-                  <div key={member.id} className="space-y-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+                  <div key={member.id} className={`${settingsSharpShellClass} space-y-4 p-4`}>
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
                         <p className="text-sm font-medium text-foreground">{member.name}（{member.email}）</p>
                         <p className="mt-1 text-xs text-muted-foreground">{t("角色：", "Role: ")}{member.enterpriseRole || "member"} / {t("状态：", "Status: ")}{member.enterpriseStatus || "unknown"}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={actionDisabled || !isActiveMember} className="rounded-full">{t("保存权限", "Save permissions")}</Button>
-                        <Button size="sm" variant="outline" onClick={() => requestResetPassword(member)} disabled={actionDisabled || member.enterpriseStatus === "removed"} className="rounded-full"><KeyRound className="mr-1 h-4 w-4" />{t("重置密码", "Reset password")}</Button>
+                        <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={actionDisabled || !isActiveMember} className="dashboard-button-primary">{t("保存权限", "Save permissions")}</Button>
+                        <Button size="sm" variant="outline" onClick={() => requestResetPassword(member)} disabled={actionDisabled || member.enterpriseStatus === "removed"} className="dashboard-button-secondary"><KeyRound className="mr-1 h-4 w-4" />{t("重置密码", "Reset password")}</Button>
                         {isSuspended ? (
-                          <Button size="sm" variant="outline" onClick={() => requestReactivateMember(member)} disabled={actionDisabled} className="rounded-full"><PlayCircle className="mr-1 h-4 w-4" />{t("恢复", "Reactivate")}</Button>
+                          <Button size="sm" variant="outline" onClick={() => requestReactivateMember(member)} disabled={actionDisabled} className="dashboard-button-secondary"><PlayCircle className="mr-1 h-4 w-4" />{t("恢复", "Reactivate")}</Button>
                         ) : (
-                          <Button size="sm" variant="outline" onClick={() => requestSuspendMember(member)} disabled={actionDisabled || isCurrentUser || !isActiveMember} className="rounded-full"><PauseCircle className="mr-1 h-4 w-4" />{t("停用", "Suspend")}</Button>
+                          <Button size="sm" variant="outline" onClick={() => requestSuspendMember(member)} disabled={actionDisabled || isCurrentUser || !isActiveMember} className="dashboard-button-secondary"><PauseCircle className="mr-1 h-4 w-4" />{t("停用", "Suspend")}</Button>
                         )}
-                        <Button size="sm" variant="outline" onClick={() => requestRemoveMember(member)} disabled={actionDisabled || isCurrentUser} className="rounded-full border-destructive/40 text-destructive hover:text-destructive"><UserX className="mr-1 h-4 w-4" />{t("移出", "Remove")}</Button>
+                        <Button size="sm" variant="outline" onClick={() => requestRemoveMember(member)} disabled={actionDisabled || isCurrentUser} className="dashboard-button-secondary border-destructive/50 px-3 text-destructive hover:bg-destructive hover:text-destructive-foreground"><UserX className="mr-1 h-4 w-4" />{t("移出", "Remove")}</Button>
                       </div>
                     </div>
 
                     <div className="grid gap-2 md:grid-cols-2">
                       {configurableFeatureKeys.map((feature) => (
-                        <label key={feature} className="flex items-center gap-2 rounded-xl border border-border/50 bg-card/80 px-3 py-2 text-sm">
+                        <label key={feature} className={settingsSharpToggleClass}>
                           <input
                             type="checkbox"
-                            className="rounded border-border"
+                            className="h-4 w-4 rounded-none border-border bg-background accent-primary"
                             checked={Boolean(draft[feature])}
                             disabled={!isActiveMember}
                             onChange={(event) => {
@@ -1054,7 +1070,7 @@ export default function SettingsPage() {
                 </div>
 
                 {canViewEnterpriseDify && (
-                  <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                  <Card className={settingsSharpCardClass}>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 font-sans text-xl"><Database className="h-5 w-5 text-primary" />{t("Dify 企业知识库", "Dify enterprise knowledge")}</CardTitle>
                       <CardDescription>
@@ -1066,7 +1082,7 @@ export default function SettingsPage() {
                     <CardContent className="space-y-5">
               {hasEnterpriseKnowledgeBinding ? (
                 <>
-                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+                  <div className={`${settingsSharpShellClass} p-4 text-sm text-muted-foreground`}>
                     <div className="space-y-1">
                       <p className="font-medium text-foreground">{t("当前企业已配置知识库", "Knowledge base configured for current enterprise")}</p>
                       <p>{t("已读取数据库中的 Dify Base URL、脱敏 API Key 和 dataset 绑定信息。", "Loaded Dify Base URL, masked API key, and dataset bindings from database.")}</p>
@@ -1080,6 +1096,7 @@ export default function SettingsPage() {
                         id="dify-base-url"
                         value={difyBaseUrl || t("未在数据库中配置", "Not configured in database")}
                         disabled
+                        className={settingsSharpInputClass}
                       />
                       <p className="text-xs text-muted-foreground">{t("只读展示当前数据库中的企业 Dify Base URL；如需修改，请直接更新数据库。", "Read-only display of enterprise Dify Base URL from database. Update database directly to change it.")}</p>
                     </div>
@@ -1089,6 +1106,7 @@ export default function SettingsPage() {
                         id="dify-api-key"
                         value={difyHasApiKey ? difyApiKeyMasked : t("未在数据库中配置", "Not configured in database")}
                         disabled
+                        className={settingsSharpInputClass}
                       />
                       <p className="text-xs text-muted-foreground">
                         {t("API Key 已做脱敏展示，不会在页面明文返回。当前已启用 ", "API key is masked and never returned in plain text. Currently enabled ")}{enabledDifyDatasetCount}{t(" 个知识库。", " dataset(s).")}
@@ -1096,10 +1114,10 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+                  <label className={`${settingsSharpToggleClass} bg-background px-4 py-3`}>
                     <input
                       type="checkbox"
-                      className="rounded border-border"
+                      className="h-4 w-4 rounded-none border-border bg-background accent-primary"
                       checked={difyEnabled}
                       disabled={!canManageEnterpriseDify || savingDifyConfig}
                       onChange={(event) => void updateEnterpriseDifyEnabled(event.target.checked)}
@@ -1113,7 +1131,7 @@ export default function SettingsPage() {
                     {difyMessage && <span className="text-sm text-muted-foreground">{difyMessage}</span>}
                   </div>
 
-                  <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
+                  <div className={`${settingsSharpShellClass} space-y-3 p-4`}>
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
                         <p className="text-sm font-medium text-foreground">{t("知识库绑定与检索用途", "Dataset bindings and retrieval use")}</p>
@@ -1132,7 +1150,7 @@ export default function SettingsPage() {
                     ) : (
                       <div className="space-y-3">
                         {difyDatasets.map((dataset) => (
-                          <div key={dataset.datasetId} className="rounded-2xl border border-border/70 bg-card/80 p-4">
+                          <div key={dataset.datasetId} className={`${settingsSharpInsetClass} p-4`}>
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div className="space-y-1 text-sm">
                                 <p className="font-medium text-foreground">{dataset.datasetName}</p>
@@ -1141,19 +1159,19 @@ export default function SettingsPage() {
                               <div className="grid min-w-[220px] gap-3 sm:grid-cols-3">
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>{t("状态", "Status")}</span>
-                                  <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
+                                  <span className={settingsSharpTagClass}>
                                     {dataset.enabled ? t("已启用", "Enabled") : t("已停用", "Disabled")}
                                   </span>
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>{t("检索用途", "Scope")}</span>
-                                  <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
+                                  <span className={settingsSharpTagClass}>
                                     {knowledgeScopeOptions.find((option) => option.value === dataset.scope)?.label || dataset.scope}
                                   </span>
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>{t("优先级", "Priority")}</span>
-                                  <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground">
+                                  <span className={settingsSharpTagClass}>
                                     {dataset.priority}
                                   </span>
                                 </div>
@@ -1166,7 +1184,7 @@ export default function SettingsPage() {
                   </div>
                 </>
               ) : (
-                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+                <div className={`${settingsSharpShellClass} p-4 text-sm text-muted-foreground`}>
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">{t("当前企业未配置知识库", "No knowledge base configured for current enterprise")}</p>
                   </div>
@@ -1177,7 +1195,7 @@ export default function SettingsPage() {
                 )}
 
                 {isEnterpriseAdmin && (
-                  <Card className="rounded-[1.75rem] border-border/70 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+                  <Card className={settingsSharpCardClass}>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 font-sans text-xl"><Workflow className="h-5 w-5 text-primary" />{t("专家顾问与客户画像 Dify Workflow 配置", "Advisor and Customer Profile Dify workflow config")}</CardTitle>
                       <CardDescription>{t("品牌顾问和增长顾问只读展示。客户画像（Customer Profile）可在此切换执行模式（Dify/Skill）；公司搜索与联系人挖掘保持原有 Dify workflow。", "Brand/Growth workflows are read-only. Customer Profile can switch execution mode (Dify/Skill); Company Search and Contact Mining keep original Dify workflows.")}</CardDescription>
@@ -1229,32 +1247,32 @@ export default function SettingsPage() {
                           ? t("当前生效：系统默认", "Current source: system default")
                           : t("当前生效：未配置", "Current source: not configured")
                   return (
-                    <div key={card.advisorType} className="space-y-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <div key={card.advisorType} className={`${settingsSharpShellClass} space-y-4 p-4`}>
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
                           <p className="text-sm font-medium text-foreground">{card.title}</p>
                           <p className="mt-1 text-xs leading-6 text-muted-foreground">{card.description}</p>
                         </div>
-                        <span className="rounded-full border border-border/70 bg-card/80 px-3 py-1 text-xs text-muted-foreground">
+                        <span className="dashboard-chip dashboard-kicker inline-flex items-center rounded-[4px] border border-primary/45 bg-primary px-3 py-1.5 text-[11px] tracking-[0.14em] text-primary-foreground">
                           {statusLabel}
                         </span>
                       </div>
 
-                      <div className="grid gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 text-sm">
+                      <div className={`${settingsSharpInsetClass} grid gap-3 p-4 text-sm`}>
                         {isLeadHunterWorkflow ? (
                           <div className="space-y-4">
                             <p className="text-xs leading-6 text-muted-foreground">
                               {t("客户画像（Customer Profile）没有系统默认 workflow。只有企业数据库里存在可用配置时，侧边栏和 Dashboard 才会显示对应入口。", "Customer Profile has no system-default workflow. Entry appears only when enterprise database configuration is available.")}
                             </p>
                             {leadHunterAdvisorType ? (
-                              <div className="space-y-3 rounded-xl border border-border/70 bg-background/70 p-3">
+                              <div className={`${settingsSharpShellClass} space-y-3 p-3`}>
                                 <p className="text-xs text-muted-foreground">{t("执行模式（数据库配置）", "Execution mode (database config)")}</p>
                                 <div className="flex flex-wrap gap-3">
-                                  <label className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-sm text-foreground">
+                                  <label className={settingsSharpToggleClass}>
                                     <input
                                       type="radio"
                                       name={`${leadHunterAdvisorType}-mode`}
-                                      className="border-border"
+                                      className="h-4 w-4 border-border bg-background accent-primary"
                                       checked={leadHunterModeDraft === "dify"}
                                       onChange={() =>
                                         setLeadHunterModeDrafts((prev) => ({ ...prev, [leadHunterAdvisorType]: "dify" }))
@@ -1263,11 +1281,11 @@ export default function SettingsPage() {
                                     />
                                     <span>{t("Dify", "Dify")}</span>
                                   </label>
-                                  <label className="flex items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-sm text-foreground">
+                                  <label className={settingsSharpToggleClass}>
                                     <input
                                       type="radio"
                                       name={`${leadHunterAdvisorType}-mode`}
-                                      className="border-border"
+                                      className="h-4 w-4 border-border bg-background accent-primary"
                                       checked={leadHunterModeDraft === "skill"}
                                       onChange={() =>
                                         setLeadHunterModeDrafts((prev) => ({ ...prev, [leadHunterAdvisorType]: "skill" }))
@@ -1281,7 +1299,7 @@ export default function SettingsPage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    className="rounded-full"
+                                    className="dashboard-button-primary"
                                     onClick={() =>
                                       void saveLeadHunterExecutionMode(
                                         leadHunterAdvisorType,
@@ -1305,13 +1323,13 @@ export default function SettingsPage() {
                           <div className="grid gap-3 md:grid-cols-2">
                             <div className="grid gap-1">
                               <span className="text-xs text-muted-foreground">{t("系统默认 Base URL", "System default Base URL")}</span>
-                              <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-foreground">
+                              <span className={settingsSharpTagClass}>
                                 {defaultInfo?.baseUrl || advisorDefaults?.baseUrl || t("未配置", "Not configured")}
                               </span>
                             </div>
                             <div className="grid gap-1">
                               <span className="text-xs text-muted-foreground">{t("系统默认 API Key", "System default API key")}</span>
-                              <span className="rounded-xl border border-border/70 bg-background px-3 py-2 text-foreground">
+                              <span className={settingsSharpTagClass}>
                                 {defaultInfo?.configured ? t("已配置", "Configured") : t("未配置", "Not configured")}
                               </span>
                             </div>
@@ -1344,13 +1362,13 @@ export default function SettingsPage() {
                 <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("单独放出退出操作，避免与普通配置动作并排出现导致误触。", "Keep logout separate from normal configuration actions to avoid accidental clicks.")}</p>
               </div>
 
-              <Card className="rounded-[1.75rem] border-destructive/30 bg-card/85 shadow-[0_24px_60px_-48px_rgba(31,41,55,0.45)]">
+              <Card className="dashboard-panel rounded-[4px] border-destructive/40 bg-card/90 shadow-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 font-sans text-xl text-destructive"><AlertTriangle className="h-5 w-5" />{t("会话管理", "Session management")}</CardTitle>
                   <CardDescription>{t("退出登录会清除当前服务端会话，并返回登录页。", "Logging out clears current server session and returns to login page.")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut} className="rounded-full px-5"><LogOut className="mr-2 h-4 w-4" />{isLoggingOut ? t("退出中...", "Logging out...") : t("退出登录", "Log out")}</Button>
+                  <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut} className="rounded-[4px] px-5"><LogOut className="mr-2 h-4 w-4" />{isLoggingOut ? t("退出中...", "Logging out...") : t("退出登录", "Log out")}</Button>
                   {isDemoMode && <p className="text-xs text-muted-foreground">{t("当前为体验账号。", "Current account is in demo mode.")}</p>}
                 </CardContent>
               </Card>
@@ -1358,7 +1376,7 @@ export default function SettingsPage() {
           </div>
 
           <aside className="space-y-4 xl:sticky xl:top-8 xl:self-start">
-            <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-48px_rgba(31,41,55,0.5)]">
+            <div className={settingsSharpSummaryCardClass}>
               <SectionEyebrow>{t("管理摘要", "Management brief")}</SectionEyebrow>
               <h2 className="mt-2 font-sans text-xl font-semibold text-foreground">{t("当前配置摘要", "Current configuration summary")}</h2>
               <p className="mt-2 text-sm leading-7 text-muted-foreground">{t("右侧摘要不承载操作，只帮助管理员快速确认企业状态、资源规模和治理负载。", "The side summary is read-only and helps admins quickly verify enterprise status, resource scale, and governance workload.")}</p>
@@ -1368,7 +1386,7 @@ export default function SettingsPage() {
               <OverviewMetric key={metric.label} icon={metric.icon} label={metric.label} value={metric.value} hint={metric.hint} tone={metric.tone} />
             ))}
 
-            <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-48px_rgba(31,41,55,0.5)]">
+            <div className={settingsSharpSummaryCardClass}>
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Workflow className="h-4 w-4 text-primary" />
                 {t("优化原则", "Optimization principles")}

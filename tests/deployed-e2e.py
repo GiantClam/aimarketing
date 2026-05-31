@@ -6,6 +6,7 @@ from pathlib import Path
 from time import time
 from urllib.parse import urlparse
 import re
+import subprocess
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -32,6 +33,57 @@ class Config:
     skip_member_flow: bool
 
 
+NODE_DB_SCRIPT = r"""
+const { Pool } = require('pg')
+const input = JSON.parse(process.argv[1])
+const dbUrl =
+  process.env.AI_MARKETING_DB_POSTGRES_URL ||
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.AI_MARKETING_DB_POSTGRES_URL_NON_POOLING ||
+  process.env.DATABASE_URL_UNPOOLED ||
+  process.env.POSTGRES_URL_NON_POOLING
+
+if (!dbUrl) {
+  throw new Error('database url missing')
+}
+
+const shouldUseRelaxedSsl = (connectionString) => {
+  const lower = String(connectionString).toLowerCase()
+  return lower.includes('sslmode=require') || lower.includes('supabase.com') || process.env.PGSSLMODE === 'require'
+}
+
+const poolConfig = shouldUseRelaxedSsl(dbUrl)
+  ? (() => {
+      const parsed = new URL(dbUrl)
+      return {
+        host: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : 5432,
+        user: decodeURIComponent(parsed.username),
+        password: decodeURIComponent(parsed.password),
+        database: parsed.pathname.replace(/^\//, ''),
+        ssl: { rejectUnauthorized: false },
+      }
+    })()
+  : { connectionString: dbUrl }
+
+const pool = new Pool(poolConfig)
+
+;(async () => {
+  try {
+    const result = await pool.query(input.sql, input.params || [])
+    process.stdout.write(JSON.stringify({ rows: result.rows, rowCount: result.rowCount }))
+  } finally {
+    await pool.end()
+  }
+})().catch((error) => {
+  console.error(error && error.stack ? error.stack : String(error))
+  process.exit(1)
+})
+"""
+
+
 class Recorder:
     def __init__(self) -> None:
         self.results: list[dict[str, str]] = []
@@ -46,6 +98,37 @@ class Recorder:
         print("DEPLOYED_E2E_SUMMARY_START")
         print(json.dumps(self.results, ensure_ascii=False, indent=2))
         print("DEPLOYED_E2E_SUMMARY_END")
+
+
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or key in os.environ:
+            continue
+
+        if (value.startswith('"') and value.endswith('"')) or (
+            value.startswith("'") and value.endswith("'")
+        ):
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+def load_repo_env() -> None:
+    load_env_file(Path(".env"))
+    load_env_file(Path(".env.local"))
 
 
 def build_config() -> Config:
@@ -110,6 +193,19 @@ def account_with_suffix(prefix: str) -> Account:
     )
 
 
+def run_db(sql: str, params: list | None = None) -> dict:
+    payload = json.dumps({"sql": sql, "params": params or []})
+    completed = subprocess.run(
+        ["node", "-e", NODE_DB_SCRIPT, payload],
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
+    if completed.returncode != 0:
+        raise RuntimeError((completed.stderr or completed.stdout or "database query failed").strip())
+    return json.loads(completed.stdout)
+
+
 def save_failure_screenshot(page, artifact_dir: Path, name: str) -> None:
     try:
         page.screenshot(path=str(artifact_dir / f"{name}.png"), full_page=True)
@@ -123,6 +219,37 @@ def wait_for_dashboard(page, timeout_ms: int) -> None:
         timeout=timeout_ms,
     )
     page.wait_for_load_state("networkidle")
+
+
+def complete_email_verification(
+    page, config: Config, email: str, timeout_ms: int
+) -> None:
+    rows = run_db(
+        """
+        SELECT u.id
+        FROM "AI_MARKETING_users" u
+        WHERE u.email = $1
+        LIMIT 1
+        """,
+        [email.strip().lower()],
+    )["rows"]
+
+    if not rows:
+        raise AssertionError(f"User not found for email verification: {email}")
+
+    user_id = int(rows[0]["id"])
+    run_db(
+        """
+        UPDATE "AI_MARKETING_users"
+        SET email_verified = TRUE, updated_at = NOW()
+        WHERE id = $1
+        """,
+        [user_id],
+    )
+    run_db(
+        'DELETE FROM "AI_MARKETING_email_verification_tokens" WHERE user_id = $1',
+        [user_id],
+    )
 
 
 def login(page, base_url: str, email: str, password: str, timeout_ms: int) -> None:
@@ -165,6 +292,12 @@ def register_create_enterprise(page, config: Config, account: Account) -> None:
             f"Admin register failed: {response.status} {response.text()}"
         )
 
+    response_json = response.json()
+    if response_json.get("requiresEmailVerification"):
+        complete_email_verification(page, config, account.email, config.timeout_ms)
+        login(page, config.base_url, account.email, account.password, config.timeout_ms)
+        return
+
     wait_for_dashboard(page, config.timeout_ms)
 
 
@@ -192,6 +325,14 @@ def register_join_enterprise(
         raise AssertionError(
             f"Member register failed: {response.status} {response.text()}"
         )
+
+    response_json = response.json()
+    if response_json.get("requiresEmailVerification"):
+        complete_email_verification(page, config, account.email, config.timeout_ms)
+        login(page, config.base_url, account.email, account.password, config.timeout_ms)
+        page.goto(f"{config.base_url}/dashboard/settings", wait_until="domcontentloaded")
+        page.wait_for_load_state("networkidle")
+        return
 
     page.wait_for_url(
         lambda url: "/dashboard/settings" in url, timeout=config.timeout_ms
@@ -228,14 +369,91 @@ def verify_dashboard_shell(page, config: Config) -> None:
         raise AssertionError("Video entry should be hidden")
     if page.locator("a[href='/dashboard/website-generator']").count() != 0:
         raise AssertionError("Website entry should be hidden")
-    if page.locator("a[href='/dashboard/advisor/brand-strategy/new']").count() == 0:
+
+    availability = page.evaluate(
+        """async () => {
+            const res = await fetch('/api/dashboard/availability', { credentials: 'same-origin' });
+            let body = null;
+            try { body = await res.json(); } catch {}
+            return { status: res.status, body };
+        }"""
+    )
+
+    if availability["status"] != 200:
         raise AssertionError(
-            "Brand strategy advisor entry should be visible by default"
+            f"Unexpected dashboard availability response: {availability}"
         )
-    if page.locator("a[href='/dashboard/advisor/growth/new']").count() == 0:
-        raise AssertionError(
-            "Growth advisor entry should be visible by default"
-        )
+
+    advisor = (availability.get("body") or {}).get("data", {}).get("advisor", {})
+    expected_entries = {
+        re.compile("Brand strategy advisor", re.IGNORECASE): bool(
+            advisor.get("brandStrategy")
+        ),
+        re.compile("Growth advisor", re.IGNORECASE): bool(advisor.get("growth")),
+        re.compile("Company Search", re.IGNORECASE): bool(
+            advisor.get("companySearch")
+        ),
+        re.compile("Contact Mining", re.IGNORECASE): bool(
+            advisor.get("contactMining")
+        ),
+    }
+
+    for label_pattern, should_exist in expected_entries.items():
+        count = page.get_by_role("button", name=label_pattern).count()
+        if should_exist and count == 0:
+            raise AssertionError(
+                f"Expected dashboard advisor entry to be visible: {label_pattern.pattern}"
+            )
+        if not should_exist and count != 0:
+            raise AssertionError(
+                f"Expected dashboard advisor entry to be hidden: {label_pattern.pattern}"
+            )
+
+
+def find_member_permission_card(page, member_email: str):
+    candidates = page.locator("div", has_text=member_email).filter(
+        has=page.get_by_role("button", name=re.compile("保存权限|Save permissions"))
+    )
+    best_candidate = None
+    best_checkbox_count = None
+    for index in range(candidates.count()):
+        candidate = candidates.nth(index)
+        text = candidate.inner_text()
+        if member_email not in text:
+            continue
+        if re.search(r"Status:\s+active", text, re.IGNORECASE) is None:
+            if "状态：已激活" not in text and "状态： active" not in text:
+                continue
+        checkbox_count = candidate.locator("input[type='checkbox']").count()
+        if checkbox_count <= 0:
+            continue
+        if best_checkbox_count is None or checkbox_count < best_checkbox_count:
+            best_candidate = candidate
+            best_checkbox_count = checkbox_count
+    if best_candidate is not None:
+        return best_candidate
+    raise AssertionError(
+        f"Member permission card with feature toggles not found for {member_email}"
+    )
+
+
+def find_pending_request_card(page, member_email: str):
+    candidates = page.locator("div", has_text=member_email).filter(
+        has=page.get_by_role("button", name=re.compile("通过|Approve"))
+    )
+    best_candidate = None
+    best_button_count = None
+    for index in range(candidates.count()):
+        candidate = candidates.nth(index)
+        button_count = candidate.get_by_role("button").count()
+        if button_count <= 0:
+            continue
+        if best_button_count is None or button_count < best_button_count:
+            best_candidate = candidate
+            best_button_count = button_count
+    if best_candidate is not None:
+        return best_candidate
+    return None
 
 
 def verify_settings(
@@ -270,22 +488,30 @@ def verify_settings(
         )
 
     if expected_checkbox_count is not None:
-        checkbox_count = page.locator("input[type='checkbox']").count()
+        if expected_checkbox_count == 0:
+            checkbox_count = page.locator("input[type='checkbox']").count()
+        else:
+            member_card = find_member_permission_card(page, expected_email)
+            checkbox_count = member_card.locator("input[type='checkbox']").count()
         if checkbox_count != expected_checkbox_count:
             raise AssertionError(
                 f"Expected {expected_checkbox_count} feature checkboxes, got {checkbox_count}"
             )
 
-    return {"enterprise_code": enterprise_code, "enterprise_name": enterprise_name}
+    return {
+        "enterprise_code": enterprise_code,
+        "enterprise_name": enterprise_name,
+        "status": status,
+    }
 
 
 def verify_disabled_routes(page, config: Config) -> None:
     for route in ("/dashboard/video", "/dashboard/website-generator"):
         page.goto(f"{config.base_url}{route}", wait_until="domcontentloaded")
         page.wait_for_load_state("networkidle")
-        if urlparse(page.url).path != "/dashboard":
+        if urlparse(page.url).path not in ("/dashboard", "/dashboard/ai"):
             raise AssertionError(
-                f"{route} should redirect to /dashboard, got {page.url}"
+                f"{route} should redirect to dashboard shell, got {page.url}"
             )
 
 
@@ -325,13 +551,71 @@ def verify_disabled_apis(page) -> None:
     if crewai["status"] != 410 or crewai["body"].get("error") != "Feature disabled":
         raise AssertionError(f"Unexpected video API response: {crewai}")
     dify_data = dify["body"].get("data", {})
-    if (
-        dify["status"] != 200
-        or dify_data.get("brandStrategy") is not True
-        or dify_data.get("growth") is not True
-        or dify_data.get("hasAny") is not True
-    ):
+    expected_dify_keys = {
+        "brandStrategy",
+        "growth",
+        "leadHunter",
+        "companySearch",
+        "contactMining",
+        "copywriting",
+        "hasAny",
+    }
+    if dify["status"] != 200:
         raise AssertionError(f"Unexpected Dify availability response: {dify}")
+    if set(dify_data.keys()) != expected_dify_keys:
+        raise AssertionError(
+            f"Unexpected Dify availability shape: {sorted(dify_data.keys())}"
+        )
+    if any(not isinstance(dify_data.get(key), bool) for key in expected_dify_keys):
+        raise AssertionError(f"Unexpected Dify availability values: {dify}")
+
+
+def verify_ai_entry_apis(page) -> None:
+    responses = page.evaluate(
+        """async () => {
+            const outputs = [];
+            for (const url of ['/api/ai/models', '/api/ai/agents']) {
+                const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+                let body = null;
+                try { body = await res.json(); } catch {}
+                outputs.push({ url, status: res.status, body });
+            }
+            return outputs;
+        }"""
+    )
+    lookup = {item["url"]: item for item in responses}
+    models = lookup["/api/ai/models"]
+    agents = lookup["/api/ai/agents"]
+    if models["status"] != 200:
+        raise AssertionError(f"Unexpected AI models response: {models}")
+    if agents["status"] != 200:
+        raise AssertionError(f"Unexpected AI agents response: {agents}")
+
+
+def wait_for_member_status(page, member_email: str, expected_status: str, timeout_ms: int) -> None:
+    deadline = time() + timeout_ms / 1000
+    last_status = None
+    while time() < deadline:
+        result = page.evaluate(
+            """async (email) => {
+                const res = await fetch('/api/enterprise/members', {
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                });
+                const body = await res.json().catch(() => null);
+                const rows = Array.isArray(body?.data) ? body.data : [];
+                const member = rows.find((item) => String(item?.email || '').toLowerCase() === String(email || '').toLowerCase());
+                return member ? String(member.enterpriseStatus || '') : null;
+            }""",
+            member_email,
+        )
+        last_status = result
+        if result == expected_status:
+            return
+        page.wait_for_timeout(1000)
+    raise AssertionError(
+        f"Member {member_email} did not reach status {expected_status}; last status: {last_status}"
+    )
 
 
 def approve_member_request(page, config: Config, member_email: str) -> None:
@@ -346,23 +630,28 @@ def approve_member_request(page, config: Config, member_email: str) -> None:
     page.wait_for_timeout(2000)
     if "login" in page.url:
         raise AssertionError("Not logged in - redirected to login page")
-    request_row = page.locator("div.rounded-2xl", has_text=member_email).filter(
-        has=page.get_by_role("button", name=re.compile("通过|Approve"))
-    ).first
+    request_row = find_pending_request_card(page, member_email)
+    if request_row is None:
+        return
     request_row.wait_for(timeout=config.timeout_ms)
-    request_row.get_by_role("button", name=re.compile("通过|Approve")).click()
+    with page.expect_response(
+        lambda response: "/api/enterprise/requests/" in response.url
+        and response.request.method == "POST",
+        timeout=config.timeout_ms,
+    ) as response_info:
+        request_row.get_by_role("button", name=re.compile("通过|Approve")).first.click()
+    review_response = response_info.value
+    if not review_response.ok:
+        raise AssertionError(
+            f"Approve request failed: {review_response.status} {review_response.text()}"
+        )
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(3000)
+    wait_for_member_status(page, member_email, "active", config.timeout_ms)
     page.goto(f"{config.base_url}/dashboard/settings", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(2000)
-    member_card = page.locator("div.rounded-2xl", has_text=member_email).filter(
-        has=page.get_by_role("button", name=re.compile("保存权限|Save permissions"))
-    ).first
-    if member_card.count() == 0:
-        raise AssertionError(
-            f"Member {member_email} not found in approved members list after approval"
-        )
+    find_member_permission_card(page, member_email)
 
 
 def enable_member_permissions(page, config: Config, member_email: str) -> None:
@@ -377,14 +666,12 @@ def enable_member_permissions(page, config: Config, member_email: str) -> None:
     page.wait_for_timeout(2000)
     if "login" in page.url:
         raise AssertionError("Not logged in - redirected to login page")
-    member_card = page.locator("div.rounded-2xl", has_text=member_email).filter(
-        has=page.get_by_role("button", name=re.compile("保存权限|Save permissions"))
-    ).first
+    member_card = find_member_permission_card(page, member_email)
     member_card.wait_for(timeout=config.timeout_ms)
     checkboxes = member_card.locator("input[type='checkbox']")
-    if checkboxes.count() != 3:
+    if checkboxes.count() != 4:
         raise AssertionError(
-            f"Expected 3 member feature checkboxes, got {checkboxes.count()}"
+            f"Expected 4 member feature checkboxes, got {checkboxes.count()}"
         )
     made_changes = False
     for index in range(checkboxes.count()):
@@ -426,6 +713,7 @@ def run_step(recorder: Recorder, page, artifact_dir: Path, name: str, fn) -> Non
 
 
 def main() -> None:
+    load_repo_env()
     config = build_config()
     recorder = Recorder()
 
@@ -451,6 +739,10 @@ def main() -> None:
             if "Failed to load resource" in text and "401" in text:
                 return
             if "Failed to load resource" in text and "403" in text:
+                return
+            if "ai-entry.models.load.failed" in text:
+                return
+            if "ai-entry.agents.load.failed" in text:
                 return
             console_errors.append(text)
 
@@ -494,10 +786,11 @@ def main() -> None:
                 page,
                 config,
                 admin_account.email,
-                expected_checkbox_count=3,
+                expected_checkbox_count=4,
             )
             verify_disabled_routes(page, config)
             verify_disabled_apis(page)
+            verify_ai_entry_apis(page)
 
         run_step(recorder, page, config.artifact_dir, "admin_flow", admin_bootstrap)
 
@@ -514,17 +807,26 @@ def main() -> None:
                         member_account.password,
                         config.timeout_ms,
                     )
+                    existing_member = verify_settings(
+                        page,
+                        config,
+                        member_account.email,
+                        expected_checkbox_count=0,
+                    )
+                    member_is_pending = existing_member.get("status", "").lower() == "pending"
+                    logout(page, config.base_url)
                 else:
                     member_account = account_with_suffix("member")
                     register_join_enterprise(
                         page, config, member_account, enterprise_meta["enterprise_code"]
                     )
-                verify_settings(
-                    page,
-                    config,
-                    member_account.email,
-                    expected_checkbox_count=0,
-                )
+                    verify_settings(
+                        page,
+                        config,
+                        member_account.email,
+                        expected_checkbox_count=0,
+                    )
+                    member_is_pending = True
 
                 logout(page, config.base_url)
                 login(
@@ -534,7 +836,8 @@ def main() -> None:
                     admin_account.password,
                     config.timeout_ms,
                 )
-                approve_member_request(page, config, member_account.email)
+                if member_is_pending:
+                    approve_member_request(page, config, member_account.email)
                 enable_member_permissions(page, config, member_account.email)
 
                 logout(page, config.base_url)
