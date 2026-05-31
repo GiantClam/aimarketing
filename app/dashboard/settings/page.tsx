@@ -118,6 +118,17 @@ function formatPasswordChangeMessage(error: unknown, fallback: string, locale: A
   return message || fallback
 }
 
+function formatMemberActionMessage(error: unknown, fallback: string, locale: AppLocale) {
+  const isZh = locale === "zh"
+  const message = error instanceof Error ? error.message : ""
+  if (message === "cannot_modify_self") return isZh ? "当前账号不支持停用或移出，请改由其他企业管理员处理。" : "The current account cannot be suspended or removed here. Ask another company admin to handle it."
+  if (message === "cannot_remove_last_admin") return isZh ? "至少需要保留一位活跃企业管理员，当前成员暂时不能移出。" : "At least one active company admin must remain, so this member cannot be removed right now."
+  if (message === "target user must belong to same enterprise") return isZh ? "只能管理当前企业下的成员。" : "You can only manage members in the current company."
+  if (message === "temporary_password_invalid") return isZh ? "临时密码至少需要 8 位，且不能超过 128 位。" : "Temporary passwords must be 8-128 characters long."
+  if (message === "unsupported_member_action") return isZh ? "暂不支持该成员操作。" : "This member action is not supported."
+  return message || fallback
+}
+
 type OverviewMetricProps = {
   icon: LucideIcon
   label: string
@@ -532,7 +543,7 @@ export default function SettingsPage() {
           : t("成员状态已更新。", "Member status updated."),
       )
     } catch (error) {
-      setMemberActionMessage(error instanceof Error ? error.message : t("成员操作失败。", "Member action failed."))
+      setMemberActionMessage(formatMemberActionMessage(error, t("成员操作失败。", "Member action failed."), locale))
     } finally {
       setActingMemberId(null)
     }
@@ -1010,6 +1021,7 @@ export default function SettingsPage() {
                 const draft = permissionDrafts[member.id] || buildPermissionMap(false)
                 const isCurrentUser = member.id === userId
                 const isSuspended = member.enterpriseStatus === "suspended"
+                const isRemoved = member.enterpriseStatus === "removed"
                 const isActiveMember = member.enterpriseStatus === "active"
                 const actionDisabled = actingMemberId === member.id
                 return (
@@ -1020,14 +1032,33 @@ export default function SettingsPage() {
                         <p className="mt-1 text-xs text-muted-foreground">{t("角色：", "Role: ")}{member.enterpriseRole || "member"} / {t("状态：", "Status: ")}{member.enterpriseStatus || "unknown"}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={actionDisabled || !isActiveMember} className="dashboard-button-primary">{t("保存权限", "Save permissions")}</Button>
-                        <Button size="sm" variant="outline" onClick={() => requestResetPassword(member)} disabled={actionDisabled || member.enterpriseStatus === "removed"} className="dashboard-button-secondary"><KeyRound className="mr-1 h-4 w-4" />{t("重置密码", "Reset password")}</Button>
+                        <Button type="button" size="sm" onClick={() => saveMemberPermissions(member.id)} disabled={actionDisabled || !isActiveMember} className="dashboard-button-primary">{t("保存权限", "Save permissions")}</Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => requestResetPassword(member)} disabled={actionDisabled || isRemoved} className="dashboard-button-secondary"><KeyRound className="mr-1 h-4 w-4" />{t("重置密码", "Reset password")}</Button>
                         {isSuspended ? (
-                          <Button size="sm" variant="outline" onClick={() => requestReactivateMember(member)} disabled={actionDisabled} className="dashboard-button-secondary"><PlayCircle className="mr-1 h-4 w-4" />{t("恢复", "Reactivate")}</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => requestReactivateMember(member)} disabled={actionDisabled} className="dashboard-button-secondary"><PlayCircle className="mr-1 h-4 w-4" />{t("恢复", "Reactivate")}</Button>
                         ) : (
-                          <Button size="sm" variant="outline" onClick={() => requestSuspendMember(member)} disabled={actionDisabled || isCurrentUser || !isActiveMember} className="dashboard-button-secondary"><PauseCircle className="mr-1 h-4 w-4" />{t("停用", "Suspend")}</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => requestSuspendMember(member)} disabled={actionDisabled || isCurrentUser || !isActiveMember} className="dashboard-button-secondary"><PauseCircle className="mr-1 h-4 w-4" />{t("停用", "Suspend")}</Button>
                         )}
-                        <Button size="sm" variant="outline" onClick={() => requestRemoveMember(member)} disabled={actionDisabled || isCurrentUser} className="dashboard-button-secondary border-destructive/50 px-3 text-destructive hover:bg-destructive hover:text-destructive-foreground"><UserX className="mr-1 h-4 w-4" />{t("移出", "Remove")}</Button>
+                        {!isCurrentUser ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => requestRemoveMember(member)}
+                            disabled={actionDisabled || isRemoved}
+                            className="dashboard-button-secondary border-destructive/50 px-3 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          >
+                            <UserX className="mr-1 h-4 w-4" />
+                            {t("移出", "Remove")}
+                          </Button>
+                        ) : (
+                          <span
+                            className="dashboard-chip dashboard-kicker inline-flex items-center rounded-[4px] px-3 py-2 text-[11px] tracking-[0.12em] text-muted-foreground"
+                            title={t("当前登录账号不支持在这里被移出。", "The current signed-in account cannot be removed here.")}
+                          >
+                            {t("当前账号不可移出", "Current account can't be removed")}
+                          </span>
+                        )}
                       </div>
                     </div>
 
