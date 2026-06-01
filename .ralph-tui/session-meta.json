@@ -1,0 +1,15 @@
+{
+  "id": "24cffa0f-4b5c-4202-a44c-5fda189ba6b3",
+  "status": "interrupted",
+  "startedAt": "2026-02-09T08:18:43.463Z",
+  "updatedAt": "2026-02-09T08:19:05.720Z",
+  "agentPlugin": "opencode",
+  "trackerPlugin": "json",
+  "prdPath": "prd.json",
+  "currentIteration": 10,
+  "maxIterations": 10,
+  "totalTasks": 0,
+  "tasksCompleted": 0,
+  "cwd": "/Users/beihuang/Documents/github/aimarketing",
+  "endedAt": "2026-02-09T08:19:05.720Z"
+}

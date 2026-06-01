@@ -427,3 +427,9 @@ export function clearSessionCookie(response: NextResponse, request?: NextRequest
   })
   return response
 }
+
+export type AuthUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>
+
+export async function requireAuthenticatedUser(request: NextRequest) {
+  return getSessionUser(request)
+}

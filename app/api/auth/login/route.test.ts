@@ -13,6 +13,8 @@ let loginPayload: Record<string, unknown> | null = null
 let verifyPasswordCalls = 0
 let createUserSessionCalls = 0
 let ensureDefaultFreeBillingCalls = 0
+let shouldThrowSessionDbError = false
+let shouldThrowEnterpriseAuthTableError = false
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -50,9 +52,25 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
   if (request === "@/lib/auth/session") {
     return {
+      applyDemoSessionCookie: (response: { status: number; body: unknown }) => ({
+        ...response,
+        demoSessionCookieApplied: true,
+      }),
       applySessionCookie: (response: { status: number; body: unknown }) => ({
         ...response,
         sessionCookieApplied: true,
+      }),
+      createDemoAuthPayload: () => ({
+        id: 1,
+        email: "demo@example.com",
+        name: "体验用户",
+        isDemo: true,
+        enterpriseId: null,
+        enterpriseCode: "experience-enterprise",
+        enterpriseName: "体验企业",
+        enterpriseRole: "admin",
+        enterpriseStatus: "active",
+        permissions: {},
       }),
       createUserSession: async () => {
         createUserSessionCalls += 1
@@ -61,7 +79,15 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           expiresAt: new Date(),
         }
       },
-      withSessionDbRetry: async (_label: string, operation: () => Promise<unknown>) => operation(),
+      isDemoLoginEnabled: () => true,
+      isSessionDbUnavailableError: (error: unknown) =>
+        error instanceof Error && error.message === "auth_session_retry_exhausted: db unavailable",
+      withSessionDbRetry: async (_label: string, operation: () => Promise<unknown>) => {
+        if (shouldThrowSessionDbError) {
+          throw new Error("auth_session_retry_exhausted: db unavailable")
+        }
+        return operation()
+      },
     }
   }
   if (request === "@/lib/billing/default-free-plan") {
@@ -73,7 +99,11 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
   if (request === "@/lib/enterprise/server") {
     return {
-      ensureEnterpriseAuthTables: async () => {},
+      ensureEnterpriseAuthTables: async () => {
+        if (shouldThrowEnterpriseAuthTableError) {
+          throw new Error("auth_session_retry_exhausted: db unavailable")
+        }
+      },
       getUserAuthPayload: async () => loginPayload,
       verifyPassword: (input: string, hashed?: string | null) => {
         verifyPasswordCalls += 1
@@ -119,6 +149,8 @@ test.beforeEach(() => {
   verifyPasswordCalls = 0
   createUserSessionCalls = 0
   ensureDefaultFreeBillingCalls = 0
+  shouldThrowSessionDbError = false
+  shouldThrowEnterpriseAuthTableError = false
 })
 
 test.after(() => {
@@ -176,4 +208,74 @@ test("login allows verified users to create a session", async () => {
   assert.equal(createUserSessionCalls, 1)
   assert.equal(ensureDefaultFreeBillingCalls, 1)
   assert.equal(response.sessionCookieApplied, true)
+})
+
+test("login falls back to demo session when the database is unavailable for demo credentials", async () => {
+  shouldThrowSessionDbError = true
+
+  const response = await POST(buildRequest({
+    email: "demo@example.com",
+    password: "demo123456",
+  }) as Parameters<typeof POST>[0]) as {
+    status: number
+    body: { user?: { email?: string }; fallback?: string }
+    demoSessionCookieApplied?: boolean
+  }
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.user?.email, "demo@example.com")
+  assert.equal(response.body?.fallback, "stateless_demo_login")
+  assert.equal(response.demoSessionCookieApplied, true)
+  assert.equal(createUserSessionCalls, 0)
+})
+
+test("login falls back to demo session when demo credentials do not have a stored user row", async () => {
+  currentUserRows = []
+
+  const response = await POST(buildRequest({
+    email: "demo@example.com",
+    password: "demo123456",
+  }) as Parameters<typeof POST>[0]) as {
+    status: number
+    body: { user?: { email?: string }; fallback?: string }
+    demoSessionCookieApplied?: boolean
+  }
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.user?.email, "demo@example.com")
+  assert.equal(response.body?.fallback, "stateless_demo_login")
+  assert.equal(response.demoSessionCookieApplied, true)
+  assert.equal(createUserSessionCalls, 0)
+})
+
+test("login falls back to demo session when auth table bootstrap fails before user lookup", async () => {
+  shouldThrowEnterpriseAuthTableError = true
+
+  const response = await POST(buildRequest({
+    email: "demo@example.com",
+    password: "demo123456",
+  }) as Parameters<typeof POST>[0]) as {
+    status: number
+    body: { user?: { email?: string }; fallback?: string }
+    demoSessionCookieApplied?: boolean
+  }
+
+  assert.equal(response.status, 200)
+  assert.equal(response.body?.user?.email, "demo@example.com")
+  assert.equal(response.body?.fallback, "stateless_demo_login")
+  assert.equal(response.demoSessionCookieApplied, true)
+  assert.equal(createUserSessionCalls, 0)
+})
+
+test("login returns database_unavailable for non-demo credentials when the database is unavailable", async () => {
+  shouldThrowSessionDbError = true
+
+  const response = await POST(buildRequest({
+    email: "person@example.com",
+    password: "correct-password",
+  }) as Parameters<typeof POST>[0])
+
+  assert.equal(response.status, 503)
+  assert.equal(response.body?.error, "database_unavailable")
+  assert.equal(createUserSessionCalls, 0)
 })

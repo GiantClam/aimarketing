@@ -1,0 +1,24 @@
+# Aider Configuration for AI Marketing Platform
+# Model: MiniMax M2.1 via NVIDIA NIM
+
+model: openai/minimaxai/minimax-m2.1
+
+# API Configuration (use environment variables)
+openai_api_key: ${NVIDIA_API_KEY}
+openai_api_base: https://integrate.api.nvidia.com/v1
+
+# Editor Settings
+edit_format: diff
+auto_commits: true
+dirty_commits: false
+
+# Testing
+auto_test: true
+test_cmd: npm test -- --passWithNoTests 2>/dev/null || echo "No tests configured"
+
+# Context
+max_chat_history_tokens: 100000
+
+# Safety
+verify_initial_commits: false
+skip_initial_commits: false

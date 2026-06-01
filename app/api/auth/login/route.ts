@@ -5,15 +5,47 @@ import { db } from "@/lib/db"
 import { ensureDefaultFreeBillingForUser } from "@/lib/billing/default-free-plan"
 import { users } from "@/lib/db/schema"
 import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
-import { applySessionCookie, createUserSession, withSessionDbRetry } from "@/lib/auth/session"
+import {
+  applyDemoSessionCookie,
+  applySessionCookie,
+  createDemoAuthPayload,
+  createUserSession,
+  isDemoLoginEnabled,
+  isSessionDbUnavailableError,
+  withSessionDbRetry,
+} from "@/lib/auth/session"
 import { getUserAuthPayload, verifyPassword } from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
 
+const DEMO_LOGIN_EMAIL = "demo@example.com"
+const DEMO_LOGIN_PASSWORD = "demo123456"
+
+function isDemoCredentialLogin(email: unknown, password: unknown) {
+  return String(email || "").trim().toLowerCase() === DEMO_LOGIN_EMAIL && String(password || "") === DEMO_LOGIN_PASSWORD
+}
+
+function buildDemoLoginResponse(request: NextRequest) {
+  const payload = createDemoAuthPayload()
+  logAuditEvent(request, "auth.login.demo_db_fallback", { email: DEMO_LOGIN_EMAIL })
+  const response = NextResponse.json({ user: payload, fallback: "stateless_demo_login" })
+  return applyDemoSessionCookie(response, undefined, request)
+}
+
 export async function POST(request: NextRequest) {
+  let email: unknown
+  let password: unknown
+
   try {
+    const body = await request.json()
+    ;({ email, password } = body || {})
+
+    if (!email || !password) {
+      return NextResponse.json({ error: "email and password are required" }, { status: 400 })
+    }
+
     await ensureEnterpriseAuthTables()
     const rateLimit = await checkRateLimit({
       key: `auth:login:${getRequestIp(request)}`,
@@ -25,13 +57,6 @@ export async function POST(request: NextRequest) {
       return createRateLimitResponse("Too many login attempts", rateLimit)
     }
 
-    const body = await request.json()
-    const { email, password } = body || {}
-
-    if (!email || !password) {
-      return NextResponse.json({ error: "email and password are required" }, { status: 400 })
-    }
-
     const rows = await withSessionDbRetry("auth.login.user-select", async () =>
       db
         .select({ id: users.id, password: users.password, emailVerified: users.emailVerified })
@@ -41,6 +66,10 @@ export async function POST(request: NextRequest) {
     )
 
     if (rows.length === 0) {
+      if (isDemoLoginEnabled() && isDemoCredentialLogin(email, password)) {
+        return buildDemoLoginResponse(request)
+      }
+
       logAuditEvent(request, "auth.login.invalid_user", { email: String(email).trim().toLowerCase() })
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
@@ -78,6 +107,15 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ user: payload })
     return applySessionCookie(response, sessionToken, expiresAt, request)
   } catch (error: any) {
+    if (isSessionDbUnavailableError(error)) {
+      if (isDemoLoginEnabled() && isDemoCredentialLogin(email, password)) {
+        return buildDemoLoginResponse(request)
+      }
+
+      logAuditEvent(request, "auth.login.db_unavailable", { message: error?.message || "unknown" })
+      return NextResponse.json({ error: "database_unavailable" }, { status: 503 })
+    }
+
     logAuditEvent(request, "auth.login.error", { message: error?.message || "unknown" })
     return NextResponse.json({ error: error.message || "login failed" }, { status: 500 })
   }

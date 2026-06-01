@@ -162,8 +162,11 @@ export async function uploadImageAssistantReferenceToGoogle(params: {
 }) {
   const ai = getGoogleClient()
   const source = await loadImageSourceForModel(params.url, { signal: params.signal })
+  const blobBytes = Uint8Array.from(source.buffer)
   const uploaded = await ai.files.upload({
-    file: new Blob([source.buffer], { type: source.mimeType }),
+    file: new Blob([blobBytes], {
+      type: source.mimeType,
+    }),
     config: {
       mimeType: source.mimeType,
       displayName: params.displayName,

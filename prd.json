@@ -1,0 +1,135 @@
+{
+  "name": "AI Marketing Platform PRD",
+  "description": "Enterprise AI Marketing Platform with content creation, lead management, and workflow automation",
+  "branchName": "feature/ai-marketing-platform-prd",
+  "userStories": [
+    {
+      "id": "STORY-001",
+      "title": "System Infrastructure Setup",
+      "description": "Set up the complete project infrastructure including:\n1. Next.js 15 frontend with TypeScript\n2. Authentication system (JWT)\n3. Database schema\n4. API routes structure",
+      "acceptanceCriteria": [
+        "Frontend runs at localhost:3000",
+        "Backend API endpoints are working",
+        "Authentication endpoints are functional"
+      ],
+      "priority": 1,
+      "passes": true,
+      "labels": ["infrastructure", "backend", "frontend"]
+    },
+    {
+      "id": "STORY-002",
+      "title": "Content Generation Module",
+      "description": "Implement AI-powered marketing content generation for:\n1. Xiaohongshu (Little Red Book) posts\n2. Zhihu articles\n3. WeChat public account content\n4. Multi-platform adaptation",
+      "acceptanceCriteria": [
+        "Content generation API returns formatted content",
+        "Platform-specific templates are applied",
+        "Content can be generated successfully"
+      ],
+      "priority": 2,
+      "passes": true,
+      "labels": ["content", "ai", "frontend"]
+    },
+    {
+      "id": "STORY-003",
+      "title": "Enterprise RBAC System",
+      "description": "Implement role-based access control with 6 roles:\n1. Super Admin - Full system access\n2. Enterprise Admin - Enterprise management\n3. Department Admin - Department management\n4. Reviewer - Content approval\n5. Creator - Content creation\n6. Guest - Limited access",
+      "acceptanceCriteria": [
+        "Users can be assigned roles",
+        "Page-level permissions work correctly",
+        "API endpoints enforce role-based access"
+      ],
+      "priority": 3,
+      "passes": false,
+      "labels": ["security", "rbac", "backend"]
+    },
+    {
+      "id": "STORY-004",
+      "title": "Lead Management Integration",
+      "description": "Implement lead management with n8n/Dify workflow integration (mock):\n1. Lead capture form and API\n2. Lead scoring system (mock algorithm)\n3. CRM integration via n8n/Dify webhook (mock)\n4. Email generation for leads (mock)",
+      "acceptanceCriteria": [
+        "Lead capture API works",
+        "Lead scoring returns valid scores",
+        "CRM webhook endpoint is defined",
+        "Email template endpoints are functional"
+      ],
+      "priority": 4,
+      "passes": false,
+      "labels": ["crm", "leads", "workflow-mock"]
+    },
+    {
+      "id": "STORY-005",
+      "title": "Website Generator Integration",
+      "description": "Implement website generator with third-party API integration (mock):\n1. Template selection UI\n2. Multi-language support (EN, ZH, JA, KO)\n3. Content integration API\n4. Website export/deploy API (mock third-party service)",
+      "acceptanceCriteria": [
+        "Template selection works",
+        "Multi-language content is supported",
+        "Export API returns mock response",
+        "Web interface is functional"
+      ],
+      "priority": 5,
+      "passes": false,
+      "labels": ["website", "generator", "api-mock"]
+    },
+    {
+      "id": "STORY-006",
+      "title": "Enterprise Strategy Consultant",
+      "description": "Implement AI consultant with n8n/Dify workflow integration (mock):\n1. Knowledge base upload and indexing (mock)\n2. Semantic search API\n3. AI Q&A endpoint via Dify workflow (mock)\n4. Source citation in responses",
+      "acceptanceCriteria": [
+        "Document upload API works",
+        "Search returns results",
+        "Q&A endpoint returns mock AI responses",
+        "UI interface is functional"
+      ],
+      "priority": 6,
+      "passes": false,
+      "labels": ["ai", "consultant", "workflow-mock"]
+    },
+    {
+      "id": "STORY-007",
+      "title": "Training Materials Integration",
+      "description": "Implement training materials with third-party API integration (mock):\n1. PPT presentation generation API (mock)\n2. Video tutorial creation API (mock)\n3. Quiz generation API\n4. Progress tracking dashboard",
+      "acceptanceCriteria": [
+        "PPT generation endpoint returns mock response",
+        "Video creation endpoint returns mock response",
+        "Quiz generation works",
+        "Progress dashboard shows mock data"
+      ],
+      "priority": 7,
+      "passes": false,
+      "labels": ["training", "content", "api-mock"]
+    },
+    {
+      "id": "STORY-008",
+      "title": "Integration and Testing",
+      "description": "Complete integration and comprehensive testing:\n1. All modules integrated\n2. API documentation complete\n3. Basic E2E tests pass\n4. Performance benchmarks met",
+      "acceptanceCriteria": [
+        "All APIs are documented",
+        "E2E tests pass",
+        "Performance metrics are acceptable",
+        "Code quality checks pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "labels": ["testing", "integration", "quality"]
+    },
+    {
+      "id": "STORY-009",
+      "title": "Deployment and Launch",
+      "description": "Deploy to production:\n1. Environment configuration\n2. CI/CD pipeline configured\n3. Monitoring and alerting set up\n4. Documentation complete",
+      "acceptanceCriteria": [
+        "Production deployment successful",
+        "Monitoring dashboards active",
+        "All documentation complete"
+      ],
+      "priority": 9,
+      "passes": false,
+      "labels": ["deployment", "devops", "docs"]
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-02-09T03:34:56.883Z",
+    "version": "3.0.0",
+    "sourcePrd": "docs/prd/PRD.md",
+    "note": "Multi-agent video generation removed. External integrations use mock services."
+  }
+}

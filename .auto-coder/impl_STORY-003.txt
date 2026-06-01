@@ -1,0 +1,21 @@
+<think>The user wants me to implement an Enterprise RBAC (Role-Based Access Control) System for an AI Marketing Platform. Let me start by exploring the project structure to understand the existing code patterns and then implement the required feature.
+
+Let me first explore the project structure to understand:
+1. The existing API patterns
+2. The project structure
+3. Any existing authentication/authorization patterns
+4. Database schema if any
+
+Let me start by reading relevant files.
+</think>
+
+I'll help you implement the Enterprise RBAC System. Let me start by exploring the project structure to understand the existing code patterns.
+<minimax:tool_call>
+ls -la /Users/beihuang/Documents/github/aimarketing
+</invoke>
+<invoke>
+<invoke>
+find /Users/beihuang/Documents/github/aimarketing -type f -name "*.ts" -o -name "*.tsx" | head -30
+</invoke>
+</invoke>
+</minimax:tool_call>

@@ -1,201 +1,184 @@
-﻿# AI Marketing Platform
+# 🤖 AI Marketing Platform - Autonomous Coding System
 
-AI Marketing 鏄竴涓互 Next.js 涓烘牳蹇冪殑浼佷笟绾?AI 钀ラ攢宸ヤ綔鍙帮紝褰撳墠涓昏兘鍔涘寘鎷細
+全自动编码系统，基于 **Aider CLI + Orchestrator + MiniMax M2.1**
 
-- 澶氬钩鍙板浘鏂囧啓浣?- 涓撳椤鹃棶瀵硅瘽
-- 瑙嗛鐢熸垚鍓嶇宸ヤ綔鍙?
-## 鎶€鏈爤
+## 🏗️ 架构
 
-- Frontend: Next.js 15, React 19, TypeScript, Tailwind CSS, shadcn/ui
-- Backend in this repo: Next.js Route Handlers / Node.js
-- Database: PostgreSQL / Neon
-- Writer/AI models: pptoken (OpenAI only), aiberm, crazyroute
-- Video agent: external service via `AGENT_URL`
+```
+Orchestrator (Python)     Aider CLI (Node.js)       MiniMax M2.1
+     │                           │                        │
+     ├── 任务调度 ──────────────→│                        │
+     │                           ├── 代码生成 ───────────→│
+     │                           │                        │
+     │                           ←── 返回代码 ────────────┤
+     │←── 完成 ──────────────────┤                        │
+     │                           │                        │
+     ├── 质量检查 ─────────────────────────────────────────┤
+```
 
-## 褰撳墠鏋舵瀯
+**分层职责：**
+- **Orchestrator**: 任务调度、错误恢复、质量检查
+- **Aider**: 代码生成、编辑、测试、Git 提交
+- **MiniMax M2.1**: AI 模型（编程能力 74% SWE-bench）
 
-鏈粨搴撲笉鍐嶅唴缃?`saleagent` Git submodule銆?
-瑙嗛鐢熸垚鑳藉姏浠嶇劧淇濈暀锛屼絾閲囩敤澶栭儴鏈嶅姟妯″紡锛?
-- 鍓嶇鍜屼唬鐞嗘帴鍙ｅ湪鏈粨搴撲腑
-- 鐪熸鐨勮棰?agent 鏈嶅姟鍗曠嫭閮ㄧ讲
-- 鏈粨搴撻€氳繃 `AGENT_URL` 鎴?`NEXT_PUBLIC_AGENT_URL` 璁块棶璇ユ湇鍔?
-## 蹇€熷紑濮?
-### 1. 瀹夎渚濊禆
+## 📋 快速开始
+
+### 1. 安装依赖
 
 ```bash
-pnpm install
+# 安装 Aider
+pip3 install aider-chat
+
+# 验证安装
+aider --version
 ```
 
-### 2. 閰嶇疆鐜鍙橀噺
-
-鍦ㄩ」鐩牴鐩綍閰嶇疆 `.env` 鎴?`.env.local`銆?
-鍏抽敭鍙橀噺锛?
-```bash
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
-
-# 澶栭儴瑙嗛 agent 鏈嶅姟
-AGENT_URL=http://localhost:8000
-NEXT_PUBLIC_AGENT_URL=http://localhost:8000
-
-# writer
-AIBERM_API_KEY=...
-CRAZYROUTE_API_KEY=...
-SERPER_API_KEY=...
-SERPER_API_BASE=https://google.serper.dev
-SERPER_SCRAPE_API_BASE=https://scrape.serper.dev
-GOOGLE_AI_API_KEY=...
-```
-
-### 3. 鍚姩鍓嶇
+### 2. 配置环境
 
 ```bash
-pnpm dev
+# 编辑 .env.local
+cat > .env.local << 'ENV'
+NVIDIA_API_KEY=nvapi-xxx
+ENV
+
+# 加载配置
+export $(cat .env.local | xargs)
 ```
 
-璁块棶 `http://localhost:3000`銆?
-## 鏈湴瑙嗛寮€鍙?
-濡傛灉浣犻渶瑕佹湰鍦拌皟璇曡棰戠敓鎴愬姛鑳斤紝璇峰崟鐙噯澶?video agent 鏈嶅姟锛岃€屼笉鏄緷璧栨湰浠撳簱瀛愭ā鍧椼€?
-鎺ㄨ崘鏂瑰紡锛?
-1. 鍗曠嫭鍏嬮殕骞惰繍琛?`saleagent` 浠撳簱
-2. 鍦ㄦ湰浠撳簱涓妸 `AGENT_URL` / `NEXT_PUBLIC_AGENT_URL` 鎸囧悜閭ｄ釜鏈嶅姟
+### 3. 运行系统
 
-## 椤圭洰缁撴瀯
+#### 方式 A: Orchestrator 自动化（推荐）
+```bash
+# 单次运行
+python3 orchestrator.py
 
-```text
-aimarketing/
-鈹溾攢 app/
-鈹? 鈹溾攢 api/
-鈹? 鈹? 鈹溾攢 crewai/         # 瑙嗛 agent 浠ｇ悊鎺ュ彛
-鈹? 鈹? 鈹斺攢 writer/         # 鍐欎綔宸ヤ綔鍙板悗绔?鈹? 鈹斺攢 dashboard/
-鈹溾攢 components/
-鈹溾攢 lib/
-鈹? 鈹溾攢 saleagent-client.ts
-鈹? 鈹斺攢 writer/
-鈹溾攢 scripts/
+# 守护进程（7x24 自动运行）
+python3 orchestrator.py --daemon 60
 ```
 
-## 鏂囨。
+#### 方式 B: 直接使用 Aider
+```bash
+# 手动触发单个任务
+aider --model openai/minimaxai/minimax-m2.1 \
+      --message "Create RBAC system with 6 roles"
+```
 
-- [INTEGRATION.md](/d:/github/aimarketing/INTEGRATION.md)
-- [VIDEO_GENERATION_WORKFLOW.md](/d:/github/aimarketing/VIDEO_GENERATION_WORKFLOW.md)
-- [SORA2_SETUP.md](/d:/github/aimarketing/SORA2_SETUP.md)
-- [SUPABASE_RLS_FIX.md](/d:/github/aimarketing/SUPABASE_RLS_FIX.md)
+## 📊 当前状态
 
-## Writer Memory + Soul
+| 指标 | 数值 |
+|------|------|
+| 总任务 | 9 个 |
+| 已完成 | 2 个 (22%) |
+| 进行中 | 7 个 |
 
-Writer personalization uses `userId + agentType` as the hard scope key.
+**已完成功能：**
+- ✅ STORY-001: 认证系统 (JWT)
+- ✅ STORY-002: 内容生成
 
-- Same `agentType`: memory is shared across sessions.
-- Different `agentType`: memory is strictly isolated.
+**待完成任务：**
+- ⏳ STORY-003: RBAC 权限系统
+- ⏳ STORY-004: 线索管理
+- ⏳ STORY-005: 网站生成器
+- ⏳ STORY-006: 战略顾问
+- ⏳ STORY-007: 培训材料
+- ⏳ STORY-008: 集成测试
+- ⏳ STORY-009: 部署上线
 
-### Feature flags
+## 📁 核心文件
 
-Add these environment variables if you want to enable memory in non-default environments:
+| 文件 | 说明 | 用途 |
+|------|------|------|
+| `orchestrator.py` | 自动化编排器 | 任务调度、错误恢复 |
+| `quality_check.sh` | 质量检查 | typecheck + lint + test |
+| `prd.json` | 任务清单 | 9 个用户故事 |
+| `ARCHITECTURE.md` | 架构文档 | 系统设计说明 |
+
+## 🔄 工作流程
+
+```
+1. Orchestrator 读取 prd.json
+2. 获取下一个待办任务
+3. 构建 Aider prompt
+4. 调用 Aider CLI 执行
+5. Aider 生成/编辑代码
+6. 运行质量检查
+7. 标记任务完成
+8. 循环到下一个任务
+```
+
+## 🛠️ 命令参考
+
+### Orchestrator
+```bash
+# 单次运行
+python3 orchestrator.py
+
+# 守护进程（每60秒检查一次）
+python3 orchestrator.py --daemon 60
+
+# 查看日志
+tail -f .auto-coder/orchestrator.log
+```
+
+### Aider
+```bash
+# 基本使用
+aider --model openai/minimaxai/minimax-m2.1 --message "Task"
+
+# 带测试
+aider --model <model> --message "Task" --test
+
+# 自动提交
+aider --model <model> --message "Task" --auto-commits
+```
+
+### 质量检查
+```bash
+# 手动运行
+./quality_check.sh
+
+# 自动修复格式
+npx prettier --write .
+```
+
+## 🔧 配置
+
+### Aider 配置 (~/.aider.conf.yml)
+```yaml
+model: openai/minimaxai/minimax-m2.1
+openai_api_key: ${NVIDIA_API_KEY}
+edit_format: diff
+auto_commits: true
+auto_test: true
+```
+
+### 环境变量 (.env.local)
+```bash
+NVIDIA_API_KEY=nvapi-xxx
+GITHUB_TOKEN=ghp-xxx      # 可选
+GITHUB_REPO=user/repo     # 可选
+```
+
+## 📝 下一步
+
+运行自动化系统开始开发：
 
 ```bash
-WRITER_MEMORY_ENABLED=false
-WRITER_SOUL_ENABLED=false
-WRITER_MEMORY_EXTRACT_ENABLED=false
-WRITER_MEMORY_MAX_ITEMS_PER_USER_AGENT=200
-WRITER_MEMORY_RETRIEVAL_TIMEOUT_MS=80
-WRITER_MEMORY_EXTRACT_TIMEOUT_MS=2000
-WRITER_MEMORY_MAX_CONTENT_CHARS=1500
+cd /Users/beihuang/Documents/github/aimarketing
+
+# 启动开发服务器（终端1）
+npm run dev
+
+# 启动自动化编排器（终端2）
+python3 orchestrator.py --daemon 60
+
+# 查看进度（终端3）
+tail -f .auto-coder/orchestrator.log
 ```
 
-### Database migration
+---
 
-```bash
-node scripts/run-writer-memory-migration.js
-```
-
-Or run the full pipeline:
-
-```bash
-node scripts/run-all-db-migrations.js
-```
-
-## Lead Hunter Skill Engine
-
-`lead-hunter` supports two backends:
-
-- `dify` (default): keep using enterprise Dify `/chat-messages`
-- `skill`: use in-repo search + synthesis pipeline while keeping UI contract unchanged
-
-Backend selection is now **database-driven per enterprise** via
-`AI_MARKETING_enterprise_dify_advisor_configs.execution_mode` (`dify` | `skill`)
-for advisor types `company-search` and `contact-mining`.
-
-### Environment variables
-
-```bash
-# runtime requirement for skill mode (at least one provider key is required)
-TAVILY_API_KEY=...
-TAVILY_API_BASE=https://api.tavily.com
-SERPER_API_KEY=...
-SERPER_API_BASE=https://google.serper.dev
-
-# optional model override for skill synthesis
-LEAD_HUNTER_SKILL_MODEL=gpt-4-mini
-
-# optional legacy global default (execution_mode in DB still has priority)
-LEAD_HUNTER_ENGINE=dify
-
-# optional performance tuning (defaults shown)
-LEAD_HUNTER_MAX_SEARCH_QUERIES=6
-LEAD_HUNTER_SEARCH_QUERY_CONCURRENCY=3
-LEAD_HUNTER_SEARCH_EARLY_STOP_SIGNALS=14
-LEAD_HUNTER_SEARCH_CACHE_TTL_MS=120000
-LEAD_HUNTER_SERPER_RESULT_NUM=4
-LEAD_HUNTER_TAVILY_RESULT_NUM=4
-LEAD_HUNTER_ENTERPRISE_QUERY_VARIANTS=3
-LEAD_HUNTER_REPORT_PROMPT_EVIDENCE_LIMIT=12
-LEAD_HUNTER_REPORT_ENTERPRISE_SNIPPETS=4
-LEAD_HUNTER_REPORT_MAX_TOKENS=1600
-LEAD_HUNTER_REPORT_TIMEOUT_MS=60000
-LEAD_HUNTER_REPORT_PROVIDER_TIMEOUT_MS=35000
-LEAD_HUNTER_VBUY_FIT_LAYER_CHARS=6000
-LEAD_HUNTER_ASYNC_EVIDENCE_PERSIST=true
-LEAD_HUNTER_EVIDENCE_PERSIST_LIMIT=16
-LEAD_HUNTER_DEFER_PERSIST_AFTER_SUCCESS=true
-```
-
-### Configure enterprise engine modes
-
-```bash
-npm run config:lead-hunter:engine-modes
-```
-
-Default script behavior:
-- `vbuy` -> `skill`
-- `灵创智能` -> `dify`
-
-### Lead Hunter evidence migration
-
-```bash
-npm run migrate:enterprise:dify
-npm run migrate:lead-hunter:evidence
-```
-
-Or run all migrations:
-
-```bash
-npm run migrate:all
-```
-
-### Skill stream + evidence smoke test
-
-```bash
-npm run test:lead-hunter:skill-stream
-```
-
-Run both advisor types:
-
-```bash
-npm run test:lead-hunter:skill-stream:all
-```
-
-### API endpoints
-
-- `GET/POST /api/writer/memory/items`
-- `GET/PATCH/DELETE /api/writer/memory/items/:memoryId`
-- `GET/PATCH /api/writer/memory/profile`
+**文档:**
+- `ARCHITECTURE.md` - 系统架构说明
+- `web_test_flow.md` - Web 测试流程
+- `AUTONOMOUS_CODING.md` - 完整使用指南
