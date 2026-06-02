@@ -22,7 +22,7 @@ export function PublicSiteHeader({ activeKey }: { activeKey?: PublicNavKey }) {
   const liveTools = leadToolsCatalog.filter((tool) => tool.status === "live")
 
   return (
-    <header className="border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/88">
+    <header className="relative z-50 border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/88">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-4">
         <Link href={homeHref} className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-[6px] border border-primary/50 bg-primary shadow-[inset_0_0_0_1px_rgba(0,0,0,0.15)]">
@@ -39,7 +39,7 @@ export function PublicSiteHeader({ activeKey }: { activeKey?: PublicNavKey }) {
         <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
           {copy.header.navItems.map((item) =>
             item.key === "tools" ? (
-              <div key={item.key} className="group relative shrink-0">
+              <div key={item.key} className="group relative z-10 shrink-0">
                 <Link
                   href={item.href}
                   className={cn(
@@ -53,7 +53,7 @@ export function PublicSiteHeader({ activeKey }: { activeKey?: PublicNavKey }) {
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Link>
 
-                <div className="invisible absolute left-1/2 top-full z-30 mt-2 min-w-[220px] -translate-x-1/2 translate-y-1 rounded-[8px] border border-border bg-card p-2 opacity-0 shadow-xl transition duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+                <div className="invisible absolute left-1/2 top-full z-[70] mt-2 min-w-[220px] -translate-x-1/2 translate-y-1 rounded-[8px] border border-border bg-card p-2 opacity-0 shadow-xl transition duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
                   {liveTools.map((tool) => (
                     <Link key={tool.slug} href={tool.href} className="block rounded-[6px] px-3 py-2.5 transition hover:bg-background">
                       <div className="font-display text-xs font-bold uppercase tracking-[0.08em] text-foreground">{tool.name}</div>
