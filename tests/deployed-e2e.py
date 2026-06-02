@@ -100,6 +100,10 @@ class Recorder:
         print("DEPLOYED_E2E_SUMMARY_END")
 
 
+class EnvironmentSkipError(Exception):
+    pass
+
+
 def load_env_file(path: Path) -> None:
     if not path.exists():
         return
@@ -642,8 +646,16 @@ def approve_member_request(page, config: Config, member_email: str) -> None:
         request_row.get_by_role("button", name=re.compile("通过|Approve")).first.click()
     review_response = response_info.value
     if not review_response.ok:
+        response_text = review_response.text()
+        if (
+            review_response.status == 409
+            and "billing_member_limit_reached" in response_text
+        ):
+            raise EnvironmentSkipError(
+                f"Member approval skipped: workspace seat limit reached ({response_text})"
+            )
         raise AssertionError(
-            f"Approve request failed: {review_response.status} {review_response.text()}"
+            f"Approve request failed: {review_response.status} {response_text}"
         )
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(3000)
@@ -707,6 +719,8 @@ def run_step(recorder: Recorder, page, artifact_dir: Path, name: str, fn) -> Non
     try:
         fn()
         recorder.add(name, "passed")
+    except EnvironmentSkipError as error:
+        recorder.add(name, "skipped", str(error))
     except (AssertionError, PlaywrightTimeoutError, Exception) as error:
         save_failure_screenshot(page, artifact_dir, name)
         recorder.add(name, "failed", str(error))
@@ -724,6 +738,7 @@ def main() -> None:
         page.set_default_timeout(config.timeout_ms)
 
         console_errors: list[str] = []
+        ignore_member_limit_console = False
 
         def collect_console_error(msg) -> None:
             if msg.type != "error":
@@ -797,7 +812,7 @@ def main() -> None:
         if not config.skip_member_flow and enterprise_meta:
 
             def member_flow() -> None:
-                nonlocal member_account
+                nonlocal member_account, ignore_member_limit_console
                 logout(page, config.base_url)
                 if member_account.email and member_account.password:
                     login(
@@ -836,8 +851,12 @@ def main() -> None:
                     admin_account.password,
                     config.timeout_ms,
                 )
-                if member_is_pending:
-                    approve_member_request(page, config, member_account.email)
+                try:
+                    if member_is_pending:
+                        approve_member_request(page, config, member_account.email)
+                except EnvironmentSkipError:
+                    ignore_member_limit_console = True
+                    raise
                 enable_member_permissions(page, config, member_account.email)
 
                 logout(page, config.base_url)
@@ -860,6 +879,14 @@ def main() -> None:
             run_step(recorder, page, config.artifact_dir, "member_flow", member_flow)
 
         browser.close()
+
+    if ignore_member_limit_console:
+        console_errors = [
+            text
+            for text in console_errors
+            if "Failed to load resource: the server responded with a status of 409"
+            not in text
+        ]
 
     if console_errors:
         recorder.add("console_errors", "failed", "\n".join(console_errors[:10]))
