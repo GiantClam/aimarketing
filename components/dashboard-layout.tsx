@@ -1,189 +1,449 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
+import {
+  Bot,
+  CreditCard,
+  Globe,
+  ImageIcon,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PenSquare,
+  Radar,
+  Search,
+  Settings,
+  Target,
+  TrendingUp,
+  Users,
+  Video,
+  X,
+} from "lucide-react"
+
+import { useAuth } from "@/components/auth-provider"
+import { AiEntrySidebarItem } from "@/components/ai-entry/AiEntrySidebarItem"
+import { AdvisorSidebarItem } from "@/components/chat/AdvisorSidebarItem"
+import {
+  DashboardAvailabilityProvider,
+  useDashboardAvailability,
+} from "@/components/dashboard-availability-provider"
+import { ImageAssistantSidebarItem } from "@/components/image-assistant/ImageAssistantSidebarItem"
+import { useI18n } from "@/components/locale-provider"
+import { LocaleSwitcher } from "@/components/locale-switcher"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Sparkles, Plus, MessageSquare, Database, Settings, LogOut, Menu, X, FileText, Video, Globe } from "lucide-react"
-import Link from "next/link"
-import { useAuth } from "@/components/auth-provider" // Fixed import path
+import { WriterSidebarItem } from "@/components/writer/WriterSidebarItem"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
-// Mock conversation history data
-const conversations = [
-  { id: "1", title: "Viber文案 - 春季上新", timestamp: "2小时前" },
-  { id: "2", title: "小红书种草 - 母亲节", timestamp: "1天前" },
-  { id: "3", title: "电商产品描述优化", timestamp: "2天前" },
-  { id: "4", title: "B2B营销邮件模板", timestamp: "3天前" },
-  { id: "5", title: "社交媒体内容策略", timestamp: "1周前" },
-]
-
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { user, isDemoMode, logout } = useAuth() // Added demo mode detection and user info display
+  return (
+    <DashboardAvailabilityProvider>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </DashboardAvailabilityProvider>
+  )
+}
+
+function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const router = useRouter()
+  const { messages, locale } = useI18n()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const { user, isDemoMode, loading, logout, hasFeature } = useAuth()
+  const { advisor, writer, imageAssistant } = useDashboardAvailability()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  useEffect(() => {
+    if (!loading && !user) router.replace("/login")
+  }, [loading, router, user])
 
   const handleLogout = async () => {
-    await logout()
-    router.push("/")
+    setIsLoggingOut(true)
+    try {
+      await logout()
+      setSidebarOpen(false)
+      router.replace("/login")
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
+  const userEmail = user?.email || ""
+  const hasAdvisorFeature = hasFeature("expert_advisor")
+  const hasLeadHunterFeature = hasFeature("customer_profile_entry")
+  const hasWebsiteFeature = hasFeature("website_generation")
+  const hasVideoFeature = hasFeature("video_generation")
+  const hasCopywritingFeature = hasFeature("copywriting_generation")
+  const hasImageAssistantFeature = hasFeature("image_design_generation")
+  const enterprisePending = user?.enterpriseStatus === "pending"
+  const enterpriseRejected = user?.enterpriseStatus === "rejected"
+
+  const showAdvisorSection = useMemo(() => {
+    if (enterprisePending || enterpriseRejected) return false
+    return hasAdvisorFeature && (advisor.brandStrategy || advisor.growth)
+  }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature])
+
+  const showLeadHunterSection = useMemo(() => {
+    if (enterprisePending || enterpriseRejected) return false
+    return (hasLeadHunterFeature && advisor.leadHunter) || (hasAdvisorFeature && (advisor.companySearch || advisor.contactMining))
+  }, [advisor, enterprisePending, enterpriseRejected, hasAdvisorFeature, hasLeadHunterFeature])
+
+  const showWriterEntry = useMemo(() => {
+    if (enterprisePending || enterpriseRejected) return false
+    return hasCopywritingFeature && writer.enabled
+  }, [enterprisePending, enterpriseRejected, hasCopywritingFeature, writer.enabled])
+
+  const showImageAssistantEntry = useMemo(() => {
+    if (enterprisePending || enterpriseRejected) return false
+    return hasImageAssistantFeature && imageAssistant.enabled
+  }, [enterprisePending, enterpriseRejected, hasImageAssistantFeature, imageAssistant.enabled])
+
+  const showAiEntry = useMemo(() => {
+    return true
+  }, [])
+
+  const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
+  const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
+  const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
+
   return (
-    <div className="h-screen bg-background flex">
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
+    <div className="dashboard-shell flex h-screen bg-transparent">
+      {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      {/* Sidebar */}
       <aside
-        className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-80 bg-sidebar border-r border-sidebar-border
-        transform transition-transform duration-200 ease-in-out
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
-      `}
+        className={`dashboard-panel fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static ${
+          sidebarCollapsed ? "w-[88px]" : "w-[320px]"
+        } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-4 border-b border-sidebar-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-sidebar-primary-foreground" />
+        <div className="flex h-full flex-col">
+          <div className={sidebarCollapsed ? "border-b border-sidebar-border p-3" : "border-b border-sidebar-border p-4"}>
+            <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex items-start justify-between gap-3"}>
+              <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex min-w-0 items-center gap-3"}>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/40 bg-primary">
+                  <span className="dashboard-title text-base text-primary-foreground">AI</span>
                 </div>
-                <h1 className="text-lg font-bold text-sidebar-foreground font-sans">AI Marketing</h1>
+                {!sidebarCollapsed && (
+                  <div className="min-w-0">
+                    <div className="dashboard-kicker text-muted-foreground">
+                      {locale === "zh" ? "工作台" : "Workspace"}
+                    </div>
+                    <h1 className="dashboard-title truncate text-lg text-sidebar-foreground">{messages.shared.appName}</h1>
+                  </div>
+                )}
               </div>
-              <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
-                <X className="w-4 h-4" />
-              </Button>
+              <div className={sidebarCollapsed ? "flex w-full flex-col items-center gap-2" : "flex items-center gap-1"}>
+                <LocaleSwitcher compact={sidebarCollapsed} className={sidebarCollapsed ? "w-full justify-center" : ""} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={sidebarCollapsed ? "dashboard-chip hidden h-9 w-9 rounded-[4px] p-0 lg:inline-flex" : "dashboard-chip hidden rounded-[4px] lg:inline-flex"}
+                  onClick={() => setSidebarCollapsed((current) => !current)}
+                  title={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
+                  aria-label={sidebarCollapsed ? messages.shared.expandSidebar : messages.shared.collapseSidebar}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                </Button>
+                <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-
-            {/* New Conversation Button */}
-            <Button className="w-full mt-4 font-manrope" size="sm" asChild>
-              <Link href="/dashboard">
-                <Plus className="w-4 h-4 mr-2" />
-                新建对话
-              </Link>
-            </Button>
+            {!sidebarCollapsed && user?.enterpriseName && (
+              <p className="dashboard-chip dashboard-kicker mt-3 rounded-[4px] px-3 py-1.5 text-sidebar-foreground/80">
+                {user.enterpriseName} ({user.enterpriseCode})
+              </p>
+            )}
           </div>
 
-          {/* Conversation History */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="p-4 flex-shrink-0">
-              <h3 className="text-sm font-medium text-sidebar-foreground mb-3 font-sans">最近对话</h3>
-            </div>
-            <div className="flex-1 min-h-0 px-2">
-              <ScrollArea className="h-full">
-                <div className="space-y-1 pb-4">
-                  {conversations.map((conversation) => (
-                    <Link key={conversation.id} href="/dashboard">
-                      <button className="w-full text-left p-3 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground hover:text-sidebar-accent-foreground transition-colors group">
-                        <div className="flex items-start gap-3">
-                          <MessageSquare className="w-4 h-4 mt-0.5 text-sidebar-primary flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate font-manrope">{conversation.title}</p>
-                            <p className="text-xs text-muted-foreground font-manrope">{conversation.timestamp}</p>
-                          </div>
-                        </div>
-                      </button>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ScrollArea
+              className="h-full"
+              viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!w-full [&>div]:!min-w-0"
+            >
+              <div className={sidebarCollapsed ? "space-y-3 p-3" : "space-y-4 p-4"}>
+                {(enterprisePending || enterpriseRejected) && (
+                  <div className="rounded-[20px] border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-700">
+                    {enterprisePending ? messages.dashboardLayout.pendingEnterprise : messages.dashboardLayout.rejectedEnterprise}
+                  </div>
+                )}
+
+                {showAiEntry && (
+                  sidebarCollapsed ? (
+                        <Link href="/dashboard/ai">
+                          <Button
+                            variant="ghost"
+                            className="dashboard-chip w-full justify-center rounded-[4px] bg-card"
+                            size="sm"
+                            title={aiEntryLabel}
+                            aria-label={aiEntryLabel}
+                      >
+                        <Bot className="h-4 w-4" />
+                      </Button>
                     </Link>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
+                  ) : (
+                    <AiEntrySidebarItem title={aiEntryLabel} icon={Bot} />
+                  )
+                )}
+
+                {showAdvisorSection && (
+                  <div>
+                    {!sidebarCollapsed && (
+                      <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
+                        {messages.dashboardLayout.advisorSection}
+                      </h3>
+                    )}
+                    {hasAdvisorFeature &&
+                      (sidebarCollapsed ? (
+                        <Link href={consultingAdvisorHref}>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-center"
+                            size="sm"
+                            title={consultingAdvisorLabel}
+                          >
+                            <Bot className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AiEntrySidebarItem
+                          title={consultingAdvisorLabel}
+                          icon={Bot}
+                          entryHref={consultingAdvisorHref}
+                        />
+                      ))}
+                    {hasAdvisorFeature && advisor.brandStrategy && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/brand-strategy/new">
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.brandAdvisor}>
+                            <Target className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.brandAdvisor} advisorType="brand-strategy" userEmail={userEmail} icon={Target} />
+                      )
+                    )}
+                    {hasAdvisorFeature && advisor.growth && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/growth/new">
+                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.growthAdvisor}>
+                            <TrendingUp className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.growthAdvisor} advisorType="growth" userEmail={userEmail} icon={TrendingUp} />
+                      )
+                    )}
+                  </div>
+                )}
+
+                {showLeadHunterSection && (
+                  <div>
+                    {!sidebarCollapsed && (
+                      <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
+                        {messages.dashboardLayout.leadHunterSection}
+                      </h3>
+                    )}
+                    {hasAdvisorFeature && advisor.companySearch && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/company-search/new">
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.companySearch}>
+                            <Search className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.companySearch} advisorType="company-search" userEmail={userEmail} icon={Search} />
+                      )
+                    )}
+                    {hasLeadHunterFeature && advisor.leadHunter && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/lead-hunter/new">
+                          <Button
+                            variant="ghost"
+                            className={hasAdvisorFeature && advisor.companySearch ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            size="sm"
+                            title={messages.dashboardLayout.leadHunter}
+                          >
+                            <Radar className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.leadHunter} advisorType="lead-hunter" userEmail={userEmail} icon={Radar} />
+                      )
+                    )}
+                    {hasAdvisorFeature && advisor.contactMining && userEmail && (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/advisor/contact-mining/new">
+                          <Button
+                            variant="ghost"
+                            className={
+                              (hasAdvisorFeature && advisor.companySearch) || (hasLeadHunterFeature && advisor.leadHunter)
+                                ? "mt-1 w-full justify-center"
+                                : "w-full justify-center"
+                            }
+                            size="sm"
+                            title={messages.dashboardLayout.contactMining}
+                          >
+                            <Users className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AdvisorSidebarItem title={messages.dashboardLayout.contactMining} advisorType="contact-mining" userEmail={userEmail} icon={Users} />
+                      )
+                    )}
+                  </div>
+                )}
+
+                {(showWriterEntry || showImageAssistantEntry) && (
+                  <div>
+                    {!sidebarCollapsed && (
+                      <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
+                        {messages.dashboardLayout.creativeSection}
+                      </h3>
+                    )}
+                    {showWriterEntry ? (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/writer">
+                          <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.writer} aria-label={messages.dashboardLayout.writer}>
+                            <PenSquare className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <WriterSidebarItem title={messages.dashboardLayout.writer} icon={PenSquare} />
+                      )
+                    ) : null}
+                    {showImageAssistantEntry ? (
+                      sidebarCollapsed ? (
+                        <Link href="/dashboard/image-assistant">
+                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.imageAssistant} aria-label={messages.dashboardLayout.imageAssistant}>
+                            <ImageIcon className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <ImageAssistantSidebarItem title={messages.dashboardLayout.imageAssistant} icon={ImageIcon} />
+                      )
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
           </div>
 
-          {/* Bottom Navigation */}
-          <div className="p-4 border-t border-sidebar-border space-y-2">
-            <Link href="/dashboard/templates">
-              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
-                <FileText className="w-4 h-4 mr-2" />
-                内容模板
+          <div className={sidebarCollapsed ? "space-y-2 border-t border-sidebar-border/80 p-3" : "space-y-2 border-t border-sidebar-border/80 p-4"}>
+            {hasVideoFeature && !enterprisePending && !enterpriseRejected && (
+              <Link href="/dashboard/video">
+                <Button
+                  variant="ghost"
+                  className={
+                    sidebarCollapsed
+                      ? "dashboard-chip w-full justify-center rounded-[4px] bg-white/40"
+                      : "dashboard-chip dashboard-kicker h-11 w-full justify-start rounded-[4px] bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                  }
+                  size="sm"
+                  title={messages.dashboardLayout.videoAgent}
+                >
+                  <Video className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+                  {!sidebarCollapsed && messages.dashboardLayout.videoAgent}
+                </Button>
+              </Link>
+            )}
+            {hasWebsiteFeature && !enterprisePending && !enterpriseRejected && (
+              <Link href="/dashboard/website-generator">
+                <Button
+                  variant="ghost"
+                  className={
+                    sidebarCollapsed
+                      ? "dashboard-chip w-full justify-center rounded-[4px] bg-white/40"
+                      : "dashboard-chip dashboard-kicker h-11 w-full justify-start rounded-[4px] bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                  }
+                  size="sm"
+                  title={messages.dashboardLayout.websiteAgent}
+                >
+                  <Globe className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+                  {!sidebarCollapsed && messages.dashboardLayout.websiteAgent}
+                </Button>
+              </Link>
+            )}
+            <Link href="/dashboard/billing">
+              <Button
+                variant="ghost"
+                className={
+                  sidebarCollapsed
+                    ? "dashboard-chip w-full justify-center rounded-[4px] bg-white/40"
+                    : "dashboard-chip dashboard-kicker h-11 w-full justify-start rounded-[4px] bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
+                }
+                size="sm"
+                title={messages.billing.navLabel}
+              >
+                <CreditCard className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+                {!sidebarCollapsed && messages.billing.navLabel}
               </Button>
             </Link>
-            <Link href="/dashboard/generate">
-              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
-                <Sparkles className="w-4 h-4 mr-2" />
-                内容生成
-              </Button>
-            </Link>
-            <Link href="/dashboard/video">
-              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
-                <Video className="w-4 h-4 mr-2" />
-                视频生成
-              </Button>
-            </Link>
-            <Link href="/dashboard/website-generator">
-              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
-                <Globe className="w-4 h-4 mr-2" />
-                网站生成
-              </Button>
-            </Link>
-            <Link href="/dashboard/knowledge-base">
-              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
-                <Database className="w-4 h-4 mr-2" />
-                知识库管理
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings">
-              <Button variant="ghost" className="w-full justify-start font-manrope" size="sm">
-                <Settings className="w-4 h-4 mr-2" />
-                用户设置
-              </Button>
-            </Link>
-
             <Separator className="my-2" />
 
-            {/* User Info */}
-            <div className="flex items-center gap-3 p-2">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                  {isDemoMode ? "体验" : "营销"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate font-manrope">
-                  {isDemoMode ? "体验用户" : user?.name || "营销专家"}
-                </p>
-                <p className="text-xs text-muted-foreground truncate font-manrope">
-                  {isDemoMode ? "demo@example.com" : user?.email || "expert@example.com"}
-                </p>
-              </div>
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => void handleLogout()}>
-                <LogOut className="w-4 h-4" />
+            <div className={sidebarCollapsed ? "flex flex-col items-center gap-2" : "flex items-center gap-2"}>
+              <Link
+                href="/dashboard/settings"
+                className={
+                  sidebarCollapsed
+                    ? "dashboard-chip flex w-full items-center justify-center rounded-[4px] bg-card p-2 transition-colors hover:bg-primary hover:text-primary-foreground"
+                    : "dashboard-chip flex min-w-0 flex-1 items-center gap-3 rounded-[4px] bg-card p-3 transition-colors hover:bg-primary hover:text-primary-foreground"
+                }
+                title={messages.shared.userSettings}
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/placeholder.svg?height=32&width=32" />
+                  <AvatarFallback className="bg-accent text-xs text-primary">
+                    {isDemoMode ? messages.dashboardLayout.demoLabel : messages.shared.user}
+                  </AvatarFallback>
+                </Avatar>
+                {!sidebarCollapsed && (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {isDemoMode ? messages.shared.demoAccount : user?.name || messages.shared.marketingMember}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground group-hover:text-primary-foreground/80">{userEmail}</p>
+                    </div>
+                    <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </>
+                )}
+              </Link>
+              <Button variant="ghost" size="sm" className="dashboard-chip rounded-[4px] border border-transparent text-muted-foreground hover:bg-muted hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
+                <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
-        <header className="lg:hidden border-b border-border bg-card/50 backdrop-blur-sm p-4">
+      <main className="flex min-w-0 flex-1 flex-col bg-transparent">
+        <header className="dashboard-panel border-b border-border bg-card p-4 lg:hidden">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}>
-              <Menu className="w-4 h-4" />
+              <Menu className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-primary-foreground" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-[4px] border border-primary/35 bg-primary">
+                <span className="dashboard-title text-xs text-primary-foreground">AI</span>
               </div>
-              <h1 className="text-lg font-bold text-foreground font-sans">AI Marketing</h1>
+              <h1 className="dashboard-title text-lg text-foreground">{messages.shared.appName}</h1>
             </div>
           </div>
         </header>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-hidden">{children}</div>
+        <div className="flex-1 overflow-hidden bg-transparent">{children}</div>
       </main>
     </div>
   )
 }
+
+
+

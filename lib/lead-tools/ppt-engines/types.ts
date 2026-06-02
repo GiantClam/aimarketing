@@ -34,6 +34,7 @@ export type LeadToolPptPreviewResponse = {
     exportRuntime: LeadToolPptExportRuntimeId
     mode: "ppt-master-project-preview" | "ppt-master-svg-preview" | "html-fast-preview"
     mockFallback: boolean
+    providerFallback?: string
   }
 }
 

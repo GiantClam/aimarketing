@@ -105,6 +105,7 @@ let previewCalls: Array<unknown[]> = []
 let finalizeCalls: Array<unknown[]> = []
 let downloadCalls: Array<unknown[]> = []
 let seoCalls: Array<unknown[]> = []
+let previewFailureMessage: string | null = null
 
 let buildLeadToolPreview: typeof import("./runtime").buildLeadToolPreview
 let buildLeadToolFinalize: typeof import("./runtime").buildLeadToolFinalize
@@ -146,6 +147,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         preview: {
           buildPreview: async (...args: unknown[]) => {
             previewCalls.push(args)
+            const options = (args[1] as { allowMockFallback?: boolean } | undefined) ?? {}
+            if (previewFailureMessage && !options.allowMockFallback) {
+              throw new Error(previewFailureMessage)
+            }
             return {
               previewSessionId: "preview-session-1",
               generatedAt: "2026-06-02T00:00:00.000Z",
@@ -156,7 +161,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
                 previewRuntime: "ppt-master-agent",
                 exportRuntime: "ppt-master-agent",
                 mode: "ppt-master-project-preview",
-                mockFallback: false,
+                mockFallback: Boolean(options.allowMockFallback),
               },
             }
           },
@@ -234,6 +239,7 @@ test.beforeEach(() => {
   finalizeCalls = []
   downloadCalls = []
   seoCalls = []
+  previewFailureMessage = null
 })
 
 test.after(() => {
@@ -285,6 +291,35 @@ test("ppt preview accepts stepfun model values and forwards them to the preview 
     language: "zh-CN",
     model: "step-3.7-flash",
   })
+})
+
+test("ppt preview falls back to mock rendering when the preferred provider is missing", async () => {
+  previewFailureMessage = "lead_tool_provider_missing:minimax:MiniMax-M2.7-highspeed"
+
+  const result = await buildLeadToolPreview("ai-ppt-preview", {
+    prompt: "Provider fallback preview",
+    scenario: "marketing-campaign",
+    language: "en-US",
+  })
+
+  assert.equal(previewCalls.length, 2)
+  assert.deepEqual(previewCalls[0]?.[1], {
+    allowMockFallback: false,
+    resolvedModels: {
+      previewModel: "preview-model",
+      finalModel: "final-model",
+    },
+  })
+  assert.deepEqual(previewCalls[1]?.[1], {
+    allowMockFallback: true,
+    resolvedModels: {
+      previewModel: "preview-model",
+      finalModel: "final-model",
+    },
+  })
+  assert.equal(result.meta.tool, "ai-ppt-preview")
+  assert.equal(result.meta.mockFallback, true)
+  assert.equal(result.meta.providerFallback, "lead_tool_provider_missing:minimax:MiniMax-M2.7-highspeed")
 })
 
 test("ppt finalize validates the selected variant before delegating to the export engine", async () => {

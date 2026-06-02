@@ -236,6 +236,22 @@ export async function buildLeadToolPreview(slug: string, input: unknown) {
         },
       }
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith("lead_tool_provider_missing:")) {
+        const fallbackResult = await engines.preview.buildPreview(payload, {
+          allowMockFallback: true,
+          resolvedModels: models,
+        })
+
+        return {
+          ...fallbackResult,
+          meta: {
+            ...fallbackResult.meta,
+            tool: tool.slug,
+            providerFallback: error.message,
+          },
+        }
+      }
+
       throw new LeadToolRuntimeError(
         "service_unavailable",
         error instanceof Error ? error.message : "PPT preview provider unavailable",
