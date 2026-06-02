@@ -2995,3 +2995,11 @@ export const frontendSlidesPreviewRuntime: LeadToolPptPreviewRuntime = {
     })
   },
 }
+
+export function buildFrontendSlidesPreviewDeck(deck: PptPreviewDeck): PptPreviewDeck {
+  return {
+    ...deck,
+    previewEngine: "frontend-slides-html" as const,
+    variants: deck.variants.map((variant) => materializeVariant(deck, variant)),
+  }
+}

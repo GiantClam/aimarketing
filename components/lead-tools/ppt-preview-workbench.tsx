@@ -36,6 +36,7 @@ type PptPreviewWorkbenchProps = {
   initialModel?: PptPreviewModelValue
   initialAction?: ProtectedAction
   initialDeck?: PptPreviewDeck | null
+  initialDisplayDeck?: PptPreviewDeck | null
   skipSavedSession?: boolean
   embedded?: boolean
 }
@@ -66,6 +67,34 @@ function getWorkbenchCopy(locale: "zh" | "en") {
       generateFinal: "生成成品",
       downloadHtml: "下载 HTML",
       downloadPpt: "下载 PPT",
+      inputSource: "输入来源",
+      model: "模型",
+      htmlPreviewMissing: "当前风格的 HTML 预览文件不存在",
+      downloadFailed: "下载预览包失败",
+      openedHtml: "已在新的浏览器标签页打开当前风格的 HTML 预览。",
+      finalizeFailed: "完整 PPT 生成失败",
+      finalizeCreated: "完整 PPT 生成任务已创建。",
+      currentVariant: "当前风格",
+      noPreviewForAction: "请先生成预览，再进行下载或完整生成。",
+      downloadedHtml: "已下载当前风格的 HTML 文件，可直接在浏览器中打开和分享。",
+      downloadedPpt: "已下载当前风格的 PPTX 文件，可以继续在 PowerPoint 或 Keynote 中编辑。",
+      promptRequired: "先输入一个主题，再生成 4 组预览。",
+      previewFailed: "生成预览失败",
+      generatedHtml: "已生成 4 个高差异化 HTML slide 预览。当前参数：{language} / {scenario}。",
+      generatedSvg: "已生成 4 个高差异化 SVG 预览。当前参数：{language} / {scenario}。",
+      loadingTitle: "生成中",
+      idleTitle: "准备中",
+      openHtmlFailed: "打开 HTML 预览失败",
+      openHtmlPrompt: "请先生成预览，再打开 HTML 页面。",
+      previousSlide: "上一页",
+      nextSlide: "下一页",
+      actionOpen: "打开",
+      actionFinal: "成品",
+      actionDownload: "下载",
+      statusReady: "可用",
+      statusRunning: "生成中",
+      statusFallback: "降级",
+      statusIdle: "待命",
       promptPlaceholder: "例如：介绍霍尔木兹海峡现状及对全球能源运输的影响",
     }
   }
@@ -92,7 +121,117 @@ function getWorkbenchCopy(locale: "zh" | "en") {
     generateFinal: "Generate Final",
     downloadHtml: "Download HTML",
     downloadPpt: "Download PPT",
+    inputSource: "Input Source",
+    model: "Model",
+    htmlPreviewMissing: "The HTML preview file for this style is not available.",
+    downloadFailed: "Failed to download the preview package.",
+    openedHtml: "Opened the HTML preview for this style in a new browser tab.",
+    finalizeFailed: "Failed to generate the final PPT output.",
+    finalizeCreated: "The full PPT generation job has been created.",
+    currentVariant: "current style",
+    noPreviewForAction: "Generate a preview before downloading or starting full generation.",
+    downloadedHtml: "Downloaded the HTML file for this style. You can open or share it directly in the browser.",
+    downloadedPpt: "Downloaded the PPTX file for this style. You can continue editing it in PowerPoint or Keynote.",
+    promptRequired: "Enter a topic first, then generate the four preview directions.",
+    previewFailed: "Failed to generate the preview.",
+    generatedHtml: "Generated four high-difference HTML slide previews. Current parameters: {language} / {scenario}.",
+    generatedSvg: "Generated four high-difference SVG previews. Current parameters: {language} / {scenario}.",
+    loadingTitle: "Generating",
+    idleTitle: "Ready",
+    openHtmlFailed: "Failed to open the HTML preview.",
+    openHtmlPrompt: "Generate a preview before opening the HTML page.",
+    previousSlide: "Previous slide",
+    nextSlide: "Next slide",
+    actionOpen: "Open",
+    actionFinal: "Final",
+    actionDownload: "Download",
+    statusReady: "READY",
+    statusRunning: "RUNNING",
+    statusFallback: "FALLBACK",
+    statusIdle: "IDLE",
     promptPlaceholder: "Example: Explain the current situation in the Strait of Hormuz and its impact on global energy transport",
+  }
+}
+
+function formatCopy(template: string, values: Record<string, string>) {
+  return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, value), template)
+}
+
+function getScenarioLabel(value: PptScenario, locale: "zh" | "en") {
+  const labels: Record<PptScenario, { zh: string; en: string }> = {
+    "marketing-campaign": { zh: "营销策划", en: "Marketing Campaign" },
+    "product-launch": { zh: "产品发布", en: "Product Launch" },
+    "sales-deck": { zh: "销售提案", en: "Sales Deck" },
+    "training": { zh: "培训课件", en: "Training Deck" },
+  }
+
+  return labels[value][locale]
+}
+
+function getScenarioDescription(value: PptScenario, locale: "zh" | "en") {
+  const descriptions: Record<PptScenario, { zh: string; en: string }> = {
+    "marketing-campaign": { zh: "适合增长活动、内容营销和渠道方案", en: "Best for growth campaigns, content marketing, and channel plans." },
+    "product-launch": { zh: "适合新品发布、定位表达和 GTM 介绍", en: "Best for new launches, positioning, and go-to-market stories." },
+    "sales-deck": { zh: "适合方案销售、客户提案和商务沟通", en: "Best for sales proposals, client pitches, and commercial conversations." },
+    "training": { zh: "适合入门培训、知识沉淀和内部分享", en: "Best for onboarding, knowledge transfer, and internal sharing." },
+  }
+
+  return descriptions[value][locale]
+}
+
+function getModelDescription(value: PptPreviewModelValue, locale: "zh" | "en") {
+  const descriptions: Record<PptPreviewModelValue, { zh: string; en: string }> = {
+    "MiniMax-M2.7-highspeed": { zh: "速度优先，适合 4 份并行预览。", en: "Speed-first and well suited to four parallel preview generations." },
+    "MiniMax-M3": { zh: "推理更重，适合更强表达但通常更慢。", en: "Heavier reasoning with stronger writing quality, but usually slower." },
+    "gpt-5.4": { zh: "通过 pptoken 路由，稳定性更高。", en: "Routed through pptoken for higher stability." },
+    "step-3.7-flash": { zh: "通过阶跃星辰直连路由，适合并发生成耗时测试。", en: "Direct StepFun routing, useful for concurrency and latency testing." },
+  }
+
+  return descriptions[value][locale]
+}
+
+function getVariantSummary(key: PptPreviewStyleKey, locale: "zh" | "en") {
+  const summaries: Record<PptPreviewStyleKey, { zh: string; en: string }> = {
+    "ppt169_brutalist_ai_newspaper_2026": {
+      zh: "frontend-slides 的长桌纪要模板，规则线、分栏和议题感最强，适合董事会汇报、策略复盘和结构化叙事。",
+      en: "A long-table review template in frontend-slides with the strongest ruled layout, agenda feel, and column structure for board updates, strategy reviews, and structured narratives.",
+    },
+    "ppt169_sugar_rush_memphis": {
+      zh: "frontend-slides 的轻快玩味模板，圆角、浮动贴纸和高亮色块最强，适合发布、教育和品牌故事。",
+      en: "A playful frontend-slides template with rounded geometry, floating sticker energy, and bright highlight blocks for launches, education, and brand storytelling.",
+    },
+    "ppt169_pritzker_2026": {
+      zh: "frontend-slides 的告示海报模板，大字号、强栏位和印刷张力最强，适合观点宣言、campaign 和冲击型表达。",
+      en: "A broadside-poster frontend-slides template with oversized type, strong columns, and print tension for bold points of view, campaigns, and impact-heavy statements.",
+    },
+    "ppt169_swiss_grid_systems": {
+      zh: "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+      en: "A neo-grid frontend-slides template with visible grid structure, strong contrast blocks, and a modern strategy-interface feel for product, consulting, and analytical decks.",
+    },
+  }
+
+  return summaries[key][locale]
+}
+
+function getLanguageLabel(value: PptLanguage, locale: "zh" | "en") {
+  const labels: Record<PptLanguage, { zh: string; en: string }> = {
+    "zh-CN": { zh: "中文", en: "Chinese" },
+    "en-US": { zh: "英文", en: "English" },
+  }
+
+  return labels[value][locale]
+}
+
+function getStatusLabel(status: "READY" | "RUNNING" | "FALLBACK" | "IDLE", copy: ReturnType<typeof getWorkbenchCopy>) {
+  switch (status) {
+    case "READY":
+      return copy.statusReady
+    case "RUNNING":
+      return copy.statusRunning
+    case "FALLBACK":
+      return copy.statusFallback
+    default:
+      return copy.statusIdle
   }
 }
 
@@ -181,6 +320,7 @@ export function PptPreviewWorkbench({
   initialModel = "MiniMax-M2.7-highspeed",
   initialAction,
   initialDeck = null,
+  initialDisplayDeck = null,
   skipSavedSession = false,
   embedded = false,
 }: PptPreviewWorkbenchProps) {
@@ -188,6 +328,7 @@ export function PptPreviewWorkbench({
   const router = useRouter()
   const pathname = usePathname()
   const { locale } = useI18n()
+  const isZh = locale === "zh"
   const copy = useMemo(() => getWorkbenchCopy(locale), [locale])
   const loadingMessageCount = copy.loadingMessages.length
   const { user, isDemoMode } = useAuth()
@@ -209,6 +350,7 @@ export function PptPreviewWorkbench({
   const [lastGeneratedRequest, setLastGeneratedRequest] = useState<PptPreviewRequest | null>(
     initialDeck ? { prompt: initialPrompt, scenario: initialScenario, language: initialLanguage, model: initialModel } : null,
   )
+  const visibleDeck = deck ?? initialDisplayDeck
 
   const canUseProtectedActions = Boolean(user) && !isDemoMode
   const redirectTo = getToolReturnPath(prompt, scenario, language, model, loginGateAction ?? undefined)
@@ -278,11 +420,11 @@ export function PptPreviewWorkbench({
 
   const variantMap = useMemo(() => {
     const next = new Map<string, NonNullable<PptPreviewWorkbenchProps["initialDeck"]>["variants"][number]>()
-    deck?.variants.forEach((variant) => {
+    visibleDeck?.variants.forEach((variant) => {
       next.set(variant.key, variant)
     })
     return next
-  }, [deck])
+  }, [visibleDeck])
 
   const previewIsStale = Boolean(
     deck &&
@@ -313,19 +455,19 @@ export function PptPreviewWorkbench({
       return
     }
 
-    setStatusMessage("参数已更新，当前预览已过期。请重新执行 4X 以生成新的语言/场景版本。")
-  }, [deck, isGenerating, previewIsStale])
+    setStatusMessage(copy.stale)
+  }, [copy.stale, deck, isGenerating, previewIsStale])
 
   const activeLoadingMessage = copy.loadingMessages[loadingMessageIndex] ?? copy.loadingMessages[0]
-  const isHtmlPreviewDeck = deck?.previewEngine === "frontend-slides-html"
-  const downloadActionLabel = isHtmlPreviewDeck ? "下载" : "下载"
-  const finalizeActionLabel = isHtmlPreviewDeck ? "打开" : "成品"
+  const isHtmlPreviewDeck = visibleDeck?.previewEngine === "frontend-slides-html"
+  const downloadActionLabel = copy.actionDownload
+  const finalizeActionLabel = isHtmlPreviewDeck ? copy.actionOpen : copy.actionFinal
 
   const openHtmlPreviewInNewTab = useCallback((currentDeck: PptPreviewDeck, variantKey: string) => {
     const variant = currentDeck.variants.find((item) => item.key === variantKey)
     const htmlDocument = variant?.preview?.htmlDocument
     if (!variant || !htmlDocument) {
-      throw new Error("当前风格的 HTML 预览文件不存在")
+      throw new Error(copy.htmlPreviewMissing)
     }
 
     const slideIndex = getVariantSlideIndex(
@@ -339,7 +481,7 @@ export function PptPreviewWorkbench({
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank", "noopener,noreferrer")
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  }, [slideIndexByVariant])
+  }, [copy.htmlPreviewMissing, slideIndexByVariant])
 
   const triggerPreviewDownload = useCallback(async (currentDeck: PptPreviewDeck, variantKey: string) => {
     const response = await fetch(getLeadToolEndpoint(toolSlug, "download"), {
@@ -361,7 +503,7 @@ export function PptPreviewWorkbench({
     }
 
     if (!response.ok) {
-      throw new Error(await parseApiError(response, "下载预览包失败"))
+      throw new Error(await parseApiError(response, copy.downloadFailed))
     }
 
     const blob = await response.blob()
@@ -378,12 +520,12 @@ export function PptPreviewWorkbench({
     anchor.download = fileName
     anchor.click()
     URL.revokeObjectURL(url)
-  }, [previewSessionId, toolSlug])
+  }, [copy.downloadFailed, previewSessionId, toolSlug])
 
   const runFinalize = useCallback(async (currentDeck: PptPreviewDeck, variantKey: string) => {
     if (currentDeck.previewEngine === "frontend-slides-html") {
       openHtmlPreviewInNewTab(currentDeck, variantKey)
-      setStatusMessage("已在新的浏览器标签页打开当前风格的 HTML 预览。")
+      setStatusMessage(copy.openedHtml)
       return
     }
 
@@ -412,19 +554,19 @@ export function PptPreviewWorkbench({
     }
 
     if (!response.ok) {
-      throw new Error(data.error || "完整 PPT 生成失败")
+      throw new Error(data.error || copy.finalizeFailed)
     }
 
     setStatusMessage(
-      `${data.message || "完整 PPT 生成任务已创建。"} 已选择 ${data.exportPlan?.selectedVariant || "当前风格"}，共 ${
-        data.exportPlan?.slideCount || 0
-      } 页。`,
+      isZh
+        ? `${data.message || copy.finalizeCreated} 已选择 ${data.exportPlan?.selectedVariant || copy.currentVariant}，共 ${data.exportPlan?.slideCount || 0} 页。`
+        : `${data.message || copy.finalizeCreated} Selected ${data.exportPlan?.selectedVariant || copy.currentVariant} with ${data.exportPlan?.slideCount || 0} slides.`,
     )
-  }, [openHtmlPreviewInNewTab, previewSessionId, toolSlug])
+  }, [copy.currentVariant, copy.finalizeCreated, copy.finalizeFailed, copy.openedHtml, isZh, openHtmlPreviewInNewTab, previewSessionId, toolSlug])
 
   const runProtectedAction = useCallback(async (action: ProtectedAction, variantKey: string) => {
     if (!deck) {
-      setStatusMessage("请先生成预览，再进行下载或完整生成。")
+      setStatusMessage(copy.noPreviewForAction)
       return
     }
 
@@ -441,8 +583,8 @@ export function PptPreviewWorkbench({
         await triggerPreviewDownload(deck, variantKey)
         setStatusMessage(
           deck.previewEngine === "frontend-slides-html"
-            ? "已下载当前风格的 HTML 文件，可直接在浏览器中打开和分享。"
-            : "已下载当前风格的 PPTX 文件，可以继续在 PowerPoint 或 Keynote 中编辑。",
+            ? copy.downloadedHtml
+            : copy.downloadedPpt,
         )
         return
       }
@@ -455,11 +597,11 @@ export function PptPreviewWorkbench({
     } finally {
       setIsRunningProtectedAction(false)
     }
-  }, [canUseProtectedActions, deck, runFinalize, triggerPreviewDownload])
+  }, [canUseProtectedActions, copy.downloadedHtml, copy.downloadedPpt, copy.noPreviewForAction, deck, runFinalize, triggerPreviewDownload])
 
   const generatePreview = async () => {
     if (!prompt.trim()) {
-      setStatusMessage("先输入一个主题，再生成 4 组预览。")
+      setStatusMessage(copy.promptRequired)
       return
     }
 
@@ -484,7 +626,7 @@ export function PptPreviewWorkbench({
       const data = (await response.json()) as { error?: string; deck?: PptPreviewDeck; previewSessionId?: string }
 
       if (!response.ok || !data.deck) {
-        throw new Error(data.error || "生成预览失败")
+        throw new Error(data.error || copy.previewFailed)
       }
 
       const nextDeck = data.deck
@@ -498,12 +640,12 @@ export function PptPreviewWorkbench({
         setSlideIndexByVariant(nextIndexes)
         setStatusMessage(
           nextDeck.previewEngine === "frontend-slides-html"
-            ? `已生成 4 个高差异化 HTML slide 预览。当前参数：${language} / ${scenario}。`
-            : `已生成 4 个高差异化 SVG 预览。当前参数：${language} / ${scenario}。`,
+            ? formatCopy(copy.generatedHtml, { language: getLanguageLabel(language, locale), scenario: getScenarioLabel(scenario, locale) })
+            : formatCopy(copy.generatedSvg, { language: getLanguageLabel(language, locale), scenario: getScenarioLabel(scenario, locale) }),
         )
       })
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "生成预览失败")
+      setStatusMessage(error instanceof Error ? error.message : copy.previewFailed)
     } finally {
       setIsGenerating(false)
     }
@@ -532,7 +674,7 @@ export function PptPreviewWorkbench({
     const currentAsset = liveVariant?.preview?.slides[slideIndex]
     const currentHtmlDocument = liveVariant?.preview?.htmlDocument
     const status =
-      !deck ? (isGenerating ? "RUNNING" : "IDLE") : deck.source === "mock" ? "FALLBACK" : "READY"
+      !visibleDeck ? (isGenerating ? "RUNNING" : "IDLE") : deck ? (deck.source === "mock" ? "FALLBACK" : "READY") : "IDLE"
 
     return {
       slot,
@@ -579,7 +721,7 @@ export function PptPreviewWorkbench({
           </div>
 
           <div className="grid gap-1.5 border-t border-black/8 pt-1.5">
-            <div className="font-display text-xs font-black uppercase text-muted-foreground">Input Source</div>
+            <div className="font-display text-xs font-black uppercase text-muted-foreground">{copy.inputSource}</div>
             <label className="grid gap-1.5">
               <span className="text-sm font-semibold text-foreground">{copy.projectTitle}</span>
               <textarea
@@ -592,7 +734,7 @@ export function PptPreviewWorkbench({
             </label>
 
             <label className="grid gap-1">
-              <span className="font-display text-xs font-black uppercase text-muted-foreground">Model</span>
+              <span className="font-display text-xs font-black uppercase text-muted-foreground">{copy.model}</span>
               <select
                 value={model}
                 onChange={(event) => setModel(event.target.value as PptPreviewModelValue)}
@@ -600,12 +742,12 @@ export function PptPreviewWorkbench({
               >
                 {pptPreviewModelOptions.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label} / {option.provider}
+                    {option.label}
                   </option>
                 ))}
               </select>
               <p className="text-[10px] leading-3.5 text-muted-foreground">
-                {pptPreviewModelOptions.find((option) => option.value === model)?.description ?? copy.modelFallback}
+                {getModelDescription(model, locale) ?? copy.modelFallback}
               </p>
             </label>
 
@@ -625,7 +767,8 @@ export function PptPreviewWorkbench({
                           : "border-black/10 bg-black/[0.02] hover:border-black/25 hover:bg-black/[0.04]",
                       )}
                     >
-                      <div className="font-display text-[13px] font-black text-foreground">{option.label}</div>
+                      <div className="font-display text-[13px] font-black text-foreground">{getScenarioLabel(option.value, locale)}</div>
+                      <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{getScenarioDescription(option.value, locale)}</div>
                     </button>
                   ))}
                 </div>
@@ -662,7 +805,7 @@ export function PptPreviewWorkbench({
           >
             <span className="inline-flex items-center gap-3">
               {isGenerating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-              {isGenerating ? "Running 4X" : copy.execute4x}
+              {isGenerating ? copy.running : copy.execute4x}
             </span>
             <span className="mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] text-black/50">
               {isGenerating ? activeLoadingMessage : copy.fourParallel}
@@ -724,7 +867,7 @@ export function PptPreviewWorkbench({
                         status === "IDLE" && "border border-black/10 text-muted-foreground",
                       )}
                     >
-                      {status}
+                      {getStatusLabel(status, copy)}
                     </span>
                   </div>
 
@@ -762,7 +905,7 @@ export function PptPreviewWorkbench({
                                   />
                                 ))}
                               </div>
-                              <strong className="font-display text-sm font-black uppercase text-foreground">生成中</strong>
+                              <strong className="font-display text-sm font-black uppercase text-foreground">{copy.loadingTitle}</strong>
                               <p className="text-[11px] font-semibold leading-4 text-muted-foreground">{activeLoadingMessage}</p>
                               <div className="grid w-full gap-2">
                                 <span className="h-2.5 rounded-full bg-black/10 animate-pulse" />
@@ -774,7 +917,7 @@ export function PptPreviewWorkbench({
                         ) : (
                           <div className="grid place-items-center gap-3">
                             <div className="h-[5px] w-14 bg-black/10" />
-                            <strong className="font-display text-sm font-black uppercase">准备中</strong>
+                            <strong className="font-display text-sm font-black uppercase">{copy.idleTitle}</strong>
                           </div>
                         )}
                       </div>
@@ -786,7 +929,7 @@ export function PptPreviewWorkbench({
                         className="pointer-events-auto grid h-7 w-7 place-items-center rounded-[2px] border border-black/14 bg-white/88 text-foreground transition hover:bg-white"
                         onClick={() => setVariantSlideIndex(variant.key, Math.max(0, slideIndex - 1))}
                         disabled={!liveVariant || slideIndex === 0}
-                        aria-label={`${variant.name} 上一页`}
+                        aria-label={`${variant.name} ${copy.previousSlide}`}
                       >
                         <ArrowLeft className="h-3.5 w-3.5" />
                       </button>
@@ -798,7 +941,7 @@ export function PptPreviewWorkbench({
                         className="pointer-events-auto grid h-7 w-7 place-items-center rounded-[2px] border border-black/14 bg-white/88 text-foreground transition hover:bg-white"
                         onClick={() => setVariantSlideIndex(variant.key, Math.min(slideCount - 1, slideIndex + 1))}
                         disabled={!liveVariant || slideIndex >= slideCount - 1}
-                        aria-label={`${variant.name} 下一页`}
+                        aria-label={`${variant.name} ${copy.nextSlide}`}
                       >
                         <ArrowRight className="h-3.5 w-3.5" />
                       </button>
@@ -820,7 +963,7 @@ export function PptPreviewWorkbench({
 
                   <div className="flex items-center justify-between gap-2 px-3 py-1.5">
                     <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground">
-                      {variant.summary}
+                      {getVariantSummary(variant.key, locale)}
                     </p>
                     <div className="flex shrink-0 gap-2">
                       <Button
@@ -841,13 +984,13 @@ export function PptPreviewWorkbench({
                             ? (() => {
                                 try {
                                   if (!deck) {
-                                    throw new Error("请先生成预览，再打开 HTML 页面。")
+                                    throw new Error(copy.openHtmlPrompt)
                                   }
                                   openHtmlPreviewInNewTab(deck, variant.key)
                                   setSelectedVariantKey(variant.key)
-                                  setStatusMessage("已在新的浏览器标签页打开当前风格的 HTML 预览。")
+                                  setStatusMessage(copy.openedHtml)
                                 } catch (error) {
-                                  setStatusMessage(error instanceof Error ? error.message : "打开 HTML 预览失败")
+                                  setStatusMessage(error instanceof Error ? error.message : copy.openHtmlFailed)
                                 }
                               })()
                             : void runProtectedAction("finalize", variant.key)

@@ -529,6 +529,29 @@ export const pptPreviewStyles: readonly PptPreviewVariantStyle[] = [
   },
 ] as const
 
+const pptPreviewStyleSummaries: Record<PptPreviewStyleKey, { zh: string; en: string }> = {
+  "ppt169_brutalist_ai_newspaper_2026": {
+    zh: "frontend-slides 的长桌纪要模板，规则线、分栏和议题感最强，适合董事会汇报、策略复盘和结构化叙事。",
+    en: "A frontend-slides long-table review preset with ruled sections, strong agenda structure, and board-style narrative clarity.",
+  },
+  "ppt169_sugar_rush_memphis": {
+    zh: "frontend-slides 的轻快玩味模板，圆角、浮动贴纸和高亮色块最强，适合发布、教育和品牌故事。",
+    en: "A frontend-slides playful preset with rounded geometry, floating sticker energy, and bright highlight blocks for launches and brand stories.",
+  },
+  "ppt169_pritzker_2026": {
+    zh: "frontend-slides 的告示海报模板，大字号、强栏位和印刷张力最强，适合观点宣言、campaign 和冲击型表达。",
+    en: "A frontend-slides broadside poster preset with oversized type, strong columns, and print tension for bold declarations and campaign statements.",
+  },
+  "ppt169_swiss_grid_systems": {
+    zh: "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+    en: "A frontend-slides neo-grid preset with visible rails, high-contrast modules, and a contemporary strategy-interface feel for analytical decks.",
+  },
+}
+
+export function getPptPreviewStyleSummary(styleKey: PptPreviewStyleKey, language: PptLanguage) {
+  return language === "zh-CN" ? pptPreviewStyleSummaries[styleKey].zh : pptPreviewStyleSummaries[styleKey].en
+}
+
 const scenarioDescriptors: Record<PptScenario, { chinese: string; english: string; outline: string[] }> = {
   "marketing-campaign": {
     chinese: "营销策划",
@@ -831,6 +854,7 @@ export function buildMockPptPreview(request: PptPreviewRequest): PptPreviewDeck 
     source: "mock",
     variants: pptPreviewStyles.map((style) => ({
       ...style,
+      summary: getPptPreviewStyleSummary(style.key, request.language),
       slides: buildMockVariantSlides(style, title, request.scenario, request.language),
     })),
   }
@@ -865,6 +889,7 @@ export function buildPptPreviewDeckFromPlans(
 
       return {
         ...style,
+        summary: getPptPreviewStyleSummary(style.key, request.language),
         outline: (plan?.outline ?? descriptor.outline).slice(0, 9),
         slides: slides.map((slide, index) => ({
           ...applyTemplateSlotMetadata(style.key, slide),
