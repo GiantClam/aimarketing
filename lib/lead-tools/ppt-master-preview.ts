@@ -15,6 +15,7 @@ const BASE_VIEWBOX_WIDTH = 1280
 const BASE_VIEWBOX_HEIGHT = 720
 
 type AssetTheme = {
+  directory: string
   files: string[]
   overlay: {
     panelFill: string
@@ -52,6 +53,7 @@ type OverlayFrame = {
 
 const themeAssets: Record<PptPreviewStyleKey, AssetTheme> = {
   "ppt169_brutalist_ai_newspaper_2026": {
+    directory: "neo-brutalism",
     files: ["01_cover.svg", "02_issue_at_a_glance.svg", "03_revenue_league.svg", "08_three_rulebooks.svg", "10_closing_read.svg"],
     overlay: {
       panelFill: "#f4ecdf",
@@ -68,7 +70,8 @@ const themeAssets: Record<PptPreviewStyleKey, AssetTheme> = {
     },
   },
   "ppt169_sugar_rush_memphis": {
-    files: ["01_cover.svg", "02_what.svg", "03_numbers.svg", "04_principles.svg", "05_who.svg"],
+    directory: "aurora-glass",
+    files: ["01_cover.svg", "02_hero_demo_to_prod.svg", "04_agent_architecture.svg", "08_kpi_dashboard.svg", "12_cta_closing.svg"],
     overlay: {
       panelFill: "#fff1fb",
       panelStroke: "#3d37ff",
@@ -85,7 +88,8 @@ const themeAssets: Record<PptPreviewStyleKey, AssetTheme> = {
     },
   },
   "ppt169_pritzker_2026": {
-    files: ["01_cover.svg", "02_overview.svg", "03_ando.svg", "04_chipperfield.svg", "05_zaha.svg"],
+    directory: "editorial-poster",
+    files: ["01_cover.svg", "02_overview.svg", "03_ando.svg", "07_oma_sanaa.svg", "11_epilogue.svg"],
     overlay: {
       panelFill: "#f6efe8",
       panelStroke: "#5f4b40",
@@ -101,7 +105,8 @@ const themeAssets: Record<PptPreviewStyleKey, AssetTheme> = {
     },
   },
   "ppt169_swiss_grid_systems": {
-    files: ["01_cover.svg", "02_quote.svg", "03_origin.svg", "04_principles.svg", "05_figures.svg"],
+    directory: "swiss-grid",
+    files: ["01_cover.svg", "02_quote.svg", "04_principles.svg", "05_figures.svg", "14_closing.svg"],
     overlay: {
       panelFill: "#f7f2e8",
       panelStroke: "#d3c4af",
@@ -261,11 +266,40 @@ function getAssetDataUrl(styleKey: PptPreviewStyleKey, fileName: string) {
     return cached
   }
 
-  const filePath = path.join(process.cwd(), "lib", "lead-tools", "ppt-master-assets", styleKey, fileName)
-  const svg = sanitizeBaseSvg(fs.readFileSync(filePath, "utf8"))
-  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`
-  assetCache.set(cacheKey, dataUrl)
-  return dataUrl
+  const assetTheme = themeAssets[styleKey]
+  const filePath = path.join(process.cwd(), "lib", "lead-tools", "ppt-master-assets", assetTheme.directory, fileName)
+
+  try {
+    const svg = sanitizeBaseSvg(fs.readFileSync(filePath, "utf8"))
+    const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`
+    assetCache.set(cacheKey, dataUrl)
+    return dataUrl
+  } catch (error) {
+    console.warn("ppt-preview.asset_missing", {
+      styleKey,
+      fileName,
+      filePath,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+function renderFallbackBackdrop(variant: PptPreviewVariant, index: number) {
+  const gradientId = `fallback-gradient-${variant.key}-${index}`
+
+  return [
+    "<defs>",
+    `<linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="100%">`,
+    `<stop offset="0%" stop-color="${variant.palette.background}" />`,
+    `<stop offset="100%" stop-color="${variant.palette.panel}" />`,
+    "</linearGradient>",
+    "</defs>",
+    `<rect width="${BASE_VIEWBOX_WIDTH}" height="${BASE_VIEWBOX_HEIGHT}" fill="url(#${gradientId})" />`,
+    `<rect x="64" y="64" width="420" height="164" rx="24" fill="${variant.palette.accent}" opacity="0.18" />`,
+    `<rect x="946" y="92" width="220" height="220" rx="32" fill="${variant.palette.border}" opacity="0.18" />`,
+    `<rect x="812" y="470" width="300" height="120" rx="24" fill="${variant.palette.foreground}" opacity="0.08" />`,
+  ].join("")
 }
 
 function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): OverlayFrame {
@@ -464,7 +498,9 @@ function renderSlide(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: Pp
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${PREVIEW_WIDTH}" height="${PREVIEW_HEIGHT}" viewBox="0 0 ${BASE_VIEWBOX_WIDTH} ${BASE_VIEWBOX_HEIGHT}" role="img" aria-label="${escapeXml(`${variant.name} preview slide ${index + 1}`)}">`,
-    `<image href="${baseAssetDataUrl}" x="0" y="0" width="${BASE_VIEWBOX_WIDTH}" height="${BASE_VIEWBOX_HEIGHT}" preserveAspectRatio="xMidYMid slice" />`,
+    baseAssetDataUrl
+      ? `<image href="${baseAssetDataUrl}" x="0" y="0" width="${BASE_VIEWBOX_WIDTH}" height="${BASE_VIEWBOX_HEIGHT}" preserveAspectRatio="xMidYMid slice" />`
+      : renderFallbackBackdrop(variant, index),
     renderOverlay(deck, variant, slide, index),
     "</svg>",
   ].join("")
