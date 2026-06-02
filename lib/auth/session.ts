@@ -373,6 +373,12 @@ export async function getSessionUser(request: NextRequest) {
   }
 }
 
+export type AuthUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>
+
+export async function requireAuthenticatedUser(request: NextRequest) {
+  return getSessionUser(request)
+}
+
 export async function deleteSessionFromRequest(request: NextRequest) {
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
   if (!sessionToken) return
@@ -426,10 +432,4 @@ export function clearSessionCookie(response: NextResponse, request?: NextRequest
     expires: new Date(0),
   })
   return response
-}
-
-export type AuthUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>
-
-export async function requireAuthenticatedUser(request: NextRequest) {
-  return getSessionUser(request)
 }

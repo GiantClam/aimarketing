@@ -1,6 +1,7 @@
 import type { AppLocale } from "@/lib/i18n/config"
+import { localizePublicPath } from "@/lib/i18n/routing"
 
-type PublicNavKey = "alternatives" | "compare" | "solutions" | "calculator" | "pricing"
+type PublicNavKey = "alternatives" | "compare" | "solutions" | "calculator" | "pricing" | "tools"
 
 type PublicNavItem = {
   key: PublicNavKey
@@ -30,6 +31,11 @@ type PublicWorkflowStep = {
   description: string
 }
 
+type PublicFaq = {
+  question: string
+  answer: string
+}
+
 type PublicPricingGuardrail = {
   title: string
   description: string
@@ -37,8 +43,11 @@ type PublicPricingGuardrail = {
 
 type PublicHomeCopy = {
   eyebrow: string
+  systemLabel: string
+  campaignControlLabel: string
   title: string
   description: string
+  supportingCopy: string
   primaryCta: string
   compareCta: string
   calculatorCta: string
@@ -48,7 +57,12 @@ type PublicHomeCopy = {
   replacementStack: string[]
   sharedOutputLabel: string
   replacementTitle: string
+  modeLabel: string
+  modeValue: string
+  statusLabel: string
+  statusValue: string
   capabilitiesEyebrow: string
+  capabilityLabel: (index: number) => string
   capabilityCards: PublicCapabilityCard[]
   workflowEyebrow: string
   workflowTitle: string
@@ -57,19 +71,27 @@ type PublicHomeCopy = {
   audienceEyebrow: string
   audienceTitle: string
   exploreSolutionsCta: string
+  useCaseLabel: (index: number) => string
+  openDetailLabel: string
   audienceCards: PublicAudienceCard[]
   resources: PublicResourceLink[]
   pricingEyebrow: string
   pricingTitle: string
   pricingDescription: string
   pricingCta: string
+  faqEyebrow: string
+  faqTitle: string
+  faqs: PublicFaq[]
   finalEyebrow: string
   finalTitle: string
   finalDescription: string
+  signalLabel: (index: number) => string
 }
 
 type PublicPricingPageCopy = {
   eyebrow: string
+  matrixLabel: string
+  sharedWorkspaceLabel: string
   title: string
   description: string
   primaryCta: string
@@ -94,6 +116,7 @@ type PublicPricingGridCopy = {
 }
 
 type PublicFooterCopy = {
+  systemFooterLabel: string
   description: string
   contact: string
   copyright: (year: number) => string
@@ -102,6 +125,7 @@ type PublicFooterCopy = {
 type PublicHeaderCopy = {
   productName: string
   tagline: string
+  brandOpsReady: string
   login: string
   startWorkspace: string
   navItems: PublicNavItem[]
@@ -117,119 +141,160 @@ export type PublicCopy = {
 
 const NAV_LINKS: Record<PublicNavKey, string> = {
   alternatives: "/alternatives/chatgpt-team-alternative",
-  compare: "/compare/best-ai-workspace-for-small-teams",
-  solutions: "/solutions/ai-for-small-marketing-teams",
-  calculator: "/resources/ai-subscription-cost-calculator",
+  compare: "/compare/best-ai-workspace-for-marketing-teams",
+  solutions: "/use-cases/ai-workspace-for-marketing-teams",
+  calculator: "/compare/compare-ai-tool-costs",
   pricing: "/pricing",
+  tools: "/tools",
 }
 
 const en: PublicCopy = {
   header: {
     productName: "AI Marketing",
-    tagline: "Small-team workspace",
+    tagline: "Multi-model marketing workspace",
+    brandOpsReady: "Brand Ops Ready",
     login: "Log in",
-    startWorkspace: "Start workspace",
+    startWorkspace: "Start Free",
     navItems: [
       { key: "alternatives", label: "Alternatives", href: NAV_LINKS.alternatives },
       { key: "compare", label: "Compare", href: NAV_LINKS.compare },
-      { key: "solutions", label: "Solutions", href: NAV_LINKS.solutions },
-      { key: "calculator", label: "Calculator", href: NAV_LINKS.calculator },
+      { key: "solutions", label: "Use Cases", href: NAV_LINKS.solutions },
+      { key: "calculator", label: "AI Costs", href: NAV_LINKS.calculator },
+      { key: "tools", label: "Tools", href: NAV_LINKS.tools },
       { key: "pricing", label: "Pricing", href: NAV_LINKS.pricing },
     ],
   },
   footer: {
+    systemFooterLabel: "System Footer",
     description:
-      "A shared AI marketing workspace for small teams that want multiple models, specialist agents, company context, and lower subscription sprawl.",
+      "A multi-model AI workspace for marketing content, research, visuals, and workflows, with room for BYOK, shared context, and private deployment.",
     contact: "Contact",
-    copyright: (year) => `© ${year} AI Marketing. Built for small-team marketing execution.`,
+    copyright: (year) => `© ${year} AI Marketing. Built for marketing teams, creators, and indie operators.`,
   },
   home: {
-    eyebrow: "Affordable multi-model AI marketing workspace",
-    title: "One AI Marketing Workspace for Small Teams",
+    eyebrow: "Multi-model AI workspace for modern marketing teams",
+    systemLabel: "AI Marketing System",
+    campaignControlLabel: "Campaign Control",
+    title: "One workspace for multiple AI models",
     description:
-      "Stop paying separately for ChatGPT, Claude, Gemini, writing tools, image tools, and marketing consultants. AI Marketing gives your team multiple AI models, specialist marketing agents, shared company context, and permissions in one workspace.",
-    primaryCta: "Start your team workspace",
-    compareCta: "Compare with ChatGPT Team",
-    calculatorCta: "Calculate AI tool savings",
+      "Create marketing content, run research, generate visuals, and manage AI workflows in one place.",
+    supportingCopy:
+      "Built for marketers, SEO operators, indie founders, and small teams that want less tool switching and more output.",
+    primaryCta: "Start Free",
+    compareCta: "View Pricing",
+    calculatorCta: "Explore Use Cases",
     demoCta: "Open demo",
     trustPoints: [
-      "Multiple AI models in one shared workspace",
-      "Marketing agents for brand, growth, copy, website, video, and images",
-      "Team permissions, company context, and shared credits",
+      "Use multiple AI models without losing the shared brief or campaign context.",
+      "Move from research to content, visuals, and workflow execution inside one workspace.",
+      "Add BYOK, team permissions, and private deployment options when the workflow matures.",
     ],
-    replacementEyebrow: "Replace tool sprawl",
-    replacementStack: ["ChatGPT", "Claude", "Gemini", "AI writing tools", "AI image tools", "marketing consultants"],
-    sharedOutputLabel: "Shared workspace output",
-    replacementTitle: "Campaign strategy, copy, images, websites, and video scripts from one context.",
+    replacementEyebrow: "Problem",
+    replacementStack: ["ChatGPT", "Claude", "Gemini", "AI writing tools", "AI image tools", "automation tools"],
+    sharedOutputLabel: "What teams are trying to fix",
+    replacementTitle: "Too many AI tools, too much context switching, and no shared place for marketing work.",
+    modeLabel: "Mode",
+    modeValue: "Brand Stack",
+    statusLabel: "Status",
+    statusValue: "Live",
     capabilitiesEyebrow: "Capabilities",
+    capabilityLabel: (index) => `Capability ${String(index).padStart(2, "0")}`,
     capabilityCards: [
       {
-        title: "Multi-model workspace",
-        description: "Use the right model for strategy, research, drafting, critique, and creative direction without moving the brief across tools.",
+        title: "Marketing content",
+        description: "Draft website copy, SEO content, campaign messaging, and launch assets without rebuilding the brief in every tool.",
       },
       {
-        title: "Marketing agents",
-        description: "Run repeatable workflows for brand strategy, growth planning, copywriting, website copy, SEO articles, images, and video scripts.",
+        title: "Research and planning",
+        description: "Keep market research, positioning notes, and creative direction attached to the same workspace that ships the work.",
       },
       {
-        title: "Shared team context",
-        description: "Keep company facts, brand rules, campaign decisions, permissions, credits, and conversation history in one workspace.",
+        title: "Reusable workflows",
+        description: "Turn repeatable tasks into shared workflows with saved context, team visibility, and room for advanced setup later.",
       },
     ],
-    workflowEyebrow: "Workflow",
-    workflowTitle: "Marketing workflow, not generic AI chat",
+    workflowEyebrow: "How it works",
+    workflowTitle: "Brief once, move across content, research, and workflow tasks faster",
     workflowDescription:
-      "The workspace is built for concrete marketing jobs: brand strategy, growth planning, SEO articles, website copy, image generation, and video scripts.",
+      "Start from one marketing brief, then keep the same context through positioning research, landing-page copy, SEO drafts, visuals, and team review.",
     workflows: [
       {
-        title: "Plan the campaign",
-        description: "Start with company context, audience, offer, and growth goal so the workspace understands the marketing problem.",
+        title: "Set shared context",
+        description: "Load the audience, offer, brand rules, and workflow goal once so the whole team starts from the same operating context.",
       },
       {
-        title: "Choose the right agent",
-        description: "Use brand, growth, copy, website, image, video, or research workflows instead of rebuilding prompts from scratch.",
+        title: "Run the right workflow",
+        description: "Switch between content, research, visual, and review workflows without moving the brief to another subscription.",
       },
       {
-        title: "Ship reusable assets",
-        description: "Generate campaign plans, landing page sections, articles, social posts, visuals, and scripts with decisions preserved.",
+        title: "Reuse what worked",
+        description: "Preserve the winning prompts, research decisions, and final assets so the next campaign starts with context instead of guesswork.",
       },
     ],
-    audienceEyebrow: "Who it fits",
-    audienceTitle: "Built for teams that need output",
-    exploreSolutionsCta: "Explore solutions",
+    audienceEyebrow: "Use cases",
+    audienceTitle: "Built for recurring marketing work",
+    exploreSolutionsCta: "Explore use cases",
+    useCaseLabel: (index) => `Use Case ${String(index).padStart(2, "0")}`,
+    openDetailLabel: "Open Detail",
     audienceCards: [
       {
-        title: "Small marketing teams",
-        description: "Consolidate content, visuals, website copy, and campaign planning without buying every AI tool separately.",
-        href: "/solutions/ai-for-small-marketing-teams",
+        title: "Marketing teams",
+        description: "Keep campaign planning, content production, and cross-model review in one operating workspace.",
+        href: "/use-cases/ai-workspace-for-marketing-teams",
       },
       {
-        title: "Agencies and consultants",
-        description: "Keep client context organized while producing campaign ideas, copy, visuals, and strategic recommendations.",
-        href: "/solutions/ai-for-agencies",
+        title: "SEO teams",
+        description: "Turn briefs, search intent, outlines, and article production into one shared workflow instead of scattered chat history.",
+        href: "/use-cases/ai-workspace-for-seo-teams",
       },
       {
-        title: "Startups and operators",
-        description: "Move from positioning to launch copy, outreach, articles, and growth experiments in one shared workspace.",
-        href: "/solutions/ai-for-startups",
+        title: "Content creators",
+        description: "Keep ideation, scripting, repurposing, and visual direction connected across every asset you publish.",
+        href: "/use-cases/ai-workspace-for-content-creators",
+      },
+      {
+        title: "Indie founders",
+        description: "Move from positioning and research to launch copy, visuals, and workflow decisions without buying a fragmented stack.",
+        href: "/use-cases/ai-workspace-for-indie-founders",
       },
     ],
     resources: [
-      { label: "Cost page", title: "Estimate AI subscription savings", href: "/resources/ai-subscription-cost-calculator" },
-      { label: "Comparison", title: "ChatGPT Team alternative", href: "/alternatives/chatgpt-team-alternative" },
-      { label: "Agent", title: "Growth marketing agent", href: "/agents/growth-marketing-agent" },
-      { label: "Visuals", title: "AI image generator for teams", href: "/agents/image-generation-agent" },
-      { label: "Pricing", title: "Shared-credit workspace plans", href: "/pricing" },
-      { label: "Prompts", title: "Marketing strategy prompts", href: "/prompts/marketing-strategy-prompts" },
+      { label: "Use case", title: "AI workspace for marketing teams", href: "/use-cases/ai-workspace-for-marketing-teams" },
+      { label: "SEO", title: "AI workspace for SEO teams", href: "/use-cases/ai-workspace-for-seo-teams" },
+      { label: "Compare", title: "Best AI workspace for marketing teams", href: "/compare/best-ai-workspace-for-marketing-teams" },
+      { label: "Costs", title: "Compare AI tool costs", href: "/compare/compare-ai-tool-costs" },
+      { label: "Pricing", title: "View workspace pricing", href: "/pricing" },
+      { label: "Alternative", title: "ChatGPT Team alternative", href: "/alternatives/chatgpt-team-alternative" },
     ],
-    pricingEyebrow: "Pricing at a glance",
-    pricingTitle: "Show pricing on the homepage, keep the full explanation on a dedicated page",
+    pricingEyebrow: "Pricing",
+    pricingTitle: "Use pricing to support the buying decision after the workflow is clear",
     pricingDescription:
-      "Homepage visitors should see the rough pricing shape quickly. The dedicated pricing page still matters as a conversion support page once they want plan details, credits, and usage guardrails.",
-    pricingCta: "Open full pricing page",
-    finalEyebrow: "Start small",
-    finalTitle: "Create one workspace before buying another AI subscription.",
-    finalDescription: "Give your team a shared place for models, marketing agents, company context, permissions, and credits.",
+      "Teams usually understand pricing faster after they have seen the use cases, cost tradeoffs, and reasons to keep multiple models in one workspace.",
+    pricingCta: "View Pricing",
+    faqEyebrow: "FAQ",
+    faqTitle: "Common questions before switching",
+    faqs: [
+      {
+        question: "Is this mainly a pricing play?",
+        answer: "No. The main value is one workspace for marketing content, research, visuals, and workflows. Pricing matters after the workflow fit is clear.",
+      },
+      {
+        question: "Who is this built for first?",
+        answer: "Marketing teams, SEO operators, creators, and indie founders who want one operating workspace instead of scattered AI subscriptions.",
+      },
+      {
+        question: "Do we have to choose one model?",
+        answer: "No. The point is to keep multiple models available while preserving shared context, reusable briefs, and team workflow visibility.",
+      },
+      {
+        question: "Can advanced teams keep their own setup?",
+        answer: "Yes. BYOK, private deployment, and deeper workflow tooling can sit behind the core workspace instead of confusing first-time visitors.",
+      },
+    ],
+    finalEyebrow: "Start with one workflow",
+    finalTitle: "Bring content, research, visuals, and workflow decisions into one workspace.",
+    finalDescription: "Start with one recurring marketing workflow, then expand into shared models, reusable context, and advanced setup options.",
+    signalLabel: (index) => `Signal ${String(index).padStart(2, "0")}`,
   },
   pricingGrid: {
     free: "Free",
@@ -249,11 +314,13 @@ const en: PublicCopy = {
   },
   pricingPage: {
     eyebrow: "Pricing",
-    title: "Shared-credit plans for small-team AI marketing work",
+    matrixLabel: "Pricing Matrix",
+    sharedWorkspaceLabel: "Shared Workspace",
+    title: "Pricing for a multi-model marketing workspace",
     description:
-      "Pricing works best as a support page, not the first thing visitors need to decode. Teams usually want to understand the workflow and savings first, then compare plans. This page gives the full plan view after the homepage, alternatives pages, and calculator have already framed the product.",
-    primaryCta: "Create your workspace",
-    calculatorCta: "Calculate AI tool savings",
+      "Pricing works best after teams understand the workspace, use cases, and cost tradeoffs. This page explains plans, credits, and where BYOK or upgrades fit.",
+    primaryCta: "Start Free",
+    calculatorCta: "Compare AI Tool Costs",
     guardrailsTitle: "Pricing guardrails",
     guardrails: [
       {
@@ -275,110 +342,150 @@ const en: PublicCopy = {
 const zh: PublicCopy = {
   header: {
     productName: "AI Marketing",
-    tagline: "小团队营销工作台",
+    tagline: "多模型营销工作台",
+    brandOpsReady: "品牌运营就绪",
     login: "登录",
-    startWorkspace: "开始使用",
+    startWorkspace: "免费开始",
     navItems: [
       { key: "alternatives", label: "替代方案", href: NAV_LINKS.alternatives },
       { key: "compare", label: "产品对比", href: NAV_LINKS.compare },
-      { key: "solutions", label: "解决方案", href: NAV_LINKS.solutions },
-      { key: "calculator", label: "成本计算器", href: NAV_LINKS.calculator },
+      { key: "solutions", label: "使用场景", href: NAV_LINKS.solutions },
+      { key: "calculator", label: "AI 成本", href: NAV_LINKS.calculator },
+      { key: "tools", label: "工具", href: NAV_LINKS.tools },
       { key: "pricing", label: "价格", href: NAV_LINKS.pricing },
     ],
   },
   footer: {
+    systemFooterLabel: "系统页脚",
     description:
-      "面向小团队的共享 AI 营销工作台，把多模型、专家 Agent、企业上下文与更可控的订阅成本集中到一个地方。",
+      "一个面向营销内容、调研、视觉和工作流的多模型 AI 工作台，并为 BYOK、团队上下文和私有部署预留扩展空间。",
     contact: "联系邮箱",
-    copyright: (year) => `© ${year} AI Marketing。为小团队营销执行而建。`,
+    copyright: (year) => `© ${year} AI Marketing。为营销团队、内容创作者和独立操盘者而建。`,
   },
   home: {
-    eyebrow: "高性价比的多模型 AI 营销工作台",
-    title: "一个面向小团队的 AI Marketing 工作台",
+    eyebrow: "面向现代营销团队的多模型 AI 工作台",
+    systemLabel: "AI 营销系统",
+    campaignControlLabel: "活动控制台",
+    title: "一个工作台，接入多个 AI 模型",
     description:
-      "不必再分别为 ChatGPT、Claude、Gemini、写作工具、图片工具和营销顾问重复付费。AI Marketing 把多种 AI 模型、营销专家 Agent、企业上下文和权限体系统一放进一个工作台。",
-    primaryCta: "开启团队工作台",
-    compareCta: "对比 ChatGPT Team",
-    calculatorCta: "计算 AI 工具节省",
+      "在一个地方完成营销内容、市场调研、视觉生成和 AI 工作流管理。",
+    supportingCopy:
+      "适合营销人员、SEO 操作手、独立创始人和希望减少工具切换、提高产出的团队。",
+    primaryCta: "免费开始",
+    compareCta: "查看价格",
+    calculatorCta: "查看使用场景",
     demoCta: "打开演示",
     trustPoints: [
-      "多个 AI 模型统一在一个共享工作台中使用",
-      "覆盖品牌、增长、文案、网站、视频和图片的营销 Agent",
-      "团队权限、企业上下文和共享积分统一管理",
+      "同时使用多个 AI 模型，同时保留共享 brief 和活动上下文。",
+      "把调研、内容、视觉和工作流执行放进同一个系统，而不是分散在多个订阅里。",
+      "当工作流成熟后，再接入 BYOK、团队权限和私有部署选项。",
     ],
-    replacementEyebrow: "替代工具堆叠",
-    replacementStack: ["ChatGPT", "Claude", "Gemini", "AI 写作工具", "AI 图片工具", "营销顾问"],
-    sharedOutputLabel: "共享工作台产出",
-    replacementTitle: "从同一份上下文里产出活动策略、文案、图片、网站和视频脚本。",
+    replacementEyebrow: "问题",
+    replacementStack: ["ChatGPT", "Claude", "Gemini", "AI 写作工具", "AI 图片工具", "自动化工具"],
+    sharedOutputLabel: "团队真正想解决的事",
+    replacementTitle: "AI 工具太多、上下文切换太频繁，而且没有一个共享的营销工作空间。",
+    modeLabel: "模式",
+    modeValue: "品牌工作栈",
+    statusLabel: "状态",
+    statusValue: "运行中",
     capabilitiesEyebrow: "核心能力",
+    capabilityLabel: (index) => `能力 ${String(index).padStart(2, "0")}`,
     capabilityCards: [
       {
-        title: "多模型工作台",
-        description: "针对策略、调研、起草、批判和创意方向选择最合适的模型，不需要在多工具之间搬运 brief。",
+        title: "营销内容",
+        description: "围绕同一份 brief 产出网站文案、SEO 内容、活动信息和上线素材，不必在每个工具里重讲背景。",
       },
       {
-        title: "营销专家 Agent",
-        description: "把品牌策略、增长规划、文案写作、网站文案、SEO 文章、图片和视频脚本沉淀成可复用流程。",
+        title: "调研与规划",
+        description: "让市场调研、定位笔记和创意方向留在同一个工作台里，再继续推进后续执行。",
       },
       {
-        title: "共享团队上下文",
-        description: "把企业事实、品牌规则、活动决策、权限、积分和历史对话统一保存在一个工作台里。",
+        title: "可复用工作流",
+        description: "把高频任务沉淀成共享工作流，保留上下文、团队可见性，并为后续高级配置留出空间。",
       },
     ],
-    workflowEyebrow: "工作流",
-    workflowTitle: "不是通用 AI 聊天，而是营销执行工作流",
+    workflowEyebrow: "工作方式",
+    workflowTitle: "同一份 brief，贯穿内容、调研和工作流任务",
     workflowDescription:
-      "这个工作台围绕真实营销任务设计，包括品牌策略、增长规划、SEO 文章、网站文案、图片生成和视频脚本。",
+      "从定位调研开始，把同一份上下文持续带到落地页文案、SEO 草稿、视觉素材和团队复核环节。",
     workflows: [
       {
-        title: "先规划活动",
-        description: "先输入企业背景、受众、产品和增长目标，让工作台真正理解你的营销问题。",
+        title: "先建立共享上下文",
+        description: "先录入受众、产品、品牌规则和本次目标，让整个团队围绕同一个营销背景展开工作。",
       },
       {
-        title: "选择合适的 Agent",
-        description: "直接使用品牌、增长、文案、网站、图片、视频或调研流程，而不是每次从零拼提示词。",
+        title: "再运行合适的工作流",
+        description: "在内容、调研、视觉和复核工作流之间切换，而不是把 brief 拆到不同订阅里重新开始。",
       },
       {
-        title: "产出可复用资产",
-        description: "生成活动方案、落地页结构、文章、社媒内容、视觉素材和脚本，并把关键决策保留下来。",
+        title: "最后复用有效结果",
+        description: "把成功的提示词、调研结论和最终资产保留下来，让下一次活动从已有上下文起步。",
       },
     ],
-    audienceEyebrow: "适合谁",
-    audienceTitle: "为真正需要产出的团队而建",
-    exploreSolutionsCta: "查看解决方案",
+    audienceEyebrow: "使用场景",
+    audienceTitle: "为高频营销工作而建",
+    exploreSolutionsCta: "查看使用场景",
+    useCaseLabel: (index) => `场景 ${String(index).padStart(2, "0")}`,
+    openDetailLabel: "查看详情",
     audienceCards: [
       {
-        title: "小型营销团队",
-        description: "把内容、视觉、网站文案和活动规划收敛到一个工作台，不必再分别采购每一种 AI 工具。",
-        href: "/solutions/ai-for-small-marketing-teams",
+        title: "营销团队",
+        description: "把活动规划、内容生产和跨模型复核统一收敛到同一个工作台里。",
+        href: "/use-cases/ai-workspace-for-marketing-teams",
       },
       {
-        title: "代理商与顾问",
-        description: "在管理客户上下文的同时，持续产出活动思路、文案、视觉和策略建议。",
-        href: "/solutions/ai-for-agencies",
+        title: "SEO 团队",
+        description: "把 brief、搜索意图、文章结构和内容生产串成一条共享流程，而不是散落在聊天记录里。",
+        href: "/use-cases/ai-workspace-for-seo-teams",
       },
       {
-        title: "创业团队与业务负责人",
-        description: "从定位一路推进到上线文案、外联、文章和增长实验，全部放在同一个共享工作台里。",
-        href: "/solutions/ai-for-startups",
+        title: "内容创作者",
+        description: "让选题、脚本、改写和视觉方向保持连贯，不再为每一种资产切换工具和上下文。",
+        href: "/use-cases/ai-workspace-for-content-creators",
+      },
+      {
+        title: "独立创始人",
+        description: "从定位、调研到上线文案和视觉决策，用一个工作台替代碎片化 AI 工具栈。",
+        href: "/use-cases/ai-workspace-for-indie-founders",
       },
     ],
     resources: [
-      { label: "成本页", title: "估算 AI 订阅节省", href: "/resources/ai-subscription-cost-calculator" },
-      { label: "对比", title: "ChatGPT Team 替代方案", href: "/alternatives/chatgpt-team-alternative" },
-      { label: "Agent", title: "增长营销 Agent", href: "/agents/growth-marketing-agent" },
-      { label: "视觉", title: "团队 AI 图片生成器", href: "/agents/image-generation-agent" },
-      { label: "价格", title: "共享积分工作台套餐", href: "/pricing" },
-      { label: "提示词", title: "营销策略提示词", href: "/prompts/marketing-strategy-prompts" },
+      { label: "场景", title: "面向营销团队的 AI 工作台", href: "/use-cases/ai-workspace-for-marketing-teams" },
+      { label: "SEO", title: "面向 SEO 团队的 AI 工作台", href: "/use-cases/ai-workspace-for-seo-teams" },
+      { label: "对比", title: "营销团队适合什么 AI 工作台", href: "/compare/best-ai-workspace-for-marketing-teams" },
+      { label: "成本", title: "对比 AI 工具成本", href: "/compare/compare-ai-tool-costs" },
+      { label: "价格", title: "查看工作台价格", href: "/pricing" },
+      { label: "替代", title: "ChatGPT Team 替代方案", href: "/alternatives/chatgpt-team-alternative" },
     ],
-    pricingEyebrow: "价格概览",
-    pricingTitle: "首页先说明价格结构，完整解释放到独立价格页",
+    pricingEyebrow: "价格",
+    pricingTitle: "先看工作流是否匹配，再用价格页支持决策",
     pricingDescription:
-      "访问首页的人应该先快速看懂价格大致形态；当他们想比较套餐、积分和使用边界时，再进入完整价格页。",
-    pricingCta: "查看完整价格页",
-    finalEyebrow: "先从小开始",
-    finalTitle: "在再买一个 AI 订阅之前，先创建一个共享工作台。",
-    finalDescription: "把模型、营销 Agent、企业上下文、权限和积分集中到团队共享的一个地方。",
+      "团队通常会先理解工作台、使用场景和成本取舍，然后才需要比较套餐、积分和 BYOK 等更细的配置边界。",
+    pricingCta: "查看价格",
+    faqEyebrow: "常见问题",
+    faqTitle: "切换前最常见的几个问题",
+    faqs: [
+      {
+        question: "这主要是在讲价格吗？",
+        answer: "不是。核心价值是把营销内容、调研、视觉和工作流放进一个工作台。价格是在确认工作流匹配之后才进入比较。",
+      },
+      {
+        question: "这个产品最先适合谁？",
+        answer: "最先适合营销团队、SEO 操作手、内容创作者和独立创始人，他们更需要一个统一工作空间，而不是更多分散的 AI 订阅。",
+      },
+      {
+        question: "我们必须只选一个模型吗？",
+        answer: "不需要。重点是保留多个模型的可用性，同时把共享上下文、可复用 brief 和团队可见性留在一个地方。",
+      },
+      {
+        question: "高级团队还能保留自己的配置吗？",
+        answer: "可以。BYOK、私有部署和更深的工作流集成应该放在升级层，而不是成为新访客进入首页后的第一层叙事。",
+      },
+    ],
+    finalEyebrow: "先从一个流程开始",
+    finalTitle: "把内容、调研、视觉和工作流决策放进同一个工作台。",
+    finalDescription: "先把一个高频营销流程迁进来，再逐步扩展到共享模型、可复用上下文和高级配置选项。",
+    signalLabel: (index) => `信号 ${String(index).padStart(2, "0")}`,
   },
   pricingGrid: {
     free: "免费",
@@ -397,11 +504,13 @@ const zh: PublicCopy = {
   },
   pricingPage: {
     eyebrow: "价格",
-    title: "面向小团队 AI 营销工作的共享积分套餐",
+    matrixLabel: "价格矩阵",
+    sharedWorkspaceLabel: "共享工作台",
+    title: "面向多模型营销工作台的价格方案",
     description:
-      "价格页更适合作为决策支持页，而不是访客第一次接触产品时就要消化的页面。团队通常会先理解工作流和节省空间，再来比较套餐。这个页面负责补齐完整的套餐信息。",
-    primaryCta: "创建工作台",
-    calculatorCta: "计算 AI 工具节省",
+      "价格页更适合作为决策支持页。团队通常会先理解工作台、使用场景和成本取舍，再来比较套餐、积分，以及 BYOK 或升级的边界。",
+    primaryCta: "免费开始",
+    calculatorCta: "对比 AI 工具成本",
     guardrailsTitle: "价格边界说明",
     guardrails: [
       {
@@ -421,7 +530,29 @@ const zh: PublicCopy = {
 }
 
 export function getPublicCopy(locale: AppLocale): PublicCopy {
-  return locale === "zh" ? zh : en
+  const base = locale === "zh" ? zh : en
+
+  return {
+    ...base,
+    header: {
+      ...base.header,
+      navItems: base.header.navItems.map((item) => ({
+        ...item,
+        href: localizePublicPath(item.href, locale),
+      })),
+    },
+    home: {
+      ...base.home,
+      audienceCards: base.home.audienceCards.map((card) => ({
+        ...card,
+        href: localizePublicPath(card.href, locale),
+      })),
+      resources: base.home.resources.map((resource) => ({
+        ...resource,
+        href: localizePublicPath(resource.href, locale),
+      })),
+    },
+  }
 }
 
 function formatNumber(value: number, locale: AppLocale) {

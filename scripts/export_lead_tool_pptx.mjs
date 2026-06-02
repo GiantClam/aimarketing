@@ -1,6 +1,80 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { ensureArtifactToolWorkspace, importArtifactTool, createSlideContext } from "/Users/beihuang/.codex/plugins/cache/openai-primary-runtime/presentations/26.521.10419/skills/presentations/scripts/artifact_tool_utils.mjs";
+import { pathToFileURL } from "node:url";
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getVersionedArtifactToolUtilsCandidates() {
+  const presentationsRoot = path.join(
+    os.homedir(),
+    ".codex",
+    "plugins",
+    "cache",
+    "openai-primary-runtime",
+    "presentations",
+  );
+
+  try {
+    const entries = await fs.readdir(presentationsRoot, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .sort((left, right) => right.name.localeCompare(left.name))
+      .map((entry) =>
+        path.join(
+          presentationsRoot,
+          entry.name,
+          "skills",
+          "presentations",
+          "scripts",
+          "artifact_tool_utils.mjs",
+        ),
+      );
+  } catch {
+    return [];
+  }
+}
+
+async function resolveArtifactToolUtilsPath() {
+  const candidates = [
+    process.env.CODEX_ARTIFACT_TOOL_UTILS_PATH,
+    path.join(
+      os.homedir(),
+      ".cache",
+      "codex-runtimes",
+      "codex-primary-runtime",
+      "plugins",
+      "openai-primary-runtime",
+      "plugins",
+      "presentations",
+      "skills",
+      "presentations",
+      "scripts",
+      "artifact_tool_utils.mjs",
+    ),
+    ...(await getVersionedArtifactToolUtilsCandidates()),
+  ].filter((value) => typeof value === "string" && value.trim().length > 0);
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error("artifact_tool_utils_not_found");
+}
+
+async function loadArtifactToolUtils() {
+  const utilsPath = await resolveArtifactToolUtilsPath();
+  return await import(pathToFileURL(utilsPath).href);
+}
 
 function requireArg(args, key) {
   const index = args.indexOf(key);
@@ -45,6 +119,7 @@ async function main() {
   const payloadPath = path.resolve(requireArg(process.argv, "--payload"));
   const outputPath = path.resolve(requireArg(process.argv, "--output"));
   const workspace = path.resolve(requireArg(process.argv, "--workspace"));
+  const { ensureArtifactToolWorkspace, importArtifactTool, createSlideContext } = await loadArtifactToolUtils();
 
   const payload = JSON.parse(await fs.readFile(payloadPath, "utf8"));
   const { deck, variant } = payload;

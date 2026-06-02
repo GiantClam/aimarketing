@@ -1,12 +1,27 @@
-import { generateStructuredObjectWithWriterModel, hasAibermApiKey, hasCrazyrouteApiKey } from "@/lib/writer/aiberm"
+import { generateText } from "ai"
+import { createOpenAI } from "@ai-sdk/openai"
+
+import { executeAiEntryWithProviderFailover, getConfiguredAiEntryProviders } from "@/lib/ai-entry/provider-routing"
+import { generateStructuredObjectWithWriterModel, generateTextWithWriterModel, hasAibermApiKey, hasCrazyrouteApiKey } from "@/lib/writer/aiberm"
 import { getLeadToolFinalModel, getLeadToolPreviewModel } from "@/lib/lead-tools/config"
 import {
-  buildPptPreviewDeckFromPlan,
+  buildPreviewStyleBody,
+  buildPreviewStyleBullet,
+  buildPreviewStyleKicker,
+  buildPreviewStyleTitle,
+  buildPreviewSystemPrompt,
+  buildPreviewUserPrompt,
+  isPreviewPlaceholder,
+} from "@/lib/lead-tools/ppt-preview-copy"
+import {
+  buildPptPreviewDeckFromPlans,
   buildMockPptPreview,
   type PptPreviewDeck,
   type PptPreviewRequest,
   type PptPreviewSlide,
-} from "@/lib/lead-tools/ppt-preview-data"
+  pptPreviewStyles,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { renderPptPreviewDeckAssets } from "@/lib/lead-tools/ppt-master-preview"
 import { buildMockSeoMetaPreview, type SeoMetaPreview, type SeoMetaRequest, type SeoMetaVariant } from "@/lib/lead-tools/seo-meta-data"
 
 type LeadToolPptPlan = {
@@ -24,48 +39,6 @@ type LeadToolPptPlan = {
 type LeadToolSeoPlan = {
   summary: string
   variants: [SeoMetaVariant, SeoMetaVariant, SeoMetaVariant]
-}
-
-function buildPptPlanSchema() {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["title", "outline", "slides"],
-    properties: {
-      title: { type: "string" },
-      outline: {
-        type: "array",
-        minItems: 5,
-        maxItems: 5,
-        items: { type: "string" },
-      },
-      slides: {
-        type: "array",
-        minItems: 5,
-        maxItems: 5,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["layout", "kicker", "title", "body", "bullets"],
-          properties: {
-            layout: {
-              type: "string",
-              enum: ["cover", "agenda", "insight", "comparison", "timeline"],
-            },
-            kicker: { type: "string" },
-            title: { type: "string" },
-            body: { type: "string" },
-            bullets: {
-              type: "array",
-              minItems: 2,
-              maxItems: 4,
-              items: { type: "string" },
-            },
-          },
-        },
-      },
-    },
-  } satisfies Record<string, unknown>
 }
 
 function buildSeoPlanSchema() {
@@ -106,35 +79,11 @@ function buildSeoPlanSchema() {
 }
 
 function buildPptSystemPrompt(language: PptPreviewRequest["language"]) {
-  if (language === "zh-CN") {
-    return [
-      "你是一个专业的演示文稿策划助手。",
-      "目标是为用户生成一个适合商业展示的 5 页 PPT 内容规划。",
-      "必须输出中文。",
-      "必须严格返回结构化结果，不要输出 JSON 之外的说明。",
-      "slides 顺序固定为: cover, agenda, insight, comparison, timeline。",
-      "每页 body 控制在 1-2 句，bullets 保持 2-4 条，可直接放到 PPT。",
-    ].join(" ")
-  }
-
-  return [
-    "You are a presentation strategist.",
-    "Generate a business-ready 5-slide PPT content plan.",
-    "Output in English only.",
-    "Return structured data only.",
-    "Keep slide order fixed as: cover, agenda, insight, comparison, timeline.",
-    "Each body should be 1-2 sentences and bullets should be concise and presentation-ready.",
-  ].join(" ")
+  return buildPreviewSystemPrompt(language)
 }
 
 function buildPptUserPrompt(request: PptPreviewRequest) {
-  return [
-    `Topic: ${request.prompt}`,
-    `Scenario: ${request.scenario}`,
-    `Language: ${request.language}`,
-    "Generate a concrete PPT plan that feels ready for a real customer-facing preview.",
-    "Avoid placeholders and generic wording.",
-  ].join("\n")
+  return buildPreviewUserPrompt(request)
 }
 
 function buildSeoSystemPrompt(language: SeoMetaRequest["language"]) {
@@ -167,26 +116,294 @@ function buildSeoUserPrompt(request: SeoMetaRequest) {
 }
 
 export function hasLeadToolGenerationProvider() {
-  return hasAibermApiKey() || hasCrazyrouteApiKey()
+  return (
+    hasLeadToolMinimaxProvider() ||
+    hasLeadToolStepfunProvider() ||
+    Boolean(getConfiguredAiEntryProviders().length) ||
+    hasAibermApiKey() ||
+    hasCrazyrouteApiKey()
+  )
+}
+
+function normalizeText(raw: unknown) {
+  return typeof raw === "string" ? raw.trim() : ""
+}
+
+function getLeadToolMinimaxConfig() {
+  const apiKey = normalizeText(process.env.LEAD_TOOLS_MINIMAX_API_KEY)
+  const baseURL = normalizeText(process.env.LEAD_TOOLS_MINIMAX_BASE_URL) || "https://api.minimaxi.com/v1"
+  const model = normalizeText(process.env.LEAD_TOOLS_MINIMAX_MODEL)
+
+  return {
+    apiKey,
+    baseURL,
+    model,
+  }
+}
+
+function getLeadToolStepfunConfig() {
+  const apiKey = normalizeText(process.env.LEAD_TOOLS_STEPFUN_API_KEY || process.env.STEPFUN_API_KEY)
+  const baseURL =
+    normalizeText(process.env.LEAD_TOOLS_STEPFUN_BASE_URL || process.env.STEPFUN_BASE_URL) ||
+    "https://api.stepfun.com/v1"
+  const model = normalizeText(process.env.LEAD_TOOLS_STEPFUN_MODEL || process.env.STEPFUN_MODEL)
+
+  return {
+    apiKey,
+    baseURL,
+    model,
+  }
+}
+
+function hasLeadToolMinimaxProvider() {
+  const config = getLeadToolMinimaxConfig()
+  return Boolean(config.apiKey && config.baseURL && config.model)
+}
+
+function hasLeadToolStepfunProvider() {
+  const config = getLeadToolStepfunConfig()
+  return Boolean(config.apiKey && config.baseURL)
+}
+
+function hasLeadToolPptokenProvider() {
+  return getConfiguredAiEntryProviders().some((provider) => provider.id === "pptoken")
+}
+
+async function generateTextWithLeadToolPreviewProvider(params: {
+  systemPrompt: string
+  userPrompt: string
+  model: string
+}) {
+  if (hasLeadToolMinimaxProvider()) {
+    const config = getLeadToolMinimaxConfig()
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    })
+
+    const response = await generateText({
+      model: provider.chat(config.model || params.model),
+      system: params.systemPrompt,
+      prompt: params.userPrompt,
+    })
+
+    const text = response.text.trim()
+    if (!text) {
+      throw new Error("lead_tool_preview_empty_response")
+    }
+
+    return {
+      text,
+      providerId: "minimax",
+      model: config.model || params.model,
+    }
+  }
+
+  if (hasLeadToolStepfunProvider()) {
+    const config = getLeadToolStepfunConfig()
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    })
+
+    const response = await generateText({
+      model: provider.chat(config.model || params.model),
+      system: params.systemPrompt,
+      prompt: params.userPrompt,
+    })
+
+    const text = response.text.trim()
+    if (!text) {
+      throw new Error("lead_tool_preview_empty_response")
+    }
+
+    return {
+      text,
+      providerId: "stepfun",
+      model: config.model || params.model,
+    }
+  }
+
+  if (hasLeadToolPptokenProvider()) {
+    const result = await executeAiEntryWithProviderFailover(
+      async (providerRun) => {
+        const response = await generateText({
+          model: providerRun.provider.chat(providerRun.model),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
+
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+      {
+        preferredProviderId: "pptoken",
+        preferredModel: params.model,
+        forcePreferredProvider: true,
+      },
+    )
+
+    return {
+      text: result.result,
+      providerId: result.providerId,
+      model: result.model,
+    }
+  }
+
+  const text = await generateTextWithWriterModel(params.systemPrompt, params.userPrompt, params.model, {
+    temperature: 0.45,
+    maxTokens: 1400,
+    timeoutMs: 36_000,
+    totalTimeoutMs: 42_000,
+  })
+
+  return {
+    text,
+    providerId: hasAibermApiKey() ? "aiberm" : hasCrazyrouteApiKey() ? "crazyroute" : "writer",
+    model: params.model,
+  }
+}
+
+function stripMarkdownDecorations(value: string) {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim()
+}
+
+function looksLikePlaceholder(value: string) {
+  return isPreviewPlaceholder(value)
+}
+
+function extractJsonObjectBlock(rawText: string) {
+  const cleanedText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
+  const candidates: string[] = []
+
+  for (const match of cleanedText.matchAll(/```json\s*([\s\S]*?)```/gi)) {
+    if (match[1]?.trim()) {
+      candidates.push(match[1].trim())
+    }
+  }
+
+  for (const match of cleanedText.matchAll(/```\s*([\s\S]*?)```/gi)) {
+    if (match[1]?.trim()) {
+      candidates.push(match[1].trim())
+    }
+  }
+
+  const slidesObjectMatch = cleanedText.match(/\{[\s\S]*"slides"\s*:\s*\[[\s\S]*\}\s*$/i)
+  if (slidesObjectMatch?.[0]?.trim()) {
+    candidates.push(slidesObjectMatch[0].trim())
+  }
+
+  const firstBrace = cleanedText.indexOf("{")
+  const lastBrace = cleanedText.lastIndexOf("}")
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(cleanedText.slice(firstBrace, lastBrace + 1))
+  }
+
+  for (const candidate of candidates) {
+    try {
+      JSON.parse(candidate)
+      return candidate
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error("ppt_preview_json_missing")
+}
+
+function normalizeBasePlan(rawPlan: any, request: PptPreviewRequest): LeadToolPptPlan {
+  const fallbackLayouts: PptPreviewSlide["layout"][] = ["cover", "agenda", "insight", "comparison", "timeline"]
+  const fallbackTitle = request.prompt.trim()
+  const rawSlides = Array.isArray(rawPlan?.slides) ? rawPlan.slides : []
+
+  const slides = fallbackLayouts.map((layout, index) => {
+    const rawSlide = rawSlides[index] ?? {}
+    const titleCandidate = typeof rawSlide?.title === "string" ? stripMarkdownDecorations(rawSlide.title) : ""
+    const bodyCandidate = typeof rawSlide?.body === "string" ? stripMarkdownDecorations(rawSlide.body) : ""
+    const kickerCandidate = typeof rawSlide?.kicker === "string" ? stripMarkdownDecorations(rawSlide.kicker) : ""
+    const bulletCandidates = Array.isArray(rawSlide?.bullets)
+      ? rawSlide.bullets.map((item: unknown) => (typeof item === "string" ? stripMarkdownDecorations(item) : "")).filter(Boolean)
+      : []
+
+    return {
+      layout,
+      kicker: kickerCandidate || `Slide ${index + 1}`,
+      title: titleCandidate || (index === 0 ? fallbackTitle : `${fallbackTitle} · ${layout}`),
+      body: bodyCandidate || `${fallbackTitle} 的第 ${index + 1} 页需要更明确的判断和解释。`,
+      bullets: (bulletCandidates.length ? bulletCandidates : [`聚焦 ${fallbackTitle}`, `完成 ${layout} 页表达`]).slice(0, 4),
+    }
+  }) as LeadToolPptPlan["slides"]
+
+  const rawOutline = Array.isArray(rawPlan?.outline)
+    ? rawPlan.outline.map((item: unknown) => (typeof item === "string" ? stripMarkdownDecorations(item) : "")).filter(Boolean)
+    : []
+
+  const normalizedTitle =
+    typeof rawPlan?.title === "string" && !looksLikePlaceholder(rawPlan.title)
+      ? stripMarkdownDecorations(rawPlan.title)
+      : fallbackTitle
+
+  const normalizedOutline = (rawOutline.length >= 5 ? rawOutline : slides.map((slide) => slide.title).slice(0, 5)) as LeadToolPptPlan["outline"]
+
+  slides[0] = {
+    ...slides[0],
+    title: fallbackTitle,
+  }
+
+  return {
+    title: normalizedTitle,
+    outline: normalizedOutline,
+    slides,
+  }
+}
+
+function buildStyledPlans(basePlan: LeadToolPptPlan, request: PptPreviewRequest) {
+  return (providerId: string) => pptPreviewStyles.map((style) => ({
+    styleKey: style.key,
+    title: basePlan.title,
+    outline: basePlan.outline,
+    provider: providerId,
+    slides: basePlan.slides.map((slide) => {
+      const baseTitle = slide.title || basePlan.title || request.prompt.trim()
+      const baseBody = slide.body || request.prompt.trim()
+      return {
+        ...slide,
+        kicker: buildPreviewStyleKicker(style.key, slide.layout, request.language),
+        title: buildPreviewStyleTitle(style.key, slide.layout, baseTitle, request.prompt.trim(), request.language),
+        body: buildPreviewStyleBody(style.key, baseBody, request.language),
+        bullets: slide.bullets.map((bullet, index) => buildPreviewStyleBullet(style.key, bullet, index, request.language)),
+      }
+    }),
+  }))
 }
 
 export async function generateLeadToolPptPreview(request: PptPreviewRequest): Promise<PptPreviewDeck> {
-  const plan = (await generateStructuredObjectWithWriterModel({
-    model: getLeadToolPreviewModel("ai-ppt-preview"),
-    systemPrompt: buildPptSystemPrompt(request.language),
+  const providerResult = await generateTextWithLeadToolPreviewProvider({
+    systemPrompt: [
+      buildPptSystemPrompt(request.language),
+      request.language === "zh-CN"
+        ? "只输出一个 JSON 对象，不要 markdown，不要解释。"
+        : "Return only one JSON object with no markdown and no explanation.",
+    ].join(" "),
     userPrompt: buildPptUserPrompt(request),
-    toolName: "return_ppt_preview_plan",
-    toolDescription: "Return a concise 5-slide PPT preview plan for the requested topic.",
-    jsonSchema: buildPptPlanSchema(),
-    options: {
-      temperature: 0.6,
-      maxTokens: 2200,
-      timeoutMs: 60_000,
-      totalTimeoutMs: 75_000,
-    },
-  })) as LeadToolPptPlan
+    model: getLeadToolPreviewModel("ai-ppt-preview"),
+  })
+  const rawPlan = JSON.parse(extractJsonObjectBlock(providerResult.text))
+  const basePlan = normalizeBasePlan(rawPlan, request)
+  const plans = buildStyledPlans(basePlan, request)(providerResult.providerId)
 
-  return buildPptPreviewDeckFromPlan(request, plan)
+  return {
+    ...renderPptPreviewDeckAssets(buildPptPreviewDeckFromPlans(request, plans)),
+    previewModel: providerResult.model,
+  }
 }
 
 export async function generateLeadToolSeoPreview(request: SeoMetaRequest): Promise<SeoMetaPreview> {
@@ -222,7 +439,7 @@ export async function generateLeadToolPptPreviewWithFallback(
 ): Promise<PptPreviewDeck> {
   if (!hasLeadToolGenerationProvider()) {
     if (allowMockFallback) {
-      return buildMockPptPreview(request)
+      return renderPptPreviewDeckAssets(buildMockPptPreview(request))
     }
 
     throw new Error("lead_tool_provider_missing")
@@ -235,7 +452,7 @@ export async function generateLeadToolPptPreviewWithFallback(
       console.warn("lead-tools.ppt.preview.fallback", {
         message: error instanceof Error ? error.message : String(error),
       })
-      return buildMockPptPreview(request)
+      return renderPptPreviewDeckAssets(buildMockPptPreview(request))
     }
 
     throw error

@@ -17,6 +17,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       hasAibermApiKey: () => providerAvailable,
       hasCrazyrouteApiKey: () => false,
       generateStructuredObjectWithWriterModel: async () => structuredResponse,
+      generateTextWithWriterModel: async () => JSON.stringify(structuredResponse),
     }
   }
 
@@ -78,7 +79,7 @@ test("uses real structured PPT plan when provider is available", async () => {
 
   assert.equal(deck.title, "Revenue expansion deck")
   assert.equal(deck.outline[0], "Problem")
-  assert.equal(deck.variants[0]?.slides[0]?.title, "Revenue expansion deck")
+  assert.match(deck.variants[0]?.slides[0]?.title ?? "", /Ignored by structured response/i)
   assert.equal(deck.variants[0]?.slides[0]?.accent, deck.variants[0]?.palette.accent)
 })
 

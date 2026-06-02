@@ -3,20 +3,45 @@ import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
 
-import type { PptPreviewDeck, PptPreviewVariant } from "@/lib/lead-tools/ppt-preview-data"
-
-const ARTIFACT_NODE_BIN = process.env.CODEX_ARTIFACT_NODE_BIN || path.join(
-  process.env.HOME || "",
-  ".cache",
-  "codex-runtimes",
-  "codex-primary-runtime",
-  "dependencies",
-  "node",
-  "bin",
-  "node",
-)
+import type { PptPreviewDeck, PptPreviewVariant } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 const EXPORT_SCRIPT_PATH = path.join(process.cwd(), "scripts", "export_lead_tool_pptx.mjs")
+
+function getBundledArtifactNodeBinCandidate() {
+  return path.join(
+    os.homedir(),
+    ".cache",
+    "codex-runtimes",
+    "codex-primary-runtime",
+    "dependencies",
+    "node",
+    "bin",
+    process.platform === "win32" ? "node.exe" : "node",
+  )
+}
+
+async function resolveArtifactNodeBin() {
+  const candidates = [
+    process.env.CODEX_ARTIFACT_NODE_BIN,
+    process.execPath,
+    getBundledArtifactNodeBinCandidate(),
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+
+  for (const candidate of candidates) {
+    if (!path.isAbsolute(candidate)) {
+      return candidate
+    }
+
+    try {
+      await fs.access(candidate)
+      return candidate
+    } catch {
+      continue
+    }
+  }
+
+  return process.platform === "win32" ? "node.exe" : "node"
+}
 
 function slugify(value: string) {
   return value
@@ -28,11 +53,11 @@ function slugify(value: string) {
 }
 
 async function runNodeScript(args: string[]) {
-  await fs.access(ARTIFACT_NODE_BIN)
   await fs.access(EXPORT_SCRIPT_PATH)
+  const nodeBin = await resolveArtifactNodeBin()
 
   return await new Promise<void>((resolve, reject) => {
-    const child = spawn(ARTIFACT_NODE_BIN, [EXPORT_SCRIPT_PATH, ...args], {
+    const child = spawn(nodeBin, [EXPORT_SCRIPT_PATH, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
     })

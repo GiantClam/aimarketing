@@ -1,12 +1,14 @@
 import type { Metadata } from "next"
 
-import { buildAppUrl, getAppBaseUrl } from "@/lib/app-url"
+import { getAppBaseUrl } from "@/lib/app-url"
+import type { AppLocale } from "@/lib/i18n/config"
+import { buildLocalizedPublicUrl, getLocalizedPublicAlternates } from "@/lib/i18n/routing"
 import type { SeoPage } from "@/lib/seo/pages"
 import { seoPathForPage } from "@/lib/seo/pages"
 
-export function metadataForSeoPage(page: SeoPage): Metadata {
+export function metadataForSeoPage(page: SeoPage, locale: AppLocale): Metadata {
   const path = seoPathForPage(page)
-  const canonical = buildAppUrl(path)
+  const canonical = buildLocalizedPublicUrl(path, locale)
 
   return {
     title: {
@@ -15,6 +17,7 @@ export function metadataForSeoPage(page: SeoPage): Metadata {
     description: page.description,
     alternates: {
       canonical,
+      languages: getLocalizedPublicAlternates(path),
     },
     openGraph: {
       title: page.title,

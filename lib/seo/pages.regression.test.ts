@@ -39,7 +39,7 @@ test("jasper alternative page includes vendor-specific copy instead of shared bo
   assert.equal(page.sections[7]?.heading, "What a Jasper-heavy workflow usually leaves outside the writing tool")
   assert.match(page.comparison?.rows[0]?.first || "", /Jasper/i)
   assert.equal(page.highlights[0]?.includes("Jasper"), true)
-  assert.equal(page.relatedLinks.some((link) => link.href === "/compare/best-ai-workspace-for-small-teams"), true)
+  assert.equal(page.relatedLinks.some((link) => link.href === "/compare/best-ai-workspace-for-marketing-teams"), true)
   assert.equal(page.faqs.some((faq) => /writing quality/i.test(faq.question)), true)
 })
 
@@ -69,4 +69,22 @@ test("targeted pages expose page-level custom sections beyond shared templates",
   assert.equal(promptsPage.sections.some((section) => section.heading === "When strategy prompts are better than jumping into copy"), true)
   assert.equal(useCasePage.sections.some((section) => section.heading === "What changes when three models share one marketing workflow"), true)
   assert.equal(agentPage.sections.some((section) => section.heading === "What separates an SEO draft from a publishable article"), true)
+})
+
+test("positioning remediation pages exist with marketing-team-focused keywords", () => {
+  const marketingTeamsPage = getSeoPage("use-cases", "ai-workspace-for-marketing-teams")
+  const seoTeamsPage = getSeoPage("use-cases", "ai-workspace-for-seo-teams")
+  const workspaceComparePage = getSeoPage("compare", "best-ai-workspace-for-marketing-teams")
+  const aiCostComparePage = getSeoPage("compare", "compare-ai-tool-costs")
+
+  assert.ok(marketingTeamsPage)
+  assert.ok(seoTeamsPage)
+  assert.ok(workspaceComparePage)
+  assert.ok(aiCostComparePage)
+
+  assert.equal(marketingTeamsPage.primaryKeyword, "AI workspace for marketing teams")
+  assert.equal(seoTeamsPage.primaryKeyword, "AI workspace for SEO teams")
+  assert.equal(workspaceComparePage.primaryKeyword, "best AI workspace for marketing teams")
+  assert.equal(aiCostComparePage.primaryKeyword, "compare AI tool costs")
+  assert.equal(aiCostComparePage.sections.some((section) => section.heading === "Why cost comparisons fail without workflow context"), true)
 })

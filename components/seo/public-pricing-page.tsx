@@ -7,11 +7,13 @@ import { TrackedCtaLink } from "@/components/seo/tracked-cta-link"
 import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
+import { localizePublicPath } from "@/lib/i18n/routing"
 import { SEO_EVENT } from "@/lib/seo/analytics"
 
 export function PublicPricingPageContent() {
   const { locale } = useI18n()
   const copy = getPublicCopy(locale)
+  const calculatorHref = localizePublicPath("/resources/ai-subscription-cost-calculator", locale)
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -20,10 +22,10 @@ export function PublicPricingPageContent() {
       <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
         <div className="flex flex-wrap items-center gap-2">
           <p className="public-kicker text-muted-foreground">{copy.pricingPage.eyebrow}</p>
-          <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">Pricing Matrix</span>
+          <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">{copy.pricingPage.matrixLabel}</span>
           <span className="inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
             <span className="public-signal" aria-hidden="true" />
-            <span className="public-kicker text-muted-foreground">Shared Workspace</span>
+            <span className="public-kicker text-muted-foreground">{copy.pricingPage.sharedWorkspaceLabel}</span>
           </span>
         </div>
         <h1 className="public-display mt-4 max-w-4xl text-5xl text-foreground lg:text-6xl">{copy.pricingPage.title}</h1>
@@ -40,12 +42,12 @@ export function PublicPricingPageContent() {
           </Button>
           <Button size="lg" className="public-button-secondary h-12 px-7" asChild>
             <TrackedCtaLink
-              href="/resources/ai-subscription-cost-calculator"
+              href={calculatorHref}
               eventName={SEO_EVENT.pricingCtaClick}
               eventData={{
                 placement: "hero",
                 cta: "calculator",
-                destination: "/resources/ai-subscription-cost-calculator",
+                destination: calculatorHref,
               }}
             >
               {copy.pricingPage.calculatorCta}

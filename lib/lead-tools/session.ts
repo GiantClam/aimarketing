@@ -1,4 +1,4 @@
-import type { PptLanguage, PptPreviewDeck, PptPreviewRequest, PptScenario } from "./ppt-preview-data"
+import type { PptLanguage, PptPreviewDeck, PptPreviewModelValue, PptPreviewRequest, PptScenario } from "./ppt-preview-data-fixed"
 
 const STORAGE_KEY = "lead-tools:ai-ppt-preview-session"
 
@@ -6,8 +6,10 @@ export type ProtectedAction = "download" | "finalize"
 
 export type PptPreviewSession = {
   request: PptPreviewRequest
+  previewSessionId?: string
   selectedVariantKey?: string
   selectedSlideIndex?: number
+  slideIndexByVariant?: Record<string, number>
   generatedDeck?: PptPreviewDeck
   lastActionAt: string
 }
@@ -20,6 +22,7 @@ export function getToolReturnPath(
   prompt: string,
   scenario: PptScenario,
   language: PptLanguage,
+  model?: PptPreviewModelValue,
   action?: ProtectedAction,
 ) {
   const searchParams = new URLSearchParams()
@@ -30,6 +33,10 @@ export function getToolReturnPath(
 
   searchParams.set("scenario", scenario)
   searchParams.set("language", language)
+
+  if (model) {
+    searchParams.set("model", model)
+  }
 
   if (action) {
     searchParams.set("action", action)
@@ -52,6 +59,7 @@ export function loadPptPreviewSession() {
   try {
     return JSON.parse(rawValue) as PptPreviewSession
   } catch {
+    window.localStorage.removeItem(STORAGE_KEY)
     return null
   }
 }
@@ -61,7 +69,27 @@ export function savePptPreviewSession(session: PptPreviewSession) {
     return
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+  const payload: PptPreviewSession = {
+    ...session,
+    generatedDeck: undefined,
+  }
+
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    window.localStorage.removeItem(STORAGE_KEY)
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        request: session.request,
+        previewSessionId: session.previewSessionId,
+        selectedVariantKey: session.selectedVariantKey,
+        selectedSlideIndex: session.selectedSlideIndex,
+        slideIndexByVariant: session.slideIndexByVariant,
+        lastActionAt: session.lastActionAt,
+      } satisfies PptPreviewSession),
+    )
+  }
 }
 
 export function clearPptPreviewSession() {

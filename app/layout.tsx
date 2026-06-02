@@ -1,6 +1,5 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { cookies } from "next/headers"
 import { Analytics } from "@vercel/analytics/react"
 import { Barlow_Condensed, IBM_Plex_Sans } from "next/font/google"
 
@@ -10,7 +9,7 @@ import { GoogleAnalytics } from "@/components/google-analytics"
 import { LocaleProvider } from "@/components/locale-provider"
 import { QueryProvider } from "@/components/query-provider"
 import { getAppBaseUrl } from "@/lib/app-url"
-import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
+import { getRequestLocale } from "@/lib/i18n/request-locale"
 import "./globals.css"
 
 const displayFont = Barlow_Condensed({
@@ -28,23 +27,23 @@ const bodyFont = IBM_Plex_Sans({
 export const metadata: Metadata = {
   metadataBase: new URL(getAppBaseUrl()),
   title: {
-    default: "AI Marketing | AI Marketing Workspace for Small Teams",
-    template: "%s | AI Marketing",
+    default: "Multi-Model AI Workspace for Marketing Teams | AIMarketingSite",
+    template: "%s | AIMarketingSite",
   },
   description:
-    "Use multiple AI models, marketing agents, shared company context, and team permissions in one affordable AI marketing workspace for small teams.",
+    "Use multiple AI models in one workspace for marketing content, research, visuals, and workflows. Built for teams, creators, and indie operators.",
   openGraph: {
-    title: "AI Marketing | AI Marketing Workspace for Small Teams",
+    title: "Multi-Model AI Workspace for Marketing Teams | AIMarketingSite",
     description:
-      "Use multiple AI models, marketing agents, shared company context, and team permissions in one affordable AI marketing workspace for small teams.",
-    siteName: "AI Marketing",
+      "Use multiple AI models in one workspace for marketing content, research, visuals, and workflows. Built for teams, creators, and indie operators.",
+    siteName: "AIMarketingSite",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AI Marketing | AI Marketing Workspace for Small Teams",
+    title: "Multi-Model AI Workspace for Marketing Teams | AIMarketingSite",
     description:
-      "Use multiple AI models, marketing agents, shared company context, and team permissions in one affordable AI marketing workspace for small teams.",
+      "Use multiple AI models in one workspace for marketing content, research, visuals, and workflows. Built for teams, creators, and indie operators.",
   },
 }
 
@@ -53,8 +52,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const cookieStore = await cookies()
-  const locale = normalizeLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value) || DEFAULT_LOCALE
+  const locale = await getRequestLocale()
 
   return (
     <html

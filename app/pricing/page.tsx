@@ -6,18 +6,18 @@ import { buildAppUrl } from "@/lib/app-url"
 const canonical = buildAppUrl("/pricing")
 
 export const metadata: Metadata = {
-  title: "AI Marketing Pricing for Small Teams",
+  title: "AI Workspace Pricing for Marketing Teams",
   description:
-    "Affordable AI marketing workspace plans for small teams, including shared credits, marketing agents, team permissions, and optional BYOK for heavier usage.",
+    "Review pricing for a multi-model AI workspace built for marketing content, research, visuals, and shared workflows, including credits and BYOK-ready expansion paths.",
   alternates: {
     canonical,
   },
   openGraph: {
-    title: "AI Marketing Pricing for Small Teams",
+    title: "AI Workspace Pricing for Marketing Teams",
     description:
-      "Compare shared-credit AI marketing workspace options for small teams, agencies, startups, and consultants.",
+      "Compare workspace pricing for marketing teams, creators, and operators who need multiple AI models in one shared system.",
     url: canonical,
-    siteName: "AI Marketing",
+    siteName: "AIMarketingSite",
     type: "website",
   },
 }

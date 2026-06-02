@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getLeadToolBySlug } from "@/lib/lead-tools/catalog"
 import { getLeadToolExample, getLeadToolExampleHref, getLeadToolExampleParams, getLeadToolExamples } from "@/lib/lead-tools/examples"
-import { buildMockPptPreview } from "@/lib/lead-tools/ppt-preview-data"
+import { buildMockPptPreview } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { renderPptPreviewDeckAssets } from "@/lib/lead-tools/ppt-master-preview"
 import { buildMockSeoMetaPreview } from "@/lib/lead-tools/seo-meta-data"
 
 type LeadToolExamplePageProps = {
@@ -164,8 +165,10 @@ export default async function LeadToolExamplePage({ params }: LeadToolExamplePag
             initialPrompt={example.request.prompt}
             initialScenario={example.request.scenario}
             initialLanguage={example.request.language}
-            initialDeck={buildMockPptPreview(example.request)}
+            initialModel="MiniMax-M2.7-highspeed"
+            initialDeck={renderPptPreviewDeckAssets(buildMockPptPreview(example.request))}
             skipSavedSession
+            embedded
           />
         )}
       </section>

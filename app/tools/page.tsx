@@ -1,36 +1,60 @@
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
-
+import { PublicSiteFooter } from "@/components/seo/public-site-footer"
+import { PublicSiteHeader } from "@/components/seo/public-site-header"
 import { ToolCardGrid } from "@/components/lead-tools/tool-card-grid"
-import { leadToolsCatalog } from "@/lib/lead-tools/catalog"
+import { getRequestLocale } from "@/lib/i18n/request-locale"
+import { getLocalizedLeadToolsCatalog } from "@/lib/lead-tools/catalog"
 
-export default function ToolsHubPage() {
+export default async function ToolsHubPage() {
+  const locale = await getRequestLocale()
+  const tools = getLocalizedLeadToolsCatalog(locale)
+
+  const pageCopy =
+    locale === "zh"
+      ? {
+          eyebrow: "SEO Lead Gen Tools",
+          title: "一套公共站点主题，承接品牌流量与工具转化",
+          description: "这里汇总了当前开放的工具入口。工具页会复用站点主题、语言与导航体验，不再脱离主站形成单独原型页。",
+          gridTitle: "工具目录",
+          gridDescription: "先从 AI PPT Preview 开始，后续 live 工具会继续复用同一套公共站点外壳与 lead-tools runtime。",
+          liveLabel: "已上线",
+          comingSoonLabel: "即将上线",
+          openToolLabel: "进入工具",
+        }
+      : {
+          eyebrow: "SEO Lead Gen Tools",
+          title: "One public-site shell for brand traffic and tool conversion",
+          description: "This hub lists the currently available tool entry points. Tool pages now reuse the same site theme, language, and navigation instead of feeling like detached prototypes.",
+          gridTitle: "Tool Directory",
+          gridDescription: "AI PPT Preview is the first live tool here. Future live tools will reuse the same public-site shell and lead-tools runtime.",
+          liveLabel: "Live",
+          comingSoonLabel: "Coming Soon",
+          openToolLabel: "Open Tool",
+        }
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(188,35,35,0.14),transparent_28%),linear-gradient(180deg,#090909_0%,#0f0f0f_100%)] px-4 py-10 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-zinc-400 transition hover:text-white">
-          <ArrowLeft className="h-4 w-4" />
-          返回首页
-        </Link>
+    <main className="min-h-screen bg-background text-foreground">
+      <PublicSiteHeader activeKey="tools" />
 
-        <div className="mt-8 max-w-3xl space-y-4">
-          <div className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-medium text-primary">
-            SEO Lead Gen Tools
+      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
+        <div className="space-y-8">
+          <div className="max-w-4xl space-y-4">
+            <div className="public-kicker text-muted-foreground">{pageCopy.eyebrow}</div>
+            <h1 className="public-display max-w-5xl text-5xl text-foreground lg:text-6xl">{pageCopy.title}</h1>
+            <p className="max-w-3xl text-lg leading-8 text-muted-foreground">{pageCopy.description}</p>
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight">一个首页，承接品牌、搜索流量和登录转化</h1>
-          <p className="text-base leading-8 text-zinc-400">
-            这里汇总了面向 SEO 的在线工具。已上线工具优先验证“匿名预览 {"->"} 登录转化 {"->"} 主产品激活”这条漏斗，后续会继续扩展更多营销类工具。
-          </p>
-        </div>
 
-        <div className="mt-10">
           <ToolCardGrid
-            tools={leadToolsCatalog}
-            title="工具目录"
-            description="PPT 预览已经接入共享底座，未来新增工具时只需要补 catalog 和 adapter。"
+            tools={tools}
+            title={pageCopy.gridTitle}
+            description={pageCopy.gridDescription}
+            liveLabel={pageCopy.liveLabel}
+            comingSoonLabel={pageCopy.comingSoonLabel}
+            openToolLabel={pageCopy.openToolLabel}
           />
         </div>
-      </div>
-    </div>
+      </section>
+
+      <PublicSiteFooter />
+    </main>
   )
 }

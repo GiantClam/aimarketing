@@ -1,23 +1,25 @@
 "use client"
 
-import { startTransition, useEffect, useMemo, useState } from "react"
-import { Download, FileStack, Loader2, Lock, Play, Sparkles, WandSparkles } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react"
+import { ArrowLeft, ArrowRight, Download, ExternalLink, Loader2, Lock, Play, Sparkles } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
+import { useI18n } from "@/components/locale-provider"
 import { LoginGateDialog } from "@/components/lead-tools/login-gate-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import {
   pptLanguageOptions,
+  pptPreviewModelOptions,
+  pptPreviewStyles,
   pptScenarioOptions,
   type PptLanguage,
   type PptPreviewDeck,
+  type PptPreviewModelValue,
   type PptPreviewRequest,
+  type PptPreviewStyleKey,
   type PptScenario,
-} from "@/lib/lead-tools/ppt-preview-data"
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
   type ProtectedAction,
   getToolReturnPath,
@@ -31,9 +33,67 @@ type PptPreviewWorkbenchProps = {
   initialPrompt?: string
   initialScenario?: PptScenario
   initialLanguage?: PptLanguage
+  initialModel?: PptPreviewModelValue
   initialAction?: ProtectedAction
   initialDeck?: PptPreviewDeck | null
   skipSavedSession?: boolean
+  embedded?: boolean
+}
+
+const variantSlots: Array<{ key: PptPreviewStyleKey; slot: "A" | "B" | "C" | "D" }> = [
+  { key: "ppt169_brutalist_ai_newspaper_2026", slot: "A" },
+  { key: "ppt169_sugar_rush_memphis", slot: "B" },
+  { key: "ppt169_pritzker_2026", slot: "C" },
+  { key: "ppt169_swiss_grid_systems", slot: "D" },
+]
+
+function getWorkbenchCopy(locale: "zh" | "en") {
+  if (locale === "zh") {
+    return {
+      loadingMessages: ["正在并行生成 4 种风格版式", "正在写入每页标题、正文与要点", "正在渲染 HTML 预览页面", "正在整理可对比的成品候选方案"],
+      projectTitle: "项目标题",
+      scenario: "场景",
+      language: "语言",
+      modelFallback: "可扩展为更多预览模型。",
+      execute4x: "执行 4X",
+      fourParallel: "四份并行生成",
+      systemStatus: "系统状态",
+      running: "运行中",
+      stable: "稳定",
+      stale: "当前预览已过期，请重新执行 4X",
+      compare: "四种高差异化风格并行对比",
+      openHtml: "打开 HTML",
+      generateFinal: "生成成品",
+      downloadHtml: "下载 HTML",
+      downloadPpt: "下载 PPT",
+      promptPlaceholder: "例如：介绍霍尔木兹海峡现状及对全球能源运输的影响",
+    }
+  }
+
+  return {
+    loadingMessages: [
+      "Generating four layout directions in parallel",
+      "Writing titles, body copy, and key points",
+      "Rendering HTML slide previews",
+      "Preparing comparable final candidates",
+    ],
+    projectTitle: "Project Title",
+    scenario: "Scenario",
+    language: "Language",
+    modelFallback: "More preview models can be added here.",
+    execute4x: "Run 4X",
+    fourParallel: "Four parallel generations",
+    systemStatus: "System Status",
+    running: "Running",
+    stable: "Stable",
+    stale: "The current preview is stale. Run 4X again.",
+    compare: "Compare four high-difference style directions side by side",
+    openHtml: "Open HTML",
+    generateFinal: "Generate Final",
+    downloadHtml: "Download HTML",
+    downloadPpt: "Download PPT",
+    promptPlaceholder: "Example: Explain the current situation in the Strait of Hormuz and its impact on global energy transport",
+  }
 }
 
 async function parseApiError(response: Response, fallbackMessage: string) {
@@ -45,28 +105,113 @@ async function parseApiError(response: Response, fallbackMessage: string) {
   }
 }
 
+function getVariantSlideIndex(slideIndexByVariant: Record<string, number>, variantKey: string, slideCount: number) {
+  const raw = slideIndexByVariant[variantKey] ?? 0
+  return Math.max(0, Math.min(raw, Math.max(slideCount - 1, 0)))
+}
+
+function buildEmbeddedHtmlPreviewDocument(html: string, slideIndex: number) {
+  const previewStyle = `
+    <style id="aimarketing-html-preview-embed">
+      html, body {
+        overflow: hidden !important;
+        background: transparent !important;
+      }
+      .nav {
+        display: none !important;
+      }
+      body::before {
+        pointer-events: none !important;
+      }
+    </style>
+  `
+
+  const previewScript = `
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        const slides = Array.from(document.querySelectorAll(".slide"));
+        const targetIndex = Math.max(0, Math.min(${slideIndex}, slides.length - 1));
+        const target = slides[targetIndex];
+        if (!target) return;
+        document.documentElement.style.scrollBehavior = "auto";
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ block: "start" });
+          requestAnimationFrame(() => {
+            target.scrollIntoView({ block: "start" });
+          });
+        });
+      });
+    </script>
+  `
+
+  if (html.includes("</head>")) {
+    return html.replace("</head>", `${previewStyle}</head>`).replace("</body>", `${previewScript}</body>`)
+  }
+
+  return `${previewStyle}${html}${previewScript}`
+}
+
+function buildOpenedHtmlPreviewDocument(html: string, slideIndex: number) {
+  const openScript = `
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        const slides = Array.from(document.querySelectorAll(".slide"));
+        const targetIndex = Math.max(0, Math.min(${slideIndex}, slides.length - 1));
+        const target = slides[targetIndex];
+        if (!target) return;
+        document.documentElement.style.scrollBehavior = "auto";
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ block: "start" });
+        });
+      });
+    </script>
+  `
+
+  if (html.includes("</body>")) {
+    return html.replace("</body>", `${openScript}</body>`)
+  }
+
+  return `${html}${openScript}`
+}
+
 export function PptPreviewWorkbench({
   initialPrompt = "",
   initialScenario = "marketing-campaign",
   initialLanguage = "zh-CN",
+  initialModel = "MiniMax-M2.7-highspeed",
   initialAction,
   initialDeck = null,
   skipSavedSession = false,
+  embedded = false,
 }: PptPreviewWorkbenchProps) {
   const toolSlug = "ai-ppt-preview"
+  const router = useRouter()
+  const pathname = usePathname()
+  const { locale } = useI18n()
+  const copy = useMemo(() => getWorkbenchCopy(locale), [locale])
+  const loadingMessageCount = copy.loadingMessages.length
   const { user, isDemoMode } = useAuth()
   const [prompt, setPrompt] = useState(initialPrompt)
   const [scenario, setScenario] = useState<PptScenario>(initialScenario)
   const [language, setLanguage] = useState<PptLanguage>(initialLanguage)
+  const [model, setModel] = useState<PptPreviewModelValue>(initialModel)
   const [deck, setDeck] = useState<PptPreviewDeck | null>(initialDeck)
+  const [previewSessionId, setPreviewSessionId] = useState<string | null>(initialDeck?.previewSessionId ?? null)
   const [selectedVariantKey, setSelectedVariantKey] = useState<string>(
-    initialDeck?.variants[0]?.key ?? "professional-business",
+    initialDeck?.variants[0]?.key ?? "ppt169_brutalist_ai_newspaper_2026",
   )
-  const [selectedSlideIndex, setSelectedSlideIndex] = useState(0)
+  const [slideIndexByVariant, setSlideIndexByVariant] = useState<Record<string, number>>({})
   const [isGenerating, setIsGenerating] = useState(false)
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0)
   const [isRunningProtectedAction, setIsRunningProtectedAction] = useState(false)
   const [loginGateAction, setLoginGateAction] = useState<ProtectedAction | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [lastGeneratedRequest, setLastGeneratedRequest] = useState<PptPreviewRequest | null>(
+    initialDeck ? { prompt: initialPrompt, scenario: initialScenario, language: initialLanguage, model: initialModel } : null,
+  )
+
+  const canUseProtectedActions = Boolean(user) && !isDemoMode
+  const redirectTo = getToolReturnPath(prompt, scenario, language, model, loginGateAction ?? undefined)
 
   useEffect(() => {
     if (skipSavedSession) {
@@ -81,41 +226,122 @@ export function PptPreviewWorkbench({
     setPrompt((currentPrompt) => currentPrompt || savedSession.request.prompt)
     setScenario(savedSession.request.scenario)
     setLanguage(savedSession.request.language)
+    setModel(savedSession.request.model ?? initialModel)
     setDeck(savedSession.generatedDeck ?? null)
-    setSelectedVariantKey(savedSession.selectedVariantKey ?? "professional-business")
-    setSelectedSlideIndex(savedSession.selectedSlideIndex ?? 0)
-  }, [skipSavedSession])
+    setLastGeneratedRequest(savedSession.generatedDeck ? savedSession.request : null)
+    setPreviewSessionId(savedSession.previewSessionId ?? savedSession.generatedDeck?.previewSessionId ?? null)
+    setSelectedVariantKey(savedSession.selectedVariantKey ?? "ppt169_brutalist_ai_newspaper_2026")
+
+    if (savedSession.slideIndexByVariant) {
+      setSlideIndexByVariant(savedSession.slideIndexByVariant)
+      return
+    }
+
+    if (savedSession.selectedVariantKey) {
+      setSlideIndexByVariant({
+        [savedSession.selectedVariantKey]: savedSession.selectedSlideIndex ?? 0,
+      })
+    }
+  }, [initialModel, skipSavedSession])
 
   useEffect(() => {
     if (!prompt.trim() && !deck) {
       return
     }
 
-    const request: PptPreviewRequest = { prompt, scenario, language }
+    const request: PptPreviewRequest = { prompt, scenario, language, model }
+    const selectedSlideIndex = slideIndexByVariant[selectedVariantKey] ?? 0
 
     savePptPreviewSession({
       request,
+      previewSessionId: previewSessionId ?? deck?.previewSessionId,
       selectedVariantKey,
       selectedSlideIndex,
+      slideIndexByVariant,
       generatedDeck: deck ?? undefined,
       lastActionAt: new Date().toISOString(),
     })
-  }, [prompt, scenario, language, selectedVariantKey, selectedSlideIndex, deck])
+  }, [deck, language, model, previewSessionId, prompt, scenario, selectedVariantKey, slideIndexByVariant])
 
-  const selectedVariant = useMemo(() => {
-    if (!deck) {
-      return null
+  useEffect(() => {
+    if (!isGenerating) {
+      setLoadingMessageIndex(0)
+      return
     }
 
-    return deck.variants.find((variant) => variant.key === selectedVariantKey) ?? deck.variants[0]
-  }, [deck, selectedVariantKey])
+    const timer = window.setInterval(() => {
+      setLoadingMessageIndex((current) => (current + 1) % loadingMessageCount)
+    }, 1400)
 
-  const currentSlide = selectedVariant?.slides[selectedSlideIndex]
+    return () => window.clearInterval(timer)
+  }, [isGenerating, loadingMessageCount])
 
-  const redirectTo = getToolReturnPath(prompt, scenario, language, loginGateAction ?? undefined)
-  const canUseProtectedActions = Boolean(user) && !isDemoMode
+  const variantMap = useMemo(() => {
+    const next = new Map<string, NonNullable<PptPreviewWorkbenchProps["initialDeck"]>["variants"][number]>()
+    deck?.variants.forEach((variant) => {
+      next.set(variant.key, variant)
+    })
+    return next
+  }, [deck])
 
-  const triggerPreviewDownload = async (currentDeck: PptPreviewDeck, variantKey: string) => {
+  const previewIsStale = Boolean(
+    deck &&
+      lastGeneratedRequest &&
+      (lastGeneratedRequest.prompt !== prompt ||
+        lastGeneratedRequest.scenario !== scenario ||
+        lastGeneratedRequest.language !== language ||
+        (lastGeneratedRequest.model ?? initialModel) !== model),
+  )
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (prompt.trim()) {
+      params.set("prompt", prompt)
+    }
+    params.set("scenario", scenario)
+    params.set("language", language)
+    params.set("model", model)
+    if (previewSessionId && !previewIsStale) {
+      params.set("previewSessionId", previewSessionId)
+    }
+
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [language, model, pathname, previewIsStale, previewSessionId, prompt, router, scenario])
+
+  useEffect(() => {
+    if (!deck || !previewIsStale || isGenerating) {
+      return
+    }
+
+    setStatusMessage("参数已更新，当前预览已过期。请重新执行 4X 以生成新的语言/场景版本。")
+  }, [deck, isGenerating, previewIsStale])
+
+  const activeLoadingMessage = copy.loadingMessages[loadingMessageIndex] ?? copy.loadingMessages[0]
+  const isHtmlPreviewDeck = deck?.previewEngine === "frontend-slides-html"
+  const downloadActionLabel = isHtmlPreviewDeck ? "下载" : "下载"
+  const finalizeActionLabel = isHtmlPreviewDeck ? "打开" : "成品"
+
+  const openHtmlPreviewInNewTab = useCallback((currentDeck: PptPreviewDeck, variantKey: string) => {
+    const variant = currentDeck.variants.find((item) => item.key === variantKey)
+    const htmlDocument = variant?.preview?.htmlDocument
+    if (!variant || !htmlDocument) {
+      throw new Error("当前风格的 HTML 预览文件不存在")
+    }
+
+    const slideIndex = getVariantSlideIndex(
+      slideIndexByVariant,
+      variantKey,
+      variant.preview?.slides.length ?? variant.slides.length ?? 1,
+    )
+    const blob = new Blob([buildOpenedHtmlPreviewDocument(htmlDocument.html, slideIndex)], {
+      type: "text/html;charset=utf-8",
+    })
+    const url = URL.createObjectURL(blob)
+    window.open(url, "_blank", "noopener,noreferrer")
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }, [slideIndexByVariant])
+
+  const triggerPreviewDownload = useCallback(async (currentDeck: PptPreviewDeck, variantKey: string) => {
     const response = await fetch(getLeadToolEndpoint(toolSlug, "download"), {
       method: "POST",
       headers: {
@@ -125,6 +351,7 @@ export function PptPreviewWorkbench({
       body: JSON.stringify({
         deck: currentDeck,
         selectedVariantKey: variantKey,
+        previewSessionId: previewSessionId ?? currentDeck.previewSessionId,
       }),
     })
 
@@ -139,7 +366,9 @@ export function PptPreviewWorkbench({
 
     const blob = await response.blob()
     const disposition = response.headers.get("Content-Disposition")
-    const fallbackFileName = `${currentDeck.title.replace(/\s+/g, "-").toLowerCase()}-${variantKey}.json`
+    const contentType = response.headers.get("Content-Type") || ""
+    const fallbackExtension = contentType.includes("text/html") ? "html" : "pptx"
+    const fallbackFileName = `${currentDeck.title.replace(/\s+/g, "-").toLowerCase()}-${variantKey}.${fallbackExtension}`
     const fileNameMatch = disposition?.match(/filename="(.+)"/)
     const fileName = fileNameMatch?.[1] || fallbackFileName
 
@@ -149,9 +378,15 @@ export function PptPreviewWorkbench({
     anchor.download = fileName
     anchor.click()
     URL.revokeObjectURL(url)
-  }
+  }, [previewSessionId, toolSlug])
 
-  const runFinalize = async (currentDeck: PptPreviewDeck, variantKey: string) => {
+  const runFinalize = useCallback(async (currentDeck: PptPreviewDeck, variantKey: string) => {
+    if (currentDeck.previewEngine === "frontend-slides-html") {
+      openHtmlPreviewInNewTab(currentDeck, variantKey)
+      setStatusMessage("已在新的浏览器标签页打开当前风格的 HTML 预览。")
+      return
+    }
+
     const response = await fetch(getLeadToolEndpoint(toolSlug, "finalize"), {
       method: "POST",
       headers: {
@@ -161,6 +396,7 @@ export function PptPreviewWorkbench({
       body: JSON.stringify({
         deck: currentDeck,
         selectedVariantKey: variantKey,
+        previewSessionId: previewSessionId ?? currentDeck.previewSessionId,
       }),
     })
 
@@ -172,7 +408,7 @@ export function PptPreviewWorkbench({
     const data = (await response.json()) as {
       error?: string
       message?: string
-      exportPlan?: { selectedVariant?: string; slideCount?: number }
+      exportPlan?: { selectedVariant?: string; slideCount?: number; output?: "editable-pptx" | "html-file" }
     }
 
     if (!response.ok) {
@@ -184,11 +420,46 @@ export function PptPreviewWorkbench({
         data.exportPlan?.slideCount || 0
       } 页。`,
     )
-  }
+  }, [openHtmlPreviewInNewTab, previewSessionId, toolSlug])
+
+  const runProtectedAction = useCallback(async (action: ProtectedAction, variantKey: string) => {
+    if (!deck) {
+      setStatusMessage("请先生成预览，再进行下载或完整生成。")
+      return
+    }
+
+    if (!canUseProtectedActions) {
+      setLoginGateAction(action)
+      return
+    }
+
+    setIsRunningProtectedAction(true)
+    setSelectedVariantKey(variantKey)
+
+    try {
+      if (action === "download") {
+        await triggerPreviewDownload(deck, variantKey)
+        setStatusMessage(
+          deck.previewEngine === "frontend-slides-html"
+            ? "已下载当前风格的 HTML 文件，可直接在浏览器中打开和分享。"
+            : "已下载当前风格的 PPTX 文件，可以继续在 PowerPoint 或 Keynote 中编辑。",
+        )
+        return
+      }
+
+      await runFinalize(deck, variantKey)
+    } catch (error) {
+      if (error instanceof Error && error.message !== "Authentication required") {
+        setStatusMessage(error.message)
+      }
+    } finally {
+      setIsRunningProtectedAction(false)
+    }
+  }, [canUseProtectedActions, deck, runFinalize, triggerPreviewDownload])
 
   const generatePreview = async () => {
     if (!prompt.trim()) {
-      setStatusMessage("先输入一个主题，再生成多风格预览。")
+      setStatusMessage("先输入一个主题，再生成 4 组预览。")
       return
     }
 
@@ -206,22 +477,30 @@ export function PptPreviewWorkbench({
           prompt,
           scenario,
           language,
+          model,
         }),
       })
 
-      const data = (await response.json()) as { error?: string; deck?: PptPreviewDeck }
+      const data = (await response.json()) as { error?: string; deck?: PptPreviewDeck; previewSessionId?: string }
 
       if (!response.ok || !data.deck) {
         throw new Error(data.error || "生成预览失败")
       }
 
       const nextDeck = data.deck
+      const nextIndexes = Object.fromEntries(nextDeck.variants.map((variant) => [variant.key, 0]))
 
       startTransition(() => {
         setDeck(nextDeck)
-        setSelectedVariantKey(nextDeck.variants[0]?.key ?? "professional-business")
-        setSelectedSlideIndex(0)
-        setStatusMessage("已生成 4 种风格预览。可以切换风格、翻页查看，再决定是否继续导出。")
+        setLastGeneratedRequest({ prompt, scenario, language, model })
+        setPreviewSessionId(data.previewSessionId ?? nextDeck.previewSessionId ?? null)
+        setSelectedVariantKey(nextDeck.variants[0]?.key ?? "ppt169_brutalist_ai_newspaper_2026")
+        setSlideIndexByVariant(nextIndexes)
+        setStatusMessage(
+          nextDeck.previewEngine === "frontend-slides-html"
+            ? `已生成 4 个高差异化 HTML slide 预览。当前参数：${language} / ${scenario}。`
+            : `已生成 4 个高差异化 SVG 预览。当前参数：${language} / ${scenario}。`,
+        )
       })
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "生成预览失败")
@@ -230,318 +509,397 @@ export function PptPreviewWorkbench({
     }
   }
 
-  const runProtectedAction = async (action: ProtectedAction) => {
-    if (!deck || !selectedVariant) {
-      setStatusMessage("请先生成预览，再进行下载或完整生成。")
+  useEffect(() => {
+    if (!initialAction || !deck || !canUseProtectedActions || isRunningProtectedAction) {
       return
     }
 
-    if (!canUseProtectedActions) {
-      setLoginGateAction(action)
-      return
+    void runProtectedAction(initialAction, selectedVariantKey)
+  }, [canUseProtectedActions, deck, initialAction, isRunningProtectedAction, runProtectedAction, selectedVariantKey])
+
+  const boardVariants = variantSlots.map(({ key, slot }) => {
+    const liveVariant = variantMap.get(key)
+    const fallbackVariant = pptPreviewStyles.find((variant) => variant.key === key)
+    const variant = liveVariant ?? fallbackVariant
+
+    if (!variant) {
+      return null
     }
 
-    setIsRunningProtectedAction(true)
+    const slideCount = liveVariant?.preview?.slides.length ?? liveVariant?.slides.length ?? 5
+    const slideIndex = getVariantSlideIndex(slideIndexByVariant, key, slideCount)
+    const currentSlide = liveVariant?.slides[slideIndex]
+    const currentAsset = liveVariant?.preview?.slides[slideIndex]
+    const currentHtmlDocument = liveVariant?.preview?.htmlDocument
+    const status =
+      !deck ? (isGenerating ? "RUNNING" : "IDLE") : deck.source === "mock" ? "FALLBACK" : "READY"
 
-    try {
-      if (action === "download") {
-        await triggerPreviewDownload(deck, selectedVariant.key)
-        setStatusMessage("已下载当前风格的 PPTX 文件，可以直接在 PowerPoint 或 Keynote 中继续编辑。")
-        return
-      }
-
-      await runFinalize(deck, selectedVariant.key)
-    } catch (error) {
-      if (error instanceof Error && error.message !== "Authentication required") {
-        setStatusMessage(error.message)
-      }
-    } finally {
-      setIsRunningProtectedAction(false)
+    return {
+      slot,
+      variant,
+      liveVariant,
+      slideCount,
+      slideIndex,
+      currentSlide,
+      currentAsset,
+      currentHtmlDocument,
+      status,
+      isFocused: selectedVariantKey === key,
     }
+  })
+
+  const setVariantSlideIndex = (variantKey: string, nextIndex: number) => {
+    setSlideIndexByVariant((current) => ({
+      ...current,
+      [variantKey]: nextIndex,
+    }))
+    setSelectedVariantKey(variantKey)
   }
 
-  useEffect(() => {
-    if (!initialAction || !deck || !selectedVariant || !canUseProtectedActions || isRunningProtectedAction) {
-      return
-    }
-
-    void (async () => {
-      setIsRunningProtectedAction(true)
-
-      try {
-        if (initialAction === "download") {
-          await triggerPreviewDownload(deck, selectedVariant.key)
-          setStatusMessage("已为当前风格下载 PPTX 文件。你可以继续编辑，或返回生成新的版本。")
-        } else {
-          await runFinalize(deck, selectedVariant.key)
-        }
-      } catch (error) {
-        if (error instanceof Error && error.message !== "Authentication required") {
-          setStatusMessage(error.message)
-        }
-      } finally {
-        setIsRunningProtectedAction(false)
-      }
-    })()
-  }, [initialAction, deck, selectedVariant, canUseProtectedActions, isRunningProtectedAction])
-
-  return (
-    <>
-      <div className="space-y-6">
-        <Card className="border-border/70 bg-card/90 text-foreground shadow-[0_24px_80px_-48px_rgba(0,0,0,0.55)]">
-          <CardHeader className="space-y-3">
-            <div className="flex items-center gap-2 text-primary">
-              <WandSparkles className="h-5 w-5" />
-              <span className="text-sm font-medium">Fast Preview Layer</span>
+  const shell = (
+    <div
+      className={cn(
+        "mx-auto h-[calc(100svh-16px)] w-full overflow-hidden rounded-[10px] border border-black/10 bg-white shadow-[0_28px_80px_-40px_rgba(0,0,0,0.28)]",
+        embedded ? "max-w-[1500px]" : "max-w-[1500px]",
+      )}
+    >
+      <div className="grid h-full min-h-0 md:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="relative flex min-h-0 flex-col gap-1.5 overflow-hidden border-b border-black/8 bg-white/88 p-2.5 md:border-b-0 md:border-r">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3 font-display text-sm font-black uppercase tracking-tight text-foreground">
+              <div className="grid h-7 w-7 place-items-center rounded-[2px] bg-primary text-[0.85rem] text-primary-foreground">4X</div>
+              <span>AI Marketing // HTML Slides Preview</span>
             </div>
-            <CardTitle className="text-2xl">输入主题，直接看 4 种 PPT 方向</CardTitle>
-            <CardDescription className="max-w-3xl text-muted-foreground">
-              先看结构和风格，再决定是否下载或生成完整 PPT。首屏只做一件事：尽快让你看到结果。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground">主题</label>
-              <Textarea
+            <div className="space-y-0.5">
+              <h1 className="font-display text-[1.8rem] font-black uppercase leading-[0.88] tracking-[-0.04em] text-foreground sm:text-[2rem]">
+                AI PPT PREVIEW
+              </h1>
+              <div className="h-1 w-full max-w-[180px] bg-[linear-gradient(90deg,var(--color-primary)_0_38%,transparent_38%_45%,#2d6bff_45%_67%,transparent_67%_75%,#ff6a2a_75%_100%)]" />
+            </div>
+          </div>
+
+          <div className="grid gap-1.5 border-t border-black/8 pt-1.5">
+            <div className="font-display text-xs font-black uppercase text-muted-foreground">Input Source</div>
+            <label className="grid gap-1.5">
+              <span className="text-sm font-semibold text-foreground">{copy.projectTitle}</span>
+              <textarea
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
-                className="min-h-28 border-border/70 bg-background/80 text-base text-foreground placeholder:text-muted-foreground"
-                placeholder="例如：为 AI Marketing 设计一个面向 B2B 客户的增长方案预览 PPT"
+                rows={6}
+                className="min-h-[120px] rounded-[2px] border border-black/14 bg-black/[0.03] px-3 py-2 text-sm font-semibold leading-5 text-foreground outline-none transition focus:border-primary"
+                placeholder={copy.promptPlaceholder}
               />
-            </div>
+            </label>
 
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="space-y-3">
-                <label className="text-sm font-medium text-foreground">场景</label>
-                <div className="grid gap-2 sm:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="font-display text-xs font-black uppercase text-muted-foreground">Model</span>
+              <select
+                value={model}
+                onChange={(event) => setModel(event.target.value as PptPreviewModelValue)}
+                className="h-10 rounded-[2px] border border-black/14 bg-black/[0.03] px-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary"
+              >
+                {pptPreviewModelOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} / {option.provider}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] leading-3.5 text-muted-foreground">
+                {pptPreviewModelOptions.find((option) => option.value === model)?.description ?? copy.modelFallback}
+              </p>
+            </label>
+
+            <div className="grid gap-1.5">
+              <div className="grid gap-1.5">
+                <div className="font-display text-xs font-black uppercase text-muted-foreground">{copy.scenario}</div>
+                <div className="grid gap-1.5">
                   {pptScenarioOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => setScenario(option.value)}
                       className={cn(
-                        "rounded-2xl border px-4 py-3 text-left transition",
+                        "min-h-10 rounded-[2px] border px-2.5 py-1.5 text-left transition",
                         scenario === option.value
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border/70 bg-background/80 text-muted-foreground hover:border-primary/30 hover:bg-primary/5",
+                          ? "border-primary bg-primary/10"
+                          : "border-black/10 bg-black/[0.02] hover:border-black/25 hover:bg-black/[0.04]",
                       )}
                     >
-                      <div className="font-medium text-foreground">{option.label}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">{option.description}</div>
+                      <div className="font-display text-[13px] font-black text-foreground">{option.label}</div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-4 rounded-[1.5rem] border border-border/70 bg-background/75 p-4">
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-foreground">语言</label>
-                  <div className="flex flex-col gap-2">
-                    {pptLanguageOptions.map((option) => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        variant={language === option.value ? "default" : "outline"}
-                        className={cn(
-                          "justify-start",
-                          language !== option.value
-                            ? "border-border/70 bg-background text-foreground hover:bg-primary/5"
-                            : "",
-                        )}
-                        onClick={() => setLanguage(option.value)}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
-                  游客先看结果，登录只发生在下载和完整生成时。
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-border/70 pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm leading-6 text-muted-foreground">
-                平台托管模型配置：预览优先速度，完整生成优先质量。
-              </div>
-              <Button className="sm:min-w-52" size="lg" onClick={() => void generatePreview()} disabled={isGenerating}>
-                {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {isGenerating ? "正在生成 4 种预览..." : "生成 4 种预览"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
-          <Card className="border-border/70 bg-card/85 text-foreground">
-            <CardHeader className="space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="space-y-2">
-                  <CardTitle className="text-2xl">{deck ? `${deck.title} · 多风格预览` : "预览结果面板"}</CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    {deck
-                      ? "先切换风格，再翻页看关键内容。喜欢哪个方向，再继续下载或生成完整 PPT。"
-                      : "生成后，结果会直接出现在这里。"}
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
-                    游客可预览
-                  </Badge>
-                  <Badge variant="outline" className="border-border/70 bg-background/80 text-muted-foreground">
-                    下载/完整生成需登录
-                  </Badge>
-                  <Badge variant="outline" className="border-border/70 bg-background/80 text-muted-foreground">
-                    工具会话自动保留
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={canUseProtectedActions ? "outline" : "default"}
-                  className={cn(
-                    canUseProtectedActions ? "border-border/70 bg-background text-foreground hover:bg-primary/5" : "",
-                  )}
-                  onClick={() => void runProtectedAction("download")}
-                  disabled={isRunningProtectedAction}
-                >
-                  {canUseProtectedActions ? <Download className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                  {canUseProtectedActions ? "下载预览包" : "登录后下载"}
-                </Button>
-                <Button onClick={() => void runProtectedAction("finalize")} disabled={isRunningProtectedAction}>
-                  {canUseProtectedActions ? <Play className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                  {canUseProtectedActions ? "生成完整 PPT" : "登录后生成完整 PPT"}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {statusMessage ? (
-                <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground">
-                  {statusMessage}
-                </div>
-              ) : null}
-
-              {!deck || !selectedVariant || !currentSlide ? (
-                <div className="rounded-[1.75rem] border border-dashed border-border/70 bg-background/75 p-10 text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <FileStack className="h-6 w-6" />
-                  </div>
-                  <h3 className="mt-4 text-xl font-medium text-foreground">先生成第一版预览</h3>
-                  <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                    这个 MVP 会先产出一个可比较的 deck 预览层。后续只需要把真实后端生成器接到当前交互上，就能完成完整导出链路。
-                  </p>
-                </div>
-              ) : (
-                <Tabs value={selectedVariantKey} onValueChange={setSelectedVariantKey} className="gap-5">
-                  <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-2xl bg-transparent p-0">
-                    {deck.variants.map((variant) => (
-                      <TabsTrigger
-                        key={variant.key}
-                        value={variant.key}
-                        className="min-w-[160px] rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-left text-foreground data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-foreground"
-                      >
-                        <div>
-                          <div className="font-medium">{variant.name}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">{variant.summary}</div>
-                        </div>
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-
-                  {deck.variants.map((variant) => (
-                    <TabsContent key={variant.key} value={variant.key} className="space-y-5">
-                      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
-                        <div
-                          className="rounded-[2rem] border p-6 shadow-[0_30px_90px_-50px_rgba(0,0,0,0.8)]"
-                          style={{
-                            backgroundColor: variant.palette.background,
-                            color: variant.palette.foreground,
-                            borderColor: variant.palette.border,
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-xs uppercase tracking-[0.2em]" style={{ color: variant.palette.accent }}>
-                                {currentSlide.kicker}
-                              </div>
-                              <h3 className="mt-3 text-3xl font-semibold">{currentSlide.title}</h3>
-                              <p className="mt-4 max-w-2xl text-sm leading-7 opacity-80">{currentSlide.body}</p>
-                            </div>
-                            <div
-                              className="rounded-full px-3 py-1 text-xs font-medium"
-                              style={{ backgroundColor: `${variant.palette.accent}20`, color: variant.palette.accent }}
-                            >
-                              {selectedSlideIndex + 1} / {variant.slides.length}
-                            </div>
-                          </div>
-
-                          <div className="mt-8 grid gap-3 md:grid-cols-2">
-                            {currentSlide.bullets.map((bullet) => (
-                              <div
-                                key={bullet}
-                                className="rounded-2xl border px-4 py-3 text-sm leading-6"
-                                style={{ backgroundColor: variant.palette.panel, borderColor: variant.palette.border }}
-                              >
-                                {bullet}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          <Card className="border-border/70 bg-background/75 text-foreground">
-                            <CardHeader className="space-y-2">
-                              <CardTitle className="text-lg">{variant.name} 的强项</CardTitle>
-                              <CardDescription className="text-muted-foreground">{variant.summary}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              {variant.strengths.map((strength) => (
-                                <div
-                                  key={strength}
-                                  className="rounded-2xl border border-border/70 bg-card px-4 py-3 text-sm"
-                                >
-                                  {strength}
-                                </div>
-                              ))}
-                            </CardContent>
-                          </Card>
-
-                          <div className="grid gap-2">
-                            {variant.slides.map((slide, index) => (
-                              <button
-                                key={slide.id}
-                                type="button"
-                                onClick={() => setSelectedSlideIndex(index)}
-                                className={cn(
-                                  "rounded-2xl border px-4 py-3 text-left transition",
-                                  selectedSlideIndex === index
-                                    ? "border-primary bg-primary/12 text-foreground"
-                                    : "border-border/70 bg-background/80 text-muted-foreground hover:border-primary/30 hover:bg-primary/5",
-                                )}
-                              >
-                                <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{slide.kicker}</div>
-                                <div className="mt-2 font-medium text-foreground">{slide.title}</div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </TabsContent>
+              <div className="grid gap-1.5">
+                <div className="font-display text-xs font-black uppercase text-muted-foreground">{copy.language}</div>
+                <div className="grid gap-1.5">
+                  {pptLanguageOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setLanguage(option.value)}
+                      className={cn(
+                        "min-h-10 rounded-[2px] border px-2.5 py-1.5 text-left font-display text-[13px] font-black transition",
+                        language === option.value
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-black/10 bg-black/[0.02] text-foreground hover:border-black/25 hover:bg-black/[0.04]",
+                      )}
+                    >
+                      {option.label}
+                    </button>
                   ))}
-                </Tabs>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void generatePreview()}
+            disabled={isGenerating}
+            className="mt-auto min-h-[44px] w-full -skew-x-6 bg-primary px-4 py-1.5 text-left text-[1.05rem] font-display font-black uppercase text-primary-foreground transition hover:-translate-y-[1px] disabled:cursor-wait disabled:opacity-75"
+          >
+            <span className="inline-flex items-center gap-3">
+              {isGenerating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+              {isGenerating ? "Running 4X" : copy.execute4x}
+            </span>
+            <span className="mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] text-black/50">
+              {isGenerating ? activeLoadingMessage : copy.fourParallel}
+            </span>
+          </button>
+        </aside>
+
+        <section className="grid min-h-0 min-w-0 grid-rows-[40px_minmax(0,1fr)]">
+          <header className="grid min-w-0 border-b border-black/10 md:grid-cols-[1fr_minmax(320px,1.4fr)]">
+            <div className="flex items-center justify-between gap-3 border-b border-black/8 px-4 md:border-b-0 md:border-r">
+              <span className="font-display text-xs font-black uppercase text-muted-foreground">{copy.systemStatus}</span>
+              <strong className="font-display text-sm font-black text-foreground">{isGenerating ? copy.running : copy.stable}</strong>
+            </div>
+            <div className="flex items-center gap-3 px-4">
+              <strong className="line-clamp-1 font-display text-sm font-black text-foreground">
+                {isGenerating
+                  ? activeLoadingMessage
+                  : previewIsStale
+                    ? copy.stale
+                    : statusMessage ?? copy.compare}
+              </strong>
+            </div>
+          </header>
+
+          <section className="grid min-h-0 grid-cols-1 md:grid-cols-2 md:grid-rows-2">
+            {boardVariants.map((entry) => {
+              if (!entry) {
+                return null
+              }
+
+              const { currentAsset, currentHtmlDocument, currentSlide, isFocused, liveVariant, slideCount, slideIndex, slot, status, variant } = entry
+              const actionDisabled = !deck || isRunningProtectedAction || !liveVariant || previewIsStale
+
+              return (
+                <article
+                  key={variant.key}
+                  className={cn(
+                    "relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_3px_auto] overflow-hidden border-b border-black/10 bg-white/92 [&:nth-child(2n+1)]:md:border-r",
+                    isFocused ? "shadow-[inset_0_0_0_1px_rgba(0,0,0,0.18)]" : "",
+                  )}
+                >
+                  <div className="pointer-events-none absolute left-3 top-1.5 font-display text-[2.6rem] font-black leading-none text-black/[0.08]">
+                    {slot}
+                  </div>
+
+                  <div className="relative z-10 flex items-start justify-between gap-2 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="font-display text-[10px] font-black uppercase text-muted-foreground">{slot} / {variant.name}</p>
+                      <h2 className="line-clamp-1 font-display text-[1.1rem] font-black uppercase tracking-[-0.05em] text-foreground">
+                        {currentSlide?.title ?? variant.name}
+                      </h2>
+                    </div>
+                    <span
+                      className={cn(
+                        "rounded-[2px] px-1.5 py-1 font-display text-[10px] font-black uppercase",
+                        status === "READY" && "bg-black text-white",
+                        status === "RUNNING" && "bg-primary text-primary-foreground animate-pulse",
+                        status === "FALLBACK" && "bg-orange-100 text-orange-700",
+                        status === "IDLE" && "border border-black/10 text-muted-foreground",
+                      )}
+                    >
+                      {status}
+                    </span>
+                  </div>
+
+                  <div className="relative mx-3 mb-1 min-h-0 overflow-hidden rounded-[2px] border border-dashed border-black/14 bg-[linear-gradient(90deg,rgba(9,9,9,0.04)_1px,transparent_1px),linear-gradient(rgba(9,9,9,0.03)_1px,transparent_1px),rgba(9,9,9,0.015)] bg-[size:28px_28px]">
+                    {currentHtmlDocument ? (
+                      <div className="aspect-[16/9] h-full w-full max-h-full bg-white">
+                        <iframe
+                          key={`${variant.key}-${slideIndex}`}
+                          srcDoc={buildEmbeddedHtmlPreviewDocument(currentHtmlDocument.html, slideIndex)}
+                          title={`${variant.name} html preview ${slideIndex + 1}`}
+                          className="h-full w-full border-0 bg-white"
+                          sandbox="allow-scripts"
+                        />
+                      </div>
+                    ) : currentAsset ? (
+                      <div className="aspect-[16/9] h-full w-full max-h-full">
+                        <img
+                          src={currentAsset.dataUrl}
+                          alt={`${variant.name} slide ${slideIndex + 1}`}
+                          className="h-full w-full object-contain object-center p-1.5"
+                        />
+                      </div>
+                    ) : (
+                      <div className="relative grid aspect-[16/9] h-full w-full place-items-center overflow-hidden text-center text-muted-foreground">
+                        {isGenerating ? (
+                          <>
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(28,91,255,0.14),transparent_45%),linear-gradient(135deg,rgba(28,91,255,0.08),transparent_50%),linear-gradient(315deg,rgba(255,106,42,0.08),transparent_52%)] animate-pulse" />
+                            <div className="relative z-10 flex w-full max-w-[76%] flex-col items-center gap-3">
+                              <div className="flex items-center gap-1.5">
+                                {[0, 1, 2].map((dot) => (
+                                  <span
+                                    key={dot}
+                                    className="h-2.5 w-2.5 rounded-full bg-primary animate-bounce"
+                                    style={{ animationDelay: `${dot * 120}ms` }}
+                                  />
+                                ))}
+                              </div>
+                              <strong className="font-display text-sm font-black uppercase text-foreground">生成中</strong>
+                              <p className="text-[11px] font-semibold leading-4 text-muted-foreground">{activeLoadingMessage}</p>
+                              <div className="grid w-full gap-2">
+                                <span className="h-2.5 rounded-full bg-black/10 animate-pulse" />
+                                <span className="h-2.5 w-[82%] justify-self-center rounded-full bg-black/10 animate-pulse" />
+                                <span className="h-2.5 w-[68%] justify-self-center rounded-full bg-black/10 animate-pulse" />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="grid place-items-center gap-3">
+                            <div className="h-[5px] w-14 bg-black/10" />
+                            <strong className="font-display text-sm font-black uppercase">准备中</strong>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="pointer-events-none absolute inset-x-1.5 bottom-1.5 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        className="pointer-events-auto grid h-7 w-7 place-items-center rounded-[2px] border border-black/14 bg-white/88 text-foreground transition hover:bg-white"
+                        onClick={() => setVariantSlideIndex(variant.key, Math.max(0, slideIndex - 1))}
+                        disabled={!liveVariant || slideIndex === 0}
+                        aria-label={`${variant.name} 上一页`}
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <b className="grid h-6 min-w-[56px] place-items-center rounded-[2px] bg-white/88 px-2 font-display text-[10px] font-black text-foreground">
+                        {slideIndex + 1} / {slideCount}
+                      </b>
+                      <button
+                        type="button"
+                        className="pointer-events-auto grid h-7 w-7 place-items-center rounded-[2px] border border-black/14 bg-white/88 text-foreground transition hover:bg-white"
+                        onClick={() => setVariantSlideIndex(variant.key, Math.min(slideCount - 1, slideIndex + 1))}
+                        disabled={!liveVariant || slideIndex >= slideCount - 1}
+                        aria-label={`${variant.name} 下一页`}
+                      >
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mx-3 h-[3px] bg-black/8">
+                    {liveVariant ? (
+                      <div
+                        className="h-full bg-primary transition-all"
+                        style={{ width: `${((slideIndex + 1) / slideCount) * 100}%` }}
+                      />
+                    ) : isGenerating ? (
+                      <div className="h-full w-[46%] bg-primary animate-pulse" />
+                    ) : (
+                      <div className="h-full w-0 bg-primary transition-all" />
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+                    <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground">
+                      {variant.summary}
+                    </p>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-7 rounded-[2px] border-black/12 bg-white px-2 text-[11px] text-foreground hover:bg-black/[0.04]"
+                        onClick={() => void runProtectedAction("download", variant.key)}
+                        disabled={actionDisabled}
+                      >
+                        {canUseProtectedActions ? <Download className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                        {downloadActionLabel}
+                      </Button>
+                      <Button
+                        type="button"
+                        className="h-7 rounded-[2px] bg-primary px-2 text-[11px] text-primary-foreground hover:bg-primary/90"
+                        onClick={() =>
+                          isHtmlPreviewDeck
+                            ? (() => {
+                                try {
+                                  if (!deck) {
+                                    throw new Error("请先生成预览，再打开 HTML 页面。")
+                                  }
+                                  openHtmlPreviewInNewTab(deck, variant.key)
+                                  setSelectedVariantKey(variant.key)
+                                  setStatusMessage("已在新的浏览器标签页打开当前风格的 HTML 预览。")
+                                } catch (error) {
+                                  setStatusMessage(error instanceof Error ? error.message : "打开 HTML 预览失败")
+                                }
+                              })()
+                            : void runProtectedAction("finalize", variant.key)
+                        }
+                        disabled={isHtmlPreviewDeck ? !deck || !liveVariant || previewIsStale : actionDisabled}
+                      >
+                        {isHtmlPreviewDeck ? (
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        ) : canUseProtectedActions ? (
+                          <Play className="h-3.5 w-3.5" />
+                        ) : (
+                          <Lock className="h-3.5 w-3.5" />
+                        )}
+                        {finalizeActionLabel}
+                      </Button>
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </section>
+        </section>
       </div>
+    </div>
+  )
+
+  return (
+    <>
+      {embedded ? (
+        shell
+      ) : (
+        <div className="h-[100svh] overflow-hidden bg-background px-2 py-2 sm:px-3">
+          {shell}
+        </div>
+      )}
 
       <LoginGateDialog
         open={Boolean(loginGateAction)}
-        onOpenChange={(open) => setLoginGateAction(open ? loginGateAction : null)}
-        actionLabel={loginGateAction === "finalize" ? "完整生成" : "下载"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLoginGateAction(null)
+          }
+        }}
+        actionLabel={
+          loginGateAction === "finalize"
+            ? deck?.previewEngine === "frontend-slides-html"
+              ? copy.openHtml
+              : copy.generateFinal
+            : deck?.previewEngine === "frontend-slides-html"
+              ? copy.downloadHtml
+              : copy.downloadPpt
+        }
         redirectTo={redirectTo}
       />
     </>

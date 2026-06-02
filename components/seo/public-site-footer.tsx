@@ -13,7 +13,7 @@ export function PublicSiteFooter() {
     <footer className="border-t border-border/80 bg-card/90">
       <div className="mx-auto grid max-w-7xl gap-8 px-6 py-12 md:grid-cols-[1.2fr_0.8fr] md:items-end">
         <div>
-          <div className="public-kicker text-muted-foreground">System Footer</div>
+          <div className="public-kicker text-muted-foreground">{copy.footer.systemFooterLabel}</div>
           <div className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.04em] text-foreground">AI Marketing</div>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">{copy.footer.description}</p>
           <div className="mt-4 text-sm text-muted-foreground">

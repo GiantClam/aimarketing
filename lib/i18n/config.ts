@@ -27,6 +27,6 @@ export function detectLocaleFromAcceptLanguage(headerValue: string | null | unde
 }
 
 export function resolveRequestLocale(cookieLocale?: string | null, _acceptLanguage?: string | null): AppLocale {
-  return normalizeLocale(cookieLocale) || DEFAULT_LOCALE
+  return normalizeLocale(_acceptLanguage) || normalizeLocale(cookieLocale) || DEFAULT_LOCALE
 }
 

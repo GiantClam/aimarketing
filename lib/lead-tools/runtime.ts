@@ -2,32 +2,113 @@ import { z } from "zod"
 
 import type { AuthUser } from "@/lib/auth/session"
 import { getLeadToolBySlug } from "@/lib/lead-tools/catalog"
-import { type PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data"
+import { type PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { getLeadToolPptEngines } from "@/lib/lead-tools/ppt-engines"
 import { buildMockSeoMetaPreview } from "@/lib/lead-tools/seo-meta-data"
 import { allowLeadToolMockFallback } from "@/lib/lead-tools/config"
 import {
-  generateLeadToolPptPreviewWithFallback,
   generateLeadToolSeoPreviewWithFallback,
   getLeadToolResolvedModels,
 } from "@/lib/lead-tools/generation"
 
 const pptScenarioSchema = z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"])
 const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
+const pptPreviewModelSchema = z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"])
 
 const pptPreviewSlideSchema = z.object({
   id: z.string(),
-  layout: z.enum(["cover", "agenda", "insight", "comparison", "timeline"]),
+  layout: z.enum(["cover", "agenda", "insight", "comparison", "evidence", "stats", "chart", "process", "timeline"]),
+  intent: z.enum(["cover", "contents", "statement", "spotlight", "comparison", "stats", "chart", "process", "closing"]).optional(),
+  nativePageType: z.string().optional(),
+  structuredFields: z
+    .array(z.enum(["bullets", "contentsItems", "comparisonItems", "spotlightItems", "metricItems", "chartItems", "processItems", "closingItems"]))
+    .optional(),
   kicker: z.string(),
   title: z.string(),
   body: z.string(),
   bullets: z.array(z.string()),
+  contentsItems: z
+    .array(
+      z.object({
+        index: z.string(),
+        title: z.string(),
+        detail: z.string(),
+      }),
+    )
+    .optional(),
+  comparisonItems: z
+    .array(
+      z.object({
+        label: z.string(),
+        title: z.string(),
+        detail: z.string(),
+      }),
+    )
+    .optional(),
+  spotlightItems: z
+    .array(
+      z.object({
+        title: z.string(),
+        detail: z.string(),
+      }),
+    )
+    .optional(),
+  metricItems: z
+    .array(
+      z.object({
+        value: z.string(),
+        label: z.string(),
+        note: z.string().optional(),
+      }),
+    )
+    .optional(),
+  chartItems: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.number(),
+        detail: z.string(),
+      }),
+    )
+    .optional(),
+  processItems: z
+    .array(
+      z.object({
+        step: z.string(),
+        title: z.string(),
+        detail: z.string(),
+      }),
+    )
+    .optional(),
+  closingItems: z
+    .array(
+      z.object({
+        label: z.string(),
+        detail: z.string(),
+      }),
+    )
+    .optional(),
   accent: z.string(),
 })
 
+const pptPreviewAssetSchema = z.object({
+  mimeType: z.enum(["image/svg+xml", "image/png"]),
+  width: z.number(),
+  height: z.number(),
+  dataUrl: z.string(),
+})
+
 const pptPreviewVariantSchema = z.object({
-  key: z.string(),
+  key: z.enum([
+    "ppt169_brutalist_ai_newspaper_2026",
+    "ppt169_sugar_rush_memphis",
+    "ppt169_pritzker_2026",
+    "ppt169_swiss_grid_systems",
+  ]),
   name: z.string(),
   summary: z.string(),
+  stylePrompt: z.string(),
+  outline: z.array(z.string()).optional(),
   palette: z.object({
     background: z.string(),
     foreground: z.string(),
@@ -37,6 +118,20 @@ const pptPreviewVariantSchema = z.object({
   }),
   strengths: z.array(z.string()),
   slides: z.array(pptPreviewSlideSchema),
+  preview: z
+    .object({
+      format: z.literal("svg"),
+      themeId: z.string(),
+      cover: pptPreviewAssetSchema,
+      slides: z.array(pptPreviewAssetSchema),
+      htmlDocument: z
+        .object({
+          fileName: z.string(),
+          html: z.string(),
+        })
+        .optional(),
+    })
+    .optional(),
 })
 
 const pptPreviewDeckSchema: z.ZodType<PptPreviewDeck> = z.object({
@@ -46,17 +141,24 @@ const pptPreviewDeckSchema: z.ZodType<PptPreviewDeck> = z.object({
   generatedAt: z.string(),
   outline: z.array(z.string()),
   variants: z.array(pptPreviewVariantSchema),
+  previewEngine: z.enum(["ppt-master-svg", "ppt-master-project", "frontend-slides-html"]).optional(),
+  previewSessionId: z.string().optional(),
+  provider: z.string().optional(),
+  previewModel: z.string().optional(),
+  source: z.enum(["live", "mock"]).optional(),
 })
 
 const pptPreviewRequestSchema = z.object({
   prompt: z.string().trim().min(1, "Prompt is required"),
   scenario: pptScenarioSchema.default("marketing-campaign"),
   language: pptLanguageSchema.default("zh-CN"),
+  model: pptPreviewModelSchema.optional(),
 })
 
 const protectedPptActionSchema = z.object({
   deck: pptPreviewDeckSchema,
   selectedVariantKey: z.string().min(1, "Selected variant is required"),
+  previewSessionId: z.string().optional(),
 })
 
 const seoPageTypeSchema = z.enum(["landing-page", "blog-post", "product-page", "feature-page"])
@@ -118,28 +220,27 @@ export async function buildLeadToolPreview(slug: string, input: unknown) {
 
   if (slug === "ai-ppt-preview") {
     const payload = pptPreviewRequestSchema.parse(input)
-    let deck: PptPreviewDeck
+    const engines = getLeadToolPptEngines()
 
     try {
-      deck = await generateLeadToolPptPreviewWithFallback(payload, allowLeadToolMockFallback())
+      const result = await engines.preview.buildPreview(payload, {
+        allowMockFallback: false,
+        resolvedModels: models,
+      })
+
+      return {
+        ...result,
+        meta: {
+          ...result.meta,
+          tool: tool.slug,
+        },
+      }
     } catch (error) {
       throw new LeadToolRuntimeError(
         "service_unavailable",
         error instanceof Error ? error.message : "PPT preview provider unavailable",
         503,
       )
-    }
-
-    return {
-      previewSessionId: crypto.randomUUID(),
-      generatedAt: deck.generatedAt,
-      deck,
-      meta: {
-        previewModel: models.previewModel,
-        mode: "fast-preview",
-        tool: tool.slug,
-        mockFallback: !hasLiveLookingDeck(deck),
-      },
     }
   }
 
@@ -173,12 +274,6 @@ export async function buildLeadToolPreview(slug: string, input: unknown) {
   throw new LeadToolRuntimeError("not_supported", "Preview not implemented for this tool", 501)
 }
 
-function hasLiveLookingDeck(deck: PptPreviewDeck) {
-  return !deck.variants.every((variant) =>
-    variant.slides.some((slide) => slide.body.includes("后续接入真实 PPTX 导出器") || slide.body.includes("Wire a real PPTX exporter next")),
-  )
-}
-
 export async function buildLeadToolFinalize(slug: string, input: unknown, user: AuthUser | null) {
   const tool = assertLiveTool(slug)
   const models = getLeadToolResolvedModels(slug)
@@ -193,20 +288,19 @@ export async function buildLeadToolFinalize(slug: string, input: unknown, user: 
 
   const payload = protectedPptActionSchema.parse(input)
   const selectedVariant = getSelectedVariant(payload.deck, payload.selectedVariantKey)
+  const engines = getLeadToolPptEngines()
 
-  return {
-    jobId: crypto.randomUUID(),
-    status: "queued",
-    message: "完整 PPT 生成任务已创建，当前为可替换的 MVP 占位导出器。",
-    requestedBy: user?.email,
-    exportPlan: {
-      title: payload.deck.title,
-      selectedVariant: selectedVariant.name,
-      slideCount: selectedVariant.slides.length,
-      output: "editable-pptx",
-      finalModel: models.finalModel,
+  return engines.export.buildFinalize(
+    {
+      deck: payload.deck,
+      selectedVariant,
+      previewSessionId: payload.previewSessionId,
     },
-  }
+    {
+      user,
+      resolvedModels: models,
+    },
+  )
 }
 
 export async function buildLeadToolDownload(slug: string, input: unknown, user: AuthUser | null) {
@@ -222,9 +316,16 @@ export async function buildLeadToolDownload(slug: string, input: unknown, user: 
 
   const payload = protectedPptActionSchema.parse(input)
   const selectedVariant = getSelectedVariant(payload.deck, payload.selectedVariantKey)
+  const engines = getLeadToolPptEngines()
 
-  return {
-    deck: payload.deck,
-    variant: selectedVariant,
-  }
+  return engines.export.buildDownload(
+    {
+      deck: payload.deck,
+      selectedVariant,
+      previewSessionId: payload.previewSessionId,
+    },
+    {
+      user,
+    },
+  )
 }

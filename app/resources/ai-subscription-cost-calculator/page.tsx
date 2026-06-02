@@ -3,41 +3,47 @@ import type { Metadata } from "next"
 import { AiCostCalculator } from "@/components/seo/ai-cost-calculator"
 import { PublicSiteFooter } from "@/components/seo/public-site-footer"
 import { PublicSiteHeader } from "@/components/seo/public-site-header"
-import { buildAppUrl } from "@/lib/app-url"
+import { buildLocalizedPublicUrl, getLocalizedPublicAlternates } from "@/lib/i18n/routing"
+import { getRequestLocale } from "@/lib/i18n/request-locale"
+import { getAiCostPageCopy } from "@/lib/seo/i18n"
 
-const canonical = buildAppUrl("/resources/ai-subscription-cost-calculator")
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale()
+  const copy = getAiCostPageCopy(locale)
+  const canonical = buildLocalizedPublicUrl("/resources/ai-subscription-cost-calculator", locale)
 
-export const metadata: Metadata = {
-  title: "AI Subscription Cost Calculator for Small Teams",
-  description:
-    "Estimate how much your team spends on ChatGPT, Claude, Gemini, image tools, writing tools, and search tools, then compare a shared AI marketing workspace.",
-  alternates: {
-    canonical,
-  },
-  openGraph: {
-    title: "AI Subscription Cost Calculator for Small Teams",
-    description:
-      "Estimate monthly and annual AI software costs for a small team and compare a shared AI Marketing workspace.",
-    url: canonical,
-    siteName: "AI Marketing",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "AI Subscription Cost Calculator for Small Teams",
-    description: "Estimate monthly and annual AI software costs for your team's AI stack.",
-  },
+  return {
+    title: locale === "zh" ? "对比营销团队的 AI 工具成本" : "Compare AI Tool Costs for Marketing Teams",
+    description: copy.description,
+    alternates: {
+      canonical,
+      languages: getLocalizedPublicAlternates("/resources/ai-subscription-cost-calculator"),
+    },
+    openGraph: {
+      title: locale === "zh" ? "对比营销团队的 AI 工具成本" : "Compare AI Tool Costs for Marketing Teams",
+      description: copy.description,
+      url: canonical,
+      siteName: "AIMarketingSite",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: locale === "zh" ? "对比营销团队的 AI 工具成本" : "Compare AI Tool Costs for Marketing Teams",
+      description: copy.description,
+    },
+  }
 }
 
-export default function AiSubscriptionCostCalculatorPage() {
+export default async function AiSubscriptionCostCalculatorPage() {
+  const locale = await getRequestLocale()
+  const copy = getAiCostPageCopy(locale)
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "AI Subscription Cost Calculator",
+    name: locale === "zh" ? "AI 工具成本计算器" : "AI Subscription Cost Calculator",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
-    description:
-      "A calculator for estimating small-team AI software subscription costs and comparing a shared AI marketing workspace.",
+    description: copy.description,
   }
 
   return (
@@ -47,24 +53,25 @@ export default function AiSubscriptionCostCalculatorPage() {
 
       <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="public-kicker text-muted-foreground">AI cost calculator</p>
-          <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">Budget Signal</span>
+          <p className="public-kicker text-muted-foreground">{copy.eyebrow}</p>
+          <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">
+            {copy.budgetSignal}
+          </span>
           <span className="inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
             <span className="public-signal" aria-hidden="true" />
-            <span className="public-kicker text-muted-foreground">Team Cost Scan</span>
+            <span className="public-kicker text-muted-foreground">{copy.teamCostScan}</span>
           </span>
         </div>
         <h1 className="public-display mt-4 max-w-4xl text-5xl text-foreground lg:text-6xl">
-          Calculate how much your team spends on separate AI tools
+          {copy.title}
         </h1>
         <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">
-          Estimate your monthly and annual AI software cost across ChatGPT, Claude, Gemini, image tools, writing tools,
-          and search tools. Then compare it with one shared AI Marketing workspace for small teams.
+          {copy.description}
         </p>
       </section>
 
       <section className="mx-auto max-w-7xl px-6 pb-18">
-        <AiCostCalculator />
+        <AiCostCalculator locale={locale} />
       </section>
 
       <PublicSiteFooter />

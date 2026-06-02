@@ -2,10 +2,12 @@
 
 import { useTransition } from "react"
 import { Globe } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { useI18n } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
+import { type AppLocale } from "@/lib/i18n/config"
+import { localizePublicPath } from "@/lib/i18n/routing"
 import { cn } from "@/lib/utils"
 
 type LocaleSwitcherProps = {
@@ -18,13 +20,25 @@ export function LocaleSwitcher({
   className,
 }: LocaleSwitcherProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { locale, setLocale } = useI18n()
   const [isPending, startTransition] = useTransition()
 
-  const handleLocaleChange = (nextLocale: "zh" | "en") => {
+  const handleLocaleChange = (nextLocale: AppLocale) => {
     if (nextLocale === locale) return
+
+    const queryString = searchParams.toString()
+    const currentPath = `${pathname}${queryString ? `?${queryString}` : ""}`
+    const nextPath = localizePublicPath(currentPath, nextLocale)
+
     setLocale(nextLocale)
     startTransition(() => {
+      if (nextPath !== currentPath) {
+        router.replace(nextPath)
+        return
+      }
+
       router.refresh()
     })
   }

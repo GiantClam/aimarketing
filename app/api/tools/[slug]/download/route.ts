@@ -9,6 +9,27 @@ type ToolRouteContext = {
   params: Promise<{ slug: string }>
 }
 
+function toAsciiDownloadFileName(fileName: string) {
+  const normalized = fileName
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/(^[-.\s]+|[-.\s]+$)/g, "")
+
+  if (normalized) {
+    return normalized
+  }
+
+  return "lead-tool-export.pptx"
+}
+
+function buildContentDisposition(fileName: string) {
+  const asciiFileName = toAsciiDownloadFileName(fileName)
+  const encodedFileName = encodeURIComponent(fileName)
+
+  return `attachment; filename="${asciiFileName}"; filename*=UTF-8''${encodedFileName}`
+}
+
 export async function POST(request: NextRequest, context: ToolRouteContext) {
   const { slug } = await context.params
 
@@ -16,16 +37,19 @@ export async function POST(request: NextRequest, context: ToolRouteContext) {
     const body = await request.json()
     const user = await requireAuthenticatedUser(request)
     const result = await buildLeadToolDownload(slug, body, user)
-    const artifact = await exportPptVariantToPptx({
-      deck: result.deck,
-      variant: result.variant,
-    })
+    const artifact =
+      "artifact" in result && result.artifact
+        ? result.artifact
+        : await exportPptVariantToPptx({
+            deck: result.deck,
+            variant: result.variant,
+          })
 
     return new NextResponse(new Uint8Array(artifact.buffer), {
       status: 200,
       headers: {
         "Content-Type": artifact.contentType,
-        "Content-Disposition": `attachment; filename="${artifact.fileName}"`,
+        "Content-Disposition": buildContentDisposition(artifact.fileName),
       },
     })
   } catch (error) {

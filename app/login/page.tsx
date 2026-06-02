@@ -29,11 +29,8 @@ export default function LoginPage() {
 
   const getNextPath = () => {
     if (typeof window === "undefined") return "/dashboard"
-    const params = new URLSearchParams(window.location.search)
-    return params.get("next") || params.get("redirect") || "/dashboard"
+    return new URLSearchParams(window.location.search).get("next") || "/dashboard"
   }
-
-  const registerHref = `/register?next=${encodeURIComponent(getNextPath())}`
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -205,7 +202,7 @@ export default function LoginPage() {
 
             <div className="text-sm text-muted-foreground">
               {messages.login.noAccount}{" "}
-              <Link href={registerHref} className="font-medium text-foreground underline underline-offset-4">
+              <Link href="/register" className="font-medium text-foreground underline underline-offset-4">
                 {messages.login.registerNow}
               </Link>
             </div>

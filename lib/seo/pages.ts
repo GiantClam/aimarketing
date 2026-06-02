@@ -192,9 +192,9 @@ const TITLE_TOPIC_PROFILES: Array<{ pattern: RegExp; profile: TopicProfile }> = 
     },
   },
   {
-    pattern: /workspace|subscription|small business|small marketing teams/i,
+    pattern: /workspace|subscription|small business|small marketing teams|marketing teams/i,
     profile: {
-      keyword: "shared AI workspace",
+      keyword: "AI workspace for marketing teams",
       deliverable: "shared model access, reusable context, and repeatable campaign assets",
       decisionLens: "seat efficiency, context reuse, model flexibility, and review visibility",
       contextSignals: ["team size", "tool stack", "recurring workflows", "approval process"],
@@ -270,7 +270,7 @@ function resolveAlternativeTopicProfile(product: string): TopicProfile {
     return resolveTopicProfile("copywriting", "copywriting")
   }
   if (/chatgpt|claude/i.test(product)) {
-    return resolveTopicProfile("small marketing teams workspace", "shared AI workspace")
+    return resolveTopicProfile("marketing teams workspace", "AI workspace for marketing teams")
   }
   if (/typingmind|team-gpt|poe/i.test(product)) {
     return resolveTopicProfile("workspace", "shared AI workspace")
@@ -315,7 +315,7 @@ function topicRelatedLinks(title: string): SeoRelatedLink[] {
   if (/brand strategy/i.test(title)) {
     return [
       makeRelatedLink("/prompts/marketing-strategy-prompts", "Use prompt structures for positioning, audience, and narrative work."),
-      makeRelatedLink("/solutions/ai-for-small-marketing-teams", "See how small teams turn positioning into repeatable execution."),
+      makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See how marketing teams turn positioning into repeatable execution."),
     ]
   }
   if (/growth marketing/i.test(title)) {
@@ -332,7 +332,7 @@ function topicRelatedLinks(title: string): SeoRelatedLink[] {
   }
 
   return [
-    makeRelatedLink("/solutions/ai-for-small-marketing-teams", "See how the shared workspace fits a broader small-team marketing stack."),
+    makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See how the shared workspace fits a broader marketing-team operating stack."),
     makeRelatedLink("/resources/ai-subscription-cost-calculator", "Estimate the cost of staying with separate subscriptions."),
   ]
 }
@@ -367,22 +367,22 @@ function alternativePage(input: {
   return {
     slug: input.slug,
     group: "alternatives",
-    title: `${input.product} Alternative for Small Marketing Teams`,
-    description: `Compare ${input.product} with AI Marketing for small teams that need multiple models, marketing agents, shared context, and a lower-cost AI workspace.`,
-    h1: `${input.product} Alternative for Small Marketing Teams`,
-    intro: `${input.product} can be a strong AI tool, but many small teams also need multi-model access, marketing-specific workflows, image generation, website copy, video scripts, and shared company context without buying a separate seat in every tool.`,
+    title: `${input.product} Alternative for Marketing Teams`,
+    description: `Compare ${input.product} with AI Marketing for marketing teams that need multiple models, shared context, and one workspace for content, research, visuals, and workflows.`,
+    h1: `${input.product} Alternative for Marketing Teams`,
+    intro: `${input.product} can be a strong AI tool, but many marketing teams also need multi-model access, marketing-specific workflows, image generation, website copy, video scripts, and shared company context without buying a separate seat in every tool.`,
     primaryKeyword: input.primaryKeyword,
     secondaryKeywords: [
       `${input.product} alternative`,
-      "AI workspace for small teams",
+      "AI workspace for marketing teams",
       "multi-model AI marketing workspace",
-      "save money on AI subscriptions",
+      "marketing AI workflow workspace",
     ],
     audience: input.audience,
     highlights: [
       `${input.product} is strongest when the team wants its native workflow and vendor-specific experience.`,
       `${input.product} alternative searches usually start when ${topic.deliverable} need to live beside shared context and more than one model.`,
-      `Best fit for buyers comparing seat sprawl against one shared workspace for small-team marketing execution.`,
+      "Best fit for buyers comparing fragmented subscriptions against one workspace for recurring marketing execution.",
     ],
     comparison: {
       firstLabel: input.product,
@@ -489,7 +489,7 @@ function alternativePage(input: {
       secondaryHref: "/resources/ai-subscription-cost-calculator",
     },
     relatedLinks: [
-      makeRelatedLink("/compare/best-ai-workspace-for-small-teams", "Compare shared workspace options for small teams before switching."),
+      makeRelatedLink("/compare/best-ai-workspace-for-marketing-teams", "Compare shared workspace options for marketing teams before switching."),
       makeRelatedLink("/use-cases/chatgpt-claude-gemini-in-one-workspace", "See how teams keep multiple models in one workspace."),
       makeRelatedLink("/resources/ai-subscription-cost-calculator", "Estimate whether replacing stacked subscriptions changes the economics."),
     ],
@@ -513,11 +513,11 @@ function solutionPage(input: {
     slug: input.slug,
     group: "solutions",
     title: `${input.title} | AI Marketing`,
-    description: `A multi-model AI marketing workspace for ${input.audience.toLowerCase()} with specialist agents, shared context, team permissions, and reusable workflows.`,
+    description: `A multi-model AI workspace for ${input.audience.toLowerCase()} with shared context, team visibility, and reusable workflows for content, research, and campaign execution.`,
     h1: input.title,
     intro: `${input.audience} need practical marketing output, not another generic AI chat window. AI Marketing gives the team a shared workspace for models, agents, company context, and repeatable content workflows.`,
     primaryKeyword: input.primaryKeyword,
-    secondaryKeywords: ["AI marketing workspace", "AI tools for small teams", "marketing agents", "shared AI workspace"],
+    secondaryKeywords: ["AI marketing workspace", "AI workspace for marketing teams", "marketing workflows", "shared AI workspace"],
     audience: input.audience,
     highlights: [
       `Built for ${sentenceCase(input.audience)} instead of a generic AI chat surface.`,
@@ -593,7 +593,7 @@ function solutionPage(input: {
     },
     relatedLinks: [
       makeRelatedLink("/alternatives/chatgpt-team-alternative", "Compare a marketing-specific workspace against a general team chat product."),
-      makeRelatedLink("/compare/best-ai-tools-for-small-business", "See how small-business buyers compare separate tools against one workspace."),
+      makeRelatedLink("/compare/best-ai-workspace-for-marketing-teams", "See how marketing teams compare workspace options instead of separate point tools."),
       makeRelatedLink("/resources/ai-subscription-cost-calculator", "Estimate whether consolidation creates a real cost advantage."),
     ],
   }
@@ -697,14 +697,14 @@ function agentPage(input: {
     cta: {
       primaryLabel: "Create a team workspace",
       primaryHref: "/register",
-      secondaryLabel: "View small-team solution",
-      secondaryHref: "/solutions/ai-for-small-marketing-teams",
+      secondaryLabel: "View marketing-team use case",
+      secondaryHref: "/use-cases/ai-workspace-for-marketing-teams",
     },
     relatedLinks: [
       ...(promptHref
         ? [makeRelatedLink(promptHref, "Start from the matching prompt library when the team needs reusable starters.")]
         : []),
-      makeRelatedLink("/solutions/ai-for-small-marketing-teams", "See where this workflow fits inside a shared team setup."),
+      makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See where this workflow fits inside a shared team setup."),
       makeRelatedLink("/resources/ai-subscription-cost-calculator", "Compare this workflow against the cost of separate point tools."),
     ],
   }
@@ -722,17 +722,18 @@ function makeUseCasePage(input: {
   customFaqs?: SeoFaq[]
 }) : SeoPage {
   const topic = resolveTopicProfile(input.title, input.primaryKeyword)
+  const currentPath = `/use-cases/${input.slug}`
 
   return {
     slug: input.slug,
     group: "use-cases",
     title: `${input.title} | AI Marketing`,
-    description: `${input.intro} Learn how small teams can consolidate AI tools with a shared multi-model marketing workspace.`,
+    description: `${input.intro} Learn how marketing teams can consolidate AI tools with a shared multi-model workspace for content, research, and workflows.`,
     h1: input.title,
     intro: input.intro,
     primaryKeyword: input.primaryKeyword,
     secondaryKeywords: ["save money on AI tools", "one AI subscription", "multi-model AI workspace"],
-    audience: "Small teams comparing the cost of separate AI subscriptions against a shared workspace.",
+    audience: "Marketing teams comparing separate AI subscriptions against a shared workspace.",
     highlights: [
       input.intro,
       `Useful when the team wants to reduce tool sprawl without losing ${topic.deliverable}.`,
@@ -803,9 +804,9 @@ function makeUseCasePage(input: {
     },
     relatedLinks: [
       makeRelatedLink("/resources/ai-subscription-cost-calculator", "Run the numbers before adding or cancelling tools."),
-      makeRelatedLink("/solutions/ai-for-small-marketing-teams", "See how the shared workspace fits recurring team delivery."),
-      makeRelatedLink("/compare/best-ai-workspace-for-small-teams", "Compare workspace options instead of only model vendors."),
-    ],
+      makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See how the shared workspace fits recurring marketing-team delivery."),
+      makeRelatedLink("/compare/best-ai-workspace-for-marketing-teams", "Compare workspace options instead of only model vendors."),
+    ].filter((link) => link.href !== currentPath),
   }
 }
 
@@ -828,12 +829,12 @@ function comparePage(input: {
     slug: input.slug,
     group: "compare",
     title: `${input.title} | AI Marketing`,
-    description: `Compare ${input.first} and ${input.second} for marketing work, then see when a shared multi-model workspace is a better fit for small teams.`,
+    description: `Compare ${input.first} and ${input.second} for marketing work, then see when a shared multi-model workspace is a better fit for marketing teams.`,
     h1: input.title,
-    intro: `Choosing the best AI model is easier when you separate model strengths from workflow needs. Small teams often need several models plus shared marketing context.`,
+    intro: "Choosing the best AI model is easier when you separate model strengths from workflow needs. Marketing teams often need several models plus shared context.",
     primaryKeyword: input.primaryKeyword,
     secondaryKeywords: ["best AI model for marketing", "AI tools comparison", "multi-model AI workspace"],
-    audience: "Small teams deciding which AI model or AI workspace should support marketing execution.",
+    audience: "Marketing teams deciding which AI model or AI workspace should support recurring execution.",
     highlights: [
       `${input.first} and ${input.second} solve different parts of ${topic.deliverable}.`,
       `The better answer usually depends on ${topic.decisionLens}, not only brand preference.`,
@@ -1034,7 +1035,7 @@ function promptPage(input: {
     relatedLinks: [
       makeRelatedLink(input.agentHref, "Open the matching structured agent workflow for this prompt set."),
       ...topicRelatedLinks(input.title).filter((link) => link.href !== input.agentHref && link.href !== currentPath),
-      makeRelatedLink("/solutions/ai-for-small-marketing-teams", "See where reusable prompts fit inside a broader team workflow."),
+      makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See where reusable prompts fit inside a broader team workflow."),
     ],
   }
 }
@@ -1319,6 +1320,102 @@ export const seoPages: SeoPage[] = [
       "Campaign context, prompts, and review notes stay attached to the company workspace.",
       "Permissions match real responsibilities across creators, reviewers, and managers.",
       "The team can revisit past decisions and reuse them instead of rebuilding everything from memory.",
+    ],
+  }),
+  makeUseCasePage({
+    slug: "ai-workspace-for-marketing-teams",
+    title: "AI Workspace for Marketing Teams",
+    intro: "Give marketing teams one workspace for content, research, visuals, and campaign workflows instead of scattering the job across separate AI tools.",
+    primaryKeyword: "AI workspace for marketing teams",
+    steps: [
+      "Map the recurring workflows that move from research to copy, visuals, and review.",
+      "Load shared audience, offer, and brand context before the team starts drafting.",
+      "Decide which workflows should stay multi-model and which ones need structured review.",
+      "Route the team through one shared workspace before buying another specialist point tool.",
+    ],
+    hiddenCosts: [
+      "Marketing teams lose time when every launch brief gets rebuilt inside different chat, writing, and image tools.",
+      "Research decisions disappear when they never reach the same workspace as the content and visual assets they should guide.",
+      "Reviewers cannot reuse winning context if the final output is assembled from disconnected subscriptions.",
+      "Homepage, SEO, and campaign work drift apart when each task starts with a different prompt history.",
+    ],
+    successSignals: [
+      "The same brief can move from research to copy, visuals, and review without re-explaining the project.",
+      "Marketing output becomes easier to reuse because the team can see what context and decisions produced the final asset.",
+      "Internal links, pricing, and use-case pages tell one product story instead of separate cost or prompt stories.",
+      "The team reduces tool switching without forcing every task into one model.",
+    ],
+  }),
+  makeUseCasePage({
+    slug: "ai-workspace-for-seo-teams",
+    title: "AI Workspace for SEO Teams",
+    intro: "Keep search intent, outlines, drafts, and refresh workflows in one AI workspace instead of spreading SEO work across isolated chats and writing tools.",
+    primaryKeyword: "AI workspace for SEO teams",
+    steps: [
+      "Collect the recurring SEO jobs that reuse the same product, ICP, and SERP context.",
+      "Store the target keyword, search intent, internal links, and editorial constraints in one shared workspace.",
+      "Use the same context for research, article outlines, refreshes, and review passes.",
+      "Compare model output without losing the SEO brief or the editorial history behind it.",
+    ],
+    hiddenCosts: [
+      "SEO teams repeat SERP research because the winning brief never stays attached to the draft workflow.",
+      "Writers and reviewers lose time when internal links, primary keywords, and factual constraints live in different systems.",
+      "Content refresh work becomes inconsistent when the old reasoning is missing from the current tool.",
+      "A general chat tool rarely preserves the workflow detail needed to scale SEO production cleanly.",
+    ],
+    successSignals: [
+      "The team can move from search intent to publishable draft faster without dropping key constraints.",
+      "Article updates inherit the earlier context instead of restarting from zero.",
+      "Editors can compare model output while keeping the same SEO brief and review criteria.",
+      "SEO work stops competing with campaign work for context because both live in one operating workspace.",
+    ],
+  }),
+  makeUseCasePage({
+    slug: "ai-workspace-for-content-creators",
+    title: "AI Workspace for Content Creators",
+    intro: "Creators need one workspace for ideation, scripting, repurposing, visuals, and launch context instead of a stack of disconnected AI tabs.",
+    primaryKeyword: "AI workspace for content creators",
+    steps: [
+      "Start with the audience, offer, and content angle that should carry through every asset.",
+      "Reuse one shared brief across outlines, scripts, repurposed posts, and visual directions.",
+      "Keep revision notes attached to the same workspace so future content starts with the right context.",
+      "Only add specialist tools when the shared workflow cannot cover a real production need.",
+    ],
+    hiddenCosts: [
+      "Creators lose momentum when every asset starts with a new prompt and a different set of reference notes.",
+      "Repurposing takes longer when the original brief and final decisions are not visible in the same system.",
+      "Visual direction drifts away from the script when image and content tools never share context.",
+      "Publishing speed falls when review notes are scattered across chats, docs, and design tools.",
+    ],
+    successSignals: [
+      "One brief can power scripts, repurposed posts, visuals, and launch copy with less rework.",
+      "The creator can revisit what worked and reuse it instead of improvising from scratch.",
+      "Content output scales across channels without forcing every task into one model or one template.",
+      "The workflow stays consistent enough that collaborators can step in without losing the thread.",
+    ],
+  }),
+  makeUseCasePage({
+    slug: "ai-workspace-for-indie-founders",
+    title: "AI Workspace for Indie Founders",
+    intro: "Indie founders need one AI workspace to connect positioning, research, launch copy, and workflow decisions while keeping spend and context under control.",
+    primaryKeyword: "AI workspace for indie founders",
+    steps: [
+      "Capture the product, target buyer, and launch goal once before drafting anything.",
+      "Run research, positioning, homepage copy, and launch assets from the same shared context.",
+      "Use cost and compare pages to decide where the shared workspace should replace separate subscriptions first.",
+      "Keep advanced setup options in reserve until the core workflow is already working.",
+    ],
+    hiddenCosts: [
+      "Founders often buy more tools than they can operationalize because each promise sounds useful in isolation.",
+      "Positioning work gets diluted when the research, homepage copy, and launch assets are produced in separate tools.",
+      "Tool sprawl hides the true workflow bottleneck, which is usually context loss rather than raw model quality.",
+      "A fragmented stack makes it harder to see which AI spending actually improves launch output.",
+    ],
+    successSignals: [
+      "The founder can move from positioning and research to launch assets without restarting the story every time.",
+      "Cost comparisons become clearer because the workflow already lives in one place.",
+      "The product narrative stays more consistent across homepage copy, SEO pages, and launch materials.",
+      "Advanced options like BYOK or private deployment become additive instead of being the first thing to explain.",
     ],
   }),
   solutionPage({
@@ -1868,6 +1965,71 @@ export const seoPages: SeoPage[] = [
       "Compare total cost including approvals, duplicated context, and occasional-user access.",
       "Check whether the business would benefit more from shared workflows than from another isolated point tool.",
       "Choose the stack that fits the operating model of the team, not only the preferences of the loudest power user.",
+    ],
+  }),
+  comparePage({
+    slug: "compare-ai-tool-costs",
+    title: "Compare AI Tool Costs for Marketing Teams",
+    first: "Separate AI subscriptions",
+    second: "Shared AI workspace",
+    primaryKeyword: "compare AI tool costs",
+    firstWinsWhen: [
+      "Different specialists genuinely need vendor-native workflows every day and the overlap is low.",
+      "The team is still testing categories and does not yet know which workflows should standardize.",
+      "A cost comparison would be misleading because the current stack is mostly exploratory rather than operational.",
+      "Model-specific features matter more than keeping briefs and review history in one system.",
+    ],
+    secondWinsWhen: [
+      "The same marketing brief keeps moving between research, copy, visuals, and approval workflows.",
+      "Occasional contributors need access to the output and context without each buying their own premium stack.",
+      "Leaders want one place to compare total spend against the operating friction caused by tool sprawl.",
+      "The team needs cost clarity without giving up multiple models or reusable workflow context.",
+    ],
+    decisionChecklist: [
+      "Count the subscriptions attached to real weekly output, not just the tools someone tested once.",
+      "Score how often the same brief is copied across chat, writing, image, and review tools.",
+      "Compare the cost of seats together with the cost of context loss, review friction, and duplicated workflows.",
+      "Use the calculator only after the team has mapped which workflows should actually live in the shared workspace.",
+    ],
+    customSections: [
+      {
+        heading: "Why cost comparisons fail without workflow context",
+        body: [
+          "A cheaper stack on paper can still be more expensive in practice if the team keeps rebuilding research, rewriting briefs, and reviewing assets across separate tools.",
+          "The point of this page is to connect spend with workflow design. Marketing teams usually need both views before they can make a confident consolidation decision.",
+        ],
+      },
+    ],
+    customFaqs: [
+      {
+        question: "Should cost savings lead the positioning?",
+        answer: "Usually no. Cost savings help support the decision, but the stronger positioning is a multi-model workspace for marketing content, research, and workflows.",
+      },
+    ],
+  }),
+  comparePage({
+    slug: "best-ai-workspace-for-marketing-teams",
+    title: "Best AI Workspace for Marketing Teams",
+    first: "Generic AI workspace",
+    second: "AI Marketing workspace",
+    primaryKeyword: "best AI workspace for marketing teams",
+    firstWinsWhen: [
+      "The team wants a neutral AI collaboration layer that serves many departments the same way.",
+      "Marketing workflows are still light enough that the workspace does not need opinionated content or review flows.",
+      "General chat collaboration matters more than keeping campaign execution, research, and visuals in one system.",
+      "No single team yet owns a repeatable marketing operating model inside the workspace.",
+    ],
+    secondWinsWhen: [
+      "The main buying job is recurring marketing execution across content, research, visuals, and workflow handoffs.",
+      "The team needs multiple models but does not want to lose the shared brief and campaign context between tools.",
+      "Leaders want use-case, compare, pricing, and workflow pages to point to one coherent product story.",
+      "The workspace should help marketers ship work, not just collaborate around prompts.",
+    ],
+    decisionChecklist: [
+      "Decide whether the workspace is mainly for generic AI collaboration or for recurring marketing delivery.",
+      "Compare how each option handles context reuse from research to content, visuals, and team review.",
+      "Check whether the workspace supports the product story you want Google and buyers to understand first.",
+      "Choose the system that matches the team's highest-frequency marketing workflows rather than the broadest feature list.",
     ],
   }),
   comparePage({

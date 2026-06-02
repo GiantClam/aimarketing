@@ -23,14 +23,6 @@ export default function RegisterPage() {
   const [enterpriseAction, setEnterpriseAction] = useState<"create" | "join">("create")
   const [enterpriseLookup, setEnterpriseLookup] = useState<{ found: boolean; name?: string } | null>(null)
 
-  const getNextPath = () => {
-    if (typeof window === "undefined") return "/dashboard"
-    const params = new URLSearchParams(window.location.search)
-    return params.get("next") || params.get("redirect") || "/dashboard"
-  }
-
-  const loginHref = `/login?next=${encodeURIComponent(getNextPath())}`
-
   const handleLookup = async (code: string) => {
     const normalized = code.trim()
     if (!normalized) return
@@ -100,7 +92,7 @@ export default function RegisterPage() {
         return
       }
 
-      router.push(getNextPath())
+      router.push("/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : messages.register.failed)
     }
@@ -336,13 +328,6 @@ export default function RegisterPage() {
                     : messages.register.submitJoin}
               </Button>
             </form>
-
-            <div className="mt-6 text-sm text-muted-foreground">
-              {t("已有账户？", "Already have an account?")}{" "}
-              <Link href={loginHref} className="font-medium text-foreground underline underline-offset-4">
-                {messages.login.submit}
-              </Link>
-            </div>
           </section>
         </div>
       </div>

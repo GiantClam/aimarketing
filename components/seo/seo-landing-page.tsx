@@ -8,6 +8,9 @@ import { PublicSiteFooter } from "@/components/seo/public-site-footer"
 import { PublicSiteHeader } from "@/components/seo/public-site-header"
 import { SeoPageHeroCta } from "@/components/seo/seo-page-hero-cta"
 import { TrackedSeoCtaBlock } from "@/components/seo/tracked-seo-cta-block"
+import type { AppLocale } from "@/lib/i18n/config"
+import { localizePublicPath } from "@/lib/i18n/routing"
+import { getSeoUiCopy } from "@/lib/seo/i18n"
 
 function faqJsonLd(page: SeoPage) {
   if (page.faqs.length === 0) return null
@@ -26,8 +29,15 @@ function faqJsonLd(page: SeoPage) {
   }
 }
 
-export function SeoLandingPage({ page }: { page: SeoPage }) {
+export function SeoLandingPage({
+  page,
+  locale,
+}: {
+  page: SeoPage
+  locale: AppLocale
+}) {
   const jsonLd = faqJsonLd(page)
+  const ui = getSeoUiCopy(locale)
   const activeKey =
     page.group === "alternatives"
       ? "alternatives"
@@ -54,22 +64,22 @@ export function SeoLandingPage({ page }: { page: SeoPage }) {
             <div className="flex flex-wrap items-center gap-2">
               <p className="public-kicker text-muted-foreground">{page.primaryKeyword}</p>
               <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">
-                SEO Landing
+                {ui.landingBadge}
               </span>
               <span className="inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
                 <span className="public-signal" aria-hidden="true" />
-                <span className="public-kicker text-muted-foreground">Brand Demand</span>
+                <span className="public-kicker text-muted-foreground">{ui.brandDemand}</span>
               </span>
             </div>
             <h1 className="public-display mt-4 max-w-4xl text-5xl text-foreground lg:text-6xl">
               {page.h1}
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">{page.intro}</p>
-            <SeoPageHeroCta page={page} />
+            <SeoPageHeroCta page={page} locale={locale} />
           </div>
 
           <aside className="public-panel rounded-[12px] p-6">
-            <p className="public-kicker text-muted-foreground">Best fit</p>
+            <p className="public-kicker text-muted-foreground">{ui.bestFit}</p>
             <p className="mt-3 text-base leading-7 text-foreground">{page.audience}</p>
             <div className="mt-6 space-y-3">
               {page.secondaryKeywords.slice(0, 4).map((keyword) => (
@@ -138,12 +148,12 @@ export function SeoLandingPage({ page }: { page: SeoPage }) {
       {page.relatedLinks.length > 0 ? (
         <section className="mx-auto max-w-7xl px-6 pb-4">
           <div className="public-panel rounded-[12px] p-6 sm:p-8">
-            <p className="public-kicker text-muted-foreground">Related pages</p>
+            <p className="public-kicker text-muted-foreground">{ui.relatedPages}</p>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               {page.relatedLinks.map((link, index) => (
                 <Link
                   key={`${page.slug}-${link.href}`}
-                  href={link.href}
+                  href={localizePublicPath(link.href, locale)}
                   className="rounded-[8px] border border-border bg-background p-5 transition hover:border-foreground/20 hover:bg-muted/40"
                 >
                   <div className="font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground/48">
@@ -158,10 +168,10 @@ export function SeoLandingPage({ page }: { page: SeoPage }) {
         </section>
       ) : null}
 
-      <SeoFaqList faqs={page.faqs} />
+      <SeoFaqList faqs={page.faqs} locale={locale} />
 
       <section className="mx-auto max-w-7xl px-6 pb-18">
-        <TrackedSeoCtaBlock cta={page.cta} group={page.group} slug={page.slug} />
+        <TrackedSeoCtaBlock cta={page.cta} group={page.group} slug={page.slug} locale={locale} />
       </section>
 
       <PublicSiteFooter />

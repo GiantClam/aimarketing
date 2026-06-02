@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n/config"
+import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
+import {
+  extractLocaleFromPathname,
+  isLocalizedPublicPath,
+  localizePublicPath,
+  LOCALE_REQUEST_HEADER_NAME,
+} from "@/lib/i18n/routing"
 
 const PUBLIC_PATHS = new Set(["/login", "/register"])
 const SESSION_COOKIE_NAME = "aimarketing_session"
@@ -16,41 +22,70 @@ function applySecurityHeaders(response: NextResponse) {
   return response
 }
 
-function applyLocaleCookie(request: NextRequest, response: NextResponse) {
-  const existing = normalizeLocale(request.cookies.get(LOCALE_COOKIE_NAME)?.value)
-  const locale = existing || DEFAULT_LOCALE
-  if (!existing) {
-    response.cookies.set(LOCALE_COOKIE_NAME, locale, {
-      path: "/",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
-    })
-  }
+function applyLocaleCookie(response: NextResponse, locale: string) {
+  response.cookies.set(LOCALE_COOKIE_NAME, locale, {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365,
+  })
   return response
 }
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const { locale: pathLocale, pathname: normalizedPathname } = extractLocaleFromPathname(pathname)
+  const locale = resolveRequestLocale(request.cookies.get(LOCALE_COOKIE_NAME)?.value, pathLocale)
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
   const demoSessionToken = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
   const hasUserSession = Boolean(sessionToken)
   const hasDemoSession = Boolean(demoSessionToken)
   const isAuthenticated = hasUserSession || hasDemoSession
 
-  if (pathname.startsWith("/dashboard")) {
+  if (!pathLocale && isLocalizedPublicPath(normalizedPathname)) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = localizePublicPath(normalizedPathname, locale)
+    return applySecurityHeaders(applyLocaleCookie(NextResponse.redirect(redirectUrl), locale))
+  }
+
+  if (normalizedPathname.startsWith("/dashboard")) {
     if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url)
-      loginUrl.searchParams.set("next", pathname)
-      return applySecurityHeaders(applyLocaleCookie(request, NextResponse.redirect(loginUrl)))
+      loginUrl.searchParams.set("next", normalizedPathname)
+      return applySecurityHeaders(applyLocaleCookie(NextResponse.redirect(loginUrl), locale))
     }
-    return applySecurityHeaders(applyLocaleCookie(request, NextResponse.next()))
   }
 
-  if (PUBLIC_PATHS.has(pathname) && hasUserSession) {
-    return applySecurityHeaders(applyLocaleCookie(request, NextResponse.redirect(new URL("/dashboard", request.url))))
+  if (PUBLIC_PATHS.has(normalizedPathname) && hasUserSession) {
+    return applySecurityHeaders(applyLocaleCookie(NextResponse.redirect(new URL("/dashboard", request.url)), locale))
   }
 
-  return applySecurityHeaders(applyLocaleCookie(request, NextResponse.next()))
+  if (pathLocale) {
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.set(LOCALE_REQUEST_HEADER_NAME, locale)
+    return applySecurityHeaders(
+      applyLocaleCookie(
+        NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        }),
+        locale,
+      ),
+    )
+  }
+
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set(LOCALE_REQUEST_HEADER_NAME, locale)
+  return applySecurityHeaders(
+    applyLocaleCookie(
+      NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      }),
+      locale,
+    ),
+  )
 }
 
 export const config = {

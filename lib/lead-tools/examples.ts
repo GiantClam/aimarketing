@@ -1,4 +1,4 @@
-import type { PptLanguage, PptScenario } from "@/lib/lead-tools/ppt-preview-data"
+import type { PptLanguage, PptScenario } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import type { SeoLanguage, SeoPageType } from "@/lib/lead-tools/seo-meta-data"
 
 type LeadToolExampleSection = {

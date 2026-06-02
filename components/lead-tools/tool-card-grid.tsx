@@ -19,9 +19,20 @@ type ToolCardGridProps = {
   className?: string
   title?: string
   description?: string
+  liveLabel?: string
+  comingSoonLabel?: string
+  openToolLabel?: string
 }
 
-export function ToolCardGrid({ tools, className, title, description }: ToolCardGridProps) {
+export function ToolCardGrid({
+  tools,
+  className,
+  title,
+  description,
+  liveLabel = "已上线",
+  comingSoonLabel = "即将上线",
+  openToolLabel = "进入工具",
+}: ToolCardGridProps) {
   return (
     <section className={cn("space-y-6", className)}>
       {(title || description) && (
@@ -46,7 +57,7 @@ export function ToolCardGrid({ tools, className, title, description }: ToolCardG
                     <Icon className="h-5 w-5" />
                   </div>
                   <Badge variant={tool.status === "live" ? "default" : "outline"}>
-                    {tool.status === "live" ? "已上线" : "即将上线"}
+                    {tool.status === "live" ? liveLabel : comingSoonLabel}
                   </Badge>
                 </div>
                 <div className="space-y-2">
@@ -68,13 +79,13 @@ export function ToolCardGrid({ tools, className, title, description }: ToolCardG
                 {tool.status === "live" ? (
                   <Button asChild className="w-full">
                     <Link href={tool.href}>
-                      进入工具
+                      {openToolLabel}
                       <ArrowUpRight className="h-4 w-4" />
                     </Link>
                   </Button>
                 ) : (
                   <Button variant="outline" className="w-full" disabled>
-                    即将上线
+                    {comingSoonLabel}
                   </Button>
                 )}
               </CardFooter>

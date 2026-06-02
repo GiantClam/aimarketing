@@ -19,7 +19,7 @@ export type AiCostEstimate = {
   annualHigh: number
   savingsLow: number
   savingsHigh: number
-  recommendedPlan: string
+  recommendedPlanKey: "byok-workspace" | "team-pro" | "lifetime-basic-or-team-pro"
 }
 
 export const aiToolPrices: AiToolPrice[] = [
@@ -57,10 +57,10 @@ export function calculateAiCostEstimate(input: AiCostInput): AiCostEstimate {
     annualHigh: monthlyHigh * 12,
     savingsLow,
     savingsHigh,
-    recommendedPlan: input.needsByok
-      ? "BYOK workspace"
+    recommendedPlanKey: input.needsByok
+      ? "byok-workspace"
       : input.teamSize > 8
-        ? "Team Pro"
-        : "Lifetime Basic or Team Pro",
+        ? "team-pro"
+        : "lifetime-basic-or-team-pro",
   }
 }

@@ -1,5 +1,6 @@
 export type PptScenario = "marketing-campaign" | "product-launch" | "sales-deck" | "training"
 export type PptLanguage = "zh-CN" | "en-US"
+export type PptPreviewStyleKey = "swiss-grid" | "editorial-poster" | "neo-brutalism" | "aurora-glass"
 
 export type PptPreviewRequest = {
   prompt: string
@@ -17,10 +18,18 @@ export type PptPreviewSlide = {
   accent: string
 }
 
-export type PptPreviewVariant = {
-  key: string
+export type PptPreviewAsset = {
+  mimeType: "image/svg+xml"
+  width: number
+  height: number
+  dataUrl: string
+}
+
+export type PptPreviewVariantStyle = {
+  key: PptPreviewStyleKey
   name: string
   summary: string
+  stylePrompt: string
   palette: {
     background: string
     foreground: string
@@ -29,7 +38,16 @@ export type PptPreviewVariant = {
     border: string
   }
   strengths: readonly string[]
+}
+
+export type PptPreviewVariant = PptPreviewVariantStyle & {
   slides: PptPreviewSlide[]
+  preview?: {
+    format: "svg"
+    themeId: string
+    cover: PptPreviewAsset
+    slides: PptPreviewAsset[]
+  }
 }
 
 export type PptPreviewDeck = {
@@ -39,6 +57,10 @@ export type PptPreviewDeck = {
   generatedAt: string
   outline: string[]
   variants: PptPreviewVariant[]
+  previewEngine?: "ppt-master-svg"
+  provider?: string
+  previewModel?: string
+  source?: "live" | "mock"
 }
 
 export const pptScenarioOptions: Array<{ value: PptScenario; label: string; description: string }> = [
@@ -53,58 +75,66 @@ export const pptLanguageOptions: Array<{ value: PptLanguage; label: string }> = 
   { value: "en-US", label: "English" },
 ]
 
-export const pptPreviewStyles = [
+export const pptPreviewStyles: readonly PptPreviewVariantStyle[] = [
   {
-    key: "professional-business",
-    name: "专业商务",
-    summary: "稳重清晰，适合汇报、提案和客户沟通。",
+    key: "swiss-grid",
+    name: "Swiss Grid",
+    summary: "冷静、克制、强网格的咨询感版本，适合高层判断和信息压缩。",
+    stylePrompt:
+      "Use a Swiss editorial grid. Make the copy decisive, modular, and highly compressed. Favor sharp headers, disciplined contrast, and concrete recommendations.",
     palette: {
-      background: "#120d0d",
-      foreground: "#f7f4f2",
-      accent: "#f25555",
-      panel: "#1d1414",
-      border: "#3f2a2a",
+      background: "#f4f0e8",
+      foreground: "#111111",
+      accent: "#c1121f",
+      panel: "#ebe3d4",
+      border: "#d5c8b3",
     },
-    strengths: ["结构感强", "重点信息突出", "适合企业场景"],
+    strengths: ["结构强", "高密度", "咨询感"],
   },
   {
-    key: "magazine-editorial",
-    name: "杂志视觉",
-    summary: "更强调封面与画面张力，适合品牌表达。",
+    key: "editorial-poster",
+    name: "Editorial Poster",
+    summary: "海报化大字标题、强视觉呼吸感，适合趋势故事和强记忆点表达。",
+    stylePrompt:
+      "Write like a premium editorial poster story. Headlines should be emotionally charged, memorable, and cinematic while staying presentation-ready.",
     palette: {
-      background: "#f8efe8",
-      foreground: "#241714",
-      accent: "#d3451c",
-      panel: "#fff8f2",
-      border: "#efcdb8",
+      background: "#f7efe6",
+      foreground: "#201614",
+      accent: "#d35c2c",
+      panel: "#fff8f0",
+      border: "#e9d5c4",
     },
-    strengths: ["视觉记忆点强", "适合品牌故事", "封面冲击感更好"],
+    strengths: ["大字海报", "叙事张力", "适合传播"],
   },
   {
-    key: "growth-marketing",
-    name: "增长营销",
-    summary: "偏增长和转化导向，适合漏斗、策略和实验表达。",
+    key: "neo-brutalism",
+    name: "Neo Brutalism",
+    summary: "高对比色块、极粗层级和攻击性标题，适合首屏冲击和产品发声。",
+    stylePrompt:
+      "Write like a neo-brutalist launch deck. The copy should feel aggressive, blunt, and high-contrast, with short decisive claims and visible momentum.",
     palette: {
-      background: "#07151b",
-      foreground: "#f4fffd",
-      accent: "#29d3b0",
-      panel: "#0d232b",
-      border: "#1e4b56",
+      background: "#070707",
+      foreground: "#fffdf6",
+      accent: "#d7ff37",
+      panel: "#111111",
+      border: "#343434",
     },
-    strengths: ["数据感更强", "适合策略拆解", "增长语言明确"],
+    strengths: ["冲击强", "块面大", "产品发声"],
   },
   {
-    key: "minimal-launch",
-    name: "极简发布",
-    summary: "版面克制，信息层级极简，适合发布会和产品介绍。",
+    key: "aurora-glass",
+    name: "Aurora Glass",
+    summary: "冷色发光、透明叠层和未来产品感，适合 AI、SaaS 和技术主题。",
+    stylePrompt:
+      "Write like a premium future-facing SaaS keynote. Balance clarity with aspiration. Each slide should feel polished, product-like, and slightly futuristic.",
     palette: {
-      background: "#ffffff",
-      foreground: "#151515",
-      accent: "#bc2323",
-      panel: "#f6f3f1",
-      border: "#e5dbd7",
+      background: "#09111d",
+      foreground: "#f7fbff",
+      accent: "#65e9ff",
+      panel: "#13233b",
+      border: "#2f5875",
     },
-    strengths: ["阅读压力低", "适合产品表达", "更容易二次编辑"],
+    strengths: ["发光层次", "未来感", "科技产品"],
   },
 ] as const
 
@@ -112,22 +142,22 @@ const scenarioDescriptors: Record<PptScenario, { chinese: string; english: strin
   "marketing-campaign": {
     chinese: "营销策划",
     english: "marketing campaign",
-    outline: ["市场机会", "核心策略", "渠道打法", "执行节奏", "转化目标"],
+    outline: ["机会窗口", "受众判断", "策略主轴", "执行组合", "转化动作"],
   },
   "product-launch": {
     chinese: "产品发布",
     english: "product launch",
-    outline: ["产品定位", "目标用户", "发布亮点", "传播策略", "上线节奏"],
+    outline: ["市场背景", "产品定位", "核心亮点", "发布叙事", "下一步动作"],
   },
   "sales-deck": {
     chinese: "销售提案",
     english: "sales proposal",
-    outline: ["客户问题", "方案概览", "价值对比", "实施计划", "合作建议"],
+    outline: ["业务问题", "解决路径", "价值证明", "实施计划", "合作建议"],
   },
   training: {
     chinese: "培训课件",
     english: "training deck",
-    outline: ["学习目标", "核心知识", "实操步骤", "案例说明", "行动建议"],
+    outline: ["学习目标", "关键概念", "方法步骤", "案例拆解", "行动清单"],
   },
 }
 
@@ -135,10 +165,8 @@ function sentenceByLanguage(language: PptLanguage, zh: string, en: string) {
   return language === "zh-CN" ? zh : en
 }
 
-type PptVariantStyle = (typeof pptPreviewStyles)[number]
-
-function buildVariantSlides(
-  variant: PptVariantStyle,
+function buildMockVariantSlides(
+  style: PptPreviewVariantStyle,
   title: string,
   scenario: PptScenario,
   language: PptLanguage,
@@ -148,121 +176,148 @@ function buildVariantSlides(
 
   return [
     {
-      id: `${variant.key}-cover`,
+      id: `${style.key}-cover`,
       layout: "cover" as const,
       kicker: sentenceByLanguage(language, descriptor.chinese, descriptor.english.toUpperCase()),
       title: topic,
       body: sentenceByLanguage(
         language,
-        `围绕“${topic}”快速构建一套适合 ${descriptor.chinese} 场景的叙事型 PPT。`,
-        `A fast preview deck built around "${topic}" for a ${descriptor.english} narrative.`,
+        `围绕“${topic}”快速搭出一套 ${style.name} 风格的展示稿，先判断方向，再进入完整生成。`,
+        `A ${style.name} preview deck built around "${topic}" so users can judge the direction before export.`,
       ),
       bullets: [
-        sentenceByLanguage(language, "4 种风格并行预览", "4 style directions in parallel"),
-        sentenceByLanguage(language, "适合首页引流与 SEO 转化", "Built for SEO traffic and homepage conversion"),
+        sentenceByLanguage(language, "预览优先速度，不等待完整 PPTX", "Preview prioritizes speed over final PPTX export"),
+        sentenceByLanguage(language, "同一主题并发比较 4 种讲法", "Compare four narrative directions in parallel"),
+        sentenceByLanguage(language, "把登录动作留给高意图节点", "Keep login for high-intent moments"),
       ],
-      accent: variant.palette.accent,
+      accent: style.palette.accent,
     },
     {
-      id: `${variant.key}-agenda`,
+      id: `${style.key}-agenda`,
       layout: "agenda" as const,
-      kicker: sentenceByLanguage(language, "结构总览", "OVERVIEW"),
-      title: sentenceByLanguage(language, "建议内容结构", "Suggested story structure"),
+      kicker: sentenceByLanguage(language, "结构总览", "STRUCTURE"),
+      title: sentenceByLanguage(language, "这一版建议怎么讲", "How this version should unfold"),
       body: sentenceByLanguage(
         language,
-        `先用问题与机会定义场景，再收束到策略、执行和行动。`,
-        `Open with the market problem, then narrow into strategy, execution, and action.`,
+        `从场景判断切入，再过渡到方法、对比和执行建议，保持 5 页内可快速浏览。`,
+        `Open with context, move into the method, then land on comparison and action in five scannable slides.`,
       ),
-      bullets: descriptor.outline.map((item, index) =>
-        sentenceByLanguage(language, `${index + 1}. ${item}`, `${index + 1}. ${item}`),
-      ),
-      accent: variant.palette.accent,
+      bullets: descriptor.outline.map((item, index) => sentenceByLanguage(language, `${index + 1}. ${item}`, `${index + 1}. ${item}`)),
+      accent: style.palette.accent,
     },
     {
-      id: `${variant.key}-insight`,
+      id: `${style.key}-insight`,
       layout: "insight" as const,
-      kicker: sentenceByLanguage(language, "核心洞察", "KEY INSIGHT"),
-      title: sentenceByLanguage(language, "为什么这个主题值得做成 PPT", "Why this deserves a deck"),
+      kicker: sentenceByLanguage(language, "核心洞察", "INSIGHT"),
+      title: sentenceByLanguage(language, "为什么先做视觉预览", "Why visual preview comes first"),
       body: sentenceByLanguage(
         language,
-        `用户先想看到方向是否靠谱，而不是先等待最终文件。预览越快，越容易促成后续下载与登录。`,
-        `Users want to validate the direction first. Faster previews drive stronger trust and downstream conversion.`,
+        `用户第一反应不是“文件能不能下载”，而是“这套表达值不值得继续”。预览越快，越能提高后续动作转化。`,
+        `The first question is not whether the file can download. It is whether this direction deserves another step. Faster previews improve conversion.`,
       ),
       bullets: [
-        sentenceByLanguage(language, "先看到价值，再决定是否继续", "See value first, decide later"),
-        sentenceByLanguage(language, "多风格对比降低反复试错成本", "Multi-style comparison reduces retry cost"),
-        sentenceByLanguage(language, "登录动作留给高价值节点", "Keep login for high-intent moments"),
+        sentenceByLanguage(language, "先验证方向，再投入完整生成", "Validate direction before committing to full generation"),
+        sentenceByLanguage(language, "视觉差异比文案说明更容易判断", "Visual contrast is easier to judge than descriptive copy"),
+        sentenceByLanguage(language, "更适合首页和 SEO 流量承接", "Better for homepage and SEO traffic capture"),
       ],
-      accent: variant.palette.accent,
+      accent: style.palette.accent,
     },
     {
-      id: `${variant.key}-comparison`,
+      id: `${style.key}-comparison`,
       layout: "comparison" as const,
-      kicker: sentenceByLanguage(language, "预览 vs 完整版", "PREVIEW VS FINAL"),
-      title: sentenceByLanguage(language, "双层生成链路", "Two-stage generation flow"),
+      kicker: sentenceByLanguage(language, "预览层 vs 成品层", "PREVIEW VS FINAL"),
+      title: sentenceByLanguage(language, "这条链路为什么更轻", "Why this pipeline feels lighter"),
       body: sentenceByLanguage(
         language,
-        `预览阶段追求速度和风格对比；完整版阶段再补充完整内容、导出能力和可编辑性。`,
-        `The preview layer optimizes for speed and comparison. The final layer adds completeness and export quality.`,
+        `预览只解决“快看到”，成品层再解决“可编辑、可导出、可交付”。前者负责转化，后者负责完成任务。`,
+        `Preview solves speed-to-visual. The final layer solves editability, export, and delivery. The first converts; the second completes the job.`,
       ),
       bullets: [
-        sentenceByLanguage(language, "Fast Preview: 结构 + 视觉风格", "Fast Preview: structure + visual direction"),
-        sentenceByLanguage(language, "Final Export: 完整内容 + 可编辑输出", "Final Export: full content + editable output"),
+        sentenceByLanguage(language, "Preview: SVG 视觉结果", "Preview: SVG visual result"),
+        sentenceByLanguage(language, "Final: 可编辑 PPTX", "Final: editable PPTX"),
+        sentenceByLanguage(language, "登录留在下载和完整生成", "Login stays at download and final generation"),
       ],
-      accent: variant.palette.accent,
+      accent: style.palette.accent,
     },
     {
-      id: `${variant.key}-timeline`,
+      id: `${style.key}-timeline`,
       layout: "timeline" as const,
-      kicker: sentenceByLanguage(language, "下一步", "NEXT STEP"),
-      title: sentenceByLanguage(language, "建议行动", "Recommended next step"),
+      kicker: sentenceByLanguage(language, "下一步", "NEXT"),
+      title: sentenceByLanguage(language, "看到合适方向之后", "After the right direction appears"),
       body: sentenceByLanguage(
         language,
-        `选择一个最接近预期的风格，再进入登录后的完整生成流程。`,
-        `Choose the strongest direction, then continue into the login-gated full generation flow.`,
+        `保留当前会话，选择最接近预期的风格，再进入完整生成或下载。`,
+        `Preserve the current session, choose the strongest direction, then continue to full generation or download.`,
       ),
       bullets: [
-        sentenceByLanguage(language, "保留当前预览会话", "Preserve the current preview session"),
-        sentenceByLanguage(language, "登录后继续导出", "Resume export after login"),
-        sentenceByLanguage(language, "后续接入真实 PPTX 导出器", "Wire a real PPTX exporter next"),
+        sentenceByLanguage(language, "锁定最接近预期的风格", "Lock the closest visual direction"),
+        sentenceByLanguage(language, "登录后继续完整导出", "Continue to full export after login"),
+        sentenceByLanguage(language, "保持会话不断裂", "Keep the session continuous"),
       ],
-      accent: variant.palette.accent,
+      accent: style.palette.accent,
     },
   ]
+}
+
+export function getPptPreviewStyleByKey(styleKey: PptPreviewStyleKey) {
+  return pptPreviewStyles.find((style) => style.key === styleKey)
 }
 
 export function buildMockPptPreview(request: PptPreviewRequest): PptPreviewDeck {
   const title = request.prompt.trim() || sentenceByLanguage(request.language, "AI 营销方案", "AI Marketing Plan")
   const descriptor = scenarioDescriptors[request.scenario]
 
-  return buildPptPreviewDeckFromPlan(request, {
-    title,
-    outline: descriptor.outline,
-    slides: buildVariantSlides(pptPreviewStyles[0], title, request.scenario, request.language).map(({ accent: _accent, id: _id, ...slide }) => slide),
-  })
-}
-
-export function buildPptPreviewDeckFromPlan(
-  request: PptPreviewRequest,
-  plan: {
-    title: string
-    outline: readonly string[]
-    slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
-  },
-): PptPreviewDeck {
   return {
-    title: plan.title.trim() || request.prompt.trim() || sentenceByLanguage(request.language, "AI 营销方案", "AI Marketing Plan"),
+    title,
     scenario: request.scenario,
     language: request.language,
     generatedAt: new Date().toISOString(),
-    outline: plan.outline.slice(0, 5),
-    variants: pptPreviewStyles.map((variant) => ({
-      ...variant,
-      slides: plan.slides.slice(0, 5).map((slide, index) => ({
-        ...slide,
-        id: `${variant.key}-${slide.layout}-${index + 1}`,
-        accent: variant.palette.accent,
-      })),
+    outline: descriptor.outline.slice(0, 5),
+    provider: "mock",
+    source: "mock",
+    variants: pptPreviewStyles.map((style) => ({
+      ...style,
+      slides: buildMockVariantSlides(style, title, request.scenario, request.language),
     })),
+  }
+}
+
+export function buildPptPreviewDeckFromPlans(
+  request: PptPreviewRequest,
+  plans: Array<{
+    styleKey: PptPreviewStyleKey
+    title: string
+    outline: readonly string[]
+    provider?: string
+    slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
+  }>,
+): PptPreviewDeck {
+  const firstPlan = plans[0]
+  const fallbackTitle = request.prompt.trim() || sentenceByLanguage(request.language, "AI 营销方案", "AI Marketing Plan")
+  const descriptor = scenarioDescriptors[request.scenario]
+
+  return {
+    title: firstPlan?.title.trim() || fallbackTitle,
+    scenario: request.scenario,
+    language: request.language,
+    generatedAt: new Date().toISOString(),
+    outline: (firstPlan?.outline ?? descriptor.outline).slice(0, 5),
+    provider: firstPlan?.provider || "live",
+    source: "live",
+    variants: pptPreviewStyles.map((style) => {
+      const plan = plans.find((item) => item.styleKey === style.key)
+      const slides = (plan?.slides ?? buildMockVariantSlides(style, fallbackTitle, request.scenario, request.language)).slice(0, 5)
+      const fallbackSlideTitles = (plan?.outline ?? descriptor.outline).slice(0, 5)
+
+      return {
+        ...style,
+        slides: slides.map((slide, index) => ({
+          ...slide,
+          title: slide.title?.trim() || (index === 0 ? fallbackTitle : fallbackSlideTitles[index] || fallbackTitle),
+          id: `${style.key}-${slide.layout}-${index + 1}`,
+          accent: style.palette.accent,
+        })),
+      }
+    }),
   }
 }

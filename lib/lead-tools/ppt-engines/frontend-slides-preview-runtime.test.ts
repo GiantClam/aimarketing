@@ -1,0 +1,524 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import { frontendSlidesPreviewRuntime } from "./frontend-slides-preview-runtime"
+
+const baseSlides = [
+  {
+    id: "cover-1",
+    layout: "cover" as const,
+    intent: "cover" as const,
+    kicker: "头版头条",
+    title: "Step 3.7 Flash 的叙事架构",
+    body: "围绕速度、清晰度和转化动作建立九页高密度预览。",
+    bullets: ["首屏判断", "结构推进", "可执行动作", "后续导出"],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "agenda-1",
+    layout: "agenda" as const,
+    intent: "contents" as const,
+    kicker: "版面结构",
+    title: "Agenda",
+    body: "依次处理机会、受众、策略、证据、数据、图示、执行和收束。",
+    bullets: ["机会窗口", "受众判断", "策略主轴", "竞争对照", "证据锚点", "关键数据", "扩散图谱", "执行路径", "转化动作"],
+    contentsItems: [
+      { index: "01", title: "机会窗口", detail: "先定义为什么现在值得讲。" },
+      { index: "02", title: "受众判断", detail: "再确认谁会被这页说服。" },
+      { index: "03", title: "策略主轴", detail: "把核心判断拉到前台。" },
+    ],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "insight-1",
+    layout: "insight" as const,
+    intent: "statement" as const,
+    kicker: "核心主张",
+    title: "速度不是唯一优势",
+    body: "真正的价值在于把主题快速折叠成可比较的叙事结构。",
+    bullets: ["先出方向", "再选风格", "最后导出", "全程可判断"],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "comparison-1",
+    layout: "comparison" as const,
+    intent: "comparison" as const,
+    kicker: "双栏对照",
+    title: "HTML 预览 vs 可编辑 PPTX",
+    body: "双引擎分别服务快预览与可编辑导出，不再互相拖累。",
+    bullets: ["快预览", "低等待", "可编辑导出", "高保真后处理"],
+    comparisonItems: [
+      { label: "A", title: "快预览", detail: "先判断方向" },
+      { label: "B", title: "可编辑导出", detail: "后完成交付" },
+    ],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "evidence-1",
+    layout: "evidence" as const,
+    intent: "spotlight" as const,
+    kicker: "证据锚点",
+    title: "为什么预览值得优先交付",
+    body: "用户真正需要的是先判断表达方式，再决定是否进入完整导出链路。",
+    bullets: ["判断门槛更低", "风格差异更直观", "减少无效导出", "提高高意图登录"],
+    spotlightItems: [
+      { title: "判断门槛", detail: "先看风格是否值得继续。" },
+      { title: "无效导出", detail: "先筛掉不需要的方向。" },
+      { title: "高意图登录", detail: "把登录留给更强动作。" },
+    ],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "stats-1",
+    layout: "stats" as const,
+    intent: "stats" as const,
+    kicker: "关键数字",
+    title: "9 页结构带来的信息密度",
+    body: "内容不再挤在 9 页里，证据、数据和流程可以各自承担独立页面。",
+    bullets: ["更少缩略", "更少空白", "图示可独立", "closing 更完整"],
+    metricItems: [
+      { value: "09", label: "总页数", note: "承载更充分" },
+      { value: "04", label: "风格数", note: "并发对比" },
+      { value: "02", label: "双引擎", note: "预览与导出分离" },
+    ],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "chart-1",
+    layout: "chart" as const,
+    intent: "chart" as const,
+    kicker: "扩散图谱",
+    title: "预览到导出的双引擎流向",
+    body: "内容规划、HTML 预览、打开下载和内部导出被拆成更清晰的路径。",
+    bullets: ["故事规划", "HTML runtime", "预览判断", "内部导出"],
+    chartItems: [
+      { label: "Plan", value: 72, detail: "故事规划" },
+      { label: "HTML", value: 58, detail: "预览生成" },
+      { label: "Open", value: 44, detail: "打开判断" },
+      { label: "Export", value: 88, detail: "内部导出" },
+    ],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "process-1",
+    layout: "process" as const,
+    intent: "process" as const,
+    kicker: "执行路径",
+    title: "上线节奏",
+    body: "先扩页，再稳定 renderer，随后校验产物和页面交互。",
+    bullets: ["扩生成 contract", "补 4 套 renderer", "更新工作台", "回归验证"],
+    processItems: [
+      { step: "01", title: "扩 contract", detail: "先让结构化字段可传递" },
+      { step: "02", title: "补 renderer", detail: "再让模板原生页法可消费" },
+      { step: "03", title: "回归验证", detail: "最后确认预览和下载链路" },
+    ],
+    accent: "#ff6f3c",
+  },
+  {
+    id: "timeline-1",
+    layout: "timeline" as const,
+    intent: "closing" as const,
+    kicker: "观察节点",
+    title: "落地顺序",
+    body: "先抽象，再接 HTML runtime，再补校验，再开放下载。",
+    bullets: ["抽象层", "HTML runtime", "版式校验", "下载链路"],
+    closingItems: [
+      { label: "CHOOSE", detail: "锁定最强的叙事方向。" },
+      { label: "OPEN", detail: "打开 HTML 成品页做最终判断。" },
+      { label: "EXPORT", detail: "仅在需要时进入导出链路。" },
+    ],
+    accent: "#ff6f3c",
+  },
+]
+
+const sampleDeck = {
+  title: "Step 3.7 Flash",
+  scenario: "marketing-campaign" as const,
+  language: "zh-CN" as const,
+  generatedAt: "2026-06-02T00:00:00.000Z",
+  outline: ["机会窗口", "受众判断", "策略主轴", "竞争对照", "证据锚点", "关键数据", "扩散图谱", "执行路径", "转化动作"],
+  provider: "pptoken",
+  previewModel: "gpt-5.4",
+  variants: [
+    {
+      key: "ppt169_brutalist_ai_newspaper_2026" as const,
+      name: "Long Table",
+      summary: "长桌纪要和节目单气质最强。",
+      stylePrompt: "Warm long-table editorial deck.",
+      outline: ["Table Stakes", "Seat Map", "Course Logic", "Decision Pour", "Proof Note", "Signal Count", "Impact Map", "Service Route", "Closing Service"],
+      palette: {
+        background: "#FAF1E2",
+        foreground: "#B53D2A",
+        accent: "#B53D2A",
+        panel: "#FFF7EC",
+        border: "#D9BCA6",
+      },
+      strengths: ["结构感"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_sugar_rush_memphis" as const,
+      name: "Playful",
+      summary: "暖桃纸面和独立品牌感最强。",
+      stylePrompt: "Peach indie launch deck.",
+      outline: ["Warm Hello", "Spark Drop", "Friendly Proof", "Side-by-Side", "Signal Stickers", "Number Pop", "Spread Map", "Play Route", "Next Bounce"],
+      palette: {
+        background: "#F0C8A0",
+        foreground: "#1A1A1A",
+        accent: "#1A1A1A",
+        panel: "#F7DEC6",
+        border: "#D29A6F",
+      },
+      strengths: ["亲和", "温暖"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_pritzker_2026" as const,
+      name: "Broadside",
+      summary: "大字报式深色编辑感最强。",
+      stylePrompt: "Dark broadside declaration deck.",
+      outline: ["Lead Line", "Signal Column", "Proof Block", "Countertext", "Poster Proof", "Figure Board", "Spillover Diagram", "Posting Steps", "Posting Order"],
+      palette: {
+        background: "#111111",
+        foreground: "#F0ECE5",
+        accent: "#E85D26",
+        panel: "#1A1A18",
+        border: "#282826",
+      },
+      strengths: ["宣言感", "戏剧张力"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_swiss_grid_systems" as const,
+      name: "Neo-Grid Bold",
+      summary: "霓黄网格与粗体模块最强。",
+      stylePrompt: "Dense neon grid strategy deck.",
+      outline: ["Input Grid", "Panel Logic", "Decision Stack", "System Board", "Proof Grid", "Signal Count", "Spread Map", "Action Flow", "Next Sequence"],
+      palette: {
+        background: "#ECECE8",
+        foreground: "#0A0A0A",
+        accent: "#E6FF3D",
+        panel: "#F5F4EF",
+        border: "#CFCFC8",
+      },
+      strengths: ["可见网格", "粗体模块"],
+      slides: baseSlides,
+    },
+  ],
+}
+
+test("frontend slides runtime materializes HTML documents and poster previews", async () => {
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(sampleDeck)
+  const variant = deck.variants[0]
+  const html = variant?.preview?.htmlDocument?.html ?? ""
+
+  assert.equal(deck.previewEngine, "frontend-slides-html")
+  assert.equal(frontendSlidesPreviewRuntime.id, "frontend-slides-agent")
+  assert.ok(deck.previewSessionId)
+  assert.ok(variant?.preview)
+  assert.equal(variant?.preview?.slides.length, 9)
+  assert.equal(variant?.preview?.cover.mimeType, "image/svg+xml")
+  assert.ok(variant?.preview?.htmlDocument?.fileName.endsWith(".html"))
+  assert.match(html, /<section class="slide">/)
+  assert.match(html, /PresentationController/)
+  assert.match(html, /aspect-ratio:\s*16\s*\/\s*9/)
+  assert.match(html, /width:\s*min\(/)
+})
+
+test("frontend slides runtime renders materially different HTML structures per variant style", async () => {
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(sampleDeck)
+  const htmlByKey = new Map(
+    deck.variants.map((variant) => [variant.key, variant.preview?.htmlDocument?.html ?? ""]),
+  )
+
+  assert.match(htmlByKey.get("ppt169_brutalist_ai_newspaper_2026") ?? "", /long-table-header|long-table-quote|long-table-featured|long-table-schedule/)
+  assert.match(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /playful-orbit|playful-vision-slide|playful-chart-area|timeline-track/)
+  assert.match(htmlByKey.get("ppt169_pritzker_2026") ?? "", /broadside-top-chrome|market-barboard|closing-pill/)
+  assert.match(htmlByKey.get("ppt169_swiss_grid_systems") ?? "", /neo-grid-ruler|module-strip/)
+  assert.match(htmlByKey.get("ppt169_brutalist_ai_newspaper_2026") ?? "", /Table Stakes/)
+  assert.match(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /机会窗口/)
+  assert.match(htmlByKey.get("ppt169_pritzker_2026") ?? "", /09 \/ Closing/)
+  assert.match(htmlByKey.get("ppt169_swiss_grid_systems") ?? "", /CHOOSE|机会窗口/)
+
+  const uniqueHtml = new Set(htmlByKey.values())
+  assert.equal(uniqueHtml.size, 4)
+  assert.match(htmlByKey.get("ppt169_brutalist_ai_newspaper_2026") ?? "", /先判断方向|快预览/)
+  assert.match(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /72|故事规划|扩 contract/)
+  assert.match(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /机会窗口|先定义为什么现在值得讲/)
+  assert.match(htmlByKey.get("ppt169_swiss_grid_systems") ?? "", /CHOOSE|打开 HTML 成品页做最终判断/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /⚡|🚢|📈/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /sticker-band|playful-doodle-frame|doodle-flow/)
+})
+
+test("neo-grid fallback derives chart and process copy from neighboring structured slides", async () => {
+  const deck = {
+    ...sampleDeck,
+    variants: sampleDeck.variants.map((variant) =>
+      variant.key === "ppt169_swiss_grid_systems"
+        ? {
+            ...variant,
+            slides: variant.slides.map((slide) =>
+              slide.layout === "chart"
+                ? { ...slide, chartItems: undefined, bullets: ["主轴关系", "外溢路径", "最终影响"] }
+                : slide.layout === "process"
+                  ? { ...slide, processItems: undefined, bullets: ["识别", "切换", "执行", "跟踪"] }
+                  : slide,
+            ),
+          }
+        : variant,
+    ),
+  }
+
+  const result = await frontendSlidesPreviewRuntime.materializeStoryDeck(deck)
+  const html = result.variants.find((variant) => variant.key === "ppt169_swiss_grid_systems")?.preview?.htmlDocument?.html ?? ""
+  const repairedVariant = result.variants.find((variant) => variant.key === "ppt169_swiss_grid_systems")
+  const repairedChart = repairedVariant?.slides.find((slide) => slide.layout === "chart")
+  const repairedProcess = repairedVariant?.slides.find((slide) => slide.layout === "process")
+
+  assert.match(html, /快预览|后完成交付|锁定最强的叙事方向/)
+  assert.doesNotMatch(html, /主轴关系|外溢路径|最终影响/)
+  assert.doesNotMatch(html, />\s*Step [1-4]\s*</)
+  assert.deepEqual(
+    repairedChart?.chartItems?.map((item) => item.detail),
+    ["快预览 · 先判断方向", "可编辑导出 · 后完成交付"],
+  )
+  assert.deepEqual(
+    repairedProcess?.processItems?.map((item) => item.title),
+    ["CHOOSE", "OPEN", "EXPORT"],
+  )
+})
+
+test("broadside process and closing pages derive structured fallback blocks from registry", async () => {
+  const deck = {
+    ...sampleDeck,
+    variants: sampleDeck.variants.map((variant) =>
+      variant.key === "ppt169_pritzker_2026"
+        ? {
+            ...variant,
+            slides: variant.slides.map((slide) =>
+              slide.layout === "process"
+                ? { ...slide, processItems: undefined, bullets: ["识别高风险段", "切换替代路线", "启动对冲机制", "持续监测外溢"] }
+                : slide.layout === "timeline"
+                  ? {
+                      ...slide,
+                      closingItems: [
+                        { label: "立即", detail: "启动风险监测与预案演练" },
+                        { label: "短期", detail: "建立备用航线与保险对冲机制" },
+                        { label: "长期", detail: "推动能源多元化与区域合作" },
+                      ],
+                    }
+                  : slide,
+            ),
+          }
+        : variant,
+    ),
+  }
+
+  const result = await frontendSlidesPreviewRuntime.materializeStoryDeck(deck)
+  const html = result.variants.find((variant) => variant.key === "ppt169_pritzker_2026")?.preview?.htmlDocument?.html ?? ""
+  const repairedVariant = result.variants.find((variant) => variant.key === "ppt169_pritzker_2026")
+  const repairedProcess = repairedVariant?.slides.find((slide) => slide.layout === "process")
+
+  assert.match(html, /立即|短期|长期/)
+  assert.match(html, /closing-card|closing-copy/)
+  assert.doesNotMatch(html, />\s*Step [1-4]\s*</)
+  assert.deepEqual(
+    repairedProcess?.processItems,
+    [
+      { step: "01", title: "立即", detail: "启动风险监测与预案演练" },
+      { step: "02", title: "短期", detail: "建立备用航线与保险对冲机制" },
+      { step: "03", title: "长期", detail: "推动能源多元化与区域合作" },
+    ],
+  )
+})
+
+test("long-table agenda density policy keeps later agenda items visible without overflowing the card grid", async () => {
+  const deck = {
+    ...sampleDeck,
+    variants: sampleDeck.variants.map((variant) =>
+      variant.key === "ppt169_brutalist_ai_newspaper_2026"
+        ? {
+            ...variant,
+            slides: variant.slides.map((slide) =>
+              slide.layout === "agenda"
+                ? {
+                    ...slide,
+                    contentsItems: [
+                      { index: "01", title: "机会窗口", detail: "先看当下窗口。" },
+                      { index: "02", title: "受众判断", detail: "锁定核心受众。" },
+                      { index: "03", title: "策略主轴", detail: "拉直主要判断。" },
+                      { index: "04", title: "竞争对照", detail: "摆出替代方案。" },
+                      { index: "05", title: "证据锚点", detail: "固化支撑事实。" },
+                      { index: "06", title: "关键数据", detail: "压缩核心指标。" },
+                      { index: "07", title: "扩散图谱", detail: "展示外溢路径。" },
+                      { index: "08", title: "执行路径", detail: "给出执行顺序。" },
+                      { index: "09", title: "转化动作", detail: "收束到行动。" },
+                    ],
+                  }
+                : slide,
+            ),
+          }
+        : variant,
+    ),
+  }
+
+  const result = await frontendSlidesPreviewRuntime.materializeStoryDeck(deck)
+  const html = result.variants.find((variant) => variant.key === "ppt169_brutalist_ai_newspaper_2026")?.preview?.htmlDocument?.html ?? ""
+
+  assert.match(html, /<div class="agenda-ledger">[\s\S]*?<span class="card-index">06<\/span>/)
+  assert.doesNotMatch(html, /<div class="agenda-ledger">[\s\S]*?<span class="card-index">07<\/span>/)
+  assert.match(html, /<div class="agenda-signal-line">[\s\S]*?<span>07<\/span>[\s\S]*?<span>08<\/span>[\s\S]*?<span>09<\/span>/)
+})
+
+test("frontend slides runtime resolves template pages by intent rather than input order", async () => {
+  const broadsideSlides = [
+    {
+      ...baseSlides[0],
+      title: "Cover Front",
+      intent: "cover" as const,
+    },
+    {
+      ...baseSlides[7],
+      title: "Process Track",
+      intent: "process" as const,
+    },
+    {
+      ...baseSlides[5],
+      title: "Stats Board",
+      intent: "stats" as const,
+    },
+    {
+      ...baseSlides[2],
+      title: "Statement Core",
+      intent: "statement" as const,
+    },
+    {
+      ...baseSlides[6],
+      title: "Chart Spill",
+      intent: "chart" as const,
+    },
+    {
+      ...baseSlides[1],
+      title: "Contents Rail",
+      intent: "contents" as const,
+    },
+    {
+      ...baseSlides[3],
+      title: "Compare Ledger",
+      intent: "comparison" as const,
+    },
+    {
+      ...baseSlides[4],
+      title: "Proof Poster",
+      intent: "spotlight" as const,
+    },
+    {
+      ...baseSlides[8],
+      title: "Closing Notice",
+      intent: "closing" as const,
+    },
+  ]
+
+  const neoGridSlides = [
+    {
+      ...baseSlides[0],
+      title: "Grid Cover",
+      intent: "cover" as const,
+    },
+    {
+      ...baseSlides[6],
+      title: "Chart Board Panel",
+      intent: "chart" as const,
+    },
+    {
+      ...baseSlides[5],
+      title: "Signal Count Deck",
+      intent: "stats" as const,
+    },
+    {
+      ...baseSlides[4],
+      title: "Evidence Beacon Panel",
+      intent: "spotlight" as const,
+    },
+    {
+      ...baseSlides[3],
+      title: "Contrast Shell Panel",
+      intent: "comparison" as const,
+    },
+    {
+      ...baseSlides[1],
+      title: "Module Rail",
+      intent: "contents" as const,
+    },
+    {
+      ...baseSlides[7],
+      title: "Execution Runway Panel",
+      intent: "process" as const,
+    },
+    {
+      ...baseSlides[2],
+      title: "Signal Thesis",
+      intent: "statement" as const,
+    },
+    {
+      ...baseSlides[8],
+      title: "Close Sequence",
+      intent: "closing" as const,
+    },
+  ]
+
+  const reorderedDeck = {
+    ...sampleDeck,
+    variants: sampleDeck.variants.map((variant) => {
+      if (variant.key === "ppt169_pritzker_2026") {
+        return { ...variant, slides: broadsideSlides }
+      }
+
+      if (variant.key === "ppt169_swiss_grid_systems") {
+        return { ...variant, slides: neoGridSlides }
+      }
+
+      return variant
+    }),
+  }
+
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(reorderedDeck)
+  const broadsideHtml = deck.variants.find((variant) => variant.key === "ppt169_pritzker_2026")?.preview?.htmlDocument?.html ?? ""
+  const neoGridHtml = deck.variants.find((variant) => variant.key === "ppt169_swiss_grid_systems")?.preview?.htmlDocument?.html ?? ""
+
+  assert.match(broadsideHtml, /Cover Front/)
+  assert.match(broadsideHtml, /Contents Rail/)
+  assert.match(broadsideHtml, /Statement Core/)
+  assert.match(broadsideHtml, /Compare Ledger/)
+  assert.match(broadsideHtml, /Proof Poster/)
+  assert.match(broadsideHtml, /Stats Board/)
+  assert.match(broadsideHtml, /Chart Spill/)
+  assert.match(broadsideHtml, /Process Track/)
+  assert.match(broadsideHtml, /Closing Notice/)
+  assert.ok(broadsideHtml.indexOf("Cover Front") < broadsideHtml.indexOf("Contents Rail"))
+  assert.ok(broadsideHtml.indexOf("Contents Rail") < broadsideHtml.indexOf("Statement Core"))
+  assert.ok(broadsideHtml.indexOf("Statement Core") < broadsideHtml.indexOf("Compare Ledger"))
+  assert.ok(broadsideHtml.indexOf("Compare Ledger") < broadsideHtml.indexOf("Proof Poster"))
+  assert.ok(broadsideHtml.indexOf("Proof Poster") < broadsideHtml.indexOf("Stats Board"))
+  assert.ok(broadsideHtml.indexOf("Stats Board") < broadsideHtml.indexOf("Chart Spill"))
+  assert.ok(broadsideHtml.indexOf("Chart Spill") < broadsideHtml.indexOf("Process Track"))
+  assert.ok(broadsideHtml.indexOf("Process Track") < broadsideHtml.indexOf("Closing Notice"))
+
+  assert.match(neoGridHtml, /Grid Cover/)
+  assert.match(neoGridHtml, /Module Rail/)
+  assert.match(neoGridHtml, /Signal Thesis/)
+  assert.match(neoGridHtml, /Contrast Shell Panel/)
+  assert.match(neoGridHtml, /Evidence Beacon Panel/)
+  assert.match(neoGridHtml, /Signal Count Deck/)
+  assert.match(neoGridHtml, /Chart Board Panel/)
+  assert.match(neoGridHtml, /Execution Runway Panel/)
+  assert.match(neoGridHtml, /Close Sequence/)
+  assert.ok(neoGridHtml.indexOf("Grid Cover") < neoGridHtml.indexOf("Module Rail"))
+  assert.ok(neoGridHtml.indexOf("Module Rail") < neoGridHtml.indexOf("Signal Thesis"))
+  assert.ok(neoGridHtml.indexOf("Signal Thesis") < neoGridHtml.indexOf("Contrast Shell Panel"))
+  assert.ok(neoGridHtml.indexOf("Contrast Shell Panel") < neoGridHtml.indexOf("Evidence Beacon Panel"))
+  assert.ok(neoGridHtml.indexOf("Evidence Beacon Panel") < neoGridHtml.indexOf("Signal Count Deck"))
+  assert.ok(neoGridHtml.indexOf("Signal Count Deck") < neoGridHtml.indexOf("Chart Board Panel"))
+  assert.ok(neoGridHtml.indexOf("Chart Board Panel") < neoGridHtml.indexOf("Execution Runway Panel"))
+  assert.ok(neoGridHtml.indexOf("Execution Runway Panel") < neoGridHtml.indexOf("Close Sequence"))
+})

@@ -1,0 +1,1418 @@
+import { generateText } from "ai"
+import { createOpenAI } from "@ai-sdk/openai"
+
+import { executeAiEntryWithProviderFailover, getConfiguredAiEntryProviders } from "@/lib/ai-entry/provider-routing"
+import { getLeadToolPreviewModel } from "@/lib/lead-tools/config"
+import {
+  materializePptMasterPreviewDeck,
+  type PptMasterPreviewRuntimeSlideContext,
+  type PptMasterPreviewRuntimeSlideResult,
+} from "@/lib/lead-tools/ppt-master-runtime"
+import {
+  buildPptPreviewTemplateCapabilityLabel,
+  buildPptPreviewIntentSequenceLabel,
+  buildMockPptPreview,
+  buildPptPreviewDeckFromPlans,
+  getPptPreviewTemplateSlotByLayout,
+  getPptPreviewStyleIntentSequence,
+  getPptPreviewStyleSlots,
+  isPptPreviewLayout,
+  isPptPreviewPageIntent,
+  type PptPreviewDeck,
+  type PptPreviewRequest,
+  type PptPreviewSlide,
+  pptPreviewStyles,
+  resolvePptPreviewSlideLayout,
+  resolvePptPreviewSlideIntent,
+  type PptPreviewVariantStyle,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { renderPptPreviewDeckAssets } from "@/lib/lead-tools/ppt-master-preview"
+import { buildPreviewSystemPrompt, buildPreviewUserPrompt, isPreviewPlaceholder } from "@/lib/lead-tools/ppt-preview-copy"
+import { generateTextWithWriterModel, hasAibermApiKey, hasCrazyrouteApiKey } from "@/lib/writer/aiberm"
+
+type LeadToolPptPlan = {
+  title: string
+  outline: [string, string, string, string, string, string, string, string, string]
+  slides: [
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+    Omit<PptPreviewSlide, "id" | "accent">,
+  ]
+}
+
+const RUNTIME_SLIDE_ATTEMPT_TIMEOUT_MS = 300_000
+
+function normalizeText(raw: unknown) {
+  return typeof raw === "string" ? raw.trim() : ""
+}
+
+function stripMarkdownDecorations(value: string) {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim()
+}
+
+function toStructuredString(value: unknown) {
+  return typeof value === "string" ? stripMarkdownDecorations(value).trim() : ""
+}
+
+function toStructuredNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function coerceStringList(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim()
+      if (item && typeof item === "object") {
+        const record = item as Record<string, unknown>
+        return normalizeText(record.detail) || normalizeText(record.title) || normalizeText(record.label)
+      }
+      return ""
+    })
+    .filter(Boolean)
+}
+
+function sanitizeRawPlan(rawPlan: unknown, request: PptPreviewRequest, style: PptPreviewVariantStyle) {
+  if (!rawPlan || typeof rawPlan !== "object") {
+    return rawPlan
+  }
+
+  const plan = rawPlan as Record<string, unknown>
+  const rawSlides = Array.isArray(plan.slides) ? plan.slides : []
+  const outline = Array.isArray(plan.outline) ? plan.outline.map((item) => normalizeText(item)).filter(Boolean) : []
+  const effectiveSlides =
+    rawSlides.length > 0
+      ? rawSlides
+      : getPptPreviewStyleSlots(style.key).map((slot, index) => ({
+          layout: slot.layout,
+          intent: resolvePptPreviewSlideIntent(style.key, slot.layout),
+          title: index === 0 ? normalizeText(plan.title) || request.prompt : outline[index] || `${request.prompt} ${index + 1}`,
+          body:
+            index === 0
+              ? `围绕“${request.prompt}”生成的 ${style.name} 风格预览页。`
+              : `围绕“${request.prompt}”的第 ${index + 1} 页内容提炼。`,
+          bullets: [outline[index] || request.prompt],
+        }))
+
+  return {
+    ...plan,
+    slides: effectiveSlides.map((rawSlide) => {
+      const slide = rawSlide && typeof rawSlide === "object" ? (rawSlide as Record<string, unknown>) : {}
+      const bullets =
+        coerceStringList(slide.bullets).length > 0
+          ? coerceStringList(slide.bullets)
+          : [
+              ...coerceStringList(slide.contentsItems),
+              ...coerceStringList(slide.comparisonItems),
+              ...coerceStringList(slide.spotlightItems),
+              ...coerceStringList(slide.metricItems),
+              ...coerceStringList(slide.chartItems),
+              ...coerceStringList(slide.processItems),
+              ...coerceStringList(slide.closingItems),
+            ].filter(Boolean)
+
+      return {
+        ...slide,
+        title: normalizeText(slide.title),
+        body: normalizeText(slide.body),
+        kicker: normalizeText(slide.kicker),
+        bullets: bullets.length > 0 ? bullets : [normalizeText(slide.title) || normalizeText(slide.layout) || "Key point"],
+        contentsItems: Array.isArray(slide.contentsItems)
+          ? slide.contentsItems.map((item, index) =>
+              typeof item === "string"
+                ? {
+                    index: String(index + 1).padStart(2, "0"),
+                    title: item.trim(),
+                    detail: item.trim(),
+                  }
+                : item,
+            )
+          : slide.contentsItems,
+        comparisonItems: Array.isArray(slide.comparisonItems)
+          ? slide.comparisonItems.map((item, index) =>
+              typeof item === "string"
+                ? {
+                    label: String.fromCharCode(65 + index),
+                    title: item.trim(),
+                    detail: item.trim(),
+                  }
+                : item,
+            )
+          : slide.comparisonItems,
+        spotlightItems: Array.isArray(slide.spotlightItems)
+          ? slide.spotlightItems.map((item, index) =>
+              typeof item === "string"
+                ? {
+                    title: index === 0 ? item.trim() : `Signal ${index + 1}`,
+                    detail: item.trim(),
+                  }
+                : item,
+            )
+          : slide.spotlightItems,
+        metricItems: Array.isArray(slide.metricItems)
+          ? slide.metricItems.map((item, index) =>
+              typeof item === "string"
+                ? {
+                    value: String(index + 1),
+                    label: item.trim(),
+                    note: "",
+                  }
+                : item,
+            )
+          : slide.metricItems,
+        chartItems: Array.isArray(slide.chartItems)
+          ? slide.chartItems.map((item, index) =>
+              typeof item === "string"
+                ? {
+                    label: String.fromCharCode(65 + index),
+                    value: 50 + index * 10,
+                    detail: item.trim(),
+                  }
+                : item,
+            )
+          : slide.chartItems,
+        processItems: Array.isArray(slide.processItems)
+          ? slide.processItems.map((item, index) =>
+              typeof item === "string"
+                ? {
+                    step: String(index + 1).padStart(2, "0"),
+                    title: `Step ${index + 1}`,
+                    detail: item.trim(),
+                  }
+                : item,
+            )
+          : slide.processItems,
+        closingItems: Array.isArray(slide.closingItems)
+          ? slide.closingItems.map((item, index) =>
+              typeof item === "string"
+                ? {
+                    label: String(index + 1).padStart(2, "0"),
+                    detail: item.trim(),
+                  }
+                : item,
+            )
+          : slide.closingItems,
+      }
+    }),
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function buildSemanticSignature(value: string) {
+  return stripMarkdownDecorations(value)
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}_]+/gu, "")
+    .replace(/\d+/gu, "")
+    .trim()
+}
+
+function isGenericGeneratedLabel(value: string) {
+  const normalized = stripMarkdownDecorations(value).trim().toLowerCase()
+  if (!normalized) return true
+
+  return [
+    /^step\s*\d+$/iu,
+    /^section\s*\d+$/iu,
+    /^signal\s*\d+$/iu,
+    /^slide\s*\d+$/iu,
+    /^module\s*\d+$/iu,
+    /^chapter\s*\d+$/iu,
+    /^part\s*\d+$/iu,
+    /^第?\s*\d+\s*(步|项|页|章|节)$/u,
+    /^模块\s*\d+$/u,
+    /^章节\s*\d+$/u,
+    /^信号\s*\d+$/u,
+  ].some((pattern) => pattern.test(normalized))
+}
+
+function looksLikePromptClone(value: string, prompt: string) {
+  const candidateSignature = buildSemanticSignature(value)
+  const promptSignature = buildSemanticSignature(prompt)
+  if (!candidateSignature || !promptSignature) return false
+
+  return (
+    candidateSignature === promptSignature ||
+    (candidateSignature.includes(promptSignature) && candidateSignature.length <= promptSignature.length + 8)
+  )
+}
+
+function collectSlideContentTexts(slide: Partial<PptPreviewSlide>) {
+  return [
+    slide.title,
+    slide.body,
+    ...(slide.bullets ?? []),
+    ...(slide.contentsItems?.flatMap((item) => [item.title, item.detail]) ?? []),
+    ...(slide.comparisonItems?.flatMap((item) => [item.label, item.title, item.detail]) ?? []),
+    ...(slide.spotlightItems?.flatMap((item) => [item.title, item.detail]) ?? []),
+    ...(slide.metricItems?.flatMap((item) => [item.label, item.note ?? ""]) ?? []),
+    ...(slide.chartItems?.flatMap((item) => [item.label, item.detail]) ?? []),
+    ...(slide.processItems?.flatMap((item) => [item.step, item.title, item.detail]) ?? []),
+    ...(slide.closingItems?.flatMap((item) => [item.label, item.detail]) ?? []),
+  ]
+    .map((item) => normalizeText(item))
+    .filter(Boolean)
+}
+
+export function isLowInformationPptPlan(plan: Pick<PptPreviewDeck, "outline"> & { title: string; slides: Partial<PptPreviewSlide>[] }, request: Pick<PptPreviewRequest, "prompt">) {
+  const meaningfulSignatures = new Set<string>()
+  let promptCloneCount = 0
+  let genericLabelCount = 0
+  let placeholderCount = 0
+  let lowInformationSlideCount = 0
+
+  const deckTexts = [plan.title, ...(plan.outline ?? []), ...plan.slides.flatMap((slide) => collectSlideContentTexts(slide))]
+    .map((item) => normalizeText(item))
+    .filter(Boolean)
+
+  for (const value of deckTexts) {
+    if (isPreviewPlaceholder(value)) {
+      placeholderCount += 1
+      continue
+    }
+
+    if (isGenericGeneratedLabel(value)) {
+      genericLabelCount += 1
+      continue
+    }
+
+    if (looksLikePromptClone(value, request.prompt)) {
+      promptCloneCount += 1
+      continue
+    }
+
+    const signature = buildSemanticSignature(value)
+    if (signature.length >= 4) {
+      meaningfulSignatures.add(signature)
+    }
+  }
+
+  for (const slide of plan.slides) {
+    const slideTexts = collectSlideContentTexts(slide)
+    if (slideTexts.length === 0) {
+      lowInformationSlideCount += 1
+      continue
+    }
+
+    const meaningfulCount = slideTexts.filter((value) => {
+      return !isPreviewPlaceholder(value) && !isGenericGeneratedLabel(value) && !looksLikePromptClone(value, request.prompt)
+    }).length
+
+    if (meaningfulCount === 0) {
+      lowInformationSlideCount += 1
+    }
+  }
+
+  const totalTextCount = deckTexts.length
+  if (totalTextCount === 0) {
+    return true
+  }
+
+  return (
+    lowInformationSlideCount >= 3 ||
+    placeholderCount >= 2 ||
+    promptCloneCount >= Math.max(8, Math.floor(totalTextCount * 0.35)) ||
+    genericLabelCount >= Math.max(6, Math.floor(totalTextCount * 0.25)) ||
+    meaningfulSignatures.size < 10
+  )
+}
+
+function getLeadToolMinimaxConfig() {
+  const apiKey = normalizeText(process.env.LEAD_TOOLS_MINIMAX_API_KEY)
+  const baseURL = normalizeText(process.env.LEAD_TOOLS_MINIMAX_BASE_URL) || "https://api.minimaxi.com/v1"
+  const model = normalizeText(process.env.LEAD_TOOLS_MINIMAX_MODEL)
+
+  return { apiKey, baseURL, model }
+}
+
+function getLeadToolStepfunConfig() {
+  const apiKey = normalizeText(process.env.LEAD_TOOLS_STEPFUN_API_KEY || process.env.STEPFUN_API_KEY)
+  const baseURL =
+    normalizeText(process.env.LEAD_TOOLS_STEPFUN_BASE_URL || process.env.STEPFUN_BASE_URL) ||
+    "https://api.stepfun.com/v1"
+  const model = normalizeText(process.env.LEAD_TOOLS_STEPFUN_MODEL || process.env.STEPFUN_MODEL)
+
+  return { apiKey, baseURL, model }
+}
+
+function hasLeadToolMinimaxProvider() {
+  const config = getLeadToolMinimaxConfig()
+  return Boolean(config.apiKey && config.baseURL && config.model)
+}
+
+function hasLeadToolStepfunProvider() {
+  const config = getLeadToolStepfunConfig()
+  return Boolean(config.apiKey && config.baseURL)
+}
+
+function hasLeadToolPptokenProvider() {
+  return getConfiguredAiEntryProviders().some((provider) => provider.id === "pptoken")
+}
+
+function resolveRequestedPreviewModel(request: PptPreviewRequest) {
+  return request.model ?? getLeadToolPreviewModel("ai-ppt-preview")
+}
+
+function inferPreviewProviderId(model: string) {
+  if (model.startsWith("MiniMax-")) {
+    return "minimax" as const
+  }
+
+  if (model.startsWith("step-")) {
+    return "stepfun" as const
+  }
+
+  if (model === "gpt-5.4") {
+    return "pptoken" as const
+  }
+
+  return null
+}
+
+async function generateTextWithLeadToolPreviewProvider(params: {
+  systemPrompt: string
+  userPrompt: string
+  model: string
+}) {
+  const preferredProviderId = inferPreviewProviderId(params.model)
+
+  if (preferredProviderId === "minimax") {
+    if (!hasLeadToolMinimaxProvider()) {
+      throw new Error(`lead_tool_provider_missing:minimax:${params.model}`)
+    }
+
+    const config = getLeadToolMinimaxConfig()
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    })
+
+    const response = await generateText({
+      model: provider.chat(params.model),
+      system: params.systemPrompt,
+      prompt: params.userPrompt,
+    })
+
+    const text = response.text.trim()
+    if (!text) {
+      throw new Error("lead_tool_preview_empty_response")
+    }
+
+    return {
+      text,
+      providerId: "minimax",
+      model: params.model,
+    }
+  }
+
+  if (preferredProviderId === "stepfun") {
+    if (!hasLeadToolStepfunProvider()) {
+      throw new Error(`lead_tool_provider_missing:stepfun:${params.model}`)
+    }
+
+    const config = getLeadToolStepfunConfig()
+    const resolvedModel = config.model || params.model
+    let payload:
+      | {
+          choices?: Array<{ message?: { content?: unknown } }>
+          error?: { message?: unknown }
+        }
+      | null = null
+    let lastError: unknown = null
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const response = await fetch(`${config.baseURL.replace(/\/+$/u, "")}/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: resolvedModel,
+            messages: [
+              { role: "system", content: params.systemPrompt },
+              { role: "user", content: params.userPrompt },
+            ],
+            temperature: 0.4,
+            response_format: {
+              type: "json_object",
+            },
+          }),
+        })
+
+        payload = (await response.json().catch(() => null)) as
+          | {
+              choices?: Array<{ message?: { content?: unknown } }>
+              error?: { message?: unknown }
+            }
+          | null
+
+        if (!response.ok) {
+          const errorMessage = normalizeText(payload?.error?.message) || `stepfun_http_${response.status}`
+          throw new Error(`lead_tool_stepfun_http_failed:${errorMessage}`)
+        }
+
+        break
+      } catch (error) {
+        lastError = error
+        if (attempt >= 3) {
+          throw error
+        }
+        await sleep(750 * attempt)
+      }
+    }
+
+    const text = normalizeText(payload?.choices?.[0]?.message?.content)
+    if (!text) {
+      throw new Error(
+        `lead_tool_preview_empty_response:${lastError instanceof Error ? lastError.message : "stepfun_empty_payload"}`,
+      )
+    }
+
+    return {
+      text,
+      providerId: "stepfun",
+      model: resolvedModel,
+    }
+  }
+
+  if (preferredProviderId === "pptoken") {
+    if (!hasLeadToolPptokenProvider()) {
+      throw new Error(`lead_tool_provider_missing:pptoken:${params.model}`)
+    }
+
+    const result = await executeAiEntryWithProviderFailover(
+      async (providerRun) => {
+        const response = await generateText({
+          model: providerRun.provider.chat(providerRun.model),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
+
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+      {
+        preferredProviderId: "pptoken",
+        preferredModel: params.model,
+        forcePreferredProvider: true,
+      },
+    )
+
+    return {
+      text: result.result,
+      providerId: result.providerId,
+      model: result.model,
+    }
+  }
+
+  if (hasLeadToolMinimaxProvider()) {
+    const config = getLeadToolMinimaxConfig()
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    })
+
+    const resolvedModel = config.model || params.model
+    const response = await generateText({
+      model: provider.chat(resolvedModel),
+      system: params.systemPrompt,
+      prompt: params.userPrompt,
+    })
+
+    const text = response.text.trim()
+    if (!text) {
+      throw new Error("lead_tool_preview_empty_response")
+    }
+
+    return {
+      text,
+      providerId: "minimax",
+      model: resolvedModel,
+    }
+  }
+
+  if (hasLeadToolStepfunProvider()) {
+    const config = getLeadToolStepfunConfig()
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    })
+
+    const resolvedModel = config.model || params.model
+    const response = await generateText({
+      model: provider.chat(resolvedModel),
+      system: params.systemPrompt,
+      prompt: params.userPrompt,
+    })
+
+    const text = response.text.trim()
+    if (!text) {
+      throw new Error("lead_tool_preview_empty_response")
+    }
+
+    return {
+      text,
+      providerId: "stepfun",
+      model: resolvedModel,
+    }
+  }
+
+  if (hasLeadToolPptokenProvider()) {
+    const result = await executeAiEntryWithProviderFailover(
+      async (providerRun) => {
+        const response = await generateText({
+          model: providerRun.provider.chat(providerRun.model),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
+
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+      {
+        preferredProviderId: "pptoken",
+        preferredModel: params.model,
+        forcePreferredProvider: true,
+      },
+    )
+
+    return {
+      text: result.result,
+      providerId: result.providerId,
+      model: result.model,
+    }
+  }
+
+  const text = await generateTextWithWriterModel(params.systemPrompt, params.userPrompt, params.model, {
+    temperature: 0.45,
+    maxTokens: 1400,
+    timeoutMs: 36_000,
+    totalTimeoutMs: 42_000,
+  })
+
+  return {
+    text,
+    providerId: hasAibermApiKey() ? "aiberm" : hasCrazyrouteApiKey() ? "crazyroute" : "writer",
+    model: params.model,
+  }
+}
+
+function extractJsonObjectBlock(rawText: string) {
+  const cleanedText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
+  const candidates: string[] = []
+
+  for (const match of cleanedText.matchAll(/```json\s*([\s\S]*?)```/gi)) {
+    if (match[1]?.trim()) {
+      candidates.push(match[1].trim())
+    }
+  }
+
+  for (const match of cleanedText.matchAll(/```\s*([\s\S]*?)```/gi)) {
+    if (match[1]?.trim()) {
+      candidates.push(match[1].trim())
+    }
+  }
+
+  const slidesObjectMatch = cleanedText.match(/\{[\s\S]*"slides"\s*:\s*\[[\s\S]*\}\s*$/i)
+  if (slidesObjectMatch?.[0]?.trim()) {
+    candidates.push(slidesObjectMatch[0].trim())
+  }
+
+  const firstBrace = cleanedText.indexOf("{")
+  const lastBrace = cleanedText.lastIndexOf("}")
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(cleanedText.slice(firstBrace, lastBrace + 1))
+  }
+
+  for (const candidate of candidates) {
+    try {
+      JSON.parse(candidate)
+      return candidate
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error("ppt_preview_json_missing")
+}
+
+function buildFallbackBody(layout: PptPreviewSlide["layout"], fallbackTitle: string, language: PptPreviewRequest["language"]) {
+  if (language === "zh-CN") {
+    switch (layout) {
+      case "cover":
+        return `${fallbackTitle} 的核心现状、关键风险与影响范围概览。`
+      case "agenda":
+        return "本页概览核心议题：现状、风险、全球影响与后续观察重点。"
+      case "insight":
+        return "提炼当前最值得关注的事实、变化趋势与结构性影响。"
+      case "comparison":
+        return "对比关键变量、参与方立场或不同路径下的影响差异。"
+      case "evidence":
+        return "补充最值得引用的证据、事实锚点与支持判断。"
+      case "stats":
+        return "提炼会直接影响决策的关键数字与压力指标。"
+      case "chart":
+        return "把影响链条压缩成一眼能看懂的扩散结构或图示。"
+      case "process":
+        return "给出从识别到响应的执行步骤与推进节奏。"
+      case "timeline":
+        return "以收束页形式给出接下来最值得执行或持续观察的动作。"
+      default:
+        return `${fallbackTitle} 的关键结论与解释。`
+    }
+  }
+
+  switch (layout) {
+    case "cover":
+      return `An at-a-glance view of the current situation, risks, and impact around ${fallbackTitle}.`
+    case "agenda":
+      return "This slide frames the core agenda: status, risk, global impact, and what to watch next."
+    case "insight":
+      return "Highlight the most important facts, shifts, and structural implications."
+    case "comparison":
+      return "Compare the most important variables, stakeholder positions, or scenario outcomes."
+    case "evidence":
+      return "Add the most quotable proof, factual anchors, and evidence that support the core claim."
+    case "stats":
+      return "Surface the numbers and signals that would actually change the decision."
+    case "chart":
+      return "Compress the impact chain into a chartable or diagram-first logic."
+    case "process":
+      return "Lay out the response steps and execution order in a clear progression."
+    case "timeline":
+      return "Close with the next moves, watchpoints, or actions rather than a literal chronology."
+    default:
+      return `Summarize the key conclusions and implications around ${fallbackTitle}.`
+  }
+}
+
+function buildFallbackSlideTitle(layout: PptPreviewSlide["layout"], fallbackTitle: string, language: PptPreviewRequest["language"]) {
+  if (layout === "cover") {
+    return fallbackTitle
+  }
+
+  if (language === "zh-CN") {
+    switch (layout) {
+      case "agenda":
+        return `${fallbackTitle}的结构总览`
+      case "insight":
+        return `${fallbackTitle}的核心判断`
+      case "comparison":
+        return `${fallbackTitle}的关键比较`
+      case "evidence":
+        return `${fallbackTitle}的证据页`
+      case "stats":
+        return `${fallbackTitle}的关键数据`
+      case "chart":
+        return `${fallbackTitle}的图示页`
+      case "process":
+        return `${fallbackTitle}的执行路径`
+      case "timeline":
+        return `${fallbackTitle}的结束页`
+    }
+  }
+
+  switch (layout) {
+    case "agenda":
+      return `${fallbackTitle} structure`
+    case "insight":
+      return `${fallbackTitle} key insight`
+    case "comparison":
+      return `${fallbackTitle} comparison`
+    case "evidence":
+      return `${fallbackTitle} proof`
+    case "stats":
+      return `${fallbackTitle} stats`
+    case "chart":
+      return `${fallbackTitle} chart`
+    case "process":
+      return `${fallbackTitle} process`
+    case "timeline":
+      return `${fallbackTitle} closing`
+    default:
+      return fallbackTitle
+  }
+}
+
+function buildFallbackBullets(layout: PptPreviewSlide["layout"], fallbackTitle: string, language: PptPreviewRequest["language"]) {
+  if (language === "zh-CN") {
+    switch (layout) {
+      case "cover":
+        return ["现状概览", "核心风险", "影响范围"]
+      case "agenda":
+        return ["海峡通行现状", "能源与航运影响", "后续观察重点"]
+      case "insight":
+        return ["当前事实", "变化趋势", "结构性影响"]
+      case "comparison":
+        return ["关键变量对比", "不同路径影响", "参与方立场差异"]
+      case "evidence":
+        return ["事实锚点", "可复述证据", "支持判断"]
+      case "stats":
+        return ["关键数字", "压力指标", "变化幅度"]
+      case "chart":
+        return ["主轴关系", "外溢路径", "最终影响"]
+      case "process":
+        return ["识别", "切换", "执行", "跟踪"]
+      case "timeline":
+        return ["收束判断", "下一步动作", "持续观察点"]
+      default:
+        return [`聚焦 ${fallbackTitle}`, "补齐核心结论"]
+    }
+  }
+
+  switch (layout) {
+    case "cover":
+      return ["Current status", "Core risk", "Impact scope"]
+    case "agenda":
+      return ["Transit status", "Energy and shipping impact", "What to watch next"]
+    case "insight":
+      return ["Key facts", "Emerging shift", "Structural implication"]
+    case "comparison":
+      return ["Variable comparison", "Scenario impact", "Stakeholder differences"]
+    case "evidence":
+      return ["Proof point", "Quoted fact", "Supportive anchor"]
+    case "stats":
+      return ["Core number", "Pressure signal", "Magnitude shift"]
+    case "chart":
+      return ["Primary axis", "Spillover path", "Resulting impact"]
+    case "process":
+      return ["Identify", "Switch", "Execute", "Track"]
+    case "timeline":
+      return ["Closing judgment", "Next move", "Watchpoint"]
+    default:
+      return [`Focus on ${fallbackTitle}`, "Fill in the key takeaway"]
+  }
+}
+
+function buildFallbackComparisonItems(slide: Pick<PptPreviewSlide, "bullets" | "title">) {
+  return slide.bullets.slice(0, 4).map((bullet, index) => ({
+    label: String.fromCharCode(65 + index),
+    title: `${slide.title} ${index + 1}`,
+    detail: bullet,
+  }))
+}
+
+function buildFallbackContentsItems(slide: Pick<PptPreviewSlide, "bullets" | "title">) {
+  return slide.bullets.slice(0, 9).map((bullet, index) => ({
+    index: String(index + 1).padStart(2, "0"),
+    title: index === 0 ? slide.title : `Section ${index + 1}`,
+    detail: bullet,
+  }))
+}
+
+function buildFallbackSpotlightItems(slide: Pick<PptPreviewSlide, "bullets" | "title">) {
+  return slide.bullets.slice(0, 4).map((bullet, index) => ({
+    title: index === 0 ? slide.title : `Signal ${index + 1}`,
+    detail: bullet,
+  }))
+}
+
+function buildFallbackMetricItems(slide: Pick<PptPreviewSlide, "bullets">) {
+  return slide.bullets.slice(0, 4).map((bullet, index) => ({
+    value: `${index + 1}`,
+    label: bullet,
+    note: "",
+  }))
+}
+
+function buildFallbackChartItems(slide: Pick<PptPreviewSlide, "bullets">) {
+  return slide.bullets.slice(0, 4).map((bullet, index) => ({
+    label: String.fromCharCode(65 + index),
+    value: Math.max(20, Math.min(96, bullet.length * 4)),
+    detail: bullet,
+  }))
+}
+
+function buildFallbackProcessItems(slide: Pick<PptPreviewSlide, "bullets">) {
+  return slide.bullets.slice(0, 4).map((bullet, index) => ({
+    step: String(index + 1).padStart(2, "0"),
+    title: `Step ${index + 1}`,
+    detail: bullet,
+  }))
+}
+
+function buildFallbackClosingItems(slide: Pick<PptPreviewSlide, "bullets">) {
+  return slide.bullets.slice(0, 4).map((bullet, index) => ({
+    label: String(index + 1).padStart(2, "0"),
+    detail: bullet,
+  }))
+}
+
+function getLayoutTextLimits(layout: PptPreviewSlide["layout"], language: PptPreviewRequest["language"]) {
+  const zh = language === "zh-CN"
+
+  switch (layout) {
+    case "cover":
+      return {
+        title: zh ? 22 : 42,
+        body: zh ? 42 : 96,
+        bullet: zh ? 14 : 28,
+        bullets: 3,
+      }
+    case "agenda":
+      return {
+        title: zh ? 22 : 42,
+        body: zh ? 40 : 90,
+        bullet: zh ? 18 : 34,
+        bullets: 5,
+      }
+    case "comparison":
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 36 : 84,
+        bullet: zh ? 16 : 30,
+        bullets: 4,
+      }
+    case "stats":
+    case "chart":
+    case "process":
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 34 : 80,
+        bullet: zh ? 14 : 28,
+        bullets: 4,
+      }
+    case "evidence":
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 34 : 80,
+        bullet: zh ? 15 : 30,
+        bullets: 3,
+      }
+    default:
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 34 : 80,
+        bullet: zh ? 15 : 30,
+        bullets: 3,
+      }
+  }
+}
+
+export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewRequest, style: PptPreviewVariantStyle): LeadToolPptPlan {
+  const styleSlots = getPptPreviewStyleSlots(style.key)
+  const fallbackTitle = request.prompt.trim()
+  const rawSlides = Array.isArray(rawPlan?.slides) ? rawPlan.slides : []
+  const normalizedCandidates = rawSlides.map((rawSlide: any, index: number) => {
+    const titleCandidate = typeof rawSlide?.title === "string" ? stripMarkdownDecorations(rawSlide.title) : ""
+    const bodyCandidate = typeof rawSlide?.body === "string" ? stripMarkdownDecorations(rawSlide.body) : ""
+    const kickerCandidate = typeof rawSlide?.kicker === "string" ? stripMarkdownDecorations(rawSlide.kicker) : ""
+    const bulletCandidates = Array.isArray(rawSlide?.bullets)
+      ? rawSlide.bullets.map((item: unknown) => (typeof item === "string" ? stripMarkdownDecorations(item) : "")).filter(Boolean)
+      : []
+    const contentsItems = Array.isArray(rawSlide?.contentsItems)
+      ? rawSlide.contentsItems
+          .map((item: unknown) => {
+            const row = item as Record<string, unknown>
+            return {
+              index: toStructuredString(row?.index),
+              title: toStructuredString(row?.title),
+              detail: toStructuredString(row?.detail),
+            }
+          })
+          .filter((item: { index: string; title: string; detail: string }) => item.index && item.title && item.detail)
+      : []
+    const comparisonItems = Array.isArray(rawSlide?.comparisonItems)
+      ? rawSlide.comparisonItems
+          .map((item: unknown) => {
+            const row = item as Record<string, unknown>
+            return {
+              label: toStructuredString(row?.label),
+              title: toStructuredString(row?.title),
+              detail: toStructuredString(row?.detail),
+            }
+          })
+          .filter((item: { label: string; title: string; detail: string }) => item.label && item.title && item.detail)
+      : []
+    const metricItems = Array.isArray(rawSlide?.metricItems)
+      ? rawSlide.metricItems
+          .map((item: unknown) => {
+            const row = item as Record<string, unknown>
+            return {
+              value: toStructuredString(row?.value),
+              label: toStructuredString(row?.label),
+              note: toStructuredString(row?.note),
+            }
+          })
+          .filter((item: { value: string; label: string; note: string }) => item.value && item.label)
+      : []
+    const chartItems = Array.isArray(rawSlide?.chartItems)
+      ? rawSlide.chartItems
+          .map((item: unknown) => {
+            const row = item as Record<string, unknown>
+            return {
+              label: toStructuredString(row?.label),
+              value: toStructuredNumber(row?.value),
+              detail: toStructuredString(row?.detail),
+            }
+          })
+          .filter((item: { label: string; value: number | null; detail: string }) => item.label && item.detail && typeof item.value === "number")
+          .map((item: { label: string; value: number | null; detail: string }) => ({ label: item.label, detail: item.detail, value: item.value as number }))
+      : []
+    const processItems = Array.isArray(rawSlide?.processItems)
+      ? rawSlide.processItems
+          .map((item: unknown) => {
+            const row = item as Record<string, unknown>
+            return {
+              step: toStructuredString(row?.step),
+              title: toStructuredString(row?.title),
+              detail: toStructuredString(row?.detail),
+            }
+          })
+          .filter((item: { step: string; title: string; detail: string }) => item.step && item.title && item.detail)
+      : []
+    const spotlightItems = Array.isArray(rawSlide?.spotlightItems)
+      ? rawSlide.spotlightItems
+          .map((item: unknown) => {
+            const row = item as Record<string, unknown>
+            return {
+              title: toStructuredString(row?.title),
+              detail: toStructuredString(row?.detail),
+            }
+          })
+          .filter((item: { title: string; detail: string }) => item.title && item.detail)
+      : []
+    const closingItems = Array.isArray(rawSlide?.closingItems)
+      ? rawSlide.closingItems
+          .map((item: unknown) => {
+            const row = item as Record<string, unknown>
+            return {
+              label: toStructuredString(row?.label),
+              detail: toStructuredString(row?.detail),
+            }
+          })
+          .filter((item: { label: string; detail: string }) => item.label && item.detail)
+      : []
+    const layoutValue = typeof rawSlide?.layout === "string" ? rawSlide.layout.trim() : ""
+    const intentValue = typeof rawSlide?.intent === "string" ? rawSlide.intent.trim() : ""
+    const normalizedLayout = isPptPreviewLayout(layoutValue)
+      ? layoutValue
+      : isPptPreviewPageIntent(layoutValue)
+        ? resolvePptPreviewSlideLayout(style.key, layoutValue)
+        : undefined
+    const normalizedIntent = isPptPreviewPageIntent(intentValue)
+      ? intentValue
+      : normalizedLayout
+        ? resolvePptPreviewSlideIntent(style.key, normalizedLayout)
+        : isPptPreviewPageIntent(layoutValue)
+          ? layoutValue
+          : undefined
+
+    return {
+      sourceIndex: index,
+      layout: normalizedLayout,
+      intent: normalizedIntent,
+      kicker: kickerCandidate,
+      title: titleCandidate,
+      body: bodyCandidate,
+      bullets: bulletCandidates,
+      contentsItems,
+      comparisonItems,
+      spotlightItems,
+      metricItems,
+      chartItems,
+      processItems,
+      closingItems,
+    }
+  })
+  type NormalizedCandidate = (typeof normalizedCandidates)[number]
+
+  const usedCandidateIndexes = new Set<number>()
+  const slides = styleSlots.map((slot, index) => {
+    const matchedByIntent = normalizedCandidates.find(
+      (candidate: NormalizedCandidate, candidateIndex: number) =>
+        !usedCandidateIndexes.has(candidateIndex) && candidate.intent === slot.intent,
+    )
+    const matchedByLayout = normalizedCandidates.find(
+      (candidate: NormalizedCandidate, candidateIndex: number) =>
+        !usedCandidateIndexes.has(candidateIndex) && candidate.layout === slot.layout,
+    )
+    const fallbackCandidate = normalizedCandidates.find(
+      (candidate: NormalizedCandidate, candidateIndex: number) =>
+        !usedCandidateIndexes.has(candidateIndex) && candidate.sourceIndex === index,
+    )
+    const rawSlide: Partial<NormalizedCandidate> =
+      matchedByIntent ?? matchedByLayout ?? fallbackCandidate ?? normalizedCandidates[index] ?? {}
+    const candidateIndex = normalizedCandidates.indexOf(rawSlide as NormalizedCandidate)
+    if (candidateIndex >= 0) {
+      usedCandidateIndexes.add(candidateIndex)
+    }
+
+    const limits = getLayoutTextLimits(slot.layout, request.language)
+    const slotSchema = getPptPreviewTemplateSlotByLayout(style.key, slot.layout)
+    const structuredFields = slotSchema?.structuredFields ?? []
+
+    return {
+      layout: slot.layout,
+      intent: slot.intent,
+      nativePageType: slotSchema?.nativePageType,
+      structuredFields: [...structuredFields],
+      kicker: (rawSlide.kicker || `Slide ${index + 1}`).trim(),
+      title: (rawSlide.title || buildFallbackSlideTitle(slot.layout, fallbackTitle, request.language)).trim(),
+      body: (rawSlide.body || buildFallbackBody(slot.layout, fallbackTitle, request.language)).trim(),
+      bullets: (rawSlide.bullets?.length ? rawSlide.bullets : buildFallbackBullets(slot.layout, fallbackTitle, request.language))
+        .map((item: string) => item.trim())
+        .slice(0, limits.bullets),
+      contentsItems:
+        structuredFields.includes("contentsItems")
+          ? (rawSlide.contentsItems?.length ? rawSlide.contentsItems : buildFallbackContentsItems(rawSlide as PptPreviewSlide)).slice(0, 9)
+          : undefined,
+      comparisonItems:
+        structuredFields.includes("comparisonItems")
+          ? (rawSlide.comparisonItems?.length ? rawSlide.comparisonItems : buildFallbackComparisonItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          : undefined,
+      spotlightItems:
+        structuredFields.includes("spotlightItems")
+          ? (rawSlide.spotlightItems?.length ? rawSlide.spotlightItems : buildFallbackSpotlightItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          : undefined,
+      metricItems:
+        structuredFields.includes("metricItems")
+          ? (rawSlide.metricItems?.length ? rawSlide.metricItems : buildFallbackMetricItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          : undefined,
+      chartItems:
+        structuredFields.includes("chartItems")
+          ? (rawSlide.chartItems?.length ? rawSlide.chartItems : buildFallbackChartItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          : undefined,
+      processItems:
+        structuredFields.includes("processItems")
+          ? (rawSlide.processItems?.length ? rawSlide.processItems : buildFallbackProcessItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          : undefined,
+      closingItems:
+        structuredFields.includes("closingItems")
+          ? (rawSlide.closingItems?.length ? rawSlide.closingItems : buildFallbackClosingItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          : undefined,
+    }
+  }) as LeadToolPptPlan["slides"]
+
+  const rawOutline = Array.isArray(rawPlan?.outline)
+    ? rawPlan.outline.map((item: unknown) => (typeof item === "string" ? stripMarkdownDecorations(item) : "")).filter(Boolean)
+    : []
+
+  const normalizedTitle =
+    typeof rawPlan?.title === "string" && !isPreviewPlaceholder(rawPlan.title)
+      ? stripMarkdownDecorations(rawPlan.title)
+      : fallbackTitle
+
+  const normalizedOutline = (rawOutline.length >= 9 ? rawOutline : slides.map((slide) => slide.title).slice(0, 9)) as LeadToolPptPlan["outline"]
+
+  return {
+    title: normalizedTitle,
+    outline: normalizedOutline,
+    slides,
+  }
+}
+
+export function buildStyleAwarePrompt(request: PptPreviewRequest, style: PptPreviewVariantStyle) {
+  const intentSequence = buildPptPreviewIntentSequenceLabel(style.key, request.language)
+  const rawIntentSequence = getPptPreviewStyleIntentSequence(style.key).join(", ")
+  const capabilityLabel = buildPptPreviewTemplateCapabilityLabel(style.key, request.language)
+  const densityHint =
+    request.language === "zh-CN"
+      ? style.key === "ppt169_swiss_grid_systems"
+        ? "Neo-Grid Bold 这种分析型模板要把网格喂满：agenda 尽量给满 9 个模块中的主要章节，comparison、stats、chart 和 closing 都尽量给 3-4 个短而硬的信号项，不要过度留白。"
+        : ""
+      : style.key === "ppt169_swiss_grid_systems"
+        ? "For Neo-Grid Bold, feed the grid: aim for a full 9-page structure, and keep comparison, stats, chart, and closing pages stocked with 3-4 sharp signal items so the layout does not feel underfilled."
+        : ""
+
+  return [
+    buildPreviewUserPrompt(request),
+    "",
+    request.language === "zh-CN" ? `Preset label: ${style.name}` : `Preset label: ${style.name}`,
+    `Style intent: ${style.summary}`,
+    `Style writing direction: ${style.stylePrompt}`,
+    `Strengths: ${style.strengths.join(", ")}`,
+    request.language === "zh-CN" ? `该模板的原生页型顺序: ${intentSequence}` : `Native page-intent sequence: ${intentSequence}`,
+    request.language === "zh-CN" ? `模板能力注册表:\n${capabilityLabel}` : `Template capability registry:\n${capabilityLabel}`,
+    request.language === "zh-CN"
+      ? `slides 数组里的每个对象都必须同时包含 layout 和 intent 字段。本模板 intent 顺序固定为: ${rawIntentSequence}。`
+      : `Every slide object must include both layout and intent. For this preset the intent sequence must be: ${rawIntentSequence}.`,
+    "",
+    request.language === "zh-CN"
+      ? [
+          "直接以该风格写完整的九页结构，不要先写通用版。",
+          "这一路必须有独立的叙事角度、章节命名和判断，不要和其他风格只做同义改写。",
+          "Long Table 要像长桌纪要和董事会讨论；Playful 要像轻快发布和友好品牌表达；Broadside 要像海报宣言和印刷告示；Neo-Grid Bold 要像现代策略界面和粗体网格评审。",
+          "虽然 slides 的字段顺序固定，但内容必须按该模板的原生页型去写，不要把九页都写成普通文字页。",
+          "layout 顺序固定为 cover, agenda, insight, comparison, evidence, stats, chart, process, timeline。",
+          "agenda 页优先产出 contentsItems；comparison 页优先产出 comparisonItems；evidence 页优先产出 spotlightItems；stats 页优先产出 metricItems；chart 页优先产出 chartItems；process 页优先产出 processItems；timeline 页优先产出 closingItems，不要只给 bullets。",
+          "agenda 页的五个章节名必须体现该风格自己的信息组织方式，不要复用通用目录词。",
+          "cover 页标题可以重写，但必须明确包含主题对象，不要简单等于原始 prompt。",
+          densityHint,
+        ].join("\n")
+      : [
+          "Write the nine-slide structure directly in this style rather than drafting a neutral base plan.",
+          "This lane must introduce its own narrative angle, chapter naming, and judgment instead of producing a synonym pass of the other styles.",
+          "Long Table should feel like a chaired long-table memo; Playful should feel like a bright launch narrative; Broadside should read like a printed declaration; Neo-Grid Bold should feel like a modern strategy interface review.",
+          "Even though the field order is fixed, write each slot according to this preset's native page intent rather than treating all nine as generic text slides.",
+          "The fixed layout order is: cover, agenda, insight, comparison, evidence, stats, chart, process, timeline.",
+          "Prefer returning contentsItems on agenda slides, comparisonItems on comparison slides, spotlightItems on evidence slides, metricItems on stats slides, chartItems on chart slides, processItems on process slides, and closingItems on closing slides rather than relying on bullets alone.",
+          "The agenda slide must use chapter names that reflect this style's own information architecture rather than a generic shared outline.",
+          "The cover title may be rewritten, but it must still explicitly name the topic rather than merely echoing the raw prompt.",
+          "The last slide should usually function as a closing page with actions, watchpoints, or a final verdict rather than a literal timeline.",
+          "Keep titles short and oversized. At least one slide should feel naturally chartable or card-based instead of paragraph-heavy.",
+          densityHint,
+        ].join("\n"),
+  ].join("\n")
+}
+
+function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) {
+  if (language === "zh-CN") {
+    return [
+      "你是 ppt-master agent runtime 里的 Executor。",
+      "任务是为单页演示文稿直接手写一个可导出的 SVG 页面。",
+      "必须只返回一个完整 SVG 文档，不要 markdown、不要解释、不要代码块、不要 XML 声明。",
+      "不要套用现成模板，不要引用外部素材底图，要基于当前页面内容直接构图。",
+      "画布固定为 1280x720，必须包含 viewBox=\"0 0 1280 720\"。",
+      "必须使用内联属性，不要使用 <style>、class、mask、foreignObject、textPath、symbol、script、animate、iframe，也不要使用 <g opacity>。",
+      "所有文字和结构必须与当前页面内容匹配，不能残留示例文案、占位词或通用模板标题。",
+      "输出中必须包含顶层语义分组，例如 background、chrome、content、annotations。",
+      "避免过度复制上一页布局；同一风格下要保持一致的视觉语法，但每一页都应重新构图。",
+    ].join(" ")
+  }
+
+  return [
+    "You are the Executor inside a ppt-master agent runtime.",
+    "Generate one standalone SVG slide that is ready for downstream finalize/export.",
+    "Return one complete SVG document only. No markdown, no explanation, no code fences, no XML declaration.",
+    "Do not wrap or reuse an existing template. Compose the slide directly from the current page content.",
+    "The canvas is fixed at 1280x720 and must include viewBox=\"0 0 1280 720\".",
+    "Use inline SVG attributes only. Do not use <style>, class, mask, foreignObject, textPath, symbol, script, animate, iframe, or <g opacity>.",
+    "All text and structure must match the current slide content. Never leave sample copy, placeholders, or generic template labels in the output.",
+    "Include semantic top-level groups such as background, chrome, content, and annotations.",
+    "Keep the visual language consistent within the variant while still recomposing each page rather than duplicating one shell.",
+  ].join(" ")
+}
+
+function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContext) {
+  const previousSummary =
+    context.previousSlides.length > 0
+      ? context.previousSlides
+          .map(
+            (slide, index) =>
+              `${index + 1}. [${slide.layout}] ${slide.title} | ${slide.body} | ${slide.bullets.join(" / ")}`,
+          )
+          .join("\n")
+      : context.deck.language === "zh-CN"
+        ? "无前序页面。"
+        : "No previous slides yet."
+
+  const layoutGuidance =
+    context.deck.language === "zh-CN"
+      ? {
+          cover: "封面页。做强标题、主题氛围和 1 个视觉主轴，不要堆积太多卡片。",
+          agenda: "目录/议程页。把 4-5 个章节或推进段落组织得清楚，允许编号、路径和结构线。",
+          insight: "洞察页。做出明显的主判断区，允许一个大数字、强结论、引语或单一视觉焦点。",
+          comparison: "比较页。至少形成两组对照关系，可以是双栏、矩阵或对比带，但不要空洞模板。",
+          evidence: "证据页。放最可引用的事实、判断和证明材料，不要和 comparison 重复。",
+          stats: "数据页。集中展示 3-4 个最关键的数字和压力指标。",
+          chart: "图示页。把传播链、因果链或扩散路径压成一眼能懂的结构。",
+          process: "流程页。给出明确步骤、阶段推进或执行顺序。",
+          timeline: "时间线页。给出清晰推进顺序和关键节点，节奏要一眼能读懂。",
+        }
+      : {
+          cover: "Cover slide. Build a strong title, atmosphere, and one primary visual axis. Avoid overloading it with cards.",
+          agenda: "Agenda slide. Organize 4-5 chapters or phases clearly. Numbering, paths, and structure lines are welcome.",
+          insight: "Insight slide. Create one dominant judgment zone with a large number, a strong claim, a quote, or a single focal visual.",
+          comparison: "Comparison slide. Form at least two contrasted groups using columns, matrix logic, or comparative bands without falling into empty template structure.",
+          evidence: "Evidence slide. Use quotable proof, anchors, and supporting facts without duplicating the comparison slide.",
+          stats: "Stats slide. Concentrate 3-4 key numbers and pressure signals.",
+          chart: "Chart slide. Compress the chain into a diagram-first or chart-first logic.",
+          process: "Process slide. Show the response sequence, phases, or executable order clearly.",
+          timeline: "Timeline slide. Make sequence and key milestones legible at a glance.",
+        }
+
+  return [
+    `Deck title: ${context.deck.title}`,
+    `Scenario: ${context.deck.scenario}`,
+    `Language: ${context.deck.language}`,
+    `Variant style: ${context.variant.name}`,
+    `Variant summary: ${context.variant.summary}`,
+    `Variant writing direction: ${context.variant.stylePrompt}`,
+    `Palette background: ${context.variant.palette.background}`,
+    `Palette foreground: ${context.variant.palette.foreground}`,
+    `Palette accent: ${context.variant.palette.accent}`,
+    `Palette panel: ${context.variant.palette.panel}`,
+    `Palette border: ${context.variant.palette.border}`,
+    "",
+    `Current page: ${context.slideIndex + 1} / ${context.variant.slides.length}`,
+    `Layout type: ${context.slide.layout}`,
+    `Layout guidance: ${layoutGuidance[context.slide.layout]}`,
+    `Kicker: ${context.slide.kicker}`,
+    `Title: ${context.slide.title}`,
+    `Body: ${context.slide.body}`,
+    `Bullets: ${context.slide.bullets.join(" | ")}`,
+    "",
+    "Deck outline:",
+    ...context.deck.outline.map((item, index) => `${index + 1}. ${item}`),
+    "",
+    "Previous slides already generated in this variant:",
+    previousSummary,
+    "",
+    context.deck.language === "zh-CN"
+      ? "请直接输出当前页 SVG。不要输出解释，不要引用 design_spec 路径，不要写模板示例词。"
+      : "Output the SVG for this page directly. Do not explain, do not cite file paths, and do not leave template sample text.",
+  ].join("\n")
+}
+
+async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideContext): Promise<PptMasterPreviewRuntimeSlideResult> {
+  const requestedModel = context.deck.previewModel ?? "MiniMax-M2.7-highspeed"
+  const providerResult = await Promise.race([
+    generateTextWithLeadToolPreviewProvider({
+      systemPrompt: buildRuntimeSlideSystemPrompt(context.deck.language),
+      userPrompt: buildRuntimeSlideUserPrompt(context),
+      model: requestedModel,
+    }),
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error("ppt_master_runtime_slide_timeout")), RUNTIME_SLIDE_ATTEMPT_TIMEOUT_MS),
+    ),
+  ])
+
+  return {
+    provider: providerResult.providerId,
+    model: providerResult.model,
+    svg: providerResult.text,
+  }
+}
+
+async function generateVariantPlan(request: PptPreviewRequest, style: PptPreviewVariantStyle) {
+  const requestedModel = resolveRequestedPreviewModel(request)
+  let lastError: unknown = null
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const retryGuardrail =
+        attempt === 1
+          ? ""
+          : request.language === "zh-CN"
+            ? "上一次结果被判定为低信息内容。重写所有标题、章节、图表项和步骤项，禁止沿用原始 prompt 加编号，禁止 Step 1/Section 2/Signal 3 这类空壳标签。"
+            : "The previous result was rejected for low-information content. Rewrite all titles, sections, chart items, and process items with real business-specific language. Do not reuse numbered clones of the prompt or hollow labels like Step 1 / Section 2 / Signal 3."
+
+      const providerResult = await generateTextWithLeadToolPreviewProvider({
+        systemPrompt: [
+          buildPreviewSystemPrompt(request.language),
+          request.language === "zh-CN"
+            ? `风格要求：${style.stylePrompt} 直接按这种风格生成 9 页内容，不要先写一个通用版本再改写。每个 slide 对象必须输出 layout 与 intent。`
+            : `Style requirement: ${style.stylePrompt} Generate the nine-slide plan directly in this style rather than drafting a neutral version first. Each slide object must output both layout and intent.`,
+          retryGuardrail,
+          request.language === "zh-CN"
+            ? "只输出一个 JSON 对象，不要 markdown，不要解释。"
+            : "Return only one JSON object with no markdown and no explanation.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        userPrompt: buildStyleAwarePrompt(request, style),
+        model: requestedModel,
+      })
+
+      const rawPlan = JSON.parse(extractJsonObjectBlock(providerResult.text))
+      const normalizedPlan = normalizeLeadToolPptPlan(sanitizeRawPlan(rawPlan, request, style), request, style)
+
+      if (isLowInformationPptPlan(normalizedPlan, request)) {
+        throw new Error(`ppt_preview_low_information:${providerResult.providerId}:${providerResult.model}:attempt_${attempt}`)
+      }
+
+      return {
+        styleKey: style.key,
+        title: normalizedPlan.title,
+        outline: normalizedPlan.outline,
+        provider: providerResult.providerId,
+        previewModel: providerResult.model,
+        slides: normalizedPlan.slides.map((slide) => ({
+          ...slide,
+          intent: resolvePptPreviewSlideIntent(style.key, slide.layout),
+        })),
+      }
+    } catch (error) {
+      lastError = error
+      if (attempt >= 3) {
+        break
+      }
+      await sleep(500 * attempt)
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("ppt_preview_generation_failed")
+}
+
+export async function generateLeadToolPptPreview(request: PptPreviewRequest): Promise<PptPreviewDeck> {
+  const storyDeck = await generateLeadToolPptStoryDeck(request)
+  return materializeLeadToolPptDeckWithPptMasterRuntime(storyDeck)
+}
+
+export async function generateLeadToolPptStoryDeck(request: PptPreviewRequest): Promise<PptPreviewDeck> {
+  const plans = await Promise.all(pptPreviewStyles.map((style) => generateVariantPlan(request, style)))
+  return {
+    ...buildPptPreviewDeckFromPlans(request, plans),
+    provider: plans[0]?.provider ?? "unknown",
+    previewModel: plans[0]?.previewModel ?? resolveRequestedPreviewModel(request),
+  }
+}
+
+export async function materializeLeadToolPptDeckWithPptMasterRuntime(deck: PptPreviewDeck): Promise<PptPreviewDeck> {
+  return materializePptMasterPreviewDeck(
+    deck,
+    {
+      generateSlideSvg: generateRuntimeSlideSvg,
+    },
+  )
+}
+
+export async function generateLeadToolPptPreviewWithFallback(
+  request: PptPreviewRequest,
+  allowMockFallback: boolean,
+): Promise<PptPreviewDeck> {
+  if (
+    !hasLeadToolMinimaxProvider() &&
+    !hasLeadToolStepfunProvider() &&
+    !hasLeadToolPptokenProvider() &&
+    !hasAibermApiKey() &&
+    !hasCrazyrouteApiKey()
+  ) {
+    if (allowMockFallback) {
+      return renderPptPreviewDeckAssets(buildMockPptPreview(request))
+    }
+
+    throw new Error("lead_tool_provider_missing")
+  }
+
+  try {
+    return await generateLeadToolPptPreview(request)
+  } catch (error) {
+    if (allowMockFallback) {
+      console.warn("lead-tools.ppt.preview.fallback", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return renderPptPreviewDeckAssets(buildMockPptPreview(request))
+    }
+
+    throw error
+  }
+}

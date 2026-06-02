@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next"
 
 import { getAppBaseUrl } from "@/lib/app-url"
+import { isLocalizedPublicPath, localizePublicPath } from "@/lib/i18n/routing"
 import { getPublicSeoPaths } from "@/lib/seo/pages"
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -8,8 +9,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date()
   const staticPaths = ["/", "/pricing", "/resources/ai-subscription-cost-calculator"]
   const paths = [...staticPaths, ...getPublicSeoPaths()]
+  const localizedPaths = [...new Set(paths.flatMap((path) => (
+    isLocalizedPublicPath(path)
+      ? [localizePublicPath(path, "en"), localizePublicPath(path, "zh")]
+      : [path]
+  )))]
 
-  return paths.map((path) => ({
+  return localizedPaths.map((path) => ({
     url: new URL(path, baseUrl).toString(),
     lastModified: now,
     changeFrequency: path === "/" ? "weekly" : "monthly",

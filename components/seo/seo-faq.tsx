@@ -1,14 +1,23 @@
 import type { SeoFaq } from "@/lib/seo/pages"
+import type { AppLocale } from "@/lib/i18n/config"
+import { getSeoUiCopy } from "@/lib/seo/i18n"
 
-export function SeoFaqList({ faqs }: { faqs: SeoFaq[] }) {
+export function SeoFaqList({
+  faqs,
+  locale,
+}: {
+  faqs: SeoFaq[]
+  locale: AppLocale
+}) {
   if (faqs.length === 0) return null
+  const ui = getSeoUiCopy(locale)
 
   return (
     <section className="mx-auto max-w-7xl px-6 py-16">
       <div className="max-w-3xl">
-        <p className="public-kicker text-muted-foreground">FAQ</p>
+        <p className="public-kicker text-muted-foreground">{ui.faqEyebrow}</p>
         <h2 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
-          Questions small teams ask before switching
+          {ui.faqTitle}
         </h2>
       </div>
       <div className="mt-8 grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-3">
