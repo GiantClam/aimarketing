@@ -52,6 +52,24 @@ test("gpt-image-2 request parts: image edit uses edits endpoint and excludes mas
   assert.equal(parts.mask?.assetId, "mask-1")
 })
 
+test("gpt-image-2 request parts: generate with style references stays on generations endpoint", () => {
+  const parts = buildOpenAiCompatibleImageRequestParts({
+    model: "gpt-image-2",
+    prompt: "Use this image as style reference and generate a new campaign poster",
+    taskType: "generate",
+    sizePreset: "16:9",
+    resolution: "2K",
+    referenceImages: [image("style-ref")],
+  })
+
+  assert.equal(parts.endpoint, "/images/generations")
+  assert.deepEqual(
+    parts.images.map((item) => item.assetId),
+    ["style-ref"],
+  )
+  assert.equal(parts.mask, null)
+})
+
 test("gpt-image-2 request parts: mask edit puts snapshot first and passes mask separately", () => {
   const parts = buildOpenAiCompatibleImageRequestParts({
     model: "gpt-image-2",

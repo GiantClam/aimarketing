@@ -177,12 +177,11 @@ export function buildOpenAiCompatibleImageRequestParts(params: {
   const prompt = normalizeText(params.prompt)
   if (!prompt) throw new Error("prompt_required")
 
-  const isEditRequest =
+  const isEditTask =
     params.taskType === "edit" ||
     params.taskType === "blend" ||
     params.taskType === "style_transfer" ||
-    params.taskType === "mask_edit" ||
-    referenceImages.length > 0
+    params.taskType === "mask_edit"
 
   const mask = params.maskAssetId
     ? referenceImages.find((image) => image.assetId === params.maskAssetId) || null
@@ -193,7 +192,7 @@ export function buildOpenAiCompatibleImageRequestParts(params: {
   }
 
   return {
-    endpoint: isEditRequest ? "/images/edits" : "/images/generations",
+    endpoint: isEditTask ? "/images/edits" : "/images/generations",
     model: normalizeText(params.model) || DEFAULT_MODEL,
     prompt,
     size: mapGptImage2Size(params.sizePreset, params.resolution),

@@ -1824,7 +1824,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
 
   const composerAttachmentCount = pendingAttachments.length
-  const primaryRunKind: ImageAssistantRunKind = composerAttachmentCount > 0 ? "edit" : "generate"
+  const primaryRunKind: ImageAssistantRunKind = "generate"
   const composerModeLabel = getRunKindLabel(primaryRunKind, extraCopy)
   const latestOrchestration = useMemo(() => {
     const messages = detail?.messages || []
@@ -5497,4 +5497,3 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
     </>
   )
 }
-

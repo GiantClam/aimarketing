@@ -244,8 +244,8 @@ test("hard reference edit shortcut still bypasses the planner model", async () =
 
   assert.equal(plannerCalls, 0)
   assert.equal(result.orchestration.planner_strategy, "rule_shortcut")
-  assert.equal(result.orchestration.ready_for_generation, false)
-  assert.equal(result.orchestration.selected_skill.id, "graphic-design-brief")
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.equal(result.orchestration.selected_skill.id, "canvas-design-execution")
 })
 
 test("guided brief can auto-complete style fallback and continue to generation", async () => {
@@ -368,6 +368,40 @@ test("one-shot prompt with ratio and resolution can skip guided Q1/Q2/Q3", async
   assert.ok(Array.isArray(result.orchestration.prompt_questions) && result.orchestration.prompt_questions.length === 0)
 })
 
+test("attached-reference generate respects explicit request resolution and ratio", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {
+      goal: "Campaign poster from reference image",
+      subject: "Reuse the uploaded reference image as the visual guide",
+      style: "Premium campaign poster",
+      composition: "4:5 vertical poster with clear headline-safe whitespace",
+      constraints: "",
+    },
+    missing_fields: [],
+    conflicts: [],
+    confidence: 0.91,
+    next_question: "",
+    ready_for_generation: true,
+  })
+
+  const result = await planImageAssistantTurn({
+    prompt: "Use this image as style reference and generate a new campaign poster",
+    currentBrief: null,
+    previousState: null,
+    taskType: "generate",
+    sizePreset: "4:5",
+    resolution: "2K",
+    referenceCount: 1,
+  })
+
+  assert.equal(result.orchestration.brief.resolution, "2K")
+  assert.equal(result.orchestration.brief.size_preset, "4:5")
+  assert.equal(result.orchestration.brief.ratio_confirmed, true)
+  assert.equal(result.orchestration.missing_fields.includes("resolution"), false)
+  assert.equal(result.orchestration.missing_fields.includes("ratio"), false)
+  assert.equal(result.orchestration.ready_for_generation, true)
+})
+
 test("usage card selection does not overwrite an existing creative goal", async () => {
   mockedPlannerResponse = JSON.stringify({
     brief_delta: {},
@@ -438,4 +472,45 @@ test("usage card selection does not overwrite an existing creative goal", async 
   assert.equal(result.orchestration.brief.usage_preset, "website_banner")
   assert.equal(result.orchestration.brief.size_preset, "16:9")
   assert.equal(result.orchestration.brief.orientation, "landscape")
+})
+
+test("explicit ratio keeps delivery context aligned and generated prompt compact", async () => {
+  mockedPlannerResponse = JSON.stringify({
+    brief_delta: {
+      usage_preset: "website_banner",
+      usage_label: "Website banner 16:9",
+      goal: "Generate a production-ready marketing image.",
+      subject: "A red-and-black multi-head CNC machine operated by a worker inside a Tesla-style factory.",
+      style: "Premium industrial campaign photography with realistic lighting and clean detail.",
+      composition: "Vertical 4:5 hero poster with a strong focal hierarchy.",
+      constraints: "",
+    },
+    missing_fields: [],
+    conflicts: [],
+    confidence: 0.93,
+    next_question: "",
+    ready_for_generation: true,
+  })
+
+  const result = await planImageAssistantTurn({
+    prompt: [
+      "Subject: A red-and-black multi-head CNC machine operated by a worker inside a Tesla-style factory.",
+      "Style: Premium industrial campaign photography with realistic lighting and clean detail.",
+      "Composition: Vertical 4:5 hero poster with a strong focal hierarchy.",
+      "Resolution: 2K.",
+      "Goal: Generate a production-ready marketing image.",
+    ].join("\n"),
+    currentBrief: null,
+    previousState: null,
+    taskType: "generate",
+    sizePreset: "4:5",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  assert.equal(result.orchestration.brief.size_preset, "4:5")
+  assert.equal(result.orchestration.brief.usage_preset, "social_cover")
+  assert.ok(result.orchestration.generated_prompt?.includes("Delivery context: Social cover 4:5."))
+  assert.equal(result.orchestration.generated_prompt?.includes("Website banner 16:9"), false)
+  assert.ok((result.orchestration.generated_prompt?.length || 0) < 1800)
 })

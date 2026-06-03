@@ -345,6 +345,11 @@ function inferUsagePresetFromSizePreset(sizePreset: ImageAssistantSizePreset | "
   return ""
 }
 
+function getUsageLabelForPreset(usagePreset: ImageAssistantUsagePresetId, isZh: boolean) {
+  const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
+  return isZh ? preset.zhLabel : preset.enLabel
+}
+
 function getUsagePresetLabel(usagePreset: ImageAssistantUsagePresetId | "", chinese: boolean) {
   const preset = getUsagePresetDefinition(usagePreset)
   return preset ? (chinese ? preset.zhLabel : preset.enLabel) : ""
@@ -783,7 +788,7 @@ function inferBriefFromPrompt(input: {
     const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
     inferred.usage_preset = usagePreset
     inferred.usage_label = inferred.usage_label || (looksLikeChinese(prompt) ? preset.zhLabel : preset.enLabel)
-    inferred.size_preset = inferred.size_preset || explicitSizePreset || preset.sizePreset
+    inferred.size_preset = explicitSizePreset || inferred.size_preset || preset.sizePreset
     inferred.orientation = inferred.orientation || preset.orientation
   }
 
@@ -929,6 +934,7 @@ function applyBriefSemanticValidation(input: {
   const base = normalizeBrief(input.brief)
   const patch: Partial<ImageAssistantBrief> = {}
   const conflicts: string[] = []
+  const isZh = looksLikeChinese(`${input.userPrompt} ${base.goal} ${base.subject} ${base.usage_label}`)
 
   if (base.usage_preset) {
     const usage = USAGE_PRESET_DEFINITIONS[base.usage_preset]
@@ -949,6 +955,18 @@ function applyBriefSemanticValidation(input: {
   }
 
   const effectiveSizePreset = patch.size_preset || base.size_preset
+  const inferredUsagePreset = inferUsagePresetFromSizePreset(effectiveSizePreset || "")
+  if (inferredUsagePreset) {
+    if (!base.usage_preset) {
+      patch.usage_preset = inferredUsagePreset
+      patch.usage_label = getUsageLabelForPreset(inferredUsagePreset, isZh)
+    } else if (base.usage_preset !== inferredUsagePreset) {
+      conflicts.push(`usage_preset_conflict:${base.usage_preset}->${inferredUsagePreset}`)
+      patch.usage_preset = inferredUsagePreset
+      patch.usage_label = getUsageLabelForPreset(inferredUsagePreset, isZh)
+    }
+  }
+
   const inferredOrientation = inferOrientationFromSizePreset(effectiveSizePreset || "")
   if (inferredOrientation && !base.orientation) {
     patch.orientation = inferredOrientation
@@ -960,7 +978,7 @@ function applyBriefSemanticValidation(input: {
   const validated = mergeBrief(base, patch)
   if (!validated.size_preset && input.fallbackSizePreset) {
     return {
-      brief: mergeBrief(validated, { size_preset: input.fallbackSizePreset }),
+      brief: mergeBrief(validated, { size_preset: input.fallbackSizePreset, ratio_confirmed: true }),
       conflicts: dedupeStrings(conflicts),
     }
   }
@@ -1151,7 +1169,7 @@ async function extractBriefWithSchema(input: {
     const validation = BriefExtractionOutputSchema.safeParse(parsed)
     if (!validation.success) return null
     const output: BriefExtractionOutput = validation.data
-    const brief = mergeBrief(input.mergedBrief, output.brief_delta)
+    const brief = mergeBrief(output.brief_delta, input.mergedBrief)
     const missingFields = output.missing_fields.filter((field): field is ImageAssistantBriefField =>
       BRIEF_FIELD_VALUES.includes(field as (typeof BRIEF_FIELD_VALUES)[number]),
     )
@@ -1405,11 +1423,23 @@ async function composePromptFromApprovedBrief(input: {
   ])
   const effectiveSizePreset = input.brief.size_preset || input.sizePreset
   const effectiveResolution = input.brief.resolution || input.resolution
-  const usageLabel = input.brief.usage_label || input.brief.goal || "image delivery"
+  const isZh = looksLikeChinese(
+    `${input.brief.goal} ${input.brief.subject} ${input.brief.style} ${input.brief.composition} ${input.brief.constraints}`,
+  )
+  const usagePresetForRatio = inferUsagePresetFromSizePreset(effectiveSizePreset || "")
+  const usageLabel =
+    usagePresetForRatio &&
+    input.brief.usage_preset &&
+    input.brief.usage_preset !== usagePresetForRatio
+      ? getUsageLabelForPreset(usagePresetForRatio, isZh)
+      : input.brief.usage_label || input.brief.goal || "image delivery"
   const orientationLabel =
     input.brief.orientation === "landscape" ? "landscape" : input.brief.orientation === "portrait" ? "portrait" : null
+  const compactExecutionMindset = truncate(runtimeSystemPrompt.replace(/\s+/g, " ").trim(), 180)
+  const compactCompositionRules = compositionRules.slice(0, 2).map((rule) => truncate(rule, 140))
+  const compactFailureChecks = failureChecks.slice(0, 2).map((rule) => truncate(rule, 140))
   const lines = [
-    `Execution mindset: ${runtimeSystemPrompt}`,
+    `Execution mindset: ${compactExecutionMindset}`,
     input.taskType === "generate"
       ? "Create a production-ready image based on this approved design brief."
       : "Edit the provided reference image(s) according to this approved design brief.",
@@ -1423,8 +1453,8 @@ async function composePromptFromApprovedBrief(input: {
     input.referenceCount > 0
       ? `Reference handling: ${input.taskType === "generate" ? "use the uploaded images as guidance while preserving key identity cues." : "preserve the recognizable identity and only change what the brief requires."}`
       : "Reference handling: there are no image references; rely only on the written brief.",
-    compositionRules.length ? `Execution rules: ${compositionRules.join(" ")}` : null,
-    failureChecks.length ? `Failure checks: ${failureChecks.join(" ")}` : null,
+    compactCompositionRules.length ? `Execution rules: ${compactCompositionRules.join(" ")}` : null,
+    compactFailureChecks.length ? `Failure checks: ${compactFailureChecks.join(" ")}` : null,
     input.taskType === "mask_edit"
       ? "Output requirement: return the fully edited image at the original dimensions while preserving framing and subject placement as closely as possible."
       : `Output requirement: ${effectiveSizePreset} composition, ${effectiveResolution} resolution target, clean focal hierarchy, production-safe framing.`,
@@ -1574,6 +1604,11 @@ export async function planImageAssistantTurn(input: {
     previousState: input.previousState,
   })
   const isGuidedOptionTurn = hasAnyBriefSignal(promptOptionBrief) && Boolean(activePromptQuestion)
+  const requestBrief = {
+    resolution: normalizeResolution(input.resolution),
+    size_preset: normalizeSizePreset(input.sizePreset),
+    ratio_confirmed: Boolean(normalizeSizePreset(input.sizePreset)),
+  } satisfies Partial<ImageAssistantBrief>
   const inferred = isGuidedOptionTurn
     ? { ...EMPTY_BRIEF }
     : inferBriefFromPrompt({
@@ -1593,7 +1628,14 @@ export async function planImageAssistantTurn(input: {
         .map((option) => normalizeText(option.id))
         .filter(Boolean)
     : []
-  const mergedBrief = mergeBrief(input.previousState?.brief, input.currentBrief, promptOptionBrief, inferred, contextual)
+  const mergedBrief = mergeBrief(
+    input.previousState?.brief,
+    input.currentBrief,
+    promptOptionBrief,
+    inferred,
+    contextual,
+    requestBrief,
+  )
   const initialMissingFields = getActionableBriefMissingFields(mergedBrief)
   const turnCount = Math.min((input.previousState?.turn_count || 0) + 1, IMAGE_ASSISTANT_MAX_BRIEF_TURNS)
   const extraction = useEditShortcut
