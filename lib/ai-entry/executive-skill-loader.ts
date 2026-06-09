@@ -3,22 +3,26 @@ import "server-only"
 import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 
+import { listBusinessAgentConfigs } from "@/lib/platform/business-agents"
+
 const EXECUTIVE_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "executive-consulting-suite")
+const BUSINESS_AGENT_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "business-agents")
 
 const skillCache = new Map<string, Promise<string>>()
 
-function getSkillDocumentPath(relativePath: string) {
-  return path.join(EXECUTIVE_SKILL_BASE_DIR, relativePath)
+function getSkillDocumentPath(baseDir: string, relativePath: string) {
+  return path.join(baseDir, relativePath)
 }
 
-async function readSkillDocument(relativePath: string) {
-  const existing = skillCache.get(relativePath)
+async function readSkillDocument(baseDir: string, relativePath: string) {
+  const cacheKey = `${baseDir}:${relativePath}`
+  const existing = skillCache.get(cacheKey)
   if (existing) {
     return existing
   }
 
-  const nextPromise = readFile(getSkillDocumentPath(relativePath), "utf8")
-  skillCache.set(relativePath, nextPromise)
+  const nextPromise = readFile(getSkillDocumentPath(baseDir, relativePath), "utf8")
+  skillCache.set(cacheKey, nextPromise)
   return nextPromise
 }
 
@@ -75,20 +79,42 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
   ],
 }
 
+const BUSINESS_AGENT_SKILL_MAP = Object.fromEntries(
+  listBusinessAgentConfigs().map((agent) => [agent.agentId, [agent.promptDocumentPath]]),
+)
+
+function getAgentSkillSource(agentId: string) {
+  if (AGENT_SKILL_MAP[agentId]?.length) {
+    return {
+      baseDir: EXECUTIVE_SKILL_BASE_DIR,
+      files: AGENT_SKILL_MAP[agentId],
+    }
+  }
+
+  if (BUSINESS_AGENT_SKILL_MAP[agentId]?.length) {
+    return {
+      baseDir: BUSINESS_AGENT_SKILL_BASE_DIR,
+      files: BUSINESS_AGENT_SKILL_MAP[agentId],
+    }
+  }
+
+  return null
+}
+
 /**
  * 根据 agent ID 加载对应的 skill 文档内容
  */
 export async function loadExecutiveSkillForAgent(agentId: string): Promise<string> {
-  const skillFiles = AGENT_SKILL_MAP[agentId]
-  if (!skillFiles || skillFiles.length === 0) {
+  const source = getAgentSkillSource(agentId)
+  if (!source) {
     return ""
   }
 
   try {
     const contents = await Promise.all(
-      skillFiles.map(async (file) => {
+      source.files.map(async (file) => {
         try {
-          const content = await readSkillDocument(file)
+          const content = await readSkillDocument(source.baseDir, file)
           return stripFrontmatter(content)
         } catch (error) {
           console.warn("executive-skill.read-failed", {
@@ -116,7 +142,7 @@ export async function loadExecutiveSkillForAgent(agentId: string): Promise<strin
  */
 export function isExecutiveConsultingAgent(agentId: string | null | undefined): boolean {
   if (!agentId) return false
-  return agentId.startsWith("executive-")
+  return Boolean(getAgentSkillSource(agentId))
 }
 
 /**

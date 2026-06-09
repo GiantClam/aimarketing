@@ -1,14 +1,23 @@
 import type { MetadataRoute } from "next"
 
 import { getAppBaseUrl } from "@/lib/app-url"
+import { getLeadToolPaths } from "@/lib/lead-tools/catalog"
+import { getLeadToolExamplePaths } from "@/lib/lead-tools/examples"
 import { isLocalizedPublicPath, localizePublicPath } from "@/lib/i18n/routing"
+import { getPublicPlatformPaths } from "@/lib/platform/catalog"
 import { getPublicSeoPaths } from "@/lib/seo/pages"
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = getAppBaseUrl()
   const now = new Date()
-  const staticPaths = ["/", "/pricing", "/resources/ai-subscription-cost-calculator"]
-  const paths = [...staticPaths, ...getPublicSeoPaths()]
+  const staticPaths = ["/", "/pricing", "/tools", "/resources/ai-subscription-cost-calculator"]
+  const paths = [
+    ...staticPaths,
+    ...getPublicSeoPaths(),
+    ...getLeadToolPaths(),
+    ...getLeadToolExamplePaths(),
+    ...getPublicPlatformPaths(),
+  ]
   const localizedPaths = [...new Set(paths.flatMap((path) => (
     isLocalizedPublicPath(path)
       ? [localizePublicPath(path, "en"), localizePublicPath(path, "zh")]

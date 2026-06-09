@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai"
 
-export type AiEntryProviderId = "pptoken" | "aiberm" | "crazyroute"
+export type AiEntryProviderId = "pptoken" | "openrouter" | "aiberm" | "crazyroute"
 
 export type AiEntryProviderConfig = {
   id: AiEntryProviderId
@@ -66,6 +66,7 @@ type ProviderModelsApiResponse = {
 }
 
 const DEFAULT_AIBERM_BASE_URL = "https://aiberm.com/v1"
+const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 const DEFAULT_PPTOKEN_BASE_URL = "https://api.pptoken.org/v1"
 const DEFAULT_MODEL = "openai/gpt-5.4-mini"
 const PROVIDER_MODEL_LIST_CACHE_TTL_MS = parsePositiveInt(
@@ -492,6 +493,30 @@ function getRawProviderConfigs(): AiEntryProviderConfig[] {
         fallbackModel,
     },
     {
+      id: "openrouter",
+      apiKey:
+        normalizeText(process.env.AI_ENTRY_OPENROUTER_API_KEY) ||
+        normalizeText(process.env.OPENROUTER_API_KEY),
+      baseURL:
+        normalizeText(process.env.AI_ENTRY_OPENROUTER_BASE_URL) ||
+        normalizeText(process.env.OPENROUTER_BASE_URL) ||
+        DEFAULT_OPENROUTER_BASE_URL,
+      model:
+        normalizeText(process.env.AI_ENTRY_OPENROUTER_MODEL) ||
+        normalizeText(process.env.OPENROUTER_MODEL) ||
+        fallbackModel,
+      headers: {
+        "HTTP-Referer":
+          normalizeText(process.env.AI_ENTRY_OPENROUTER_REFERER) ||
+          normalizeText(process.env.OPENROUTER_SITE_URL) ||
+          normalizeText(process.env.NEXT_PUBLIC_APP_URL),
+        "X-Title":
+          normalizeText(process.env.AI_ENTRY_OPENROUTER_TITLE) ||
+          normalizeText(process.env.OPENROUTER_APP_NAME) ||
+          "Aimarketing",
+      },
+    },
+    {
       id: "aiberm",
       apiKey:
         normalizeText(process.env.AI_ENTRY_AIBERM_API_KEY) ||
@@ -569,8 +594,8 @@ async function buildProviderRuntimes(
   }
 
   const defaultOrder: AiEntryProviderId[] = allowPptoken
-    ? ["pptoken", "aiberm", "crazyroute"]
-    : ["aiberm", "crazyroute"]
+    ? ["pptoken", "openrouter", "aiberm", "crazyroute"]
+    : ["openrouter", "aiberm", "crazyroute"]
   configs.sort((a, b) => defaultOrder.indexOf(a.id) - defaultOrder.indexOf(b.id))
   if (preferredProviderId && !forcePreferredProvider) {
     const preferred = configs.find((item) => item.id === preferredProviderId)
@@ -656,7 +681,7 @@ export async function executeAiEntryWithProviderFailover<T>(
   const providers = await buildProviderRuntimes(options)
   if (providers.length === 0) {
     throw new Error(
-      "No configured AI entry providers. Configure at least one of: pptoken, aiberm, crazyroute.",
+      "No configured AI entry providers. Configure at least one of: pptoken, openrouter, aiberm, crazyroute.",
     )
   }
 

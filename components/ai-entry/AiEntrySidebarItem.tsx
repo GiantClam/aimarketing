@@ -95,6 +95,9 @@ export function AiEntrySidebarItem({
       : null
   const currentAgentId = (searchParams.get("agent") || "").trim() || null
   const effectiveAgentId = isConsultingEntry ? entryAgentId : (entryAgentId || currentAgentId)
+  const cacheKeySuffix = effectiveAgentId
+    ? `${scopeCacheKeySuffix}:${effectiveAgentId}`
+    : scopeCacheKeySuffix
   const hrefQueryParams = new URLSearchParams(entryQuery)
   if (effectiveAgentId) {
     hrefQueryParams.set("agent", effectiveAgentId)
@@ -120,7 +123,7 @@ export function AiEntrySidebarItem({
     restoreSnapshot,
     handleListScroll,
   } = useCachedSidebarList<AiEntryConversationSummary>({
-    cacheKey: `${AI_ENTRY_CONVERSATION_LIST_CACHE_KEY}:${scopeCacheKeySuffix}`,
+    cacheKey: `${AI_ENTRY_CONVERSATION_LIST_CACHE_KEY}:${cacheKeySuffix}`,
     ttlMs: AI_ENTRY_CONVERSATION_CACHE_TTL_MS,
     isExpanded: isOpen,
     activeItemId: activeConversationId,
@@ -128,6 +131,7 @@ export function AiEntrySidebarItem({
       const params = new URLSearchParams({ limit: "30" })
       if (cursor) params.set("cursor", cursor)
       if (entryMode) params.set("entryMode", entryMode)
+      if (effectiveAgentId) params.set("agent", effectiveAgentId)
 
       const response = await fetch(`/api/ai/conversations?${params.toString()}`)
       if (!response.ok) {
@@ -200,6 +204,7 @@ export function AiEntrySidebarItem({
         body: JSON.stringify({
           name: editingConvName,
           ...(entryMode ? { entryMode } : {}),
+          ...(effectiveAgentId ? { agentId: effectiveAgentId } : {}),
         }),
       })
       if (!response.ok) {
@@ -228,8 +233,11 @@ export function AiEntrySidebarItem({
 
     try {
       const deleteUrl = entryMode
-        ? `/api/ai/conversations/${convId}?entryMode=${encodeURIComponent(entryMode)}`
-        : `/api/ai/conversations/${convId}`
+        ? `/api/ai/conversations/${convId}?${new URLSearchParams({
+            entryMode,
+            ...(effectiveAgentId ? { agent: effectiveAgentId } : {}),
+          }).toString()}`
+        : `/api/ai/conversations/${convId}${effectiveAgentId ? `?agent=${encodeURIComponent(effectiveAgentId)}` : ""}`
       const response = await fetch(deleteUrl, {
         method: "DELETE",
       })

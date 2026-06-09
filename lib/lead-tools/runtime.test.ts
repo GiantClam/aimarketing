@@ -319,7 +319,10 @@ test("ppt preview falls back to mock rendering when the preferred provider is mi
   })
   assert.equal(result.meta.tool, "ai-ppt-preview")
   assert.equal(result.meta.mockFallback, true)
-  assert.equal(result.meta.providerFallback, "lead_tool_provider_missing:minimax:MiniMax-M2.7-highspeed")
+  assert.equal(
+    "providerFallback" in result.meta ? result.meta.providerFallback : undefined,
+    "lead_tool_provider_missing:minimax:MiniMax-M2.7-highspeed",
+  )
 })
 
 test("ppt finalize validates the selected variant before delegating to the export engine", async () => {

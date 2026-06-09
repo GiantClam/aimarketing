@@ -1,19 +1,34 @@
 import Link from "next/link"
-import { ArrowLeft, ArrowUpRight, CheckCircle2, Lock, Search, Sparkles } from "lucide-react"
+import { ArrowLeft, ArrowUpRight, CheckCircle2, Lock, Search, Sparkles, Workflow } from "lucide-react"
 
 import { SeoMetaWorkbench } from "@/components/lead-tools/seo-meta-workbench"
 import { ToolShell } from "@/components/lead-tools/tool-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PublicMediaToolWorkbench } from "@/components/platform/public-media-tool-workbench"
+import { PublicChatToolWorkbench } from "@/components/platform/public-chat-tool-workbench"
+import type { AuthUser } from "@/lib/auth/session"
 import type { LeadToolDefinition } from "@/lib/lead-tools/catalog"
 import { getLeadToolExampleHref, getLeadToolExamples } from "@/lib/lead-tools/examples"
 import type { AppLocale } from "@/lib/i18n/config"
+import { localizePublicPath } from "@/lib/i18n/routing"
 import type { SeoLanguage, SeoPageType } from "@/lib/lead-tools/seo-meta-data"
+import { resolveLocalizedPlatformCapabilitiesFromSnapshot } from "@/lib/platform/capability-resolver"
+import {
+  getDeferredAvailabilityLabel,
+  getDeferredEntryCopy,
+  isDeferredAvailability,
+} from "@/lib/platform/deferred-entry"
+import { getLocalizedToolDirectoryEntryBySlug } from "@/lib/platform/directory-registry"
+import { getPlatformCapabilityExecutionState } from "@/lib/platform/execution"
+import { buildPlatformLaunchPath } from "@/lib/platform/launch-path"
+import { getPlatformRuntimeSnapshot } from "@/lib/platform/runtime"
 
 type ToolMarketingPageProps = {
   tool: LeadToolDefinition
   locale: AppLocale
+  currentUser: AuthUser | null
   topic?: string
   prompt?: string
   audience?: string
@@ -21,11 +36,11 @@ type ToolMarketingPageProps = {
   seoLanguage?: SeoLanguage
 }
 
-export function MissingLeadToolPage() {
+export function MissingLeadToolPage({ locale = "en" }: { locale?: AppLocale }) {
   return (
     <div className="min-h-screen bg-background px-4 py-10 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl rounded-[2rem] border border-border/70 bg-card/90 p-10">
-        <Link href="/tools" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={localizePublicPath("/tools", locale)} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           Back to tools
         </Link>
@@ -35,7 +50,7 @@ export function MissingLeadToolPage() {
         </p>
         <div className="mt-8">
           <Button asChild>
-            <Link href="/tools/ai-ppt-preview">Open AI PPT Preview</Link>
+            <Link href={localizePublicPath("/tools/ai-ppt-preview", locale)}>Open AI PPT Preview</Link>
           </Button>
         </div>
       </div>
@@ -43,9 +58,50 @@ export function MissingLeadToolPage() {
   )
 }
 
-export function ToolMarketingPage({
+function getExecutionStatusLabel(
+  locale: AppLocale,
+  runtimeStatus: "ready" | "deferred" | "runtime_disabled",
+  accessState: "public" | "public_then_login" | "login_required" | "authorized" | "permission_required" | "admin_required",
+) {
+  const runtimeLabel =
+    locale === "zh"
+      ? {
+          ready: "运行中",
+          deferred: "后续实现",
+          runtime_disabled: "运行时关闭",
+        }[runtimeStatus]
+      : {
+          ready: "Runtime ready",
+          deferred: "Deferred",
+          runtime_disabled: "Runtime disabled",
+        }[runtimeStatus]
+
+  const accessLabel =
+    locale === "zh"
+      ? {
+          public: "公开可见",
+          public_then_login: "先公开后登录",
+          login_required: "需登录",
+          authorized: "已授权",
+          permission_required: "需企业权限",
+          admin_required: "需管理员",
+        }[accessState]
+      : {
+          public: "Public",
+          public_then_login: "Public then login",
+          login_required: "Login required",
+          authorized: "Authorized",
+          permission_required: "Permission required",
+          admin_required: "Admin required",
+        }[accessState]
+
+  return `${runtimeLabel} · ${accessLabel}`
+}
+
+export async function ToolMarketingPage({
   tool,
   locale,
+  currentUser,
   topic,
   prompt,
   audience,
@@ -53,6 +109,56 @@ export function ToolMarketingPage({
   seoLanguage,
 }: ToolMarketingPageProps) {
   const examplePages = getLeadToolExamples(tool.slug).slice(0, 3)
+  const toolDirectoryEntry = getLocalizedToolDirectoryEntryBySlug(locale, tool.slug)
+  const deferredAvailability = toolDirectoryEntry?.availability
+  const isDeferredTool =
+    tool.accessMode === "deferred" || isDeferredAvailability(deferredAvailability)
+  const platformCapabilityMap = new Map(
+    resolveLocalizedPlatformCapabilitiesFromSnapshot(locale, "all", getPlatformRuntimeSnapshot()).map((item) => [
+      item.slug,
+      item,
+    ] as const),
+  )
+  const deferredEntrySpec =
+    tool.slug === "sentiment-monitoring"
+      ? {
+          workspaceHref: "/dashboard/agent-platform",
+          directoryHref: "/agents",
+        }
+      : tool.slug === "video-remake-studio" || tool.slug === "hot-video-research"
+        ? {
+            workspaceHref: "/dashboard/workflows",
+            directoryHref: "/workflows",
+          }
+        : null
+
+  const workspaceEntrySpec =
+    tool.slug === "ai-chat"
+      ? {
+          capabilitySlug: "ai-chat",
+          workspaceHref: "/dashboard/ai",
+          directoryHref: "/capabilities",
+        }
+      : tool.slug === "ai-image"
+        ? {
+            capabilitySlug: "ai-image",
+            workspaceHref: "/dashboard/image-assistant",
+            directoryHref: "/capabilities",
+          }
+        : tool.slug === "ai-video"
+        ? {
+            capabilitySlug: "ai-video",
+            workspaceHref: "/dashboard/video",
+            directoryHref: "/capabilities",
+          }
+        : null
+  const workspaceCapability = workspaceEntrySpec
+    ? platformCapabilityMap.get(workspaceEntrySpec.capabilitySlug)
+    : null
+  const workspaceExecution = workspaceEntrySpec
+    ? await getPlatformCapabilityExecutionState(workspaceEntrySpec.capabilitySlug, locale, currentUser)
+    : null
+  const deferredCopy = getDeferredEntryCopy(locale, deferredAvailability)
   const copy =
     locale === "zh"
       ? {
@@ -73,6 +179,18 @@ export function ToolMarketingPage({
           openExample: "查看示例页",
           notOpenTitle: "该工具暂未开放",
           notOpenBody: "当前只落地了 PPT 预览样板页，其余工具已经在 catalog 中占位，后续会复用同一套 Lead Tool Runtime 快速上线。",
+          entryTitle: "从公共入口进入正式工作台",
+          entryBody: "这个页面不是另起一套 runtime，而是把现有工作台能力包装成 public toolsite 能理解、能转化的入口。",
+          loginAction: "登录后进入工作台",
+          workspaceAction: "直接打开工作台",
+          directoryAction: "查看能力中心",
+          runtimeStrategyTitle: "运行时策略",
+          runtimeStrategyBody: "公开入口负责定位、说明和转化，真实任务仍进入现有 workspace runtime 处理。",
+          executionFlowTitle: "进入路径",
+          executionFlowBody: "先理解能力，再登录进入正式工作台，避免普通用户从企业导航里迷路。",
+          providerBindingsTitle: "当前能力绑定位",
+          deferredNoticeTitle: "Deferred 边界",
+          deferredNoticeBody: "相关 deferred 能力仍会保留平台位置，但不会伪装成已经可用的正式功能。",
           faqTitle: "常见问题",
           faqDescription: "这部分内容也会作为工具页的 SEO 长文结构的一部分。",
         }
@@ -94,9 +212,35 @@ export function ToolMarketingPage({
           openExample: "Open example page",
           notOpenTitle: "This tool is not open yet",
           notOpenBody: "Only the PPT preview reference page is fully live right now. The remaining tools are already cataloged and will reuse the same Lead Tool Runtime when they launch.",
+          deferredEntryTitle: "Deferred module with a real platform entry",
+          deferredEntryBody:
+            "This module intentionally ships as an entry, explanation, and workspace path before the production runtime is ready. That keeps the platform information architecture honest without faking finished capability.",
+          entryTitle: "Use one public entry to reach the real workspace",
+          entryBody: "This page does not introduce a second runtime. It packages the existing workspace capability into a public-facing entry that can convert and educate new users.",
+          loginAction: "Log in to workspace",
+          workspaceAction: "Open workspace",
+          directoryAction: "View capabilities",
+          runtimeStrategyTitle: "Runtime strategy",
+          runtimeStrategyBody: "The public entry handles positioning, explanation, and conversion while the real task execution stays in the existing workspace runtime.",
+          executionFlowTitle: "Entry flow",
+          executionFlowBody: "Help users understand the capability first, then log in and continue in the formal workspace instead of dropping them into enterprise navigation cold.",
+          providerBindingsTitle: "Current capability bindings",
+          deferredNoticeTitle: "Deferred boundary",
+          deferredNoticeBody: "Related deferred modules keep a visible platform position, but they are not presented as already-finished production features.",
           faqTitle: "FAQ",
           faqDescription: "This section also serves as long-form SEO support content for the tool page.",
         }
+
+  const mediaWorkbenchSpec =
+    tool.slug === "ai-image"
+      ? {
+          capabilitySlug: "ai-image" as const,
+        }
+      : tool.slug === "ai-video"
+        ? {
+            capabilitySlug: "ai-video" as const,
+          }
+        : null
 
   return (
     <ToolShell
@@ -109,7 +253,7 @@ export function ToolMarketingPage({
       faq={tool.faqs}
       aside={
         <div className="space-y-4 text-sm text-muted-foreground">
-          <Link href="/tools" className="inline-flex items-center gap-2 text-muted-foreground transition hover:text-foreground">
+          <Link href={localizePublicPath("/tools", locale)} className="inline-flex items-center gap-2 text-muted-foreground transition hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
             {copy.toolsHubLabel}
           </Link>
@@ -181,7 +325,7 @@ export function ToolMarketingPage({
                 {examplePages.map((example) => (
                   <Link
                     key={example.slug}
-                    href={getLeadToolExampleHref(example.toolSlug, example.slug)}
+                    href={localizePublicPath(getLeadToolExampleHref(example.toolSlug, example.slug), locale)}
                     className="rounded-2xl border border-border/70 bg-background/75 p-5 transition hover:border-primary/30 hover:bg-primary/5"
                   >
                     <div className="flex flex-wrap gap-2">
@@ -202,6 +346,183 @@ export function ToolMarketingPage({
               </div>
             </section>
           ) : null}
+        </>
+      ) : isDeferredTool && deferredEntrySpec ? (
+        <>
+          <section className="rounded-[2rem] border border-border/70 bg-card/85 p-6">
+            <div className="max-w-3xl space-y-3">
+              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
+                {getDeferredAvailabilityLabel(locale, deferredAvailability)}
+              </Badge>
+              <h2 className="text-2xl font-semibold text-foreground">{deferredCopy.title}</h2>
+              <p className="text-sm leading-6 text-muted-foreground">{deferredCopy.body}</p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button asChild>
+                <Link href={localizePublicPath(deferredEntrySpec.directoryHref, locale)}>
+                  {deferredCopy.primaryActionLabel}
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href={deferredEntrySpec.workspaceHref}>{deferredCopy.secondaryActionLabel}</Link>
+              </Button>
+            </div>
+          </section>
+
+          <section className="mt-8 grid gap-4 md:grid-cols-3">
+            {tool.proofPoints.map((point) => (
+              <Card key={point} className="border-border/70 bg-card/85 text-foreground">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                    {tool.shortName}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm leading-6 text-muted-foreground">{point}</CardContent>
+              </Card>
+            ))}
+          </section>
+        </>
+      ) : workspaceCapability && workspaceEntrySpec ? (
+        <>
+          {tool.slug === "ai-chat" && workspaceExecution ? (
+            <PublicChatToolWorkbench
+              locale={locale}
+              currentUser={Boolean(currentUser)}
+              loginHref={buildPlatformLaunchPath({
+                itemType: "capability",
+                slug: workspaceEntrySpec.capabilitySlug,
+                surface: "workspace",
+                locale,
+              })}
+              workspaceHref={workspaceEntrySpec.workspaceHref}
+              runtimeStatus={workspaceExecution.runtimeStatus}
+              accessState={workspaceExecution.accessState}
+            />
+          ) : null}
+
+          {mediaWorkbenchSpec && workspaceExecution ? (
+            <PublicMediaToolWorkbench
+              capabilitySlug={mediaWorkbenchSpec.capabilitySlug as "ai-image" | "ai-video"}
+              locale={locale}
+              currentUser={Boolean(currentUser)}
+              loginHref={buildPlatformLaunchPath({
+                itemType: "capability",
+                slug: workspaceEntrySpec.capabilitySlug,
+                surface: "workspace",
+                locale,
+              })}
+              workspaceHref={workspaceEntrySpec.workspaceHref}
+              runtimeStatus={workspaceExecution.runtimeStatus}
+              accessState={workspaceExecution.accessState}
+            />
+          ) : null}
+
+          <section className="rounded-[2rem] border border-border/70 bg-card/85 p-6">
+            <div className="max-w-3xl space-y-2">
+              <h2 className="text-2xl font-semibold text-foreground">
+                {tool.status === "coming_soon" ? copy.deferredEntryTitle : copy.entryTitle}
+              </h2>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {tool.status === "coming_soon" ? copy.deferredEntryBody : copy.entryBody}
+              </p>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button asChild>
+                <Link
+                  href={buildPlatformLaunchPath({
+                    itemType: "capability",
+                    slug: workspaceEntrySpec.capabilitySlug,
+                    surface: "workspace",
+                    locale,
+                  })}
+                >
+                  {copy.loginAction}
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link
+                  href={buildPlatformLaunchPath({
+                    itemType: "capability",
+                    slug: workspaceEntrySpec.capabilitySlug,
+                    surface: "workspace",
+                    locale,
+                  })}
+                >
+                  {copy.workspaceAction}
+                </Link>
+              </Button>
+              <Button variant="ghost" asChild>
+                <Link href={localizePublicPath(workspaceEntrySpec.directoryHref, locale)}>{copy.directoryAction}</Link>
+              </Button>
+            </div>
+          </section>
+
+          <section className="mt-8 grid gap-4 md:grid-cols-3">
+            <Card className="border-border/70 bg-card/85 text-foreground">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Workflow className="h-5 w-5 text-primary" />
+                  {copy.runtimeStrategyTitle}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm leading-6 text-muted-foreground">{copy.runtimeStrategyBody}</CardContent>
+            </Card>
+            <Card className="border-border/70 bg-card/85 text-foreground">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ArrowUpRight className="h-5 w-5 text-primary" />
+                  {copy.executionFlowTitle}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm leading-6 text-muted-foreground">{copy.executionFlowBody}</CardContent>
+            </Card>
+            <Card className="border-border/70 bg-card/85 text-foreground">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                  {copy.deferredNoticeTitle}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm leading-6 text-muted-foreground">{copy.deferredNoticeBody}</CardContent>
+            </Card>
+          </section>
+
+          <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-6">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-foreground">{copy.providerBindingsTitle}</h2>
+              <p className="text-sm leading-6 text-muted-foreground">{workspaceCapability.summary}</p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              {workspaceCapability.bindings.map((binding) => (
+                <Badge key={`${workspaceCapability.slug}-${binding.provider}`} variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
+                  {binding.provider} · {binding.status}
+                </Badge>
+              ))}
+              {workspaceExecution ? (
+                <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
+                  {getExecutionStatusLabel(locale, workspaceExecution.runtimeStatus, workspaceExecution.accessState)}
+                </Badge>
+              ) : null}
+              {workspaceExecution?.billing?.availableCredits != null ? (
+                <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
+                  {locale === "zh"
+                    ? `Credits ${workspaceExecution.billing.availableCredits}`
+                    : `${workspaceExecution.billing.availableCredits} credits`}
+                </Badge>
+              ) : null}
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {(workspaceExecution?.notes || workspaceCapability.proofPoints).map((point) => (
+                <div key={point} className="rounded-2xl border border-border/70 bg-background/75 p-5 text-sm leading-6 text-muted-foreground">
+                  {point}
+                </div>
+              ))}
+            </div>
+          </section>
         </>
       ) : (
         <div className="rounded-[2rem] border border-border/70 bg-card/85 p-8 text-foreground">

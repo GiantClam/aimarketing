@@ -174,7 +174,7 @@ export function VideoChat() {
 
   const checkVideoAgentAvailability = useCallback(async () => {
     try {
-      const response = await fetch("/api/crewai/chat", {
+      const response = await fetch("/api/video-agent/chat", {
         method: "GET",
         cache: "no-store",
       })
@@ -210,7 +210,7 @@ export function VideoChat() {
     setLoading(true)
 
     try {
-      const res = await fetch("/api/crewai/chat", {
+      const res = await fetch("/api/video-agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -242,7 +242,7 @@ export function VideoChat() {
 
           try {
             const event = JSON.parse(line)
-            console.log("[SSE/crewai-chat:init]", event)
+            console.log("[SSE/video-agent/chat:init]", event)
             if (event.type === "message" || event.type === "question") {
               addMessage(
                 "assistant",
@@ -329,12 +329,12 @@ export function VideoChat() {
     }
   }, [messages.length, conversationState.status, checkVideoAgentAvailability, initializeConversation, agentUnavailableMessage, t])
 
-  const startCrewStatusPolling = useCallback((runId: string) => {
+  const startVideoAgentStatusPolling = useCallback((runId: string) => {
     if (pollingRef.current) return
     const base = process.env.NEXT_PUBLIC_AGENT_URL || ""
     pollingRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${base}/workflow/crew-status/${encodeURIComponent(runId)}`)
+        const res = await fetch(`${base}/workflow/agent-status/${encodeURIComponent(runId)}`)
         if (!res.ok) return
         const data = await res.json()
         if (data && data.status === "completed" && data.result) {
@@ -470,14 +470,14 @@ export function VideoChat() {
       } else if (status === "processing") {
         addMessage("system", event.delta || t("任务已提交，后台处理中…", "Task submitted. Processing in the background..."))
         if (runId) {
-          startCrewStatusPolling(runId)
+          startVideoAgentStatusPolling(runId)
         }
       }
     } else if (event.type === "error") {
       setLoading(false)
       addMessage("assistant", formatError(event.delta || event.content))
     }
-  }, [addMessage, conversationState.runId, formatError, startCrewStatusPolling, t])
+  }, [addMessage, conversationState.runId, formatError, startVideoAgentStatusPolling, t])
 
   const startConversation = useCallback(async () => {
     // 防止重复调用
@@ -496,7 +496,7 @@ export function VideoChat() {
     setLoading(true)
 
     try {
-      const res = await fetch("/api/crewai/chat", {
+      const res = await fetch("/api/video-agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -528,7 +528,7 @@ export function VideoChat() {
 
           try {
             const event = JSON.parse(line)
-            console.log("[SSE/crewai-chat]", event)
+            console.log("[SSE/video-agent/chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("Failed to parse event:", e)
@@ -575,7 +575,7 @@ export function VideoChat() {
     setLoading(true)
 
     try {
-      const res = await fetch("/api/crewai/chat", {
+      const res = await fetch("/api/video-agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -608,7 +608,7 @@ export function VideoChat() {
 
           try {
             const event = JSON.parse(line)
-            console.log("[SSE/crewai-chat]", event)
+            console.log("[SSE/video-agent/chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("Failed to parse event:", e)
@@ -640,7 +640,7 @@ export function VideoChat() {
       setLoading(true)
 
       try {
-        const res = await fetch("/api/crewai/chat", {
+        const res = await fetch("/api/video-agent/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -673,7 +673,7 @@ export function VideoChat() {
 
             try {
               const event = JSON.parse(line)
-              console.log("[SSE/crewai-chat]", event)
+              console.log("[SSE/video-agent/chat]", event)
               handleEvent(event)
             } catch (e) {
               console.error("Failed to parse event:", e)
@@ -695,7 +695,7 @@ export function VideoChat() {
 
     setIsRegenerating(true)
     try {
-      const res = await fetch("/api/crewai/scene/regenerate", {
+      const res = await fetch("/api/video-agent/scene/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -784,7 +784,7 @@ export function VideoChat() {
       setProductImageFile(null)
       setProductImageUrl("")
       setLoading(true)
-      const resp = await fetch("/api/crewai/chat", {
+      const resp = await fetch("/api/video-agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -809,7 +809,7 @@ export function VideoChat() {
           if (!line) continue
           try {
             const event = JSON.parse(line)
-            console.log("[SSE/crewai-chat]", event)
+            console.log("[SSE/video-agent/chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("Failed to parse event:", e)
@@ -832,7 +832,7 @@ export function VideoChat() {
     setProductImageUrl("")
     setLoading(true)
     try {
-      const resp = await fetch("/api/crewai/chat", {
+      const resp = await fetch("/api/video-agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -857,7 +857,7 @@ export function VideoChat() {
           if (!line) continue
           try {
             const event = JSON.parse(line)
-            console.log("[SSE/crewai-chat]", event)
+            console.log("[SSE/video-agent/chat]", event)
             handleEvent(event)
           } catch (e) {
             console.error("Failed to parse event:", e)
@@ -886,7 +886,7 @@ export function VideoChat() {
         formData.append("image", uploadedImage)
       }
 
-      const res = await fetch("/api/crewai/scene/update", {
+      const res = await fetch("/api/video-agent/scene/update", {
         method: "POST",
         body: formData,
       })
@@ -1139,7 +1139,7 @@ export function VideoChat() {
                                           // 重新生成视频片段
                                           setLoading(true)
                                           try {
-                                            const res = await fetch("/api/crewai/scene/regenerate", {
+                                            const res = await fetch("/api/video-agent/scene/regenerate", {
                                               method: "POST",
                                               headers: { "Content-Type": "application/json" },
                                               body: JSON.stringify({
@@ -1189,7 +1189,7 @@ export function VideoChat() {
                                   
                                   addMessage("system", t("已确认所有视频片段，开始拼接最终视频...", "All clips confirmed. Starting final stitching..."))
                                   
-                                  const res = await fetch("/api/crewai/video-clips/confirm", {
+                                  const res = await fetch("/api/video-agent/video-clips/confirm", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -1341,7 +1341,7 @@ export function VideoChat() {
                                 
                                 setLoading(true)
                                 try {
-                                  const res = await fetch("/api/crewai/storyboard/confirm", {
+                                  const res = await fetch("/api/video-agent/storyboard/confirm", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -1353,7 +1353,7 @@ export function VideoChat() {
                                   if (res.ok) {
                                     addMessage("system", t("已确认故事板，后台继续生成视频...", "Storyboard confirmed. Continuing generation..."))
                                     const rid = runId
-                                    if (rid) startCrewStatusPolling(rid)
+                                    if (rid) startVideoAgentStatusPolling(rid)
                                     setLoading(false)
                                   }
                                 } catch (error) {
@@ -1374,7 +1374,7 @@ export function VideoChat() {
                                 
                                 setLoading(true)
                                 try {
-                                  const res = await fetch("/api/crewai/storyboard/confirm", {
+                                  const res = await fetch("/api/video-agent/storyboard/confirm", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({

@@ -5,6 +5,7 @@
 当前集成模式是：
 
 - `aimarketing` 负责前端页面、鉴权、代理路由
+- `aimarketing` 内部直接承接 MiniMax 音频能力（AI音乐 / 声音克隆 / 声音合成）
 - video agent 服务独立部署和运行
 - 本仓库通过 `AGENT_URL` / `NEXT_PUBLIC_AGENT_URL` 调用外部服务
 
@@ -12,17 +13,24 @@
 
 本仓库内保留的部分：
 
-- [app/api/crewai](/d:/github/aimarketing/app/api/crewai)
+- [app/api/video-agent](/d:/github/aimarketing/app/api/video-agent)
+- [app/api/platform/minimax](/d:/github/aimarketing/app/api/platform/minimax)
 - [components/video-chat.tsx](/d:/github/aimarketing/components/video-chat.tsx)
 - [lib/saleagent-client.ts](/d:/github/aimarketing/lib/saleagent-client.ts)
 
 外部服务负责的部分：
 
-- `/crewai-agent`
-- `/crewai-chat`
+- `/video-agent/agent`
+- `/video-agent/chat`
 - `/workflow/*`
 - 视频任务编排
 - Sora2 / RunningHub / Supabase 等 provider 集成
+
+本仓库直接负责的音频 provider：
+
+- `LEAD_TOOLS_MINIMAX_API_KEY`
+- `LEAD_TOOLS_MINIMAX_BASE_URL`
+- 音色查询、语音合成、音频上传、音色复刻、歌词生成、音乐生成、文件下载
 
 ## 环境变量
 
@@ -32,6 +40,8 @@
 AGENT_URL=http://localhost:8000
 NEXT_PUBLIC_AGENT_URL=http://localhost:8000
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+LEAD_TOOLS_MINIMAX_API_KEY=
+LEAD_TOOLS_MINIMAX_BASE_URL=https://api.minimaxi.com/v1
 ```
 
 外部 video agent 服务：

@@ -2,6 +2,6 @@ import { getHomeMetadata, renderHomePage } from "@/lib/seo/localized-public-page
 
 export const metadata = getHomeMetadata("en")
 
-export default function EnHomePage() {
-  return renderHomePage()
+export default async function EnHomePage() {
+  return await renderHomePage("en")
 }

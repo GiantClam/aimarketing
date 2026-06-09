@@ -25,10 +25,16 @@ function parseLimit(input: string | null, fallback: number) {
   return Math.min(parsed, 50)
 }
 
+function parseAgentId(input: string | null | undefined) {
+  const normalized = typeof input === "string" ? input.trim() : ""
+  return normalized || null
+}
+
 async function resolveCreateConversationModelId(
   userId: number,
   requestedModelId: string | null,
   scope: AiEntryConversationScope,
+  agentId: string | null,
   options?: {
     forceConsultingModel?: boolean
     consultingModelMode?: AiEntryConsultingModelMode
@@ -73,7 +79,7 @@ async function resolveCreateConversationModelId(
     })
   }
 
-  const latestModelId = await getLatestAiEntryConversationModelId(userId, scope)
+  const latestModelId = await getLatestAiEntryConversationModelId(userId, scope, agentId)
   if (latestModelId) return latestModelId
 
   return AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
@@ -88,6 +94,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const limit = parseLimit(searchParams.get("limit"), 20)
   const cursor = searchParams.get("cursor")
+  const agentId = parseAgentId(searchParams.get("agent"))
   const conversationScope: AiEntryConversationScope = shouldLockConsultingAdvisorModel({
     entryMode: searchParams.get("entryMode"),
   })
@@ -100,6 +107,7 @@ export async function GET(request: NextRequest) {
       limit,
       cursor,
       conversationScope,
+      agentId,
     )
     return NextResponse.json(data)
   } catch (error) {
@@ -143,6 +151,7 @@ export async function POST(request: NextRequest) {
       auth.user.id,
       rawModelId,
       conversationScope,
+      rawAgentId,
       {
         forceConsultingModel: shouldLockModel,
         consultingModelMode,
@@ -167,6 +176,7 @@ export async function POST(request: NextRequest) {
       rawTitle,
       resolvedModelId,
       conversationScope,
+      rawAgentId,
     )
     return NextResponse.json({ data })
   } catch (error) {

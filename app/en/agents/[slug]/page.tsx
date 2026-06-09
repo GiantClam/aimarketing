@@ -3,6 +3,11 @@ import {
   getAgentStaticParams,
   renderAgentPage,
 } from "@/lib/seo/localized-public-pages"
+import {
+  getPlatformAgentMetadata,
+  getPlatformAgentStaticParams,
+  renderPlatformAgentPage,
+} from "@/lib/platform/public-detail-pages"
 
 type Props = {
   params: Promise<{ slug: string }>
@@ -11,15 +16,19 @@ type Props = {
 export const dynamicParams = false
 
 export function generateStaticParams() {
-  return getAgentStaticParams()
+  return [...new Map([...getAgentStaticParams(), ...getPlatformAgentStaticParams()].map((item) => [item.slug, item])).values()]
 }
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params
+  const platformMetadata = getPlatformAgentMetadata("en", slug)
+  if (Object.keys(platformMetadata).length > 0) return platformMetadata
   return getAgentMetadata("en", slug)
 }
 
 export default async function EnAgentSeoPage({ params }: Props) {
   const { slug } = await params
+  const platformPage = await renderPlatformAgentPage("en", slug)
+  if (platformPage) return platformPage
   return renderAgentPage("en", slug)
 }

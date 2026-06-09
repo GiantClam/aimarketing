@@ -10,6 +10,7 @@ import {
 
 const AI_ENTRY_CHAT_TITLE_PREFIX = "[ai-entry] "
 const AI_ENTRY_CONSULTING_TITLE_PREFIX = "[ai-consulting] "
+const AI_ENTRY_AGENT_PREFIX = "[agent:"
 const AI_ENTRY_DEFAULT_TITLE = "New chat"
 const AI_ENTRY_AUTO_TITLE_MAX_LENGTH = 60
 const DB_RETRY_DELAYS_MS = [250, 750]
@@ -21,6 +22,7 @@ type AiEntryConversationRow = {
   title: string
   currentModelId?: string | null
   createdAt?: Date | string | number | null
+  latestMessageCreatedAt?: Date | string | number | null
 }
 
 type AiEntryMessageRow = {
@@ -28,7 +30,7 @@ type AiEntryMessageRow = {
   role: string
   content: string
   knowledge_source?: string | null
-  created_at?: Date | string | number | null
+  createdAt?: Date | string | number | null
 }
 
 export type AiEntryConversationSummary = {
@@ -108,6 +110,12 @@ function stripTitlePrefix(title: string) {
   } else if (title.startsWith(AI_ENTRY_CONSULTING_TITLE_PREFIX)) {
     normalized = title.slice(AI_ENTRY_CONSULTING_TITLE_PREFIX.length)
   }
+  if (normalized.startsWith(AI_ENTRY_AGENT_PREFIX)) {
+    const closingIndex = normalized.indexOf("] ")
+    if (closingIndex >= 0) {
+      normalized = normalized.slice(closingIndex + 2)
+    }
+  }
   return normalized.trim() || AI_ENTRY_DEFAULT_TITLE
 }
 
@@ -129,28 +137,46 @@ function normalizeModelId(modelId: string | null | undefined) {
   return canonical || normalized
 }
 
-function getTitlePrefix(scope: AiEntryConversationScope) {
-  return scope === "consulting"
-    ? AI_ENTRY_CONSULTING_TITLE_PREFIX
-    : AI_ENTRY_CHAT_TITLE_PREFIX
+function normalizeAgentId(agentId: string | null | undefined) {
+  const normalized = typeof agentId === "string" ? agentId.trim() : ""
+  return normalized || null
+}
+
+function getTitlePrefix(
+  scope: AiEntryConversationScope,
+  agentId?: string | null,
+) {
+  const scopePrefix =
+    scope === "consulting"
+      ? AI_ENTRY_CONSULTING_TITLE_PREFIX
+      : AI_ENTRY_CHAT_TITLE_PREFIX
+  const normalizedAgentId = normalizeAgentId(agentId)
+  if (!normalizedAgentId) return scopePrefix
+  return `${scopePrefix}${AI_ENTRY_AGENT_PREFIX}${normalizedAgentId}] `
 }
 
 function buildConversationTitle(
   name: string | null | undefined,
   scope: AiEntryConversationScope,
+  agentId?: string | null,
 ) {
-  return `${getTitlePrefix(scope)}${normalizeConversationName(name)}`
+  return `${getTitlePrefix(scope, agentId)}${normalizeConversationName(name)}`
 }
 
 function buildConversationTitleFromPrompt(
   prompt: string,
   scope: AiEntryConversationScope,
+  agentId?: string | null,
 ) {
   const normalizedPrompt = prompt
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, AI_ENTRY_AUTO_TITLE_MAX_LENGTH)
-  return buildConversationTitle(normalizedPrompt || AI_ENTRY_DEFAULT_TITLE, scope)
+  return buildConversationTitle(
+    normalizedPrompt || AI_ENTRY_DEFAULT_TITLE,
+    scope,
+    agentId,
+  )
 }
 
 function isGenericConversationTitle(title: string) {
@@ -185,10 +211,11 @@ function mapConversationSummary(
     currentModelId?: string | null
     createdAt: Date | string | number | null | undefined
     updatedAt?: Date | string | number | null | undefined
+    latestMessageCreatedAt?: Date | string | number | null | undefined
   },
 ): AiEntryConversationSummary {
   const createdAt = toEpochSeconds(row.createdAt)
-  const updatedAt = toEpochSeconds(row.updatedAt ?? row.createdAt)
+  const updatedAt = toEpochSeconds(row.updatedAt ?? row.latestMessageCreatedAt ?? row.createdAt)
   return {
     id: String(row.id),
     name: stripTitlePrefix(row.title),
@@ -203,10 +230,11 @@ export async function getAiEntryConversation(
   userId: number,
   conversationId: string | number | null | undefined,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ) {
   const parsedConversationId = parsePositiveInt(conversationId)
   if (!parsedConversationId) return null
-  const titlePrefix = getTitlePrefix(scope)
+  const titlePrefix = getTitlePrefix(scope, agentId)
 
   const rows = await withAiEntryDbRetry("get-ai-entry-conversation", () =>
     db
@@ -236,6 +264,7 @@ export async function createAiEntryConversation(
   title?: string | null,
   currentModelId?: string | null,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ) {
   const normalizedModelId = normalizeModelId(currentModelId)
   const rows = await withAiEntryDbRetry("create-ai-entry-conversation", () =>
@@ -243,7 +272,11 @@ export async function createAiEntryConversation(
       .insert(conversations)
       .values({
         userId,
-        title: buildConversationTitle(title || AI_ENTRY_DEFAULT_TITLE, scope),
+        title: buildConversationTitle(
+          title || AI_ENTRY_DEFAULT_TITLE,
+          scope,
+          agentId,
+        ),
         currentModelId: normalizedModelId,
       })
       .returning({
@@ -270,8 +303,9 @@ export async function createAiEntryConversation(
 export async function getLatestAiEntryConversationModelId(
   userId: number,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ) {
-  const titlePrefix = getTitlePrefix(scope)
+  const titlePrefix = getTitlePrefix(scope, agentId)
   const rows = await withAiEntryDbRetry("get-latest-ai-entry-conversation-model", () =>
     db
       .select({
@@ -300,9 +334,10 @@ export async function ensureAiEntryConversation(
   fallbackTitle?: string,
   currentModelId?: string | null,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ) {
   const normalizedModelId = normalizeModelId(currentModelId)
-  const existing = await getAiEntryConversation(userId, conversationId, scope)
+  const existing = await getAiEntryConversation(userId, conversationId, scope, agentId)
   if (existing) {
     if (normalizedModelId && normalizedModelId !== normalizeModelId(existing.currentModelId)) {
       await withAiEntryDbRetry("set-ai-entry-conversation-model", () =>
@@ -326,6 +361,7 @@ export async function ensureAiEntryConversation(
     fallbackTitle || AI_ENTRY_DEFAULT_TITLE,
     normalizedModelId,
     scope,
+    agentId,
   )
 }
 
@@ -334,10 +370,11 @@ export async function listAiEntryConversations(
   limit: number,
   cursor?: string | null,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ): Promise<AiEntryConversationPage> {
   const safeLimit = Math.max(1, Math.min(limit, 50))
   const parsedCursor = parseCursor(cursor)
-  const titlePrefix = getTitlePrefix(scope)
+  const titlePrefix = getTitlePrefix(scope, agentId)
 
   const rows = await withAiEntryDbRetry("list-ai-entry-conversations", () =>
     db
@@ -345,8 +382,11 @@ export async function listAiEntryConversations(
         id: conversations.id,
         title: conversations.title,
         currentModelId: conversations.currentModelId,
+        createdAt: conversations.createdAt,
+        latestMessageCreatedAt: sql<Date | null>`max(${messages.createdAt})`,
       })
       .from(conversations)
+      .leftJoin(messages, eq(messages.conversationId, conversations.id))
       .where(
         and(
           eq(conversations.userId, userId),
@@ -354,7 +394,13 @@ export async function listAiEntryConversations(
           parsedCursor ? lt(conversations.id, parsedCursor) : undefined,
         ),
       )
-      .orderBy(desc(conversations.id))
+      .groupBy(
+        conversations.id,
+        conversations.title,
+        conversations.currentModelId,
+        conversations.createdAt,
+      )
+      .orderBy(desc(sql`coalesce(max(${messages.createdAt}), ${conversations.createdAt})`), desc(conversations.id))
       .limit(safeLimit + 1),
   )
 
@@ -364,8 +410,8 @@ export async function listAiEntryConversations(
       id: row.id,
       title: row.title,
       currentModelId: row.currentModelId,
-      createdAt: null,
-      updatedAt: null,
+      createdAt: row.createdAt || null,
+      latestMessageCreatedAt: row.latestMessageCreatedAt || null,
     }),
   )
 
@@ -386,8 +432,9 @@ export async function deleteAiEntryConversation(
   userId: number,
   conversationId: string,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ) {
-  const conversation = await getAiEntryConversation(userId, conversationId, scope)
+  const conversation = await getAiEntryConversation(userId, conversationId, scope, agentId)
   if (!conversation) return false
 
   await withAiEntryDbRetry("delete-ai-entry-messages", () =>
@@ -404,8 +451,9 @@ export async function renameAiEntryConversation(
   conversationId: string,
   name: string,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ) {
-  const conversation = await getAiEntryConversation(userId, conversationId, scope)
+  const conversation = await getAiEntryConversation(userId, conversationId, scope, agentId)
   if (!conversation) {
     return null
   }
@@ -416,7 +464,7 @@ export async function renameAiEntryConversation(
     db
       .update(conversations)
       .set({
-        title: buildConversationTitle(normalizedName, scope),
+        title: buildConversationTitle(normalizedName, scope, agentId),
       })
       .where(eq(conversations.id, conversation.id)),
   )
@@ -425,6 +473,7 @@ export async function renameAiEntryConversation(
     userId,
     conversationId,
     scope,
+    agentId,
   )
   if (!updatedConversation) return null
 
@@ -443,12 +492,14 @@ export async function appendAiEntryTurn(params: {
   assistantMessage: string
   knowledgeSource: "industry_kb" | "personal_kb"
   scope?: AiEntryConversationScope
+  agentId?: string | null
 }) {
   const scope = params.scope || "chat"
   const conversation = await getAiEntryConversation(
     params.userId,
     params.conversationId,
     scope,
+    params.agentId,
   )
   if (!conversation) {
     return null
@@ -467,7 +518,7 @@ export async function appendAiEntryTurn(params: {
   const existingMessageCount = Number(messageCountRows[0]?.count || 0)
   const shouldRetitle = existingMessageCount === 0 || isGenericConversationTitle(conversation.title)
   const nextTitle = shouldRetitle
-    ? buildConversationTitleFromPrompt(params.userPrompt, scope)
+    ? buildConversationTitleFromPrompt(params.userPrompt, scope, params.agentId)
     : conversation.title
 
   if (shouldRetitle) {
@@ -503,8 +554,9 @@ export async function listAiEntryMessages(
   conversationId: string,
   limit = 200,
   scope: AiEntryConversationScope = "chat",
+  agentId?: string | null,
 ): Promise<AiEntryMessagePage | null> {
-  const conversation = await getAiEntryConversation(userId, conversationId, scope)
+  const conversation = await getAiEntryConversation(userId, conversationId, scope, agentId)
   if (!conversation) return null
 
   const safeLimit = Math.max(1, Math.min(limit, 500))
@@ -513,10 +565,11 @@ export async function listAiEntryMessages(
       SELECT
         m.id,
         m.role,
-        m.content
+        m.content,
+        m.created_at as "createdAt"
       FROM "AI_MARKETING_messages" m
       WHERE m.conversation_id = ${conversation.id}
-      ORDER BY m.id ASC
+      ORDER BY m.created_at ASC, m.id ASC
       LIMIT ${safeLimit}
     `),
   )
@@ -529,7 +582,7 @@ export async function listAiEntryMessages(
       role: row.role as "user" | "assistant",
       content: row.content || "",
       knowledge_source: null,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: toEpochSeconds(row.createdAt),
     }))
 
   return {
@@ -544,4 +597,3 @@ export async function listAiEntryMessages(
     }),
   }
 }
-

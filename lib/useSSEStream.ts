@@ -80,9 +80,9 @@ export function useSSEStreamEx(path: string, options?: { base?: string; headers?
 }
 
 export function useAgentSSE(base?: string) {
-  const core = useSSEStream('/crewai-agent', base)
+  const core = useSSEStream('/video-agent/agent', base)
   const { start: startCore, ...rest } = core
-  const start = useCallback((payload: { prompt?: string; img?: string; thread_id?: string; run_id?: string; goal?: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; use_crewai?: boolean }) => startCore(payload), [startCore])
+  const start = useCallback((payload: { prompt?: string; img?: string; thread_id?: string; run_id?: string; goal?: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; use_video_agent?: boolean }) => startCore(payload), [startCore])
   return { ...rest, start }
 }
 

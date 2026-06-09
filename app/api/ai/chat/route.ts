@@ -36,6 +36,12 @@ import {
 import {
   normalizeAiEntryIdentity,
 } from "@/lib/ai-entry/identity"
+import {
+  normalizeAttachmentList,
+  normalizeMessages,
+  type IncomingAttachment,
+  type IncomingMessage,
+} from "@/lib/ai-entry/chat-attachments"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
@@ -52,23 +58,6 @@ import {
 } from "@/lib/billing/runtime"
 
 export const runtime = "nodejs"
-
-type IncomingMessage = {
-  role?: string
-  content?: unknown
-}
-
-type IncomingAttachment = {
-  name?: unknown
-  mediaType?: unknown
-  dataUrl?: unknown
-  text?: unknown
-  size?: unknown
-}
-
-type AttachmentContextPart =
-  | { type: "text"; text: string }
-  | { type: "image"; image: string; mediaType: string }
 
 type ChatRequestBody = {
   messages?: IncomingMessage[]
@@ -107,33 +96,6 @@ function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
 }
 
-function normalizeAttachmentList(input: unknown) {
-  if (!Array.isArray(input)) return []
-  return input
-    .map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) return null
-      const source = item as IncomingAttachment
-      const name = typeof source.name === "string" ? source.name.trim().slice(0, 180) : "attachment"
-      const mediaType = typeof source.mediaType === "string" ? source.mediaType.trim().toLowerCase() : ""
-      const dataUrl = typeof source.dataUrl === "string" ? source.dataUrl.trim() : ""
-      const text = typeof source.text === "string" ? source.text.slice(0, 80_000) : ""
-      const size = typeof source.size === "number" && Number.isFinite(source.size) ? source.size : 0
-      if (!mediaType || (!dataUrl && !text)) return null
-      return { name, mediaType, dataUrl, text, size }
-    })
-    .filter((item): item is { name: string; mediaType: string; dataUrl: string; text: string; size: number } => Boolean(item))
-    .slice(0, 4)
-}
-
-function extractDataUrlPayload(dataUrl: string) {
-  const match = /^data:([^;,]+);base64,(.+)$/i.exec(dataUrl)
-  if (!match) return null
-  return {
-    mediaType: match[1].toLowerCase(),
-    data: match[2],
-  }
-}
-
 function modelSupportsImageInput(modelId: string | null | undefined) {
   const normalized = typeof modelId === "string" ? modelId.toLowerCase() : ""
   if (!normalized) return false
@@ -142,51 +104,6 @@ function modelSupportsImageInput(modelId: string | null | undefined) {
   if (normalized.includes("gpt-4") || normalized.includes("gpt-5") || normalized.includes("o3") || normalized.includes("o4")) return true
   if (normalized.includes("vision") || normalized.includes("vl") || normalized.includes("pixtral")) return true
   return false
-}
-
-function buildAttachmentContextParts(attachments: ReturnType<typeof normalizeAttachmentList>): AttachmentContextPart[] {
-  const parts: AttachmentContextPart[] = []
-  for (const attachment of attachments) {
-    if (attachment.mediaType.startsWith("text/") || attachment.mediaType.includes("json") || attachment.mediaType.includes("csv")) {
-      parts.push({
-        type: "text",
-        text: `\n\n[Uploaded file: ${attachment.name} / ${attachment.mediaType}]\n${attachment.text || "(No readable text content was provided.)"}`,
-      })
-      continue
-    }
-
-    if (attachment.mediaType.startsWith("image/")) {
-      const payload = extractDataUrlPayload(attachment.dataUrl)
-      if (!payload) continue
-      parts.push({
-        type: "image",
-        image: payload.data,
-        mediaType: payload.mediaType,
-      })
-    }
-  }
-  return parts
-}
-
-function normalizeMessages(messages: IncomingMessage[], attachments: ReturnType<typeof normalizeAttachmentList> = []) {
-  const normalized: CoreMessage[] = []
-  for (const [index, item] of messages.entries()) {
-    const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
-    const content = typeof item?.content === "string" ? item.content.trim() : ""
-    if (!role || !content) continue
-    if (role === "user" && index === messages.length - 1 && attachments.length > 0) {
-      normalized.push({
-        role,
-        content: [
-          { type: "text", text: content },
-          ...buildAttachmentContextParts(attachments),
-        ],
-      } as CoreMessage)
-      continue
-    }
-    normalized.push({ role, content })
-  }
-  return normalized
 }
 
 function parseEnabledToolNames(input: unknown) {
@@ -529,6 +446,7 @@ async function persistAiEntryTurnSafe(params: {
   assistantMessage: string
   knowledgeSource: "industry_kb" | "personal_kb"
   scope: AiEntryConversationScope
+  agentId?: string | null
 }) {
   if (!params.userPrompt.trim() || !params.assistantMessage.trim()) return
   try {
@@ -598,6 +516,7 @@ export async function POST(request: NextRequest) {
         latestUserPrompt || "New chat",
         modelConfig?.modelId,
         conversationScope,
+        agentConfig.agentId,
       )
       conversationId = ensuredConversation.id
     } catch (error) {
@@ -761,31 +680,34 @@ export async function POST(request: NextRequest) {
       selectedToolIds: effectiveSelectedToolIds,
     })
 
-    const reserveEstimate = estimateTextCredits({
-      featureKey: "ai_entry_chat",
-      inputTokens: estimateTextTokens(normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n")),
-      outputTokens: 4_000,
-      provider: modelConfig?.providerId || null,
-      model: modelConfig?.providerModelId || modelConfig?.modelId || null,
-    })
-    try {
-      aiEntryCreditReservation = await reserveFeatureCredits({
-        userId: currentUser.id,
-        enterpriseId: currentUser.enterpriseId,
+    const shouldReserveAiEntryCredits = !currentUser.isDemo
+    if (shouldReserveAiEntryCredits) {
+      const reserveEstimate = estimateTextCredits({
         featureKey: "ai_entry_chat",
-        amount: reserveEstimate.credits,
-        idempotencyKey: `ai-entry:${conversationId}:${traceId}:reserve`,
-        metadata: {
-          conversationId,
-          traceId,
-          estimate: reserveEstimate,
-        },
+        inputTokens: estimateTextTokens(normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n")),
+        outputTokens: 4_000,
+        provider: modelConfig?.providerId || null,
+        model: modelConfig?.providerModelId || modelConfig?.modelId || null,
       })
-    } catch (error) {
-      if (error instanceof Error && error.message === "insufficient_credits") {
-        return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+      try {
+        aiEntryCreditReservation = await reserveFeatureCredits({
+          userId: currentUser.id,
+          enterpriseId: currentUser.enterpriseId,
+          featureKey: "ai_entry_chat",
+          amount: reserveEstimate.credits,
+          idempotencyKey: `ai-entry:${conversationId}:${traceId}:reserve`,
+          metadata: {
+            conversationId,
+            traceId,
+            estimate: reserveEstimate,
+          },
+        })
+      } catch (error) {
+        if (error instanceof Error && error.message === "insufficient_credits") {
+          return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+        }
+        throw error
       }
-      throw error
     }
 
     if (!stream) {
@@ -851,6 +773,7 @@ export async function POST(request: NextRequest) {
           assistantMessage: normalizedAssistantMessage,
           knowledgeSource,
           scope: conversationScope,
+          agentId: agentConfig.agentId,
         })
       }
 
@@ -1090,6 +1013,7 @@ export async function POST(request: NextRequest) {
               assistantMessage: normalizedStreamedAnswer,
               knowledgeSource,
               scope: conversationScope,
+              agentId: agentConfig.agentId,
             })
           }
           const usageTokens = getAiEntryUsageTokens(

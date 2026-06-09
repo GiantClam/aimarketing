@@ -18,6 +18,7 @@ function parseProviderId(value: string | null): AiEntryProviderId | null {
   if (normalized === "crazyrouter") return "crazyroute"
   if (
     normalized === "pptoken" ||
+    normalized === "openrouter" ||
     normalized === "aiberm" ||
     normalized === "crazyroute"
   ) {
@@ -88,6 +89,8 @@ export async function GET(request: NextRequest) {
       label:
         provider.id === "pptoken"
           ? "PPTOKEN"
+          : provider.id === "openrouter"
+          ? "OpenRouter"
           : provider.id === "aiberm"
           ? "Aiberm"
           : "CrazyRouter",

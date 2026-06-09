@@ -7,6 +7,11 @@ const PROVIDER_ENV_KEYS = [
   "AI_ENTRY_PPTOKEN_API_KEY",
   "AI_ENTRY_PPTOKEN_BASE_URL",
   "AI_ENTRY_PPTOKEN_MODEL",
+  "AI_ENTRY_OPENROUTER_API_KEY",
+  "AI_ENTRY_OPENROUTER_BASE_URL",
+  "AI_ENTRY_OPENROUTER_MODEL",
+  "AI_ENTRY_OPENROUTER_REFERER",
+  "AI_ENTRY_OPENROUTER_TITLE",
   "AI_ENTRY_AIBERM_API_KEY",
   "AI_ENTRY_AIBERM_BASE_URL",
   "AI_ENTRY_AIBERM_MODEL",
@@ -17,6 +22,9 @@ const PROVIDER_ENV_KEYS = [
   "PPTOKEN_API_KEY",
   "PPTOKEN_BASE_URL",
   "PPTOKEN_MODEL",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_BASE_URL",
+  "OPENROUTER_MODEL",
   "AIBERM_API_KEY",
   "AIBERM_BASE_URL",
   "CRAZYROUTE_API_KEY",
@@ -189,6 +197,9 @@ test("provider order: pptoken is the default provider before aiberm and crazyrou
       AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
       AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
       AI_ENTRY_PPTOKEN_MODEL: "pptoken/default-chat-model",
+      AI_ENTRY_OPENROUTER_API_KEY: "test-key-o",
+      AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
+      AI_ENTRY_OPENROUTER_MODEL: "openrouter/default-chat-model",
       AI_ENTRY_AIBERM_API_KEY: "test-key-a",
       AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
       AI_ENTRY_AIBERM_MODEL: "aiberm/default-chat-model",
@@ -205,8 +216,41 @@ test("provider order: pptoken is the default provider before aiberm and crazyrou
       })
 
       assert.equal(result.providerId, "pptoken")
-      assert.deepEqual(result.result, ["pptoken", "aiberm", "crazyroute"])
+      assert.deepEqual(result.result, ["pptoken", "openrouter", "aiberm", "crazyroute"])
       assert.deepEqual(attempts, ["pptoken:pptoken/default-chat-model"])
+    },
+  )
+})
+
+test("provider order: non-openai models prefer openrouter before aiberm and crazyroute", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_OPENROUTER_API_KEY: "test-key-o",
+      AI_ENTRY_OPENROUTER_BASE_URL: "https://openrouter.example/v1",
+      AI_ENTRY_OPENROUTER_MODEL: "openrouter/default-chat-model",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "aiberm/default-chat-model",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "https://crazy.example/v1",
+      AI_ENTRY_CRAZYROUTE_MODEL: "crazy/default-chat-model",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(
+        async (params) => {
+          attempts.push(`${params.providerId}:${params.model}`)
+          return params.providerOrder
+        },
+        {
+          preferredModel: "anthropic/claude-sonnet-4.6",
+        },
+      )
+
+      assert.equal(result.providerId, "openrouter")
+      assert.deepEqual(result.result, ["openrouter", "aiberm", "crazyroute"])
+      assert.deepEqual(attempts, ["openrouter:openrouter/default-chat-model"])
     },
   )
 })
@@ -753,4 +797,3 @@ test("policy errors skip same-provider model variants and switch provider", asyn
     },
   )
 })
-

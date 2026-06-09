@@ -4,6 +4,11 @@ import { requireSessionUser } from "@/lib/auth/guards"
 import { deleteAiEntryConversation } from "@/lib/ai-entry/repository"
 import { shouldLockConsultingAdvisorModel } from "@/lib/ai-entry/model-policy"
 
+function parseAgentId(input: string | null | undefined) {
+  const normalized = typeof input === "string" ? input.trim() : ""
+  return normalized || null
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ conversationId: string }> },
@@ -19,12 +24,14 @@ export async function DELETE(
   })
     ? "consulting"
     : "chat"
+  const agentId = parseAgentId(request.nextUrl.searchParams.get("agent"))
 
   try {
     const success = await deleteAiEntryConversation(
       auth.user.id,
       resolved.conversationId,
       conversationScope,
+      agentId,
     )
     return NextResponse.json({ success, conversationId: resolved.conversationId })
   } catch (error) {

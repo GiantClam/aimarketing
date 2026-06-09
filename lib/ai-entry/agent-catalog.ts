@@ -1,4 +1,6 @@
-export type AiEntryAgentCategory = "general" | "executive"
+import { listBusinessAgentConfigs } from "@/lib/platform/business-agents"
+
+export type AiEntryAgentCategory = "general" | "executive" | "business"
 
 export type LocalizedText = {
   zh: string
@@ -26,9 +28,13 @@ const GROUPS: AiEntryAgentCatalogGroup[] = [
     id: "executive",
     label: { zh: "专家顾问套件", en: "Executive Consulting Suite" },
   },
+  {
+    id: "business",
+    label: { zh: "业务 Agent 工作台", en: "Business Agent Workbenches" },
+  },
 ]
 
-const AGENTS: AiEntryAgentCatalogItem[] = [
+const CORE_AGENTS: AiEntryAgentCatalogItem[] = [
   {
     id: "general",
     category: "general",
@@ -120,6 +126,15 @@ const AGENTS: AiEntryAgentCatalogItem[] = [
     },
   },
 ]
+
+const BUSINESS_AGENTS: AiEntryAgentCatalogItem[] = listBusinessAgentConfigs().map((agent) => ({
+  id: agent.agentId,
+  category: "business",
+  name: agent.name,
+  description: agent.summary,
+}))
+
+const AGENTS: AiEntryAgentCatalogItem[] = [...CORE_AGENTS, ...BUSINESS_AGENTS]
 
 const AGENT_ID_SET = new Set(AGENTS.map((item) => item.id))
 

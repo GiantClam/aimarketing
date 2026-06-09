@@ -9,7 +9,9 @@ import { TrackedCtaLink } from "@/components/seo/tracked-cta-link"
 import { Button } from "@/components/ui/button"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
 import { localizePublicPath } from "@/lib/i18n/routing"
-import { leadToolsCatalog } from "@/lib/lead-tools/catalog"
+import { getLocalizedLeadToolsCatalog } from "@/lib/lead-tools/catalog"
+import { getLocalizedPlatformHubLinks } from "@/lib/platform/catalog"
+import { getPlatformDirectoryAvailability } from "@/lib/platform/directory-config"
 import { SEO_EVENT } from "@/lib/seo/analytics"
 import { cn } from "@/lib/utils"
 
@@ -19,7 +21,14 @@ export function PublicSiteHeader({ activeKey }: { activeKey?: PublicNavKey }) {
   const { locale } = useI18n()
   const copy = getPublicCopy(locale)
   const homeHref = localizePublicPath("/", locale)
-  const liveTools = leadToolsCatalog.filter((tool) => tool.status === "live")
+  const liveTools = getLocalizedLeadToolsCatalog(locale).filter(
+    (tool) =>
+      getPlatformDirectoryAvailability("tool", tool.slug, {
+        status: tool.status === "live" ? "live_tool" : "coming_soon_tool",
+        surface: "public",
+      }) === "available",
+  )
+  const platformLinks = getLocalizedPlatformHubLinks(locale)
 
   return (
     <header className="relative z-50 border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/88">
@@ -55,9 +64,20 @@ export function PublicSiteHeader({ activeKey }: { activeKey?: PublicNavKey }) {
 
                 <div className="invisible absolute left-1/2 top-full z-[70] mt-2 min-w-[220px] -translate-x-1/2 translate-y-1 rounded-[8px] border border-border bg-card p-2 opacity-0 shadow-xl transition duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
                   {liveTools.map((tool) => (
-                    <Link key={tool.slug} href={tool.href} className="block rounded-[6px] px-3 py-2.5 transition hover:bg-background">
+                    <Link
+                      key={tool.slug}
+                      href={localizePublicPath(tool.href, locale)}
+                      className="block rounded-[6px] px-3 py-2.5 transition hover:bg-background"
+                    >
                       <div className="font-display text-xs font-bold uppercase tracking-[0.08em] text-foreground">{tool.name}</div>
                       <div className="mt-1 text-xs leading-5 text-muted-foreground">{tool.tagline}</div>
+                    </Link>
+                  ))}
+                  <div className="my-2 border-t border-border" />
+                  {platformLinks.map((item) => (
+                    <Link key={item.slug} href={localizePublicPath(item.href, locale)} className="block rounded-[6px] px-3 py-2.5 transition hover:bg-background">
+                      <div className="font-display text-xs font-bold uppercase tracking-[0.08em] text-foreground">{item.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{item.summary}</div>
                     </Link>
                   ))}
                 </div>

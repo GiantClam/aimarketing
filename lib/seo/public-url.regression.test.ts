@@ -4,6 +4,7 @@ import test from "node:test"
 import robots from "@/app/robots"
 import sitemap from "@/app/sitemap"
 import { buildAppUrl, getAppBaseUrl } from "@/lib/app-url"
+import { getLeadToolExampleMetadata, getLeadToolMetadata, getToolsHubMetadata } from "@/lib/lead-tools/public-metadata"
 import { metadataForSeoPage } from "@/lib/seo/metadata"
 import { getSeoPage } from "@/lib/seo/pages"
 
@@ -157,6 +158,32 @@ test("localized prompt pages emit locale-prefixed canonical and language alterna
   )
 })
 
+test("localized tool pages emit locale-prefixed canonical and language alternates", () => {
+  withAppUrlEnv(
+    {
+      APP_URL: "https://aimarketingsite.com",
+    },
+    () => {
+      const hubMetadata = getToolsHubMetadata("zh")
+      const toolMetadata = getLeadToolMetadata("zh", "ai-ppt-preview")
+      const exampleMetadata = getLeadToolExampleMetadata("zh", "ai-ppt-preview", "product-launch-deck")
+
+      assert.equal(hubMetadata.alternates?.canonical, "https://www.aimarketingsite.com/zh/tools")
+      assert.equal(hubMetadata.alternates?.languages?.en, "https://www.aimarketingsite.com/en/tools")
+      assert.equal(toolMetadata.alternates?.canonical, "https://www.aimarketingsite.com/zh/tools/ai-ppt-preview")
+      assert.equal(toolMetadata.alternates?.languages?.en, "https://www.aimarketingsite.com/en/tools/ai-ppt-preview")
+      assert.equal(
+        exampleMetadata.alternates?.canonical,
+        "https://www.aimarketingsite.com/zh/tools/ai-ppt-preview/examples/product-launch-deck",
+      )
+      assert.equal(
+        exampleMetadata.alternates?.languages?.en,
+        "https://www.aimarketingsite.com/en/tools/ai-ppt-preview/examples/product-launch-deck",
+      )
+    },
+  )
+})
+
 test("robots and sitemap share the same www canonical host", () => {
   withAppUrlEnv(
     {
@@ -169,14 +196,30 @@ test("robots and sitemap share the same www canonical host", () => {
       const localizedCostEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/compare\/compare-ai-tool-costs$/.test(entry.url))
       const localizedAlternativeEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/alternatives\/chatgpt-team-alternative$/.test(entry.url))
       const localizedAgentEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/agents\/seo-article-agent$/.test(entry.url))
+      const localizedPlatformAgentEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/agents\/brand-strategy-agent$/.test(entry.url))
+      const localizedCapabilityEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/capabilities\/ai-image$/.test(entry.url))
+      const localizedPluginEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/plugins\/runninghub-media$/.test(entry.url))
+      const localizedMcpEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/mcp-services\/document-parsing-mcp$/.test(entry.url))
+      const localizedWorkflowEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/workflows\/campaign-launch$/.test(entry.url))
       const localizedPromptEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/prompts\/seo-article-prompts$/.test(entry.url))
+      const toolEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools\/(ai-chat|ai-image|ai-video|ai-ppt-preview)$/.test(entry.url))
+      const toolExampleEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools\/ai-ppt-preview\/examples\/product-launch-deck$/.test(entry.url))
+      const toolsHubEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools$/.test(entry.url))
 
       assert.equal(robotsMetadata.sitemap, "https://www.aimarketingsite.com/sitemap.xml")
       assert.equal(promptEntry?.url, "https://www.aimarketingsite.com/en/prompts/video-script-prompts")
       assert.equal(localizedCostEntries.length, 2)
       assert.equal(localizedAlternativeEntries.length, 2)
       assert.equal(localizedAgentEntries.length, 2)
+      assert.equal(localizedPlatformAgentEntries.length, 2)
+      assert.equal(localizedCapabilityEntries.length, 2)
+      assert.equal(localizedPluginEntries.length, 2)
+      assert.equal(localizedMcpEntries.length, 2)
+      assert.equal(localizedWorkflowEntries.length, 2)
       assert.equal(localizedPromptEntries.length, 2)
+      assert.equal(toolsHubEntries.length, 2)
+      assert.equal(toolEntries.length, 8)
+      assert.equal(toolExampleEntries.length, 2)
     },
   )
 })

@@ -5,7 +5,7 @@
 ## 工作流
 
 1. 用户在前端提交视频需求
-2. 本仓库通过 [app/api/crewai](/d:/github/aimarketing/app/api/crewai) 代理请求
+2. 本仓库通过 [app/api/video-agent](/d:/github/aimarketing/app/api/video-agent) 代理请求
 3. 外部 video agent 服务执行多智能体工作流
 4. 结果通过 SSE 和轮询回传到前端
 
@@ -28,7 +28,7 @@
 ## 当前仓库中的相关入口
 
 - [components/video-chat.tsx](/d:/github/aimarketing/components/video-chat.tsx)
-- [app/api/crewai/chat/route.ts](/d:/github/aimarketing/app/api/crewai/chat/route.ts)
+- [app/api/video-agent/chat/route.ts](/d:/github/aimarketing/app/api/video-agent/chat/route.ts)
 - [lib/saleagent-client.ts](/d:/github/aimarketing/lib/saleagent-client.ts)
 
 ## 配置

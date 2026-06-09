@@ -525,7 +525,7 @@ def verify_disabled_apis(page) -> None:
             const outputs = [];
             for (const [url, payload] of [
                 ['/api/webgen/generate', { prompt: 'test' }],
-                ['/api/crewai/agent', { message: 'test' }],
+                ['/api/video-agent/agent', { message: 'test' }],
                 ['/api/dify/advisors/availability', null],
             ]) {
                 const options = payload
@@ -547,13 +547,13 @@ def verify_disabled_apis(page) -> None:
 
     lookup = {item["url"]: item for item in responses}
     webgen = lookup["/api/webgen/generate"]
-    crewai = lookup["/api/crewai/agent"]
+    video_agent = lookup["/api/video-agent/agent"]
     dify = lookup["/api/dify/advisors/availability"]
 
     if webgen["status"] != 410 or webgen["body"].get("error") != "Feature disabled":
         raise AssertionError(f"Unexpected website API response: {webgen}")
-    if crewai["status"] != 410 or crewai["body"].get("error") != "Feature disabled":
-        raise AssertionError(f"Unexpected video API response: {crewai}")
+    if video_agent["status"] != 410 or video_agent["body"].get("error") != "Feature disabled":
+        raise AssertionError(f"Unexpected video API response: {video_agent}")
     dify_data = dify["body"].get("data", {})
     expected_dify_keys = {
         "brandStrategy",

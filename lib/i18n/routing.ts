@@ -5,7 +5,13 @@ export const LOCALE_REQUEST_HEADER_NAME = "x-aimarketing-locale"
 
 const LOCALIZED_PUBLIC_PATHS = new Set([
   "/",
+  "/agents",
+  "/capabilities",
+  "/plugins",
+  "/mcp-services",
   "/pricing",
+  "/tools",
+  "/workflows",
   "/agents/brand-strategy-agent",
   "/agents/growth-marketing-agent",
   "/agents/seo-article-agent",
@@ -27,6 +33,15 @@ const LOCALIZED_PUBLIC_PATHS = new Set([
   "/prompts/image-generation-prompts",
   "/resources/ai-subscription-cost-calculator",
 ])
+
+const LOCALIZED_PUBLIC_PREFIXES = [
+  "/agents/",
+  "/capabilities/",
+  "/plugins/",
+  "/mcp-services/",
+  "/tools/",
+  "/workflows/",
+] as const
 
 type LocalizedPathParts = {
   locale: AppLocale | null
@@ -59,7 +74,16 @@ export function extractLocaleFromPathname(pathname: string): LocalizedPathParts 
 }
 
 export function isLocalizedPublicPath(pathname: string) {
-  return LOCALIZED_PUBLIC_PATHS.has(normalizePathname(pathname))
+  const normalizedPathname = normalizePathname(pathname)
+
+  if (LOCALIZED_PUBLIC_PATHS.has(normalizedPathname)) {
+    return true
+  }
+
+  return LOCALIZED_PUBLIC_PREFIXES.some(
+    (prefix) =>
+      normalizedPathname.startsWith(prefix) && normalizedPathname.length > prefix.length,
+  )
 }
 
 export function localizePublicPath(path: string, locale: AppLocale) {
