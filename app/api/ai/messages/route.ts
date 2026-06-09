@@ -10,6 +10,11 @@ function parseLimit(input: string | null, fallback: number) {
   return Math.min(parsed, 500)
 }
 
+function parseAgentId(input: string | null | undefined) {
+  const normalized = typeof input === "string" ? input.trim() : ""
+  return normalized || null
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireSessionUser(request)
   if ("response" in auth) {
@@ -19,6 +24,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const conversationId = searchParams.get("conversation_id")?.trim() || ""
   const limit = parseLimit(searchParams.get("limit"), 200)
+  const agentId = parseAgentId(searchParams.get("agent"))
   const conversationScope = shouldLockConsultingAdvisorModel({
     entryMode: searchParams.get("entryMode"),
   })
@@ -35,6 +41,7 @@ export async function GET(request: NextRequest) {
       conversationId,
       limit,
       conversationScope,
+      agentId,
     )
     if (!page) {
       return NextResponse.json({ error: "conversation_not_found" }, { status: 404 })

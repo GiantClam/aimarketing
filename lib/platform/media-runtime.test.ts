@@ -1,0 +1,166 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import {
+  buildPlatformMediaRuntimeEntriesFromState,
+  getPlatformMediaCapabilityStateFromSnapshot,
+  isPlatformMediaCapabilitySlug,
+} from "@/lib/platform/media-runtime"
+import type { PlatformRuntimeSnapshot } from "@/lib/platform/runtime"
+import type { RunningHubConfig } from "@/lib/platform/runninghub"
+
+const emptyRunningHubConfig: RunningHubConfig = {
+  baseUrl: "https://www.runninghub.ai",
+  apiKey: "",
+  queryPath: "/openapi/v2/query",
+  uploadPath: "/task/openapi/upload",
+  image: {
+    configured: false,
+    endpoint: null,
+  },
+  video: {
+    configured: false,
+    endpoint: null,
+  },
+  music: {
+    configured: false,
+    endpoint: null,
+  },
+}
+
+function buildSnapshot(overrides?: Partial<PlatformRuntimeSnapshot>): PlatformRuntimeSnapshot {
+  return {
+    generatedAt: "2026-06-06T00:00:00.000Z",
+    activeTextProvider: "pptoken",
+    providers: [],
+    tasks: [],
+    entitlements: [],
+    ...overrides,
+  }
+}
+
+test("media runtime helper recognizes platform media capability slugs", () => {
+  assert.equal(isPlatformMediaCapabilitySlug("ai-image"), true)
+  assert.equal(isPlatformMediaCapabilitySlug("ai-video"), true)
+  assert.equal(isPlatformMediaCapabilitySlug("ai-music"), true)
+  assert.equal(isPlatformMediaCapabilitySlug("ai-chat"), false)
+})
+
+test("media runtime helper marks ai-image as runtime_disabled when task is present but off", () => {
+  const state = getPlatformMediaCapabilityStateFromSnapshot(
+    buildSnapshot({
+      providers: [
+        {
+          id: "runninghub-image",
+          scope: "image",
+          configured: false,
+          active: false,
+          model: null,
+          baseURL: null,
+          role: "planned",
+          capabilitySlugs: ["ai-image", "runninghub-media"],
+          notes: ["Planned media provider."],
+        },
+      ],
+      tasks: [
+        {
+          id: "ai-image-runtime",
+          capabilitySlug: "ai-image",
+          title: "AI image assistant queue",
+          mode: "async",
+          enabled: false,
+          runtimeId: "image-assistant",
+          statuses: ["queued", "running", "succeeded", "failed", "cancelled"],
+          notes: ["Image queue disabled."],
+        },
+      ],
+    }),
+    "ai-image",
+  )
+
+  assert.equal(state.runtimeStatus, "runtime_disabled")
+  assert.equal(state.task?.runtimeId, "image-assistant")
+  assert.deepEqual(state.providers.map((provider) => provider.id), ["runninghub-image"])
+})
+
+test("media runtime helper keeps ai-video deferred when the task is explicitly deferred", () => {
+  const state = getPlatformMediaCapabilityStateFromSnapshot(
+    buildSnapshot({
+      providers: [
+        {
+          id: "runninghub-video",
+          scope: "video",
+          configured: false,
+          active: false,
+          model: null,
+          baseURL: null,
+          role: "planned",
+          capabilitySlugs: ["ai-video", "runninghub-media"],
+          notes: ["Planned media provider."],
+        },
+      ],
+      tasks: [
+        {
+          id: "ai-video-runtime",
+          capabilitySlug: "ai-video",
+          title: "AI video workspace",
+          mode: "deferred",
+          enabled: false,
+          runtimeId: "dashboard-video",
+          statuses: ["queued", "running", "succeeded", "failed", "cancelled"],
+          notes: ["Video runtime deferred."],
+        },
+      ],
+    }),
+    "ai-video",
+  )
+
+  assert.equal(state.runtimeStatus, "deferred")
+  assert.equal(state.task?.mode, "deferred")
+  assert.deepEqual(state.providers.map((provider) => provider.id), ["runninghub-video"])
+})
+
+test("media runtime builder promotes RunningHub image and video targets into ready platform tasks", () => {
+  const runtime = buildPlatformMediaRuntimeEntriesFromState({
+    imageAvailability: {
+      enabled: false,
+      reason: "image_assistant_r2_config_missing",
+      provider: "unavailable",
+      models: {
+        highQuality: "gpt-image-2",
+        lowCost: "gpt-image-2",
+      },
+    },
+    videoRuntimeEnabled: false,
+    runningHubConfig: {
+      ...emptyRunningHubConfig,
+      apiKey: "test-key",
+      image: {
+        configured: true,
+        endpoint: "/api/image/run",
+      },
+      video: {
+        configured: true,
+        endpoint: "/api/video/run",
+      },
+      music: {
+        configured: true,
+        endpoint: "/api/music/run",
+      },
+    },
+  })
+
+  assert.equal(runtime.mediaRuntimeEnabled, true)
+  assert.equal(runtime.runningHubImageConfigured, true)
+  assert.equal(runtime.runningHubVideoConfigured, true)
+  assert.equal(runtime.runningHubMusicConfigured, true)
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.runtimeId, "runninghub-image")
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.enabled, true)
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-video")?.runtimeId, "runninghub-video")
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-video")?.enabled, true)
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.runtimeId, "runninghub-music")
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.enabled, true)
+  assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-image")?.role, "primary")
+  assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-video")?.role, "primary")
+  assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-music")?.role, "primary")
+})

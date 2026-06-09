@@ -180,6 +180,18 @@ const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> 
     "gpt-5.4-mini",
     "gpt-5.5",
   ],
+  openrouter: [
+    "claude-opus-4.6",
+    "claude-opus-4.7",
+    "claude-sonnet-4.6",
+    "claude-haiku-4.5",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "MiniMax-M2.7",
+  ],
   aiberm: [
     "claude-opus-4.6",
     "claude-opus-4.7",

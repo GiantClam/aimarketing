@@ -20,6 +20,10 @@ const SESSION_DB_RETRY_DELAYS_MS = [250, 750, 1500]
 const SESSION_TOUCH_INTERVAL_MS = 1000 * 60 * 5
 const DEFAULT_DEMO_SESSION_ID = 1
 
+function shouldHydrateDemoSessionFromDb() {
+  return process.env.DEMO_SESSION_DB_HYDRATE === "true"
+}
+
 function hashSessionToken(token: string) {
   return createHash("sha256").update(token).digest("hex")
 }
@@ -190,6 +194,10 @@ export async function deleteUserSessions(userId: number) {
 export async function getSessionUser(request: NextRequest) {
   const demoCookie = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
   if (parseDemoCookieValue(demoCookie)) {
+    if (!shouldHydrateDemoSessionFromDb()) {
+      return createDemoAuthPayload()
+    }
+
     try {
       const rows = await withSessionDbRetry("get-session-user.demo-select", async () =>
         db

@@ -16,7 +16,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "incremental": true,
     "plugins": [
       {
         "name": "next"
@@ -26,15 +25,16 @@
       "@/*": [
         "./*"
       ]
-    }
+    },
+    "incremental": true
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
     ".next-ai-entry-model-selection-e2e/types/**/*.ts",
     ".next-ai-entry-validation/types/**/*.ts",
-    ".next-build/types/**/*.ts",
     ".next-image-assistant-e2e/types/**/*.ts",
+    ".next-lead-hunter-timing/types/**/*.ts",
     ".next-lead-hunter-workflows-e2e/types/**/*.ts",
     ".next-stream-check/types/**/*.ts",
     ".next-writer-assets-probe/types/**/*.ts",
@@ -46,7 +46,7 @@
     ".next-writer-smoke/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-lead-hunter-timing/types/**/*.ts"
+    ".next-build/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

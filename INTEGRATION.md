@@ -12,14 +12,14 @@
 
 本仓库内保留的部分：
 
-- [app/api/crewai](/d:/github/aimarketing/app/api/crewai)
+- [app/api/video-agent](/d:/github/aimarketing/app/api/video-agent)
 - [components/video-chat.tsx](/d:/github/aimarketing/components/video-chat.tsx)
 - [lib/saleagent-client.ts](/d:/github/aimarketing/lib/saleagent-client.ts)
 
 外部服务负责的部分：
 
-- `/crewai-agent`
-- `/crewai-chat`
+- `/video-agent/agent`
+- `/video-agent/chat`
 - `/workflow/*`
 - 视频任务编排
 - Sora2 / RunningHub / Supabase 等 provider 集成

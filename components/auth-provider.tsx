@@ -127,7 +127,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true
     const controller = new AbortController()
-    const isPublicRoute = !pathname || pathname === "/" || pathname === "/login" || pathname === "/register"
+    const normalizedPath =
+      !pathname || pathname === "/"
+        ? "/"
+        : pathname.replace(/^\/(en|zh)(?=\/|$)/, "") || "/"
+    const isPublicRoute = !normalizedPath.startsWith("/dashboard")
 
     const bootstrap = async () => {
       let completed = false

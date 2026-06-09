@@ -536,6 +536,309 @@ export const enterpriseDifyAdvisorConfigs = pgTable(
   }),
 )
 
+export const enterprisePlatformRegistryConfigs = pgTable(
+  withPrefix("enterprise_platform_registry_configs"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    itemType: varchar("item_type", { length: 32 }).notNull(),
+    itemSlug: varchar("item_slug", { length: 128 }).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    publicVisible: boolean("public_visible").default(false).notNull(),
+    workspaceVisible: boolean("workspace_visible").default(true).notNull(),
+    bindingTarget: varchar("binding_target", { length: 128 }),
+    bindingMode: varchar("binding_mode", { length: 32 }).default("existing_runtime").notNull(),
+    notes: text("notes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseItemUnique: uniqueIndex(withPrefix("enterprise_platform_registry_configs_enterprise_item_idx")).on(
+      table.enterpriseId,
+      table.itemType,
+      table.itemSlug,
+    ),
+  }),
+)
+
+export const enterprisePlatformAgentCards = pgTable(
+  withPrefix("enterprise_platform_agent_cards"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    title: varchar("title", { length: 160 }).notNull(),
+    summary: text("summary").notNull(),
+    focus: varchar("focus", { length: 160 }).notNull(),
+    status: varchar("status", { length: 24 }).default("beta").notNull(),
+    publicVisible: boolean("public_visible").default(false).notNull(),
+    workspaceVisible: boolean("workspace_visible").default(true).notNull(),
+    bindingTarget: varchar("binding_target", { length: 128 }),
+    bindingMode: varchar("binding_mode", { length: 32 }).default("existing_runtime").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseSlugUnique: uniqueIndex(withPrefix("enterprise_platform_agent_cards_enterprise_slug_idx")).on(
+      table.enterpriseId,
+      table.slug,
+    ),
+  }),
+)
+
+export const enterprisePlatformWorkflowTemplates = pgTable(
+  withPrefix("enterprise_platform_workflow_templates"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    title: varchar("title", { length: 160 }).notNull(),
+    summary: text("summary").notNull(),
+    trigger: varchar("trigger", { length: 160 }).notNull(),
+    status: varchar("status", { length: 24 }).default("beta").notNull(),
+    publicVisible: boolean("public_visible").default(false).notNull(),
+    workspaceVisible: boolean("workspace_visible").default(true).notNull(),
+    bindingTarget: varchar("binding_target", { length: 128 }),
+    bindingMode: varchar("binding_mode", { length: 32 }).default("existing_runtime").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseSlugUnique: uniqueIndex(withPrefix("enterprise_platform_workflow_templates_enterprise_slug_idx")).on(
+      table.enterpriseId,
+      table.slug,
+    ),
+  }),
+)
+
+export const enterprisePlatformPluginSlots = pgTable(
+  withPrefix("enterprise_platform_plugin_slots"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    title: varchar("title", { length: 160 }).notNull(),
+    summary: text("summary").notNull(),
+    integratesWith: varchar("integrates_with", { length: 160 }).notNull(),
+    status: varchar("status", { length: 24 }).default("beta").notNull(),
+    publicVisible: boolean("public_visible").default(false).notNull(),
+    workspaceVisible: boolean("workspace_visible").default(true).notNull(),
+    bindingTarget: varchar("binding_target", { length: 128 }),
+    bindingMode: varchar("binding_mode", { length: 32 }).default("existing_runtime").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseSlugUnique: uniqueIndex(withPrefix("enterprise_platform_plugin_slots_enterprise_slug_idx")).on(
+      table.enterpriseId,
+      table.slug,
+    ),
+  }),
+)
+
+export const enterprisePlatformMcpServiceProfiles = pgTable(
+  withPrefix("enterprise_platform_mcp_service_profiles"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    title: varchar("title", { length: 160 }).notNull(),
+    summary: text("summary").notNull(),
+    serviceType: varchar("service_type", { length: 160 }).notNull(),
+    status: varchar("status", { length: 24 }).default("beta").notNull(),
+    publicVisible: boolean("public_visible").default(false).notNull(),
+    workspaceVisible: boolean("workspace_visible").default(true).notNull(),
+    bindingTarget: varchar("binding_target", { length: 128 }),
+    bindingMode: varchar("binding_mode", { length: 32 }).default("existing_runtime").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    enterpriseSlugUnique: uniqueIndex(withPrefix("enterprise_platform_mcp_service_profiles_enterprise_slug_idx")).on(
+      table.enterpriseId,
+      table.slug,
+    ),
+  }),
+)
+
+export const platformTaskRuns = pgTable(
+  withPrefix("platform_task_runs"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    itemType: varchar("item_type", { length: 32 }).notNull(),
+    itemSlug: varchar("item_slug", { length: 128 }).notNull(),
+    externalRunId: varchar("external_run_id", { length: 255 }),
+    externalSystem: varchar("external_system", { length: 32 }),
+    status: varchar("status", { length: 24 }).default("queued").notNull(),
+    inputPayload: jsonb("input_payload").$type<Record<string, unknown> | null>(),
+    normalizedResult: jsonb("normalized_result").$type<Record<string, unknown> | null>(),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    enterpriseCreatedIdx: index(withPrefix("platform_task_runs_enterprise_created_idx")).on(
+      table.enterpriseId,
+      table.createdAt,
+    ),
+    enterpriseStatusIdx: index(withPrefix("platform_task_runs_enterprise_status_idx")).on(
+      table.enterpriseId,
+      table.status,
+    ),
+  }),
+)
+
+export const platformTaskRunEvents = pgTable(
+  withPrefix("platform_task_run_events"),
+  {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => platformTaskRuns.id, { onDelete: "cascade" }),
+    level: varchar("level", { length: 16 }).notNull(),
+    message: varchar("message", { length: 255 }).notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    runCreatedIdx: index(withPrefix("platform_task_run_events_run_created_idx")).on(table.runId, table.createdAt),
+  }),
+)
+
+export const platformArtifacts = pgTable(
+  withPrefix("platform_artifacts"),
+  {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => platformTaskRuns.id, { onDelete: "cascade" }),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    ownerUserId: integer("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    mimeType: varchar("mime_type", { length: 120 }),
+    storageKey: text("storage_key"),
+    externalUrl: text("external_url"),
+    payload: jsonb("payload").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    enterpriseCreatedIdx: index(withPrefix("platform_artifacts_enterprise_created_idx")).on(
+      table.enterpriseId,
+      table.createdAt,
+    ),
+    runCreatedIdx: index(withPrefix("platform_artifacts_run_created_idx")).on(table.runId, table.createdAt),
+  }),
+)
+
+export const businessWorkbenchStates = pgTable(
+  withPrefix("business_workbench_states"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    currentViewSlug: varchar("current_view_slug", { length: 64 }).notNull().default("content-growth"),
+    activeTabId: varchar("active_tab_id", { length: 160 }),
+    tabs: jsonb("tabs").$type<Record<string, unknown>[]>().default([]).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userUnique: uniqueIndex(withPrefix("business_workbench_states_user_idx")).on(table.userId),
+    userUpdatedIdx: index(withPrefix("business_workbench_states_user_updated_idx")).on(table.userId, table.updatedAt),
+  }),
+)
+
+export const platformWorkItems = pgTable(
+  withPrefix("platform_work_items"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    ownerUserId: integer("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    sourceArtifactId: integer("source_artifact_id")
+      .notNull()
+      .references(() => platformArtifacts.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 24 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    summary: text("summary"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    enterpriseCreatedIdx: index(withPrefix("platform_work_items_enterprise_created_idx")).on(
+      table.enterpriseId,
+      table.createdAt,
+    ),
+    sourceArtifactIdx: index(withPrefix("platform_work_items_source_artifact_idx")).on(table.sourceArtifactId),
+  }),
+)
+
+export const platformKnowledgeSaveJobs = pgTable(
+  withPrefix("platform_knowledge_save_jobs"),
+  {
+    id: serial("id").primaryKey(),
+    artifactId: integer("artifact_id")
+      .notNull()
+      .references(() => platformArtifacts.id, { onDelete: "cascade" }),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    ownerUserId: integer("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    status: varchar("status", { length: 24 }).default("queued").notNull(),
+    targetType: varchar("target_type", { length: 32 }).default("knowledge_base").notNull(),
+    requestPayload: jsonb("request_payload").$type<Record<string, unknown> | null>(),
+    resultPayload: jsonb("result_payload").$type<Record<string, unknown> | null>(),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    artifactCreatedIdx: index(withPrefix("platform_knowledge_save_jobs_artifact_created_idx")).on(
+      table.artifactId,
+      table.createdAt,
+    ),
+    enterpriseStatusIdx: index(withPrefix("platform_knowledge_save_jobs_enterprise_status_idx")).on(
+      table.enterpriseId,
+      table.status,
+    ),
+  }),
+)
+
 // Submitted URLs table for industry knowledge base
 export const submittedUrls = pgTable(withPrefix("submitted_urls"), {
   id: serial("id").primaryKey(),

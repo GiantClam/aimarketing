@@ -8,13 +8,17 @@ import {
   Calculator,
   CheckCircle2,
   Image,
+  LayoutGrid,
   LineChart,
   LockKeyhole,
+  Network,
   PenTool,
   PlayCircle,
+  Plug,
   Search,
   Sparkles,
   Users2,
+  Workflow,
 } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
@@ -26,19 +30,48 @@ import { TrackedCtaLink } from "@/components/seo/tracked-cta-link"
 import { Button } from "@/components/ui/button"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
 import { localizePublicPath } from "@/lib/i18n/routing"
+import { getLocalizedPlatformHubLinks } from "@/lib/platform/catalog"
+import type { PlatformRegistryControlEntry } from "@/lib/platform/control-plane"
+import { buildPlatformLaunchPath } from "@/lib/platform/launch-path"
 import { SEO_EVENT } from "@/lib/seo/analytics"
 
 const capabilityIcons = [Bot, Sparkles, Users2] as const
 const audienceIcons = [LineChart, Search, PenTool, LockKeyhole] as const
 const resourceIcons = [Calculator, PenTool, PlayCircle, Image, LockKeyhole, Sparkles] as const
+const platformHubIcons = {
+  capabilities: LayoutGrid,
+  agents: Users2,
+  plugins: Plug,
+  "mcp-services": Network,
+  workflows: Workflow,
+} as const
+const platformCapabilityIcons = {
+  "ai-chat": Bot,
+  "ai-ppt": Sparkles,
+  "ai-image": Image,
+  "ai-video": PlayCircle,
+  "agent-platform": Users2,
+} as const
 
-export function PublicHomePageContent() {
+function getProviderStatusLabel(status: "active" | "fallback" | "planned", locale: "zh" | "en") {
+  if (status === "active") return locale === "zh" ? "已接入" : "Active"
+  if (status === "fallback") return locale === "zh" ? "兼容链路" : "Fallback"
+  return locale === "zh" ? "规划中" : "Planned"
+}
+
+export function PublicHomePageContent({
+  platformCapabilities,
+}: {
+  platformCapabilities: PlatformRegistryControlEntry[]
+}) {
   const { anonymousLogin } = useAuth()
   const { locale } = useI18n()
   const copy = getPublicCopy(locale)
   const router = useRouter()
   const pricingHref = localizePublicPath("/pricing", locale)
+  const toolsHref = localizePublicPath("/tools", locale)
   const useCasesHref = localizePublicPath("/use-cases/ai-workspace-for-marketing-teams", locale)
+  const platformHubs = getLocalizedPlatformHubLinks(locale)
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -209,6 +242,126 @@ export function PublicHomePageContent() {
                 </article>
               )
             })}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+          <div className="grid gap-8 lg:grid-cols-[0.78fr_1.22fr]">
+            <div className="public-panel rounded-[12px] px-6 py-6 lg:px-7 lg:py-7">
+              <p className="public-kicker text-muted-foreground">{locale === "zh" ? "Platform Directories" : "Platform Directories"}</p>
+              <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
+                {locale === "zh" ? "把工具站扩成平台入口" : "Expand the toolsite into a platform front door"}
+              </h2>
+              <p className="mt-4 max-w-xl text-lg leading-8 text-muted-foreground">
+                {locale === "zh"
+                  ? "公开前台继续承接 SEO、注册和工具试用，但入口不再只停留在单点工具，而是可以直接进入能力中心、智能体广场、插件目录、MCP 服务和工作流模板。"
+                  : "The public front door still handles SEO, signup, and trial usage, but it no longer stops at one-off tools. It now opens directly into capabilities, agents, plugins, MCP services, and workflow templates."}
+              </p>
+              <div className="mt-5">
+                <Button className="public-button-primary h-10 px-4" asChild>
+                  <Link href={toolsHref}>
+                    {locale === "zh" ? "进入应用中心" : "Open app center"}
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+              <div className="mt-6 grid gap-3">
+                {platformHubs.map((hub) => {
+                  const Icon = platformHubIcons[hub.slug as keyof typeof platformHubIcons] ?? LayoutGrid
+                  return (
+                    <Link
+                      key={hub.slug}
+                      href={localizePublicPath(hub.href, locale)}
+                      className="group rounded-[8px] border border-border bg-card/70 px-4 py-4 transition hover:border-primary/35 hover:bg-background"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
+                          <Icon className="h-5 w-5 text-primary-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-display text-xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                            {hub.title}
+                          </div>
+                          <p className="mt-2 text-sm leading-7 text-muted-foreground">{hub.summary}</p>
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border xl:grid-cols-2">
+              {platformCapabilities.map((item) => {
+                const Icon = platformCapabilityIcons[item.slug as keyof typeof platformCapabilityIcons] ?? Sparkles
+                return (
+                  <article key={item.slug} className="bg-card px-6 py-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-3">
+                        <div className="public-kicker text-muted-foreground">
+                          {item.capabilityKind?.toUpperCase() || "CAPABILITY"}
+                        </div>
+                        <h3 className="font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                          {item.title}
+                        </h3>
+                      </div>
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
+                        <Icon className="h-5 w-5 text-primary-foreground" />
+                      </div>
+                    </div>
+
+                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{item.summary}</p>
+
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {(item.bindings ?? []).map((binding) => (
+                        <span key={`${item.slug}-${binding.provider}`} className="public-system-chip rounded-[4px] px-3 py-2 text-xs leading-5 text-muted-foreground">
+                          {binding.provider} · {getProviderStatusLabel(binding.status, locale)}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="mt-5 space-y-2">
+                      {item.proofPoints.slice(0, 2).map((point) => (
+                        <div key={point} className="public-tag rounded-[6px] px-3 py-2 text-sm text-foreground/82">
+                          {point}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      {item.publicHref ? (
+                        <Button className="public-button-primary h-10 px-4" asChild>
+                          <Link
+                            href={buildPlatformLaunchPath({
+                              itemType: "capability",
+                              slug: item.slug,
+                              surface: "public",
+                              locale,
+                            })}
+                          >
+                            {locale === "zh" ? "打开入口" : "Open Entry"}
+                          </Link>
+                        </Button>
+                      ) : null}
+                      {item.workspaceHref ? (
+                        <Button className="public-button-secondary h-10 px-4" asChild>
+                          <Link
+                            href={buildPlatformLaunchPath({
+                              itemType: "capability",
+                              slug: item.slug,
+                              surface: "workspace",
+                              locale,
+                            })}
+                          >
+                            {locale === "zh" ? "企业工作台" : "Workspace"}
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
           </div>
         </section>
 

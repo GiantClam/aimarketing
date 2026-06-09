@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ArrowRight, Bot, Check, Copy, ImageIcon, Loader2, Paperclip, Send, Sparkles, X } from "lucide-react"
 
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/select"
 import { TextMorph } from "@/components/ui/text-morph"
 import { TypingIndicator } from "@/components/ui/typing-indicator"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
 import type { PendingTaskEvent } from "@/lib/assistant-task-events"
 import {
@@ -51,7 +53,13 @@ type ChatAttachment = {
   dataUrl?: string
   text?: string
 }
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; attachments?: ChatAttachment[] }
+type ChatMessage = {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  attachments?: ChatAttachment[]
+  createdAt?: number
+}
 type ModelOption = {
   id: string
   name: string
@@ -64,7 +72,7 @@ type AgentOption = { id: string; category: string; name: string; description: st
 type AgentGroupOption = { id: string; label: string; agents: AgentOption[] }
 
 type MessageApiResponse = {
-  data?: Array<{ id?: string; role?: "user" | "assistant"; content?: string }>
+  data?: Array<{ id?: string; role?: "user" | "assistant"; content?: string; created_at?: number }>
   conversation?: {
     current_model_id?: string | null
   } | null
@@ -100,6 +108,19 @@ type ChatStreamApiResponse = {
     }
   } | null
 }
+
+export type AiEntryWorkspaceLinkAction = {
+  label: string
+  href: string
+}
+
+export type AiEntryWorkspaceGuideMessage = {
+  title: string
+  body: string
+  promptLabel?: string
+  prompts?: string[]
+}
+
 type ModelApiResponse = {
   providerId?: string | null
   selectedProviderId?: string | null
@@ -187,6 +208,12 @@ function readInitialAgentFromLocation() {
   if (!raw) return null
   const normalized = raw.trim()
   return normalized.length > 0 ? normalized : null
+}
+
+function readInitialDraftFromLocation() {
+  if (typeof window === "undefined") return ""
+  const raw = new URLSearchParams(window.location.search).get("draft")
+  return typeof raw === "string" ? raw.trim() : ""
 }
 
 function readPersistedSelectedModelId() {
@@ -356,7 +383,29 @@ function renderAiEntryErrorMessage(
   return raw
 }
 
-export function AiEntryWorkspace({ initialConversationId }: { initialConversationId: string | null }) {
+export function AiEntryWorkspace({
+  initialConversationId,
+  embedded = false,
+  compactEmbedded = false,
+  forcedAgentId = null,
+  draftSeed = "",
+  embeddedPromptButtons = [],
+  embeddedLinkActions = [],
+  embeddedContextChips = [],
+  embeddedGuideMessage = null,
+  onConversationIdChange,
+}: {
+  initialConversationId: string | null
+  embedded?: boolean
+  compactEmbedded?: boolean
+  forcedAgentId?: string | null
+  draftSeed?: string
+  embeddedPromptButtons?: string[]
+  embeddedLinkActions?: AiEntryWorkspaceLinkAction[]
+  embeddedContextChips?: string[]
+  embeddedGuideMessage?: AiEntryWorkspaceGuideMessage | null
+  onConversationIdChange?: (conversationId: string | null) => void
+}) {
   const { locale } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
@@ -460,12 +509,16 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   const [isAgentSelectionExplicit, setIsAgentSelectionExplicit] = useState(false)
   const [agentQueryReady, setAgentQueryReady] = useState(false)
   const [initialAgentFromQuery] = useState<string | null>(() => readInitialAgentFromLocation())
+  const [initialDraftFromQuery] = useState<string>(() => readInitialDraftFromLocation())
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
+  const onConversationIdChangeRef = useRef<typeof onConversationIdChange>(onConversationIdChange)
   const pendingFirstConversationRouteRef = useRef(false)
   const search = searchParams.toString()
+  const routeAgentId = forcedAgentId || (searchParams.get("agent") || "").trim() || null
+  const routeDraft = embedded ? draftSeed.trim() : (searchParams.get("draft") || "").trim()
   const routeEntryMode = (searchParams.get("entry") || "").trim()
   const shouldLockModel = useMemo(
     () =>
@@ -487,6 +540,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     [models],
   )
   const showLanding =
+    !embedded &&
     !isConversationLoading &&
     messages.length === 0 &&
     !(shouldLockModel && Boolean(conversationId))
@@ -494,9 +548,60 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     () => models.find((item) => item.id === selectedModelId) || null,
     [models, selectedModelId],
   )
+  const composerPromptButtons = useMemo(() => {
+    if (embedded && compactEmbedded) {
+      return embeddedPromptButtons.filter((item) => item.trim()).slice(0, 4)
+    }
+    return quickPrompts
+  }, [compactEmbedded, embedded, embeddedPromptButtons, quickPrompts])
+  const composerLinkActions = useMemo(
+    () => (embedded && compactEmbedded ? embeddedLinkActions.slice(0, 6) : []),
+    [compactEmbedded, embedded, embeddedLinkActions],
+  )
+  const composerContextChips = useMemo(
+    () => (embedded && compactEmbedded ? embeddedContextChips.filter((item) => item.trim()).slice(0, 6) : []),
+    [compactEmbedded, embedded, embeddedContextChips],
+  )
+  const shouldShowEmbeddedGuide =
+    embedded &&
+    compactEmbedded &&
+    !isConversationLoading &&
+    messages.length === 0 &&
+    Boolean(embeddedGuideMessage?.title || embeddedGuideMessage?.body)
+  const embeddedGuideContent = useMemo(() => {
+    if (!shouldShowEmbeddedGuide || !embeddedGuideMessage) return ""
+
+    const lines: string[] = []
+    if (embeddedGuideMessage.title.trim()) {
+      lines.push(`**${embeddedGuideMessage.title.trim()}**`)
+    }
+    if (embeddedGuideMessage.body.trim()) {
+      lines.push(embeddedGuideMessage.body.trim())
+    }
+
+    const prompts = (embeddedGuideMessage.prompts || [])
+      .map((prompt) => prompt.trim())
+      .filter(Boolean)
+      .slice(0, 2)
+
+    if (prompts.length > 0) {
+      lines.push(embeddedGuideMessage.promptLabel?.trim() || (isZh ? "你可以这样开始：" : "You can start with:"))
+      lines.push(...prompts.map((prompt) => `- ${prompt}`))
+    }
+
+    return lines.join("\n\n")
+  }, [embeddedGuideMessage, isZh, shouldShowEmbeddedGuide])
 
   useEffect(() => {
     latestConversationIdRef.current = conversationId
+  }, [conversationId])
+
+  useEffect(() => {
+    onConversationIdChangeRef.current = onConversationIdChange
+  }, [onConversationIdChange])
+
+  useEffect(() => {
+    onConversationIdChangeRef.current?.(conversationId)
   }, [conversationId])
 
   useEffect(() => {
@@ -561,6 +666,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
   }, [agentGroups, agents])
 
   useEffect(() => {
+    if (embedded) return
     if (!initialConversationId && pathname === "/dashboard/ai" && conversationId) {
       setConversationId(null)
       latestConversationIdRef.current = null
@@ -569,19 +675,40 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     }
 
     const targetPath = conversationId ? `/dashboard/ai/${conversationId}` : "/dashboard/ai"
-    if (pathname !== targetPath) {
-      router.replace(search ? `${targetPath}?${search}` : targetPath)
+    const params = new URLSearchParams(search)
+    if (conversationId) {
+      params.delete("draft")
     }
-  }, [conversationId, initialConversationId, pathname, router, search])
+    const nextSearch = params.toString()
+    if (pathname !== targetPath || nextSearch !== search) {
+      router.replace(nextSearch ? `${targetPath}?${nextSearch}` : targetPath)
+    }
+  }, [conversationId, embedded, initialConversationId, pathname, router, search])
 
   useEffect(() => {
+    if (embedded) return
     if (!agentQueryReady) return
     const fromRoute = (searchParams.get("agent") || "").trim() || null
     setSelectedAgentId((current) => (current === fromRoute ? current : fromRoute))
     setIsAgentSelectionExplicit(Boolean(fromRoute))
-  }, [agentQueryReady, searchParams])
+  }, [agentQueryReady, embedded, searchParams])
 
   useEffect(() => {
+    if (!embedded) return
+    setSelectedAgentId(forcedAgentId)
+    setIsAgentSelectionExplicit(Boolean(forcedAgentId))
+  }, [embedded, forcedAgentId])
+
+  useEffect(() => {
+    if (initialConversationId) return
+    if (messages.length > 0) return
+    const nextDraft = routeDraft || (!embedded ? initialDraftFromQuery : "")
+    if (!nextDraft) return
+    setInput((current) => (current.trim() ? current : nextDraft))
+  }, [embedded, initialConversationId, initialDraftFromQuery, messages.length, routeDraft])
+
+  useEffect(() => {
+    if (embedded) return
     if (!agentQueryReady) return
     if (!isAgentSelectionExplicit) return
     if (
@@ -603,6 +730,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     if (nextSearch !== search) router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname)
   }, [
     agentQueryReady,
+    embedded,
     isAgentSelectionExplicit,
     pathname,
     router,
@@ -848,18 +976,37 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
       try {
         const params = new URLSearchParams({ conversation_id: initialConversationId, limit: "200" })
         if (routeEntryMode) params.set("entryMode", routeEntryMode)
+        if (routeAgentId && !shouldLockModel) params.set("agent", routeAgentId)
         const response = await fetch(`/api/ai/messages?${params.toString()}`, { cache: "no-store", credentials: "same-origin" })
         const payload = (await response.json().catch(() => null)) as MessageApiResponse | null
         if (cancelled) return
-        if (!response.ok) throw new Error(`http_${response.status}`)
+        if (!response.ok) {
+          const apiError =
+            payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
+              ? payload.error.trim()
+              : ""
+          if (response.status === 404 && apiError === "conversation_not_found") {
+            clearPendingConversationMessages(initialConversationId)
+            setConversationId(null)
+            latestConversationIdRef.current = null
+            setMessages([])
+            setErrorMessage(null)
+            return
+          }
+          throw new Error(`http_${response.status}`)
+        }
 
         const restored = (payload?.data || [])
           .map((item) => {
             const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : null
             const content = typeof item.content === "string" ? item.content : ""
             const id = typeof item.id === "string" ? item.id : `${role || "msg"}-${Math.random()}`
+            const createdAt =
+              typeof item.created_at === "number" && Number.isFinite(item.created_at)
+                ? item.created_at
+                : undefined
             if (!role || !content.trim()) return null
-            return { id, role, content } as ChatMessage
+            return { id, role, content, createdAt } as ChatMessage
           })
           .filter((item): item is ChatMessage => Boolean(item))
 
@@ -894,7 +1041,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
     return () => {
       cancelled = true
     }
-  }, [copy, initialConversationId, models, routeEntryMode, shouldLockModel])
+  }, [copy, initialConversationId, models, routeAgentId, routeEntryMode, shouldLockModel])
 
   const renderModelSelectContent = useCallback(() => {
     if (modelsLoading) return <SelectItem value="__loading" disabled>{copy.modelLoading}</SelectItem>
@@ -1497,92 +1644,126 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
 
   if (showLanding) {
     return (
-      <div className="dashboard-shell flex h-full min-h-0 justify-center overflow-y-auto bg-background">
-        <section className="w-full max-w-6xl px-4 py-10 lg:px-8">
-          <div className="mx-auto max-w-4xl text-center">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
-              <span className="public-signal" aria-hidden="true" />
-              <span className="dashboard-kicker text-muted-foreground">AI Workspace</span>
+      <TooltipProvider>
+        <div className="dashboard-shell flex h-full min-h-0 justify-center overflow-y-auto bg-background">
+          <section className="w-full max-w-6xl px-4 py-10 lg:px-8">
+            <div className="mx-auto max-w-4xl text-center">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
+                <span className="public-signal" aria-hidden="true" />
+                <span className="dashboard-kicker text-muted-foreground">AI Workspace</span>
+              </div>
+              <h1 className="dashboard-title text-5xl tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
+              <p className="mt-4 text-lg text-muted-foreground">{copy.landingHint}</p>
             </div>
-            <h1 className="dashboard-title text-5xl tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
-            <p className="mt-4 text-lg text-muted-foreground">{copy.landingHint}</p>
-          </div>
 
-          <div className="dashboard-panel mx-auto mt-10 max-w-5xl rounded-[12px] p-4 shadow-sm">
-            <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
-              {isAgentSelectionExplicit && selectedAgent ? (
-                <div className="px-1 pb-2 text-xs text-muted-foreground">
-                  {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
-                </div>
-              ) : null}
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*,.txt,.md,.csv,.json,text/*,application/json,text/csv"
-                className="hidden"
-                onChange={(event) => void handleAttachmentFiles(event.target.files)}
-              />
-              {renderSelectedAttachments()}
-              <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
-              <PromptInputActions>
-                <div className="flex items-center gap-2">
-                  {renderAttachmentPicker()}
-                </div>
-                <div className="flex min-w-0 items-center gap-2">
-                  {renderSelectors("h-10")}
-                  <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
-                      {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
-                      {copy.send}
-                    </Button>
-                  </PromptInputAction>
-                </div>
-              </PromptInputActions>
-            </PromptInput>
-          </div>
+            <div className="dashboard-panel mx-auto mt-10 max-w-5xl rounded-[12px] p-4 shadow-sm">
+              <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
+                {isAgentSelectionExplicit && selectedAgent ? (
+                  <div className="px-1 pb-2 text-xs text-muted-foreground">
+                    {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
+                  </div>
+                ) : null}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.txt,.md,.csv,.json,text/*,application/json,text/csv"
+                  className="hidden"
+                  onChange={(event) => void handleAttachmentFiles(event.target.files)}
+                />
+                {renderSelectedAttachments()}
+                <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
+                <PromptInputActions>
+                  <div className="flex items-center gap-2">
+                    {renderAttachmentPicker()}
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {renderSelectors("h-10")}
+                    <PromptInputAction tooltip={copy.send}>
+                      <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                        {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
+                        {copy.send}
+                      </Button>
+                    </PromptInputAction>
+                  </div>
+                </PromptInputActions>
+              </PromptInput>
+            </div>
 
-          {!shouldLockModel ? renderRecommendedAgents("landing") : null}
+            {!embedded && !shouldLockModel ? renderRecommendedAgents("landing") : null}
 
-          <div className="mx-auto mt-10 grid max-w-5xl gap-3 lg:grid-cols-3">
-            {quickPrompts.map((prompt) => (
-              <button key={prompt} type="button" className="dashboard-panel rounded-[10px] p-4 text-left transition hover:border-primary/60 hover:bg-primary/5" onClick={() => setInput(prompt)}>
-                <div className="dashboard-kicker mb-2 inline-flex items-center gap-1 text-muted-foreground">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {copy.quickStart}
-                </div>
-                <div className="text-sm leading-6 text-foreground">{prompt}</div>
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
+            <div className="mx-auto mt-10 grid max-w-5xl gap-3 lg:grid-cols-3">
+              {quickPrompts.map((prompt) => (
+                <button key={prompt} type="button" className="dashboard-panel rounded-[10px] p-4 text-left transition hover:border-primary/60 hover:bg-primary/5" onClick={() => setInput(prompt)}>
+                  <div className="dashboard-kicker mb-2 inline-flex items-center gap-1 text-muted-foreground">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {copy.quickStart}
+                  </div>
+                  <div className="text-sm leading-6 text-foreground">{prompt}</div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      </TooltipProvider>
     )
   }
 
   return (
-    <div className="dashboard-shell flex h-full min-h-0 justify-center">
-      <section className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[12px] border-x border-b border-border/70 bg-background">
-        <header className="dashboard-panel border-b border-border/70 bg-card/60 px-4 py-3 backdrop-blur">
-          <h1 className="dashboard-title flex items-center gap-2 text-base text-foreground"><Bot className="h-4 w-4" />{workspaceTitle}</h1>
-          <p className="text-xs text-muted-foreground">{workspaceSubtitle}</p>
-        </header>
+    <TooltipProvider>
+      <div className="dashboard-shell flex h-full min-h-0 justify-center">
+        <section className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[12px] border-x border-b border-border/70 bg-background">
+          {!embedded || !compactEmbedded ? (
+            <header className="dashboard-panel border-b border-border/70 bg-card/60 px-4 py-3 backdrop-blur">
+              <h1 className="dashboard-title flex items-center gap-2 text-base text-foreground"><Bot className="h-4 w-4" />{workspaceTitle}</h1>
+              <p className="text-xs text-muted-foreground">{workspaceSubtitle}</p>
+            </header>
+          ) : null}
 
         <div className="min-h-0 flex-1">
           <ScrollArea className="h-full">
-            <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 lg:px-4">
+            <div
+              className={cn(
+                "mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 lg:px-4",
+                embedded && compactEmbedded ? "min-h-[280px] sm:min-h-[320px]" : undefined,
+              )}
+            >
               {isConversationLoading && messages.length === 0 ? <div className="dashboard-panel rounded-[10px] p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
+
+              {shouldShowEmbeddedGuide && embeddedGuideContent ? (
+                <Message className="justify-start">
+                  <MessageAvatar alt="AI" fallback="AI" />
+                  <div className="flex max-w-[min(80ch,92%)] flex-col gap-1.5 items-start">
+                    <MessageContent markdown role="assistant">{embeddedGuideContent}</MessageContent>
+                  </div>
+                </Message>
+              ) : null}
 
               {messages.map((message, index) => {
                 const isAssistant = message.role === "assistant"
                 const copied = copiedMessageId === message.id
+                const isPendingAssistant =
+                  isAssistant &&
+                  isLoading &&
+                  index === messages.length - 1 &&
+                  !message.content.trim()
+                const shouldShowLoadingDetails = isPendingAssistant
                 return (
                   <Message key={message.id} className={cn(isAssistant ? "justify-start" : "justify-end")}>
                     {isAssistant ? <MessageAvatar alt="AI" fallback="AI" /> : null}
                     <div className={cn("flex max-w-[min(80ch,88%)] flex-col gap-1.5", isAssistant ? "items-start" : "items-end")}>
-                      <MessageContent markdown={isAssistant} role={isAssistant ? "assistant" : "user"}>{message.content || (isAssistant && isLoading ? copy.loading : "")}</MessageContent>
+                      {isPendingAssistant ? (
+                        <div className="dashboard-panel w-full min-w-[220px] rounded-[10px] border border-border/70 bg-card/90 p-3">
+                          <div className="flex items-center gap-2 text-sm text-foreground">
+                            <TypingIndicator />
+                            <span>{copy.loading}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <MessageContent markdown={isAssistant} role={isAssistant ? "assistant" : "user"}>{message.content}</MessageContent>
+                      )}
                       {!isAssistant ? renderMessageAttachments(message.attachments) : null}
-                      {isAssistant && isLoading && index === messages.length - 1 ? (
+                      {shouldShowLoadingDetails ? (
                         <div className="dashboard-panel w-full rounded-[10px] p-3">
                           <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                             <TypingIndicator />
@@ -1631,16 +1812,50 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
           <div className="dashboard-panel mx-auto w-full max-w-5xl rounded-[10px] bg-background/90 p-2 supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur">
             {!isConversationLoading && messages.length === 0 ? (
               <div className="mb-2">
-                <div className="dashboard-kicker mb-1 text-muted-foreground">{copy.quickStart}</div>
                 <div className="flex flex-wrap gap-2">
-                  {quickPrompts.map((prompt) => (
+                  {composerPromptButtons.map((prompt) => (
                     <button key={prompt} type="button" className="dashboard-chip max-w-[260px] truncate rounded-[4px] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-primary" title={prompt} onClick={() => setInput(prompt)} disabled={isLoading}>{prompt}</button>
                   ))}
                 </div>
               </div>
             ) : null}
 
-            <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-2">
+            {!compactEmbedded && (composerLinkActions.length > 0 || composerContextChips.length > 0) ? (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {composerLinkActions.map((action) => (
+                  <Button
+                    key={`${action.href}:${action.label}`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-[6px] px-3 text-xs"
+                    asChild
+                  >
+                    <Link href={action.href}>
+                      {action.label}
+                      <ArrowRight className="ml-1.5 h-3 w-3" />
+                    </Link>
+                  </Button>
+                ))}
+                {composerContextChips.map((chip) => (
+                  <span
+                    key={chip}
+                    className="dashboard-chip inline-flex items-center rounded-[4px] px-3 py-1.5 text-[11px] text-muted-foreground"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            <PromptInput
+              value={input}
+              onValueChange={setInput}
+              onSubmit={handleSend}
+              isLoading={isLoading}
+              maxHeight={220}
+              className={compactEmbedded ? "border border-border/70 shadow-none" : "border-2"}
+            >
               {isAgentSelectionExplicit && selectedAgent ? (
                 <div className="px-1 pb-2 text-xs text-muted-foreground">
                   {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
@@ -1655,7 +1870,7 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
                 onChange={(event) => void handleAttachmentFiles(event.target.files)}
               />
               {renderSelectedAttachments()}
-              <PromptInputTextarea placeholder={copy.placeholder} />
+              <PromptInputTextarea placeholder={copy.placeholder} className={compactEmbedded ? "min-h-[88px]" : undefined} />
               <PromptInputActions>
                 <div className="flex items-center gap-2">
                   {renderAttachmentPicker()}
@@ -1672,13 +1887,13 @@ export function AiEntryWorkspace({ initialConversationId }: { initialConversatio
               </PromptInputActions>
             </PromptInput>
 
-            {!shouldLockModel && !isConversationLoading && messages.length === 0
+            {!embedded && !shouldLockModel && !isConversationLoading && messages.length === 0
               ? renderRecommendedAgents("inline")
               : null}
           </div>
         </div>
-      </section>
-    </div>
+        </section>
+      </div>
+    </TooltipProvider>
   )
 }
-

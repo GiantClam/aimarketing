@@ -529,6 +529,7 @@ async function persistAiEntryTurnSafe(params: {
   assistantMessage: string
   knowledgeSource: "industry_kb" | "personal_kb"
   scope: AiEntryConversationScope
+  agentId?: string | null
 }) {
   if (!params.userPrompt.trim() || !params.assistantMessage.trim()) return
   try {
@@ -598,6 +599,7 @@ export async function POST(request: NextRequest) {
         latestUserPrompt || "New chat",
         modelConfig?.modelId,
         conversationScope,
+        agentConfig.agentId,
       )
       conversationId = ensuredConversation.id
     } catch (error) {
@@ -761,31 +763,34 @@ export async function POST(request: NextRequest) {
       selectedToolIds: effectiveSelectedToolIds,
     })
 
-    const reserveEstimate = estimateTextCredits({
-      featureKey: "ai_entry_chat",
-      inputTokens: estimateTextTokens(normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n")),
-      outputTokens: 4_000,
-      provider: modelConfig?.providerId || null,
-      model: modelConfig?.providerModelId || modelConfig?.modelId || null,
-    })
-    try {
-      aiEntryCreditReservation = await reserveFeatureCredits({
-        userId: currentUser.id,
-        enterpriseId: currentUser.enterpriseId,
+    const shouldReserveAiEntryCredits = !currentUser.isDemo
+    if (shouldReserveAiEntryCredits) {
+      const reserveEstimate = estimateTextCredits({
         featureKey: "ai_entry_chat",
-        amount: reserveEstimate.credits,
-        idempotencyKey: `ai-entry:${conversationId}:${traceId}:reserve`,
-        metadata: {
-          conversationId,
-          traceId,
-          estimate: reserveEstimate,
-        },
+        inputTokens: estimateTextTokens(normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n")),
+        outputTokens: 4_000,
+        provider: modelConfig?.providerId || null,
+        model: modelConfig?.providerModelId || modelConfig?.modelId || null,
       })
-    } catch (error) {
-      if (error instanceof Error && error.message === "insufficient_credits") {
-        return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+      try {
+        aiEntryCreditReservation = await reserveFeatureCredits({
+          userId: currentUser.id,
+          enterpriseId: currentUser.enterpriseId,
+          featureKey: "ai_entry_chat",
+          amount: reserveEstimate.credits,
+          idempotencyKey: `ai-entry:${conversationId}:${traceId}:reserve`,
+          metadata: {
+            conversationId,
+            traceId,
+            estimate: reserveEstimate,
+          },
+        })
+      } catch (error) {
+        if (error instanceof Error && error.message === "insufficient_credits") {
+          return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+        }
+        throw error
       }
-      throw error
     }
 
     if (!stream) {
@@ -851,6 +856,7 @@ export async function POST(request: NextRequest) {
           assistantMessage: normalizedAssistantMessage,
           knowledgeSource,
           scope: conversationScope,
+          agentId: agentConfig.agentId,
         })
       }
 
@@ -1090,6 +1096,7 @@ export async function POST(request: NextRequest) {
               assistantMessage: normalizedStreamedAnswer,
               knowledgeSource,
               scope: conversationScope,
+              agentId: agentConfig.agentId,
             })
           }
           const usageTokens = getAiEntryUsageTokens(

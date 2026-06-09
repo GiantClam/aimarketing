@@ -25,7 +25,7 @@ export default function LoginPage() {
 
   const allowDemoLogin =
     process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true" ||
-    (process.env.NODE_ENV === "development" && typeof window !== "undefined" && window.location.hostname === "localhost")
+    process.env.NODE_ENV === "development"
 
   const getNextPath = () => {
     if (typeof window === "undefined") return "/dashboard"

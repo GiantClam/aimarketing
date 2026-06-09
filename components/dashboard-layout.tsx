@@ -3,26 +3,37 @@
 import type React from "react"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu"
 import {
   Bot,
   CreditCard,
+  Database,
   Globe,
+  GraduationCap,
   ImageIcon,
+  LayoutGrid,
   LogOut,
   Menu,
+  Network,
   PanelLeftClose,
   PanelLeftOpen,
   PenSquare,
+  Plug,
   Radar,
   Search,
   Settings,
+  Scale,
+  ShieldCheck,
   Target,
   TrendingUp,
   Users,
+  UserPlus,
   Video,
+  Workflow,
   X,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
 import { AiEntrySidebarItem } from "@/components/ai-entry/AiEntrySidebarItem"
@@ -39,10 +50,30 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { WriterSidebarItem } from "@/components/writer/WriterSidebarItem"
+import { listLocalizedBusinessAgentConfigsBySlug } from "@/lib/platform/business-agents"
+import {
+  buildDashboardBusinessHref,
+  getLocalizedWorkspaceBusinessEntries,
+  resolveWorkspaceBusinessSlug,
+} from "@/lib/platform/workspace-business"
+import { cn } from "@/lib/utils"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
+
+const businessIconMap = {
+  content: TrendingUp,
+  creative: ImageIcon,
+  lead: Radar,
+  sales: Target,
+  operations: Workflow,
+  knowledge: Database,
+  compliance: ShieldCheck,
+  training: GraduationCap,
+  talent: UserPlus,
+  legal: Scale,
+} satisfies Record<string, LucideIcon>
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
@@ -54,12 +85,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
 function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { messages, locale } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const { user, isDemoMode, loading, logout, hasFeature } = useAuth()
   const { advisor, writer, imageAssistant } = useDashboardAvailability()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const usesImmersiveCanvas =
+    pathname.startsWith("/dashboard/ai") ||
+    pathname.startsWith("/dashboard/writer") ||
+    pathname.startsWith("/dashboard/image-assistant") ||
+    pathname.startsWith("/dashboard/video") ||
+    pathname.startsWith("/dashboard/business") ||
+    pathname.startsWith("/dashboard/advisor")
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login")
@@ -113,14 +153,52 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
   const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
   const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
+  const businessSectionLabel = locale === "zh" ? "业务入口" : "Business"
+  const currentBusinessAgentId = (searchParams.get("agent") || "").trim()
+  const requestedBusinessView = searchParams.get("view")
+  const localizedBusinessEntries = useMemo(
+    () =>
+      getLocalizedWorkspaceBusinessEntries(locale).map((entry) => ({
+        ...entry,
+        agents: listLocalizedBusinessAgentConfigsBySlug(locale === "zh" ? "zh" : "en", entry.slug),
+      })),
+    [locale],
+  )
+  const currentBusinessView = useMemo(() => {
+    const queryScopedEntry = localizedBusinessEntries.find((entry) => entry.slug === requestedBusinessView)
+    if (queryScopedEntry) return queryScopedEntry.slug
+    if (currentBusinessAgentId) {
+      const agentScopedEntry = localizedBusinessEntries.find((entry) =>
+        entry.agents.some((agent) => agent.agentId === currentBusinessAgentId),
+      )
+      if (agentScopedEntry) return agentScopedEntry.slug
+    }
+    return resolveWorkspaceBusinessSlug(null)
+  }, [currentBusinessAgentId, localizedBusinessEntries, requestedBusinessView])
+  const platformSectionLabel = locale === "zh" ? "\u5e73\u53f0\u4e2d\u53f0" : "Platform"
+  const capabilityCenterLabel = locale === "zh" ? "\u80fd\u529b\u4e2d\u5fc3" : "Capabilities"
+  const agentPlatformLabel = locale === "zh" ? "\u667a\u80fd\u4f53\u4e2d\u53f0" : "Agent Platform"
+  const pluginsLabel = locale === "zh" ? "\u63d2\u4ef6\u76ee\u5f55" : "Plugins"
+  const mcpServicesLabel = locale === "zh" ? "MCP \u670d\u52a1" : "MCP Services"
+  const workflowsLabel = locale === "zh" ? "\u5de5\u4f5c\u6d41\u6a21\u677f" : "Workflows"
+  const platformSettingsLabel = locale === "zh" ? "\u4f01\u4e1a\u8bbe\u7f6e" : "Enterprise Settings"
+  const resourcesSectionLabel = locale === "zh" ? "资源入口" : "Resources"
+  const taskCenterLabel = locale === "zh" ? "任务中心" : "Task Center"
+  const assetLibraryLabel = locale === "zh" ? "素材库" : "Asset Library"
+  const workLibraryLabel = locale === "zh" ? "作品库" : "Work Library"
+  const knowledgeBaseLabel = locale === "zh" ? "知识库" : "Knowledge Base"
+  const billingLabel = locale === "zh" ? "计费与用量" : "Billing and usage"
+
+  const isSidebarLinkActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`)
 
   return (
     <div className="dashboard-shell flex h-screen bg-transparent">
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside
-        className={`dashboard-panel fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static ${
-          sidebarCollapsed ? "w-[88px]" : "w-[320px]"
+        className={`dashboard-panel !fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:!static ${
+          sidebarCollapsed ? "w-[88px]" : "w-[288px] lg:w-[300px]"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-full flex-col">
@@ -130,14 +208,6 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/40 bg-primary">
                   <span className="dashboard-title text-base text-primary-foreground">AI</span>
                 </div>
-                {!sidebarCollapsed && (
-                  <div className="min-w-0">
-                    <div className="dashboard-kicker text-muted-foreground">
-                      {locale === "zh" ? "工作台" : "Workspace"}
-                    </div>
-                    <h1 className="dashboard-title truncate text-lg text-sidebar-foreground">{messages.shared.appName}</h1>
-                  </div>
-                )}
               </div>
               <div className={sidebarCollapsed ? "flex w-full flex-col items-center gap-2" : "flex items-center gap-1"}>
                 <LocaleSwitcher compact={sidebarCollapsed} className={sidebarCollapsed ? "w-full justify-center" : ""} />
@@ -332,6 +402,90 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     ) : null}
                   </div>
                 )}
+
+                <div>
+                  {!sidebarCollapsed && (
+                    <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">{businessSectionLabel}</h3>
+                  )}
+                  <div className="space-y-1">
+                    {localizedBusinessEntries.map((entry) => {
+                      const isBusinessActive = pathname === "/dashboard/business" && currentBusinessView === entry.slug
+                      const BusinessIcon = businessIconMap[entry.iconKey]
+                      const defaultAgentHref = buildDashboardBusinessHref(entry.slug, {
+                        agentId: entry.agents[0]?.agentId || null,
+                      })
+                      return (
+                        <div key={entry.slug} className="space-y-1">
+                          <DashboardMenuLink
+                            href={defaultAgentHref}
+                            label={entry.title}
+                            icon={BusinessIcon}
+                            collapsed={sidebarCollapsed}
+                            active={isBusinessActive}
+                          />
+                          {!sidebarCollapsed && isBusinessActive && entry.agents.length > 0 ? (
+                            <div className="ml-3 space-y-1 border-l border-sidebar-border/70 pl-3">
+                              {entry.agents.map((agent, index) => {
+                                const isAgentActive =
+                                  pathname === "/dashboard/business" &&
+                                  currentBusinessView === entry.slug &&
+                                  (currentBusinessAgentId
+                                    ? currentBusinessAgentId === agent.agentId
+                                    : index === 0)
+                                return (
+                                  <DashboardSubMenuLink
+                                    key={agent.agentId}
+                                    href={buildDashboardBusinessHref(entry.slug, { agentId: agent.agentId })}
+                                    label={agent.name}
+                                    active={isAgentActive}
+                                  />
+                                )
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  {!sidebarCollapsed && (
+                    <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">{platformSectionLabel}</h3>
+                  )}
+                  {sidebarCollapsed ? (
+                    <div className="space-y-1">
+                      <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} collapsed active={isSidebarLinkActive("/dashboard/capabilities")} />
+                      <DashboardMenuLink href="/dashboard/agent-platform" label={agentPlatformLabel} icon={Bot} collapsed active={isSidebarLinkActive("/dashboard/agent-platform")} />
+                      <DashboardMenuLink href="/dashboard/plugins" label={pluginsLabel} icon={Plug} collapsed active={isSidebarLinkActive("/dashboard/plugins")} />
+                      <DashboardMenuLink href="/dashboard/mcp-services" label={mcpServicesLabel} icon={Network} collapsed active={isSidebarLinkActive("/dashboard/mcp-services")} />
+                      <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} collapsed active={isSidebarLinkActive("/dashboard/workflows")} />
+                      <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} collapsed active={isSidebarLinkActive("/dashboard/platform-settings")} />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} collapsed={false} active={isSidebarLinkActive("/dashboard/capabilities")} />
+                      <DashboardMenuLink href="/dashboard/agent-platform" label={agentPlatformLabel} icon={Bot} collapsed={false} active={isSidebarLinkActive("/dashboard/agent-platform")} />
+                      <DashboardMenuLink href="/dashboard/plugins" label={pluginsLabel} icon={Plug} collapsed={false} active={isSidebarLinkActive("/dashboard/plugins")} />
+                      <DashboardMenuLink href="/dashboard/mcp-services" label={mcpServicesLabel} icon={Network} collapsed={false} active={isSidebarLinkActive("/dashboard/mcp-services")} />
+                      <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} collapsed={false} active={isSidebarLinkActive("/dashboard/workflows")} />
+                      <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} collapsed={false} active={isSidebarLinkActive("/dashboard/platform-settings")} />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  {!sidebarCollapsed && (
+                    <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">{resourcesSectionLabel}</h3>
+                  )}
+                  <div className="space-y-1">
+                    <DashboardMenuLink href="/dashboard/tasks" label={taskCenterLabel} icon={Workflow} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/tasks")} />
+                    <DashboardMenuLink href="/dashboard/assets" label={assetLibraryLabel} icon={ImageIcon} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/assets")} />
+                    <DashboardMenuLink href="/dashboard/works" label={workLibraryLabel} icon={LayoutGrid} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/works")} />
+                    <DashboardMenuLink href="/dashboard/knowledge-base" label={knowledgeBaseLabel} icon={Database} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/knowledge-base")} />
+                    <DashboardMenuLink href="/dashboard/billing" label={billingLabel} icon={CreditCard} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/billing")} />
+                  </div>
+                </div>
               </div>
             </ScrollArea>
           </div>
@@ -371,54 +525,76 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                 </Button>
               </Link>
             )}
-            <Link href="/dashboard/billing">
-              <Button
-                variant="ghost"
-                className={
-                  sidebarCollapsed
-                    ? "dashboard-chip w-full justify-center rounded-[4px] bg-white/40"
-                    : "dashboard-chip dashboard-kicker h-11 w-full justify-start rounded-[4px] bg-card text-sidebar-foreground hover:bg-primary hover:text-primary-foreground"
-                }
-                size="sm"
-                title={messages.billing.navLabel}
-              >
-                <CreditCard className={sidebarCollapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
-                {!sidebarCollapsed && messages.billing.navLabel}
-              </Button>
-            </Link>
             <Separator className="my-2" />
 
             <div className={sidebarCollapsed ? "flex flex-col items-center gap-2" : "flex items-center gap-2"}>
-              <Link
-                href="/dashboard/settings"
-                className={
-                  sidebarCollapsed
-                    ? "dashboard-chip flex w-full items-center justify-center rounded-[4px] bg-card p-2 transition-colors hover:bg-primary hover:text-primary-foreground"
-                    : "dashboard-chip flex min-w-0 flex-1 items-center gap-3 rounded-[4px] bg-card p-3 transition-colors hover:bg-primary hover:text-primary-foreground"
-                }
-                title={messages.shared.userSettings}
-              >
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                  <AvatarFallback className="bg-accent text-xs text-primary">
-                    {isDemoMode ? messages.dashboardLayout.demoLabel : messages.shared.user}
-                  </AvatarFallback>
-                </Avatar>
-                {!sidebarCollapsed && (
-                  <>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {isDemoMode ? messages.shared.demoAccount : user?.name || messages.shared.marketingMember}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground group-hover:text-primary-foreground/80">{userEmail}</p>
-                    </div>
-                    <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </>
-                )}
-              </Link>
-              <Button variant="ghost" size="sm" className="dashboard-chip rounded-[4px] border border-transparent text-muted-foreground hover:bg-muted hover:text-destructive" onClick={() => void handleLogout()} disabled={isLoggingOut} title={messages.shared.logout}>
-                <LogOut className="h-4 w-4" />
-              </Button>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    className={
+                      sidebarCollapsed
+                        ? "dashboard-chip flex w-full items-center justify-center rounded-[4px] bg-card p-2 transition-colors hover:bg-primary hover:text-primary-foreground"
+                        : "dashboard-chip flex min-w-0 flex-1 items-center gap-3 rounded-[4px] bg-card p-3 text-left transition-colors hover:bg-primary hover:text-primary-foreground"
+                    }
+                    title={messages.shared.userSettings}
+                    aria-label={messages.shared.userSettings}
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src="/placeholder.svg?height=32&width=32" />
+                      <AvatarFallback className="bg-accent text-xs text-primary">
+                        {isDemoMode ? messages.dashboardLayout.demoLabel : messages.shared.user}
+                      </AvatarFallback>
+                    </Avatar>
+                    {!sidebarCollapsed && (
+                      <>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {isDemoMode ? messages.shared.demoAccount : user?.name || messages.shared.marketingMember}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground group-hover:text-primary-foreground/80">{userEmail}</p>
+                        </div>
+                        <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </>
+                    )}
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    sideOffset={8}
+                    align={sidebarCollapsed ? "center" : "start"}
+                    className="z-50 min-w-[180px] rounded-[8px] border border-sidebar-border bg-card p-1 shadow-lg outline-none"
+                  >
+                    <DropdownMenu.Item asChild>
+                      <Link
+                        href="/dashboard/billing"
+                        className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-sidebar-foreground outline-none transition hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground"
+                      >
+                        <CreditCard className="h-4 w-4" />
+                        {messages.billing.navLabel}
+                      </Link>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item asChild>
+                      <Link
+                        href="/dashboard/settings"
+                        className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-sidebar-foreground outline-none transition hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground"
+                      >
+                        <Settings className="h-4 w-4" />
+                        {messages.shared.userSettings}
+                      </Link>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator className="my-1 h-px bg-sidebar-border" />
+                    <DropdownMenu.Item
+                      onSelect={() => void handleLogout()}
+                      disabled={isLoggingOut}
+                      className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-sidebar-foreground outline-none transition hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {messages.shared.logout}
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
             </div>
           </div>
         </div>
@@ -439,11 +615,71 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden bg-transparent">{children}</div>
+        <div
+          className={cn(
+            "flex-1 bg-transparent",
+            usesImmersiveCanvas ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden",
+          )}
+        >
+          {children}
+        </div>
       </main>
     </div>
   )
 }
 
+function DashboardMenuLink({
+  href,
+  label,
+  icon: Icon,
+  collapsed,
+  active,
+}: {
+  href: string
+  label: string
+  icon: LucideIcon
+  collapsed: boolean
+  active: boolean
+}) {
+  return (
+    <Link href={href} className="block w-full">
+      <Button
+        variant="ghost"
+        className={cn(
+          collapsed
+            ? "box-border h-11 w-full min-w-0 justify-center rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
+            : "box-border h-11 w-full min-w-0 justify-start rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
+          active && "border-primary bg-primary text-primary-foreground",
+        )}
+        size="sm"
+        title={label}
+        aria-label={label}
+      >
+        <Icon className={collapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+        {!collapsed && label}
+      </Button>
+    </Link>
+  )
+}
 
-
+function DashboardSubMenuLink({
+  href,
+  label,
+  active,
+}: {
+  href: string
+  label: string
+  active: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "block rounded-[6px] px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:bg-primary/10 hover:text-sidebar-foreground",
+        active && "bg-primary/10 text-sidebar-foreground",
+      )}
+    >
+      {label}
+    </Link>
+  )
+}

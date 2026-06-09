@@ -1,0 +1,27 @@
+import type { Metadata } from "next"
+
+import {
+  getPlatformCapabilityMetadata,
+  getPlatformCapabilityStaticParams,
+  renderPlatformCapabilityPage,
+} from "@/lib/platform/public-detail-pages"
+
+type Props = {
+  params: Promise<{ slug: string }>
+}
+
+export const dynamicParams = false
+
+export function generateStaticParams() {
+  return getPlatformCapabilityStaticParams()
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params
+  return getPlatformCapabilityMetadata("zh", slug)
+}
+
+export default async function ZhCapabilityDetailPage({ params }: Props) {
+  const { slug } = await params
+  return renderPlatformCapabilityPage("zh", slug)
+}

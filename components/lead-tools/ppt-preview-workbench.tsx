@@ -235,6 +235,10 @@ function getStatusLabel(status: "READY" | "RUNNING" | "FALLBACK" | "IDLE", copy:
   }
 }
 
+function isWorkbenchStatus(value: string): value is "READY" | "RUNNING" | "FALLBACK" | "IDLE" {
+  return value === "READY" || value === "RUNNING" || value === "FALLBACK" || value === "IDLE"
+}
+
 async function parseApiError(response: Response, fallbackMessage: string) {
   try {
     const data = (await response.json()) as { error?: string }
@@ -867,7 +871,7 @@ export function PptPreviewWorkbench({
                         status === "IDLE" && "border border-black/10 text-muted-foreground",
                       )}
                     >
-                      {getStatusLabel(status, copy)}
+                      {getStatusLabel(isWorkbenchStatus(status) ? status : "IDLE", copy)}
                     </span>
                   </div>
 

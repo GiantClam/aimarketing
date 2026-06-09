@@ -3,7 +3,7 @@ export type ClipSpec = { idx: number; desc: string; begin_s: number; end_s: numb
 export type EventItem = { thread_id?: string; run_id?: string; agent?: string; type: string; delta?: string | null; payload?: any; progress?: { current: number; total: number }; ts?: number }
 export type RunClipResult = { idx: number; status: 'succeeded' | 'failed'; video_url?: string; detail?: any }
 export type JobInfo = { run_id: string; slogan?: string; cover_url?: string; video_url?: string; share_slug?: string; status?: string; created_at?: string; updated_at?: string }
-export type CrewStatus = { run_id: string; status: string; result?: string; error?: string; expected_clips?: number; context?: any; created_at?: string; updated_at?: string }
+export type VideoAgentStatus = { run_id: string; status: string; result?: string; error?: string; expected_clips?: number; context?: any; created_at?: string; updated_at?: string }
 
 const DEFAULT_BASE = typeof process !== 'undefined' && (process.env.NEXT_PUBLIC_AGENT_URL || process.env.AGENT_URL) ? (process.env.NEXT_PUBLIC_AGENT_URL || process.env.AGENT_URL)! : 'https://api.aimarketingsite.com'
 
@@ -129,25 +129,25 @@ export async function workflowStitch(run_id: string, segments: string[], output_
   return postJson<{ run_id: string; segments: string[]; final_url: string }>(url, { run_id, segments, output_key })
 }
 
-export async function crewRun(payload: { goal: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; run_id?: string }, base?: string) {
-  const url = `${getBaseUrl(base)}/workflow/crew-run`
+export async function agentRun(payload: { goal: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; run_id?: string }, base?: string) {
+  const url = `${getBaseUrl(base)}/workflow/agent-run`
   return postJson<{ run_id: string; session_id: string; status: string; message: string }>(url, payload)
 }
 
-export async function crewStatus(run_id: string, base?: string) {
-  const url = `${getBaseUrl(base)}/workflow/crew-status/${encodeURIComponent(run_id)}`
+export async function agentStatus(run_id: string, base?: string) {
+  const url = `${getBaseUrl(base)}/workflow/agent-status/${encodeURIComponent(run_id)}`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json() as Promise<CrewStatus>
+  return res.json() as Promise<VideoAgentStatus>
 }
 
-export async function agentSSE(payload: { prompt?: string; img?: string; thread_id?: string; run_id?: string; goal?: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; use_crewai?: boolean }, onEvent: (e: EventItem) => void, base?: string) {
-  const url = `${getBaseUrl(base)}/crewai-agent`
+export async function agentSSE(payload: { prompt?: string; img?: string; thread_id?: string; run_id?: string; goal?: string; styles?: string[]; total_duration?: number; num_clips?: number; image_control?: boolean; use_video_agent?: boolean }, onEvent: (e: EventItem) => void, base?: string) {
+  const url = `${getBaseUrl(base)}/video-agent/agent`
   return streamSSE(url, payload, onEvent)
 }
 
 export async function chatSSE(payload: { action: 'start' | 'message'; thread_id?: string; run_id?: string; message?: string }, onEvent: (e: EventItem) => void, base?: string) {
-  const url = `${getBaseUrl(base)}/crewai-chat`
+  const url = `${getBaseUrl(base)}/video-agent/chat`
   return streamSSE(url, payload, onEvent)
 }
 
@@ -164,16 +164,16 @@ export async function jobsGet(run_id: string, base?: string) {
 }
 
 export async function storyboardConfirm(payload: { run_id: string; confirmed?: boolean; feedback?: string }, base?: string) {
-  const url = `${getBaseUrl(base)}/crewai/storyboard/confirm`
+  const url = `${getBaseUrl(base)}/video-agent/storyboard/confirm`
   return postJson<{ run_id: string; status: string; message: string }>(url, payload)
 }
 
 export async function sceneUpdate(payload: { message_id: string; scene_idx: number; script?: string; image_url?: string }, base?: string) {
-  const url = `${getBaseUrl(base)}/crewai/scene/update`
+  const url = `${getBaseUrl(base)}/video-agent/scene/update`
   return postJson<{ message_id: string; scene_idx: number; clips?: ClipSpec[]; image_url?: string }>(url, payload)
 }
 
 export async function sceneRegenerate(payload: { message_id: string; scene_idx: number; script?: string; context?: any }, base?: string) {
-  const url = `${getBaseUrl(base)}/crewai/scene/regenerate`
+  const url = `${getBaseUrl(base)}/video-agent/scene/regenerate`
   return postJson<{ message_id: string; scene_idx: number; clips: ClipSpec[]; image_url: string }>(url, payload)
 }

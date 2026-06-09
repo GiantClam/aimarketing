@@ -101,6 +101,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
 
     const load = async () => {
       if (authLoading) {
@@ -122,6 +123,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
         const response = await fetch("/api/dashboard/availability", {
           credentials: "same-origin",
           cache: "no-store",
+          signal: controller.signal,
         })
         if (!response.ok) {
           throw new Error(`http_${response.status}`)
@@ -152,9 +154,8 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
             reason: typeof json?.data?.imageAssistant?.reason === "string" ? json.data.imageAssistant.reason : null,
           },
         })
-      } catch (error) {
-        if (cancelled) return
-        console.error("dashboard.availability.load-failed", error)
+      } catch (_error) {
+        if (cancelled || controller.signal.aborted) return
         setAvailability(buildPermissionFallback(user))
       }
     }
@@ -163,6 +164,7 @@ export function DashboardAvailabilityProvider({ children }: { children: React.Re
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [authLoading, user])
 

@@ -27,3 +27,19 @@ test("default executive diagnostic loads compact runtime brief", async () => {
     `expected compact default diagnostic prompt, received ${content.length} chars`,
   )
 })
+
+test("business agent prompt documents are loadable through the shared agent loader", async () => {
+  const { loadExecutiveSkillForAgent } = await import("./executive-skill-loader")
+
+  const content = await loadExecutiveSkillForAgent("business-sales-close")
+  const complianceContent = await loadExecutiveSkillForAgent("business-compliance-auditor")
+  const legalContent = await loadExecutiveSkillForAgent("business-legal-document-review")
+
+  assert.match(content, /Sales Close Agent/)
+  assert.match(content, /MEDDPICC/)
+  assert.match(content, /Expected outputs/)
+  assert.match(complianceContent, /Compliance Auditor Agent/)
+  assert.match(complianceContent, /audit-readiness checklist/)
+  assert.match(legalContent, /Legal Document Review Agent/)
+  assert.match(legalContent, /not a substitute for counsel/)
+})

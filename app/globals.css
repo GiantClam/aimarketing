@@ -140,6 +140,10 @@
     @apply border-border outline-ring/50;
   }
 
+  html {
+    font-size: 93.75%;
+  }
+
   body {
     @apply text-foreground;
     background-color: var(--background);
@@ -209,7 +213,7 @@
     font-family:
       var(--font-display),
       var(--font-display-fallback);
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
@@ -398,7 +402,7 @@
     font-family:
       var(--font-display),
       var(--font-display-fallback);
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     font-weight: 700;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -471,7 +475,7 @@
 
 @media (max-width: 640px) {
   .public-kicker {
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     letter-spacing: 0.16em;
   }
 

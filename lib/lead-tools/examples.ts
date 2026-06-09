@@ -173,3 +173,7 @@ export function getLeadToolExampleParams() {
     exampleSlug: example.slug,
   }))
 }
+
+export function getLeadToolExamplePaths() {
+  return leadToolExamples.map((example) => getLeadToolExampleHref(example.toolSlug, example.slug))
+}
