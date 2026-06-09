@@ -16,7 +16,7 @@ export type PlatformTaskRunStatus = "queued" | "running" | "succeeded" | "failed
 
 export type PlatformProviderRuntime = {
   id: string
-  scope: "text" | "image" | "video" | "agent" | "tooling"
+  scope: "text" | "image" | "video" | "audio" | "agent" | "tooling"
   configured: boolean
   active: boolean
   model: string | null
@@ -96,7 +96,7 @@ function getEntitlementCapabilitySlugs(feature: FeatureKey) {
   }
 
   if (feature === "video_generation") {
-    return ["ai-video", "visual-ad-pipeline"] as string[]
+    return ["ai-video", "ai-music", "visual-ad-pipeline"] as string[]
   }
 
   if (feature === "website_generation") {

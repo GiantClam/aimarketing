@@ -1,4 +1,5 @@
 import { getImageAssistantAvailability } from "@/lib/image-assistant/aiberm"
+import { getMiniMaxAudioConfig, isMiniMaxAudioConfigured } from "@/lib/platform/minimax-audio"
 import { getRunningHubConfig, hasRunningHubMediaExecution, isRunningHubConfiguredForTarget } from "@/lib/platform/runninghub"
 import { isVideoGenerationEnabled } from "@/lib/runtime-features"
 import type {
@@ -20,6 +21,7 @@ type PlatformMediaRuntimeBuildInput = {
   imageAvailability: ReturnType<typeof getImageAssistantAvailability>
   videoRuntimeEnabled: boolean
   runningHubConfig: ReturnType<typeof getRunningHubConfig>
+  minimaxConfig: ReturnType<typeof getMiniMaxAudioConfig>
 }
 
 function uniqueNotes(values: string[]) {
@@ -41,14 +43,15 @@ export function buildPlatformMediaRuntimeEntries() {
     imageAvailability: getImageAssistantAvailability(),
     videoRuntimeEnabled: isVideoGenerationEnabled(),
     runningHubConfig: getRunningHubConfig(),
+    minimaxConfig: getMiniMaxAudioConfig(),
   })
 }
 
 export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRuntimeBuildInput) {
-  const { imageAvailability, videoRuntimeEnabled, runningHubConfig } = input
+  const { imageAvailability, videoRuntimeEnabled, runningHubConfig, minimaxConfig } = input
   const runningHubImageConfigured = isRunningHubConfiguredForTarget("ai-image", runningHubConfig)
   const runningHubVideoConfigured = isRunningHubConfiguredForTarget("ai-video", runningHubConfig)
-  const runningHubMusicConfigured = isRunningHubConfiguredForTarget("ai-music", runningHubConfig)
+  const minimaxAudioConfigured = isMiniMaxAudioConfigured(minimaxConfig)
   const mediaRuntimeEnabled = hasRunningHubMediaExecution(runningHubConfig)
 
   const providers: PlatformProviderRuntime[] = [
@@ -105,21 +108,21 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
       ],
     },
     {
-      id: "runninghub-music",
-      scope: "video",
-      configured: runningHubMusicConfigured,
-      active: runningHubMusicConfigured,
-      model: null,
-      baseURL: runningHubConfig.baseUrl,
-      role: runningHubMusicConfigured ? "primary" : "planned",
+      id: "minimax-audio",
+      scope: "audio",
+      configured: minimaxAudioConfigured,
+      active: minimaxAudioConfigured,
+      model: "speech-2.8 / music-2.6",
+      baseURL: minimaxConfig.baseUrl,
+      role: minimaxAudioConfigured ? "primary" : "planned",
       capabilitySlugs: ["ai-music"],
       notes: [
-        runningHubMusicConfigured
-          ? "Configured as the shared music provider in the unified media runtime."
-          : "Reserved as the target music provider in the shared media runtime.",
-        runningHubMusicConfigured
-          ? "Music capability can execute through the platform media adapter."
-          : "Music capability stays as an entry-only surface until the RunningHub music target is configured.",
+        minimaxAudioConfigured
+          ? "Configured as the unified MiniMax audio provider for music generation, voice clone, and speech synthesis."
+          : "Reserved as the target audio provider in the shared media runtime.",
+        minimaxAudioConfigured
+          ? "Audio capability can execute through the MiniMax media adapter."
+          : "Audio capability stays deferred until the MiniMax API credentials are configured.",
       ],
     },
   ]
@@ -164,18 +167,18 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
     {
       id: "ai-music-runtime",
       capabilitySlug: "ai-music",
-      title: "AI music runtime",
-      mode: runningHubMusicConfigured ? "async" : "deferred",
-      enabled: runningHubMusicConfigured,
-      runtimeId: runningHubMusicConfigured ? "runninghub-music" : "planned-music",
+      title: "AI audio runtime",
+      mode: minimaxAudioConfigured ? "hybrid" : "deferred",
+      enabled: minimaxAudioConfigured,
+      runtimeId: minimaxAudioConfigured ? "minimax-audio" : "planned-music",
       statuses: ["queued", "running", "succeeded", "failed", "cancelled"],
       notes: [
-        runningHubMusicConfigured
-          ? "Music generation is available through the shared RunningHub media adapter."
-          : "Music generation stays deferred until the RunningHub music endpoint is configured.",
-        runningHubMusicConfigured
-          ? "The public AI music entry can hand work into the shared media runtime."
-          : "This phase ships the entry point first and keeps runtime wiring minimal.",
+        minimaxAudioConfigured
+          ? "MiniMax powers AI music, voice clone, and async speech synthesis inside the shared media workspace."
+          : "Audio runtime stays deferred until LEAD_TOOLS_MINIMAX_API_KEY and LEAD_TOOLS_MINIMAX_BASE_URL are configured.",
+        minimaxAudioConfigured
+          ? "The public AI music entry and dashboard workspace both route to the same MiniMax adapter."
+          : "The workspace stays visible, but submissions remain blocked until the MiniMax runtime is configured.",
       ],
     },
   ]
@@ -186,7 +189,7 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
     mediaRuntimeEnabled,
     runningHubImageConfigured,
     runningHubVideoConfigured,
-    runningHubMusicConfigured,
+    runningHubMusicConfigured: false,
   }
 }
 
@@ -196,7 +199,7 @@ export function getPlatformMediaCapabilityStateFromSnapshot(
 ): PlatformMediaCapabilityState {
   const providers = snapshot.providers.filter(
     (provider) =>
-      (provider.scope === "image" || provider.scope === "video") &&
+      (provider.scope === "image" || provider.scope === "video" || provider.scope === "audio") &&
       provider.capabilitySlugs.includes(capabilitySlug),
   )
   const task = snapshot.tasks.find((item) => item.capabilitySlug === capabilitySlug)

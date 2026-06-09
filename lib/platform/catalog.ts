@@ -284,21 +284,21 @@ export const platformCapabilities: CapabilityDescriptor[] = [
     surface: "both",
     title: { zh: "AI 音乐入口", en: "AI Music Entry" },
     summary: {
-      zh: "为配乐、主题音乐和音频片段生成补齐公开入口，并直接复用 shared media runtime 的 RunningHub 任务通道。",
-      en: "Adds a public entry for soundtrack, theme-music, and audio-clip generation while reusing the shared media runtime through RunningHub.",
+      zh: "为配乐、主题音乐、声音克隆和语音合成补齐统一入口，并通过 MiniMax 音频 runtime 承接真实执行。",
+      en: "Adds one entry for soundtrack, voice cloning, and speech synthesis powered by the MiniMax audio runtime.",
     },
     proofPoints: [
       { zh: "新增独立 public tool 页面", en: "Ships as a dedicated public tool page." },
       { zh: "与图片/视频共用统一 media task adapter", en: "Shares the same media task adapter as image and video." },
-      { zh: "通过 RunningHub music target 承接异步任务", en: "Uses a RunningHub music target for async execution." },
+      { zh: "通过 MiniMax 音频 provider 统一承接音色、语音和音乐任务", en: "Routes voice, speech, and music work through a unified MiniMax audio provider." },
     ],
     publicHref: "/tools/ai-music",
     workspaceHref: "/dashboard/capabilities?workspace=media&feature=ai-music",
     bindings: [
       {
-        provider: "runninghub",
-        status: "planned",
-        note: { zh: "作为 shared media runtime 的音乐任务目标。", en: "Acts as the music task target inside the shared media runtime." },
+        provider: "minimax",
+        status: "active",
+        note: { zh: "作为 shared media runtime 的音频执行 provider。", en: "Acts as the audio execution provider inside the shared media runtime." },
       },
     ],
   },

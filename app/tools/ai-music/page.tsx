@@ -41,14 +41,14 @@ function getAiMusicPageCopy(locale: AppLocale): PageCopy {
     return {
       eyebrow: "Audio Lead Gen Tool",
       title: "AI 音乐入口",
-      description: "把 AI 配乐、短音频片段和主题音乐生成补进 public toolsite，并让任务直接落到 shared media runtime。",
-      proofPoints: ["公开入口先上线", "复用 shared media runtime", "RunningHub music target 承接异步任务"],
+      description: "把 AI 配乐、声音克隆和声音合成补进 public toolsite，并让任务直接落到 MiniMax 音频 runtime。",
+      proofPoints: ["公开入口先上线", "复用 shared media runtime", "MiniMax 音频 provider 承接音乐/语音任务"],
       faqTitle: "常见问题",
       faqDescription: "先把入口、运行时边界和接入方式说清楚，再逐步补完整交互。",
       faq: [
         {
           question: "这个页面现在能直接在线生成音乐吗？",
-          answer: "当前阶段先补平台入口、目录映射和统一任务通道。真正的生成请求已经走 shared media runtime，但完整前端交互还会后续补齐。",
+          answer: "当前阶段已经补齐平台入口、目录映射和统一任务通道。真实音频请求会走 MiniMax 音频 runtime，更多面向公开页的交互还会继续补齐。",
         },
         {
           question: "为什么不单独做一套音乐 runtime？",
@@ -56,23 +56,23 @@ function getAiMusicPageCopy(locale: AppLocale): PageCopy {
         },
         {
           question: "音乐任务会走哪个 provider？",
-          answer: "最小实现直接对接 RunningHub 的 music target，通过新的 ai-music target 进入统一媒体路由。",
+          answer: "AI 音乐、声音克隆和声音合成会统一走 MiniMax API；视频相关能力仍继续使用 RunningHub。",
         },
       ],
       asideTitle: "当前接入策略",
       accessLabel: "访问方式",
-      asideRuntime: "AI 音乐会复用图片/视频同一套 shared media runtime，统一提交任务和查询状态。",
+      asideRuntime: "AI 音乐会复用能力中心同一套 media workspace，但音频执行层已经切到 MiniMax API。",
       asideAccess: "运行时调用仍要求登录，并沿用现有媒体权限校验链路。",
       sectionTitle: "这次最小实现补了什么",
-      sectionDescription: "目标不是重做一套音乐工作台，而是先把平台入口、能力目录和底层任务 target 接通。",
+      sectionDescription: "目标不是重做一套公开音乐工作台，而是先把平台入口、能力目录和底层音频执行链路接通。",
       cards: [
         {
           title: "Public Entry",
           body: "新增 /tools/ai-music 公开页面，先承接产品定位、能力说明和后续跳转。",
         },
         {
-          title: "Shared Runtime",
-          body: "新增 ai-music target，直接复用平台媒体运行时、任务提交和任务查询接口。",
+          title: "MiniMax Audio Runtime",
+          body: "AI 音乐、声音克隆、声音合成都接到 MiniMax provider，并复用平台任务提交与查询接口。",
         },
         {
           title: "Directory Visibility",
@@ -84,7 +84,7 @@ function getAiMusicPageCopy(locale: AppLocale): PageCopy {
       routeLabel: "运行时路由",
       routeValue: "POST /api/platform/media/run?target=ai-music&action=generate",
       capabilityLabel: "平台能力",
-      capabilityValue: "AI 音乐现在和图片、视频共用统一 media task adapter。",
+      capabilityValue: "AI 音乐现在和图片、视频共用统一 media task adapter，但音频执行 provider 已经切到 MiniMax。",
       statusLabel: "Beta",
       whyEntryTitle: "为什么先做入口",
     }
@@ -93,14 +93,14 @@ function getAiMusicPageCopy(locale: AppLocale): PageCopy {
   return {
     eyebrow: "Audio Lead Gen Tool",
     title: "AI Music Entry",
-    description: "Adds a public landing page for AI soundtrack, short audio, and theme-music generation while sending execution into the shared media runtime.",
-    proofPoints: ["Public entry now exists", "Reuses the shared media runtime", "RunningHub music target handles async execution"],
+    description: "Adds a public landing page for AI soundtrack, voice cloning, and speech synthesis while sending audio execution into the MiniMax runtime.",
+    proofPoints: ["Public entry now exists", "Reuses the shared media runtime", "MiniMax handles music and speech execution"],
     faqTitle: "FAQ",
     faqDescription: "This page clarifies the entry point, runtime boundary, and integration contract before the richer UI lands.",
     faq: [
       {
         question: "Can this page already generate music directly in-browser?",
-        answer: "This phase focuses on the platform entry, directory wiring, and unified task target. The runtime path exists, but the richer generation UI is still a follow-up.",
+        answer: "This phase already wires the real platform entry, directory mapping, and unified task path. Audio execution now runs through MiniMax, while the richer public-page UX can keep improving afterward.",
       },
       {
         question: "Why reuse the shared media runtime instead of building a separate music runtime?",
@@ -108,23 +108,23 @@ function getAiMusicPageCopy(locale: AppLocale): PageCopy {
       },
       {
         question: "Which provider handles AI music jobs?",
-        answer: "The MVP routes AI music through a dedicated RunningHub music target, exposed as the new ai-music media target.",
+        answer: "AI music, voice cloning, and speech synthesis route through MiniMax, while the video-focused capabilities continue to use RunningHub.",
       },
     ],
     asideTitle: "Current integration strategy",
     accessLabel: "Access",
-    asideRuntime: "AI music shares the same media runtime contract as image and video, including unified submit and status-query paths.",
+    asideRuntime: "AI music still uses the shared media workspace contract, but the audio execution layer is now MiniMax.",
     asideAccess: "Execution still requires login and follows the existing protected media access checks.",
     sectionTitle: "What this MVP adds",
-    sectionDescription: "The goal is not a second standalone music workspace. It is a platform entry, a visible directory slot, and a real runtime target.",
+    sectionDescription: "The goal is not a second standalone public music studio. It is a platform entry, a visible directory slot, and a real audio execution target.",
     cards: [
       {
         title: "Public Entry",
         body: "Ships a dedicated /tools/ai-music page so the capability has a product-facing landing page.",
       },
       {
-        title: "Shared Runtime",
-        body: "Adds an ai-music target that reuses the platform media runtime for submission and task polling.",
+        title: "MiniMax Audio Runtime",
+        body: "Routes AI music, voice clone, and speech synthesis through MiniMax while preserving the same platform submission and polling contract.",
       },
       {
         title: "Directory Visibility",
@@ -136,7 +136,7 @@ function getAiMusicPageCopy(locale: AppLocale): PageCopy {
     routeLabel: "Runtime route",
     routeValue: "POST /api/platform/media/run?target=ai-music&action=generate",
     capabilityLabel: "Platform capability",
-    capabilityValue: "AI music now shares the unified media task adapter.",
+    capabilityValue: "AI music now shares the unified media task adapter with image and video surfaces, while its audio provider is MiniMax.",
     statusLabel: "Beta",
     whyEntryTitle: "Why ship the entry first",
   }

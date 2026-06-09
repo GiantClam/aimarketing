@@ -53,6 +53,19 @@ type ChatAttachment = {
   dataUrl?: string
   text?: string
 }
+type ExtractedChatAttachmentResponse = {
+  data?: {
+    id?: string
+    name?: string
+    mediaType?: string
+    originalMediaType?: string
+    size?: number
+    text?: string
+    textCharCount?: number
+    truncated?: boolean
+  }
+  error?: string
+}
 type ChatMessage = {
   id: string
   role: "user" | "assistant"
@@ -321,6 +334,76 @@ function isTextLikeFile(file: File) {
   )
 }
 
+function isParseableDocumentFile(file: File) {
+  const normalizedType = file.type.toLowerCase()
+  return (
+    /\.(docx|pdf)$/i.test(file.name) ||
+    normalizedType === "application/pdf" ||
+    normalizedType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  )
+}
+
+async function extractDocumentAttachment(file: File): Promise<ChatAttachment> {
+  const formData = new FormData()
+  formData.set("file", file)
+  formData.set("surface", "ai-entry")
+
+  const response = await fetch("/api/chat-attachments/extract", {
+    method: "POST",
+    body: formData,
+    credentials: "same-origin",
+  })
+  const payload = (await response.json().catch(() => null)) as ExtractedChatAttachmentResponse | null
+
+  if (!response.ok || !payload?.data?.text) {
+    throw new Error(payload?.error || `attachment_extract_failed_${response.status}`)
+  }
+
+  return {
+    id: payload.data.id || `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: payload.data.name || file.name,
+    mediaType: payload.data.mediaType || "text/plain",
+    size: typeof payload.data.size === "number" ? payload.data.size : file.size,
+    text: payload.data.text,
+  }
+}
+
+function renderAttachmentError(code: string, isZh: boolean) {
+  const messages: Record<string, { zh: string; en: string }> = {
+    unsupported_file_type: {
+      zh: "暂不支持该文件类型，请上传 DOCX、可复制文字 PDF、TXT、MD 或图片。",
+      en: "This file type is not supported. Upload DOCX, copyable-text PDF, TXT, MD, or images.",
+    },
+    file_too_large: {
+      zh: "单个附件不能超过 4MB。",
+      en: "Each attachment must be 4MB or smaller.",
+    },
+    pdf_encrypted: {
+      zh: "该 PDF 已加密，无法解析。",
+      en: "This PDF is encrypted and cannot be parsed.",
+    },
+    pdf_no_extractable_text: {
+      zh: "该 PDF 没有可提取文字。扫描版 PDF 暂不支持 OCR。",
+      en: "This PDF has no extractable text. Scanned PDFs are not supported yet.",
+    },
+    extracted_text_empty: {
+      zh: "附件中没有可读取的文字。",
+      en: "No readable text was found in this attachment.",
+    },
+    docx_parse_failed: {
+      zh: "DOCX 解析失败，请确认文件未损坏。",
+      en: "DOCX parsing failed. Check that the file is not corrupted.",
+    },
+    pdf_parse_failed: {
+      zh: "PDF 解析失败，请确认文件可打开且包含可复制文字。",
+      en: "PDF parsing failed. Check that the file opens and contains copyable text.",
+    },
+  }
+  const message = messages[code]
+  if (message) return isZh ? message.zh : message.en
+  return isZh ? `附件解析失败：${code}` : `Attachment parsing failed: ${code}`
+}
+
 function modelSupportsImageInput(model: ModelOption | null) {
   const normalized = [model?.id, model?.runtimeId, model?.canonicalId, ...(model?.aliases || [])]
     .filter(Boolean)
@@ -488,6 +571,7 @@ export function AiEntryWorkspace({
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isPreparingAttachments, setIsPreparingAttachments] = useState(false)
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId) && initialMessages.length === 0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -514,6 +598,7 @@ export function AiEntryWorkspace({
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
+  const isLoadingRef = useRef(false)
   const onConversationIdChangeRef = useRef<typeof onConversationIdChange>(onConversationIdChange)
   const pendingFirstConversationRouteRef = useRef(false)
   const search = searchParams.toString()
@@ -595,6 +680,10 @@ export function AiEntryWorkspace({
   useEffect(() => {
     latestConversationIdRef.current = conversationId
   }, [conversationId])
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading
+  }, [isLoading])
 
   useEffect(() => {
     onConversationIdChangeRef.current = onConversationIdChange
@@ -904,12 +993,18 @@ export function AiEntryWorkspace({
         if (leftovers.length > 0) groups.push({ id: "other", label: "Other", agents: leftovers })
 
         const validIds = new Set(normalizedAgents.map((item) => item.id))
-        const fromQuery = initialAgentFromQuery && validIds.has(initialAgentFromQuery) ? initialAgentFromQuery : null
+        const fromForcedAgent =
+          forcedAgentId && validIds.has(forcedAgentId) ? forcedAgentId : null
+        const fromQuery =
+          !embedded && initialAgentFromQuery && validIds.has(initialAgentFromQuery)
+            ? initialAgentFromQuery
+            : null
+        const nextSelectedAgentId = fromForcedAgent || fromQuery
 
         setAgents(normalizedAgents)
         setAgentGroups(groups)
-        setSelectedAgentId(fromQuery)
-        setIsAgentSelectionExplicit(Boolean(fromQuery))
+        setSelectedAgentId(nextSelectedAgentId)
+        setIsAgentSelectionExplicit(Boolean(nextSelectedAgentId))
       } catch (error) {
         if (cancelled) return
         console.error("ai-entry.agents.load.failed", error)
@@ -929,7 +1024,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [initialAgentFromQuery, isZh, shouldLockModel])
+  }, [embedded, forcedAgentId, initialAgentFromQuery, isZh, shouldLockModel])
 
   useEffect(() => {
     if (shouldLockModel) {
@@ -964,6 +1059,19 @@ export function AiEntryWorkspace({
       if (!shouldLockModel && models.length > 0) {
         setSelectedModelId(models[0]?.id || null)
       }
+      return
+    }
+
+    if (
+      isLoadingRef.current ||
+      (
+        pendingFirstConversationRouteRef.current &&
+        latestConversationIdRef.current === initialConversationId
+      )
+    ) {
+      setConversationId(initialConversationId)
+      latestConversationIdRef.current = initialConversationId
+      setIsConversationLoading(false)
       return
     }
 
@@ -1081,11 +1189,14 @@ export function AiEntryWorkspace({
         return
       }
 
+      setIsPreparingAttachments(true)
       try {
         const nextAttachments: ChatAttachment[] = []
+        let hadAttachmentError = false
         for (const file of files) {
           if (file.size > AI_ENTRY_MAX_ATTACHMENT_BYTES) {
             setErrorMessage(isZh ? "单个附件不能超过 4MB。" : "Each attachment must be 4MB or smaller.")
+            hadAttachmentError = true
             continue
           }
 
@@ -1111,14 +1222,27 @@ export function AiEntryWorkspace({
             continue
           }
 
-          setErrorMessage(isZh ? "当前对话暂不支持该文件类型，请上传图片或文本文件。" : "This chat does not support that file type yet. Upload an image or text file.")
+          if (isParseableDocumentFile(file)) {
+            try {
+              nextAttachments.push(await extractDocumentAttachment(file))
+            } catch (error) {
+              const code = error instanceof Error ? error.message : "attachment_parse_failed"
+              setErrorMessage(renderAttachmentError(code, isZh))
+              hadAttachmentError = true
+            }
+            continue
+          }
+
+          setErrorMessage(isZh ? "当前对话暂不支持该文件类型，请上传图片、文本、DOCX 或 PDF 文件。" : "This chat does not support that file type yet. Upload an image, text, DOCX, or PDF file.")
+          hadAttachmentError = true
         }
 
         if (nextAttachments.length > 0) {
           setAttachments((current) => [...current, ...nextAttachments].slice(0, AI_ENTRY_MAX_ATTACHMENTS))
-          setErrorMessage(null)
+          if (!hadAttachmentError) setErrorMessage(null)
         }
       } finally {
+        setIsPreparingAttachments(false)
         if (fileInputRef.current) fileInputRef.current.value = ""
       }
     },
@@ -1127,7 +1251,7 @@ export function AiEntryWorkspace({
 
   const handleSend = useCallback(async () => {
     const prompt = input.trim()
-    if ((!prompt && attachments.length === 0) || isLoading || isConversationLoading) return
+    if ((!prompt && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments) return
     const hasImageAttachments = attachments.some((attachment) => attachment.mediaType.startsWith("image/"))
     if (hasImageAttachments && !modelSupportsImageInput(selectedModel)) {
       setErrorMessage(isZh ? "当前所选模型不支持图片上传或识别，请切换到支持视觉的模型后再发送。" : "The selected model does not support image upload or recognition. Switch to a vision-capable model before sending.")
@@ -1154,12 +1278,21 @@ export function AiEntryWorkspace({
       },
     ])
     setMessages((previous) => [...previous, userMessage, { id: assistantMessageId, role: "assistant", content: "" }])
+    isLoadingRef.current = true
     setIsLoading(true)
     if (!conversationId) {
       pendingFirstConversationRouteRef.current = true
     }
 
     try {
+      const effectiveRequestAgentId =
+        embedded && forcedAgentId
+          ? forcedAgentId
+          : selectedAgentId
+      const shouldSendAgentConfig =
+        shouldLockModel ||
+        Boolean(effectiveRequestAgentId && (embedded || isAgentSelectionExplicit))
+
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: {
@@ -1186,10 +1319,10 @@ export function AiEntryWorkspace({
                 }
               : undefined,
           agentConfig:
-            (isAgentSelectionExplicit && selectedAgentId) || shouldLockModel
+            shouldSendAgentConfig
               ? {
-                  ...(!shouldLockModel && isAgentSelectionExplicit && selectedAgentId
-                    ? { agentId: selectedAgentId }
+                  ...(!shouldLockModel && effectiveRequestAgentId
+                    ? { agentId: effectiveRequestAgentId }
                     : {}),
                   ...(shouldLockModel
                     ? {
@@ -1485,9 +1618,8 @@ export function AiEntryWorkspace({
       setMessages((previous) => previous.map((item) => item.id === assistantMessageId ? { ...item, content: renderedError } : item))
       setPendingTaskEvents((current) => [...current, failedEvent].slice(-12))
     } finally {
-      if (!latestConversationIdRef.current) {
-        pendingFirstConversationRouteRef.current = false
-      }
+      pendingFirstConversationRouteRef.current = false
+      isLoadingRef.current = false
       setIsLoading(false)
     }
   }, [
@@ -1496,8 +1628,11 @@ export function AiEntryWorkspace({
     copy,
     input,
     isConversationLoading,
+    isPreparingAttachments,
     isLoading,
     isZh,
+    embedded,
+    forcedAgentId,
     messages,
     modelProviderId,
     models,
@@ -1540,9 +1675,15 @@ export function AiEntryWorkspace({
   )
 
   const renderSelectedAttachments = () => {
-    if (attachments.length === 0) return null
+    if (attachments.length === 0 && !isPreparingAttachments) return null
     return (
-      <div className="flex flex-wrap gap-2 px-1 pb-2">
+      <div className="flex flex-wrap items-center gap-2 px-1 pb-2">
+        {isPreparingAttachments ? (
+          <div className="dashboard-chip inline-flex items-center gap-2 rounded-[4px] px-2.5 py-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span>{isZh ? "正在解析附件" : "Parsing attachment"}</span>
+          </div>
+        ) : null}
         {attachments.map((attachment) => {
           const isImage = attachment.mediaType.startsWith("image/")
           return (
@@ -1580,14 +1721,14 @@ export function AiEntryWorkspace({
   }
 
   const renderAttachmentPicker = () => (
-    <PromptInputAction tooltip={isZh ? "上传图片或文本附件" : "Upload image or text attachment"}>
+    <PromptInputAction tooltip={isZh ? "上传图片、文本、DOCX 或 PDF 附件" : "Upload image, text, DOCX, or PDF attachment"}>
       <Button
         type="button"
         size="sm"
         variant="outline"
         className="dashboard-button-secondary h-9 px-3"
         onClick={() => fileInputRef.current?.click()}
-        disabled={isLoading || isConversationLoading || attachments.length >= AI_ENTRY_MAX_ATTACHMENTS}
+        disabled={isLoading || isConversationLoading || isPreparingAttachments || attachments.length >= AI_ENTRY_MAX_ATTACHMENTS}
       >
         <Paperclip className="h-3.5 w-3.5" />
       </Button>
@@ -1667,7 +1808,7 @@ export function AiEntryWorkspace({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*,.txt,.md,.csv,.json,text/*,application/json,text/csv"
+                  accept="image/*,.txt,.md,.docx,.pdf,.csv,.json,text/*,application/json,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="hidden"
                   onChange={(event) => void handleAttachmentFiles(event.target.files)}
                 />
@@ -1680,7 +1821,7 @@ export function AiEntryWorkspace({
                   <div className="flex min-w-0 items-center gap-2">
                     {renderSelectors("h-10")}
                     <PromptInputAction tooltip={copy.send}>
-                      <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                      <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
                         {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
                         {copy.send}
                       </Button>
@@ -1865,7 +2006,7 @@ export function AiEntryWorkspace({
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="image/*,.txt,.md,.csv,.json,text/*,application/json,text/csv"
+                accept="image/*,.txt,.md,.docx,.pdf,.csv,.json,text/*,application/json,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className="hidden"
                 onChange={(event) => void handleAttachmentFiles(event.target.files)}
               />
@@ -1878,7 +2019,7 @@ export function AiEntryWorkspace({
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="dashboard-button-primary h-9 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || modelsLoading}>
+                    <Button type="button" size="sm" className="dashboard-button-primary h-9 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
                       {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>

@@ -23,10 +23,6 @@ const baseConfig: RunningHubConfig = {
     configured: false,
     endpoint: null,
   },
-  music: {
-    configured: false,
-    endpoint: null,
-  },
 }
 
 test("runninghub helpers detect configured image and video targets independently", () => {
@@ -41,26 +37,6 @@ test("runninghub helpers detect configured image and video targets independently
   assert.equal(isRunningHubConfiguredForTarget("ai-image", config), true)
   assert.equal(isRunningHubConfiguredForTarget("ai-video", config), false)
   assert.equal(hasRunningHubMediaExecution(config), true)
-})
-
-test("runninghub helpers support a dedicated music target without requiring image or video", () => {
-  const config: RunningHubConfig = {
-    ...baseConfig,
-    music: {
-      configured: true,
-      endpoint: "/api/music/run",
-    },
-  }
-
-  assert.equal(isRunningHubConfiguredForTarget("ai-music", config), true)
-  assert.equal(isRunningHubConfiguredForTarget("ai-image", config), false)
-  assert.equal(hasRunningHubMediaExecution(config), true)
-  assert.deepEqual(resolveRunningHubProviderTarget("ai-music", config), {
-    requestedTarget: "ai-music",
-    providerTarget: "ai-music",
-    configured: true,
-    endpoint: "/api/music/run",
-  })
 })
 
 test("runninghub visual ad target prefers the configured video provider when both are not equal", () => {
@@ -90,14 +66,12 @@ test("runninghub submit/query helpers unwrap envelope responses with nested data
   const previousBaseUrl = process.env.RUNNINGHUB_BASE_URL
   const previousImageEndpoint = process.env.RUNNINGHUB_IMAGE_ENDPOINT
   const previousVideoEndpoint = process.env.RUNNINGHUB_VIDEO_ENDPOINT
-  const previousMusicEndpoint = process.env.RUNNINGHUB_MUSIC_ENDPOINT
   const previousQueryPath = process.env.RUNNINGHUB_QUERY_PATH
 
   process.env.RUNNINGHUB_API_KEY = "test-key"
   process.env.RUNNINGHUB_BASE_URL = "https://mock.runninghub.local"
   process.env.RUNNINGHUB_IMAGE_ENDPOINT = "/image"
   process.env.RUNNINGHUB_VIDEO_ENDPOINT = "/video"
-  process.env.RUNNINGHUB_MUSIC_ENDPOINT = "/music"
   process.env.RUNNINGHUB_QUERY_PATH = "/query"
 
   globalThis.fetch = async (input, init) => {
@@ -159,10 +133,6 @@ test("runninghub submit/query helpers unwrap envelope responses with nested data
 
     if (previousVideoEndpoint == null) delete process.env.RUNNINGHUB_VIDEO_ENDPOINT
     else process.env.RUNNINGHUB_VIDEO_ENDPOINT = previousVideoEndpoint
-
-    if (previousMusicEndpoint == null) delete process.env.RUNNINGHUB_MUSIC_ENDPOINT
-    else process.env.RUNNINGHUB_MUSIC_ENDPOINT = previousMusicEndpoint
-
     if (previousQueryPath == null) delete process.env.RUNNINGHUB_QUERY_PATH
     else process.env.RUNNINGHUB_QUERY_PATH = previousQueryPath
   }

@@ -23,10 +23,6 @@ const configuredRunningHub: RunningHubConfig = {
     configured: true,
     endpoint: "/api/video/run",
   },
-  music: {
-    configured: true,
-    endpoint: "/api/music/run",
-  },
 }
 
 test("capability execute target maps AI PPT preview as public preview runtime", () => {
@@ -64,10 +60,18 @@ test("capability execute target maps AI video workflow through shared media exec
   })
 })
 
-test("capability execute target maps AI music into RunningHub shared media executor", () => {
+test("capability execute target maps AI music into the shared media executor", () => {
   assert.deepEqual(resolvePlatformCapabilityExecutionProxyTarget("ai-music", "generate", configuredRunningHub), {
     action: "generate",
     downstreamPath: "/api/platform/media/run?target=ai-music&action=generate",
+    requiresLogin: true,
+  })
+})
+
+test("capability execute target preserves ai-music voice synthesis action", () => {
+  assert.deepEqual(resolvePlatformCapabilityExecutionProxyTarget("ai-music", "voice-synthesis"), {
+    action: "voice-synthesis",
+    downstreamPath: "/api/platform/media/run?target=ai-music&action=voice-synthesis",
     requiresLogin: true,
   })
 })

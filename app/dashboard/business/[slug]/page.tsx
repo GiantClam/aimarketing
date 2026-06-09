@@ -13,7 +13,11 @@ export default async function DashboardBusinessDetailPage({
   params: Promise<{ slug: string }>
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const [{ slug }, rawSearchParams] = await Promise.all([params, searchParams ?? Promise.resolve({})])
+  const emptySearchParams: Record<string, string | string[] | undefined> = {}
+  const [{ slug }, rawSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve(emptySearchParams),
+  ])
   const entry = getLocalizedWorkspaceBusinessEntryBySlug(
     "zh",
     slug as WorkspaceBusinessSlug,

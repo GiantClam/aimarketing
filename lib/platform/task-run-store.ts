@@ -352,6 +352,27 @@ export function buildPlatformTaskRunRecord(input: CreatePlatformTaskRunInput): t
   }
 }
 
+function buildInMemoryPlatformTaskRunRecord(id: number, input: CreatePlatformTaskRunInput): PlatformTaskRunRecord {
+  const record = buildPlatformTaskRunRecord(input)
+  return {
+    id,
+    enterpriseId: record.enterpriseId,
+    userId: record.userId,
+    kind: record.kind,
+    itemType: record.itemType,
+    itemSlug: record.itemSlug,
+    externalSystem: record.externalSystem ?? null,
+    externalRunId: record.externalRunId ?? null,
+    status: record.status ?? "queued",
+    inputPayload: record.inputPayload ?? null,
+    normalizedResult: record.normalizedResult ?? null,
+    startedAt: record.startedAt ?? null,
+    finishedAt: record.finishedAt ?? null,
+    createdAt: record.createdAt ?? new Date(),
+    updatedAt: record.updatedAt ?? new Date(),
+  }
+}
+
 export function buildPlatformRunEventRecord(
   runId: number,
   input: AppendPlatformRunEventInput,
@@ -362,6 +383,22 @@ export function buildPlatformRunEventRecord(
     message: normalizeTitle(input.message, "event", 255),
     payload: input.payload ?? null,
     createdAt: new Date(),
+  }
+}
+
+function buildInMemoryPlatformRunEventRecord(
+  id: number,
+  runId: number,
+  input: AppendPlatformRunEventInput,
+): PlatformTaskRunEventRecord {
+  const record = buildPlatformRunEventRecord(runId, input)
+  return {
+    id,
+    runId: record.runId,
+    level: record.level,
+    message: record.message,
+    payload: record.payload ?? null,
+    createdAt: record.createdAt ?? new Date(),
   }
 }
 
@@ -377,6 +414,23 @@ export function buildPlatformArtifactRecord(input: SavePlatformArtifactInput): t
     externalUrl: normalizeOptionalText(input.externalUrl, 4096),
     payload: input.payload ?? null,
     createdAt: new Date(),
+  }
+}
+
+function buildInMemoryPlatformArtifactRecord(id: number, input: SavePlatformArtifactInput): PlatformArtifactRecord {
+  const record = buildPlatformArtifactRecord(input)
+  return {
+    id,
+    runId: record.runId,
+    enterpriseId: record.enterpriseId,
+    ownerUserId: record.ownerUserId,
+    kind: record.kind,
+    title: record.title,
+    mimeType: record.mimeType ?? null,
+    storageKey: record.storageKey ?? null,
+    externalUrl: record.externalUrl ?? null,
+    payload: record.payload ?? null,
+    createdAt: record.createdAt ?? new Date(),
   }
 }
 
@@ -398,6 +452,22 @@ export function buildPlatformWorkItemRecord(
   }
 }
 
+function buildInMemoryPlatformWorkItemRecord(id: number, input: CreatePlatformWorkItemInput): PlatformWorkItemRecord {
+  const record = buildPlatformWorkItemRecord(input)
+  return {
+    id,
+    enterpriseId: record.enterpriseId,
+    ownerUserId: record.ownerUserId,
+    sourceArtifactId: record.sourceArtifactId,
+    type: record.type,
+    title: record.title,
+    summary: record.summary ?? null,
+    metadata: record.metadata ?? null,
+    createdAt: record.createdAt ?? new Date(),
+    updatedAt: record.updatedAt ?? new Date(),
+  }
+}
+
 export function buildPlatformKnowledgeSaveJobRecord(
   input: EnqueuePlatformKnowledgeSaveJobInput,
 ): typeof platformKnowledgeSaveJobs.$inferInsert {
@@ -414,6 +484,26 @@ export function buildPlatformKnowledgeSaveJobRecord(
     errorMessage: normalizeOptionalText(input.errorMessage, 10_000),
     createdAt: now,
     updatedAt: now,
+  }
+}
+
+function buildInMemoryPlatformKnowledgeSaveJobRecord(
+  id: number,
+  input: EnqueuePlatformKnowledgeSaveJobInput,
+): PlatformKnowledgeSaveJobRecord {
+  const record = buildPlatformKnowledgeSaveJobRecord(input)
+  return {
+    id,
+    artifactId: record.artifactId,
+    enterpriseId: record.enterpriseId,
+    ownerUserId: record.ownerUserId,
+    status: record.status ?? "queued",
+    targetType: record.targetType ?? "knowledge_base",
+    requestPayload: record.requestPayload ?? null,
+    resultPayload: record.resultPayload ?? null,
+    errorMessage: record.errorMessage ?? null,
+    createdAt: record.createdAt ?? new Date(),
+    updatedAt: record.updatedAt ?? new Date(),
   }
 }
 
@@ -609,20 +699,14 @@ export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
 
   return {
     async createPlatformTaskRun(input) {
-      const row: PlatformTaskRunRecord = {
-        id: nextRunId,
-        ...buildPlatformTaskRunRecord(input),
-      }
+      const row = buildInMemoryPlatformTaskRunRecord(nextRunId, input)
       nextRunId += 1
       runs.set(row.id, row)
       return row
     },
 
     async appendPlatformRunEvent(runId, input) {
-      const row: PlatformTaskRunEventRecord = {
-        id: nextEventId,
-        ...buildPlatformRunEventRecord(runId, input),
-      }
+      const row = buildInMemoryPlatformRunEventRecord(nextEventId, runId, input)
       nextEventId += 1
       events.push(row)
       return row
@@ -644,30 +728,21 @@ export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
     },
 
     async savePlatformArtifact(input) {
-      const row: PlatformArtifactRecord = {
-        id: nextArtifactId,
-        ...buildPlatformArtifactRecord(input),
-      }
+      const row = buildInMemoryPlatformArtifactRecord(nextArtifactId, input)
       nextArtifactId += 1
       artifacts.push(row)
       return row
     },
 
     async promotePlatformArtifactToWorkItem(input) {
-      const row: PlatformWorkItemRecord = {
-        id: nextWorkItemId,
-        ...buildPlatformWorkItemRecord(input),
-      }
+      const row = buildInMemoryPlatformWorkItemRecord(nextWorkItemId, input)
       nextWorkItemId += 1
       workItems.push(row)
       return row
     },
 
     async enqueuePlatformKnowledgeSaveJob(input) {
-      const row: PlatformKnowledgeSaveJobRecord = {
-        id: nextKnowledgeJobId,
-        ...buildPlatformKnowledgeSaveJobRecord(input),
-      }
+      const row = buildInMemoryPlatformKnowledgeSaveJobRecord(nextKnowledgeJobId, input)
       nextKnowledgeJobId += 1
       knowledgeSaveJobs.push(row)
       return row

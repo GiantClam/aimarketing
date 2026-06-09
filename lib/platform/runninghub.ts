@@ -1,4 +1,4 @@
-export type RunningHubMediaTarget = "ai-image" | "ai-video" | "ai-music" | "visual-ad-pipeline"
+export type RunningHubMediaTarget = "ai-image" | "ai-video" | "visual-ad-pipeline"
 
 export type RunningHubTaskStatus = "QUEUED" | "RUNNING" | "SUCCESS" | "FAILED"
 
@@ -38,7 +38,6 @@ export type RunningHubConfig = {
   uploadPath: string
   image: RunningHubTargetConfig
   video: RunningHubTargetConfig
-  music?: RunningHubTargetConfig
 }
 
 function normalizeBaseUrl(value: string | undefined) {
@@ -76,16 +75,12 @@ export function getRunningHubConfig(): RunningHubConfig {
       configured: Boolean(apiKey && process.env.RUNNINGHUB_VIDEO_ENDPOINT?.trim()),
       endpoint: normalizeEndpoint(process.env.RUNNINGHUB_VIDEO_ENDPOINT),
     },
-    music: {
-      configured: Boolean(apiKey && process.env.RUNNINGHUB_MUSIC_ENDPOINT?.trim()),
-      endpoint: normalizeEndpoint(process.env.RUNNINGHUB_MUSIC_ENDPOINT),
-    },
   }
 }
 
 export type RunningHubResolvedTarget = {
   requestedTarget: RunningHubMediaTarget
-  providerTarget: "ai-image" | "ai-video" | "ai-music"
+  providerTarget: "ai-image" | "ai-video"
   configured: boolean
   endpoint: string | null
 }
@@ -93,12 +88,6 @@ export type RunningHubResolvedTarget = {
 export function resolveRunningHubTargetConfig(mediaTarget: RunningHubMediaTarget, config = getRunningHubConfig()) {
   if (mediaTarget === "ai-image") return config.image
   if (mediaTarget === "ai-video") return config.video
-  if (mediaTarget === "ai-music") {
-    return config.music ?? {
-      configured: false,
-      endpoint: null,
-    }
-  }
   return {
     configured: config.image.configured || config.video.configured,
     endpoint: config.video.endpoint || config.image.endpoint,
@@ -106,12 +95,7 @@ export function resolveRunningHubTargetConfig(mediaTarget: RunningHubMediaTarget
 }
 
 export function hasRunningHubMediaTarget(mediaTarget: string): mediaTarget is RunningHubMediaTarget {
-  return (
-    mediaTarget === "ai-image" ||
-    mediaTarget === "ai-video" ||
-    mediaTarget === "ai-music" ||
-    mediaTarget === "visual-ad-pipeline"
-  )
+  return mediaTarget === "ai-image" || mediaTarget === "ai-video" || mediaTarget === "visual-ad-pipeline"
 }
 
 export function isRunningHubConfiguredForTarget(
@@ -123,11 +107,7 @@ export function isRunningHubConfiguredForTarget(
 }
 
 export function hasRunningHubMediaExecution(config = getRunningHubConfig()) {
-  return (
-    isRunningHubConfiguredForTarget("ai-image", config) ||
-    isRunningHubConfiguredForTarget("ai-video", config) ||
-    isRunningHubConfiguredForTarget("ai-music", config)
-  )
+  return isRunningHubConfiguredForTarget("ai-image", config) || isRunningHubConfiguredForTarget("ai-video", config)
 }
 
 export function resolveRunningHubProviderTarget(
@@ -149,16 +129,6 @@ export function resolveRunningHubProviderTarget(
     return {
       requestedTarget: mediaTarget,
       providerTarget: "ai-video",
-      configured: Boolean(config.apiKey && target.configured && target.endpoint),
-      endpoint: target.endpoint,
-    }
-  }
-
-  if (mediaTarget === "ai-music") {
-    const target = resolveRunningHubTargetConfig("ai-music", config)
-    return {
-      requestedTarget: mediaTarget,
-      providerTarget: "ai-music",
       configured: Boolean(config.apiKey && target.configured && target.endpoint),
       endpoint: target.endpoint,
     }

@@ -11,6 +11,8 @@ import {
   type PlatformTaskRunStore,
 } from "@/lib/platform/task-run-store"
 
+type EnterpriseAuthUser = AuthUser & { enterpriseId: number }
+
 type WorkflowRunPersistence = Pick<
   PlatformTaskRunStore,
   | "createPlatformTaskRun"
@@ -94,7 +96,7 @@ async function patchPlatformWorkflowRunRecord(runId: number, patch: PlatformWork
   await db.update(platformTaskRuns).set(nextValues).where(eq(platformTaskRuns.id, runId))
 }
 
-function assertEnterpriseUser(currentUser: AuthUser) {
+function assertEnterpriseUser(currentUser: AuthUser): asserts currentUser is EnterpriseAuthUser {
   if (!currentUser?.id) {
     throw new Error("workflow_run_user_required")
   }
@@ -294,7 +296,7 @@ export async function createPlatformWorkflowRun(input: CreatePlatformWorkflowRun
   assertEnterpriseUser(input.currentUser)
 
   const run = await store.createPlatformTaskRun({
-    enterpriseId: input.currentUser.enterpriseId as number,
+    enterpriseId: input.currentUser.enterpriseId,
     userId: input.currentUser.id,
     kind: "workflow",
     itemType: "workflow",

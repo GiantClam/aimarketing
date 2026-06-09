@@ -14,7 +14,11 @@ export default async function DashboardBusinessWorkbenchPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const [locale, rawSearchParams] = await Promise.all([getRequestLocale(), searchParams ?? Promise.resolve({})])
+  const emptySearchParams: Record<string, string | string[] | undefined> = {}
+  const [locale, rawSearchParams] = await Promise.all([
+    getRequestLocale(),
+    searchParams ?? Promise.resolve(emptySearchParams),
+  ])
   const uiLocale = locale === "zh" ? "zh" : "en"
   const entries = getLocalizedWorkspaceBusinessEntries(uiLocale)
   const agents = listLocalizedBusinessAgentConfigs(uiLocale)

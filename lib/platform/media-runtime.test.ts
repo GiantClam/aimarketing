@@ -6,6 +6,7 @@ import {
   getPlatformMediaCapabilityStateFromSnapshot,
   isPlatformMediaCapabilitySlug,
 } from "@/lib/platform/media-runtime"
+import type { MiniMaxAudioConfig } from "@/lib/platform/minimax-audio"
 import type { PlatformRuntimeSnapshot } from "@/lib/platform/runtime"
 import type { RunningHubConfig } from "@/lib/platform/runninghub"
 
@@ -22,10 +23,16 @@ const emptyRunningHubConfig: RunningHubConfig = {
     configured: false,
     endpoint: null,
   },
-  music: {
-    configured: false,
-    endpoint: null,
-  },
+}
+
+const configuredMiniMax: MiniMaxAudioConfig = {
+  baseUrl: "https://api.minimaxi.com/v1",
+  apiKey: "minimax-key",
+}
+
+const emptyMiniMax: MiniMaxAudioConfig = {
+  baseUrl: "https://api.minimaxi.com/v1",
+  apiKey: "",
 }
 
 function buildSnapshot(overrides?: Partial<PlatformRuntimeSnapshot>): PlatformRuntimeSnapshot {
@@ -120,7 +127,7 @@ test("media runtime helper keeps ai-video deferred when the task is explicitly d
   assert.deepEqual(state.providers.map((provider) => provider.id), ["runninghub-video"])
 })
 
-test("media runtime builder promotes RunningHub image and video targets into ready platform tasks", () => {
+test("media runtime builder promotes RunningHub video/image and MiniMax audio targets into ready platform tasks", () => {
   const runtime = buildPlatformMediaRuntimeEntriesFromState({
     imageAvailability: {
       enabled: false,
@@ -143,24 +150,41 @@ test("media runtime builder promotes RunningHub image and video targets into rea
         configured: true,
         endpoint: "/api/video/run",
       },
-      music: {
-        configured: true,
-        endpoint: "/api/music/run",
-      },
     },
+    minimaxConfig: configuredMiniMax,
   })
 
   assert.equal(runtime.mediaRuntimeEnabled, true)
   assert.equal(runtime.runningHubImageConfigured, true)
   assert.equal(runtime.runningHubVideoConfigured, true)
-  assert.equal(runtime.runningHubMusicConfigured, true)
+  assert.equal(runtime.runningHubMusicConfigured, false)
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.runtimeId, "runninghub-image")
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.enabled, true)
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-video")?.runtimeId, "runninghub-video")
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-video")?.enabled, true)
-  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.runtimeId, "runninghub-music")
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.runtimeId, "minimax-audio")
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.enabled, true)
   assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-image")?.role, "primary")
   assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-video")?.role, "primary")
-  assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-music")?.role, "primary")
+  assert.equal(runtime.providers.find((provider) => provider.id === "minimax-audio")?.role, "primary")
+})
+
+test("media runtime keeps ai-music deferred when MiniMax audio is not configured", () => {
+  const runtime = buildPlatformMediaRuntimeEntriesFromState({
+    imageAvailability: {
+      enabled: false,
+      reason: "image_assistant_r2_config_missing",
+      provider: "unavailable",
+      models: {
+        highQuality: "gpt-image-2",
+        lowCost: "gpt-image-2",
+      },
+    },
+    videoRuntimeEnabled: false,
+    runningHubConfig: emptyRunningHubConfig,
+    minimaxConfig: emptyMiniMax,
+  })
+
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.mode, "deferred")
+  assert.equal(runtime.providers.find((provider) => provider.id === "minimax-audio")?.configured, false)
 })

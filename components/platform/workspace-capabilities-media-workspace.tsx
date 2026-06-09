@@ -1,7 +1,19 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AudioLines, ChevronRight, Download, Home, Loader2, Sparkles, Video, X } from "lucide-react"
+import {
+  AudioLines,
+  ChevronRight,
+  Download,
+  Loader2,
+  Mic,
+  RefreshCw,
+  Sparkles,
+  Square,
+  Upload,
+  Video,
+  X,
+} from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
@@ -45,19 +57,35 @@ type MediaTaskSubmission = {
   endpoint?: string | null
   taskId: string
   status: string
+  results?: MediaTaskResult[] | null
+  extra?: Record<string, unknown> | null
   raw?: Record<string, unknown> | null
+}
+
+type MediaTaskResult = {
+  url?: string | null
+  outputType?: string | null
+  text?: string | null
+  title?: string | null
 }
 
 type MediaTaskQuery = {
   taskId: string
   mediaTarget: string
+  requestedTarget?: string
   provider: string
   status: string
-  results?: Array<{
-    url?: string | null
-    outputType?: string | null
-    text?: string | null
-  }> | null
+  results?: MediaTaskResult[] | null
+  extra?: Record<string, unknown> | null
+  raw?: Record<string, unknown> | null
+}
+
+type WorkspaceVoiceOption = {
+  voiceId: string
+  voiceName: string
+  category: "system" | "voice_cloning" | "voice_generation"
+  description: string[]
+  createdTime: string | null
 }
 
 type WorkspaceTabState = {
@@ -70,6 +98,15 @@ type WorkspaceTabState = {
   message: string | null
   submission: MediaTaskSubmission | null
   task: MediaTaskQuery | null
+  sourceFileId: string | null
+  sourceFileName: string | null
+  sourcePreviewUrl: string | null
+  sourceUploading: boolean
+  promptAudioFileId: string | null
+  promptAudioFileName: string | null
+  promptAudioPreviewUrl: string | null
+  promptAudioUploading: boolean
+  isRecording: boolean
 }
 
 type Copy = {
@@ -102,13 +139,51 @@ type Copy = {
   queued: string
   ready: string
   unsupported: string
-  blocked: string
-  deferred: string
   tabsOpen: string
+  voiceLibrary: string
+  reloadVoices: string
+  loadingVoices: string
+  noVoices: string
+  uploadReference: string
+  uploadPromptAudio: string
+  uploadOptionalHint: string
+  recordReference: string
+  stopRecording: string
+  recording: string
+  requestingPermission: string
+  microphoneDenied: string
+  uploading: string
+  referenceReady: string
+  promptReady: string
+  resultDetails: string
+  lyrics: string
 }
 
 function buildDefaultValues(feature: CapabilityMediaWorkspaceFeature) {
   return Object.fromEntries(feature.fields.map((field) => [field.id, field.defaultValue || ""]))
+}
+
+function createTabState(feature: CapabilityMediaWorkspaceFeature): WorkspaceTabState {
+  return {
+    id: feature.id,
+    featureId: feature.id,
+    values: buildDefaultValues(feature),
+    isSubmitting: false,
+    isRefreshing: false,
+    error: null,
+    message: null,
+    submission: null,
+    task: null,
+    sourceFileId: null,
+    sourceFileName: null,
+    sourcePreviewUrl: null,
+    sourceUploading: false,
+    promptAudioFileId: null,
+    promptAudioFileName: null,
+    promptAudioPreviewUrl: null,
+    promptAudioUploading: false,
+    isRecording: false,
+  }
 }
 
 function isTerminalStatus(status: string | null | undefined) {
@@ -168,20 +243,35 @@ function getCopy(locale: "zh" | "en"): Copy {
       openFeature: "打开能力",
       openFirst: "先从上方选择一个音频或视频子能力。",
       runtimeDeferred: "当前运行时还未开放，暂时不能提交真实任务。",
-      runtimeDisabled: "当前运行时不可用，暂时不能提交真实任务。",
-      permissionRequired: "当前账号缺少企业权限，暂时不能提交真实任务。",
-      loginRequired: "当前需要登录后再执行。",
+      runtimeDisabled: "当前运行时已禁用，暂时不能提交真实任务。",
+      permissionRequired: "当前账号缺少能力权限。",
+      loginRequired: "登录后才可以提交真实任务。",
       taskQueued: "任务已提交，右侧会继续轮询真实状态。",
       taskFailed: "媒体任务执行失败。",
-      refresh: "刷新状态",
+      refresh: "刷新结果",
       download: "下载",
       generating: "提交中",
-      queued: "处理中",
+      queued: "排队中",
       ready: "就绪",
-      unsupported: "当前能力还没有可执行工作区。",
-      blocked: "受限",
-      deferred: "未开放",
-      tabsOpen: "已打开 tab",
+      unsupported: "当前能力暂不支持这个动作。",
+      tabsOpen: "个已打开标签",
+      voiceLibrary: "可用音色",
+      reloadVoices: "刷新音色",
+      loadingVoices: "正在查询可用音色…",
+      noVoices: "当前账号下还没有可用音色。",
+      uploadReference: "上传参考音频",
+      uploadPromptAudio: "上传示例音频",
+      uploadOptionalHint: "示例音频可选，用于增强复刻相似度；提供时需要同时填写文字转写。",
+      recordReference: "录音采集",
+      stopRecording: "停止录音",
+      recording: "录音中…",
+      requestingPermission: "正在向浏览器申请麦克风权限，请在弹框中点击允许。",
+      microphoneDenied: "当前浏览器未授予麦克风权限。请点击地址栏的网站权限设置，将麦克风改为允许后重试。",
+      uploading: "上传中…",
+      referenceReady: "参考音频已就绪",
+      promptReady: "示例音频已就绪",
+      resultDetails: "结果细节",
+      lyrics: "最终歌词",
     }
   }
 
@@ -189,35 +279,81 @@ function getCopy(locale: "zh" | "en"): Copy {
     eyebrow: "Media Workspace",
     title: "Capabilities",
     description: "Open one tab per sub-capability. Fill the structured brief on the left and review real task output, preview, and download on the right.",
-    launchers: "Capability Launchers",
-    workspace: "Multi-tab workspace",
-    config: "Task configuration",
+    launchers: "Launchers",
+    workspace: "Workspace",
+    config: "Configuration",
     result: "Result",
     allTasks: "All tasks",
-    status: "Task status",
+    status: "Status",
     provider: "Provider",
     runtime: "Runtime",
     access: "Access",
     latest: "Latest output",
-    history: "Result list",
+    history: "Results",
     latestEmpty: "No real previewable result is available yet.",
-    openFeature: "Open capability",
-    openFirst: "Start by opening an audio or video sub-capability above.",
-    runtimeDeferred: "This runtime is still deferred, so real execution is not available yet.",
-    runtimeDisabled: "This runtime is currently disabled, so real execution is not available yet.",
-    permissionRequired: "This account does not currently have permission to run this capability.",
-    loginRequired: "Login is required before execution.",
+    openFeature: "Open feature",
+    openFirst: "Choose an audio or video feature above to begin.",
+    runtimeDeferred: "This runtime is not available yet, so real task submission is blocked.",
+    runtimeDisabled: "This runtime is currently disabled, so real task submission is blocked.",
+    permissionRequired: "Your account does not have access to this capability.",
+    loginRequired: "Sign in before submitting a real task.",
     taskQueued: "Task submitted. The panel will continue polling real task state.",
     taskFailed: "The media task failed.",
-    refresh: "Refresh status",
+    refresh: "Refresh",
     download: "Download",
     generating: "Submitting",
-    queued: "Processing",
+    queued: "Queued",
     ready: "Ready",
-    unsupported: "This capability does not yet expose an executable workspace.",
-    blocked: "Blocked",
-    deferred: "Deferred",
+    unsupported: "This capability does not support the requested action.",
     tabsOpen: "open tabs",
+    voiceLibrary: "Voice library",
+    reloadVoices: "Reload voices",
+    loadingVoices: "Loading available voices…",
+    noVoices: "No voices are available for this account yet.",
+    uploadReference: "Upload reference audio",
+    uploadPromptAudio: "Upload prompt audio",
+    uploadOptionalHint: "Prompt audio is optional and helps stabilize similarity. If provided, add the matching transcript text too.",
+    recordReference: "Record reference",
+    stopRecording: "Stop recording",
+    recording: "Recording…",
+    requestingPermission: "Requesting microphone access. Please allow it in the browser prompt.",
+    microphoneDenied: "Microphone access is currently blocked for this site. Re-enable it from the browser site-permission control and try again.",
+    uploading: "Uploading…",
+    referenceReady: "Reference audio ready",
+    promptReady: "Prompt audio ready",
+    resultDetails: "Details",
+    lyrics: "Final lyrics",
+  }
+}
+
+function getVoiceCategoryLabel(locale: "zh" | "en", category: WorkspaceVoiceOption["category"]) {
+  if (locale === "zh") {
+    if (category === "system") return "系统音色"
+    if (category === "voice_cloning") return "复刻音色"
+    return "生成音色"
+  }
+
+  if (category === "system") return "System"
+  if (category === "voice_cloning") return "Cloned"
+  return "Generated"
+}
+
+function coerceExtraText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+async function getMicrophonePermissionState() {
+  if (!("permissions" in navigator) || !navigator.permissions?.query) {
+    return null
+  }
+
+  try {
+    const status = await navigator.permissions.query({
+      name: "microphone" as PermissionName,
+    })
+    return status.state
+  } catch {
+    return null
   }
 }
 
@@ -263,8 +399,51 @@ function renderField(
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={field.placeholder}
+      step={field.type === "number" ? "0.1" : undefined}
     />
   )
+}
+
+function encodeWav(chunks: Float32Array[], sampleRate: number) {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const pcm = new Int16Array(totalLength)
+  let offset = 0
+
+  for (const chunk of chunks) {
+    for (let index = 0; index < chunk.length; index += 1) {
+      const sample = Math.max(-1, Math.min(1, chunk[index] || 0))
+      pcm[offset] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+      offset += 1
+    }
+  }
+
+  const buffer = new ArrayBuffer(44 + pcm.length * 2)
+  const view = new DataView(buffer)
+  const writeString = (position: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(position + index, value.charCodeAt(index))
+    }
+  }
+
+  writeString(0, "RIFF")
+  view.setUint32(4, 36 + pcm.length * 2, true)
+  writeString(8, "WAVE")
+  writeString(12, "fmt ")
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeString(36, "data")
+  view.setUint32(40, pcm.length * 2, true)
+
+  for (let index = 0; index < pcm.length; index += 1) {
+    view.setInt16(44 + index * 2, pcm[index], true)
+  }
+
+  return new Blob([buffer], { type: "audio/wav" })
 }
 
 export function WorkspaceCapabilitiesMediaWorkspace({
@@ -286,11 +465,28 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   const searchParams = useSearchParams()
   const [tabs, setTabs] = useState<WorkspaceTabState[]>([])
   const [activeTabId, setActiveTabId] = useState<CapabilityMediaWorkspaceFeatureId | null>(null)
+  const [voiceOptions, setVoiceOptions] = useState<WorkspaceVoiceOption[]>([])
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false)
+  const [voicesError, setVoicesError] = useState<string | null>(null)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const activeTabRef = useRef<HTMLButtonElement | null>(null)
+  const sourceFileInputRef = useRef<HTMLInputElement | null>(null)
+  const promptAudioFileInputRef = useRef<HTMLInputElement | null>(null)
+  const previewUrlsRef = useRef<Set<string>>(new Set())
+  const recordingStreamRef = useRef<MediaStream | null>(null)
+  const recordingContextRef = useRef<AudioContext | null>(null)
+  const recordingSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const recordingProcessorRef = useRef<ScriptProcessorNode | null>(null)
+  const recordingBuffersRef = useRef<Float32Array[]>([])
+  const recordingSampleRateRef = useRef<number>(44100)
+  const recordingTabIdRef = useRef<CapabilityMediaWorkspaceFeatureId | null>(null)
 
   const featureMap = useMemo(
-    () => Object.fromEntries(features.map((feature) => [feature.id, feature])) as Record<CapabilityMediaWorkspaceFeatureId, CapabilityMediaWorkspaceFeature>,
+    () =>
+      Object.fromEntries(features.map((feature) => [feature.id, feature])) as Record<
+        CapabilityMediaWorkspaceFeatureId,
+        CapabilityMediaWorkspaceFeature
+      >,
     [features],
   )
 
@@ -320,26 +516,64 @@ export function WorkspaceCapabilitiesMediaWorkspace({
     [pathname, router, searchParams],
   )
 
+  const patchTab = useCallback((featureId: CapabilityMediaWorkspaceFeatureId, patch: Partial<WorkspaceTabState>) => {
+    setTabs((current) =>
+      current.map((tab) =>
+        tab.id === featureId
+          ? {
+              ...tab,
+              ...patch,
+            }
+          : tab,
+      ),
+    )
+  }, [])
+
+  const updateTabValue = useCallback(
+    (featureId: CapabilityMediaWorkspaceFeatureId, fieldId: string, nextValue: string) => {
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.id === featureId
+            ? {
+                ...tab,
+                values: {
+                  ...tab.values,
+                  [fieldId]: nextValue,
+                },
+              }
+            : tab,
+        ),
+      )
+    },
+    [],
+  )
+
+  const stopWaveRecording = useCallback(async () => {
+    recordingProcessorRef.current?.disconnect()
+    recordingSourceRef.current?.disconnect()
+    recordingContextRef.current?.close().catch(() => undefined)
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop())
+    recordingProcessorRef.current = null
+    recordingSourceRef.current = null
+    recordingContextRef.current = null
+    recordingStreamRef.current = null
+  }, [])
+
+  useEffect(() => {
+    const previewUrls = previewUrlsRef.current
+    return () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url))
+      previewUrls.clear()
+      void stopWaveRecording()
+    }
+  }, [stopWaveRecording])
+
   useEffect(() => {
     if (!initialFeatureId || !featureMap[initialFeatureId]) return
 
     setTabs((current) => {
       if (current.some((tab) => tab.id === initialFeatureId)) return current
-      const feature = featureMap[initialFeatureId]
-      return [
-        ...current,
-        {
-          id: initialFeatureId,
-          featureId: initialFeatureId,
-          values: buildDefaultValues(feature),
-          isSubmitting: false,
-          isRefreshing: false,
-          error: null,
-          message: null,
-          submission: null,
-          task: null,
-        },
-      ]
+      return [...current, createTabState(featureMap[initialFeatureId])]
     })
     setActiveTabId(initialFeatureId)
   }, [featureMap, initialFeatureId])
@@ -351,7 +585,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
       inline: "center",
       block: "nearest",
     })
-  }, [activeTabId, tabs])
+  }, [activeTabId, tabs.length])
 
   const groupedFeatures = useMemo(
     () =>
@@ -364,26 +598,52 @@ export function WorkspaceCapabilitiesMediaWorkspace({
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null
   const activeFeature = activeTab ? featureMap[activeTab.featureId] : null
+
+  const ensureVoicesLoaded = useCallback(
+    async (force = false) => {
+      if (isLoadingVoices) return
+      if (!force && voiceOptions.length > 0) return
+
+      setIsLoadingVoices(true)
+      setVoicesError(null)
+
+      try {
+        const response = await fetch("/api/platform/minimax/voices", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ voiceType: "all" }),
+        })
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string; data?: { voices?: WorkspaceVoiceOption[] | null } }
+          | null
+
+        if (!response.ok) {
+          throw new Error(payload?.error || copy.taskFailed)
+        }
+
+        setVoiceOptions(payload?.data?.voices || [])
+      } catch (error) {
+        setVoicesError(error instanceof Error ? error.message : copy.taskFailed)
+      } finally {
+        setIsLoadingVoices(false)
+      }
+    },
+    [copy.taskFailed, isLoadingVoices, voiceOptions.length],
+  )
+
+  useEffect(() => {
+    if (!activeFeature) return
+    if (activeFeature.id !== "voice-synthesis") return
+    void ensureVoicesLoaded(false)
+  }, [activeFeature, ensureVoicesLoaded])
+
   function openFeatureTab(featureId: CapabilityMediaWorkspaceFeatureId) {
     const feature = featureMap[featureId]
     if (!feature) return
 
     setTabs((current) => {
       if (current.some((tab) => tab.id === featureId)) return current
-      return [
-        ...current,
-        {
-          id: featureId,
-          featureId,
-          values: buildDefaultValues(feature),
-          isSubmitting: false,
-          isRefreshing: false,
-          error: null,
-          message: null,
-          submission: null,
-          task: null,
-        },
-      ]
+      return [...current, createTabState(feature)]
     })
     setActiveTabId(featureId)
     syncFeatureQuery(featureId)
@@ -402,43 +662,36 @@ export function WorkspaceCapabilitiesMediaWorkspace({
     })
   }
 
-  function patchTab(featureId: CapabilityMediaWorkspaceFeatureId, patch: Partial<WorkspaceTabState>) {
-    setTabs((current) =>
-      current.map((tab) =>
-        tab.id === featureId
-          ? {
-              ...tab,
-              ...patch,
-            }
-          : tab,
-      ),
-    )
-  }
+  const refreshTask = useCallback(
+    async (featureId: CapabilityMediaWorkspaceFeatureId, capabilitySlug: "ai-video" | "ai-music", taskId: string) => {
+      patchTab(featureId, { isRefreshing: true })
 
-  const refreshTask = useCallback(async (featureId: CapabilityMediaWorkspaceFeatureId, capabilitySlug: "ai-video" | "ai-music", taskId: string) => {
-    patchTab(featureId, { isRefreshing: true })
+      try {
+        const response = await fetch(
+          `/api/platform/media/tasks/${encodeURIComponent(taskId)}?target=${encodeURIComponent(capabilitySlug)}`,
+          {
+            cache: "no-store",
+          },
+        )
+        const payload = (await response.json().catch(() => null)) as { error?: string; data?: MediaTaskQuery } | null
+        if (!response.ok || !payload?.data) {
+          throw new Error(payload?.error || copy.taskFailed)
+        }
 
-    try {
-      const response = await fetch(`/api/platform/media/tasks/${encodeURIComponent(taskId)}?target=${encodeURIComponent(capabilitySlug)}`, {
-        cache: "no-store",
-      })
-      const payload = (await response.json().catch(() => null)) as { error?: string; data?: MediaTaskQuery } | null
-      if (!response.ok || !payload?.data) {
-        throw new Error(payload?.error || copy.taskFailed)
+        patchTab(featureId, {
+          task: payload.data,
+          error: null,
+          isRefreshing: false,
+        })
+      } catch (error) {
+        patchTab(featureId, {
+          error: error instanceof Error ? error.message : copy.taskFailed,
+          isRefreshing: false,
+        })
       }
-
-      patchTab(featureId, {
-        task: payload.data,
-        error: null,
-        isRefreshing: false,
-      })
-    } catch (error) {
-      patchTab(featureId, {
-        error: error instanceof Error ? error.message : copy.taskFailed,
-        isRefreshing: false,
-      })
-    }
-  }, [copy.taskFailed])
+    },
+    [copy.taskFailed, patchTab],
+  )
 
   useEffect(() => {
     const pendingTabs = tabs.filter((tab) => tab.task?.taskId && tab.task?.status && !isTerminalStatus(tab.task.status))
@@ -454,6 +707,171 @@ export function WorkspaceCapabilitiesMediaWorkspace({
 
     return () => window.clearTimeout(timer)
   }, [featureMap, refreshTask, tabs])
+
+  const uploadAudioFile = useCallback(
+    async (featureId: CapabilityMediaWorkspaceFeatureId, purpose: "voice_clone" | "prompt_audio", file: File) => {
+      patchTab(featureId, {
+        error: null,
+        sourceUploading: purpose === "voice_clone",
+        promptAudioUploading: purpose === "prompt_audio",
+      })
+
+      try {
+        const formData = new FormData()
+        formData.set("purpose", purpose)
+        formData.set("file", file)
+
+        const response = await fetch("/api/platform/minimax/files/upload", {
+          method: "POST",
+          body: formData,
+        })
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              error?: string
+              data?: {
+                fileId: string
+                fileName: string
+              }
+            }
+          | null
+
+        if (!response.ok || !payload?.data?.fileId) {
+          throw new Error(payload?.error || copy.taskFailed)
+        }
+
+        const previewUrl = URL.createObjectURL(file)
+        previewUrlsRef.current.add(previewUrl)
+
+        if (purpose === "voice_clone") {
+          setTabs((current) =>
+            current.map((tab) =>
+              tab.id === featureId
+                ? {
+                    ...tab,
+                    sourceUploading: false,
+                    sourceFileId: payload.data?.fileId || null,
+                    sourceFileName: payload.data?.fileName || file.name,
+                    sourcePreviewUrl: previewUrl,
+                    values: {
+                      ...tab.values,
+                      sourceFileId: payload.data?.fileId || "",
+                    },
+                  }
+                : tab,
+            ),
+          )
+        } else {
+          setTabs((current) =>
+            current.map((tab) =>
+              tab.id === featureId
+                ? {
+                    ...tab,
+                    promptAudioUploading: false,
+                    promptAudioFileId: payload.data?.fileId || null,
+                    promptAudioFileName: payload.data?.fileName || file.name,
+                    promptAudioPreviewUrl: previewUrl,
+                    values: {
+                      ...tab.values,
+                      promptAudioFileId: payload.data?.fileId || "",
+                    },
+                  }
+                : tab,
+            ),
+          )
+        }
+      } catch (error) {
+        patchTab(featureId, {
+          error: error instanceof Error ? error.message : copy.taskFailed,
+          sourceUploading: false,
+          promptAudioUploading: false,
+        })
+      }
+    },
+    [copy.taskFailed, patchTab],
+  )
+
+  const startReferenceRecording = useCallback(async () => {
+    if (!activeTab) return
+    if (activeTab.featureId !== "voice-clone") return
+    if (!navigator.mediaDevices?.getUserMedia || typeof window.AudioContext === "undefined") {
+      patchTab(activeTab.id, { error: "Browser audio recording is not supported here." })
+      return
+    }
+
+    try {
+      const permissionState = await getMicrophonePermissionState()
+      if (permissionState === "denied") {
+        patchTab(activeTab.id, {
+          error: copy.microphoneDenied,
+          isRecording: false,
+        })
+        return
+      }
+
+      patchTab(activeTab.id, {
+        error: permissionState === "prompt" || permissionState === null ? copy.requestingPermission : null,
+        isRecording: false,
+      })
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const context = new window.AudioContext()
+      const source = context.createMediaStreamSource(stream)
+      const processor = context.createScriptProcessor(4096, 1, 1)
+
+      recordingBuffersRef.current = []
+      recordingSampleRateRef.current = context.sampleRate
+      processor.onaudioprocess = (event) => {
+        recordingBuffersRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)))
+      }
+
+      source.connect(processor)
+      processor.connect(context.destination)
+
+      recordingStreamRef.current = stream
+      recordingContextRef.current = context
+      recordingSourceRef.current = source
+      recordingProcessorRef.current = processor
+      recordingTabIdRef.current = activeTab.id
+
+      patchTab(activeTab.id, {
+        error: null,
+        isRecording: true,
+      })
+    } catch (error) {
+      const permissionState = await getMicrophonePermissionState()
+      patchTab(activeTab.id, {
+        error:
+          permissionState === "denied" ||
+          (error instanceof DOMException && error.name === "NotAllowedError")
+            ? copy.microphoneDenied
+            : error instanceof Error
+              ? error.message
+              : "Failed to start recording.",
+        isRecording: false,
+      })
+    }
+  }, [activeTab, copy.microphoneDenied, copy.requestingPermission, patchTab])
+
+  const stopReferenceRecording = useCallback(async () => {
+    const featureId = recordingTabIdRef.current
+    if (!featureId) return
+
+    const chunks = recordingBuffersRef.current.slice()
+    const sampleRate = recordingSampleRateRef.current
+    await stopWaveRecording()
+    recordingTabIdRef.current = null
+    recordingBuffersRef.current = []
+    patchTab(featureId, { isRecording: false })
+
+    if (chunks.length === 0) {
+      patchTab(featureId, { error: "No audio was captured during recording." })
+      return
+    }
+
+    const wavBlob = encodeWav(chunks, sampleRate)
+    const file = new File([wavBlob], `voice-recording-${Date.now()}.wav`, { type: "audio/wav" })
+    await uploadAudioFile(featureId, "voice_clone", file)
+  }, [patchTab, stopWaveRecording, uploadAudioFile])
 
   async function submitActiveTab() {
     if (!activeTab || !activeFeature) return
@@ -479,6 +897,10 @@ export function WorkspaceCapabilitiesMediaWorkspace({
       patchTab(activeTab.id, { error: copy.loginRequired })
       return
     }
+    if (activeFeature.id === "voice-clone" && !activeTab.sourceFileId) {
+      patchTab(activeTab.id, { error: locale === "zh" ? "请先上传或录制参考音频。" : "Upload or record the reference audio first." })
+      return
+    }
 
     patchTab(activeTab.id, {
       isSubmitting: true,
@@ -489,7 +911,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
     const payload = {
       featureId: activeFeature.id,
       mode: "capabilities-media-workspace",
-      prompt: activeTab.values.prompt || "",
+      prompt: activeTab.values.prompt || activeTab.values.previewText || activeTab.values.stylePrompt || "",
       params: activeTab.values,
     }
 
@@ -513,9 +935,12 @@ export function WorkspaceCapabilitiesMediaWorkspace({
         task: {
           taskId: data.data.taskId,
           mediaTarget: data.data.mediaTarget,
+          requestedTarget: data.data.requestedTarget,
           provider: data.data.provider,
           status: data.data.status,
-          results: null,
+          results: data.data.results || null,
+          extra: data.data.extra || null,
+          raw: data.data.raw || null,
         },
         message: copy.taskQueued,
         isSubmitting: false,
@@ -533,15 +958,71 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   const latestResultUrl = latestResult?.url || null
   const latestIsVideo = activeFeature?.previewKind === "video" || isVideoLikeResult(latestResultUrl, latestResult?.outputType)
   const latestIsAudio = activeFeature?.previewKind === "audio" || isAudioLikeResult(latestResultUrl, latestResult?.outputType)
+  const activeExtra = activeTab?.task?.extra || activeTab?.submission?.extra || null
+  const activeLyrics = coerceExtraText(activeExtra?.lyrics)
+  const activeVoiceId = coerceExtraText(activeExtra?.voiceId)
+
+  const renderVoiceSelect = (tab: WorkspaceTabState, field: CapabilityMediaWorkspaceFieldView) => {
+    const value = tab.values[field.id] || ""
+    return (
+      <div className="space-y-2">
+        <Select value={value} onValueChange={(nextValue) => updateTabValue(tab.id, field.id, nextValue)}>
+          <SelectTrigger id={`${tab.id}-${field.id}`} className="w-full">
+            <SelectValue placeholder={field.placeholder || field.label} />
+          </SelectTrigger>
+          <SelectContent>
+            {voiceOptions.map((voice) => (
+              <SelectItem key={`${voice.category}-${voice.voiceId}`} value={voice.voiceId}>
+                {voice.voiceName} · {getVoiceCategoryLabel(locale, voice.category)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {value ? (
+          <div className="text-xs text-muted-foreground">
+            {voiceOptions.find((voice) => voice.voiceId === value)?.description?.[0] || value}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <section className="public-grid-bg w-full px-2 py-3 lg:px-3 lg:py-4">
+      <input
+        ref={sourceFileInputRef}
+        type="file"
+        accept=".mp3,.m4a,.wav,audio/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          const featureId = activeTab?.id
+          event.currentTarget.value = ""
+          if (!file || !featureId) return
+          void uploadAudioFile(featureId, "voice_clone", file)
+        }}
+      />
+      <input
+        ref={promptAudioFileInputRef}
+        type="file"
+        accept=".mp3,.m4a,.wav,audio/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          const featureId = activeTab?.id
+          event.currentTarget.value = ""
+          if (!file || !featureId) return
+          void uploadAudioFile(featureId, "prompt_audio", file)
+        }}
+      />
+
       <div className="space-y-3">
         <div className="rounded-[18px] border border-border/60 bg-background/90 p-3 shadow-sm lg:p-4">
           <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
           <h2 className="mt-2 font-display text-3xl font-extrabold tracking-[0.01em] text-foreground lg:text-4xl">
             {copy.title}
           </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
         </div>
 
         <div className="grid gap-3 xl:grid-cols-2">
@@ -568,29 +1049,16 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                       onClick={() => openFeatureTab(feature.id)}
                       className={cn(
                         "flex min-h-[84px] w-full items-center gap-3 rounded-[14px] border px-4 py-4 text-left transition",
-                        available
-                          ? "border-border/70 bg-card hover:border-primary/25 hover:bg-accent/20"
-                          : "border-border/60 bg-muted/35 text-muted-foreground hover:border-border/70 hover:bg-muted/45",
-                        opened && available && "border-primary/35 bg-primary/5 shadow-sm",
+                        getFeatureIconTone(opened),
+                        !available && "opacity-70",
                       )}
                     >
-                      <div
-                        className={cn(
-                          "flex size-9 shrink-0 items-center justify-center rounded-full border shadow-sm",
-                          getFeatureIconTone(opened),
-                        )}
-                      >
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-background/80">
                         {feature.previewKind === "audio" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div
-                          className={cn(
-                            "text-sm font-medium leading-5 whitespace-normal break-words",
-                            available ? "text-foreground" : "text-muted-foreground",
-                          )}
-                        >
-                          {feature.title}
-                        </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-foreground">{feature.title}</div>
+                        <div className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{feature.summary}</div>
                       </div>
                     </button>
                   )
@@ -600,14 +1068,15 @@ export function WorkspaceCapabilitiesMediaWorkspace({
           ))}
         </div>
 
-        <article ref={workspaceRef} className="overflow-hidden rounded-[20px] border border-border/60 bg-background/95 shadow-sm">
-          <div className="border-b border-border/70 bg-card/50 px-3 py-3 lg:px-5">
-            <div className="flex flex-wrap items-center gap-3 overflow-hidden">
-              <div className="flex shrink-0 items-center justify-center rounded-[12px] border border-border/70 bg-background p-3 text-muted-foreground">
-                <Home className="size-4" />
+        <article ref={workspaceRef} className="rounded-[18px] border border-border/60 bg-background/90 shadow-sm">
+          <div className="border-b border-border/60 px-3 py-3 lg:px-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
+                <div className="public-kicker text-muted-foreground">{copy.workspace}</div>
+                <div className="font-display text-2xl font-extrabold tracking-[0.01em] text-foreground">{copy.launchers}</div>
               </div>
-              <div className="min-w-0 flex-1 overflow-x-auto">
-                <div className="flex min-w-max items-stretch gap-2 pb-1">
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1">
+                <div className="flex min-w-0 items-center gap-2">
                   {tabs.map((tab) => {
                     const feature = featureMap[tab.featureId]
                     const active = tab.id === activeTabId
@@ -615,7 +1084,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                       <div
                         key={tab.id}
                         className={cn(
-                          "group flex shrink-0 items-center gap-2 rounded-[12px] border pr-2 transition",
+                          "flex items-center rounded-[12px] border transition",
                           active
                             ? "border-primary/35 bg-background text-primary shadow-sm"
                             : "border-border/70 bg-card text-foreground hover:border-primary/20 hover:bg-accent/20",
@@ -667,17 +1136,80 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                   <p className="text-sm leading-6 text-muted-foreground">{activeFeature.summary}</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {activeFeature.id === "voice-synthesis" ? (
+                    <div className="space-y-3 rounded-[12px] border border-border/70 bg-background/70 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="dashboard-kicker text-muted-foreground">{copy.voiceLibrary}</div>
+                        <Button type="button" size="sm" variant="outline" className="rounded-[8px]" onClick={() => void ensureVoicesLoaded(true)} disabled={isLoadingVoices}>
+                          {isLoadingVoices ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
+                          {copy.reloadVoices}
+                        </Button>
+                      </div>
+                      {isLoadingVoices ? <div className="text-sm text-muted-foreground">{copy.loadingVoices}</div> : null}
+                      {voicesError ? <div className="text-sm text-destructive">{voicesError}</div> : null}
+                      {!isLoadingVoices && !voicesError && voiceOptions.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">{copy.noVoices}</div>
+                      ) : null}
+                      {voiceOptions.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {voiceOptions.slice(0, 6).map((voice) => (
+                            <Badge key={`${voice.category}-${voice.voiceId}`} variant="outline" className="rounded-[4px]">
+                              {voice.voiceName} · {getVoiceCategoryLabel(locale, voice.category)}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {activeFeature.id === "voice-clone" ? (
+                    <div className="space-y-3 rounded-[12px] border border-border/70 bg-background/70 p-3">
+                      <div className="dashboard-kicker text-muted-foreground">{copy.uploadReference}</div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" className="rounded-[8px]" onClick={() => sourceFileInputRef.current?.click()} disabled={activeTab.sourceUploading || activeTab.isRecording}>
+                          {activeTab.sourceUploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
+                          {activeTab.sourceUploading ? copy.uploading : copy.uploadReference}
+                        </Button>
+                        <Button type="button" variant="outline" className="rounded-[8px]" onClick={() => void (activeTab.isRecording ? stopReferenceRecording() : startReferenceRecording())}>
+                          {activeTab.isRecording ? <Square className="mr-2 size-4" /> : <Mic className="mr-2 size-4" />}
+                          {activeTab.isRecording ? copy.stopRecording : copy.recordReference}
+                        </Button>
+                      </div>
+                      {activeTab.isRecording ? <div className="text-sm text-primary">{copy.recording}</div> : null}
+                      {activeTab.sourceFileName ? (
+                        <div className="space-y-2 rounded-[8px] border border-border/60 bg-muted/20 p-3">
+                          <div className="text-sm text-foreground/85">
+                            {copy.referenceReady}: {activeTab.sourceFileName}
+                          </div>
+                          {activeTab.sourcePreviewUrl ? <audio src={activeTab.sourcePreviewUrl} controls className="w-full" /> : null}
+                        </div>
+                      ) : null}
+
+                      <div className="dashboard-kicker text-muted-foreground">{copy.uploadPromptAudio}</div>
+                      <Button type="button" variant="outline" className="rounded-[8px]" onClick={() => promptAudioFileInputRef.current?.click()} disabled={activeTab.promptAudioUploading}>
+                        {activeTab.promptAudioUploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
+                        {activeTab.promptAudioUploading ? copy.uploading : copy.uploadPromptAudio}
+                      </Button>
+                      <div className="text-sm leading-6 text-muted-foreground">{copy.uploadOptionalHint}</div>
+                      {activeTab.promptAudioFileName ? (
+                        <div className="space-y-2 rounded-[8px] border border-border/60 bg-muted/20 p-3">
+                          <div className="text-sm text-foreground/85">
+                            {copy.promptReady}: {activeTab.promptAudioFileName}
+                          </div>
+                          {activeTab.promptAudioPreviewUrl ? <audio src={activeTab.promptAudioPreviewUrl} controls className="w-full" /> : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   {activeFeature.fields.map((field) => (
                     <div key={field.id} className="space-y-2">
                       <Label htmlFor={`${activeTab.id}-${field.id}`}>{field.label}</Label>
-                      {renderField(`${activeTab.id}-${field.id}`, field, activeTab.values[field.id] || "", (nextValue) =>
-                        patchTab(activeTab.id, {
-                          values: {
-                            ...activeTab.values,
-                            [field.id]: nextValue,
-                          },
-                        }),
-                      )}
+                      {activeFeature.id === "voice-synthesis" && field.id === "voiceId"
+                        ? renderVoiceSelect(activeTab, field)
+                        : renderField(`${activeTab.id}-${field.id}`, field, activeTab.values[field.id] || "", (nextValue) =>
+                            updateTabValue(activeTab.id, field.id, nextValue),
+                          )}
                     </div>
                   ))}
 
@@ -721,10 +1253,8 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                       <video src={latestResultUrl} controls className="aspect-video w-full rounded-[8px] bg-black/85" />
                     ) : null}
                     {latestResultUrl && !latestIsVideo && latestIsAudio ? (
-                      <div className="space-y-3">
-                        <div className="rounded-[8px] border border-border/60 bg-muted/20 p-4">
-                          <audio src={latestResultUrl} controls className="w-full" />
-                        </div>
+                      <div className="space-y-3 rounded-[8px] border border-border/60 bg-muted/20 p-4">
+                        <audio src={latestResultUrl} controls className="w-full" />
                       </div>
                     ) : null}
                     {!latestResultUrl ? (
@@ -733,6 +1263,25 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                       </div>
                     ) : null}
                   </div>
+
+                  {activeVoiceId || activeLyrics ? (
+                    <div className="space-y-3 rounded-[12px] border border-border/70 bg-background/70 p-3">
+                      <div className="dashboard-kicker text-muted-foreground">{copy.resultDetails}</div>
+                      {activeVoiceId ? (
+                        <div className="text-sm text-foreground/85">
+                          <span className="font-medium">voice_id:</span> {activeVoiceId}
+                        </div>
+                      ) : null}
+                      {activeLyrics ? (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-foreground">{copy.lyrics}</div>
+                          <pre className="whitespace-pre-wrap rounded-[8px] border border-border/60 bg-muted/20 p-3 text-sm leading-6 text-foreground/85">
+                            {activeLyrics}
+                          </pre>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-wrap gap-3">
                     <Button
@@ -764,9 +1313,12 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                     {activeTab.task?.results?.length ? (
                       <div className="space-y-2">
                         {activeTab.task.results.map((result, index) => (
-                          <div key={`${activeTab.id}-result-${index}`} className="dashboard-chip flex items-center justify-between gap-3 rounded-[4px] px-3 py-3 text-sm text-foreground/85">
+                          <div
+                            key={`${activeTab.id}-result-${index}`}
+                            className="dashboard-chip flex items-center justify-between gap-3 rounded-[4px] px-3 py-3 text-sm text-foreground/85"
+                          >
                             <span className="truncate">
-                              {result.outputType || (result.url ? "file" : "text")} · {result.url || result.text || "—"}
+                              {result.title || result.outputType || (result.url ? "file" : "text")} · {result.text || result.url || "—"}
                             </span>
                             {result.url ? (
                               <a href={result.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">

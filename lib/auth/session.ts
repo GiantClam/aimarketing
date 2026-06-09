@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/retry"
 import { enterprises, userFeaturePermissions, userSessions, users } from "@/lib/db/schema"
 import { FEATURE_KEYS, buildPermissionMap } from "@/lib/enterprise/constants"
+import type { AuthUserPayload } from "@/lib/enterprise/server"
 import { normalizeDisplayText } from "@/lib/text/display-name"
 
 export const SESSION_COOKIE_NAME = "aimarketing_session"
@@ -20,8 +21,11 @@ const SESSION_DB_RETRY_DELAYS_MS = [250, 750, 1500]
 const SESSION_TOUCH_INTERVAL_MS = 1000 * 60 * 5
 const DEFAULT_DEMO_SESSION_ID = 1
 
-function shouldHydrateDemoSessionFromDb() {
-  return process.env.DEMO_SESSION_DB_HYDRATE === "true"
+export function isDemoSessionDbHydrationEnabled() {
+  const explicit = process.env.DEMO_SESSION_DB_HYDRATE?.trim().toLowerCase()
+  if (explicit === "true") return true
+  if (explicit === "false") return false
+  return process.env.NODE_ENV === "development"
 }
 
 function hashSessionToken(token: string) {
@@ -117,7 +121,7 @@ function parseDemoCookieValue(value?: string | null) {
   return payload
 }
 
-export function createDemoAuthPayload() {
+export function createDemoAuthPayload(): AuthUserPayload {
   const configuredDemoUserId = Number(process.env.DEMO_FALLBACK_USER_ID || DEFAULT_DEMO_SESSION_ID)
   return {
     id: Number.isFinite(configuredDemoUserId) && configuredDemoUserId > 0 ? configuredDemoUserId : DEFAULT_DEMO_SESSION_ID,
@@ -191,10 +195,10 @@ export async function deleteUserSessions(userId: number) {
   })
 }
 
-export async function getSessionUser(request: NextRequest) {
+export async function getSessionUser(request: NextRequest): Promise<AuthUserPayload | null> {
   const demoCookie = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
   if (parseDemoCookieValue(demoCookie)) {
-    if (!shouldHydrateDemoSessionFromDb()) {
+    if (!isDemoSessionDbHydrationEnabled()) {
       return createDemoAuthPayload()
     }
 
@@ -381,7 +385,7 @@ export async function getSessionUser(request: NextRequest) {
   }
 }
 
-export type AuthUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>
+export type AuthUser = AuthUserPayload
 
 export async function requireAuthenticatedUser(request: NextRequest) {
   return getSessionUser(request)

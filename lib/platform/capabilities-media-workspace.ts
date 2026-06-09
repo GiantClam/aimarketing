@@ -40,7 +40,7 @@ type CapabilityMediaWorkspaceFeatureDefinition = {
   title: LocalizedText
   summary: LocalizedText
   submitLabel: LocalizedText
-  action: "generate" | "workflow-plan"
+  action: "generate" | "voice-clone" | "voice-synthesis" | "workflow-plan"
   fields: CapabilityMediaWorkspaceField[]
 }
 
@@ -77,7 +77,7 @@ export type CapabilityMediaWorkspaceFeature = {
   title: string
   summary: string
   submitLabel: string
-  action: "generate" | "workflow-plan"
+  action: "generate" | "voice-clone" | "voice-synthesis" | "workflow-plan"
   fields: CapabilityMediaWorkspaceFieldView[]
 }
 
@@ -123,55 +123,48 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     previewKind: "audio",
     title: { zh: "AI音乐", en: "AI Music" },
     summary: {
-      zh: "生成高保真配乐、主题音乐和音频片段。",
-      en: "Generate high-fidelity soundtracks, theme music, and short audio clips.",
+      zh: "生成高保真歌曲与配乐，支持手填歌词或 AI 自动写词。",
+      en: "Generate songs and soundtracks with manual lyrics or AI-written lyrics.",
     },
     submitLabel: { zh: "生成音频", en: "Generate audio" },
     action: "generate",
     fields: [
       {
-        id: "prompt",
+        id: "stylePrompt",
         type: "textarea",
-        label: { zh: "音乐描述", en: "Music brief" },
+        label: { zh: "风格 / 情绪 / 场景", en: "Style / mood / scene" },
         placeholder: {
-          zh: "例如：为 AI 产品发布视频生成一段 30 秒科技感开场配乐。",
-          en: "Example: Create a 30-second futuristic opening soundtrack for an AI launch video.",
+          zh: "例如：独立电子流行，克制但有冲劲，适合 AI 产品发布片头。",
+          en: "Example: restrained electronic pop with momentum for an AI product launch opener.",
         },
       },
       {
-        id: "duration",
+        id: "lyricsSource",
         type: "select",
-        label: { zh: "时长", en: "Duration" },
-        defaultValue: "30",
-        options: DURATION_OPTIONS,
-      },
-      {
-        id: "mood",
-        type: "select",
-        label: { zh: "情绪", en: "Mood" },
-        defaultValue: "uplifting",
+        label: { zh: "歌词来源", en: "Lyrics source" },
+        defaultValue: "manual",
         options: [
-          { value: "uplifting", label: { zh: "振奋", en: "Uplifting" } },
-          { value: "cinematic", label: { zh: "电影感", en: "Cinematic" } },
-          { value: "calm", label: { zh: "平静", en: "Calm" } },
+          { value: "manual", label: { zh: "手动填写", en: "Manual lyrics" } },
+          { value: "ai_generate", label: { zh: "AI 自动生成", en: "AI generate" } },
         ],
       },
       {
-        id: "genre",
-        type: "select",
-        label: { zh: "风格", en: "Genre" },
-        defaultValue: "electronic",
-        options: [
-          { value: "electronic", label: { zh: "电子", en: "Electronic" } },
-          { value: "orchestral", label: { zh: "交响", en: "Orchestral" } },
-          { value: "ambient", label: { zh: "氛围", en: "Ambient" } },
-        ],
+        id: "lyrics",
+        type: "textarea",
+        label: { zh: "歌词", en: "Lyrics" },
+        placeholder: {
+          zh: "手动填写歌词；如果选择 AI 自动生成，这里会在结果区回显最终歌词。",
+          en: "Enter manual lyrics here. When AI generation is selected, the final lyrics will be shown in the result panel.",
+        },
       },
       {
-        id: "instrumentation",
-        type: "text",
-        label: { zh: "核心乐器", en: "Instrumentation" },
-        placeholder: { zh: "例如：合成器、低音鼓、弦乐铺底", en: "Example: synths, kick, soft strings" },
+        id: "lyricsPrompt",
+        type: "textarea",
+        label: { zh: "AI 写词提示", en: "AI lyrics prompt" },
+        placeholder: {
+          zh: "例如：写一首关于新品牌发布夜的中文流行歌，含主歌与副歌。",
+          en: "Example: write a Mandarin pop song about a late-night brand launch with verses and chorus.",
+        },
       },
     ],
   },
@@ -182,39 +175,39 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     previewKind: "audio",
     title: { zh: "声音克隆", en: "Voice Clone" },
     summary: {
-      zh: "复制目标音色、语调和表达习惯，用于配音和虚拟人场景。",
-      en: "Clone target timbre, tone, and delivery for voiceovers and virtual personalities.",
+      zh: "上传或录制参考音频，快速复刻音色，并生成试听结果供后续合成复用。",
+      en: "Upload or record reference audio, clone the voice, and generate a preview for later synthesis.",
     },
-    submitLabel: { zh: "生成克隆音频", en: "Generate cloned voice" },
-    action: "generate",
+    submitLabel: { zh: "复刻音色", en: "Clone voice" },
+    action: "voice-clone",
     fields: [
       {
-        id: "voiceSourceUrl",
-        type: "url",
-        label: { zh: "样本音频 URL", en: "Reference audio URL" },
-        placeholder: { zh: "粘贴音色样本地址", en: "Paste a reference voice sample URL" },
+        id: "voiceId",
+        type: "text",
+        label: { zh: "新音色 ID", en: "New voice ID" },
+        placeholder: { zh: "留空则自动生成，例如 voice_brand_host", en: "Leave blank to auto-generate, for example voice_brand_host" },
       },
       {
-        id: "prompt",
+        id: "previewText",
         type: "textarea",
-        label: { zh: "目标口播内容", en: "Target script" },
+        label: { zh: "试听文本", en: "Preview script" },
         placeholder: { zh: "例如：欢迎来到 AI Marketing 新品发布会。", en: "Example: Welcome to the AI Marketing launch event." },
       },
       {
-        id: "language",
-        type: "select",
-        label: { zh: "语言", en: "Language" },
-        defaultValue: "zh-CN",
-        options: [
-          { value: "zh-CN", label: { zh: "中文", en: "Chinese" } },
-          { value: "en-US", label: { zh: "英文", en: "English" } },
-        ],
+        id: "promptText",
+        type: "text",
+        label: { zh: "示例音频文本", en: "Prompt audio transcript" },
+        placeholder: { zh: "仅在上传示例音频时填写，用于增强相似度。", en: "Required only when a prompt audio clip is uploaded to stabilize similarity." },
       },
       {
-        id: "style",
-        type: "text",
-        label: { zh: "表达方式", en: "Delivery style" },
-        placeholder: { zh: "例如：专业、亲和、节奏稳定", en: "Example: professional, warm, steady pace" },
+        id: "needNoiseReduction",
+        type: "select",
+        label: { zh: "降噪", en: "Noise reduction" },
+        defaultValue: "false",
+        options: [
+          { value: "false", label: { zh: "关闭", en: "Off" } },
+          { value: "true", label: { zh: "开启", en: "On" } },
+        ],
       },
     ],
   },
@@ -225,11 +218,11 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     previewKind: "audio",
     title: { zh: "声音合成", en: "Voice Synthesis" },
     summary: {
-      zh: "把文本转成自然流畅的语音，适用于助手、有声读物和播报场景。",
-      en: "Turn text into natural speech for assistants, audiobooks, and narration.",
+      zh: "把长文本提交为异步语音任务，查询状态后下载最终音频。",
+      en: "Submit long-form text as an async speech task, poll status, and download the final audio.",
     },
     submitLabel: { zh: "合成语音", en: "Synthesize voice" },
-    action: "generate",
+    action: "voice-synthesis",
     fields: [
       {
         id: "prompt",
@@ -238,36 +231,49 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
         placeholder: { zh: "输入需要合成的完整文本", en: "Enter the full script to synthesize" },
       },
       {
-        id: "voicePreset",
+        id: "voiceId",
+        type: "text",
+        label: { zh: "音色", en: "Voice" },
+        placeholder: { zh: "从可用音色库选择", en: "Choose from the available voice library" },
+      },
+      {
+        id: "model",
         type: "select",
-        label: { zh: "音色预设", en: "Voice preset" },
-        defaultValue: "narrator-female",
+        label: { zh: "模型", en: "Model" },
+        defaultValue: "speech-2.8-hd",
         options: [
-          { value: "narrator-female", label: { zh: "女声旁白", en: "Female narrator" } },
-          { value: "narrator-male", label: { zh: "男声旁白", en: "Male narrator" } },
-          { value: "assistant-neutral", label: { zh: "中性助手", en: "Neutral assistant" } },
+          { value: "speech-2.8-hd", label: { zh: "Speech 2.8 HD", en: "Speech 2.8 HD" } },
+          { value: "speech-2.8-turbo", label: { zh: "Speech 2.8 Turbo", en: "Speech 2.8 Turbo" } },
         ],
       },
       {
-        id: "language",
+        id: "languageBoost",
         type: "select",
-        label: { zh: "语言", en: "Language" },
-        defaultValue: "zh-CN",
+        label: { zh: "语言增强", en: "Language boost" },
+        defaultValue: "auto",
         options: [
-          { value: "zh-CN", label: { zh: "中文", en: "Chinese" } },
-          { value: "en-US", label: { zh: "英文", en: "English" } },
+          { value: "auto", label: { zh: "自动", en: "Auto" } },
+          { value: "Chinese", label: { zh: "中文", en: "Chinese" } },
+          { value: "English", label: { zh: "英文", en: "English" } },
         ],
       },
       {
-        id: "pace",
-        type: "select",
-        label: { zh: "语速", en: "Pace" },
-        defaultValue: "balanced",
-        options: [
-          { value: "slow", label: { zh: "舒缓", en: "Slow" } },
-          { value: "balanced", label: { zh: "均衡", en: "Balanced" } },
-          { value: "fast", label: { zh: "快速", en: "Fast" } },
-        ],
+        id: "speed",
+        type: "number",
+        label: { zh: "语速", en: "Speed" },
+        defaultValue: "1",
+      },
+      {
+        id: "volume",
+        type: "number",
+        label: { zh: "音量", en: "Volume" },
+        defaultValue: "1",
+      },
+      {
+        id: "pitch",
+        type: "number",
+        label: { zh: "音高", en: "Pitch" },
+        defaultValue: "1",
       },
     ],
   },
@@ -460,25 +466,27 @@ export function getCapabilityMediaWorkspaceFeatures(locale: AppLocale): Capabili
       submitLabel: localizeText(locale, feature.submitLabel),
       action: feature.action,
       fields: feature.fields.map((field) => {
-        const base = {
+        if (field.type === "select") {
+          return {
+            id: field.id,
+            type: field.type,
+            label: localizeText(locale, field.label),
+            placeholder: field.placeholder ? localizeText(locale, field.placeholder) : undefined,
+            defaultValue: field.defaultValue,
+            options: field.options.map((option) => ({
+              value: option.value,
+              label: localizeText(locale, option.label),
+            })),
+          } satisfies CapabilityMediaWorkspaceFieldView
+        }
+        return {
           id: field.id,
           type: field.type,
           label: localizeText(locale, field.label),
           placeholder: field.placeholder ? localizeText(locale, field.placeholder) : undefined,
           defaultValue: field.defaultValue,
-        }
-        if (field.type === "select") {
-          return {
-            ...base,
-            options: field.options.map((option) => ({
-              value: option.value,
-              label: localizeText(locale, option.label),
-            })),
-          }
-        }
-        return base
+        } satisfies CapabilityMediaWorkspaceFieldView
       }),
     })),
   }
 }
-

@@ -24,8 +24,11 @@ test("media workspace exposes grouped audio and video features", () => {
 test("media workspace localizes feature titles and form labels", () => {
   const en = getCapabilityMediaWorkspaceFeatures("en")
   const voiceClone = en.features.find((item) => item.id === "voice-clone")
+  const voiceSynthesis = en.features.find((item) => item.id === "voice-synthesis")
+  const aiMusic = en.features.find((item) => item.id === "ai-music")
 
   assert.equal(voiceClone?.title, "Voice Clone")
-  assert.equal(voiceClone?.fields[0]?.label, "Reference audio URL")
+  assert.equal(voiceClone?.fields[0]?.label, "New voice ID")
+  assert.equal(voiceSynthesis?.fields[1]?.label, "Voice")
+  assert.equal(aiMusic?.fields[1]?.label, "Lyrics source")
 })
-

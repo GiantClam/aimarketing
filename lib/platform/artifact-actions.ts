@@ -1,7 +1,12 @@
 import type { AuthUser } from "@/lib/auth/session"
+import { getR2PublicUrl } from "@/lib/r2"
 import type { PlatformArtifactRecord } from "@/lib/platform/task-run-store"
 
-export function assertEnterpriseWorkspaceUser(currentUser: AuthUser | null | undefined) {
+type EnterpriseWorkspaceUser = AuthUser & { enterpriseId: number }
+
+export function assertEnterpriseWorkspaceUser(
+  currentUser: AuthUser | null | undefined,
+): asserts currentUser is EnterpriseWorkspaceUser {
   if (!currentUser) {
     throw new Error("authentication_required")
   }
@@ -41,4 +46,24 @@ export function serializePlatformArtifact(artifact: PlatformArtifactRecord) {
     ...artifact,
     createdAt: artifact.createdAt instanceof Date ? artifact.createdAt.toISOString() : null,
   }
+}
+
+export function resolvePlatformArtifactSourceUrl(artifact: PlatformArtifactRecord) {
+  if (artifact.externalUrl) return artifact.externalUrl
+  if (artifact.storageKey) {
+    try {
+      return getR2PublicUrl(artifact.storageKey)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+export function getPlatformArtifactPreviewKind(artifact: Pick<PlatformArtifactRecord, "mimeType" | "kind">) {
+  const mimeType = artifact.mimeType?.toLowerCase() || ""
+  if (mimeType.startsWith("image/")) return "image" as const
+  if (mimeType.startsWith("video/")) return "video" as const
+  if (mimeType.startsWith("audio/")) return "audio" as const
+  return "file" as const
 }

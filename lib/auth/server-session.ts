@@ -2,8 +2,9 @@ import { headers } from "next/headers"
 import { NextRequest } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
+import type { AuthUserPayload } from "@/lib/enterprise/server"
 
-export async function getServerSessionUser() {
+export async function getServerSessionUser(): Promise<AuthUserPayload | null> {
   const headerStore = await headers()
   const requestHeaders = new Headers()
 
