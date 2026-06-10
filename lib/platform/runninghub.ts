@@ -2,16 +2,19 @@ export type RunningHubMediaTarget = "ai-image" | "ai-video" | "visual-ad-pipelin
 
 export type RunningHubTaskStatus = "QUEUED" | "RUNNING" | "SUCCESS" | "FAILED"
 
+export type RunningHubTaskResult = {
+  url?: string | null
+  nodeId?: string | null
+  outputType?: string | null
+  text?: string | null
+}
+
 export type RunningHubTaskResponse = {
   taskId: string
   status: RunningHubTaskStatus | string
   errorCode?: string
   errorMessage?: string
-  results?: Array<{
-    url?: string | null
-    outputType?: string | null
-    text?: string | null
-  }> | null
+  results?: RunningHubTaskResult[] | null
   clientId?: string
   promptTips?: string
   failedReason?: Record<string, unknown> | null
@@ -21,9 +24,29 @@ export type RunningHubTaskResponse = {
 type RunningHubEnvelope = {
   code?: number | string
   message?: string
+  msg?: string
   errorCode?: string
   errorMessage?: string
   data?: RunningHubTaskResponse | null
+}
+
+type RunningHubWorkflowCreateResponse = {
+  taskId?: string | null
+  taskStatus?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
+  msg?: string | null
+}
+
+type RunningHubUploadResponse = {
+  code?: number | string
+  message?: string
+  data?: {
+    type?: string | null
+    download_url?: string | null
+    fileName?: string | null
+    size?: string | number | null
+  } | null
 }
 
 type RunningHubTargetConfig = {
@@ -36,6 +59,11 @@ export type RunningHubConfig = {
   apiKey: string
   queryPath: string
   uploadPath: string
+  workflowCreatePath: string
+  seedanceTextToVideoEndpoint: string | null
+  seedanceImageToVideoEndpoint: string | null
+  digitalHumanWorkflowId: string | null
+  videoEnhanceWorkflowId: string | null
   image: RunningHubTargetConfig
   video: RunningHubTargetConfig
 }
@@ -61,19 +89,40 @@ function normalizeEndpoint(value: string | undefined) {
 export function getRunningHubConfig(): RunningHubConfig {
   const apiKey = process.env.RUNNINGHUB_API_KEY?.trim() || ""
   const baseUrl = normalizeBaseUrl(process.env.RUNNINGHUB_BASE_URL)
+  const seedanceTextToVideoEndpoint = normalizeEndpoint(process.env.RUNNINGHUB_SEEDANCE_TEXT_TO_VIDEO_ENDPOINT)
+  const seedanceImageToVideoEndpoint = normalizeEndpoint(process.env.RUNNINGHUB_SEEDANCE_IMAGE_TO_VIDEO_ENDPOINT)
+  const workflowCreatePath = normalizeApiPath(process.env.RUNNINGHUB_WORKFLOW_CREATE_PATH, "/task/openapi/create")
+  const digitalHumanWorkflowId = process.env.RUNNINGHUB_DIGITAL_HUMAN_WORKFLOW_ID?.trim() || null
+  const videoEnhanceWorkflowId = process.env.RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID?.trim() || null
+  const legacyVideoEndpoint = normalizeEndpoint(process.env.RUNNINGHUB_VIDEO_ENDPOINT)
+  const hasScopedVideoConfig = Boolean(
+    seedanceTextToVideoEndpoint ||
+      seedanceImageToVideoEndpoint ||
+      (workflowCreatePath && digitalHumanWorkflowId) ||
+      (workflowCreatePath && videoEnhanceWorkflowId),
+  )
 
   return {
     baseUrl,
     apiKey,
     queryPath: normalizeApiPath(process.env.RUNNINGHUB_QUERY_PATH, "/openapi/v2/query"),
-    uploadPath: normalizeApiPath(process.env.RUNNINGHUB_UPLOAD_PATH, "/task/openapi/upload"),
+    uploadPath: normalizeApiPath(process.env.RUNNINGHUB_UPLOAD_PATH, "/openapi/v2/media/upload/binary"),
+    workflowCreatePath,
+    seedanceTextToVideoEndpoint,
+    seedanceImageToVideoEndpoint,
+    digitalHumanWorkflowId,
+    videoEnhanceWorkflowId,
     image: {
       configured: Boolean(apiKey && process.env.RUNNINGHUB_IMAGE_ENDPOINT?.trim()),
       endpoint: normalizeEndpoint(process.env.RUNNINGHUB_IMAGE_ENDPOINT),
     },
     video: {
-      configured: Boolean(apiKey && process.env.RUNNINGHUB_VIDEO_ENDPOINT?.trim()),
-      endpoint: normalizeEndpoint(process.env.RUNNINGHUB_VIDEO_ENDPOINT),
+      configured: Boolean(apiKey && (legacyVideoEndpoint || hasScopedVideoConfig)),
+      endpoint:
+        legacyVideoEndpoint ||
+        seedanceTextToVideoEndpoint ||
+        seedanceImageToVideoEndpoint ||
+        workflowCreatePath,
     },
   }
 }
@@ -167,7 +216,67 @@ function normalizeRunningHubResponsePayload(payload: unknown): RunningHubTaskRes
     return envelope.data
   }
 
+  const workflow = payload as RunningHubWorkflowCreateResponse
+  if (typeof workflow.taskId === "string" && workflow.taskId.trim()) {
+    return {
+      taskId: workflow.taskId.trim(),
+      status: workflow.taskStatus?.trim() || "RUNNING",
+      errorCode: workflow.errorCode || undefined,
+      errorMessage: workflow.errorMessage || workflow.msg || undefined,
+      results: null,
+    }
+  }
+
   return null
+}
+
+function normalizeRunningHubErrorCode(value: unknown) {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === "0") return null
+  return trimmed
+}
+
+function normalizeRunningHubEnvelopeCode(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim())
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function normalizeRunningHubErrorMessage(value: unknown) {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function resolveRunningHubSubmitError(
+  raw: RunningHubTaskResponse | RunningHubEnvelope | null,
+  data: RunningHubTaskResponse | null,
+) {
+  const envelope = raw as RunningHubEnvelope | null
+  const envelopeCode = normalizeRunningHubEnvelopeCode(envelope?.code)
+  const envelopeHasErrorCode = envelopeCode != null && envelopeCode !== 0
+  const dataError =
+    normalizeRunningHubErrorMessage(data?.errorMessage) ||
+    normalizeRunningHubErrorCode(data?.errorCode)
+  if (dataError) return dataError
+
+  if (!envelopeHasErrorCode) {
+    return (
+      normalizeRunningHubErrorMessage(envelope?.errorMessage) ||
+      normalizeRunningHubErrorCode(envelope?.errorCode)
+    )
+  }
+
+  return (
+    normalizeRunningHubErrorMessage(envelope?.message) ||
+    normalizeRunningHubErrorMessage(envelope?.msg) ||
+    normalizeRunningHubErrorCode(envelope?.errorCode) ||
+    String(envelopeCode)
+  )
 }
 
 export async function submitRunningHubTask(input: {
@@ -192,9 +301,9 @@ export async function submitRunningHubTask(input: {
 
   const raw = (await response.json().catch(() => null)) as RunningHubTaskResponse | RunningHubEnvelope | null
   const data = normalizeRunningHubResponsePayload(raw)
-  if (!response.ok) {
-    const envelope = raw as RunningHubEnvelope | null
-    throw new Error(data?.errorMessage || data?.errorCode || envelope?.errorMessage || envelope?.errorCode || "runninghub_submit_failed")
+  const submitError = resolveRunningHubSubmitError(raw, data)
+  if (!response.ok || submitError) {
+    throw new Error(submitError || "runninghub_submit_failed")
   }
   if (!data?.taskId) {
     throw new Error("runninghub_task_id_missing")
@@ -208,6 +317,105 @@ export async function submitRunningHubTask(input: {
     taskId: data.taskId,
     status: data.status,
     raw: raw ?? data,
+  }
+}
+
+export async function submitRunningHubRawTask(input: {
+  endpoint: string
+  payload: Record<string, unknown>
+  config?: RunningHubConfig
+}) {
+  const config = input.config ?? getRunningHubConfig()
+  if (!config.apiKey || !input.endpoint) {
+    throw new Error("runninghub_not_configured")
+  }
+
+  const response = await fetch(resolveRunningHubUrl(input.endpoint, config), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input.payload),
+    cache: "no-store",
+  })
+
+  const raw = (await response.json().catch(() => null)) as RunningHubTaskResponse | RunningHubEnvelope | null
+  const data = normalizeRunningHubResponsePayload(raw)
+  const submitError = resolveRunningHubSubmitError(raw, data)
+  if (!response.ok || submitError) {
+    throw new Error(submitError || "runninghub_submit_failed")
+  }
+  if (!data?.taskId) {
+    throw new Error("runninghub_task_id_missing")
+  }
+
+  return {
+    endpoint: input.endpoint,
+    taskId: data.taskId,
+    status: data.status,
+    raw: raw ?? data,
+  }
+}
+
+export async function submitRunningHubWorkflowTask(input: {
+  workflowId: string
+  nodeInfoList: Array<{
+    nodeId: string
+    fieldName: string
+    fieldValue: unknown
+  }>
+  config?: RunningHubConfig
+}) {
+  const config = input.config ?? getRunningHubConfig()
+  if (!config.apiKey || !config.workflowCreatePath) {
+    throw new Error("runninghub_not_configured")
+  }
+
+  return submitRunningHubRawTask({
+    endpoint: config.workflowCreatePath,
+    config,
+    payload: {
+      apiKey: config.apiKey,
+      workflowId: input.workflowId,
+      nodeInfoList: input.nodeInfoList,
+    },
+  })
+}
+
+export async function uploadRunningHubBinary(input: {
+  file: Blob
+  fileName: string
+  config?: RunningHubConfig
+}) {
+  const config = input.config ?? getRunningHubConfig()
+  if (!config.apiKey || !config.uploadPath) {
+    throw new Error("runninghub_not_configured")
+  }
+
+  const formData = new FormData()
+  formData.set("file", input.file, input.fileName)
+
+  const response = await fetch(resolveRunningHubUrl(config.uploadPath, config), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: formData,
+    cache: "no-store",
+  })
+
+  const raw = (await response.json().catch(() => null)) as RunningHubUploadResponse | null
+  if (!response.ok || !raw?.data?.fileName || !raw.data.download_url) {
+    throw new Error(raw?.message || "runninghub_upload_failed")
+  }
+
+  return {
+    type: raw.data.type?.trim() || null,
+    fileName: raw.data.fileName.trim(),
+    downloadUrl: raw.data.download_url.trim(),
+    size: raw.data.size == null ? null : String(raw.data.size),
+    raw,
   }
 }
 

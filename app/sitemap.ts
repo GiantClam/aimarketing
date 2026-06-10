@@ -10,7 +10,7 @@ import { getPublicSeoPaths } from "@/lib/seo/pages"
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = getAppBaseUrl()
   const now = new Date()
-  const staticPaths = ["/", "/pricing", "/tools", "/resources/ai-subscription-cost-calculator"]
+  const staticPaths = ["/", "/pricing", "/resources", "/tools", "/resources/ai-subscription-cost-calculator"]
   const paths = [
     ...staticPaths,
     ...getPublicSeoPaths(),

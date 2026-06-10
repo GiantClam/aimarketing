@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { notFound } from "next/navigation"
+import { ArrowRight, Bot, Calculator, CheckCircle2, LineChart, Search, Sparkles } from "lucide-react"
 
 import { PublicHomePageContent } from "@/components/seo/public-home-page"
 import { PublicPlatformDirectory } from "@/components/platform/public-platform-directory"
@@ -7,10 +9,11 @@ import { AiCostCalculator } from "@/components/seo/ai-cost-calculator"
 import { PublicSiteFooter } from "@/components/seo/public-site-footer"
 import { PublicSiteHeader } from "@/components/seo/public-site-header"
 import { SeoLandingPage } from "@/components/seo/seo-landing-page"
+import { Button } from "@/components/ui/button"
 import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
 import type { AppLocale } from "@/lib/i18n/config"
-import { buildLocalizedPublicUrl, getLocalizedPublicAlternates, isLocalizedPublicPath } from "@/lib/i18n/routing"
+import { buildLocalizedPublicUrl, getLocalizedPublicAlternates, isLocalizedPublicPath, localizePublicPath } from "@/lib/i18n/routing"
 import { listPlatformCapabilityExecutionStates } from "@/lib/platform/execution"
 import { listPlatformRegistryEntryExecutionStates } from "@/lib/platform/registry-entry-execution"
 import { listVisiblePlatformRegistryEntries } from "@/lib/platform/directory-resolver"
@@ -30,6 +33,133 @@ type LocalizedSeoGroup =
   | "use-cases"
 
 type PlatformDirectoryPage = "agents" | "capabilities" | "plugins" | "mcp-services" | "workflows"
+
+type PublicResourceEntry = {
+  label: string
+  title: string
+  description: string
+  href: string
+}
+
+function getPublicResourceDirectory(locale: AppLocale): PublicResourceEntry[] {
+  return locale === "zh"
+    ? [
+        {
+          label: "专题",
+          title: "Claude Fable 5 主题集群",
+          description: "承接 Claude Fable 5 pricing、prompts、benchmarks、API 和 SEO use cases 的专题入口。",
+          href: "/claude/fable-5",
+        },
+        {
+          label: "成本",
+          title: "AI 工具成本计算器",
+          description: "对比团队继续叠加 ChatGPT、Claude、Gemini 和图片工具订阅的真实成本。",
+          href: "/resources/ai-subscription-cost-calculator",
+        },
+        {
+          label: "场景",
+          title: "面向营销团队的 AI 工作台",
+          description: "从 broad commercial intent 切入，承接营销团队对共享 AI 工作台的需求。",
+          href: "/use-cases/ai-workspace-for-marketing-teams",
+        },
+        {
+          label: "SEO",
+          title: "面向 SEO 团队的 AI 工作台",
+          description: "把 brief、结构、内链和文章生产统一到同一个 SEO 工作流里。",
+          href: "/use-cases/ai-workspace-for-seo-teams",
+        },
+        {
+          label: "对比",
+          title: "营销团队适合什么 AI 工作台",
+          description: "用对比页承接 workspace、替代方案和多模型协作相关搜索。",
+          href: "/compare/best-ai-workspace-for-marketing-teams",
+        },
+        {
+          label: "替代",
+          title: "ChatGPT Team 替代方案",
+          description: "承接从通用团队聊天产品迁移到营销工作台的商业型搜索意图。",
+          href: "/alternatives/chatgpt-team-alternative",
+        },
+      ]
+    : [
+        {
+          label: "Cluster",
+          title: "Claude Fable 5 topic hub",
+          description: "The main cluster entry for Claude Fable 5 pricing, prompts, benchmarks, API, and SEO use cases.",
+          href: "/claude/fable-5",
+        },
+        {
+          label: "Costs",
+          title: "AI subscription cost calculator",
+          description: "Compare what a team spends on stacked ChatGPT, Claude, Gemini, image, and writing subscriptions.",
+          href: "/resources/ai-subscription-cost-calculator",
+        },
+        {
+          label: "Use Case",
+          title: "AI workspace for marketing teams",
+          description: "The broad commercial entry for teams evaluating a shared multi-model marketing workspace.",
+          href: "/use-cases/ai-workspace-for-marketing-teams",
+        },
+        {
+          label: "SEO",
+          title: "AI workspace for SEO teams",
+          description: "A workflow page for briefs, structure, internal links, and article production in one SEO system.",
+          href: "/use-cases/ai-workspace-for-seo-teams",
+        },
+        {
+          label: "Compare",
+          title: "Best AI workspace for marketing teams",
+          description: "A comparison page for workspace, alternatives, and multi-model collaboration intent.",
+          href: "/compare/best-ai-workspace-for-marketing-teams",
+        },
+        {
+          label: "Alternative",
+          title: "ChatGPT Team alternative",
+          description: "A commercial comparison entry for teams moving from general team chat to a marketing workspace.",
+          href: "/alternatives/chatgpt-team-alternative",
+        },
+      ]
+}
+
+function getResourcesPageCopy(locale: AppLocale) {
+  return locale === "zh"
+    ? {
+        eyebrow: "Resources",
+        title: "把搜索入口组织成资源目录，而不是零散文章",
+        description:
+          "这里集中放置专题 hub、成本工具、使用场景和对比页，帮助搜索访客从信息查询自然进入 AI Marketing 的商业路径。",
+        featuredTitle: "Claude Fable 5 专题入口",
+        featuredDescription:
+          "这个 hub 承接 Claude Fable 5 主词和相关长尾搜索，再通过内部链接把流量导向定价、提示词、SEO 场景和对比页。",
+        featuredHref: "/claude/fable-5",
+        featuredCta: "打开专题",
+        directoryTitle: "资源目录",
+        directoryDescription: "保留强 intent 页面，减少首页直接承载过多长尾主题。",
+        proofPoints: [
+          "首页继续承接 broad commercial intent，不和专题 cluster 抢词。",
+          "Resources 目录给 crawler 和用户一个稳定的聚合入口。",
+          "专题 hub、calculator、use cases 和 compare 页在同一目录中互相导流。",
+        ],
+      }
+    : {
+        eyebrow: "Resources",
+        title: "Organize search entry points as a resource directory, not scattered articles",
+        description:
+          "This page groups the topic hub, cost tools, use cases, and comparison pages so search visitors can move from information intent into the AI Marketing buying path.",
+        featuredTitle: "Claude Fable 5 topic hub",
+        featuredDescription:
+          "This hub captures the main Claude Fable 5 term and its long-tail searches, then routes traffic into pricing, prompts, SEO workflow, and comparison pages.",
+        featuredHref: "/claude/fable-5",
+        featuredCta: "Open topic hub",
+        directoryTitle: "Resource directory",
+        directoryDescription: "Keep the homepage focused on broad commercial intent instead of carrying too many long-tail topics directly.",
+        proofPoints: [
+          "The homepage stays focused on broad commercial intent instead of competing with the topical cluster.",
+          "The Resources directory gives crawlers and users one stable aggregation point.",
+          "The topic hub, calculator, use cases, and compare pages can route traffic into one another from a shared directory.",
+        ],
+      }
+}
 
 function getPlatformDirectoryHeadingCopy(locale: AppLocale, page: PlatformDirectoryPage) {
   const isZh = locale === "zh"
@@ -206,6 +336,125 @@ export function getPricingMetadata(locale: AppLocale): Metadata {
 export async function renderPricingPage() {
   const { PublicPricingPageContent } = await import("@/components/seo/public-pricing-page")
   return <PublicPricingPageContent />
+}
+
+export function getResourcesMetadata(locale: AppLocale): Metadata {
+  const copy = getResourcesPageCopy(locale)
+  const canonical = buildLocalizedPublicUrl("/resources", locale)
+  const title = locale === "zh" ? "营销 AI 资源目录 | AIMarketingSite" : "Marketing AI Resource Directory | AIMarketingSite"
+
+  return {
+    title,
+    description: copy.description,
+    alternates: {
+      canonical,
+      languages: getLocalizedPublicAlternates("/resources"),
+    },
+    openGraph: {
+      title,
+      description: copy.description,
+      url: canonical,
+      siteName: "AIMarketingSite",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: copy.description,
+    },
+  }
+}
+
+export function renderResourcesPage(locale: AppLocale) {
+  const copy = getResourcesPageCopy(locale)
+  const resources = getPublicResourceDirectory(locale)
+  const featuredHref = localizePublicPath(copy.featuredHref, locale)
+  const iconList = [Bot, Calculator, Sparkles, Search, LineChart, CheckCircle2] as const
+
+  return (
+    <main className="min-h-screen bg-background text-foreground">
+      <PublicSiteHeader activeKey="resources" />
+
+      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_360px]">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="public-kicker text-muted-foreground">{copy.eyebrow}</p>
+              <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">
+                {locale === "zh" ? "Search Cluster" : "Search Cluster"}
+              </span>
+            </div>
+            <h1 className="public-display mt-4 max-w-5xl text-5xl text-foreground lg:text-6xl">{copy.title}</h1>
+            <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">{copy.description}</p>
+          </div>
+
+          <aside className="public-panel rounded-[12px] p-6">
+            <p className="public-kicker text-muted-foreground">{copy.directoryTitle}</p>
+            <p className="mt-3 text-base leading-7 text-foreground">{copy.directoryDescription}</p>
+            <div className="mt-6 space-y-3">
+              {copy.proofPoints.map((point) => (
+                <div key={point} className="flex gap-2 text-sm leading-6 text-muted-foreground">
+                  <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-secondary" />
+                  <span>{point}</span>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 pb-8">
+        <div className="public-panel rounded-[12px] p-6 sm:p-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="public-kicker text-muted-foreground">{copy.eyebrow}</p>
+              <h2 className="mt-3 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {copy.featuredTitle}
+              </h2>
+              <p className="mt-4 text-base leading-8 text-muted-foreground">{copy.featuredDescription}</p>
+            </div>
+            <Button className="public-button-primary h-11 px-5" asChild>
+              <Link href={featuredHref}>
+                {copy.featuredCta}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 pb-18">
+        <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-2 xl:grid-cols-3">
+          {resources.map((resource, index) => {
+            const Icon = iconList[index] ?? Sparkles
+            return (
+              <Link
+                key={resource.href}
+                href={localizePublicPath(resource.href, locale)}
+                className="group bg-card px-6 py-6 transition hover:bg-background"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="public-kicker text-muted-foreground">{resource.label}</div>
+                  <div className="flex h-11 w-11 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
+                    <Icon className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                </div>
+                <h2 className="mt-6 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                  {resource.title}
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-muted-foreground">{resource.description}</p>
+                <div className="mt-5 font-display text-xs font-bold uppercase tracking-[0.16em] text-foreground/58 group-hover:text-foreground">
+                  {locale === "zh" ? "打开资源" : "Open resource"}
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+      </section>
+
+      <PublicSiteFooter />
+    </main>
+  )
 }
 
 async function getPlatformDirectoryCopy(locale: AppLocale, page: PlatformDirectoryPage) {
@@ -456,7 +705,7 @@ export function renderAiCostPage(locale: AppLocale) {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <PublicSiteHeader activeKey="calculator" />
+      <PublicSiteHeader activeKey="resources" />
 
       <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
         <div className="flex flex-wrap items-center gap-2">

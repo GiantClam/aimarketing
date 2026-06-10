@@ -9,6 +9,7 @@ import {
   queryRunningHubTask,
   type RunningHubMediaTarget,
 } from "@/lib/platform/runninghub"
+import { queryRunningHubVideoTask } from "@/lib/platform/runninghub-video"
 
 export const runtime = "nodejs"
 
@@ -66,21 +67,39 @@ export async function GET(
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
   }
 
-  const result = await queryRunningHubTask(taskId).catch((error) => {
-    const message = error instanceof Error ? error.message : String(error)
-    return NextResponse.json({ error: message || "runninghub_query_failed" }, { status: 502 })
-  })
+  const result =
+    target === "ai-video"
+      ? await (async () => {
+          const runId = Number(taskId)
+          if (!Number.isFinite(runId) || runId <= 0) {
+            return NextResponse.json({ error: "invalid_media_task_id" }, { status: 400 })
+          }
+          return queryRunningHubVideoTask({
+            currentUser,
+            runId,
+          }).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error)
+            return NextResponse.json({ error: message || "runninghub_video_query_failed" }, { status: 502 })
+          })
+        })()
+      : await queryRunningHubTask(taskId).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          return NextResponse.json({ error: message || "runninghub_query_failed" }, { status: 502 })
+        })
 
   if (result instanceof NextResponse) {
     return result
   }
 
   return NextResponse.json({
-    data: {
-      taskId,
-      mediaTarget: target,
-      provider: "runninghub",
-      ...result,
-    },
+    data:
+      target === "ai-video"
+        ? result
+        : {
+            taskId,
+            mediaTarget: target,
+            provider: "runninghub",
+            ...result,
+          },
   })
 }

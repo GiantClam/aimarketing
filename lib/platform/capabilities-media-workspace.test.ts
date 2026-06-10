@@ -11,8 +11,8 @@ test("media workspace exposes grouped audio and video features", () => {
     "ai-music",
     "voice-clone",
     "voice-synthesis",
-    "ai-video",
-    "face-fusion",
+    "text-to-video",
+    "image-to-video",
     "digital-human",
     "video-enhance",
   ])
@@ -31,4 +31,19 @@ test("media workspace localizes feature titles and form labels", () => {
   assert.equal(voiceClone?.fields[0]?.label, "New voice ID")
   assert.equal(voiceSynthesis?.fields[1]?.label, "Voice")
   assert.equal(aiMusic?.fields[1]?.label, "Lyrics source")
+})
+
+test("video workspace copy and feature set stay scoped to the four shipped video flows", () => {
+  const en = getCapabilityMediaWorkspaceFeatures("en")
+  const videoGroup = en.groups.find((item) => item.id === "video-processing")
+  const videoFeatures = en.features.filter((item) => item.capabilitySlug === "ai-video")
+
+  assert.equal(
+    videoGroup?.description,
+    "Handle text-to-video, image-to-video, digital human, and video enhancement tasks in one video workspace.",
+  )
+  assert.deepEqual(
+    videoFeatures.map((item) => item.id),
+    ["text-to-video", "image-to-video", "digital-human", "video-enhance"],
+  )
 })

@@ -1,4 +1,6 @@
-export type SeoGroup = "alternatives" | "solutions" | "agents" | "compare" | "use-cases" | "prompts"
+import { claudeFablePages } from "@/lib/seo/claude-fable-pages"
+
+export type SeoGroup = "alternatives" | "solutions" | "agents" | "compare" | "use-cases" | "prompts" | "claude"
 
 export type SeoSection = {
   heading: string
@@ -1041,6 +1043,7 @@ function promptPage(input: {
 }
 
 export const seoPages: SeoPage[] = [
+  ...claudeFablePages,
   alternativePage({
     slug: "chatgpt-team-alternative",
     product: "ChatGPT Team",

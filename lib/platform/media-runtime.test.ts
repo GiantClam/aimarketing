@@ -14,7 +14,12 @@ const emptyRunningHubConfig: RunningHubConfig = {
   baseUrl: "https://www.runninghub.ai",
   apiKey: "",
   queryPath: "/openapi/v2/query",
-  uploadPath: "/task/openapi/upload",
+  uploadPath: "/openapi/v2/media/upload/binary",
+  workflowCreatePath: "/task/openapi/create",
+  seedanceTextToVideoEndpoint: null,
+  seedanceImageToVideoEndpoint: null,
+  digitalHumanWorkflowId: null,
+  videoEnhanceWorkflowId: null,
   image: {
     configured: false,
     endpoint: null,

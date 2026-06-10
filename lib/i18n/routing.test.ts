@@ -32,6 +32,7 @@ test("localized public path helpers add and strip locale prefixes for supported 
   assert.equal(isLocalizedPublicPath("/mcp-services"), true)
   assert.equal(isLocalizedPublicPath("/mcp-services/design-context-mcp"), true)
   assert.equal(isLocalizedPublicPath("/pricing"), true)
+  assert.equal(isLocalizedPublicPath("/resources"), true)
   assert.equal(isLocalizedPublicPath("/tools"), true)
   assert.equal(isLocalizedPublicPath("/tools/ai-ppt-preview"), true)
   assert.equal(isLocalizedPublicPath("/tools/ai-ppt-preview/examples/product-launch-deck"), true)
@@ -48,6 +49,7 @@ test("localized public path helpers add and strip locale prefixes for supported 
   assert.equal(localizePublicPath("/agents/seo-article-agent", "zh"), "/zh/agents/seo-article-agent")
   assert.equal(localizePublicPath("/use-cases/ai-workspace-for-marketing-teams", "zh"), "/zh/use-cases/ai-workspace-for-marketing-teams")
   assert.equal(localizePublicPath("/pricing", "zh"), "/zh/pricing")
+  assert.equal(localizePublicPath("/resources", "zh"), "/zh/resources")
   assert.equal(localizePublicPath("/tools", "zh"), "/zh/tools")
   assert.equal(localizePublicPath("/tools/ai-ppt-preview", "zh"), "/zh/tools/ai-ppt-preview")
   assert.equal(localizePublicPath("/tools/ai-ppt-preview/examples/product-launch-deck", "zh"), "/zh/tools/ai-ppt-preview/examples/product-launch-deck")
@@ -73,6 +75,7 @@ test("localized public alternates are exposed only for supported localized pages
   assert.equal(getLocalizedPublicAlternates("/mcp-services")?.zh?.endsWith("/zh/mcp-services"), true)
   assert.equal(getLocalizedPublicAlternates("/mcp-services/design-context-mcp")?.zh?.endsWith("/zh/mcp-services/design-context-mcp"), true)
   assert.equal(getLocalizedPublicAlternates("/pricing")?.zh?.endsWith("/zh/pricing"), true)
+  assert.equal(getLocalizedPublicAlternates("/resources")?.zh?.endsWith("/zh/resources"), true)
   assert.equal(getLocalizedPublicAlternates("/tools")?.zh?.endsWith("/zh/tools"), true)
   assert.equal(getLocalizedPublicAlternates("/tools/ai-ppt-preview")?.zh?.endsWith("/zh/tools/ai-ppt-preview"), true)
   assert.equal(
