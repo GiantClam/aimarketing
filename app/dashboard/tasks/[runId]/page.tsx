@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { WorkspaceOutputActions } from "@/components/workspace/workspace-output-actions"
 import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
+import { resolvePlatformArtifactSourceUrl } from "@/lib/platform/artifact-actions"
 import { getPlatformTaskRun } from "@/lib/platform/task-run-store"
 
 export default async function TaskDetailPage({
@@ -27,6 +28,7 @@ export default async function TaskDetailPage({
   }
 
   const firstArtifact = run.artifacts[0] ?? null
+  const firstArtifactSourceUrl = firstArtifact ? resolvePlatformArtifactSourceUrl(firstArtifact) : null
   const copy =
     displayLocale === "zh"
       ? {
@@ -76,9 +78,9 @@ export default async function TaskDetailPage({
               artifactLabel={firstArtifact.title}
               artifactId={firstArtifact.id}
               shareUrl={`/dashboard/tasks/${run.id}`}
-              downloadFilename={`${firstArtifact.title.replace(/\s+/g, "-").toLowerCase()}.json`}
-              downloadMimeType={firstArtifact.mimeType || "application/json"}
-              downloadPayload={firstArtifact.payload}
+              downloadFilename={firstArtifact.title}
+              downloadMimeType={firstArtifact.mimeType || "application/octet-stream"}
+              downloadUrl={firstArtifactSourceUrl || `/api/platform/artifacts/${firstArtifact.id}/download?download=1`}
             />
           ) : null}
 

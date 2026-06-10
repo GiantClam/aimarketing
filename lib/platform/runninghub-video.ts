@@ -3,6 +3,13 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { platformTaskRuns } from "@/lib/db/schema"
 import {
+  resolvePlatformArtifactSourceUrl,
+} from "@/lib/platform/artifact-actions"
+import {
+  isPlatformArtifactR2Available,
+  mirrorPlatformArtifactToR2,
+} from "@/lib/platform/artifact-storage"
+import {
   appendPlatformRunEvent,
   createPlatformTaskRun,
   getPlatformTaskRun,
@@ -191,10 +198,14 @@ function mapPlatformStatusToProviderStatus(status: string | null | undefined): R
   return "RUNNING"
 }
 
-function normalizeResultsFromTaskResult(normalizedResult: Record<string, unknown> | null | undefined) {
+function normalizeResultsFromTaskResult(
+  normalizedResult: Record<string, unknown> | null | undefined,
+  artifacts: HydratedPlatformTaskRun["artifacts"] = [],
+) {
   const results = normalizedResult?.results
-  if (!Array.isArray(results)) return []
-  return results
+  const normalizedResults = !Array.isArray(results)
+    ? []
+    : results
     .map((item) => {
       if (!item || typeof item !== "object") return null
       const record = item as Record<string, unknown>
@@ -206,6 +217,40 @@ function normalizeResultsFromTaskResult(normalizedResult: Record<string, unknown
       }
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
+
+  if (normalizedResults.length === 0 && artifacts.length > 0) {
+    return artifacts.map((artifact) => ({
+      url: resolvePlatformArtifactSourceUrl(artifact),
+      outputType: artifact.mimeType,
+      text: null,
+      title: artifact.title,
+    }))
+  }
+
+  const mergedResults = normalizedResults.map((item, index) => {
+    const artifact = artifacts[index]
+    if (!artifact) return item
+    return {
+      url: resolvePlatformArtifactSourceUrl(artifact) || item.url,
+      outputType: item.outputType || artifact.mimeType,
+      text: item.text,
+      title: item.title || artifact.title,
+    }
+  })
+
+  if (artifacts.length <= mergedResults.length) {
+    return mergedResults
+  }
+
+  return [
+    ...mergedResults,
+    ...artifacts.slice(mergedResults.length).map((artifact) => ({
+      url: resolvePlatformArtifactSourceUrl(artifact),
+      outputType: artifact.mimeType,
+      text: null,
+      title: artifact.title,
+    })),
+  ]
 }
 
 function buildTaskResponseFromRun(run: HydratedPlatformTaskRun): RunningHubVideoTask {
@@ -218,7 +263,7 @@ function buildTaskResponseFromRun(run: HydratedPlatformTaskRun): RunningHubVideo
     requestedTarget: resolveRequestedTarget(run),
     provider: "runninghub",
     status: mapPlatformStatusToProviderStatus(run.status),
-    results: normalizeResultsFromTaskResult(normalizedResult),
+    results: normalizeResultsFromTaskResult(normalizedResult, run.artifacts),
     extra:
       normalizedResult?.extra && typeof normalizedResult.extra === "object"
         ? (normalizedResult.extra as Record<string, unknown>)
@@ -265,8 +310,29 @@ async function persistResultArtifacts(input: {
     const outputType = normalizeOptionalText(result?.outputType)
     const text = normalizeOptionalText(result?.text)
     const existingArtifact = input.run.artifacts[index]
+    const artifactTitle = buildArtifactTitle(input.featureId, index, outputType)
 
     if (rawUrl) {
+      let mirroredArtifact:
+        | {
+            storageKey: string
+            publicUrl: string
+            contentType: string
+          }
+        | null = null
+
+      if (!existingArtifact && isPlatformArtifactR2Available()) {
+        mirroredArtifact = await mirrorPlatformArtifactToR2({
+          sourceUrl: rawUrl,
+          enterpriseId: input.run.enterpriseId,
+          runId: input.run.id,
+          provider: "runninghub",
+          title: artifactTitle,
+          contentType: inferMimeTypeFromOutputType(outputType),
+          suggestedExtension: outputType,
+        }).catch(() => null)
+      }
+
       const artifact =
         existingArtifact ||
         (await savePlatformArtifact({
@@ -274,8 +340,9 @@ async function persistResultArtifacts(input: {
           enterpriseId: input.run.enterpriseId,
           ownerUserId: input.run.userId,
           kind: "file",
-          title: buildArtifactTitle(input.featureId, index, outputType),
-          mimeType: inferMimeTypeFromOutputType(outputType),
+          title: artifactTitle,
+          mimeType: mirroredArtifact?.contentType || inferMimeTypeFromOutputType(outputType),
+          storageKey: mirroredArtifact?.storageKey || null,
           externalUrl: rawUrl,
           payload: {
             provider: "runninghub",
@@ -284,6 +351,8 @@ async function persistResultArtifacts(input: {
             resultIndex: index,
             nodeId: normalizeOptionalText(result?.nodeId),
             outputType,
+            mirroredUrl: mirroredArtifact?.publicUrl || null,
+            upstreamUrl: rawUrl,
           },
         }))
 
@@ -292,7 +361,7 @@ async function persistResultArtifacts(input: {
       }
 
       nextResults.push({
-        url: `/api/platform/artifacts/${artifact.id}/download`,
+        url: resolvePlatformArtifactSourceUrl(artifact) || rawUrl,
         outputType: outputType || artifact.mimeType || null,
         text,
         title: artifact.title,

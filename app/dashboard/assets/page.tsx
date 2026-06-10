@@ -19,18 +19,21 @@ export default async function AssetsPage() {
   return (
     <WorkspaceAssetLibrary
       locale={displayLocale}
-      artifacts={artifacts.map((artifact) => ({
-        id: artifact.id,
-        title: artifact.title,
-        kind: artifact.kind,
-        mimeType: artifact.mimeType,
-        runId: artifact.runId,
-        createdAt: artifact.createdAt instanceof Date ? artifact.createdAt.toISOString() : null,
-        previewKind: getPlatformArtifactPreviewKind(artifact),
-        sourceUrl: resolvePlatformArtifactSourceUrl(artifact),
-        previewUrl: `/api/platform/artifacts/${artifact.id}/download`,
-        downloadUrl: `/api/platform/artifacts/${artifact.id}/download?download=1`,
-      }))}
+      artifacts={artifacts.map((artifact) => {
+        const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
+        return {
+          id: artifact.id,
+          title: artifact.title,
+          kind: artifact.kind,
+          mimeType: artifact.mimeType,
+          runId: artifact.runId,
+          createdAt: artifact.createdAt instanceof Date ? artifact.createdAt.toISOString() : null,
+          previewKind: getPlatformArtifactPreviewKind(artifact),
+          sourceUrl,
+          previewUrl: sourceUrl || `/api/platform/artifacts/${artifact.id}/download`,
+          downloadUrl: sourceUrl || `/api/platform/artifacts/${artifact.id}/download?download=1`,
+        }
+      })}
     />
   )
 }

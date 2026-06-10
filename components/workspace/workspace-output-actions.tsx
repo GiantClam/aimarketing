@@ -15,6 +15,7 @@ type WorkspaceOutputActionsProps = {
   description?: string
   artifactId?: number
   shareUrl?: string
+  downloadUrl?: string
   downloadFilename?: string
   downloadMimeType?: string
   downloadPayload?: unknown
@@ -81,6 +82,7 @@ export function WorkspaceOutputActions({
   description,
   artifactId,
   shareUrl,
+  downloadUrl,
   downloadFilename,
   downloadMimeType,
   downloadPayload,
@@ -115,6 +117,19 @@ export function WorkspaceOutputActions({
 
     try {
       if (action === "download") {
+        if (downloadUrl) {
+          const anchor = document.createElement("a")
+          anchor.href = downloadUrl
+          anchor.target = "_blank"
+          anchor.rel = "noreferrer"
+          if (downloadFilename) {
+            anchor.download = downloadFilename
+          }
+          anchor.click()
+          toast.success(copy.actions.download.label)
+          return
+        }
+
         if (downloadPayload === undefined) {
           triggerPlaceholder(action)
           return

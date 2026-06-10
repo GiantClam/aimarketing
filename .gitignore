@@ -92,7 +92,7 @@ tmp-next-start.out.log
 tmp-next-start.err.log
 .ruff_cache/
 tests/screenshots/
-artifacts/
+/artifacts/
 
 .playwright-cli/
 

@@ -1,53 +1,76 @@
 import { S3Client } from "@aws-sdk/client-s3"
 
-const R2_ENDPOINT =
-  process.env.R2_ENDPOINT ||
-  (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : "")
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || ""
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY || ""
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || ""
-const R2_PUBLIC_BASE = process.env.R2_PUBLIC_BASE || process.env.R2_PUBLIC_URL || ""
-
 let r2Client: S3Client | null = null
+let r2ClientSignature = ""
+
+function getR2Endpoint() {
+  return process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : "")
+}
+
+function getR2AccessKeyId() {
+  return process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || ""
+}
+
+function getR2SecretAccessKey() {
+  return process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY || ""
+}
+
+function getR2BucketEnv() {
+  return process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || ""
+}
+
+function getR2PublicBaseEnv() {
+  return process.env.R2_PUBLIC_BASE || process.env.R2_PUBLIC_URL || ""
+}
 
 function getAccountIdFromEndpoint() {
   if (process.env.R2_ACCOUNT_ID) return process.env.R2_ACCOUNT_ID
-  if (!R2_ENDPOINT) return ""
+  const endpoint = getR2Endpoint()
+  if (!endpoint) return ""
 
   try {
-    return new URL(R2_ENDPOINT).hostname.split(".")[0] || ""
+    return new URL(endpoint).hostname.split(".")[0] || ""
   } catch {
     return ""
   }
 }
 
 export function getR2PublicBase() {
-  if (R2_PUBLIC_BASE) return R2_PUBLIC_BASE.replace(/\/$/, "")
+  const publicBase = getR2PublicBaseEnv()
+  if (publicBase) return publicBase.replace(/\/$/, "")
   const accountId = getAccountIdFromEndpoint()
   return accountId ? `https://pub-${accountId}.r2.dev` : ""
 }
 
 export function getR2Client() {
-  if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME) {
+  const endpoint = getR2Endpoint()
+  const accessKeyId = getR2AccessKeyId()
+  const secretAccessKey = getR2SecretAccessKey()
+  const bucketName = getR2BucketEnv()
+  if (!endpoint || !accessKeyId || !secretAccessKey || !bucketName) {
+    r2Client = null
+    r2ClientSignature = ""
     return null
   }
 
-  if (!r2Client) {
+  const signature = `${endpoint}::${accessKeyId}::${bucketName}`
+  if (!r2Client || r2ClientSignature !== signature) {
     r2Client = new S3Client({
       region: process.env.AWS_REGION || "auto",
-      endpoint: R2_ENDPOINT,
+      endpoint,
       credentials: {
-        accessKeyId: R2_ACCESS_KEY_ID,
-        secretAccessKey: R2_SECRET_ACCESS_KEY,
+        accessKeyId,
+        secretAccessKey,
       },
     })
+    r2ClientSignature = signature
   }
 
   return r2Client
 }
 
 export function getR2BucketName() {
-  return R2_BUCKET_NAME
+  return getR2BucketEnv()
 }
 
 export function isR2Available() {

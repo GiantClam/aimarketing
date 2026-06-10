@@ -49,14 +49,14 @@ export function serializePlatformArtifact(artifact: PlatformArtifactRecord) {
 }
 
 export function resolvePlatformArtifactSourceUrl(artifact: PlatformArtifactRecord) {
-  if (artifact.externalUrl) return artifact.externalUrl
   if (artifact.storageKey) {
     try {
       return getR2PublicUrl(artifact.storageKey)
     } catch {
-      return null
+      // fall through to externalUrl when R2 public URL is unavailable
     }
   }
+  if (artifact.externalUrl) return artifact.externalUrl
   return null
 }
 
