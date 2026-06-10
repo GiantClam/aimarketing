@@ -82,8 +82,8 @@ export function resolvePlatformMediaExecutionProxyTarget(
 
   if (mediaTarget === "ai-video") {
     if (isRunningHubConfiguredForTarget("ai-video", runningHubConfig)) {
-      if (action === "execute" || action === "workflow" || action === "workflow-plan") {
-        return buildRunningHubProxyTarget("ai-video", "workflow-plan")
+      if (action === "execute" || action === "generate" || action === "workflow" || action === "workflow-plan") {
+        return buildRunningHubProxyTarget("ai-video", action === "generate" ? "generate" : "workflow-plan")
       }
       if (action === "workflow-keyframes") {
         return buildRunningHubProxyTarget("ai-video", "workflow-keyframes")
@@ -102,7 +102,7 @@ export function resolvePlatformMediaExecutionProxyTarget(
       }
     }
 
-    if (action === "execute" || action === "workflow" || action === "workflow-plan") {
+    if (action === "execute" || action === "generate" || action === "workflow" || action === "workflow-plan") {
       return buildVideoWorkflowTarget("workflow-plan", "plan")
     }
     if (action === "workflow-keyframes") {

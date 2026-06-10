@@ -4,8 +4,8 @@ export type CapabilityMediaWorkspaceFeatureId =
   | "ai-music"
   | "voice-clone"
   | "voice-synthesis"
-  | "ai-video"
-  | "face-fusion"
+  | "text-to-video"
+  | "image-to-video"
   | "digital-human"
   | "video-enhance"
 
@@ -40,7 +40,7 @@ type CapabilityMediaWorkspaceFeatureDefinition = {
   title: LocalizedText
   summary: LocalizedText
   submitLabel: LocalizedText
-  action: "generate" | "voice-clone" | "voice-synthesis" | "workflow-plan"
+  action: "generate" | "voice-clone" | "voice-synthesis"
   fields: CapabilityMediaWorkspaceField[]
 }
 
@@ -77,7 +77,7 @@ export type CapabilityMediaWorkspaceFeature = {
   title: string
   summary: string
   submitLabel: string
-  action: "generate" | "voice-clone" | "voice-synthesis" | "workflow-plan"
+  action: "generate" | "voice-clone" | "voice-synthesis"
   fields: CapabilityMediaWorkspaceFieldView[]
 }
 
@@ -103,16 +103,31 @@ const GROUPS: CapabilityMediaWorkspaceGroupDefinition[] = [
     id: "video-processing",
     title: { zh: "视频处理", en: "Video Processing" },
     description: {
-      zh: "支持从文字或素材生成视频，统一承接换脸、数字人和高清化场景。",
-      en: "Handle text/material-to-video, face fusion, digital humans, and enhancement in one video workspace.",
+      zh: "支持文生视频、图生视频、口播数字人和视频高清化，统一在一个视频工作台完成。",
+      en: "Handle text-to-video, image-to-video, digital human, and video enhancement tasks in one video workspace.",
     },
   },
 ]
 
 const DURATION_OPTIONS: LocalizedOption[] = [
+  { value: "5", label: { zh: "5 秒", en: "5 sec" } },
+  { value: "10", label: { zh: "10 秒", en: "10 sec" } },
   { value: "15", label: { zh: "15 秒", en: "15 sec" } },
-  { value: "30", label: { zh: "30 秒", en: "30 sec" } },
-  { value: "60", label: { zh: "60 秒", en: "60 sec" } },
+]
+
+const VIDEO_RESOLUTION_OPTIONS: LocalizedOption[] = [
+  { value: "480p", label: { zh: "480p", en: "480p" } },
+  { value: "720p", label: { zh: "720p", en: "720p" } },
+  { value: "1080p", label: { zh: "1080p", en: "1080p" } },
+  { value: "2k", label: { zh: "2K", en: "2K" } },
+  { value: "4k", label: { zh: "4K", en: "4K" } },
+]
+
+const VIDEO_RATIO_OPTIONS: LocalizedOption[] = [
+  { value: "adaptive", label: { zh: "自适应", en: "Adaptive" } },
+  { value: "16:9", label: { zh: "横版 16:9", en: "Landscape 16:9" } },
+  { value: "9:16", label: { zh: "竖版 9:16", en: "Portrait 9:16" } },
+  { value: "1:1", label: { zh: "方形 1:1", en: "Square 1:1" } },
 ]
 
 const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
@@ -278,91 +293,140 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     ],
   },
   {
-    id: "ai-video",
+    id: "text-to-video",
     groupId: "video-processing",
     capabilitySlug: "ai-video",
     previewKind: "video",
-    title: { zh: "AI视频", en: "AI Video" },
+    title: { zh: "文生视频", en: "Text to Video" },
     summary: {
-      zh: "输入文字描述即可快速生成包含画面、场景和情节的动态视频。",
-      en: "Generate dynamic video scenes directly from a structured text brief.",
+      zh: "直接输入提示词生成视频，走 RunningHub seedance2.0 文生视频链路。",
+      en: "Generate video from prompt text through the RunningHub seedance2.0 text-to-video flow.",
     },
     submitLabel: { zh: "生成视频", en: "Generate video" },
-    action: "workflow-plan",
+    action: "generate",
     fields: [
       {
         id: "prompt",
         type: "textarea",
-        label: { zh: "视频描述", en: "Video brief" },
-        placeholder: { zh: "例如：一支 15 秒 AI 产品预热视频，强调增长与未来感。", en: "Example: A 15-second AI product teaser focused on growth and futurism." },
+        label: { zh: "提示词", en: "Prompt" },
+        placeholder: { zh: "例如：一支 15 秒 AI 产品预热视频，强调增长感、科技质感和电影镜头。", en: "Example: A 15-second AI product teaser with cinematic camera moves, premium tech visuals, and a growth-focused story." },
+      },
+      {
+        id: "resolution",
+        type: "select",
+        label: { zh: "分辨率", en: "Resolution" },
+        defaultValue: "720p",
+        options: VIDEO_RESOLUTION_OPTIONS,
       },
       {
         id: "duration",
         type: "select",
         label: { zh: "时长", en: "Duration" },
-        defaultValue: "15",
+        defaultValue: "5",
         options: DURATION_OPTIONS,
       },
       {
-        id: "aspectRatio",
+        id: "ratio",
         type: "select",
         label: { zh: "画幅比例", en: "Aspect ratio" },
-        defaultValue: "16:9",
-        options: [
-          { value: "16:9", label: { zh: "横版 16:9", en: "Landscape 16:9" } },
-          { value: "9:16", label: { zh: "竖版 9:16", en: "Portrait 9:16" } },
-          { value: "1:1", label: { zh: "方形 1:1", en: "Square 1:1" } },
-        ],
+        defaultValue: "adaptive",
+        options: VIDEO_RATIO_OPTIONS,
       },
       {
-        id: "style",
-        type: "text",
-        label: { zh: "画面风格", en: "Visual style" },
-        placeholder: { zh: "例如：高端科技、电影感、冷色调", en: "Example: premium tech, cinematic, cool palette" },
-      },
-      {
-        id: "deliveryGoal",
+        id: "generateAudio",
         type: "select",
-        label: { zh: "投放目标", en: "Delivery goal" },
-        defaultValue: "launch",
+        label: { zh: "生成音频", en: "Generate audio" },
+        defaultValue: "true",
         options: [
-          { value: "launch", label: { zh: "新品发布", en: "Product launch" } },
-          { value: "ads", label: { zh: "广告投放", en: "Paid ads" } },
-          { value: "social", label: { zh: "社媒传播", en: "Social media" } },
+          { value: "true", label: { zh: "开启", en: "On" } },
+          { value: "false", label: { zh: "关闭", en: "Off" } },
         ],
+      },
+      {
+        id: "seed",
+        type: "number",
+        label: { zh: "Seed", en: "Seed" },
+        defaultValue: "-1",
       },
     ],
   },
   {
-    id: "face-fusion",
+    id: "image-to-video",
     groupId: "video-processing",
     capabilitySlug: "ai-video",
     previewKind: "video",
-    title: { zh: "人脸融合", en: "Face Fusion" },
+    title: { zh: "图生视频", en: "Image to Video" },
     summary: {
-      zh: "将目标人脸特征融合进素材视频，生成新的合成视频。",
-      en: "Fuse a target face into source video material to create a new composite output.",
+      zh: "上传或选择首帧图片，必要时补尾帧图，走 RunningHub seedance2.0 图生视频链路。",
+      en: "Upload or select a first frame image, optionally add an end frame, and generate video through the RunningHub seedance2.0 image-to-video flow.",
     },
-    submitLabel: { zh: "开始融合", en: "Start fusion" },
-    action: "workflow-plan",
+    submitLabel: { zh: "生成视频", en: "Generate video" },
+    action: "generate",
     fields: [
       {
-        id: "sourceVideoUrl",
+        id: "firstFrameUrl",
         type: "url",
-        label: { zh: "源视频 URL", en: "Source video URL" },
-        placeholder: { zh: "粘贴待处理视频地址", en: "Paste the source video URL" },
+        label: { zh: "首帧图片 URL", en: "First frame URL" },
+        placeholder: { zh: "上传图片后会自动填入，也可以粘贴素材库图片地址", en: "Uploading an image fills this automatically, or paste an existing asset URL." },
       },
       {
-        id: "faceImageUrl",
+        id: "lastFrameUrl",
         type: "url",
-        label: { zh: "目标人脸图片 URL", en: "Target face image URL" },
-        placeholder: { zh: "粘贴目标人脸图片地址", en: "Paste the target face image URL" },
+        label: { zh: "尾帧图片 URL", en: "Last frame URL" },
+        placeholder: { zh: "可选，适合首尾帧控制", en: "Optional. Use this for first/last-frame control." },
       },
       {
         id: "prompt",
         type: "textarea",
-        label: { zh: "融合说明", en: "Fusion brief" },
-        placeholder: { zh: "说明需要保留的风格、镜头或表情特征", en: "Describe the style, shots, or expressions to preserve" },
+        label: { zh: "补充提示词", en: "Prompt" },
+        placeholder: { zh: "可选。补充镜头、动作、风格和节奏要求。", en: "Optional. Add direction for motion, camera, style, and pacing." },
+      },
+      {
+        id: "resolution",
+        type: "select",
+        label: { zh: "分辨率", en: "Resolution" },
+        defaultValue: "720p",
+        options: VIDEO_RESOLUTION_OPTIONS,
+      },
+      {
+        id: "duration",
+        type: "select",
+        label: { zh: "时长", en: "Duration" },
+        defaultValue: "5",
+        options: DURATION_OPTIONS,
+      },
+      {
+        id: "ratio",
+        type: "select",
+        label: { zh: "画幅比例", en: "Aspect ratio" },
+        defaultValue: "adaptive",
+        options: VIDEO_RATIO_OPTIONS,
+      },
+      {
+        id: "generateAudio",
+        type: "select",
+        label: { zh: "生成音频", en: "Generate audio" },
+        defaultValue: "true",
+        options: [
+          { value: "true", label: { zh: "开启", en: "On" } },
+          { value: "false", label: { zh: "关闭", en: "Off" } },
+        ],
+      },
+      {
+        id: "realPersonMode",
+        type: "select",
+        label: { zh: "真人模式", en: "Real person mode" },
+        defaultValue: "true",
+        options: [
+          { value: "true", label: { zh: "开启", en: "On" } },
+          { value: "false", label: { zh: "关闭", en: "Off" } },
+        ],
+      },
+      {
+        id: "seed",
+        type: "number",
+        label: { zh: "Seed", en: "Seed" },
+        defaultValue: "-1",
       },
     ],
   },
@@ -373,39 +437,41 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     previewKind: "video",
     title: { zh: "口播数字人", en: "Digital Human Presenter" },
     summary: {
-      zh: "输入文本即可驱动数字人流畅口播，适配品牌宣讲和多场景解说。",
-      en: "Drive a digital human presenter from text for branded narration and scripted delivery.",
+      zh: "支持上传或选择音频、上传或选择人物图，也支持只填文案走 TTS 驱动。",
+      en: "Upload or select audio and avatar image, or submit script-only input to drive the TTS path.",
     },
     submitLabel: { zh: "生成口播视频", en: "Generate presenter video" },
-    action: "workflow-plan",
+    action: "generate",
     fields: [
       {
-        id: "avatarSourceUrl",
+        id: "audioUrl",
         type: "url",
-        label: { zh: "数字人素材 URL", en: "Avatar source URL" },
-        placeholder: { zh: "粘贴人物素材或形象资源地址", en: "Paste the avatar or source asset URL" },
+        label: { zh: "音频 URL", en: "Audio URL" },
+        placeholder: { zh: "上传音频后会自动填入，也可以粘贴素材库音频地址", en: "Uploading audio fills this automatically, or paste an existing asset URL." },
+      },
+      {
+        id: "avatarImageUrl",
+        type: "url",
+        label: { zh: "人物图片 URL", en: "Avatar image URL" },
+        placeholder: { zh: "上传图片后会自动填入，也可以粘贴素材库图片地址", en: "Uploading an image fills this automatically, or paste an existing asset URL." },
+      },
+      {
+        id: "script",
+        type: "textarea",
+        label: { zh: "口播文案", en: "Script" },
+        placeholder: { zh: "未上传音频时，这段文案会走 TTS 合成。", en: "When no audio is uploaded, this script is used for TTS synthesis." },
       },
       {
         id: "prompt",
         type: "textarea",
-        label: { zh: "口播文本", en: "Presenter script" },
-        placeholder: { zh: "输入数字人需要口播的完整文本", en: "Enter the complete presenter script" },
+        label: { zh: "场景提示", en: "Scene prompt" },
+        placeholder: { zh: "例如：模特正在做产品展示，进行电商直播带货", en: "Example: A presenter is demonstrating a product in a live commerce setting." },
       },
       {
-        id: "voiceStyle",
-        type: "text",
-        label: { zh: "声音风格", en: "Voice style" },
-        placeholder: { zh: "例如：可信、专业、节奏明快", en: "Example: credible, professional, energetic pace" },
-      },
-      {
-        id: "language",
-        type: "select",
-        label: { zh: "语言", en: "Language" },
-        defaultValue: "zh-CN",
-        options: [
-          { value: "zh-CN", label: { zh: "中文", en: "Chinese" } },
-          { value: "en-US", label: { zh: "英文", en: "English" } },
-        ],
+        id: "seed",
+        type: "number",
+        label: { zh: "Seed", en: "Seed" },
+        defaultValue: "-1",
       },
     ],
   },
@@ -416,34 +482,35 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     previewKind: "video",
     title: { zh: "视频高清化", en: "Video Enhancement" },
     summary: {
-      zh: "修复模糊、噪点和细节损失，提升画质与观感。",
-      en: "Enhance sharpness, repair detail loss, and improve perceived video quality.",
+      zh: "上传或选择源视频，走 RunningHub workflow 视频修复链路。",
+      en: "Upload or select a source video and run it through the RunningHub workflow enhancement flow.",
     },
     submitLabel: { zh: "开始高清化", en: "Enhance video" },
-    action: "workflow-plan",
+    action: "generate",
     fields: [
       {
         id: "sourceVideoUrl",
         type: "url",
         label: { zh: "源视频 URL", en: "Source video URL" },
-        placeholder: { zh: "粘贴待高清化的视频地址", en: "Paste the source video URL to enhance" },
+        placeholder: { zh: "上传视频后会自动填入，也可以粘贴素材库视频地址", en: "Uploading a video fills this automatically, or paste an existing asset URL." },
       },
       {
         id: "prompt",
         type: "textarea",
         label: { zh: "增强目标", en: "Enhancement goal" },
-        placeholder: { zh: "例如：提升细节、修复压缩模糊、强化人物边缘", en: "Example: recover detail, reduce compression blur, sharpen subject edges" },
+        placeholder: { zh: "例如：提升细节、修复压缩模糊、强化人物边缘", en: "Example: recover detail, reduce compression blur, sharpen subject edges." },
       },
       {
-        id: "resolutionTarget",
-        type: "select",
-        label: { zh: "目标清晰度", en: "Target resolution" },
-        defaultValue: "1080p",
-        options: [
-          { value: "1080p", label: { zh: "1080p", en: "1080p" } },
-          { value: "2k", label: { zh: "2K", en: "2K" } },
-          { value: "4k", label: { zh: "4K", en: "4K" } },
-        ],
+        id: "durationLimit",
+        type: "number",
+        label: { zh: "处理时长上限（秒）", en: "Duration limit (sec)" },
+        defaultValue: "10",
+      },
+      {
+        id: "seed",
+        type: "number",
+        label: { zh: "Seed", en: "Seed" },
+        defaultValue: "-1",
       },
     ],
   },

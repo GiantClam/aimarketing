@@ -1,7 +1,7 @@
 import type { AppLocale } from "@/lib/i18n/config"
 import { localizePublicPath } from "@/lib/i18n/routing"
 
-type PublicNavKey = "alternatives" | "compare" | "solutions" | "calculator" | "pricing" | "tools"
+type PublicNavKey = "alternatives" | "compare" | "solutions" | "resources" | "pricing" | "tools"
 
 type PublicNavItem = {
   key: PublicNavKey
@@ -143,7 +143,7 @@ const NAV_LINKS: Record<PublicNavKey, string> = {
   alternatives: "/alternatives/chatgpt-team-alternative",
   compare: "/compare/best-ai-workspace-for-marketing-teams",
   solutions: "/use-cases/ai-workspace-for-marketing-teams",
-  calculator: "/compare/compare-ai-tool-costs",
+  resources: "/resources",
   pricing: "/pricing",
   tools: "/tools",
 }
@@ -159,7 +159,7 @@ const en: PublicCopy = {
       { key: "alternatives", label: "Alternatives", href: NAV_LINKS.alternatives },
       { key: "compare", label: "Compare", href: NAV_LINKS.compare },
       { key: "solutions", label: "Use Cases", href: NAV_LINKS.solutions },
-      { key: "calculator", label: "AI Costs", href: NAV_LINKS.calculator },
+      { key: "resources", label: "Resources", href: NAV_LINKS.resources },
       { key: "tools", label: "Tools", href: NAV_LINKS.tools },
       { key: "pricing", label: "Pricing", href: NAV_LINKS.pricing },
     ],
@@ -259,6 +259,7 @@ const en: PublicCopy = {
       },
     ],
     resources: [
+      { label: "Claude Fable 5", title: "Pricing, prompts, benchmarks, and SEO use cases", href: "/claude/fable-5" },
       { label: "Use case", title: "AI workspace for marketing teams", href: "/use-cases/ai-workspace-for-marketing-teams" },
       { label: "SEO", title: "AI workspace for SEO teams", href: "/use-cases/ai-workspace-for-seo-teams" },
       { label: "Compare", title: "Best AI workspace for marketing teams", href: "/compare/best-ai-workspace-for-marketing-teams" },
@@ -350,7 +351,7 @@ const zh: PublicCopy = {
       { key: "alternatives", label: "替代方案", href: NAV_LINKS.alternatives },
       { key: "compare", label: "产品对比", href: NAV_LINKS.compare },
       { key: "solutions", label: "使用场景", href: NAV_LINKS.solutions },
-      { key: "calculator", label: "AI 成本", href: NAV_LINKS.calculator },
+      { key: "resources", label: "资源", href: NAV_LINKS.resources },
       { key: "tools", label: "工具", href: NAV_LINKS.tools },
       { key: "pricing", label: "价格", href: NAV_LINKS.pricing },
     ],
@@ -450,6 +451,7 @@ const zh: PublicCopy = {
       },
     ],
     resources: [
+      { label: "Claude Fable 5", title: "价格、提示词、基准与 SEO 场景", href: "/claude/fable-5" },
       { label: "场景", title: "面向营销团队的 AI 工作台", href: "/use-cases/ai-workspace-for-marketing-teams" },
       { label: "SEO", title: "面向 SEO 团队的 AI 工作台", href: "/use-cases/ai-workspace-for-seo-teams" },
       { label: "对比", title: "营销团队适合什么 AI 工作台", href: "/compare/best-ai-workspace-for-marketing-teams" },

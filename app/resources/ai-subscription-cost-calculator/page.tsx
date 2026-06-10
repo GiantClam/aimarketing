@@ -49,7 +49,7 @@ export default async function AiSubscriptionCostCalculatorPage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <PublicSiteHeader activeKey="calculator" />
+      <PublicSiteHeader activeKey="resources" />
 
       <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
         <div className="flex flex-wrap items-center gap-2">

@@ -50,6 +50,13 @@ type WorkspaceCapabilityState = {
   summary: string
 }
 
+type WorkspaceAssetOption = {
+  id: number
+  title: string
+  previewKind: "image" | "video" | "audio" | "file"
+  sourceUrl: string | null
+}
+
 type MediaTaskSubmission = {
   provider: string
   mediaTarget: string
@@ -107,6 +114,14 @@ type WorkspaceTabState = {
   promptAudioPreviewUrl: string | null
   promptAudioUploading: boolean
   isRecording: boolean
+  fieldUploads: Record<
+    string,
+    {
+      fileName: string | null
+      previewUrl: string | null
+      uploading: boolean
+    }
+  >
 }
 
 type Copy = {
@@ -157,6 +172,10 @@ type Copy = {
   promptReady: string
   resultDetails: string
   lyrics: string
+  uploadMedia: string
+  assetLibrary: string
+  selectAsset: string
+  noMatchingAssets: string
 }
 
 function buildDefaultValues(feature: CapabilityMediaWorkspaceFeature) {
@@ -183,6 +202,7 @@ function createTabState(feature: CapabilityMediaWorkspaceFeature): WorkspaceTabS
     promptAudioPreviewUrl: null,
     promptAudioUploading: false,
     isRecording: false,
+    fieldUploads: {},
   }
 }
 
@@ -272,6 +292,10 @@ function getCopy(locale: "zh" | "en"): Copy {
       promptReady: "示例音频已就绪",
       resultDetails: "结果细节",
       lyrics: "最终歌词",
+      uploadMedia: "上传素材",
+      assetLibrary: "素材库",
+      selectAsset: "从素材库选择",
+      noMatchingAssets: "当前素材库里没有匹配的素材。",
     }
   }
 
@@ -323,7 +347,29 @@ function getCopy(locale: "zh" | "en"): Copy {
     promptReady: "Prompt audio ready",
     resultDetails: "Details",
     lyrics: "Final lyrics",
+    uploadMedia: "Upload media",
+    assetLibrary: "Asset library",
+    selectAsset: "Select from assets",
+    noMatchingAssets: "No matching assets are available yet.",
   }
+}
+
+function buildRunningHubFileNameFieldId(fieldId: string) {
+  return `${fieldId}RunningHubFileName`
+}
+
+function getAssetPreviewKindForField(fieldId: string): WorkspaceAssetOption["previewKind"] | null {
+  if (fieldId === "firstFrameUrl" || fieldId === "lastFrameUrl" || fieldId === "avatarImageUrl") return "image"
+  if (fieldId === "audioUrl") return "audio"
+  if (fieldId === "sourceVideoUrl") return "video"
+  return null
+}
+
+function getUploadAcceptForField(fieldId: string) {
+  if (fieldId === "firstFrameUrl" || fieldId === "lastFrameUrl" || fieldId === "avatarImageUrl") return "image/*"
+  if (fieldId === "audioUrl") return "audio/*,.mp3,.wav,.m4a,.ogg"
+  if (fieldId === "sourceVideoUrl") return "video/*,.mp4,.mov,.webm"
+  return "*/*"
 }
 
 function getVoiceCategoryLabel(locale: "zh" | "en", category: WorkspaceVoiceOption["category"]) {
@@ -451,12 +497,14 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   groups,
   features,
   capabilityStates,
+  assetOptions,
   initialFeatureId,
 }: {
   locale: "zh" | "en"
   groups: CapabilityMediaWorkspaceGroup[]
   features: CapabilityMediaWorkspaceFeature[]
   capabilityStates: Record<"ai-video" | "ai-music", WorkspaceCapabilityState | null>
+  assetOptions: WorkspaceAssetOption[]
   initialFeatureId?: CapabilityMediaWorkspaceFeatureId | null
 }) {
   const copy = useMemo(() => getCopy(locale), [locale])
@@ -472,6 +520,9 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   const activeTabRef = useRef<HTMLButtonElement | null>(null)
   const sourceFileInputRef = useRef<HTMLInputElement | null>(null)
   const promptAudioFileInputRef = useRef<HTMLInputElement | null>(null)
+  const assetFileInputRef = useRef<HTMLInputElement | null>(null)
+  const assetUploadTabIdRef = useRef<CapabilityMediaWorkspaceFeatureId | null>(null)
+  const assetUploadFieldIdRef = useRef<string | null>(null)
   const previewUrlsRef = useRef<Set<string>>(new Set())
   const recordingStreamRef = useRef<MediaStream | null>(null)
   const recordingContextRef = useRef<AudioContext | null>(null)
@@ -546,6 +597,109 @@ export function WorkspaceCapabilitiesMediaWorkspace({
       )
     },
     [],
+  )
+
+  const getMatchingAssetOptions = useCallback(
+    (fieldId: string) => {
+      const previewKind = getAssetPreviewKindForField(fieldId)
+      if (!previewKind) return []
+      return assetOptions.filter((asset) => asset.previewKind === previewKind && asset.sourceUrl)
+    },
+    [assetOptions],
+  )
+
+  const uploadRunningHubFieldFile = useCallback(
+    async (featureId: CapabilityMediaWorkspaceFeatureId, fieldId: string, file: File) => {
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.id === featureId
+            ? {
+                ...tab,
+                error: null,
+                fieldUploads: {
+                  ...tab.fieldUploads,
+                  [fieldId]: {
+                    fileName: file.name,
+                    previewUrl: tab.fieldUploads[fieldId]?.previewUrl || null,
+                    uploading: true,
+                  },
+                },
+              }
+            : tab,
+        ),
+      )
+
+      try {
+        const formData = new FormData()
+        formData.set("file", file)
+
+        const response = await fetch("/api/platform/runninghub/files/upload", {
+          method: "POST",
+          body: formData,
+        })
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              error?: string
+              data?: {
+                fileName: string
+                downloadUrl: string
+              }
+            }
+          | null
+
+        if (!response.ok || !payload?.data?.downloadUrl) {
+          throw new Error(payload?.error || copy.taskFailed)
+        }
+
+        const previewUrl = URL.createObjectURL(file)
+        previewUrlsRef.current.add(previewUrl)
+
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.id === featureId
+              ? {
+                  ...tab,
+                  values: {
+                    ...tab.values,
+                    [fieldId]: payload.data?.downloadUrl || "",
+                    [buildRunningHubFileNameFieldId(fieldId)]: payload.data?.fileName || "",
+                  },
+                  fieldUploads: {
+                    ...tab.fieldUploads,
+                    [fieldId]: {
+                      fileName: payload.data?.fileName || file.name,
+                      previewUrl,
+                      uploading: false,
+                    },
+                  },
+                }
+              : tab,
+          ),
+        )
+      } catch (error) {
+        patchTab(featureId, {
+          error: error instanceof Error ? error.message : copy.taskFailed,
+        })
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.id === featureId
+              ? {
+                  ...tab,
+                  fieldUploads: {
+                    ...tab.fieldUploads,
+                    [fieldId]: {
+                      fileName: file.name,
+                      previewUrl: tab.fieldUploads[fieldId]?.previewUrl || null,
+                      uploading: false,
+                    },
+                  },
+                }
+              : tab,
+          ),
+        )
+      }
+    },
+    [copy.taskFailed, patchTab],
   )
 
   const stopWaveRecording = useCallback(async () => {
@@ -1015,6 +1169,19 @@ export function WorkspaceCapabilitiesMediaWorkspace({
           void uploadAudioFile(featureId, "prompt_audio", file)
         }}
       />
+      <input
+        ref={assetFileInputRef}
+        type="file"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          const featureId = assetUploadTabIdRef.current
+          const fieldId = assetUploadFieldIdRef.current
+          event.currentTarget.value = ""
+          if (!file || !featureId || !fieldId) return
+          void uploadRunningHubFieldFile(featureId, fieldId, file)
+        }}
+      />
 
       <div className="space-y-3">
         <div className="rounded-[18px] border border-border/60 bg-background/90 p-3 shadow-sm lg:p-4">
@@ -1210,6 +1377,60 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                         : renderField(`${activeTab.id}-${field.id}`, field, activeTab.values[field.id] || "", (nextValue) =>
                             updateTabValue(activeTab.id, field.id, nextValue),
                           )}
+                      {field.type === "url" && activeFeature.capabilitySlug === "ai-video" && getAssetPreviewKindForField(field.id) ? (
+                        <div className="space-y-2 rounded-[10px] border border-border/60 bg-background/70 p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-[8px]"
+                              onClick={() => {
+                                assetUploadTabIdRef.current = activeTab.id
+                                assetUploadFieldIdRef.current = field.id
+                                if (assetFileInputRef.current) {
+                                  assetFileInputRef.current.accept = getUploadAcceptForField(field.id)
+                                  assetFileInputRef.current.click()
+                                }
+                              }}
+                              disabled={Boolean(activeTab.fieldUploads[field.id]?.uploading)}
+                            >
+                              {activeTab.fieldUploads[field.id]?.uploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
+                              {copy.uploadMedia}
+                            </Button>
+                          </div>
+
+                          {getMatchingAssetOptions(field.id).length > 0 ? (
+                            <div className="space-y-2">
+                              <div className="dashboard-kicker text-muted-foreground">{copy.assetLibrary}</div>
+                              <Select
+                                value=""
+                                onValueChange={(nextValue) => {
+                                  updateTabValue(activeTab.id, field.id, nextValue)
+                                  updateTabValue(activeTab.id, buildRunningHubFileNameFieldId(field.id), "")
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder={copy.selectAsset} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {getMatchingAssetOptions(field.id).map((asset) => (
+                                    <SelectItem key={`${field.id}-asset-${asset.id}`} value={asset.sourceUrl || ""}>
+                                      #{asset.id} {asset.title}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">{copy.noMatchingAssets}</div>
+                          )}
+
+                          {activeTab.fieldUploads[field.id]?.fileName ? (
+                            <div className="text-xs text-foreground/80">{activeTab.fieldUploads[field.id]?.fileName}</div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
 

@@ -13,7 +13,7 @@ test("public copy switches homepage and pricing labels between zh and en", () =>
   assert.equal(zh.footer.systemFooterLabel, "系统页脚")
   assert.equal(en.header.navItems.find((item) => item.key === "solutions")?.href, "/en/use-cases/ai-workspace-for-marketing-teams")
   assert.equal(en.header.navItems.find((item) => item.key === "pricing")?.href, "/en/pricing")
-  assert.equal(zh.header.navItems.find((item) => item.key === "calculator")?.href, "/zh/compare/compare-ai-tool-costs")
+  assert.equal(zh.header.navItems.find((item) => item.key === "resources")?.href, "/zh/resources")
   assert.equal(zh.header.brandOpsReady, "品牌运营就绪")
   assert.equal(en.home.title, "One workspace for multiple AI models")
   assert.equal(zh.home.title, "一个工作台，接入多个 AI 模型")

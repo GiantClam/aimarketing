@@ -132,7 +132,7 @@ export function PublicMediaToolWorkbench({
   const [submission, setSubmission] = useState<MediaTaskSubmission | null>(null)
   const [task, setTask] = useState<MediaTaskQuery | null>(null)
 
-  const action = capabilitySlug === "ai-image" ? "generate" : "workflow-plan"
+  const action = capabilitySlug === "ai-image" ? "generate" : "generate"
   const canExecute = currentUser && runtimeStatus === "ready" && (accessState === "authorized" || accessState === "public")
 
   const refreshTask = useCallback(async (nextTaskId?: string) => {

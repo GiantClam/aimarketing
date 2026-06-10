@@ -13,6 +13,10 @@ import {
   submitRunningHubTask,
   type RunningHubMediaTarget,
 } from "@/lib/platform/runninghub"
+import {
+  executeRunningHubVideoFeature,
+  resolveRunningHubVideoFeatureId,
+} from "@/lib/platform/runninghub-video"
 
 export const runtime = "nodejs"
 
@@ -100,18 +104,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
   }
 
-  const result = await submitRunningHubTask({
-    mediaTarget: target,
-    payload: {
-      ...payload,
-      platformAction: action,
-      userId: currentUser.id,
-      enterpriseId: currentUser.enterpriseId,
-    },
-  }).catch((error) => {
-    const message = error instanceof Error ? error.message : String(error)
-    return NextResponse.json({ error: message || "runninghub_submit_failed" }, { status: 502 })
-  })
+  const params =
+    payload.params && typeof payload.params === "object" ? (payload.params as Record<string, unknown>) : payload
+
+  const result =
+    target === "ai-video"
+      ? await executeRunningHubVideoFeature({
+          currentUser,
+          featureId: resolveRunningHubVideoFeatureId(payload.featureId) || "text-to-video",
+          params: {
+            ...params,
+            prompt:
+              (typeof params.prompt === "string" && params.prompt.trim()) ||
+              (typeof payload.prompt === "string" && payload.prompt.trim()) ||
+              "",
+            platformAction: action,
+          },
+        }).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          return NextResponse.json({ error: message || "runninghub_video_execute_failed" }, { status: 502 })
+        })
+      : await submitRunningHubTask({
+          mediaTarget: target,
+          payload: {
+            ...payload,
+            platformAction: action,
+            userId: currentUser.id,
+            enterpriseId: currentUser.enterpriseId,
+          },
+        }).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          return NextResponse.json({ error: message || "runninghub_submit_failed" }, { status: 502 })
+        })
 
   if (result instanceof NextResponse) {
     return result

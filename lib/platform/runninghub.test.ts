@@ -6,6 +6,7 @@ import {
   isRunningHubConfiguredForTarget,
   queryRunningHubTask,
   resolveRunningHubProviderTarget,
+  submitRunningHubRawTask,
   submitRunningHubTask,
   type RunningHubConfig,
 } from "@/lib/platform/runninghub"
@@ -14,7 +15,12 @@ const baseConfig: RunningHubConfig = {
   baseUrl: "https://www.runninghub.ai",
   apiKey: "test-key",
   queryPath: "/openapi/v2/query",
-  uploadPath: "/task/openapi/upload",
+  uploadPath: "/openapi/v2/media/upload/binary",
+  workflowCreatePath: "/task/openapi/create",
+  seedanceTextToVideoEndpoint: null,
+  seedanceImageToVideoEndpoint: null,
+  digitalHumanWorkflowId: null,
+  videoEnhanceWorkflowId: null,
   image: {
     configured: false,
     endpoint: null,
@@ -67,12 +73,14 @@ test("runninghub submit/query helpers unwrap envelope responses with nested data
   const previousImageEndpoint = process.env.RUNNINGHUB_IMAGE_ENDPOINT
   const previousVideoEndpoint = process.env.RUNNINGHUB_VIDEO_ENDPOINT
   const previousQueryPath = process.env.RUNNINGHUB_QUERY_PATH
+  const previousUploadPath = process.env.RUNNINGHUB_UPLOAD_PATH
 
   process.env.RUNNINGHUB_API_KEY = "test-key"
   process.env.RUNNINGHUB_BASE_URL = "https://mock.runninghub.local"
   process.env.RUNNINGHUB_IMAGE_ENDPOINT = "/image"
   process.env.RUNNINGHUB_VIDEO_ENDPOINT = "/video"
   process.env.RUNNINGHUB_QUERY_PATH = "/query"
+  process.env.RUNNINGHUB_UPLOAD_PATH = "/upload"
 
   globalThis.fetch = async (input, init) => {
     const url = String(input)
@@ -135,5 +143,75 @@ test("runninghub submit/query helpers unwrap envelope responses with nested data
     else process.env.RUNNINGHUB_VIDEO_ENDPOINT = previousVideoEndpoint
     if (previousQueryPath == null) delete process.env.RUNNINGHUB_QUERY_PATH
     else process.env.RUNNINGHUB_QUERY_PATH = previousQueryPath
+    if (previousUploadPath == null) delete process.env.RUNNINGHUB_UPLOAD_PATH
+    else process.env.RUNNINGHUB_UPLOAD_PATH = previousUploadPath
+  }
+})
+
+test("runninghub raw submit surfaces business errors returned with http 200", async () => {
+  const previousFetch = globalThis.fetch
+
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        taskId: "",
+        status: "",
+        errorCode: "1014",
+        errorMessage: "Access Denied: Standard Model API is restricted to Enterprise-Shared API Keys only.",
+        results: null,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )
+
+  try {
+    await assert.rejects(
+      submitRunningHubRawTask({
+        endpoint: "/video",
+        payload: { prompt: "AI Marketing hero video" },
+        config: {
+          ...baseConfig,
+          video: {
+            configured: true,
+            endpoint: "/video",
+          },
+        },
+      }),
+      /Enterprise-Shared API Keys only/,
+    )
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test("runninghub raw submit keeps generic missing-task error when envelope is success-shaped but empty", async () => {
+  const previousFetch = globalThis.fetch
+
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        code: 0,
+        message: "success",
+        data: null,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )
+
+  try {
+    await assert.rejects(
+      submitRunningHubRawTask({
+        endpoint: "/video",
+        payload: { prompt: "AI Marketing hero video" },
+        config: {
+          ...baseConfig,
+          video: {
+            configured: true,
+            endpoint: "/video",
+          },
+        },
+      }),
+      /runninghub_task_id_missing/,
+    )
+  } finally {
+    globalThis.fetch = previousFetch
   }
 })

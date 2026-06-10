@@ -10,6 +10,7 @@ const LOCALIZED_PUBLIC_PATHS = new Set([
   "/plugins",
   "/mcp-services",
   "/pricing",
+  "/resources",
   "/tools",
   "/workflows",
   "/agents/brand-strategy-agent",

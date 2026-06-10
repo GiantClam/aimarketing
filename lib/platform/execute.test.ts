@@ -14,7 +14,12 @@ const configuredRunningHub: RunningHubConfig = {
   baseUrl: "https://www.runninghub.ai",
   apiKey: "test-key",
   queryPath: "/openapi/v2/query",
-  uploadPath: "/task/openapi/upload",
+  uploadPath: "/openapi/v2/media/upload/binary",
+  workflowCreatePath: "/task/openapi/create",
+  seedanceTextToVideoEndpoint: "/openapi/v2/rhart-video/text-to-video",
+  seedanceImageToVideoEndpoint: "/openapi/v2/rhart-video/image-to-video",
+  digitalHumanWorkflowId: "2019410250268418050",
+  videoEnhanceWorkflowId: "2064172986302812162",
   image: {
     configured: true,
     endpoint: "/api/image/run",

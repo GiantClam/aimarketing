@@ -173,11 +173,11 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     finalizeRequiresLogin: false,
     previewModel: "runninghub",
     finalModel: "video workspace runtime",
-    proofPoints: ["统一视频入口", "保留现有 dashboard/video runtime", "为后续视频复刻与热门检索预留扩展位"],
+    proofPoints: ["统一视频入口", "覆盖 4 个已上线视频流", "保留现有 dashboard/video runtime"],
     faqs: [
       {
-        question: "视频复刻和热门视频检索现在能用吗？",
-        answer: "当前阶段保留入口与平台位置，但真实能力仍在 deferred 范围内，不会假装已经完成。",
+        question: "当前视频工作台支持哪些能力？",
+        answer: "当前只开放文生视频、图生视频、口播数字人和视频高清化四个入口，都会统一进入现有视频工作台异步执行。",
       },
       {
         question: "这个页面和企业工作台是什么关系？",
@@ -349,13 +349,17 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
 ]
 
 export const featuredLeadTool = leadToolsCatalog.find((tool) => tool.featured) ?? leadToolsCatalog[0]
+const HIDDEN_VIDEO_TOOL_SLUGS = new Set(["video-remake-studio", "hot-video-research"])
 
 export function getLeadToolBySlug(slug: string) {
+  if (HIDDEN_VIDEO_TOOL_SLUGS.has(slug)) {
+    return undefined
+  }
   return leadToolsCatalog.find((tool) => tool.slug === slug)
 }
 
 export function getLeadToolPaths() {
-  return leadToolsCatalog.map((tool) => tool.href)
+  return leadToolsCatalog.filter((tool) => !HIDDEN_VIDEO_TOOL_SLUGS.has(tool.slug)).map((tool) => tool.href)
 }
 
 const localizedLeadToolCopy: Record<
@@ -416,7 +420,7 @@ const localizedLeadToolCopy: Record<
       shortName: "AI 视频",
       tagline: "从 public toolsite 进入视频生成与媒体工作流。",
       description: "公开承接 AI 视频能力，让用户先理解视频生成入口，再逐步进入现有 dashboard/video 的正式流程。",
-      proofPoints: ["统一视频入口", "保留现有 dashboard/video runtime", "为后续视频复刻与热门检索预留扩展位"],
+      proofPoints: ["统一视频入口", "覆盖 4 个已上线视频流", "保留现有 dashboard/video runtime"],
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-video")?.faqs ?? [],
     },
     "sentiment-monitoring": {
@@ -510,8 +514,8 @@ const localizedLeadToolCopy: Record<
       name: "AI Video Workspace Entry",
       shortName: "AI Video",
       tagline: "Route public-toolsite visitors into video generation and media workflows.",
-      description: "Creates a clear public landing path for video generation before handing users into the existing dashboard/video runtime.",
-      proofPoints: ["Unified video entry", "Keeps the current dashboard/video runtime", "Leaves room for future video-clone and trending modules"],
+      description: "Creates a clear public landing path for the four shipped video flows before handing users into the existing dashboard/video runtime.",
+      proofPoints: ["Unified video entry", "Covers the 4 shipped video flows", "Keeps the current dashboard/video runtime"],
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-video")?.faqs ?? [],
     },
     "sentiment-monitoring": {
@@ -568,7 +572,9 @@ export function localizeLeadTool(tool: LeadToolDefinition, locale: AppLocale): L
 }
 
 export function getLocalizedLeadToolsCatalog(locale: AppLocale) {
-  return leadToolsCatalog.map((tool) => localizeLeadTool(tool, locale))
+  return leadToolsCatalog
+    .filter((tool) => !HIDDEN_VIDEO_TOOL_SLUGS.has(tool.slug))
+    .map((tool) => localizeLeadTool(tool, locale))
 }
 
 export function getLocalizedLeadToolBySlug(slug: string, locale: AppLocale) {

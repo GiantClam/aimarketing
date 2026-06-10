@@ -27,7 +27,7 @@ import type { PptLanguage, PptPreviewModelValue, PptScenario } from "@/lib/lead-
 import { buildMockSeoMetaPreview } from "@/lib/lead-tools/seo-meta-data"
 import type { SeoLanguage, SeoPageType } from "@/lib/lead-tools/seo-meta-data"
 
-import { MissingLeadToolPage, ToolMarketingPage } from "@/app/tools/[slug]/tool-marketing-page"
+import { ToolMarketingPage } from "@/app/tools/[slug]/tool-marketing-page"
 
 export type LeadToolRouteSearchParams = {
   prompt?: string
@@ -151,7 +151,7 @@ export async function renderLeadToolPage(
   const defaultPptLanguage: PptLanguage = locale === "zh" ? "zh-CN" : "en-US"
 
   if (!tool) {
-    return <MissingLeadToolPage locale={locale} />
+    notFound()
   }
 
   if (tool.slug === "ai-ppt-preview") {

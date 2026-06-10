@@ -37,7 +37,7 @@ import { SEO_EVENT } from "@/lib/seo/analytics"
 
 const capabilityIcons = [Bot, Sparkles, Users2] as const
 const audienceIcons = [LineChart, Search, PenTool, LockKeyhole] as const
-const resourceIcons = [Calculator, PenTool, PlayCircle, Image, LockKeyhole, Sparkles] as const
+const resourceIcons = [Bot, Calculator, PenTool, PlayCircle, Image, LockKeyhole, Sparkles] as const
 const platformHubIcons = {
   capabilities: LayoutGrid,
   agents: Users2,

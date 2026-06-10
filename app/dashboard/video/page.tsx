@@ -1,31 +1,74 @@
-﻿"use client"
+import { WorkspaceCapabilitiesMediaWorkspace } from "@/components/platform/workspace-capabilities-media-workspace"
+import { getServerSessionUser } from "@/lib/auth/server-session"
+import { getRequestLocale } from "@/lib/i18n/request-locale"
+import {
+  getPlatformArtifactPreviewKind,
+  resolvePlatformArtifactSourceUrl,
+} from "@/lib/platform/artifact-actions"
+import {
+  getCapabilityMediaWorkspaceFeatures,
+  type CapabilityMediaWorkspaceFeatureId,
+} from "@/lib/platform/capabilities-media-workspace"
+import { listPlatformCapabilityExecutionStates } from "@/lib/platform/execution"
+import { listPlatformArtifactsForEnterprise } from "@/lib/platform/task-run-store"
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-
-import { useAuth } from "@/components/auth-provider"
-import { VideoChat } from "@/components/video-chat"
-
-export default function VideoPage() {
-  const router = useRouter()
-  const { hasFeature, user } = useAuth()
-
-  useEffect(() => {
-    if (!user) return
-    if (!hasFeature("video_generation")) {
-      router.replace("/dashboard")
-    }
-  }, [hasFeature, router, user])
-
-  if (!user || !hasFeature("video_generation")) {
-    return null
+function normalizeInitialFeatureId(value: string | string[] | undefined): CapabilityMediaWorkspaceFeatureId | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (raw === "ai-video") return "text-to-video"
+  if (
+    raw === "text-to-video" ||
+    raw === "image-to-video" ||
+    raw === "digital-human" ||
+    raw === "video-enhance"
+  ) {
+    return raw
   }
+  return null
+}
+
+export default async function VideoPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const locale = await getRequestLocale()
+  const displayLocale = locale === "zh" ? "zh" : "en"
+  const resolvedSearchParams = (await searchParams) || {}
+  const currentUser = await getServerSessionUser().catch(() => null)
+  const mediaWorkspace = getCapabilityMediaWorkspaceFeatures(displayLocale)
+  const videoFeatures = mediaWorkspace.features.filter((feature) => feature.capabilitySlug === "ai-video")
+  const videoGroups = mediaWorkspace.groups.filter((group) => group.id === "video-processing")
+  const artifacts =
+    currentUser?.enterpriseId != null
+      ? await listPlatformArtifactsForEnterprise(currentUser.enterpriseId)
+      : []
+  const executionMap = new Map(
+    (await listPlatformCapabilityExecutionStates(locale, currentUser)).map((item) => [item.capabilitySlug, item] as const),
+  )
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-muted/10">
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <VideoChat />
-      </div>
-    </div>
+    <WorkspaceCapabilitiesMediaWorkspace
+      locale={displayLocale}
+      groups={videoGroups}
+      features={videoFeatures}
+      capabilityStates={{
+        "ai-video": executionMap.get("ai-video")
+          ? {
+              runtimeStatus: executionMap.get("ai-video")!.runtimeStatus,
+              accessState: executionMap.get("ai-video")!.accessState,
+              title: executionMap.get("ai-video")!.title,
+              summary: executionMap.get("ai-video")!.summary,
+            }
+          : null,
+        "ai-music": null,
+      }}
+      assetOptions={artifacts.map((artifact) => ({
+        id: artifact.id,
+        title: artifact.title,
+        previewKind: getPlatformArtifactPreviewKind(artifact),
+        sourceUrl: resolvePlatformArtifactSourceUrl(artifact),
+      }))}
+      initialFeatureId={normalizeInitialFeatureId(resolvedSearchParams.feature) || "text-to-video"}
+    />
   )
 }
