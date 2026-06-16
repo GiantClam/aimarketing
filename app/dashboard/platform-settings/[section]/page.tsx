@@ -1,9 +1,12 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { ArrowRight, CreditCard, Network, Settings, Users2 } from "lucide-react"
 
+import { PlatformGovernanceSettingsPanel } from "@/components/platform/platform-governance-settings-panel"
 import { Button } from "@/components/ui/button"
+import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
+import { getCustomerGovernanceSnapshot } from "@/lib/platform/customer-governance"
 import {
   getLocalizedWorkspaceEnterpriseSettingEntryBySlug,
   type WorkspaceEnterpriseSettingSlug,
@@ -21,7 +24,10 @@ export default async function DashboardPlatformSettingDetailPage({
 }: {
   params: Promise<{ section: string }>
 }) {
-  const [{ section }, locale] = await Promise.all([params, getRequestLocale()])
+  const [{ section }, locale, currentUser] = await Promise.all([params, getRequestLocale(), getServerSessionUser()])
+  if (!currentUser) {
+    redirect("/login?next=%2Fdashboard%2Fplatform-settings")
+  }
   const displayLocale = locale === "zh" ? "zh" : "en"
   const entry = getLocalizedWorkspaceEnterpriseSettingEntryBySlug(
     locale,
@@ -33,19 +39,23 @@ export default async function DashboardPlatformSettingDetailPage({
   }
 
   const Icon = iconMap[entry.slug]
+  const customerSnapshot =
+    entry.slug === "compute" && currentUser.enterpriseId
+      ? await getCustomerGovernanceSnapshot(currentUser).catch(() => null)
+      : null
   const relatedLabel = displayLocale === "zh" ? "关联入口" : "Related entries"
   const openLabel = displayLocale === "zh" ? "打开入口" : "Open entry"
   const noteLabel = displayLocale === "zh" ? "信息架构说明" : "Information architecture note"
   const noteBody =
     displayLocale === "zh"
-      ? "该页面只补齐企业设置的信息架构入口，不改现有登录、支付、权限底层，也不新增独立治理后端。"
-      : "This page adds the enterprise-settings information architecture entry only. It does not rewrite auth, payments, permissions, or introduce a separate governance backend."
+      ? "该页面只补齐企业设置的信息架构入口；算力编排页会额外承接企业模型配置，其余栏目不改现有登录、支付、权限底层。"
+      : "This page keeps the enterprise-settings information architecture entry. The compute section additionally hosts enterprise model configuration, while other sections do not rewrite auth, payments, or permission foundations."
 
   return (
     <div className="h-full overflow-auto bg-transparent">
-      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-10">
-        <div className="space-y-8">
-          <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+      <section className="public-grid-bg workspace-page-shell mx-auto max-w-7xl">
+        <div className="workspace-stack">
+          <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
             <div className="public-kicker text-muted-foreground">Enterprise Settings</div>
             <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-4xl">
@@ -66,7 +76,7 @@ export default async function DashboardPlatformSettingDetailPage({
           </div>
 
           <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-            <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
               <div className="dashboard-kicker text-muted-foreground">{noteLabel}</div>
               <div className="mt-5 space-y-3">
                 {entry.bullets.map((item) => (
@@ -77,7 +87,7 @@ export default async function DashboardPlatformSettingDetailPage({
               </div>
             </article>
 
-            <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
               <div className="dashboard-kicker text-muted-foreground">{relatedLabel}</div>
               <div className="mt-5 space-y-3">
                 {entry.relatedLinks.map((link) => (
@@ -94,6 +104,14 @@ export default async function DashboardPlatformSettingDetailPage({
               </div>
             </article>
           </div>
+
+          {entry.slug === "compute" && customerSnapshot ? (
+            <PlatformGovernanceSettingsPanel
+              locale={locale}
+              snapshot={customerSnapshot}
+              initialCategory="text_generation"
+            />
+          ) : null}
         </div>
       </section>
     </div>

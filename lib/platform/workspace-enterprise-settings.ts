@@ -47,10 +47,10 @@ const zhEntries: LocalizedWorkspaceEnterpriseSettingEntry[] = [
   {
     slug: "compute",
     title: "算力编排",
-    summary: "把模型路由、provider 和长任务运行时放回统一算力视角。",
+    summary: "把模型路由、provider、模型选择和长任务运行时放回统一算力视角。",
     description:
-      "当前先提供信息架构入口，解释文本、图片、视频和工作流所依赖的 provider 组合，不改底层 provider routing。",
-    bullets: ["说明主文本路由与备用链路", "说明图片/视频长任务抽象", "回流能力中心与运行时治理"],
+      "这个入口现在同时承接真实配置面。企业管理员可以分别配置文本、图片、视频生成的 provider、model、Base URL 和 API Key，同时保留对现有能力中心与运行时治理的回流。",
+    bullets: ["配置文本/图片/视频默认模型与 Provider", "说明图片/视频长任务抽象", "回流能力中心与运行时治理"],
     href: "/dashboard/platform-settings/compute",
     relatedLinks: [
       { label: "平台设置总览", href: "/dashboard/platform-settings" },
@@ -106,10 +106,10 @@ const enEntries: LocalizedWorkspaceEnterpriseSettingEntry[] = [
   {
     slug: "compute",
     title: "Compute orchestration",
-    summary: "Reframe model routing, providers, and long-running media tasks as one compute surface.",
+    summary: "Reframe model routing, providers, model selection, and long-running media tasks as one compute surface.",
     description:
-      "This phase adds the information architecture entry point that explains the text, image, video, and workflow provider mix without rewriting the existing provider routing layer.",
-    bullets: ["Describe primary and fallback text routes", "Describe image and video task abstractions", "Link back to capabilities and runtime governance"],
+      "This entry now includes a live configuration surface. Enterprise admins can set provider, model, base URL, and API key for text, image, and video generation while still linking back to the existing capability and runtime governance surfaces.",
+    bullets: ["Configure default text/image/video providers and models", "Describe image and video task abstractions", "Link back to capabilities and runtime governance"],
     href: "/dashboard/platform-settings/compute",
     relatedLinks: [
       { label: "Platform settings", href: "/dashboard/platform-settings" },
