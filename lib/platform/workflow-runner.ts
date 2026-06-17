@@ -291,6 +291,26 @@ export function serializePlatformWorkflowRun(run: HydratedPlatformTaskRun) {
   }
 }
 
+export function serializePlatformWorkflowRunStatus(run: HydratedPlatformTaskRun) {
+  return {
+    id: run.id,
+    enterpriseId: run.enterpriseId,
+    userId: run.userId,
+    kind: run.kind,
+    itemType: run.itemType,
+    itemSlug: run.itemSlug,
+    externalRunId: run.externalRunId,
+    externalSystem: run.externalSystem,
+    status: run.status,
+    inputPayload: run.inputPayload,
+    normalizedResult: run.normalizedResult,
+    startedAt: serializeDate(run.startedAt),
+    finishedAt: serializeDate(run.finishedAt),
+    createdAt: serializeDate(run.createdAt),
+    updatedAt: serializeDate(run.updatedAt),
+  }
+}
+
 export async function createPlatformWorkflowRun(input: CreatePlatformWorkflowRunInput) {
   const store = resolveWorkflowRunStore(input.store)
   assertEnterpriseUser(input.currentUser)

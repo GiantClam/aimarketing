@@ -1,0 +1,44 @@
+ragflow:
+  host: ${RAGFLOW_HOST:-0.0.0.0}
+  http_port: 9380
+
+admin:
+  host: ${RAGFLOW_HOST:-0.0.0.0}
+  http_port: 9381
+
+mysql:
+  name: '${MYSQL_DBNAME:-rag_flow}'
+  user: '${MYSQL_USER}'
+  password: '${MYSQL_PASSWORD}'
+  host: '${MYSQL_HOST}'
+  port: ${MYSQL_PORT:-3306}
+  max_connections: 100
+  stale_timeout: 300
+  max_allowed_packet: ${MYSQL_MAX_PACKET:-1073741824}
+
+redis:
+  db: 1
+  username: '${REDIS_USERNAME:-}'
+  password: '${REDIS_PASSWORD}'
+  host: '${REDIS_HOST:-redis}:${REDIS_PORT:-6379}'
+
+infinity:
+  uri: '${INFINITY_HOST:-infinity}:${INFINITY_THRIFT_PORT:-23817}'
+  postgres_port: 5432
+  db_name: 'default_db'
+
+s3:
+  access_key: '${R2_ACCESS_KEY_ID}'
+  secret_key: '${R2_SECRET_ACCESS_KEY}'
+  region: '${R2_REGION:-auto}'
+  endpoint_url: '${R2_ENDPOINT}'
+  bucket: '${R2_BUCKET_NAME}'
+  prefix_path: '${R2_PREFIX_PATH:-ragflow}'
+  signature_version: 'v4'
+  addressing_style: 'path'
+
+user_default_llm:
+  default_models:
+    embedding_model:
+      api_key: '${EMBEDDING_API_KEY:-replace-me}'
+      base_url: '${EMBEDDING_BASE_URL:-https://replace-me.example.com/v1}'

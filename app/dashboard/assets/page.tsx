@@ -1,11 +1,7 @@
 import { WorkspaceAssetLibrary } from "@/components/platform/workspace-asset-library"
 import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
-import {
-  getPlatformArtifactPreviewKind,
-  resolvePlatformArtifactSourceUrl,
-} from "@/lib/platform/artifact-actions"
-import { listPlatformArtifactsForEnterprise } from "@/lib/platform/task-run-store"
+import { listEnterpriseAssetLibraryCandidates } from "@/lib/platform/assets"
 
 export default async function AssetsPage() {
   const locale = await getRequestLocale()
@@ -13,27 +9,8 @@ export default async function AssetsPage() {
   const currentUser = await getServerSessionUser().catch(() => null)
   const artifacts =
     currentUser?.enterpriseId != null
-      ? await listPlatformArtifactsForEnterprise(currentUser.enterpriseId)
+      ? await listEnterpriseAssetLibraryCandidates(currentUser.enterpriseId)
       : []
 
-  return (
-    <WorkspaceAssetLibrary
-      locale={displayLocale}
-      artifacts={artifacts.map((artifact) => {
-        const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
-        return {
-          id: artifact.id,
-          title: artifact.title,
-          kind: artifact.kind,
-          mimeType: artifact.mimeType,
-          runId: artifact.runId,
-          createdAt: artifact.createdAt instanceof Date ? artifact.createdAt.toISOString() : null,
-          previewKind: getPlatformArtifactPreviewKind(artifact),
-          sourceUrl,
-          previewUrl: sourceUrl || `/api/platform/artifacts/${artifact.id}/download`,
-          downloadUrl: sourceUrl || `/api/platform/artifacts/${artifact.id}/download?download=1`,
-        }
-      })}
-    />
-  )
+  return <WorkspaceAssetLibrary locale={displayLocale} artifacts={artifacts} />
 }

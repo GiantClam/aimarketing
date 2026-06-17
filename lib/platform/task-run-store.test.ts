@@ -136,3 +136,128 @@ test("savePlatformArtifact and promotePlatformArtifactToWorkItem preserve run li
   assert.equal(artifactList[0]?.id, artifact.id)
   assert.equal(workList[0]?.id, workItem.id)
 })
+
+test("listPlatformWorkLibraryItemsForEnterprise hydrates artifacts and counts references", async () => {
+  const store = createInMemoryPlatformTaskRunStore()
+  const run = await store.createPlatformTaskRun({
+    enterpriseId: 8,
+    userId: 3,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "asset-hydration",
+  })
+
+  const artifact = await store.savePlatformArtifact({
+    runId: run.id,
+    enterpriseId: 8,
+    ownerUserId: 3,
+    kind: "file",
+    title: "reference-image.png",
+    mimeType: "image/png",
+    externalUrl: "https://example.com/reference-image.png",
+    source: "workflow",
+  })
+
+  await store.promotePlatformArtifactToWorkItem({
+    sourceArtifactId: artifact.id,
+    enterpriseId: 8,
+    ownerUserId: 3,
+    type: "image_set",
+    title: "First image work",
+  })
+
+  await store.promotePlatformArtifactToWorkItem({
+    sourceArtifactId: artifact.id,
+    enterpriseId: 8,
+    ownerUserId: 3,
+    type: "image_set",
+    title: "Second image work",
+  })
+
+  const items = await store.listPlatformWorkLibraryItemsForEnterprise(8)
+  assert.equal(items.length, 2)
+  assert.equal(items[0]?.artifact.id, artifact.id)
+  assert.equal(items[0]?.referenceCount, 2)
+  assert.equal(items[1]?.referenceCount, 2)
+})
+
+test("deletePlatformWorkItem removes only the selected work record", async () => {
+  const store = createInMemoryPlatformTaskRunStore()
+  const run = await store.createPlatformTaskRun({
+    enterpriseId: 9,
+    userId: 3,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "remove-only",
+  })
+
+  const artifact = await store.savePlatformArtifact({
+    runId: run.id,
+    enterpriseId: 9,
+    ownerUserId: 3,
+    kind: "file",
+    title: "shared.pdf",
+    mimeType: "application/pdf",
+  })
+
+  const workA = await store.promotePlatformArtifactToWorkItem({
+    sourceArtifactId: artifact.id,
+    enterpriseId: 9,
+    ownerUserId: 3,
+    type: "document",
+    title: "shared-a",
+  })
+
+  const workB = await store.promotePlatformArtifactToWorkItem({
+    sourceArtifactId: artifact.id,
+    enterpriseId: 9,
+    ownerUserId: 3,
+    type: "document",
+    title: "shared-b",
+  })
+
+  const deleted = await store.deletePlatformWorkItem(workA.id, 9)
+  const workItems = await store.listPlatformWorkItemsForEnterprise(9)
+  const hydrated = await store.listPlatformWorkLibraryItemsForEnterprise(9)
+
+  assert.equal(deleted?.id, workA.id)
+  assert.deepEqual(workItems.map((item) => item.id), [workB.id])
+  assert.equal(hydrated[0]?.artifact.id, artifact.id)
+  assert.equal(hydrated[0]?.referenceCount, 1)
+})
+
+test("deletePlatformArtifactPermanently removes artifact and all related work items", async () => {
+  const store = createInMemoryPlatformTaskRunStore()
+  const run = await store.createPlatformTaskRun({
+    enterpriseId: 10,
+    userId: 6,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "permanent-delete",
+  })
+
+  const artifact = await store.savePlatformArtifact({
+    runId: run.id,
+    enterpriseId: 10,
+    ownerUserId: 6,
+    kind: "file",
+    title: "final.mp4",
+    mimeType: "video/mp4",
+    storageKey: "platform-artifacts/final.mp4",
+  })
+
+  const work = await store.promotePlatformArtifactToWorkItem({
+    sourceArtifactId: artifact.id,
+    enterpriseId: 10,
+    ownerUserId: 6,
+    type: "video",
+    title: "final video",
+  })
+
+  const result = await store.deletePlatformArtifactPermanently(artifact.id, 10)
+
+  assert.equal(result?.artifactId, artifact.id)
+  assert.deepEqual(result?.deletedWorkItemIds, [work.id])
+  assert.equal(await store.getPlatformArtifact(artifact.id), null)
+  assert.equal((await store.listPlatformWorkItemsForEnterprise(10)).length, 0)
+})

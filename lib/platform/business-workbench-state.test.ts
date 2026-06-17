@@ -1,12 +1,26 @@
 import assert from "node:assert/strict"
+import { createRequire } from "node:module"
 import test from "node:test"
 
-import {
-  sanitizeBusinessWorkbenchStateInput,
-  validateBusinessWorkbenchStateConversations,
-} from "@/lib/platform/business-workbench-state"
+const require = createRequire(import.meta.url)
+const nodeModule = require("node:module") as {
+  _load: (request: string, parent: unknown, isMain: boolean) => unknown
+}
+const originalLoad = nodeModule._load
 
-test("business workbench state sanitizer keeps only valid business agent tabs", () => {
+nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
+  if (request === "server-only") {
+    return {}
+  }
+  return originalLoad.call(this, request, parent, isMain)
+}
+
+async function loadBusinessWorkbenchStateModule() {
+  return import("./business-workbench-state")
+}
+
+test("business workbench state sanitizer keeps only valid business agent tabs", async () => {
+  const { sanitizeBusinessWorkbenchStateInput } = await loadBusinessWorkbenchStateModule()
   const state = sanitizeBusinessWorkbenchStateInput({
     currentViewSlug: "sales-close",
     activeTabId: "tab-2",
@@ -38,7 +52,8 @@ test("business workbench state sanitizer keeps only valid business agent tabs", 
   assert.equal(state.tabs[1]?.agentId, "business-sales-close")
 })
 
-test("business workbench state sanitizer falls back when active tab is invalid", () => {
+test("business workbench state sanitizer falls back when active tab is invalid", async () => {
+  const { sanitizeBusinessWorkbenchStateInput } = await loadBusinessWorkbenchStateModule()
   const state = sanitizeBusinessWorkbenchStateInput({
     currentViewSlug: "not-a-real-view",
     activeTabId: "missing-tab",
@@ -57,7 +72,8 @@ test("business workbench state sanitizer falls back when active tab is invalid",
   assert.equal(state.activeTabId, "tab-1")
 })
 
-test("business workbench state sanitizer dedupes tabs by agent id", () => {
+test("business workbench state sanitizer dedupes tabs by agent id", async () => {
+  const { sanitizeBusinessWorkbenchStateInput } = await loadBusinessWorkbenchStateModule()
   const state = sanitizeBusinessWorkbenchStateInput({
     currentViewSlug: "content-growth",
     activeTabId: "tab-2",
@@ -85,6 +101,10 @@ test("business workbench state sanitizer dedupes tabs by agent id", () => {
 })
 
 test("business workbench state validation clears stale conversation ids that no longer belong to the tab agent", async () => {
+  const {
+    sanitizeBusinessWorkbenchStateInput,
+    validateBusinessWorkbenchStateConversations,
+  } = await loadBusinessWorkbenchStateModule()
   const state = sanitizeBusinessWorkbenchStateInput({
     currentViewSlug: "lead-conversion",
     activeTabId: "tab-1",

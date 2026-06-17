@@ -222,7 +222,7 @@ export function ToolCardGrid({
         </div>
       )}
 
-      <div className="public-panel rounded-[12px] border border-border bg-card/85 p-5">
+      <div className="public-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="public-kicker text-muted-foreground">{resultCopy.filterTitle}</div>

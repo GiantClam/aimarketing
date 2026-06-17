@@ -201,9 +201,9 @@ export function WorkspaceMcpServiceProfileStudio({ locale }: { locale: "zh" | "e
   const statusOptions: McpStatus[] = ["live", "beta", "planned"]
 
   return (
-    <section className="public-grid-bg mx-auto max-w-7xl px-6 pb-10">
-      <div className="space-y-8">
-        <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+    <section className="public-grid-bg workspace-page-shell-bottom mx-auto max-w-7xl">
+      <div className="workspace-stack">
+        <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
           <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
           <h2 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[0.02em] text-foreground lg:text-5xl">
             {copy.title}
@@ -216,7 +216,7 @@ export function WorkspaceMcpServiceProfileStudio({ locale }: { locale: "zh" | "e
         </div>
 
         {canManage ? (
-          <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+          <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
             <div className="grid gap-4 xl:grid-cols-2">
               <label className="grid gap-2 text-sm text-foreground">
                 <span className="dashboard-kicker text-muted-foreground">{copy.titleLabel}</span>
@@ -268,11 +268,11 @@ export function WorkspaceMcpServiceProfileStudio({ locale }: { locale: "zh" | "e
         ) : null}
 
         <div className="grid gap-4">
-          {profiles.length === 0 ? <div className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5 text-sm text-muted-foreground">{copy.noItems}</div> : null}
+          {profiles.length === 0 ? <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 text-sm text-muted-foreground">{copy.noItems}</div> : null}
           {profiles.map((item) => {
             const draft = drafts[item.id] ?? cloneDraft(item)
             return (
-              <article key={item.id} className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+              <article key={item.id} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="grid gap-4 xl:grid-cols-2">
                   <label className="grid gap-2 text-sm text-foreground">
                     <span className="dashboard-kicker text-muted-foreground">{copy.titleLabel}</span>

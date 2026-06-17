@@ -1,4 +1,5 @@
 import { headers } from "next/headers"
+import { redirect } from "next/navigation"
 import { NextRequest } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
@@ -17,4 +18,12 @@ export async function getServerSessionUser(): Promise<AuthUserPayload | null> {
   })
 
   return getSessionUser(request)
+}
+
+export async function requireServerSessionUser(nextPath: string): Promise<AuthUserPayload> {
+  const currentUser = await getServerSessionUser()
+  if (!currentUser) {
+    redirect(`/login?next=${encodeURIComponent(nextPath)}`)
+  }
+  return currentUser
 }

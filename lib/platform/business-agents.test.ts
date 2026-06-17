@@ -10,7 +10,9 @@ import {
   listLocalizedBusinessAgentConfigsBySlug,
   listBusinessAgentConfigs,
 } from "@/lib/platform/business-agents"
-import { WORKSPACE_BUSINESS_SLUGS } from "@/lib/platform/workspace-business"
+import { CORE_WORKSPACE_BUSINESS_SLUGS, WORKSPACE_BUSINESS_SLUGS } from "@/lib/platform/workspace-business"
+
+const workspaceBusinessSlugSet = new Set<string>(WORKSPACE_BUSINESS_SLUGS)
 
 test("business agents cover every dashboard business entry with multiple agents, workflows, and prompts", () => {
   const agents = listBusinessAgentConfigs()
@@ -25,7 +27,7 @@ test("business agents cover every dashboard business entry with multiple agents,
     assert.ok(agent.artifactKinds.length > 0)
     assert.ok(getBusinessAgentConfigById(agent.agentId))
     assert.ok(
-      WORKSPACE_BUSINESS_SLUGS.includes(agent.businessSlug),
+      workspaceBusinessSlugSet.has(agent.businessSlug),
       `unexpected business slug: ${agent.businessSlug}`,
     )
     assert.ok(
@@ -34,7 +36,7 @@ test("business agents cover every dashboard business entry with multiple agents,
     )
   }
 
-  for (const slug of WORKSPACE_BUSINESS_SLUGS) {
+  for (const slug of CORE_WORKSPACE_BUSINESS_SLUGS) {
     assert.ok(
       listBusinessAgentConfigsBySlug(slug).length > 0,
       `expected at least one agent for ${slug}`,

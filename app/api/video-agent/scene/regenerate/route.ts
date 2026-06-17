@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import {
+  fetchVideoAgentUpstream,
+  getVideoAgentErrorMessage,
+  readJsonResponse,
+} from "@/lib/video-agent/upstream"
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -16,20 +21,29 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    const res = await fetch(`${AGENT_URL}/video-agent/scene/regenerate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const res = await fetchVideoAgentUpstream(
+      `${AGENT_URL}/video-agent/scene/regenerate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...body,
+          user_id: auth.user.id,
+          user_email: auth.user.email,
+        }),
       },
-      body: JSON.stringify({
-        ...body,
-        user_id: auth.user.id,
-        user_email: auth.user.email,
-      }),
-    })
+      {
+        label: "video_agent.scene.regenerate",
+        timeoutMs: 120_000,
+        attempts: 3,
+      },
+    )
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ error: "重新生成失败" }), {
+      const payload = await readJsonResponse(res)
+      return new Response(JSON.stringify({ error: getVideoAgentErrorMessage(payload, "重新生成失败") }), {
         status: res.status,
         headers: { "Content-Type": "application/json" },
       })
@@ -47,4 +61,3 @@ export async function POST(request: NextRequest) {
     })
   }
 }
-

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { hasFeatureAccess } from "@/lib/auth/guards"
+import { hasFeatureAccessWithFallback } from "@/lib/auth/guards"
 import { getSessionUser } from "@/lib/auth/session"
 import {
   isMiniMaxAudioConfigured,
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 })
   }
 
-  if (!hasFeatureAccess(currentUser, "video_generation")) {
+  if (!hasFeatureAccessWithFallback(currentUser, "audio_generation", "video_generation")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

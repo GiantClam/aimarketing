@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation"
 import {
   getLocalizedWorkspaceBusinessEntryBySlug,
   buildDashboardBusinessHref,
-  type WorkspaceBusinessSlug,
 } from "@/lib/platform/workspace-business"
 
 export default async function DashboardBusinessDetailPage({
@@ -20,7 +19,7 @@ export default async function DashboardBusinessDetailPage({
   ])
   const entry = getLocalizedWorkspaceBusinessEntryBySlug(
     "zh",
-    slug as WorkspaceBusinessSlug,
+    slug,
   )
 
   if (!entry) {

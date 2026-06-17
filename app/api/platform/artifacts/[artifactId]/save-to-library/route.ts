@@ -3,9 +3,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSessionUser } from "@/lib/auth/session"
 import {
   assertArtifactEnterpriseAccess,
+  inferWorkItemTypeFromArtifact,
   serializePlatformArtifact,
 } from "@/lib/platform/artifact-actions"
-import { getPlatformArtifact } from "@/lib/platform/task-run-store"
+import {
+  getPlatformArtifact,
+  listPlatformWorkItemsForEnterprise,
+  promotePlatformArtifactToWorkItem,
+} from "@/lib/platform/task-run-store"
 
 export const runtime = "nodejs"
 
@@ -23,10 +28,35 @@ export async function POST(
     }
 
     const artifact = assertArtifactEnterpriseAccess(currentUser, await getPlatformArtifact(numericArtifactId))
+    const existingWorkItem = (await listPlatformWorkItemsForEnterprise(artifact.enterpriseId)).find(
+      (item) => item.sourceArtifactId === artifact.id,
+    )
+
+    const workItem =
+      existingWorkItem ??
+      (await promotePlatformArtifactToWorkItem({
+        enterpriseId: artifact.enterpriseId,
+        ownerUserId: artifact.ownerUserId,
+        sourceArtifactId: artifact.id,
+        type: inferWorkItemTypeFromArtifact(artifact),
+        title: artifact.title,
+        summary: artifact.mimeType || artifact.kind,
+        metadata: {
+          source: "workspace-output-actions",
+          savedFrom: "save-to-library",
+        },
+      }))
+
     return NextResponse.json({
       data: {
         saved: true,
         artifact: serializePlatformArtifact(artifact),
+        workItem: {
+          ...workItem,
+          createdAt: workItem.createdAt instanceof Date ? workItem.createdAt.toISOString() : null,
+          updatedAt: workItem.updatedAt instanceof Date ? workItem.updatedAt.toISOString() : null,
+        },
+        alreadySaved: Boolean(existingWorkItem),
       },
     })
   } catch (error) {

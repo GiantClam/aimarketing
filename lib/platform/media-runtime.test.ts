@@ -169,6 +169,10 @@ test("media runtime builder promotes RunningHub video/image and MiniMax audio ta
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-video")?.enabled, true)
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.runtimeId, "minimax-audio")
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.enabled, true)
+  assert.match(
+    runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.notes.join(" ") ?? "",
+    /audio_generation/,
+  )
   assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-image")?.role, "primary")
   assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-video")?.role, "primary")
   assert.equal(runtime.providers.find((provider) => provider.id === "minimax-audio")?.role, "primary")

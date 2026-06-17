@@ -513,6 +513,153 @@ export const enterpriseDifyDatasets = pgTable(
   }),
 )
 
+export const enterpriseKnowledgeSources = pgTable(
+  withPrefix("enterprise_knowledge_sources"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    providerType: varchar("provider_type", { length: 32 }).default("ragflow").notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    baseUrl: text("base_url").notNull(),
+    apiKey: varchar("api_key", { length: 500 }),
+    status: varchar("status", { length: 24 }).default("unavailable").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    lastCheckedAt: timestamp("last_checked_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    enterpriseProviderUnique: uniqueIndex(withPrefix("enterprise_knowledge_sources_enterprise_provider_idx")).on(
+      table.enterpriseId,
+      table.providerType,
+    ),
+    enterpriseStatusIdx: index(withPrefix("enterprise_knowledge_sources_enterprise_status_idx")).on(
+      table.enterpriseId,
+      table.status,
+    ),
+  }),
+)
+
+export const enterpriseKnowledgeDatasets = pgTable(
+  withPrefix("enterprise_knowledge_datasets"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    sourceId: integer("source_id")
+      .notNull()
+      .references(() => enterpriseKnowledgeSources.id, { onDelete: "cascade" }),
+    providerDatasetId: varchar("provider_dataset_id", { length: 255 }),
+    name: varchar("name", { length: 255 }).notNull(),
+    category: varchar("category", { length: 32 }).default("general").notNull(),
+    priority: integer("priority").default(100).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    chunkingConfig: jsonb("chunking_config").$type<Record<string, unknown> | null>(),
+    retrievalConfig: jsonb("retrieval_config").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    sourceDatasetUnique: uniqueIndex(withPrefix("enterprise_knowledge_datasets_source_provider_idx")).on(
+      table.sourceId,
+      table.providerDatasetId,
+    ),
+    enterpriseCategoryIdx: index(withPrefix("enterprise_knowledge_datasets_enterprise_category_idx")).on(
+      table.enterpriseId,
+      table.category,
+    ),
+  }),
+)
+
+export const enterpriseKnowledgeDocuments = pgTable(
+  withPrefix("enterprise_knowledge_documents"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id),
+    sourceId: integer("source_id").references(() => enterpriseKnowledgeSources.id, { onDelete: "set null" }),
+    datasetId: integer("dataset_id").references(() => enterpriseKnowledgeDatasets.id, { onDelete: "set null" }),
+    providerDocumentId: varchar("provider_document_id", { length: 255 }),
+    name: varchar("name", { length: 255 }).notNull(),
+    sourceType: varchar("source_type", { length: 24 }).notNull(),
+    sourceUrl: text("source_url"),
+    category: varchar("category", { length: 32 }).default("general").notNull(),
+    status: varchar("status", { length: 24 }).default("uploaded").notNull(),
+    chunkCount: integer("chunk_count").default(0).notNull(),
+    parseSummary: jsonb("parse_summary").$type<Record<string, unknown> | null>(),
+    chunkingOverride: jsonb("chunking_override").$type<Record<string, unknown> | null>(),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    enterpriseStatusIdx: index(withPrefix("enterprise_knowledge_documents_enterprise_status_idx")).on(
+      table.enterpriseId,
+      table.status,
+    ),
+    datasetUpdatedIdx: index(withPrefix("enterprise_knowledge_documents_dataset_updated_idx")).on(
+      table.datasetId,
+      table.updatedAt,
+    ),
+  }),
+)
+
+export const enterpriseKnowledgeChunks = pgTable(
+  withPrefix("enterprise_knowledge_chunks"),
+  {
+    id: serial("id").primaryKey(),
+    documentId: integer("document_id")
+      .notNull()
+      .references(() => enterpriseKnowledgeDocuments.id, { onDelete: "cascade" }),
+    providerChunkId: varchar("provider_chunk_id", { length: 255 }),
+    chunkIndex: integer("chunk_index").default(0).notNull(),
+    content: text("content"),
+    excerpt: text("excerpt"),
+    keywords: jsonb("keywords").$type<string[] | null>(),
+    questions: jsonb("questions").$type<string[] | null>(),
+    tags: jsonb("tags").$type<string[] | null>(),
+    enabled: boolean("enabled").default(true).notNull(),
+    edited: boolean("edited").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    documentChunkUnique: uniqueIndex(withPrefix("enterprise_knowledge_chunks_document_chunk_idx")).on(
+      table.documentId,
+      table.chunkIndex,
+    ),
+    documentUpdatedIdx: index(withPrefix("enterprise_knowledge_chunks_document_updated_idx")).on(
+      table.documentId,
+      table.updatedAt,
+    ),
+  }),
+)
+
+export const enterpriseKnowledgeBindings = pgTable(
+  withPrefix("enterprise_knowledge_bindings"),
+  {
+    id: serial("id").primaryKey(),
+    datasetId: integer("dataset_id")
+      .notNull()
+      .references(() => enterpriseKnowledgeDatasets.id, { onDelete: "cascade" }),
+    targetType: varchar("target_type", { length: 48 }).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    datasetTargetUnique: uniqueIndex(withPrefix("enterprise_knowledge_bindings_dataset_target_idx")).on(
+      table.datasetId,
+      table.targetType,
+    ),
+  }),
+)
+
 export const enterpriseDifyAdvisorConfigs = pgTable(
   withPrefix("enterprise_dify_advisor_configs"),
   {
@@ -616,6 +763,85 @@ export const enterprisePlatformWorkflowTemplates = pgTable(
     enterpriseSlugUnique: uniqueIndex(withPrefix("enterprise_platform_workflow_templates_enterprise_slug_idx")).on(
       table.enterpriseId,
       table.slug,
+    ),
+  }),
+)
+
+export const platformWorkflows = pgTable(
+  withPrefix("platform_workflows"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id, { onDelete: "cascade" }),
+    ownerUserId: integer("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 160 }).notNull(),
+    status: varchar("status", { length: 24 }).default("draft").notNull(),
+    triggerType: varchar("trigger_type", { length: 24 }).default("manual").notNull(),
+    description: text("description"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    enterpriseSlugUnique: uniqueIndex(withPrefix("platform_workflows_enterprise_slug_idx")).on(table.enterpriseId, table.slug),
+    enterpriseUpdatedIdx: index(withPrefix("platform_workflows_enterprise_updated_idx")).on(table.enterpriseId, table.updatedAt),
+  }),
+)
+
+export const platformWorkflowNodes = pgTable(
+  withPrefix("platform_workflow_nodes"),
+  {
+    id: serial("id").primaryKey(),
+    workflowId: integer("workflow_id")
+      .notNull()
+      .references(() => platformWorkflows.id, { onDelete: "cascade" }),
+    nodeKey: varchar("node_key", { length: 120 }).notNull(),
+    type: varchar("type", { length: 32 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    positionX: integer("position_x").default(0).notNull(),
+    positionY: integer("position_y").default(0).notNull(),
+    config: jsonb("config").$type<Record<string, unknown>>().default({}).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    workflowNodeKeyUnique: uniqueIndex(withPrefix("platform_workflow_nodes_workflow_node_key_idx")).on(
+      table.workflowId,
+      table.nodeKey,
+    ),
+    workflowPositionIdx: index(withPrefix("platform_workflow_nodes_workflow_position_idx")).on(
+      table.workflowId,
+      table.positionX,
+      table.positionY,
+    ),
+  }),
+)
+
+export const platformWorkflowEdges = pgTable(
+  withPrefix("platform_workflow_edges"),
+  {
+    id: serial("id").primaryKey(),
+    workflowId: integer("workflow_id")
+      .notNull()
+      .references(() => platformWorkflows.id, { onDelete: "cascade" }),
+    sourceNodeKey: varchar("source_node_key", { length: 120 }).notNull(),
+    targetNodeKey: varchar("target_node_key", { length: 120 }).notNull(),
+    inputName: varchar("input_name", { length: 80 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    workflowTargetIdx: index(withPrefix("platform_workflow_edges_workflow_target_idx")).on(
+      table.workflowId,
+      table.targetNodeKey,
+      table.sourceNodeKey,
+    ),
+    workflowSourceIdx: index(withPrefix("platform_workflow_edges_workflow_source_idx")).on(
+      table.workflowId,
+      table.sourceNodeKey,
     ),
   }),
 )
@@ -777,6 +1003,26 @@ export const businessWorkbenchStates = pgTable(
   }),
 )
 
+export const businessMarketplaceSelections = pgTable(
+  withPrefix("business_marketplace_selections"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    selectedAgentIds: jsonb("selected_agent_ids").$type<string[]>().default([]).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userUnique: uniqueIndex(withPrefix("business_marketplace_selections_user_idx")).on(table.userId),
+    userUpdatedIdx: index(withPrefix("business_marketplace_selections_user_updated_idx")).on(
+      table.userId,
+      table.updatedAt,
+    ),
+  }),
+)
+
 export const platformWorkItems = pgTable(
   withPrefix("platform_work_items"),
   {
@@ -803,6 +1049,45 @@ export const platformWorkItems = pgTable(
       table.createdAt,
     ),
     sourceArtifactIdx: index(withPrefix("platform_work_items_source_artifact_idx")).on(table.sourceArtifactId),
+  }),
+)
+
+export const platformWorkflowNodeExecutions = pgTable(
+  withPrefix("platform_workflow_node_executions"),
+  {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => platformTaskRuns.id, { onDelete: "cascade" }),
+    workflowId: integer("workflow_id")
+      .notNull()
+      .references(() => platformWorkflows.id, { onDelete: "cascade" }),
+    nodeKey: varchar("node_key", { length: 120 }).notNull(),
+    nodeType: varchar("node_type", { length: 32 }).notNull(),
+    status: varchar("status", { length: 24 }).default("queued").notNull(),
+    providerId: varchar("provider_id", { length: 80 }),
+    modelId: varchar("model_id", { length: 160 }),
+    taskRunId: integer("task_run_id").references(() => platformTaskRuns.id, { onDelete: "set null" }),
+    inputPayload: jsonb("input_payload").$type<Record<string, unknown> | null>(),
+    outputPayload: jsonb("output_payload").$type<Record<string, unknown> | null>(),
+    errorMessage: text("error_message"),
+    creditsConsumed: integer("credits_consumed").default(0).notNull(),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    runNodeKeyUnique: uniqueIndex(withPrefix("platform_workflow_node_executions_run_node_key_idx")).on(
+      table.runId,
+      table.nodeKey,
+    ),
+    workflowStatusIdx: index(withPrefix("platform_workflow_node_executions_workflow_status_idx")).on(
+      table.workflowId,
+      table.status,
+      table.createdAt,
+    ),
+    taskRunIdx: index(withPrefix("platform_workflow_node_executions_task_run_idx")).on(table.taskRunId),
   }),
 )
 

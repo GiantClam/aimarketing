@@ -58,7 +58,7 @@ export function SeoLandingPage({
 
       <PublicSiteHeader activeKey={activeKey} />
 
-      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
+      <section className="public-grid-bg public-page-hero-shell mx-auto max-w-7xl">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -94,7 +94,7 @@ export function SeoLandingPage({
       </section>
 
       <section className="border-y border-border bg-card/85">
-        <div className="mx-auto max-w-7xl px-6 py-14">
+        <div className="public-page-highlight-shell mx-auto max-w-7xl">
           <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border md:grid-cols-3">
             {page.highlights.map((item, index) => (
               <div key={item} className="bg-background px-5 py-5 text-sm font-medium leading-6">
@@ -108,7 +108,7 @@ export function SeoLandingPage({
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-16">
+      <section className="public-page-hero-shell mx-auto max-w-7xl">
         <div className="grid gap-6">
           {page.sections.map((section) => (
             <article key={section.heading} className="public-panel rounded-[12px] p-6 sm:p-8">
@@ -146,7 +146,7 @@ export function SeoLandingPage({
       </section>
 
       {page.relatedLinks.length > 0 ? (
-        <section className="mx-auto max-w-7xl px-6 pb-4">
+        <section className="public-page-bottom-shell mx-auto max-w-7xl">
           <div className="public-panel rounded-[12px] p-6 sm:p-8">
             <p className="public-kicker text-muted-foreground">{ui.relatedPages}</p>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -170,7 +170,7 @@ export function SeoLandingPage({
 
       <SeoFaqList faqs={page.faqs} locale={locale} />
 
-      <section className="mx-auto max-w-7xl px-6 pb-18">
+      <section className="public-page-bottom-shell mx-auto max-w-7xl">
         <TrackedSeoCtaBlock cta={page.cta} group={page.group} slug={page.slug} locale={locale} />
       </section>
 

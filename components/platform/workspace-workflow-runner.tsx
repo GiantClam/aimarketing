@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { buildWorkflowRunStatusPath } from "@/lib/workflows/run-status-path"
 
 type WorkflowRunnerItem = {
   slug: string
@@ -42,27 +43,45 @@ export function WorkspaceWorkflowRunner({
   const [run, setRun] = useState<WorkflowRunDetail | null>(null)
   const [detailPath, setDetailPath] = useState<string | null>(null)
   const [message, setMessage] = useState("")
+  const detailRequestInFlightRef = useRef(false)
 
   const selectedItem = items.find((item) => item.slug === selectedSlug) || items[0] || null
 
   useEffect(() => {
-    if (!detailPath || !run || run.status !== "running") return
+    if (!detailPath || !run || (run.status !== "running" && run.status !== "queued")) return
 
     let cancelled = false
-    const timer = window.setInterval(async () => {
-      const response = await fetch(detailPath, {
-        credentials: "same-origin",
-        cache: "no-store",
-      }).catch(() => null)
-      if (!response?.ok) return
-      const payload = await response.json().catch(() => null)
-      if (!cancelled && payload?.data?.run) {
-        setRun(payload.data.run as WorkflowRunDetail)
+    detailRequestInFlightRef.current = false
+
+    const refreshRun = async () => {
+      if (detailRequestInFlightRef.current) return
+      detailRequestInFlightRef.current = true
+      try {
+        const response = await fetch(buildWorkflowRunStatusPath(detailPath), {
+          credentials: "same-origin",
+          cache: "no-store",
+        }).catch(() => null)
+        if (!response?.ok) return
+        const payload = await response.json().catch(() => null)
+        if (!cancelled && payload?.data?.run) {
+          setRun((current) => ({
+            ...(current || {}),
+            ...(payload.data.run as WorkflowRunDetail),
+          }))
+        }
+      } finally {
+        detailRequestInFlightRef.current = false
       }
+    }
+
+    void refreshRun()
+    const timer = window.setInterval(() => {
+      void refreshRun()
     }, 3000)
 
     return () => {
       cancelled = true
+      detailRequestInFlightRef.current = false
       window.clearInterval(timer)
     }
   }, [detailPath, run])
@@ -125,7 +144,7 @@ export function WorkspaceWorkflowRunner({
 
       setRun(payload.data.run as WorkflowRunDetail)
       setDetailPath(payload.data.detailPath as string)
-      setMessage(payload.data.run.status === "running" ? copy.running : copy.success)
+      setMessage(payload.data.run.status === "running" || payload.data.run.status === "queued" ? copy.running : copy.success)
     } catch (error) {
       setMessage(`${copy.failed}: ${error instanceof Error ? error.message : "unknown_error"}`)
     } finally {
@@ -134,8 +153,8 @@ export function WorkspaceWorkflowRunner({
   }
 
   return (
-    <section className={cn(compact ? "" : "public-grid-bg mx-auto max-w-7xl px-6 pb-10", className)}>
-      <div className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+    <section className={cn(compact ? "" : "public-grid-bg workspace-page-shell-bottom mx-auto max-w-7xl", className)}>
+      <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
         <div className="space-y-3">
           <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
           <h2 className={cn("font-display font-extrabold uppercase tracking-[0.02em] text-foreground", compact ? "text-2xl" : "text-3xl")}>

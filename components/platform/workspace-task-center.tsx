@@ -45,9 +45,9 @@ export function WorkspaceTaskCenter({
 
   return (
     <div className="h-full overflow-auto bg-transparent">
-      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-10">
-        <div className="space-y-8">
-          <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+      <section className="public-grid-bg workspace-page-shell mx-auto max-w-7xl">
+        <div className="workspace-stack">
+          <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
             <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
             <h1 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[0.02em] text-foreground lg:text-5xl">
               {copy.title}
@@ -57,13 +57,13 @@ export function WorkspaceTaskCenter({
 
           <div className="space-y-4">
             {runs.length === 0 ? (
-              <div className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5 text-sm text-muted-foreground">
+              <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 text-sm text-muted-foreground">
                 {copy.empty}
               </div>
             ) : null}
 
             {runs.map((run) => (
-              <article key={run.id} className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+              <article key={run.id} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-2">
                     <div className="dashboard-kicker text-muted-foreground">

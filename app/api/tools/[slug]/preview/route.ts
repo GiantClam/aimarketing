@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ZodError } from "zod"
 
+import { getSessionUser } from "@/lib/auth/session"
 import { buildLeadToolPreview, LeadToolRuntimeError } from "@/lib/lead-tools/runtime"
 
 type ToolRouteContext = {
@@ -12,7 +13,8 @@ export async function POST(request: NextRequest, context: ToolRouteContext) {
 
   try {
     const body = await request.json()
-    const result = await buildLeadToolPreview(slug, body)
+    const user = await getSessionUser(request).catch(() => null)
+    const result = await buildLeadToolPreview(slug, body, user)
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ZodError) {

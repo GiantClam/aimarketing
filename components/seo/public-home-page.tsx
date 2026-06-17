@@ -105,7 +105,7 @@ export function PublicHomePageContent({
       <PublicSiteHeader />
 
       <main className="public-grid-bg">
-        <section className="mx-auto max-w-7xl px-6 py-10 lg:py-14">
+        <section className="public-page-hero-shell mx-auto max-w-7xl">
           <div className="public-panel grid overflow-hidden rounded-[12px] bg-background/90 lg:grid-cols-[minmax(0,1.12fr)_390px]">
             <div className="border-b border-border px-6 py-8 lg:border-b-0 lg:border-r lg:px-8 lg:py-10">
               <div className="grid gap-6">
@@ -223,7 +223,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-3">
             {copy.home.capabilityCards.map(({ title, description }, index) => {
               const Icon = capabilityIcons[index]
@@ -245,7 +245,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="grid gap-8 lg:grid-cols-[0.78fr_1.22fr]">
             <div className="public-panel rounded-[12px] px-6 py-6 lg:px-7 lg:py-7">
               <p className="public-kicker text-muted-foreground">{locale === "zh" ? "Platform Directories" : "Platform Directories"}</p>
@@ -365,7 +365,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="grid gap-8 lg:grid-cols-[0.82fr_1.18fr]">
             <div className="public-panel rounded-[12px] px-6 py-6 lg:px-7 lg:py-7">
               <p className="public-kicker text-muted-foreground">{copy.home.workflowEyebrow}</p>
@@ -391,7 +391,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="flex flex-col justify-between gap-6 border-b border-border pb-6 md:flex-row md:items-end">
             <div>
               <p className="public-kicker text-muted-foreground">{copy.home.audienceEyebrow}</p>
@@ -438,7 +438,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-3">
             {copy.home.resources.map(({ label, title, href }, index) => {
               const Icon = resourceIcons[index]
@@ -459,7 +459,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="flex flex-col justify-between gap-6 border-b border-border pb-6 md:flex-row md:items-end">
             <div className="max-w-3xl">
               <p className="public-kicker text-muted-foreground">{copy.home.pricingEyebrow}</p>
@@ -484,7 +484,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-10">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="border-b border-border pb-6">
             <p className="public-kicker text-muted-foreground">{copy.home.faqEyebrow}</p>
             <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
@@ -502,7 +502,7 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:py-12">
+        <section className="public-page-section-shell mx-auto max-w-7xl">
           <div className="overflow-hidden rounded-[12px] border border-primary/30 bg-primary text-primary-foreground shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]">
             <div className="grid gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:px-8 lg:py-10">
               <div className="max-w-3xl">

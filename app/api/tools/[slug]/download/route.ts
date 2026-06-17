@@ -30,6 +30,12 @@ function buildContentDisposition(fileName: string) {
   return `attachment; filename="${asciiFileName}"; filename*=UTF-8''${encodedFileName}`
 }
 
+function setOptionalPlatformHeader(headers: Headers, key: string, value: number | undefined) {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    headers.set(key, String(value))
+  }
+}
+
 export async function POST(request: NextRequest, context: ToolRouteContext) {
   const { slug } = await context.params
 
@@ -45,12 +51,17 @@ export async function POST(request: NextRequest, context: ToolRouteContext) {
             variant: result.variant,
           })
 
+    const headers = new Headers({
+      "Content-Type": artifact.contentType,
+      "Content-Disposition": buildContentDisposition(artifact.fileName),
+    })
+    setOptionalPlatformHeader(headers, "X-Platform-Run-Id", result.meta?.platformRunId)
+    setOptionalPlatformHeader(headers, "X-Platform-Artifact-Id", result.meta?.platformArtifactId)
+    setOptionalPlatformHeader(headers, "X-Platform-Work-Item-Id", result.meta?.platformWorkItemId)
+
     return new NextResponse(new Uint8Array(artifact.buffer), {
       status: 200,
-      headers: {
-        "Content-Type": artifact.contentType,
-        "Content-Disposition": buildContentDisposition(artifact.fileName),
-      },
+      headers,
     })
   } catch (error) {
     if (error instanceof ZodError) {

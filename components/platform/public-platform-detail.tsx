@@ -76,9 +76,9 @@ export function PublicPlatformDetail({
         : copy.planned
 
   return (
-    <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
-      <div className="space-y-8">
-        <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+    <section className="public-grid-bg public-page-hero-shell mx-auto max-w-7xl">
+      <div className="workspace-stack">
+        <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-4xl space-y-4">
               <div className="public-kicker text-muted-foreground">{eyebrow}</div>

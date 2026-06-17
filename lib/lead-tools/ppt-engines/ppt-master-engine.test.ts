@@ -4,7 +4,7 @@ import test from "node:test"
 import { getPptMasterEngines } from "./ppt-master-engine"
 
 const htmlDocument = {
-  fileName: "long-table.html",
+  fileName: "ai-growth-deck-5p-long-table.html",
   html: "<!doctype html><html><body><main>long table</main></body></html>",
 }
 
@@ -22,6 +22,7 @@ const htmlDeck = {
   variants: [
     {
       key: "ppt169_brutalist_ai_newspaper_2026" as const,
+      styleKey: "ppt169_brutalist_ai_newspaper_2026" as const,
       name: "Long Table",
       summary: "summary",
       stylePrompt: "style",
@@ -108,7 +109,7 @@ test("frontend-slides download returns html artifact", async () => {
 
   assert.ok(result.artifact)
   assert.equal(result.artifact.contentType, "text/html; charset=utf-8")
-  assert.equal(result.artifact.fileName, "long-table.html")
+  assert.equal(result.artifact.fileName, "ai-growth-deck-5p-long-table.html")
   const html = new TextDecoder().decode(result.artifact.buffer)
   assert.match(html, /<!doctype html>/i)
 })

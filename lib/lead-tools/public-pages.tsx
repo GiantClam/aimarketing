@@ -19,11 +19,21 @@ import { getLeadToolExample, getLeadToolExampleHref, getLeadToolExamples } from 
 import { buildFrontendSlidesPreviewDeck } from "@/lib/lead-tools/ppt-engines/frontend-slides-preview-runtime"
 import { getLocalizedPlatformHubLinks } from "@/lib/platform/catalog"
 import { getLocalizedPublicToolsCenterEntries } from "@/lib/platform/directory-registry"
-import { buildMockPptPreview } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import {
+  buildMockPptPreview,
+  resolveOptionalPptPreviewPageCount,
+  resolvePptPreviewTemplateMode,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { getPptMasterSessionDeck } from "@/lib/lead-tools/ppt-master-runtime"
 import { renderPptPreviewDeckAssets } from "@/lib/lead-tools/ppt-master-preview"
 import { getPptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
-import type { PptLanguage, PptPreviewModelValue, PptScenario } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import type {
+  PptFrontendTemplateId,
+  PptLanguage,
+  PptPreviewModelValue,
+  PptPreviewTemplateMode,
+  PptScenario,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { buildMockSeoMetaPreview } from "@/lib/lead-tools/seo-meta-data"
 import type { SeoLanguage, SeoPageType } from "@/lib/lead-tools/seo-meta-data"
 
@@ -34,6 +44,9 @@ export type LeadToolRouteSearchParams = {
   scenario?: PptScenario
   language?: PptLanguage
   model?: PptPreviewModelValue
+  templateMode?: PptPreviewTemplateMode
+  templateId?: PptFrontendTemplateId
+  pageCount?: string
   previewSessionId?: string
   action?: "download" | "finalize"
   topic?: string
@@ -164,14 +177,23 @@ export async function renderLeadToolPage(
     const initialScenario = query.scenario ?? sessionDeck?.scenario ?? "marketing-campaign"
     const initialLanguage = query.language ?? sessionDeck?.language ?? defaultPptLanguage
     const initialModel = (query.model ?? sessionDeck?.previewModel ?? tool.previewModel) as PptPreviewModelValue
+    const initialTemplateMode = resolvePptPreviewTemplateMode({
+      templateMode: query.templateMode ?? sessionDeck?.templateMode ?? "auto-4",
+      templateId: query.templateId ?? sessionDeck?.selectedTemplateId ?? undefined,
+    })
+    const initialTemplateId = query.templateId ?? sessionDeck?.selectedTemplateId ?? undefined
+    const initialPageCount = resolveOptionalPptPreviewPageCount(query.pageCount ?? sessionDeck?.pageCount)
     const displayDeck = sessionDeck
       ? null
       : buildFrontendSlidesPreviewDeck(
           buildMockPptPreview({
             prompt: query.prompt ?? "",
             scenario: initialScenario,
-            language: "en-US",
+            language: initialLanguage,
             model: initialModel,
+            templateMode: initialTemplateMode,
+            templateId: initialTemplateMode === "single-template" ? initialTemplateId : undefined,
+            pageCount: initialPageCount,
           }),
         )
 
@@ -184,6 +206,9 @@ export async function renderLeadToolPage(
             initialScenario={initialScenario}
             initialLanguage={initialLanguage}
             initialModel={initialModel}
+            initialTemplateMode={initialTemplateMode}
+            initialTemplateId={initialTemplateId}
+            initialPageCount={initialPageCount}
             initialAction={query.action}
             initialDeck={sessionDeck}
             initialDisplayDeck={displayDeck}

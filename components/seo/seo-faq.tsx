@@ -13,7 +13,7 @@ export function SeoFaqList({
   const ui = getSeoUiCopy(locale)
 
   return (
-    <section className="mx-auto max-w-7xl px-6 py-16">
+    <section className="public-page-hero-shell mx-auto max-w-7xl">
       <div className="max-w-3xl">
         <p className="public-kicker text-muted-foreground">{ui.faqEyebrow}</p>
         <h2 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[-0.04em] text-foreground">

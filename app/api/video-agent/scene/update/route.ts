@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import {
+  fetchVideoAgentUpstream,
+  getVideoAgentErrorMessage,
+  readJsonResponse,
+} from "@/lib/video-agent/upstream"
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -26,10 +31,18 @@ export async function POST(request: NextRequest) {
       const uploadFormData = new FormData()
       uploadFormData.append("file", imageFile)
       
-      const uploadRes = await fetch(`${AGENT_URL}/workflow/upload-image`, {
-        method: "POST",
-        body: uploadFormData,
-      })
+      const uploadRes = await fetchVideoAgentUpstream(
+        `${AGENT_URL}/workflow/upload-image`,
+        {
+          method: "POST",
+          body: uploadFormData,
+        },
+        {
+          label: "video_agent.scene.upload_image",
+          timeoutMs: 120_000,
+          attempts: 2,
+        },
+      )
       
       if (uploadRes.ok) {
         const uploadData = await uploadRes.json()
@@ -40,23 +53,32 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用后端更新 scene
-    const updateRes = await fetch(`${AGENT_URL}/video-agent/scene/update`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const updateRes = await fetchVideoAgentUpstream(
+      `${AGENT_URL}/video-agent/scene/update`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message_id: messageId,
+          scene_idx: sceneIdx,
+          script,
+          image_url: imageUrl,
+          user_id: auth.user.id,
+          user_email: auth.user.email,
+        }),
       },
-      body: JSON.stringify({
-        message_id: messageId,
-        scene_idx: sceneIdx,
-        script,
-        image_url: imageUrl,
-        user_id: auth.user.id,
-        user_email: auth.user.email,
-      }),
-    })
+      {
+        label: "video_agent.scene.update",
+        timeoutMs: 120_000,
+        attempts: 3,
+      },
+    )
 
     if (!updateRes.ok) {
-      return new Response(JSON.stringify({ error: "更新失败" }), {
+      const payload = await readJsonResponse(updateRes)
+      return new Response(JSON.stringify({ error: getVideoAgentErrorMessage(payload, "更新失败") }), {
         status: updateRes.status,
         headers: { "Content-Type": "application/json" },
       })
@@ -74,4 +96,3 @@ export async function POST(request: NextRequest) {
     })
   }
 }
-

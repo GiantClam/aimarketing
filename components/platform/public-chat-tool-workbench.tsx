@@ -127,13 +127,13 @@ export function PublicChatToolWorkbench({
   }
 
   return (
-    <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-6">
+    <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-4">
       <div className="max-w-3xl space-y-2">
         <h2 className="text-2xl font-semibold text-foreground">{copy.title}</h2>
         <p className="text-sm leading-6 text-muted-foreground">{copy.body}</p>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+      <div className="mt-6 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
         <Card className="border-border/70 bg-background/75">
           <CardHeader>
             <CardTitle className="text-lg text-foreground">{copy.submit}</CardTitle>

@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
@@ -23,6 +23,16 @@ export type PlatformTaskRunEventRecord = typeof platformTaskRunEvents.$inferSele
 export type PlatformArtifactRecord = typeof platformArtifacts.$inferSelect
 export type PlatformWorkItemRecord = typeof platformWorkItems.$inferSelect
 export type PlatformKnowledgeSaveJobRecord = typeof platformKnowledgeSaveJobs.$inferSelect
+export type PlatformWorkLibraryItemRecord = {
+  workItem: PlatformWorkItemRecord
+  artifact: PlatformArtifactRecord
+  referenceCount: number
+}
+export type DeletePlatformArtifactResult = {
+  artifactId: number
+  deletedWorkItemIds: number[]
+  deletedStorage: boolean
+}
 
 export type HydratedPlatformTaskRun = PlatformTaskRunRecord & {
   events: PlatformTaskRunEventRecord[]
@@ -62,6 +72,7 @@ export type SavePlatformArtifactInput = {
   storageKey?: string | null
   externalUrl?: string | null
   payload?: Record<string, unknown> | null
+  source?: "upload" | "generated" | "workflow" | "chat" | "assistant" | "import"
 }
 
 export type CreatePlatformWorkItemInput = {
@@ -95,7 +106,10 @@ export type PlatformTaskRunStore = {
   listPlatformTaskRunsForEnterprise(enterpriseId: number): Promise<PlatformTaskRunRecord[]>
   listPlatformArtifactsForEnterprise(enterpriseId: number): Promise<PlatformArtifactRecord[]>
   listPlatformWorkItemsForEnterprise(enterpriseId: number): Promise<PlatformWorkItemRecord[]>
+  listPlatformWorkLibraryItemsForEnterprise(enterpriseId: number): Promise<PlatformWorkLibraryItemRecord[]>
   getPlatformArtifact(artifactId: number): Promise<PlatformArtifactRecord | null>
+  deletePlatformWorkItem(workItemId: number, enterpriseId: number): Promise<PlatformWorkItemRecord | null>
+  deletePlatformArtifactPermanently(artifactId: number, enterpriseId: number): Promise<DeletePlatformArtifactResult | null>
 }
 
 const PLATFORM_TASK_RUN_DB_RETRY_DELAYS_MS = [250, 750] as const
@@ -412,7 +426,10 @@ export function buildPlatformArtifactRecord(input: SavePlatformArtifactInput): t
     mimeType: normalizeOptionalText(input.mimeType, 120),
     storageKey: normalizeOptionalText(input.storageKey, 4096),
     externalUrl: normalizeOptionalText(input.externalUrl, 4096),
-    payload: input.payload ?? null,
+    payload: {
+      ...(input.payload ?? {}),
+      source: input.source ?? input.payload?.source ?? null,
+    },
     createdAt: new Date(),
   }
 }
@@ -558,6 +575,14 @@ async function loadHydratedPlatformTaskRun(run: PlatformTaskRunRecord): Promise<
   return hydratePlatformTaskRun(run, events, artifacts, workItems, knowledgeSaveJobs)
 }
 
+function sortPlatformRowsByCreatedDesc<T extends { createdAt: Date | null; id: number }>(rows: T[]) {
+  return [...rows].sort((left, right) => {
+    const leftTime = left.createdAt instanceof Date ? left.createdAt.getTime() : 0
+    const rightTime = right.createdAt instanceof Date ? right.createdAt.getTime() : 0
+    return rightTime - leftTime || right.id - left.id
+  })
+}
+
 export async function createPlatformTaskRun(input: CreatePlatformTaskRunInput) {
   await ensurePlatformTaskRunTables()
 
@@ -674,6 +699,48 @@ export async function listPlatformWorkItemsForEnterprise(enterpriseId: number) {
   )
 }
 
+export async function listPlatformWorkLibraryItemsForEnterprise(enterpriseId: number) {
+  await ensurePlatformTaskRunTables()
+
+  const works = await listPlatformWorkItemsForEnterprise(enterpriseId)
+  const artifactIds = [...new Set(works.map((work) => work.sourceArtifactId))]
+  if (artifactIds.length === 0) return []
+
+  const [artifacts, referenceRows] = await Promise.all([
+    withPlatformTaskRunDbRetry("list-platform-work-library-artifacts-for-enterprise", () =>
+      db
+        .select()
+        .from(platformArtifacts)
+        .where(and(eq(platformArtifacts.enterpriseId, enterpriseId), inArray(platformArtifacts.id, artifactIds))),
+    ),
+    withPlatformTaskRunDbRetry("count-platform-work-library-artifact-references", () =>
+      db
+        .select({
+          artifactId: platformWorkItems.sourceArtifactId,
+          referenceCount: sql<number>`count(*)::int`,
+        })
+        .from(platformWorkItems)
+        .where(and(eq(platformWorkItems.enterpriseId, enterpriseId), inArray(platformWorkItems.sourceArtifactId, artifactIds)))
+        .groupBy(platformWorkItems.sourceArtifactId),
+    ),
+  ])
+
+  const artifactById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
+  const referenceCountByArtifactId = new Map(referenceRows.map((row) => [row.artifactId, row.referenceCount]))
+
+  return works
+    .map((workItem) => {
+      const artifact = artifactById.get(workItem.sourceArtifactId)
+      if (!artifact) return null
+      return {
+        workItem,
+        artifact,
+        referenceCount: referenceCountByArtifactId.get(workItem.sourceArtifactId) ?? 1,
+      } satisfies PlatformWorkLibraryItemRecord
+    })
+    .filter((item): item is PlatformWorkLibraryItemRecord => item !== null)
+}
+
 export async function getPlatformArtifact(artifactId: number) {
   await ensurePlatformTaskRunTables()
 
@@ -682,6 +749,72 @@ export async function getPlatformArtifact(artifactId: number) {
   )
 
   return row ?? null
+}
+
+export async function deletePlatformWorkItem(workItemId: number, enterpriseId: number) {
+  await ensurePlatformTaskRunTables()
+
+  const [row] = await withPlatformTaskRunDbRetry("delete-platform-work-item", () =>
+    db
+      .delete(platformWorkItems)
+      .where(and(eq(platformWorkItems.id, workItemId), eq(platformWorkItems.enterpriseId, enterpriseId)))
+      .returning(),
+  )
+
+  return row ?? null
+}
+
+export async function deletePlatformArtifactPermanently(
+  artifactId: number,
+  enterpriseId: number,
+  deleteStorageObject?: (storageKey: string) => Promise<boolean>,
+) {
+  await ensurePlatformTaskRunTables()
+
+  const [artifact] = await withPlatformTaskRunDbRetry("get-platform-artifact-for-permanent-delete", () =>
+    db
+      .select()
+      .from(platformArtifacts)
+      .where(and(eq(platformArtifacts.id, artifactId), eq(platformArtifacts.enterpriseId, enterpriseId))),
+  )
+
+  if (!artifact) return null
+
+  const referenceRows = await withPlatformTaskRunDbRetry("list-platform-work-item-references-for-artifact-delete", () =>
+    db
+      .select({ id: platformWorkItems.id })
+      .from(platformWorkItems)
+      .where(and(eq(platformWorkItems.enterpriseId, enterpriseId), eq(platformWorkItems.sourceArtifactId, artifactId))),
+  )
+
+  let deletedStorage = false
+  if (artifact.storageKey && deleteStorageObject) {
+    deletedStorage = await deleteStorageObject(artifact.storageKey)
+  }
+
+  const deletedWorkItemIds = referenceRows.map((row) => row.id)
+
+  await withPlatformTaskRunDbRetry("delete-platform-artifact-permanently", () =>
+    db.transaction(async (tx) => {
+      if (deletedWorkItemIds.length > 0) {
+        await tx
+          .delete(platformWorkItems)
+          .where(and(eq(platformWorkItems.enterpriseId, enterpriseId), eq(platformWorkItems.sourceArtifactId, artifactId)))
+      }
+      await tx
+        .delete(platformKnowledgeSaveJobs)
+        .where(and(eq(platformKnowledgeSaveJobs.enterpriseId, enterpriseId), eq(platformKnowledgeSaveJobs.artifactId, artifactId)))
+      await tx
+        .delete(platformArtifacts)
+        .where(and(eq(platformArtifacts.enterpriseId, enterpriseId), eq(platformArtifacts.id, artifactId)))
+    }),
+  )
+
+  return {
+    artifactId,
+    deletedWorkItemIds,
+    deletedStorage,
+  }
 }
 
 export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
@@ -759,11 +892,68 @@ export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
     },
 
     async listPlatformWorkItemsForEnterprise(enterpriseId) {
-      return workItems.filter((workItem) => workItem.enterpriseId === enterpriseId).sort((left, right) => right.id - left.id)
+      return sortPlatformRowsByCreatedDesc(workItems.filter((workItem) => workItem.enterpriseId === enterpriseId))
+    },
+
+    async listPlatformWorkLibraryItemsForEnterprise(enterpriseId) {
+      const enterpriseWorks = await this.listPlatformWorkItemsForEnterprise(enterpriseId)
+      const referenceCountByArtifactId = new Map<number, number>()
+      for (const workItem of workItems) {
+        if (workItem.enterpriseId !== enterpriseId) continue
+        referenceCountByArtifactId.set(
+          workItem.sourceArtifactId,
+          (referenceCountByArtifactId.get(workItem.sourceArtifactId) ?? 0) + 1,
+        )
+      }
+
+      return enterpriseWorks
+        .map((workItem) => {
+          const artifact = artifacts.find(
+            (candidate) => candidate.id === workItem.sourceArtifactId && candidate.enterpriseId === enterpriseId,
+          )
+          if (!artifact) return null
+          return {
+            workItem,
+            artifact,
+            referenceCount: referenceCountByArtifactId.get(workItem.sourceArtifactId) ?? 1,
+          } satisfies PlatformWorkLibraryItemRecord
+        })
+        .filter((item): item is PlatformWorkLibraryItemRecord => item !== null)
     },
 
     async getPlatformArtifact(artifactId) {
       return artifacts.find((artifact) => artifact.id === artifactId) ?? null
+    },
+
+    async deletePlatformWorkItem(workItemId, enterpriseId) {
+      const index = workItems.findIndex((workItem) => workItem.id === workItemId && workItem.enterpriseId === enterpriseId)
+      if (index < 0) return null
+      const [deleted] = workItems.splice(index, 1)
+      return deleted ?? null
+    },
+
+    async deletePlatformArtifactPermanently(artifactId, enterpriseId) {
+      const artifactIndex = artifacts.findIndex((artifact) => artifact.id === artifactId && artifact.enterpriseId === enterpriseId)
+      if (artifactIndex < 0) return null
+      artifacts.splice(artifactIndex, 1)
+      const deletedWorkItemIds = workItems.filter(
+        (workItem) => workItem.enterpriseId === enterpriseId && workItem.sourceArtifactId === artifactId,
+      ).map((workItem) => workItem.id)
+      for (let index = workItems.length - 1; index >= 0; index -= 1) {
+        if (workItems[index]?.enterpriseId === enterpriseId && workItems[index]?.sourceArtifactId === artifactId) {
+          workItems.splice(index, 1)
+        }
+      }
+      for (let index = knowledgeSaveJobs.length - 1; index >= 0; index -= 1) {
+        if (knowledgeSaveJobs[index]?.enterpriseId === enterpriseId && knowledgeSaveJobs[index]?.artifactId === artifactId) {
+          knowledgeSaveJobs.splice(index, 1)
+        }
+      }
+      return {
+        artifactId,
+        deletedWorkItemIds,
+        deletedStorage: false,
+      }
     },
   }
 }
@@ -778,5 +968,8 @@ export const platformTaskRunStore: PlatformTaskRunStore = {
   listPlatformTaskRunsForEnterprise,
   listPlatformArtifactsForEnterprise,
   listPlatformWorkItemsForEnterprise,
+  listPlatformWorkLibraryItemsForEnterprise,
   getPlatformArtifact,
+  deletePlatformWorkItem,
+  deletePlatformArtifactPermanently,
 }

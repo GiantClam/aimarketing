@@ -16,6 +16,11 @@ import {
 import {
   buildPptPreviewDeckFromPlans,
   buildMockPptPreview,
+  getPptPreviewLayoutSequence,
+  getPptPreviewTemplateCapability,
+  getPptPreviewTemplateLabel,
+  resolvePptPreviewTemplateMode,
+  type PptFrontendTemplateId,
   type PptPreviewDeck,
   type PptPreviewRequest,
   type PptPreviewSlide,
@@ -26,14 +31,8 @@ import { buildMockSeoMetaPreview, type SeoMetaPreview, type SeoMetaRequest, type
 
 type LeadToolPptPlan = {
   title: string
-  outline: [string, string, string, string, string]
-  slides: [
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-  ]
+  outline: string[]
+  slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
 }
 
 type LeadToolSeoPlan = {
@@ -78,12 +77,32 @@ function buildSeoPlanSchema() {
   } satisfies Record<string, unknown>
 }
 
-function buildPptSystemPrompt(language: PptPreviewRequest["language"]) {
-  return buildPreviewSystemPrompt(language)
+function buildPptSystemPrompt(request: PptPreviewRequest) {
+  const templateMode = resolvePptPreviewTemplateMode(request)
+  const templateLabel =
+    templateMode === "single-template" && request.templateId
+      ? getPptPreviewTemplateLabel(request.templateId, request.language)
+      : undefined
+
+  return buildPreviewSystemPrompt(request, {
+    layoutSequence: getPptPreviewLayoutSequence(request.pageCount),
+    templateMode,
+    templateLabel,
+  })
 }
 
 function buildPptUserPrompt(request: PptPreviewRequest) {
-  return buildPreviewUserPrompt(request)
+  const templateMode = resolvePptPreviewTemplateMode(request)
+  const templateLabel =
+    templateMode === "single-template" && request.templateId
+      ? getPptPreviewTemplateLabel(request.templateId, request.language)
+      : undefined
+
+  return buildPreviewUserPrompt(request, {
+    layoutSequence: getPptPreviewLayoutSequence(request.pageCount),
+    templateMode,
+    templateLabel,
+  })
 }
 
 function buildSeoSystemPrompt(language: SeoMetaRequest["language"]) {
@@ -320,7 +339,7 @@ function extractJsonObjectBlock(rawText: string) {
 }
 
 function normalizeBasePlan(rawPlan: any, request: PptPreviewRequest): LeadToolPptPlan {
-  const fallbackLayouts: PptPreviewSlide["layout"][] = ["cover", "agenda", "insight", "comparison", "timeline"]
+  const fallbackLayouts = getPptPreviewLayoutSequence(request.pageCount)
   const fallbackTitle = request.prompt.trim()
   const rawSlides = Array.isArray(rawPlan?.slides) ? rawPlan.slides : []
 
@@ -351,7 +370,7 @@ function normalizeBasePlan(rawPlan: any, request: PptPreviewRequest): LeadToolPp
       ? stripMarkdownDecorations(rawPlan.title)
       : fallbackTitle
 
-  const normalizedOutline = (rawOutline.length >= 5 ? rawOutline : slides.map((slide) => slide.title).slice(0, 5)) as LeadToolPptPlan["outline"]
+  const normalizedOutline = rawOutline.length >= fallbackLayouts.length ? rawOutline : slides.map((slide) => slide.title).slice(0, fallbackLayouts.length)
 
   slides[0] = {
     ...slides[0],
@@ -367,7 +386,9 @@ function normalizeBasePlan(rawPlan: any, request: PptPreviewRequest): LeadToolPp
 
 function buildStyledPlans(basePlan: LeadToolPptPlan, request: PptPreviewRequest) {
   return (providerId: string) => pptPreviewStyles.map((style) => ({
+    variantKey: style.key,
     styleKey: style.key,
+    templateId: getPptPreviewTemplateCapability(style.key).templateId as PptFrontendTemplateId,
     title: basePlan.title,
     outline: basePlan.outline,
     provider: providerId,
@@ -388,7 +409,7 @@ function buildStyledPlans(basePlan: LeadToolPptPlan, request: PptPreviewRequest)
 export async function generateLeadToolPptPreview(request: PptPreviewRequest): Promise<PptPreviewDeck> {
   const providerResult = await generateTextWithLeadToolPreviewProvider({
     systemPrompt: [
-      buildPptSystemPrompt(request.language),
+      buildPptSystemPrompt(request),
       request.language === "zh-CN"
         ? "只输出一个 JSON 对象，不要 markdown，不要解释。"
         : "Return only one JSON object with no markdown and no explanation.",

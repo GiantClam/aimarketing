@@ -11,15 +11,17 @@ import {
 } from "@/lib/db/retry"
 import { enterprises, userFeaturePermissions, userSessions, users } from "@/lib/db/schema"
 import { FEATURE_KEYS, buildPermissionMap } from "@/lib/enterprise/constants"
-import type { AuthUserPayload } from "@/lib/enterprise/server"
+import { getUserAuthPayload, type AuthUserPayload } from "@/lib/enterprise/server"
 import { normalizeDisplayText } from "@/lib/text/display-name"
 
 export const SESSION_COOKIE_NAME = "aimarketing_session"
 export const DEMO_SESSION_COOKIE_NAME = "aimarketing_demo_session"
+export const INTERNAL_SERVICE_AUTH_HEADER = "x-aimarketing-internal-auth"
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30
 const SESSION_DB_RETRY_DELAYS_MS = [250, 750, 1500]
 const SESSION_TOUCH_INTERVAL_MS = 1000 * 60 * 5
 const DEFAULT_DEMO_SESSION_ID = 1
+const INTERNAL_SERVICE_AUTH_TTL_MS = 1000 * 60 * 5
 
 export function isDemoSessionDbHydrationEnabled() {
   const explicit = process.env.DEMO_SESSION_DB_HYDRATE?.trim().toLowerCase()
@@ -77,6 +79,21 @@ function getDemoCookieSecret() {
   )
 }
 
+function getInternalServiceAuthSecret() {
+  const candidates = [
+    process.env.INTERNAL_SERVICE_AUTH_SECRET,
+    process.env.CRON_SECRET,
+    process.env.STACK_SECRET_SERVER_KEY,
+  ]
+
+  for (const candidate of candidates) {
+    const trimmed = candidate?.trim()
+    if (trimmed) return trimmed
+  }
+
+  return null
+}
+
 function encodeBase64Url(value: string) {
   return Buffer.from(value, "utf8").toString("base64url")
 }
@@ -87,6 +104,10 @@ function decodeBase64Url(value: string) {
 
 function signDemoPayload(payload: string) {
   return createHmac("sha256", getDemoCookieSecret()).update(payload).digest("base64url")
+}
+
+function signInternalServicePayload(payload: string, secret: string) {
+  return createHmac("sha256", secret).update(payload).digest("base64url")
 }
 
 function buildDemoCookieValue(expiresAt: Date) {
@@ -119,6 +140,69 @@ function parseDemoCookieValue(value?: string | null) {
   }
 
   return payload
+}
+
+type InternalServiceAuthPayload = {
+  userId: number
+  issuedAtMs: number
+}
+
+function parseInternalServiceAuthToken(value?: string | null): InternalServiceAuthPayload | null {
+  const secret = getInternalServiceAuthSecret()
+  if (!secret || !value) return null
+
+  const [userIdPart, issuedAtPart, signature] = value.split(".")
+  if (!userIdPart || !issuedAtPart || !signature) return null
+
+  const userId = Number(userIdPart)
+  const issuedAtMs = Number(issuedAtPart)
+  if (!Number.isInteger(userId) || userId <= 0 || !Number.isFinite(issuedAtMs) || issuedAtMs <= 0) {
+    return null
+  }
+
+  if (Math.abs(Date.now() - issuedAtMs) > INTERNAL_SERVICE_AUTH_TTL_MS) {
+    return null
+  }
+
+  const payload = `${userId}.${issuedAtMs}`
+  const expectedSignature = signInternalServicePayload(payload, secret)
+  const signatureBuffer = new Uint8Array(Buffer.from(signature))
+  const expectedBuffer = new Uint8Array(Buffer.from(expectedSignature))
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    return null
+  }
+
+  return {
+    userId,
+    issuedAtMs,
+  }
+}
+
+export function createInternalServiceAuthToken(userId: number) {
+  const secret = getInternalServiceAuthSecret()
+  if (!secret || !Number.isInteger(userId) || userId <= 0) return null
+
+  const issuedAtMs = Date.now()
+  const payload = `${userId}.${issuedAtMs}`
+  const signature = signInternalServicePayload(payload, secret)
+  return `${payload}.${signature}`
+}
+
+export function applyInternalServiceAuthHeader(headers: Headers, userId: number) {
+  const token = createInternalServiceAuthToken(userId)
+  if (!token) return false
+  headers.set(INTERNAL_SERVICE_AUTH_HEADER, token)
+  return true
+}
+
+async function getInternalServiceAuthUser(request: NextRequest) {
+  const token = request.headers.get(INTERNAL_SERVICE_AUTH_HEADER)
+  const payload = parseInternalServiceAuthToken(token)
+  if (!payload) return null
+  return getUserAuthPayload(payload.userId)
 }
 
 export function createDemoAuthPayload(): AuthUserPayload {
@@ -196,6 +280,16 @@ export async function deleteUserSessions(userId: number) {
 }
 
 export async function getSessionUser(request: NextRequest): Promise<AuthUserPayload | null> {
+  const internalServiceUser = await getInternalServiceAuthUser(request).catch((error) => {
+    console.warn("auth.internal.resolve.failed", {
+      message: getErrorMessage(error),
+    })
+    return null
+  })
+  if (internalServiceUser) {
+    return internalServiceUser
+  }
+
   const demoCookie = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
   if (parseDemoCookieValue(demoCookie)) {
     if (!isDemoSessionDbHydrationEnabled()) {

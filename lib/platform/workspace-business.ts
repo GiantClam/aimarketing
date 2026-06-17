@@ -1,16 +1,11 @@
 import type { AppLocale } from "@/lib/i18n/config"
 
-export type WorkspaceBusinessSlug =
-  | "content-growth"
-  | "brand-creative"
-  | "lead-conversion"
-  | "sales-close"
-  | "enterprise-operations"
-  | "knowledge-assets"
-  | "compliance-risk"
-  | "training-enablement"
-  | "talent-recruiting"
-  | "legal-ops"
+export type WorkspaceBusinessSlug = string
+
+type LocalizedText = {
+  zh: string
+  en: string
+}
 
 export type LocalizedWorkspaceBusinessEntry = {
   slug: WorkspaceBusinessSlug
@@ -39,7 +34,7 @@ export type LocalizedWorkspaceBusinessEntry = {
   expertWorkbenchLabel?: string
 }
 
-export const WORKSPACE_BUSINESS_SLUGS = [
+export const CORE_WORKSPACE_BUSINESS_SLUGS = [
   "content-growth",
   "brand-creative",
   "lead-conversion",
@@ -50,10 +45,34 @@ export const WORKSPACE_BUSINESS_SLUGS = [
   "training-enablement",
   "talent-recruiting",
   "legal-ops",
-] as const satisfies readonly WorkspaceBusinessSlug[]
+] as const
+
+export const IMPORTED_WORKSPACE_BUSINESS_SLUGS = [
+  "academic",
+  "design",
+  "engineering",
+  "finance",
+  "game-development",
+  "gis",
+  "marketing",
+  "paid-media",
+  "product",
+  "project-management",
+  "sales",
+  "security",
+  "spatial-computing",
+  "specialized",
+  "support",
+  "testing",
+] as const
+
+export const WORKSPACE_BUSINESS_SLUGS = [
+  ...CORE_WORKSPACE_BUSINESS_SLUGS,
+  ...IMPORTED_WORKSPACE_BUSINESS_SLUGS,
+] as const
 
 export function isWorkspaceBusinessSlug(value: string | null | undefined): value is WorkspaceBusinessSlug {
-  return Boolean(value && WORKSPACE_BUSINESS_SLUGS.includes(value as WorkspaceBusinessSlug))
+  return Boolean(value && WORKSPACE_BUSINESS_SLUGS.includes(value as (typeof WORKSPACE_BUSINESS_SLUGS)[number]))
 }
 
 export function resolveWorkspaceBusinessSlug(
@@ -429,17 +448,287 @@ const enEntries: LocalizedWorkspaceBusinessEntry[] = [
   },
 ]
 
-export function getLocalizedWorkspaceBusinessEntries(locale: AppLocale | "zh" | "en") {
-  return (locale === "zh" ? zhEntries : enEntries).map((entry) => ({
+const importedCategoryEntryMeta: Record<
+  string,
+  {
+    iconKey: LocalizedWorkspaceBusinessEntry["iconKey"]
+    title: LocalizedText
+    summary: LocalizedText
+    description: LocalizedText
+    outcomes: LocalizedText[]
+    workflowSlugs: string[]
+  }
+> = {
+  academic: {
+    iconKey: "knowledge",
+    title: { zh: "学术研究", en: "Academic" },
+    summary: { zh: "面向研究、论文、方法论和深度分析类智能体。", en: "A marketplace lane for research, papers, methodology, and deep-analysis agents." },
+    description: { zh: "适合需要研究框架、论证结构、文献分析和高密度知识整理的任务。", en: "Built for research framing, argument structure, literature analysis, and dense knowledge synthesis." },
+    outcomes: [
+      { zh: "研究摘要", en: "Research summaries" },
+      { zh: "论点结构", en: "Argument structures" },
+      { zh: "证据整理", en: "Evidence synthesis" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  design: {
+    iconKey: "creative",
+    title: { zh: "设计", en: "Design" },
+    summary: { zh: "面向品牌、界面、视觉叙事和创意设计类智能体。", en: "A marketplace lane for brand, UI, visual storytelling, and creative design agents." },
+    description: { zh: "适合品牌视觉、UI/UX、图像提示词和叙事表达类工作。", en: "Built for brand visuals, UI/UX, image prompting, and narrative-driven design work." },
+    outcomes: [
+      { zh: "视觉方向", en: "Visual direction" },
+      { zh: "设计建议", en: "Design recommendations" },
+      { zh: "创意结构", en: "Creative structures" },
+    ],
+    workflowSlugs: ["visual-ad-pipeline", "campaign-launch"],
+  },
+  engineering: {
+    iconKey: "operations",
+    title: { zh: "工程开发", en: "Engineering" },
+    summary: { zh: "面向架构、代码、平台、集成和工程实现类智能体。", en: "A marketplace lane for architecture, code, platform, integration, and engineering implementation agents." },
+    description: { zh: "适合技术实现、系统设计、排障和工程决策类任务。", en: "Built for implementation planning, systems design, debugging, and engineering decisions." },
+    outcomes: [
+      { zh: "技术方案", en: "Technical plans" },
+      { zh: "排障路径", en: "Debug paths" },
+      { zh: "实现建议", en: "Implementation guidance" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  finance: {
+    iconKey: "operations",
+    title: { zh: "财务", en: "Finance" },
+    summary: { zh: "面向预算、规划、分析和财务经营类智能体。", en: "A marketplace lane for budgeting, planning, analysis, and finance operations agents." },
+    description: { zh: "适合预算取舍、财务分析、经营复盘和资金规划。", en: "Built for financial tradeoffs, planning, performance review, and operating analysis." },
+    outcomes: [
+      { zh: "预算判断", en: "Budget decisions" },
+      { zh: "财务分析", en: "Financial analysis" },
+      { zh: "经营复盘", en: "Operating reviews" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  "game-development": {
+    iconKey: "creative",
+    title: { zh: "游戏开发", en: "Game Development" },
+    summary: { zh: "面向游戏设计、技术美术、叙事和关卡类智能体。", en: "A marketplace lane for game design, technical art, narrative, and level-design agents." },
+    description: { zh: "适合概念设计、玩法结构、内容制作和游戏体验规划。", en: "Built for gameplay concepts, systems thinking, content production, and game experience planning." },
+    outcomes: [
+      { zh: "玩法方案", en: "Gameplay plans" },
+      { zh: "内容结构", en: "Content structures" },
+      { zh: "制作建议", en: "Production guidance" },
+    ],
+    workflowSlugs: ["visual-ad-pipeline"],
+  },
+  gis: {
+    iconKey: "knowledge",
+    title: { zh: "地理空间", en: "GIS" },
+    summary: { zh: "面向空间数据、地图分析和 GIS 解决方案类智能体。", en: "A marketplace lane for spatial data, mapping analysis, and GIS solution agents." },
+    description: { zh: "适合空间数据整理、制图表达、地理分析和相关技术咨询。", en: "Built for spatial data prep, cartography, geospatial analysis, and related technical consulting." },
+    outcomes: [
+      { zh: "地图分析", en: "Map analysis" },
+      { zh: "空间数据方案", en: "Spatial data plans" },
+      { zh: "GIS 咨询", en: "GIS consulting" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  marketing: {
+    iconKey: "content",
+    title: { zh: "营销", en: "Marketing" },
+    summary: { zh: "面向 SEO、内容、社媒、平台运营和增长类营销智能体。", en: "A marketplace lane for SEO, content, social, platform ops, and growth marketing agents." },
+    description: { zh: "适合内容增长、平台分发、流量策略和营销协同。", en: "Built for content growth, channel distribution, traffic strategy, and marketing coordination." },
+    outcomes: [
+      { zh: "内容策略", en: "Content strategy" },
+      { zh: "渠道分发", en: "Channel distribution" },
+      { zh: "增长动作", en: "Growth actions" },
+    ],
+    workflowSlugs: ["content-repurpose", "campaign-launch"],
+  },
+  "paid-media": {
+    iconKey: "lead",
+    title: { zh: "付费投放", en: "Paid Media" },
+    summary: { zh: "面向 PPC、社媒广告、程序化投放和追踪归因类智能体。", en: "A marketplace lane for PPC, paid social, programmatic, and tracking-attribution agents." },
+    description: { zh: "适合广告结构、投放优化、素材测试和归因治理。", en: "Built for ad structure, optimization, creative testing, and attribution governance." },
+    outcomes: [
+      { zh: "投放结构", en: "Campaign architecture" },
+      { zh: "优化建议", en: "Optimization guidance" },
+      { zh: "归因判断", en: "Attribution judgment" },
+    ],
+    workflowSlugs: ["campaign-launch"],
+  },
+  product: {
+    iconKey: "operations",
+    title: { zh: "产品", en: "Product" },
+    summary: { zh: "面向产品策略、反馈分析和优先级判断类智能体。", en: "A marketplace lane for product strategy, feedback synthesis, and prioritization agents." },
+    description: { zh: "适合产品规划、用户反馈整理和 roadmap 决策。", en: "Built for product planning, feedback synthesis, and roadmap decision support." },
+    outcomes: [
+      { zh: "产品优先级", en: "Product priorities" },
+      { zh: "反馈洞察", en: "Feedback insight" },
+      { zh: "路线规划", en: "Roadmap guidance" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  "project-management": {
+    iconKey: "operations",
+    title: { zh: "项目管理", en: "Project Management" },
+    summary: { zh: "面向项目推进、实验跟踪和跨团队协调类智能体。", en: "A marketplace lane for project delivery, experiment tracking, and cross-functional coordination agents." },
+    description: { zh: "适合阶段规划、协作推进、风险追踪和执行管理。", en: "Built for milestone planning, coordination, risk tracking, and execution management." },
+    outcomes: [
+      { zh: "推进计划", en: "Execution plans" },
+      { zh: "里程碑结构", en: "Milestone structures" },
+      { zh: "协作节奏", en: "Coordination cadence" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  sales: {
+    iconKey: "sales",
+    title: { zh: "销售", en: "Sales" },
+    summary: { zh: "面向获客、发现、赢单、提案和销售运营类智能体。", en: "A marketplace lane for prospecting, discovery, deal strategy, proposals, and revenue operations agents." },
+    description: { zh: "适合机会判断、赢单策略、外联和提案推进。", en: "Built for opportunity diagnosis, win strategy, outbound, and proposal work." },
+    outcomes: [
+      { zh: "赢单策略", en: "Win strategy" },
+      { zh: "外联动作", en: "Outbound actions" },
+      { zh: "提案优化", en: "Proposal improvements" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  security: {
+    iconKey: "compliance",
+    title: { zh: "安全", en: "Security" },
+    summary: { zh: "面向安全架构、审计、渗透、事件响应和合规类智能体。", en: "A marketplace lane for security architecture, audit, pentest, incident response, and compliance agents." },
+    description: { zh: "适合漏洞评估、控制审查、审计准备和风险升级。", en: "Built for vulnerability assessment, control review, audit readiness, and escalation." },
+    outcomes: [
+      { zh: "安全评估", en: "Security assessments" },
+      { zh: "控制缺口", en: "Control gaps" },
+      { zh: "审计准备", en: "Audit readiness" },
+    ],
+    workflowSlugs: ["campaign-launch"],
+  },
+  "spatial-computing": {
+    iconKey: "creative",
+    title: { zh: "空间计算", en: "Spatial Computing" },
+    summary: { zh: "面向 XR、visionOS、空间交互和沉浸式体验类智能体。", en: "A marketplace lane for XR, visionOS, spatial interaction, and immersive experience agents." },
+    description: { zh: "适合空间体验规划、交互方式和相关技术实现思考。", en: "Built for spatial experience planning, interaction design, and related implementation thinking." },
+    outcomes: [
+      { zh: "空间交互方案", en: "Spatial interaction plans" },
+      { zh: "体验结构", en: "Experience structures" },
+      { zh: "技术路线", en: "Technical approaches" },
+    ],
+    workflowSlugs: ["visual-ad-pipeline"],
+  },
+  specialized: {
+    iconKey: "operations",
+    title: { zh: "专项顾问", en: "Specialized" },
+    summary: { zh: "面向多领域专项顾问、行业角色和专业流程类智能体。", en: "A marketplace lane for specialized consultants, domain roles, and niche operational agents." },
+    description: { zh: "适合行业专门问题、业务流程和专业角色辅助任务。", en: "Built for domain-specific questions, niche workflows, and specialist role support." },
+    outcomes: [
+      { zh: "专业判断", en: "Specialist judgment" },
+      { zh: "流程建议", en: "Workflow guidance" },
+      { zh: "角色辅助", en: "Role support" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  support: {
+    iconKey: "knowledge",
+    title: { zh: "支持运营", en: "Support" },
+    summary: { zh: "面向分析汇总、信息分发和支持运营类智能体。", en: "A marketplace lane for analytics, summaries, report distribution, and support operations agents." },
+    description: { zh: "适合数据摘要、运营报告、支持流程和内部信息分发。", en: "Built for data summaries, operating reports, support flows, and internal distribution." },
+    outcomes: [
+      { zh: "运营摘要", en: "Operating summaries" },
+      { zh: "数据报告", en: "Data reports" },
+      { zh: "分发动作", en: "Distribution actions" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+  testing: {
+    iconKey: "compliance",
+    title: { zh: "测试与 QA", en: "Testing" },
+    summary: { zh: "面向 API、性能、可访问性、工具评估和 QA 类智能体。", en: "A marketplace lane for API, performance, accessibility, tooling, and QA agents." },
+    description: { zh: "适合测试设计、结果分析、质量验证和改进建议。", en: "Built for test design, result analysis, quality validation, and improvement guidance." },
+    outcomes: [
+      { zh: "测试计划", en: "Test plans" },
+      { zh: "质量报告", en: "Quality reports" },
+      { zh: "验证建议", en: "Validation guidance" },
+    ],
+    workflowSlugs: ["content-repurpose"],
+  },
+}
+
+function buildImportedWorkspaceEntries(
+  locale: AppLocale | "zh" | "en",
+  includedSlugs?: readonly string[] | null,
+) {
+  const allowedSlugs = includedSlugs ? new Set(includedSlugs) : null
+
+  return Object.entries(importedCategoryEntryMeta)
+    .filter(([slug]) => !allowedSlugs || allowedSlugs.has(slug))
+    .map(([slug, meta]) => ({
+    slug,
+    iconKey: meta.iconKey,
+    title: locale === "zh" ? meta.title.zh : meta.title.en,
+    summary: locale === "zh" ? meta.summary.zh : meta.summary.en,
+    description: locale === "zh" ? meta.description.zh : meta.description.en,
+    outcomes: meta.outcomes.map((item) => (locale === "zh" ? item.zh : item.en)),
+    href: buildDashboardBusinessHref(slug),
+    workflowSlugs: [...meta.workflowSlugs],
+    relatedLinks:
+      locale === "zh"
+        ? [
+            { label: "AI 对话", href: "/dashboard/ai" },
+            { label: "智能体中台", href: "/dashboard/agent-platform" },
+            { label: "工作流", href: "/dashboard/workflows" },
+          ]
+        : [
+            { label: "AI Chat", href: "/dashboard/ai" },
+            { label: "Agent platform", href: "/dashboard/agent-platform" },
+            { label: "Workflows", href: "/dashboard/workflows" },
+          ],
+    }))
+}
+
+export function getLocalizedWorkspaceMarketplaceEntries(
+  locale: AppLocale | "zh" | "en",
+  options?: {
+    includeSlugs?: readonly string[] | null
+  },
+) : LocalizedWorkspaceBusinessEntry[] {
+  return buildImportedWorkspaceEntries(locale, options?.includeSlugs).map((entry) => ({
     ...entry,
     relatedLinks: entry.relatedLinks.map((link) => ({ ...link })),
     outcomes: [...entry.outcomes],
   }))
 }
 
+export function getLocalizedWorkspaceBusinessEntries(
+  locale: AppLocale | "zh" | "en",
+  options?: {
+    includeImportedSlugs?: readonly string[] | null
+  },
+) : LocalizedWorkspaceBusinessEntry[] {
+  const coreEntries = (locale === "zh" ? zhEntries : enEntries).map((entry) => ({
+    ...entry,
+    relatedLinks: entry.relatedLinks.map((link) => ({ ...link })),
+    outcomes: [...entry.outcomes],
+    expertWorkbenchHref: entry.expertWorkbenchHref,
+    expertWorkbenchLabel: entry.expertWorkbenchLabel,
+  }))
+  return [
+    ...coreEntries,
+    ...getLocalizedWorkspaceMarketplaceEntries(locale, {
+      includeSlugs: options?.includeImportedSlugs ?? [],
+    }),
+  ]
+}
+
 export function getLocalizedWorkspaceBusinessEntryBySlug(
   locale: AppLocale | "zh" | "en",
-  slug: WorkspaceBusinessSlug,
+  slug: string,
+  options?: {
+    includeImportedSlugs?: readonly string[] | null
+  },
 ) {
-  return getLocalizedWorkspaceBusinessEntries(locale).find((entry) => entry.slug === slug) ?? null
+  return (
+    getLocalizedWorkspaceBusinessEntries(locale, {
+      includeImportedSlugs: options?.includeImportedSlugs,
+    }).find((entry) => entry.slug === slug) ?? null
+  )
 }

@@ -3,7 +3,7 @@ import test from "node:test"
 
 import { FEATURE_KEYS, buildPermissionMap, type FeatureKey } from "@/lib/enterprise/constants"
 import type { AuthUserPayload } from "@/lib/enterprise/server"
-import { getAdvisorFeature, hasFeatureAccess } from "./guards"
+import { getAdvisorFeature, hasFeatureAccess, hasFeatureAccessWithFallback } from "./guards"
 
 function buildUser(overrides: Partial<AuthUserPayload> = {}): AuthUserPayload {
   return {
@@ -40,6 +40,26 @@ test("NORMAL: active member access follows feature permission map", () => {
 
   assert.equal(hasFeatureAccess(user, "copywriting_generation"), true)
   assert.equal(hasFeatureAccess(user, "image_design_generation"), false)
+})
+
+test("NORMAL: audio_generation is recognized and can fall back to video_generation", () => {
+  const audioOnlyUser = buildUser({
+    permissions: {
+      ...buildPermissionMap(false),
+      audio_generation: true,
+    } as AuthUserPayload["permissions"] & Record<"audio_generation", boolean>,
+  })
+  const legacyVideoUser = buildUser({
+    permissions: {
+      ...buildPermissionMap(false),
+      video_generation: true,
+    },
+  })
+
+  assert.equal(hasFeatureAccess(audioOnlyUser, "audio_generation"), true)
+  assert.equal(hasFeatureAccessWithFallback(audioOnlyUser, "audio_generation", "video_generation"), true)
+  assert.equal(hasFeatureAccess(legacyVideoUser, "audio_generation"), false)
+  assert.equal(hasFeatureAccessWithFallback(legacyVideoUser, "audio_generation", "video_generation"), true)
 })
 
 test("SECURITY: inactive enterprise user cannot access feature even with permission", () => {

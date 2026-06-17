@@ -58,12 +58,16 @@ type WorkspaceAssetOption = {
 }
 
 type MediaTaskSubmission = {
+  runId?: number
+  capabilitySlug?: string
+  featureId?: string
   provider: string
   mediaTarget: string
   requestedTarget?: string
   endpoint?: string | null
   taskId: string
   status: string
+  detailPath?: string | null
   results?: MediaTaskResult[] | null
   extra?: Record<string, unknown> | null
   raw?: Record<string, unknown> | null
@@ -77,11 +81,15 @@ type MediaTaskResult = {
 }
 
 type MediaTaskQuery = {
+  runId?: number
+  capabilitySlug?: string
+  featureId?: string
   taskId: string
   mediaTarget: string
   requestedTarget?: string
   provider: string
   status: string
+  detailPath?: string | null
   results?: MediaTaskResult[] | null
   extra?: Record<string, unknown> | null
   raw?: Record<string, unknown> | null
@@ -208,7 +216,7 @@ function createTabState(feature: CapabilityMediaWorkspaceFeature): WorkspaceTabS
 
 function isTerminalStatus(status: string | null | undefined) {
   const normalized = String(status || "").toUpperCase()
-  return normalized === "SUCCESS" || normalized === "FAILED"
+  return normalized === "SUCCESS" || normalized === "FAILED" || normalized === "SUCCEEDED"
 }
 
 function isVideoLikeResult(url: string | null | undefined, outputType: string | null | undefined) {
@@ -499,6 +507,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   capabilityStates,
   assetOptions,
   initialFeatureId,
+  showHero = true,
 }: {
   locale: "zh" | "en"
   groups: CapabilityMediaWorkspaceGroup[]
@@ -506,6 +515,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   capabilityStates: Record<"ai-video" | "ai-music", WorkspaceCapabilityState | null>
   assetOptions: WorkspaceAssetOption[]
   initialFeatureId?: CapabilityMediaWorkspaceFeatureId | null
+  showHero?: boolean
 }) {
   const copy = useMemo(() => getCopy(locale), [locale])
   const pathname = usePathname()
@@ -817,12 +827,17 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   }
 
   const refreshTask = useCallback(
-    async (featureId: CapabilityMediaWorkspaceFeatureId, capabilitySlug: "ai-video" | "ai-music", taskId: string) => {
+    async (
+      featureId: CapabilityMediaWorkspaceFeatureId,
+      capabilitySlug: "ai-image" | "ai-video" | "ai-music",
+      taskId: string,
+      detailPath?: string | null,
+    ) => {
       patchTab(featureId, { isRefreshing: true })
 
       try {
         const response = await fetch(
-          `/api/platform/media/tasks/${encodeURIComponent(taskId)}?target=${encodeURIComponent(capabilitySlug)}`,
+          detailPath || `/api/platform/media/tasks/${encodeURIComponent(taskId)}?target=${encodeURIComponent(capabilitySlug)}`,
           {
             cache: "no-store",
           },
@@ -855,7 +870,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
       pendingTabs.forEach((tab) => {
         const feature = featureMap[tab.featureId]
         if (!tab.task?.taskId || !feature) return
-        void refreshTask(tab.featureId, feature.capabilitySlug, tab.task.taskId)
+        void refreshTask(tab.featureId, feature.capabilitySlug, tab.task.taskId, tab.task.detailPath)
       })
     }, 4000)
 
@@ -1088,10 +1103,14 @@ export function WorkspaceCapabilitiesMediaWorkspace({
         submission: data.data,
         task: {
           taskId: data.data.taskId,
-          mediaTarget: data.data.mediaTarget,
-          requestedTarget: data.data.requestedTarget,
+          runId: data.data.runId,
+          capabilitySlug: data.data.capabilitySlug || activeFeature.capabilitySlug,
+          featureId: data.data.featureId || activeFeature.id,
+          mediaTarget: data.data.mediaTarget || activeFeature.capabilitySlug,
+          requestedTarget: data.data.requestedTarget || data.data.featureId || activeFeature.id,
           provider: data.data.provider,
           status: data.data.status,
+          detailPath: data.data.detailPath || null,
           results: data.data.results || null,
           extra: data.data.extra || null,
           raw: data.data.raw || null,
@@ -1099,7 +1118,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
         message: copy.taskQueued,
         isSubmitting: false,
       })
-      await refreshTask(activeTab.id, activeFeature.capabilitySlug, data.data.taskId)
+      await refreshTask(activeTab.id, activeFeature.capabilitySlug, data.data.taskId, data.data.detailPath)
     } catch (error) {
       patchTab(activeTab.id, {
         isSubmitting: false,
@@ -1184,13 +1203,15 @@ export function WorkspaceCapabilitiesMediaWorkspace({
       />
 
       <div className="space-y-3">
-        <div className="rounded-[18px] border border-border/60 bg-background/90 p-3 shadow-sm lg:p-4">
-          <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
-          <h2 className="mt-2 font-display text-3xl font-extrabold tracking-[0.01em] text-foreground lg:text-4xl">
-            {copy.title}
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
-        </div>
+        {showHero ? (
+          <div className="rounded-[18px] border border-border/60 bg-background/90 p-3 shadow-sm lg:p-4">
+            <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
+            <h2 className="mt-2 font-display text-3xl font-extrabold tracking-[0.01em] text-foreground lg:text-4xl">
+              {copy.title}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 xl:grid-cols-2">
           {groupedFeatures.map((group) => (
@@ -1511,7 +1532,12 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                       className="rounded-[8px]"
                       onClick={() => {
                         if (!activeFeature || !activeTab.task?.taskId) return
-                        void refreshTask(activeTab.id, activeFeature.capabilitySlug, activeTab.task.taskId)
+                        void refreshTask(
+                          activeTab.id,
+                          activeFeature.capabilitySlug,
+                          activeTab.task.taskId,
+                          activeTab.task.detailPath,
+                        )
                       }}
                       disabled={!activeTab.task?.taskId || activeTab.isRefreshing}
                     >

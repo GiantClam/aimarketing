@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
 
+import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
 import type { PptPreviewDeck, PptPreviewVariant } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 const EXPORT_SCRIPT_PATH = path.join(process.cwd(), "scripts", "export_lead_tool_pptx.mjs")
@@ -43,15 +44,6 @@ async function resolveArtifactNodeBin() {
   return process.platform === "win32" ? "node.exe" : "node"
 }
 
-function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-}
-
 async function runNodeScript(args: string[]) {
   await fs.access(EXPORT_SCRIPT_PATH)
   const nodeBin = await resolveArtifactNodeBin()
@@ -86,7 +78,8 @@ export async function exportPptVariantToPptx(params: {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lead-tool-pptx-"))
   const workspaceDir = path.join(tempRoot, "workspace")
   const payloadPath = path.join(tempRoot, "payload.json")
-  const outputPath = path.join(tempRoot, `${slugify(params.deck.title || "deck")}-${params.variant.key}.pptx`)
+  const fileName = buildPptExportFileName(params.deck, params.variant, "pptx")
+  const outputPath = path.join(tempRoot, fileName)
 
   try {
     await fs.mkdir(workspaceDir, { recursive: true })
@@ -107,7 +100,7 @@ export async function exportPptVariantToPptx(params: {
     const buffer = await fs.readFile(outputPath)
 
     return {
-      fileName: `${slugify(params.deck.title || "deck")}-${params.variant.key}.pptx`,
+      fileName,
       contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       buffer,
     }

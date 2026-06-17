@@ -122,19 +122,7 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
       } satisfies LeadToolPptFinalizeResponse
     }
 
-    return {
-      jobId: randomUUID(),
-      status: "queued",
-      message: "完整 PPT 生成任务已创建，当前为可替换的 MVP 占位导出器。",
-      requestedBy: options.user?.email,
-      exportPlan: {
-        title: action.deck.title,
-        selectedVariant: action.selectedVariant.name,
-        slideCount: action.selectedVariant.slides.length,
-        output: "editable-pptx",
-        finalModel: options.resolvedModels.finalModel,
-      },
-    } satisfies LeadToolPptFinalizeResponse
+    throw new Error("ppt_preview_session_required")
   },
 
   async buildDownload(action) {
@@ -163,10 +151,7 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
       } satisfies LeadToolPptDownloadResponse
     }
 
-    return {
-      deck: action.deck,
-      variant: action.selectedVariant,
-    } satisfies LeadToolPptDownloadResponse
+    throw new Error("ppt_preview_session_required")
   },
 }
 

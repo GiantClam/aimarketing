@@ -1,8 +1,7 @@
 import {
   loadEnterpriseKnowledgeContext,
-  type EnterpriseKnowledgeContext,
-  type EnterpriseKnowledgeScope,
-} from "@/lib/dify/enterprise-knowledge"
+} from "@/lib/knowledge/service"
+import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
 /* eslint-disable no-useless-escape */
 import { z } from "zod"
 import {

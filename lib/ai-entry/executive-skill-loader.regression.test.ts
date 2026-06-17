@@ -34,6 +34,7 @@ test("business agent prompt documents are loadable through the shared agent load
   const content = await loadExecutiveSkillForAgent("business-sales-close")
   const complianceContent = await loadExecutiveSkillForAgent("business-compliance-auditor")
   const legalContent = await loadExecutiveSkillForAgent("business-legal-document-review")
+  const importedContent = await loadExecutiveSkillForAgent("agency-sales-deal-strategist")
 
   assert.match(content, /Sales Close Agent/)
   assert.match(content, /MEDDPICC/)
@@ -42,4 +43,7 @@ test("business agent prompt documents are loadable through the shared agent load
   assert.match(complianceContent, /audit-readiness checklist/)
   assert.match(legalContent, /Legal Document Review Agent/)
   assert.match(legalContent, /not a substitute for counsel/)
+  assert.match(importedContent, /Deal Strategist Agent/)
+  assert.match(importedContent, /MEDDPICC/)
+  assert.match(importedContent, /Forecast Accuracy/)
 })

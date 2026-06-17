@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, Bot, Check, Copy, ImageIcon, Loader2, Paperclip, Send, Sparkles, X } from "lucide-react"
+import { ArrowRight, Bot, Check, Copy, Database, ImageIcon, Loader2, Paperclip, Plus, Send, Sparkles, X } from "lucide-react"
 
 import {
   Message,
@@ -21,6 +21,8 @@ import {
 import { useI18n } from "@/components/locale-provider"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -43,6 +45,7 @@ import {
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
+import type { KnowledgeScope } from "@/lib/knowledge/types"
 import { cn } from "@/lib/utils"
 
 type ChatAttachment = {
@@ -52,6 +55,44 @@ type ChatAttachment = {
   size: number
   dataUrl?: string
   text?: string
+}
+
+type Copy = {
+  title: string
+  subtitle: string
+  placeholder: string
+  send: string
+  loading: string
+  restoring: string
+  quickStart: string
+  modelLabel: string
+  modelLoading: string
+  modelEmpty: string
+  agentLabel: string
+  agentLoading: string
+  agentEmpty: string
+  agentRecommended: string
+  selectedAgent: string
+  landingHint: string
+  copy: string
+  copied: string
+  copyReply: string
+  copiedReply: string
+  knowledgeLabel: string
+  knowledgeDisabled: string
+  knowledgeAllEnabled: string
+  knowledgeSelectedCount: string
+  knowledgeAdd: string
+  knowledgeChoose: string
+  knowledgeLoading: string
+  knowledgeEmpty: string
+  knowledgeSearch: string
+  enableKnowledge: string
+  disableKnowledge: string
+  uploadFile: string
+  addMenu: string
+  unknownError: string
+  errorPrefix: string
 }
 type ExtractedChatAttachmentResponse = {
   data?: {
@@ -120,6 +161,24 @@ type ChatStreamApiResponse = {
       results?: Array<{ title?: string; url?: string; snippet?: string; provider?: string }>
     }
   } | null
+}
+
+type KnowledgeDatasetOption = {
+  id: number
+  name: string
+  category: KnowledgeScope
+}
+
+type KnowledgeDatasetsApiResponse = {
+  data?: {
+    items?: Array<{
+      id?: number
+      name?: string
+      category?: KnowledgeScope
+      enabled?: boolean
+    }>
+  }
+  error?: string
 }
 
 export type AiEntryWorkspaceLinkAction = {
@@ -519,6 +578,19 @@ export function AiEntryWorkspace({
             copied: "已复制",
             copyReply: "复制回复",
             copiedReply: "已复制",
+            knowledgeLabel: "知识库",
+            knowledgeDisabled: "知识库未启用",
+            knowledgeAllEnabled: "全部已启用知识库",
+            knowledgeSelectedCount: "已选知识库",
+            knowledgeAdd: "添加知识库",
+            knowledgeChoose: "选择知识库",
+            knowledgeLoading: "加载知识库中...",
+            knowledgeEmpty: "当前没有可选知识库",
+            knowledgeSearch: "搜索知识库...",
+            enableKnowledge: "启用知识库",
+            disableKnowledge: "关闭知识库",
+            uploadFile: "上传文件",
+            addMenu: "添加内容",
             unknownError: "未知错误",
             errorPrefix: "请求失败：",
           }
@@ -543,6 +615,19 @@ export function AiEntryWorkspace({
             copied: "Copied",
             copyReply: "Copy reply",
             copiedReply: "Copied",
+            knowledgeLabel: "Knowledge",
+            knowledgeDisabled: "Knowledge disabled",
+            knowledgeAllEnabled: "All enabled knowledge bases",
+            knowledgeSelectedCount: "Selected knowledge bases",
+            knowledgeAdd: "Add knowledge base",
+            knowledgeChoose: "Choose knowledge base",
+            knowledgeLoading: "Loading knowledge bases...",
+            knowledgeEmpty: "No knowledge bases available",
+            knowledgeSearch: "Search knowledge bases...",
+            enableKnowledge: "Enable knowledge",
+            disableKnowledge: "Disable knowledge",
+            uploadFile: "Upload file",
+            addMenu: "Add content",
             unknownError: "Unknown error",
             errorPrefix: "Request failed: ",
           },
@@ -576,14 +661,18 @@ export function AiEntryWorkspace({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [pendingTaskEvents, setPendingTaskEvents] = useState<PendingTaskEvent[]>([])
+  const [knowledgeEnabled, setKnowledgeEnabled] = useState(false)
+  const [knowledgePickerOpen, setKnowledgePickerOpen] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [knowledgeDatasets, setKnowledgeDatasets] = useState<KnowledgeDatasetOption[]>([])
+  const [knowledgeDatasetsLoading, setKnowledgeDatasetsLoading] = useState(true)
+  const [selectedKnowledgeDatasetIds, setSelectedKnowledgeDatasetIds] = useState<number[]>([])
 
   const [modelsLoading, setModelsLoading] = useState(true)
   const [modelProviderId, setModelProviderId] = useState<string | null>(null)
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelGroups, setModelGroups] = useState<ModelGroupOption[]>([])
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
-    readPersistedSelectedModelId(),
-  )
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
 
   const [agentLoading, setAgentLoading] = useState(true)
@@ -716,10 +805,83 @@ export function AiEntryWorkspace({
     () => agents.find((item) => item.id === selectedAgentId) || null,
     [agents, selectedAgentId],
   )
+  const selectedKnowledgeDatasets = useMemo(
+    () =>
+      selectedKnowledgeDatasetIds
+        .map((datasetId) => knowledgeDatasets.find((item) => item.id === datasetId) || null)
+        .filter((item): item is KnowledgeDatasetOption => Boolean(item)),
+    [knowledgeDatasets, selectedKnowledgeDatasetIds],
+  )
+  const knowledgeSummaryLabel = useMemo(() => {
+    if (!knowledgeEnabled) return copy.knowledgeDisabled
+    if (selectedKnowledgeDatasets.length === 0) return copy.knowledgeAllEnabled
+    return `${copy.knowledgeSelectedCount} ${selectedKnowledgeDatasets.length}`
+  }, [copy.knowledgeAllEnabled, copy.knowledgeDisabled, copy.knowledgeSelectedCount, knowledgeEnabled, selectedKnowledgeDatasets.length])
   const handleAgentSelectionChange = useCallback((nextAgentId: string | null) => {
     setSelectedAgentId(nextAgentId)
     setIsAgentSelectionExplicit(Boolean(nextAgentId))
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadKnowledgeDatasets() {
+      setKnowledgeDatasetsLoading(true)
+      try {
+        const response = await fetch("/api/knowledge/datasets", {
+          credentials: "same-origin",
+        })
+        const payload = (await response.json().catch(() => null)) as KnowledgeDatasetsApiResponse | null
+        if (!response.ok) {
+          throw new Error(payload?.error || "knowledge_datasets_failed")
+        }
+
+        const nextDatasets = (payload?.data?.items || [])
+          .map((item) => {
+            if (!item || typeof item.id !== "number" || !item.name || !item.category) return null
+            return {
+              id: item.id,
+              name: item.name,
+              category: item.category,
+            } satisfies KnowledgeDatasetOption
+          })
+          .filter((item): item is KnowledgeDatasetOption => Boolean(item))
+
+        if (cancelled) return
+        setKnowledgeDatasets(nextDatasets)
+        setSelectedKnowledgeDatasetIds((current) => current.filter((datasetId) => nextDatasets.some((item) => item.id === datasetId)))
+      } catch {
+        if (cancelled) return
+        setKnowledgeDatasets([])
+      } finally {
+        if (!cancelled) {
+          setKnowledgeDatasetsLoading(false)
+        }
+      }
+    }
+
+    void loadKnowledgeDatasets()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const toggleKnowledgeDataset = useCallback((datasetId: number) => {
+    setKnowledgeEnabled(true)
+    setSelectedKnowledgeDatasetIds((current) =>
+      current.includes(datasetId)
+        ? current.filter((item) => item !== datasetId)
+        : [...current, datasetId],
+    )
+  }, [])
+
+  const disableKnowledge = useCallback(() => {
+    setKnowledgeEnabled(false)
+    setKnowledgePickerOpen(false)
+    setSelectedKnowledgeDatasetIds([])
+  }, [])
+
   const loadingEventSummary = useMemo(() => {
     const totalCount = pendingTaskEvents.length
     const completedCount = pendingTaskEvents.filter((item) => item.status === "completed").length
@@ -907,6 +1069,7 @@ export function AiEntryWorkspace({
         )
         const preferredFromCatalog =
           typeof payload?.selectedModelId === "string" ? payload.selectedModelId : null
+        const preferredFromStorage = shouldLockModel ? null : readPersistedSelectedModelId()
         const consultingModelFallback =
           pickConsultingModelId(normalizedModels) ||
           AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
@@ -921,6 +1084,14 @@ export function AiEntryWorkspace({
           if (normalizedCurrent) {
             const resolvedCurrent = resolveDisplayModelId(normalizedCurrent, normalizedModels)
             if (resolvedCurrent) return resolvedCurrent
+          }
+
+          if (preferredFromStorage) {
+            const resolvedPreferredFromStorage = resolveDisplayModelId(
+              preferredFromStorage,
+              normalizedModels,
+            )
+            if (resolvedPreferredFromStorage) return resolvedPreferredFromStorage
           }
 
           if (preferredFromCatalog) {
@@ -1304,6 +1475,10 @@ export function AiEntryWorkspace({
           stream: true,
           messages: contextMessages,
           attachments: sentAttachments,
+          enterpriseKnowledge: {
+            enabled: knowledgeEnabled,
+            datasetIds: selectedKnowledgeDatasetIds,
+          },
           conversationId,
           conversationScope: shouldLockModel ? "consulting" : "chat",
           modelConfig:
@@ -1633,9 +1808,11 @@ export function AiEntryWorkspace({
     isZh,
     embedded,
     forcedAgentId,
+    knowledgeEnabled,
     messages,
     modelProviderId,
     models,
+    selectedKnowledgeDatasetIds,
     isAgentSelectionExplicit,
     selectedAgentId,
     selectedModel,
@@ -1706,6 +1883,92 @@ export function AiEntryWorkspace({
     )
   }
 
+  const renderKnowledgeControl = () => {
+    if (!knowledgeEnabled) return null
+
+    return (
+      <div className="flex items-center gap-1">
+        <Popover open={knowledgePickerOpen} onOpenChange={setKnowledgePickerOpen}>
+          <PromptInputAction tooltip={copy.knowledgeChoose}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="dashboard-button-secondary h-9 max-w-[220px] gap-2 px-3"
+                disabled={isLoading || isConversationLoading || isPreparingAttachments}
+              >
+                <Database className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{copy.knowledgeLabel}</span>
+                <span className="truncate text-muted-foreground">{knowledgeSummaryLabel}</span>
+              </Button>
+            </PopoverTrigger>
+          </PromptInputAction>
+          <PopoverContent className="w-80 p-0" align="start">
+            <Command>
+              <div className="border-b border-border px-3 py-3">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-[6px] border border-border bg-background px-3 py-2 text-left text-sm transition hover:border-primary/50"
+                  onClick={disableKnowledge}
+                >
+                  <span>{copy.disableKnowledge}</span>
+                </button>
+                <button
+                  type="button"
+                  className="mt-2 flex w-full items-center justify-between rounded-[6px] px-1 py-1 text-left text-xs text-muted-foreground transition hover:text-foreground"
+                  onClick={() => setSelectedKnowledgeDatasetIds([])}
+                >
+                  <span>{copy.knowledgeAllEnabled}</span>
+                  {selectedKnowledgeDatasetIds.length === 0 ? <Check className="h-4 w-4 text-primary" /> : null}
+                </button>
+              </div>
+              <CommandInput placeholder={copy.knowledgeSearch} />
+              <CommandList>
+                <CommandEmpty>{knowledgeDatasetsLoading ? copy.knowledgeLoading : copy.knowledgeEmpty}</CommandEmpty>
+                <CommandGroup>
+                  {knowledgeDatasets.map((dataset) => {
+                    const selected = selectedKnowledgeDatasetIds.includes(dataset.id)
+                    return (
+                      <CommandItem
+                        key={dataset.id}
+                        onSelect={() => toggleKnowledgeDataset(dataset.id)}
+                        className="cursor-pointer"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <Database className="h-4 w-4 shrink-0" />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm">{dataset.name}</div>
+                            <div className="truncate text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                              {dataset.category}
+                            </div>
+                          </div>
+                        </div>
+                        {selected ? <Check className="ml-2 h-4 w-4 text-primary" /> : null}
+                      </CommandItem>
+                    )
+                  })}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+        <PromptInputAction tooltip={copy.disableKnowledge}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="dashboard-button-secondary h-9 px-2.5"
+            disabled={isLoading || isConversationLoading || isPreparingAttachments}
+            onClick={disableKnowledge}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </PromptInputAction>
+      </div>
+    )
+  }
+
   const renderMessageAttachments = (items: ChatAttachment[] | undefined) => {
     if (!items?.length) return null
     return (
@@ -1721,18 +1984,49 @@ export function AiEntryWorkspace({
   }
 
   const renderAttachmentPicker = () => (
-    <PromptInputAction tooltip={isZh ? "上传图片、文本、DOCX 或 PDF 附件" : "Upload image, text, DOCX, or PDF attachment"}>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="dashboard-button-secondary h-9 px-3"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={isLoading || isConversationLoading || isPreparingAttachments || attachments.length >= AI_ENTRY_MAX_ATTACHMENTS}
-      >
-        <Paperclip className="h-3.5 w-3.5" />
-      </Button>
-    </PromptInputAction>
+    <Popover open={addMenuOpen} onOpenChange={setAddMenuOpen}>
+      <PromptInputAction tooltip={copy.addMenu}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="dashboard-button-secondary h-9 px-3"
+            disabled={isLoading || isConversationLoading || isPreparingAttachments}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+      </PromptInputAction>
+      <PopoverContent className="w-56 p-2" align="start">
+        <div className="space-y-1">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm transition hover:bg-accent"
+            onClick={() => {
+              setAddMenuOpen(false)
+              fileInputRef.current?.click()
+            }}
+            disabled={attachments.length >= AI_ENTRY_MAX_ATTACHMENTS}
+          >
+            <Paperclip className="h-4 w-4 shrink-0" />
+            <span>{copy.uploadFile}</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm transition hover:bg-accent"
+            onClick={() => {
+              setAddMenuOpen(false)
+              setKnowledgeEnabled(true)
+              setKnowledgePickerOpen(true)
+            }}
+          >
+            <Database className="h-4 w-4 shrink-0" />
+            <span>{copy.knowledgeAdd}</span>
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 
   const renderRecommendedAgents = (size: "landing" | "inline") => {
@@ -1810,13 +2104,14 @@ export function AiEntryWorkspace({
                   multiple
                   accept="image/*,.txt,.md,.docx,.pdf,.csv,.json,text/*,application/json,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="hidden"
-                  onChange={(event) => void handleAttachmentFiles(event.target.files)}
-                />
-                {renderSelectedAttachments()}
-                <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
+                onChange={(event) => void handleAttachmentFiles(event.target.files)}
+              />
+              {renderSelectedAttachments()}
+              <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
                 <PromptInputActions>
                   <div className="flex items-center gap-2">
                     {renderAttachmentPicker()}
+                    {renderKnowledgeControl()}
                   </div>
                   <div className="flex min-w-0 items-center gap-2">
                     {renderSelectors("h-10")}
@@ -2015,6 +2310,7 @@ export function AiEntryWorkspace({
               <PromptInputActions>
                 <div className="flex items-center gap-2">
                   {renderAttachmentPicker()}
+                  {renderKnowledgeControl()}
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}

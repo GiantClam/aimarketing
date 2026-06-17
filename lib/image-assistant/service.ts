@@ -24,6 +24,7 @@ import {
   getImageAssistantSession,
   updateImageAssistantAsset,
   listImageAssistantAssets,
+  listImageAssistantAssetsByIds,
   listImageAssistantMessages,
   listImageAssistantVersions,
   setSelectedVersionCandidate,
@@ -219,14 +220,18 @@ async function resolveReferenceImagesForModel(params: {
   userId: number
   sessionId: string
   referencedAssets: ImageAssistantAsset[]
+  referenceUrls?: string[]
   signal?: AbortSignal
 }) {
   const assetsWithUrls = params.referencedAssets.filter((asset): asset is ImageAssistantAsset => Boolean(asset?.url))
-  if (!assetsWithUrls.length) return []
+  const standaloneUrls = [...new Set((params.referenceUrls || []).map((value) => value.trim()).filter(Boolean))]
+  if (!assetsWithUrls.length && !standaloneUrls.length) return []
+
+  const standaloneUrlsOnly = standaloneUrls.filter((url) => !assetsWithUrls.some((asset) => asset.url === url))
 
   const prepareInlineReferences = async () =>
-    Promise.all(
-      assetsWithUrls.map(async (asset) => {
+    Promise.all([
+      ...assetsWithUrls.map(async (asset) => {
         const inline = await urlToInlineImage(asset.url!, { signal: params.signal })
         return {
           kind: "inline" as const,
@@ -235,7 +240,16 @@ async function resolveReferenceImagesForModel(params: {
           base64Data: inline.base64Data,
         }
       }),
-    )
+      ...standaloneUrlsOnly.map(async (url) => {
+          const inline = await urlToInlineImage(url, { signal: params.signal })
+          return {
+            kind: "inline" as const,
+            assetId: null,
+            mimeType: inline.mimeType,
+            base64Data: inline.base64Data,
+          }
+        }),
+    ])
 
   if (shouldUseImageAssistantFixtures()) {
     return prepareInlineReferences()
@@ -261,7 +275,17 @@ async function resolveReferenceImagesForModel(params: {
       let inlineReferences: Array<{ kind: "inline"; assetId?: string | null; mimeType: string; base64Data: string }> = []
       if (shouldPrepareInlineReferences) {
         try {
-          inlineReferences = await prepareInlineReferences()
+          inlineReferences = standaloneUrlsOnly.length > 0 ? await Promise.all(
+            standaloneUrlsOnly.map(async (url) => {
+              const inline = await urlToInlineImage(url, { signal: params.signal })
+              return {
+                kind: "inline" as const,
+                assetId: null,
+                mimeType: inline.mimeType,
+                base64Data: inline.base64Data,
+              }
+            }),
+          ) : []
         } catch (error) {
           console.warn("image-assistant.references.inline-fallback", {
             sessionId: params.sessionId,
@@ -315,28 +339,44 @@ async function resolveReferenceAssets(params: {
   userId: number
   sessionId: string
   referenceAssetIds?: string[]
+  referenceUrls?: string[]
   sessionValidated?: boolean
 }) {
   const scopedReferenceAssetIds = (params.referenceAssetIds || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
-  if (!scopedReferenceAssetIds.length) {
+  const scopedReferenceUrls = [...new Set(
+    (params.referenceUrls || [])
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )].slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS)
+
+  if (!scopedReferenceAssetIds.length && !scopedReferenceUrls.length) {
     return {
       assets: [] as ImageAssistantAsset[],
       referencedAssets: [] as ImageAssistantAsset[],
+      referenceUrls: [] as string[],
     }
   }
 
-  const assets = await listImageAssistantAssets(params.userId, params.sessionId, {
-    limit: scopedReferenceAssetIds.length,
-    assetIds: scopedReferenceAssetIds,
-    skipSessionValidation: Boolean(params.sessionValidated),
-  })
+  const assets = scopedReferenceAssetIds.length
+    ? await listImageAssistantAssets(params.userId, params.sessionId, {
+        limit: scopedReferenceAssetIds.length,
+        assetIds: scopedReferenceAssetIds,
+        skipSessionValidation: Boolean(params.sessionValidated),
+      })
+    : []
+  const missingAssetIds = scopedReferenceAssetIds.filter((assetId) => !assets.some((asset) => asset.id === assetId))
+  const crossSessionAssets = missingAssetIds.length
+    ? await listImageAssistantAssetsByIds(params.userId, missingAssetIds)
+    : []
+  const allResolvedAssets = [...assets, ...crossSessionAssets]
   const referencedAssets = scopedReferenceAssetIds
-    .map((assetId) => assets.find((asset) => asset.id === assetId))
+    .map((assetId) => allResolvedAssets.find((asset) => asset.id === assetId))
     .filter((asset): asset is ImageAssistantAsset => Boolean(asset))
 
   return {
-    assets,
+    assets: allResolvedAssets,
     referencedAssets,
+    referenceUrls: scopedReferenceUrls.filter((url) => !referencedAssets.some((asset) => asset.url === url)),
   }
 }
 
@@ -451,6 +491,8 @@ export async function runImageAssistantJob(params: {
   prompt: string
   taskType: ImageAssistantTaskType
   referenceAssetIds?: string[]
+  referenceUrls?: string[]
+  providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
@@ -486,7 +528,7 @@ export async function runImageAssistantJob(params: {
   logImageAssistantStage("job.start", {
     sessionId,
     taskType: params.taskType,
-    referenceAssetCount: params.referenceAssetIds?.length || 0,
+    referenceAssetCount: (params.referenceAssetIds?.length || 0) + (params.referenceUrls?.length || 0),
     candidateCount: params.candidateCount || 1,
     sizePreset: params.sizePreset,
     resolution: params.resolution,
@@ -501,6 +543,7 @@ export async function runImageAssistantJob(params: {
     userId: params.userId,
     sessionId,
     referenceAssetIds: params.referenceAssetIds,
+    referenceUrls: params.referenceUrls,
     sessionValidated: true,
   })
   logImageAssistantStage("job.references.resolved", {
@@ -512,6 +555,7 @@ export async function runImageAssistantJob(params: {
     userId: params.userId,
     sessionId,
     referencedAssets,
+    referenceUrls: params.referenceUrls,
     signal: params.signal,
   })
   throwIfAborted(params.signal)
@@ -554,6 +598,7 @@ export async function runImageAssistantJob(params: {
       resolution: normalizedResolution,
       sizePreset: normalizedSizePreset,
       referenceImages,
+      providerLock: params.providerLock || null,
       snapshotAssetId: params.snapshotAssetId || null,
       maskAssetId: params.maskAssetId || null,
       candidateCount: params.candidateCount || 1,
@@ -741,6 +786,8 @@ export async function runImageAssistantConversationTurn(params: {
   brief?: Partial<ImageAssistantBrief> | null
   taskType: ImageAssistantTaskType
   referenceAssetIds?: string[]
+  referenceUrls?: string[]
+  providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
@@ -783,18 +830,19 @@ export async function runImageAssistantConversationTurn(params: {
   logImageAssistantStage("conversation.start", {
     sessionId,
     taskType: params.taskType,
-    referenceAssetCount: params.referenceAssetIds?.length || 0,
+    referenceAssetCount: (params.referenceAssetIds?.length || 0) + (params.referenceUrls?.length || 0),
     sizePreset: params.sizePreset,
     resolution: params.resolution,
     memoryAppliedCount: memoryBridge.memoryAppliedIds.length,
   })
 
-  const [messages, { referencedAssets }] = await Promise.all([
+  const [messages, { referencedAssets, referenceUrls }] = await Promise.all([
     listImageAssistantMessages(params.userId, sessionId, { skipSessionValidation: true }),
     resolveReferenceAssets({
       userId: params.userId,
       sessionId,
       referenceAssetIds: params.referenceAssetIds,
+      referenceUrls: params.referenceUrls,
       sessionValidated: true,
     }),
   ])
@@ -802,7 +850,7 @@ export async function runImageAssistantConversationTurn(params: {
   logImageAssistantStage("conversation.context.loaded", {
     sessionId,
     historyCount: messages.length,
-    referenceAssetCount: referencedAssets.length,
+    referenceAssetCount: referencedAssets.length + referenceUrls.length,
     elapsedMs: Date.now() - startedAt,
   })
   const isFirstUserTurn = !messages.some((message) => message.role === "user")
@@ -860,7 +908,7 @@ export async function runImageAssistantConversationTurn(params: {
     taskType: params.taskType,
     sizePreset: normalizeSizePreset(params.sizePreset),
     resolution: normalizeResolution(params.resolution),
-    referenceCount: referencedAssets.length,
+    referenceCount: referencedAssets.length + referenceUrls.length,
     extraInstructions: effectiveExtraInstructions,
   })
   throwIfAborted(params.signal)
@@ -877,6 +925,8 @@ export async function runImageAssistantConversationTurn(params: {
   const requestPayload = {
     workflow: "skills_tools",
     referenceAssetIds: (params.referenceAssetIds || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
+    referenceUrls: (params.referenceUrls || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
+    providerLock: params.providerLock || null,
     candidateCount: params.candidateCount || 1,
     sizePreset: normalizeSizePreset(params.sizePreset),
     resolution: normalizeResolution(params.resolution),
@@ -950,6 +1000,8 @@ export async function runImageAssistantConversationTurn(params: {
     prompt: plan.orchestration.generated_prompt,
     taskType: params.taskType,
     referenceAssetIds: (params.referenceAssetIds || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
+    referenceUrls: (params.referenceUrls || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
+    providerLock: params.providerLock || null,
     candidateCount: params.candidateCount || 1,
     sizePreset: normalizeSizePreset(params.sizePreset),
     resolution: normalizeResolution(params.resolution),

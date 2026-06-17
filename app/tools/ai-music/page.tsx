@@ -188,7 +188,7 @@ export function renderAiMusicPage(locale: AppLocale) {
         </div>
       }
     >
-      <section className="rounded-[2rem] border border-border/70 bg-card/85 p-6">
+      <section className="rounded-[2rem] border border-border/70 bg-card/85 p-4">
         <div className="max-w-3xl space-y-3">
           <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
             {capability?.status === "beta" ? copy.statusLabel : "Live"}

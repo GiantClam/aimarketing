@@ -303,7 +303,7 @@ function renderFallbackBackdrop(variant: PptPreviewVariant, index: number) {
 }
 
 function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): OverlayFrame {
-  if (variant.key === "ppt169_swiss_grid_systems") {
+  if (variant.styleKey === "ppt169_swiss_grid_systems") {
     switch (slide.layout) {
       case "cover":
         return {
@@ -338,7 +338,7 @@ function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): Ov
     }
   }
 
-  if (variant.key === "ppt169_pritzker_2026") {
+  if (variant.styleKey === "ppt169_pritzker_2026") {
     switch (slide.layout) {
       case "cover":
         return {
@@ -363,7 +363,7 @@ function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): Ov
     }
   }
 
-  if (variant.key === "ppt169_brutalist_ai_newspaper_2026") {
+  if (variant.styleKey === "ppt169_brutalist_ai_newspaper_2026") {
     switch (slide.layout) {
       case "cover":
         return {
@@ -429,7 +429,7 @@ function renderPanelDecor(frame: OverlayFrame, variant: PptPreviewVariant, overl
 }
 
 function renderOverlay(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: PptPreviewSlide, index: number) {
-  const overlay = themeAssets[variant.key].overlay
+  const overlay = themeAssets[variant.styleKey].overlay
   const frame = getOverlayFrame(variant, slide)
 
   return [
@@ -492,9 +492,9 @@ function renderOverlay(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: 
 }
 
 function renderSlide(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: PptPreviewSlide, index: number) {
-  const assetTheme = themeAssets[variant.key]
+  const assetTheme = themeAssets[variant.styleKey]
   const fileName = assetTheme.files[Math.min(index, assetTheme.files.length - 1)]
-  const baseAssetDataUrl = getAssetDataUrl(variant.key, fileName)
+  const baseAssetDataUrl = getAssetDataUrl(variant.styleKey, fileName)
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${PREVIEW_WIDTH}" height="${PREVIEW_HEIGHT}" viewBox="0 0 ${BASE_VIEWBOX_WIDTH} ${BASE_VIEWBOX_HEIGHT}" role="img" aria-label="${escapeXml(`${variant.name} preview slide ${index + 1}`)}">`,
@@ -517,7 +517,7 @@ export function renderPptPreviewDeckAssets(deck: PptPreviewDeck): PptPreviewDeck
         ...variant,
         preview: {
           format: "svg",
-          themeId: variant.key,
+          themeId: variant.styleKey,
           cover: slideAssets[0],
           slides: slideAssets,
         },

@@ -142,6 +142,7 @@ const sampleDeck = {
   variants: [
     {
       key: "ppt169_brutalist_ai_newspaper_2026" as const,
+      styleKey: "ppt169_brutalist_ai_newspaper_2026" as const,
       name: "Long Table",
       summary: "长桌纪要和节目单气质最强。",
       stylePrompt: "Warm long-table editorial deck.",
@@ -158,6 +159,7 @@ const sampleDeck = {
     },
     {
       key: "ppt169_sugar_rush_memphis" as const,
+      styleKey: "ppt169_sugar_rush_memphis" as const,
       name: "Playful",
       summary: "暖桃纸面和独立品牌感最强。",
       stylePrompt: "Peach indie launch deck.",
@@ -174,6 +176,7 @@ const sampleDeck = {
     },
     {
       key: "ppt169_pritzker_2026" as const,
+      styleKey: "ppt169_pritzker_2026" as const,
       name: "Broadside",
       summary: "大字报式深色编辑感最强。",
       stylePrompt: "Dark broadside declaration deck.",
@@ -190,6 +193,7 @@ const sampleDeck = {
     },
     {
       key: "ppt169_swiss_grid_systems" as const,
+      styleKey: "ppt169_swiss_grid_systems" as const,
       name: "Neo-Grid Bold",
       summary: "霓黄网格与粗体模块最强。",
       stylePrompt: "Dense neon grid strategy deck.",
@@ -218,7 +222,7 @@ test("frontend slides runtime materializes HTML documents and poster previews", 
   assert.ok(variant?.preview)
   assert.equal(variant?.preview?.slides.length, 9)
   assert.equal(variant?.preview?.cover.mimeType, "image/svg+xml")
-  assert.ok(variant?.preview?.htmlDocument?.fileName.endsWith(".html"))
+  assert.equal(variant?.preview?.htmlDocument?.fileName, "step-37-flash-9p-long-table.html")
   assert.match(html, /<section class="slide">/)
   assert.match(html, /PresentationController/)
   assert.match(html, /aspect-ratio:\s*16\s*\/\s*9/)

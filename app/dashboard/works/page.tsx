@@ -1,7 +1,7 @@
 import { WorkspaceWorkLibrary } from "@/components/platform/workspace-work-library"
 import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
-import { listPlatformWorkItemsForEnterprise } from "@/lib/platform/task-run-store"
+import { listEnterpriseWorkLibraryCandidates } from "@/lib/platform/works"
 
 export default async function WorksPage() {
   const locale = await getRequestLocale()
@@ -9,19 +9,8 @@ export default async function WorksPage() {
   const currentUser = await getServerSessionUser().catch(() => null)
   const works =
     currentUser?.enterpriseId != null
-      ? await listPlatformWorkItemsForEnterprise(currentUser.enterpriseId)
+      ? await listEnterpriseWorkLibraryCandidates(currentUser.enterpriseId)
       : []
 
-  return (
-    <WorkspaceWorkLibrary
-      locale={displayLocale}
-      works={works.map((work) => ({
-        id: work.id,
-        title: work.title,
-        type: work.type,
-        sourceArtifactId: work.sourceArtifactId,
-        createdAt: work.createdAt instanceof Date ? work.createdAt.toISOString() : null,
-      }))}
-    />
-  )
+  return <WorkspaceWorkLibrary locale={displayLocale} works={works} />
 }

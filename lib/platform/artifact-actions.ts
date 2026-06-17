@@ -67,3 +67,27 @@ export function getPlatformArtifactPreviewKind(artifact: Pick<PlatformArtifactRe
   if (mimeType.startsWith("audio/")) return "audio" as const
   return "file" as const
 }
+
+export function getPlatformArtifactFormatGroup(artifact: Pick<PlatformArtifactRecord, "mimeType" | "title">) {
+  const mimeType = artifact.mimeType?.toLowerCase() || ""
+  const title = artifact.title.toLowerCase()
+
+  if (mimeType.startsWith("image/")) return "image" as const
+  if (mimeType.startsWith("video/")) return "video" as const
+  if (mimeType.startsWith("audio/")) return "audio" as const
+  if (
+    mimeType === "application/pdf" ||
+    mimeType.includes("presentation") ||
+    mimeType.includes("powerpoint") ||
+    mimeType.includes("msword") ||
+    mimeType.includes("spreadsheet") ||
+    mimeType.includes("excel") ||
+    mimeType.includes("json") ||
+    mimeType.startsWith("text/") ||
+    /\.(pdf|ppt|pptx|doc|docx|xls|xlsx|json|txt|md)$/i.test(title)
+  ) {
+    return "document" as const
+  }
+
+  return "other" as const
+}

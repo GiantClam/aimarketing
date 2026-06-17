@@ -91,11 +91,11 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
   },
   {
     slug: "ai-ppt-preview",
-    name: "AI PPT 快速预览",
-    shortName: "PPT 预览",
-    tagline: "输入一个主题，并发获得 4 种高质量 HTML Slides 预览版本。",
+    name: "AI PPT 生成器",
+    shortName: "AI PPT",
+    tagline: "输入主题，按模板生成 4 个正式候选；页数可指定，也可交给 AI 自动规划。",
     description:
-      "面向 SEO 引流与首页转化的首个样板工具。先并发生成 4 个差异明显的 HTML Slides 方案，再在高价值动作上触发登录和下载。",
+      "面向 SEO 引流与首页转化的正式 AI PPT 工具。游客先看到 4 个可对比的 HTML Slides 候选，可选模板、手填页数或留空让 AI 自动规划，再在登录后继续打开、下载和完整导出。",
     category: "Presentation",
     icon: "presentation",
     media: "presentation",
@@ -109,19 +109,23 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     finalizeRequiresLogin: true,
     previewModel: getLeadToolPreviewModel("ai-ppt-preview"),
     finalModel: getLeadToolFinalModel("ai-ppt-preview"),
-    proofPoints: ["4 种风格并发 HTML 预览", "登录前即可预览", "下载动作登录后继续"],
+    proofPoints: ["4 个候选并排预览", "模板可切换，页数可手填或交给 AI", "登录前即可预览，登录后继续下载与完整导出"],
     faqs: [
       {
         question: "需要先登录才能看到结果吗？",
-        answer: "不需要。游客可以直接生成多风格预览，登录只在下载和完整生成时触发。",
+        answer: "不需要。游客可以直接生成并比较 4 个候选版本，登录只在下载、打开受保护成品和完整导出时触发。",
       },
       {
-        question: "为什么先做预览，而不是直接下载文件？",
-        answer: "预览更快出现，用户能先判断风格、文案和版式方向是否正确，再决定是否继续打开或下载 HTML 成品。",
+        question: "可以自己选模板和页数吗？",
+        answer: "可以。你可以在自动四模板和单模板四叙事之间切换，手动填写 4-20 页，或者留空让 AI 先规划实际页数。",
       },
       {
-        question: "模型能自定义吗？",
-        answer: "当前 MVP 由平台统一指定预览模型和最终模型，保证速度、成本和结果稳定性。",
+        question: "为什么一次给 4 个候选？",
+        answer: "因为正式 PPT 的关键不是只生成一份，而是先比较 4 个模板或 4 个叙事角度，快速判断哪条表达路线最值得继续。",
+      },
+      {
+        question: "为什么先做 HTML 预览，而不是直接下载 PPTX？",
+        answer: "HTML 预览更快出现，能先验证模板、文案和页数规划是否正确，再进入登录后的下载和完整导出链路。",
       },
     ],
   },
@@ -379,23 +383,27 @@ const localizedLeadToolCopy: Record<
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-chat")?.faqs ?? [],
     },
     "ai-ppt-preview": {
-      name: "AI PPT 快速预览",
-      shortName: "PPT 预览",
-      tagline: "输入一个主题，并发获得 4 种高质量 HTML Slides 预览版本。",
-      description: "先并发生成 4 个差异明显的 HTML Slides 方案，再继续打开或下载 HTML 成品。",
-      proofPoints: ["4 种风格并发 HTML 预览", "登录前即可预览", "下载动作登录后继续"],
+      name: "AI PPT 生成器",
+      shortName: "AI PPT",
+      tagline: "输入主题，按模板生成 4 个正式候选；页数可指定，也可交给 AI 自动规划。",
+      description: "先生成 4 个正式 HTML Slides 候选，再继续比较模板、页数规划和叙事角度，最后进入打开、下载与完整导出。",
+      proofPoints: ["4 个候选并排预览", "模板可切换，页数可手填或交给 AI", "登录前即可预览，登录后继续下载与完整导出"],
       faqs: [
         {
           question: "需要先登录才能看到结果吗？",
-          answer: "不需要。游客可以直接生成多风格预览，登录只在下载和完整生成时触发。",
+          answer: "不需要。游客可以直接生成并比较 4 个候选版本，登录只在下载、打开受保护成品和完整导出时触发。",
         },
         {
-          question: "为什么先做预览，而不是直接下载文件？",
-          answer: "预览更快出现，用户能先判断风格、文案和版式方向是否正确，再决定是否继续打开或下载 HTML 成品。",
+          question: "可以自己选模板和页数吗？",
+          answer: "可以。你可以在自动四模板和单模板四叙事之间切换，手动填写 4-20 页，或者留空让 AI 先规划实际页数。",
         },
         {
-          question: "模型能自定义吗？",
-          answer: "当前版本支持平台预设模型选择，默认会优先使用更稳定的预览模型。",
+          question: "为什么一次给 4 个候选？",
+          answer: "因为正式 PPT 的关键不是只生成一份，而是先比较 4 个模板或 4 个叙事角度，快速判断哪条表达路线最值得继续。",
+        },
+        {
+          question: "为什么先做 HTML 预览，而不是直接下载 PPTX？",
+          answer: "HTML 预览更快出现，能先验证模板、文案和页数规划是否正确，再进入登录后的下载和完整导出链路。",
         },
       ],
     },
@@ -474,23 +482,28 @@ const localizedLeadToolCopy: Record<
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-chat")?.faqs ?? [],
     },
     "ai-ppt-preview": {
-      name: "AI PPT Preview",
-      shortName: "PPT Preview",
-      tagline: "Enter one topic and get four parallel HTML slide directions.",
-      description: "Generate four clearly differentiated HTML Slides directions first, then open or download the selected HTML result.",
-      proofPoints: ["4 parallel HTML slide directions", "Preview before login", "Login continues the download action"],
+      name: "AI PPT Generator",
+      shortName: "AI PPT",
+      tagline: "Enter one topic, pick a template flow, and get four formal candidates with manual or AI-planned page counts.",
+      description:
+        "Generate four formal HTML Slides candidates first, compare template choices, narrative directions, and resolved page counts, then continue into protected open, download, and full export actions.",
+      proofPoints: ["4 candidates side by side", "Template choice plus manual or AI page planning", "Preview before login, continue download and full export after login"],
       faqs: [
         {
           question: "Do I need to log in before seeing results?",
-          answer: "No. Visitors can generate and compare the previews first. Login is only required for protected follow-up actions.",
+          answer: "No. Visitors can generate and compare all four candidates first. Login is only required for protected open, download, and full-export follow-up actions.",
         },
         {
-          question: "Why preview first instead of downloading immediately?",
-          answer: "Preview appears faster and lets users validate style, copy, and layout direction before opening or downloading the HTML output.",
+          question: "Can I choose the template and page count?",
+          answer: "Yes. You can switch between auto-four-template mode and single-template four-narrative mode, enter any page count from 4 to 20, or leave it blank and let AI resolve the slide count.",
         },
         {
-          question: "Can I choose a model?",
-          answer: "Yes. The current version keeps a curated set of preview models, with the more stable one used as the default.",
+          question: "Why generate four candidates instead of one?",
+          answer: "Because the fastest path to a strong deck is comparing four template or narrative options up front, then continuing with the direction that actually reads best.",
+        },
+        {
+          question: "Why preview in HTML before exporting PPTX?",
+          answer: "HTML preview lands faster and lets you validate template fit, copy, and page planning before spending time on protected download and full export.",
         },
       ],
     },

@@ -7,11 +7,6 @@ import {
 import { requireSessionUser } from "@/lib/auth/guards"
 import { isSessionDbUnavailableError } from "@/lib/auth/session"
 import {
-  loadEnterpriseKnowledgeContext,
-  type EnterpriseKnowledgeScope,
-  type EnterpriseKnowledgeContext,
-} from "@/lib/dify/enterprise-knowledge"
-import {
   appendAiEntryTurn,
   ensureAiEntryConversation,
   type AiEntryConversationScope,
@@ -36,6 +31,8 @@ import {
 import {
   normalizeAiEntryIdentity,
 } from "@/lib/ai-entry/identity"
+import { loadEnterpriseKnowledgeContext } from "@/lib/knowledge/service"
+import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
 import {
   normalizeAttachmentList,
   normalizeMessages,
@@ -62,11 +59,16 @@ export const runtime = "nodejs"
 type ChatRequestBody = {
   messages?: IncomingMessage[]
   message?: string
+  systemPrompt?: string
   attachments?: IncomingAttachment[]
   conversationId?: string | null
   conversationScope?: "chat" | "consulting"
   stream?: boolean
   knowledgeSource?: "industry_kb" | "personal_kb"
+  enterpriseKnowledge?: {
+    enabled?: boolean
+    datasetIds?: number[]
+  }
   modelConfig?: {
     providerId?: string
     modelId?: string
@@ -78,6 +80,17 @@ type ChatRequestBody = {
   skillConfig?: {
     enabled?: boolean
     enabledToolNames?: string[]
+  }
+}
+
+function parseEnterpriseKnowledgeConfig(input: ChatRequestBody["enterpriseKnowledge"]) {
+  const datasetIds = Array.isArray(input?.datasetIds)
+    ? [...new Set(input.datasetIds.filter((value) => Number.isInteger(value) && value > 0))]
+    : []
+
+  return {
+    enabled: input?.enabled !== false,
+    datasetIds,
   }
 }
 
@@ -194,6 +207,7 @@ function buildEnterpriseKnowledgePromptSection(context: EnterpriseKnowledgeConte
 function buildAiEntrySystemPrompt(
   enterpriseKnowledge: EnterpriseKnowledgeContext | null,
   agentInstruction: string,
+  customSystemPrompt: string,
   latestUserPrompt: string,
   forcedReplyLanguage: "zh" | "en" | null,
   webSearch: {
@@ -243,6 +257,9 @@ function buildAiEntrySystemPrompt(
   const sections = [base]
   if (agentInstruction.trim()) {
     sections.push(`## Agent mode\n${agentInstruction.trim()}`)
+  }
+  if (customSystemPrompt.trim()) {
+    sections.push(`## Custom system instruction\n${customSystemPrompt.trim()}`)
   }
   if (enterpriseKnowledge?.snippets.length) {
     sections.push(buildEnterpriseKnowledgePromptSection(enterpriseKnowledge))
@@ -477,6 +494,9 @@ export async function POST(request: NextRequest) {
     billingEnterpriseId = currentUser.enterpriseId
 
     const body = (await request.json()) as ChatRequestBody
+    const customSystemPrompt =
+      typeof body.systemPrompt === "string" ? body.systemPrompt.trim().slice(0, 24_000) : ""
+    const enterpriseKnowledgeConfig = parseEnterpriseKnowledgeConfig(body.enterpriseKnowledge)
     const attachments = normalizeAttachmentList(body.attachments)
     const requestedMessages = normalizeMessages(Array.isArray(body.messages) ? body.messages : [], attachments)
     const fallbackPrompt = typeof body.message === "string" ? body.message.trim() : ""
@@ -549,6 +569,7 @@ export async function POST(request: NextRequest) {
       inferAiEntryPreferredKnowledgeScopes(latestUserPrompt)
     const canQueryEnterpriseKnowledge =
       canLoadEnterpriseKnowledgeForUser(currentUser) &&
+      enterpriseKnowledgeConfig.enabled &&
       typeof enterpriseId === "number" &&
       enterpriseId > 0 &&
       latestUserPrompt.trim().length > 0
@@ -568,6 +589,7 @@ export async function POST(request: NextRequest) {
           query: latestUserPrompt.trim(),
           queryVariants: knowledgeQueryVariants,
           preferredScopes: preferredKnowledgeScopes,
+          preferredDatasetIds: enterpriseKnowledgeConfig.datasetIds,
           platform: "generic",
           mode: "article",
         })
@@ -684,7 +706,11 @@ export async function POST(request: NextRequest) {
     if (shouldReserveAiEntryCredits) {
       const reserveEstimate = estimateTextCredits({
         featureKey: "ai_entry_chat",
-        inputTokens: estimateTextTokens(normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n")),
+        inputTokens: estimateTextTokens(
+          [customSystemPrompt, ...normalizedMessages.map((message) => normalizeCoreMessageContent(message.content))]
+            .filter(Boolean)
+            .join("\n"),
+        ),
         outputTokens: 4_000,
         provider: modelConfig?.providerId || null,
         model: modelConfig?.providerModelId || modelConfig?.modelId || null,
@@ -715,6 +741,7 @@ export async function POST(request: NextRequest) {
       const systemPrompt = buildAiEntrySystemPrompt(
         enterpriseKnowledge,
         resolvedInstruction,
+        customSystemPrompt,
         latestUserPrompt,
         forcedReplyLanguage,
         {
@@ -871,6 +898,7 @@ export async function POST(request: NextRequest) {
           const systemPrompt = buildAiEntrySystemPrompt(
             enterpriseKnowledge,
             resolvedInstruction,
+            customSystemPrompt,
             latestUserPrompt,
             forcedReplyLanguage,
             {

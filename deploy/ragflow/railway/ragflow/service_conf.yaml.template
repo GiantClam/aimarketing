@@ -1,0 +1,45 @@
+ragflow:
+  host: ${RAGFLOW_HOST:-0.0.0.0}
+  http_port: 9380
+
+admin:
+  host: ${RAGFLOW_HOST:-0.0.0.0}
+  http_port: 9381
+
+postgres:
+  name: '${POSTGRES_DBNAME:-postgres}'
+  user: '${POSTGRES_USER}'
+  password: '${POSTGRES_PASSWORD}'
+  host: '${POSTGRES_HOST}'
+  port: ${POSTGRES_PORT:-5432}
+  sslmode: '${POSTGRES_SSLMODE:-require}'
+  connect_timeout: ${POSTGRES_CONNECT_TIMEOUT:-10}
+  max_connections: 100
+  stale_timeout: 30
+
+redis:
+  db: 1
+  username: '${REDIS_USERNAME:-}'
+  password: '${REDIS_PASSWORD}'
+  host: '${REDIS_HOST:-redis}:${REDIS_PORT:-6379}'
+
+infinity:
+  uri: '${INFINITY_HOST:-infinity}:${INFINITY_THRIFT_PORT:-23817}'
+  postgres_port: 5432
+  db_name: 'default_db'
+
+s3:
+  access_key: '${R2_ACCESS_KEY_ID}'
+  secret_key: '${R2_SECRET_ACCESS_KEY}'
+  region: '${R2_REGION:-auto}'
+  endpoint_url: '${R2_ENDPOINT}'
+  bucket: '${R2_BUCKET_NAME}'
+  prefix_path: '${R2_PREFIX_PATH:-ragflow}'
+  signature_version: 'v4'
+  addressing_style: 'path'
+
+user_default_llm:
+  default_models:
+    embedding_model:
+      api_key: '${EMBEDDING_API_KEY:-replace-me}'
+      base_url: '${EMBEDDING_BASE_URL:-https://replace-me.example.com/v1}'

@@ -46,11 +46,11 @@ export function MissingLeadToolPage({ locale = "en" }: { locale?: AppLocale }) {
         </Link>
         <h1 className="mt-6 text-3xl font-semibold text-foreground">This tool is not live yet</h1>
         <p className="mt-4 max-w-2xl text-muted-foreground">
-          AI PPT Preview is the current live reference tool. Other SEO-oriented lead-gen tools will reuse the same runtime, preview pattern, and conversion flow.
+          AI PPT Generator is the current live reference tool. Other SEO-oriented lead-gen tools will reuse the same runtime, preview pattern, and conversion flow.
         </p>
         <div className="mt-8">
           <Button asChild>
-            <Link href={localizePublicPath("/tools/ai-ppt-preview", locale)}>Open AI PPT Preview</Link>
+            <Link href={localizePublicPath("/tools/ai-ppt-preview", locale)}>Open AI PPT Generator</Link>
           </Button>
         </div>
       </div>
@@ -316,7 +316,7 @@ export async function ToolMarketingPage({
           </section>
 
           {examplePages.length > 0 ? (
-            <section className="mt-10 rounded-[2rem] border border-border/70 bg-card/85 p-6">
+            <section className="mt-10 rounded-[2rem] border border-border/70 bg-card/85 p-4">
               <div className="max-w-3xl space-y-2">
                 <h2 className="text-2xl font-semibold text-foreground">{copy.examplesTitle}</h2>
                 <p className="text-sm leading-6 text-zinc-400">{copy.examplesBody}</p>
@@ -326,7 +326,7 @@ export async function ToolMarketingPage({
                   <Link
                     key={example.slug}
                     href={localizePublicPath(getLeadToolExampleHref(example.toolSlug, example.slug), locale)}
-                    className="rounded-2xl border border-border/70 bg-background/75 p-5 transition hover:border-primary/30 hover:bg-primary/5"
+                    className="rounded-2xl border border-border/70 bg-background/75 p-4 transition hover:border-primary/30 hover:bg-primary/5"
                   >
                     <div className="flex flex-wrap gap-2">
                       {example.tags.slice(0, 2).map((tag) => (
@@ -349,7 +349,7 @@ export async function ToolMarketingPage({
         </>
       ) : isDeferredTool && deferredEntrySpec ? (
         <>
-          <section className="rounded-[2rem] border border-border/70 bg-card/85 p-6">
+          <section className="rounded-[2rem] border border-border/70 bg-card/85 p-4">
             <div className="max-w-3xl space-y-3">
               <Badge variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
                 {getDeferredAvailabilityLabel(locale, deferredAvailability)}
@@ -419,7 +419,7 @@ export async function ToolMarketingPage({
             />
           ) : null}
 
-          <section className="rounded-[2rem] border border-border/70 bg-card/85 p-6">
+          <section className="rounded-[2rem] border border-border/70 bg-card/85 p-4">
             <div className="max-w-3xl space-y-2">
               <h2 className="text-2xl font-semibold text-foreground">
                 {tool.status === "coming_soon" ? copy.deferredEntryTitle : copy.entryTitle}
@@ -489,7 +489,7 @@ export async function ToolMarketingPage({
             </Card>
           </section>
 
-          <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-6">
+          <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-4">
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold text-foreground">{copy.providerBindingsTitle}</h2>
               <p className="text-sm leading-6 text-muted-foreground">{workspaceCapability.summary}</p>
@@ -517,7 +517,7 @@ export async function ToolMarketingPage({
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               {(workspaceExecution?.notes || workspaceCapability.proofPoints).map((point) => (
-                <div key={point} className="rounded-2xl border border-border/70 bg-background/75 p-5 text-sm leading-6 text-muted-foreground">
+                <div key={point} className="rounded-2xl border border-border/70 bg-background/75 p-4 text-sm leading-6 text-muted-foreground">
                   {point}
                 </div>
               ))}

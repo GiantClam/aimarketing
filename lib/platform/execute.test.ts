@@ -4,6 +4,7 @@ import test from "node:test"
 import { buildPermissionMap } from "@/lib/enterprise/constants"
 import {
   evaluatePlatformExecutionGate,
+  normalizePlatformMediaExecutionPayload,
   normalizePlatformRegistryItemType,
   resolvePlatformBindingExecutionProxyTarget,
   resolvePlatformCapabilityExecutionProxyTarget,
@@ -71,6 +72,71 @@ test("capability execute target maps AI music into the shared media executor", (
     downstreamPath: "/api/platform/media/run?target=ai-music&action=generate",
     requiresLogin: true,
   })
+})
+
+test("normalizePlatformMediaExecutionPayload adds capability metadata and a stable detail path", () => {
+  assert.deepEqual(
+    normalizePlatformMediaExecutionPayload({
+      capabilitySlug: "ai-music",
+      featureId: "voice-synthesis",
+      data: {
+        taskId: "42",
+        provider: "minimax",
+        status: "RUNNING",
+        results: [{ url: "https://example.com/audio.mp3", outputType: "audio/mpeg" }],
+      },
+    }),
+    {
+      data: {
+        runId: 42,
+        taskId: "42",
+        capabilitySlug: "ai-music",
+        featureId: "voice-synthesis",
+        provider: "minimax",
+        status: "running",
+        results: [{ url: "https://example.com/audio.mp3", outputType: "audio/mpeg", text: null, title: null }],
+        detailPath: "/api/platform/media/tasks/42?target=ai-music",
+        mediaTarget: "ai-music",
+        requestedTarget: "voice-synthesis",
+        endpoint: null,
+        extra: null,
+        raw: null,
+      },
+    },
+  )
+})
+
+test("normalizePlatformMediaExecutionPayload infers provider and keeps external task ids", () => {
+  assert.deepEqual(
+    normalizePlatformMediaExecutionPayload({
+      capabilitySlug: "ai-video",
+      data: {
+        taskId: "rh-task-1",
+        status: "SUCCESS",
+        requestedTarget: "text-to-video",
+        results: [{ url: "https://example.com/video.mp4", outputType: "video/mp4", title: "Hero cut" }],
+      },
+    }),
+    {
+      data: {
+        runId: undefined,
+        taskId: "rh-task-1",
+        capabilitySlug: "ai-video",
+        featureId: "text-to-video",
+        provider: "runninghub",
+        status: "succeeded",
+        results: [
+          { url: "https://example.com/video.mp4", outputType: "video/mp4", text: null, title: "Hero cut" },
+        ],
+        detailPath: "/api/platform/media/tasks/rh-task-1?target=ai-video",
+        mediaTarget: "ai-video",
+        requestedTarget: "text-to-video",
+        endpoint: null,
+        extra: null,
+        raw: null,
+      },
+    },
+  )
 })
 
 test("capability execute target preserves ai-music voice synthesis action", () => {

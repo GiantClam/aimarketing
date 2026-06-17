@@ -184,6 +184,54 @@
     background-size: 64px 64px;
   }
 
+  .workspace-page-shell {
+    @apply px-0.5 py-1;
+  }
+
+  .workspace-page-shell-tight {
+    @apply px-0.5 py-1;
+  }
+
+  .workspace-page-shell-bottom {
+    @apply px-0.5 pb-1;
+  }
+
+  .workspace-stack {
+    @apply space-y-2.5;
+  }
+
+  .workspace-hero-panel {
+    @apply p-2 lg:p-2.5;
+  }
+
+  .workspace-card-panel {
+    @apply p-2.5;
+  }
+
+  .workspace-card-panel-tight {
+    @apply p-2;
+  }
+
+  .public-page-hero-shell {
+    @apply px-0.5 py-2.5 lg:py-3;
+  }
+
+  .public-page-section-shell {
+    @apply px-0.5 py-1.5;
+  }
+
+  .public-page-highlight-shell {
+    @apply px-0.5 py-2;
+  }
+
+  .public-page-bottom-shell {
+    @apply px-0.5 pb-2.5 lg:pb-3;
+  }
+
+  .public-tool-shell {
+    @apply px-0.5 py-1.5;
+  }
+
   .public-panel {
     position: relative;
     border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);

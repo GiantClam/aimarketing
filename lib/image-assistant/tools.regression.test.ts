@@ -514,3 +514,20 @@ test("explicit ratio keeps delivery context aligned and generated prompt compact
   assert.equal(result.orchestration.generated_prompt?.includes("Website banner 16:9"), false)
   assert.ok((result.orchestration.generated_prompt?.length || 0) < 1800)
 })
+
+test("reference-edit prompts with long image urls do not overflow labeled-line parsing", async () => {
+  const longSignedUrl = `https://cdn.example.com/generated/image-2.png?sig=${"a:b/".repeat(4000)}`
+
+  const result = await planImageAssistantTurn({
+    prompt: `将 ${longSignedUrl} 中的人物替换为 https://cdn.example.com/generated/image-3.png?token=stable 的人物，保留画面构图与风格。`,
+    currentBrief: null,
+    previousState: null,
+    taskType: "edit",
+    sizePreset: "16:9",
+    resolution: "4K",
+    referenceCount: 2,
+  })
+
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.ok((result.orchestration.generated_prompt?.length || 0) > 0)
+})

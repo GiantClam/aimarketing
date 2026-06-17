@@ -176,6 +176,7 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
         minimaxAudioConfigured
           ? "MiniMax powers AI music, voice clone, and async speech synthesis inside the shared media workspace."
           : "Audio runtime stays deferred until LEAD_TOOLS_MINIMAX_API_KEY and LEAD_TOOLS_MINIMAX_BASE_URL are configured.",
+        "Audio access prefers the audio_generation entitlement and falls back to video_generation for backward compatibility.",
         minimaxAudioConfigured
           ? "The public AI music entry and dashboard workspace both route to the same MiniMax adapter."
           : "The workspace stays visible, but submissions remain blocked until the MiniMax runtime is configured.",

@@ -3,6 +3,7 @@ import type {
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
 } from "@/lib/image-assistant/types"
+import { withTaskTimeout } from "@/lib/task-timeout"
 
 export type OpenAiCompatibleImageProviderId = "pptoken" | "aiberm" | "crazyroute"
 
@@ -32,6 +33,9 @@ export type OpenAiCompatibleImageRequestParts = {
 }
 
 const DEFAULT_MODEL = "gpt-image-2"
+const MAX_OPENAI_COMPATIBLE_IMAGE_CANDIDATES = 9
+const OPENAI_COMPATIBLE_IMAGE_REQUEST_TIMEOUT_MS = 120_000
+const OPENAI_COMPATIBLE_IMAGE_REQUEST_ATTEMPTS = 3
 
 function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
@@ -41,21 +45,70 @@ function trimBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/u, "")
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableOpenAiCompatibleImageStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+}
+
+function isRetryableOpenAiCompatibleImageError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
+  const cause = error.cause as { code?: string } | undefined
+  return (
+    message.includes("fetch failed") ||
+    message.includes("other side closed") ||
+    message.includes("socket hang up") ||
+    message.includes("timed out") ||
+    message.includes("timeout") ||
+    message.includes("temporarily unavailable") ||
+    message.includes("request aborted") ||
+    message.includes("request_timeout") ||
+    message.includes("econnreset") ||
+    cause?.code === "ECONNRESET" ||
+    cause?.code === "ETIMEDOUT" ||
+    cause?.code === "UND_ERR_SOCKET" ||
+    cause?.code === "UND_ERR_CONNECT_TIMEOUT"
+  )
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    const error = new Error("request_aborted")
+    error.name = "AbortError"
+    throw error
+  }
+}
+
+function connectAbortSignals(parentSignal: AbortSignal | undefined, abortController: AbortController) {
+  if (!parentSignal) {
+    return () => {}
+  }
+
+  if (parentSignal.aborted) {
+    abortController.abort()
+    return () => {}
+  }
+
+  const handleAbort = () => abortController.abort()
+  parentSignal.addEventListener("abort", handleAbort, { once: true })
+  return () => parentSignal.removeEventListener("abort", handleAbort)
+}
+
 export function getOpenAiCompatibleImageProviderConfig(
   provider: OpenAiCompatibleImageProviderId,
 ): OpenAiCompatibleImageProviderConfig | null {
   if (provider === "pptoken") {
-    const apiKey =
-      normalizeText(process.env.IMAGE_ASSISTANT_PPTOKEN_API_KEY) ||
-      normalizeText(process.env.PPTOKEN_API_KEY)
+    const apiKey = normalizeText(process.env.IMAGE_ASSISTANT_PPTOKEN_API_KEY)
     if (!apiKey) return null
     return {
       provider,
       apiKey,
       baseUrl:
         normalizeText(process.env.IMAGE_ASSISTANT_PPTOKEN_BASE_URL) ||
-        normalizeText(process.env.PPTOKEN_BASE_URL) ||
-        "https://api.pptoken.org/v1",
+        "https://api.pptoken.cc/v1",
       model:
         normalizeText(process.env.IMAGE_ASSISTANT_PPTOKEN_MODEL) ||
         normalizeText(process.env.PPTOKEN_IMAGE_MODEL) ||
@@ -235,6 +288,8 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
   maskAssetId?: string | null
   candidateCount?: number
   signal?: AbortSignal
+  attempts?: number
+  timeoutMs?: number
 }) {
   const requestParts = buildOpenAiCompatibleImageRequestParts({
     model: params.config.model,
@@ -247,30 +302,36 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
     maskAssetId: params.maskAssetId,
   })
   const endpoint = `${trimBaseUrl(params.config.baseUrl)}${requestParts.endpoint}`
-  const count = Math.max(1, Math.min(params.candidateCount || 1, 4))
+  const count = Math.max(1, Math.min(params.candidateCount || 1, MAX_OPENAI_COMPATIBLE_IMAGE_CANDIDATES))
+  const attempts = Math.max(1, Math.min(params.attempts || OPENAI_COMPATIBLE_IMAGE_REQUEST_ATTEMPTS, 5))
+  const timeoutMs = Math.max(1_000, params.timeoutMs || OPENAI_COMPATIBLE_IMAGE_REQUEST_TIMEOUT_MS)
+  let lastError: unknown = null
 
-  const requestInit: RequestInit = {
-    method: "POST",
-    signal: params.signal,
-    headers: {
-      Authorization: `Bearer ${params.config.apiKey}`,
-    },
-  }
-
-  if (requestParts.endpoint === "/images/generations") {
-    requestInit.headers = {
-      ...requestInit.headers,
-      "Content-Type": "application/json",
+  const createRequestInit = (signal?: AbortSignal): RequestInit => {
+    const requestInit: RequestInit = {
+      method: "POST",
+      signal,
+      headers: {
+        Authorization: `Bearer ${params.config.apiKey}`,
+      },
     }
-    requestInit.body = JSON.stringify({
-      model: requestParts.model,
-      prompt: requestParts.prompt,
-      size: requestParts.size,
-      quality: requestParts.quality,
-      output_format: requestParts.outputFormat,
-      n: count,
-    })
-  } else {
+
+    if (requestParts.endpoint === "/images/generations") {
+      requestInit.headers = {
+        ...requestInit.headers,
+        "Content-Type": "application/json",
+      }
+      requestInit.body = JSON.stringify({
+        model: requestParts.model,
+        prompt: requestParts.prompt,
+        size: requestParts.size,
+        quality: requestParts.quality,
+        output_format: requestParts.outputFormat,
+        n: count,
+      })
+      return requestInit
+    }
+
     const form = new FormData()
     form.set("model", requestParts.model)
     form.set("prompt", requestParts.prompt)
@@ -285,30 +346,75 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
       form.set("mask", imageToBlob(requestParts.mask), `${requestParts.mask.assetId || "mask"}.png`)
     }
     requestInit.body = form
+    return requestInit
   }
 
-  const response = await fetch(endpoint, requestInit)
-  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    throwIfAborted(params.signal)
+    const abortController = new AbortController()
+    const cleanupAbort = connectAbortSignals(params.signal, abortController)
 
-  if (!response.ok) {
-    const message =
-      typeof payload?.error === "object" && payload.error && "message" in payload.error
-        ? String((payload.error as Record<string, unknown>).message || "")
-        : `image_assistant_${params.config.provider}_http_${response.status}`
-    throw new Error(message || `image_assistant_${params.config.provider}_request_failed`)
+    try {
+      const response = await withTaskTimeout(
+        fetch(endpoint, createRequestInit(abortController.signal)),
+        timeoutMs,
+        `image_assistant_${params.config.provider}_request_timeout`,
+        { abortController },
+      )
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+
+      if (!response.ok) {
+        const message =
+          typeof payload?.error === "object" && payload.error && "message" in payload.error
+            ? String((payload.error as Record<string, unknown>).message || "")
+            : `image_assistant_${params.config.provider}_http_${response.status}`
+        const error = new Error(message || `image_assistant_${params.config.provider}_request_failed`)
+        if (attempt < attempts && isRetryableOpenAiCompatibleImageStatus(response.status)) {
+          console.warn("image-assistant.openai-compatible.retry", {
+            provider: params.config.provider,
+            attempt,
+            status: response.status,
+            endpoint: requestParts.endpoint,
+          })
+          await sleep(500 * attempt)
+          continue
+        }
+        throw error
+      }
+
+      const images = (Array.isArray(payload?.data) ? payload.data : [])
+        .map(dataUrlFromImageApiItem)
+        .filter((value): value is string => Boolean(value))
+
+      if (images.length === 0) {
+        throw new Error("image_assistant_images_missing")
+      }
+
+      return {
+        model: requestParts.model,
+        images,
+        textSummary: "Image generation completed.",
+      }
+    } catch (error) {
+      lastError = error
+      if (params.signal?.aborted) {
+        throwIfAborted(params.signal)
+      }
+      if (attempt < attempts && isRetryableOpenAiCompatibleImageError(error)) {
+        console.warn("image-assistant.openai-compatible.retry", {
+          provider: params.config.provider,
+          attempt,
+          endpoint: requestParts.endpoint,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        await sleep(500 * attempt)
+        continue
+      }
+      throw error
+    } finally {
+      cleanupAbort()
+    }
   }
 
-  const images = (Array.isArray(payload?.data) ? payload.data : [])
-    .map(dataUrlFromImageApiItem)
-    .filter((value): value is string => Boolean(value))
-
-  if (images.length === 0) {
-    throw new Error("image_assistant_images_missing")
-  }
-
-  return {
-    model: requestParts.model,
-    images,
-    textSummary: "Image generation completed.",
-  }
+  throw lastError instanceof Error ? lastError : new Error("image_assistant_request_failed")
 }

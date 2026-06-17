@@ -50,11 +50,16 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { WriterSidebarItem } from "@/components/writer/WriterSidebarItem"
-import { listLocalizedBusinessAgentConfigsBySlug } from "@/lib/platform/business-agents"
+import { BUSINESS_MARKETPLACE_SELECTION_UPDATED_EVENT } from "@/lib/platform/business-marketplace-events"
 import {
-  buildDashboardBusinessHref,
+  listLocalizedBusinessAgentConfigsBySlug,
+  type LocalizedBusinessAgentConfig,
+} from "@/lib/platform/business-agents"
+import { buildBusinessSidebarItems } from "@/lib/platform/business-sidebar"
+import {
   getLocalizedWorkspaceBusinessEntries,
   resolveWorkspaceBusinessSlug,
+  type LocalizedWorkspaceBusinessEntry,
 } from "@/lib/platform/workspace-business"
 import { cn } from "@/lib/utils"
 
@@ -156,14 +161,89 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const businessSectionLabel = locale === "zh" ? "业务入口" : "Business"
   const currentBusinessAgentId = (searchParams.get("agent") || "").trim()
   const requestedBusinessView = searchParams.get("view")
-  const localizedBusinessEntries = useMemo(
-    () =>
-      getLocalizedWorkspaceBusinessEntries(locale).map((entry) => ({
-        ...entry,
-        agents: listLocalizedBusinessAgentConfigsBySlug(locale === "zh" ? "zh" : "en", entry.slug),
-      })),
-    [locale],
+  const [selectedMarketplaceEntries, setSelectedMarketplaceEntries] = useState<LocalizedWorkspaceBusinessEntry[]>([])
+  const [selectedMarketplaceAgents, setSelectedMarketplaceAgents] = useState<LocalizedBusinessAgentConfig[]>([])
+  const selectedMarketplaceAgentIdSet = useMemo(
+    () => new Set(selectedMarketplaceAgents.map((agent) => agent.agentId)),
+    [selectedMarketplaceAgents],
   )
+  const localizedBusinessEntries = useMemo(
+    () => {
+      const displayLocale = locale === "zh" ? "zh" : "en"
+      const coreEntries = getLocalizedWorkspaceBusinessEntries(locale)
+      const importedAgentMap = new Map(
+        selectedMarketplaceAgents.map((agent) => [agent.agentId, agent]),
+      )
+
+      const importedEntries = selectedMarketplaceEntries
+        .filter((entry) => !coreEntries.some((coreEntry) => coreEntry.slug === entry.slug))
+        .map((entry) => ({
+          ...entry,
+          agents: selectedMarketplaceAgents.filter((agent) => agent.businessSlug === entry.slug),
+        }))
+        .filter((entry) => entry.agents.length > 0)
+
+      return [
+        ...coreEntries.map((entry) => ({
+          ...entry,
+          agents: [
+            ...listLocalizedBusinessAgentConfigsBySlug(displayLocale, entry.slug),
+            ...selectedMarketplaceAgents.filter((agent) => agent.businessSlug === entry.slug),
+          ].filter((agent, index, collection) => collection.findIndex((item) => item.agentId === agent.agentId) === index),
+        })),
+        ...importedEntries,
+      ].map((entry) => ({
+        ...entry,
+        agents: entry.agents
+          .map((agent) => importedAgentMap.get(agent.agentId) || agent)
+          .filter((agent, index, collection) => collection.findIndex((item) => item.agentId === agent.agentId) === index),
+      }))
+    },
+    [locale, selectedMarketplaceAgents, selectedMarketplaceEntries],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadMarketplaceSelection = async () => {
+      try {
+        const params = new URLSearchParams({
+          locale: locale === "zh" ? "zh" : "en",
+        })
+        const response = await fetch(`/api/platform/business/marketplace-selection?${params.toString()}`, {
+          cache: "no-store",
+          credentials: "same-origin",
+        })
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              data?: {
+                selectedAgents?: LocalizedBusinessAgentConfig[]
+                selectedEntries?: LocalizedWorkspaceBusinessEntry[]
+              }
+            }
+          | null
+        if (cancelled || !response.ok) return
+
+        setSelectedMarketplaceAgents(Array.isArray(payload?.data?.selectedAgents) ? payload.data.selectedAgents : [])
+        setSelectedMarketplaceEntries(Array.isArray(payload?.data?.selectedEntries) ? payload.data.selectedEntries : [])
+      } catch {
+        if (cancelled) return
+        setSelectedMarketplaceAgents([])
+        setSelectedMarketplaceEntries([])
+      }
+    }
+
+    const handleMarketplaceSelectionUpdated = () => {
+      void loadMarketplaceSelection()
+    }
+
+    void loadMarketplaceSelection()
+    window.addEventListener(BUSINESS_MARKETPLACE_SELECTION_UPDATED_EVENT, handleMarketplaceSelectionUpdated)
+    return () => {
+      cancelled = true
+      window.removeEventListener(BUSINESS_MARKETPLACE_SELECTION_UPDATED_EVENT, handleMarketplaceSelectionUpdated)
+    }
+  }, [locale])
   const currentBusinessView = useMemo(() => {
     const queryScopedEntry = localizedBusinessEntries.find((entry) => entry.slug === requestedBusinessView)
     if (queryScopedEntry) return queryScopedEntry.slug
@@ -175,6 +255,23 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     }
     return resolveWorkspaceBusinessSlug(null)
   }, [currentBusinessAgentId, localizedBusinessEntries, requestedBusinessView])
+  const businessSidebarItems = useMemo(
+    () =>
+      buildBusinessSidebarItems({
+        entries: localizedBusinessEntries,
+        pathname,
+        currentBusinessView,
+        currentBusinessAgentId,
+        selectedMarketplaceAgentIdSet,
+      }),
+    [
+      currentBusinessAgentId,
+      currentBusinessView,
+      localizedBusinessEntries,
+      pathname,
+      selectedMarketplaceAgentIdSet,
+    ],
+  )
   const platformSectionLabel = locale === "zh" ? "\u5e73\u53f0\u4e2d\u53f0" : "Platform"
   const capabilityCenterLabel = locale === "zh" ? "\u80fd\u529b\u4e2d\u5fc3" : "Capabilities"
   const agentPlatformLabel = locale === "zh" ? "\u667a\u80fd\u4f53\u4e2d\u53f0" : "Agent Platform"
@@ -198,7 +295,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
       <aside
         className={`dashboard-panel !fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:!static ${
-          sidebarCollapsed ? "w-[88px]" : "w-[288px] lg:w-[300px]"
+          sidebarCollapsed ? "w-[88px]" : "w-[216px] lg:w-[225px]"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-full flex-col">
@@ -409,35 +506,29 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   )}
                   <div className="space-y-1">
                     {localizedBusinessEntries.map((entry) => {
-                      const isBusinessActive = pathname === "/dashboard/business" && currentBusinessView === entry.slug
+                      const sidebarItem = businessSidebarItems.find((item) => item.slug === entry.slug)
+                      if (!sidebarItem) return null
                       const BusinessIcon = businessIconMap[entry.iconKey]
-                      const defaultAgentHref = buildDashboardBusinessHref(entry.slug, {
-                        agentId: entry.agents[0]?.agentId || null,
-                      })
                       return (
                         <div key={entry.slug} className="space-y-1">
                           <DashboardMenuLink
-                            href={defaultAgentHref}
+                            href={sidebarItem.href}
                             label={entry.title}
                             icon={BusinessIcon}
                             collapsed={sidebarCollapsed}
-                            active={isBusinessActive}
+                            active={sidebarItem.active}
+                            highlighted={sidebarItem.highlighted}
                           />
-                          {!sidebarCollapsed && isBusinessActive && entry.agents.length > 0 ? (
+                          {!sidebarCollapsed && sidebarItem.visibleAgents.length > 0 ? (
                             <div className="ml-3 space-y-1 border-l border-sidebar-border/70 pl-3">
-                              {entry.agents.map((agent, index) => {
-                                const isAgentActive =
-                                  pathname === "/dashboard/business" &&
-                                  currentBusinessView === entry.slug &&
-                                  (currentBusinessAgentId
-                                    ? currentBusinessAgentId === agent.agentId
-                                    : index === 0)
+                              {sidebarItem.visibleAgents.map((agent) => {
                                 return (
                                   <DashboardSubMenuLink
                                     key={agent.agentId}
-                                    href={buildDashboardBusinessHref(entry.slug, { agentId: agent.agentId })}
+                                    href={agent.href}
                                     label={agent.name}
-                                    active={isAgentActive}
+                                    active={agent.active}
+                                    highlighted={agent.highlighted}
                                   />
                                 )
                               })}
@@ -634,12 +725,14 @@ function DashboardMenuLink({
   icon: Icon,
   collapsed,
   active,
+  highlighted,
 }: {
   href: string
   label: string
   icon: LucideIcon
   collapsed: boolean
   active: boolean
+  highlighted?: boolean
 }) {
   return (
     <Link href={href} className="block w-full">
@@ -650,6 +743,7 @@ function DashboardMenuLink({
             ? "box-border h-11 w-full min-w-0 justify-center rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
             : "box-border h-11 w-full min-w-0 justify-start rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
           active && "border-primary bg-primary text-primary-foreground",
+          highlighted && !active && "border-primary/45 bg-primary/6",
         )}
         size="sm"
         title={label}
@@ -666,10 +760,12 @@ function DashboardSubMenuLink({
   href,
   label,
   active,
+  highlighted,
 }: {
   href: string
   label: string
   active: boolean
+  highlighted?: boolean
 }) {
   return (
     <Link
@@ -677,6 +773,7 @@ function DashboardSubMenuLink({
       className={cn(
         "block rounded-[6px] px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:bg-primary/10 hover:text-sidebar-foreground",
         active && "bg-primary/10 text-sidebar-foreground",
+        highlighted && !active && "border border-primary/30 bg-primary/5 text-sidebar-foreground",
       )}
     >
       {label}

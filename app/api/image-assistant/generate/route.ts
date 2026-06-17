@@ -56,6 +56,23 @@ function normalizeReferenceAssetIds(input: unknown) {
   return input.filter((value): value is string => typeof value === "string")
 }
 
+function normalizeReferenceUrls(input: unknown) {
+  if (!Array.isArray(input)) return []
+  return [...new Set(
+    input
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )]
+}
+
+function normalizeProviderLock(input: unknown) {
+  if (input === "pptoken" || input === "aiberm" || input === "crazyroute") {
+    return input
+  }
+  return null
+}
+
 function normalizeSessionCurrentVersionId(session: unknown): string | null {
   if (!session || typeof session !== "object") return null
   const candidate = session as { currentVersionId?: unknown; current_version_id?: unknown }
@@ -109,6 +126,8 @@ export async function POST(req: NextRequest) {
     const guidedSelection = normalizeGuidedSelection(body?.guidedSelection)
     const parentVersionId = typeof body?.parentVersionId === "string" ? body.parentVersionId : null
     const explicitReferenceAssetIds = normalizeReferenceAssetIds(body?.referenceAssetIds)
+    const explicitReferenceUrls = normalizeReferenceUrls(body?.referenceUrls)
+    const providerLock = normalizeProviderLock(body?.providerLock)
     const disableReferenceCarryover = body?.disableReferenceCarryover === true
     const sessionCurrentVersionId = normalizeSessionCurrentVersionId(session)
     const isLikelyReferenceEditPrompt = looksLikeReferenceEditIntent({
@@ -166,6 +185,8 @@ export async function POST(req: NextRequest) {
         brief,
         taskType: effectiveTaskType,
         referenceAssetIds: effectiveReferenceAssetIds,
+        referenceUrls: explicitReferenceUrls,
+        providerLock,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
         sizePreset: requestOptions.sizePreset,
         resolution: requestOptions.resolution,
@@ -219,6 +240,8 @@ export async function POST(req: NextRequest) {
         brief,
         taskType: effectiveTaskType,
         referenceAssetIds: effectiveReferenceAssetIds,
+        referenceUrls: explicitReferenceUrls,
+        providerLock,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
         sizePreset: requestOptions.sizePreset,
         resolution: requestOptions.resolution,

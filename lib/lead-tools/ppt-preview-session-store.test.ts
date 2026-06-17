@@ -18,6 +18,7 @@ const sampleDeck = {
   variants: [
     {
       key: "ppt169_swiss_grid_systems" as const,
+      styleKey: "ppt169_swiss_grid_systems" as const,
       name: "Neo-Grid Bold",
       summary: "高密度、强网格、霓黄强调。",
       stylePrompt: "Write with a dense neo-grid mindset.",

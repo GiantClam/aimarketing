@@ -2,8 +2,20 @@ import { z } from "zod"
 
 import type { AuthUser } from "@/lib/auth/session"
 import { getLeadToolBySlug } from "@/lib/lead-tools/catalog"
-import { type PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import {
+  createLeadToolPlatformRun,
+  promoteLeadToolArtifactToWork,
+  saveLeadToolPreviewArtifact,
+  saveLeadToolSelectedArtifact,
+} from "@/lib/lead-tools/platform-persistence"
+import {
+  MAX_PPT_PREVIEW_PAGE_COUNT,
+  MIN_PPT_PREVIEW_PAGE_COUNT,
+  resolvePptPreviewDeckPageCount,
+  type PptPreviewDeck,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { getLeadToolPptEngines } from "@/lib/lead-tools/ppt-engines"
+import type { LeadToolPptDownloadResponse, LeadToolPptFinalizeResponse } from "@/lib/lead-tools/ppt-engines/types"
 import { buildMockSeoMetaPreview } from "@/lib/lead-tools/seo-meta-data"
 import { allowLeadToolMockFallback } from "@/lib/lead-tools/config"
 import {
@@ -14,6 +26,14 @@ import {
 const pptScenarioSchema = z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"])
 const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
 const pptPreviewModelSchema = z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"])
+const pptPreviewTemplateModeSchema = z.enum(["auto-4", "single-template"])
+const pptFrontendTemplateIdSchema = z.enum(["long-table", "playful", "broadside", "neo-grid-bold"])
+const pptPreviewPageCountSchema = z
+  .number()
+  .int("Page count must be an integer")
+  .min(MIN_PPT_PREVIEW_PAGE_COUNT, `Page count must be at least ${MIN_PPT_PREVIEW_PAGE_COUNT}`)
+  .max(MAX_PPT_PREVIEW_PAGE_COUNT, `Page count must be at most ${MAX_PPT_PREVIEW_PAGE_COUNT}`)
+const pptPreviewNarrativeAngleSchema = z.enum(["executive-brief", "campaign-story", "data-proof", "action-plan"])
 
 const pptPreviewSlideSchema = z.object({
   id: z.string(),
@@ -99,12 +119,16 @@ const pptPreviewAssetSchema = z.object({
 })
 
 const pptPreviewVariantSchema = z.object({
-  key: z.enum([
+  key: z.string(),
+  styleKey: z.enum([
     "ppt169_brutalist_ai_newspaper_2026",
     "ppt169_sugar_rush_memphis",
     "ppt169_pritzker_2026",
     "ppt169_swiss_grid_systems",
   ]),
+  templateId: pptFrontendTemplateIdSchema.optional(),
+  narrativeAngle: pptPreviewNarrativeAngleSchema.optional(),
+  slotLabel: z.enum(["A", "B", "C", "D"]).optional(),
   name: z.string(),
   summary: z.string(),
   stylePrompt: z.string(),
@@ -146,14 +170,31 @@ const pptPreviewDeckSchema: z.ZodType<PptPreviewDeck> = z.object({
   provider: z.string().optional(),
   previewModel: z.string().optional(),
   source: z.enum(["live", "mock"]).optional(),
+  templateMode: pptPreviewTemplateModeSchema.optional(),
+  selectedTemplateId: pptFrontendTemplateIdSchema.nullable().optional(),
+  pageCount: pptPreviewPageCountSchema.nullable().optional(),
+  resolvedPageCount: pptPreviewPageCountSchema.optional(),
 })
 
-const pptPreviewRequestSchema = z.object({
-  prompt: z.string().trim().min(1, "Prompt is required"),
-  scenario: pptScenarioSchema.default("marketing-campaign"),
-  language: pptLanguageSchema.default("zh-CN"),
-  model: pptPreviewModelSchema.optional(),
-})
+const pptPreviewRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1, "Prompt is required"),
+    scenario: pptScenarioSchema.default("marketing-campaign"),
+    language: pptLanguageSchema.default("zh-CN"),
+    model: pptPreviewModelSchema.optional(),
+    templateMode: pptPreviewTemplateModeSchema.default("auto-4"),
+    templateId: pptFrontendTemplateIdSchema.optional(),
+    pageCount: pptPreviewPageCountSchema.nullable().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.templateMode === "single-template" && !value.templateId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Template is required for single-template mode",
+        path: ["templateId"],
+      })
+    }
+  })
 
 const protectedPptActionSchema = z.object({
   deck: pptPreviewDeckSchema,
@@ -214,7 +255,120 @@ function getSelectedVariant(deck: PptPreviewDeck, selectedVariantKey: string) {
   return selectedVariant
 }
 
-export async function buildLeadToolPreview(slug: string, input: unknown) {
+function assertPptProtectedArtifactReady(
+  deck: PptPreviewDeck,
+  selectedVariant: ReturnType<typeof getSelectedVariant>,
+  previewSessionId: string | undefined,
+) {
+  if (deck.previewEngine === "frontend-slides-html" && selectedVariant.preview?.htmlDocument) {
+    return
+  }
+
+  if (previewSessionId) {
+    return
+  }
+
+  throw new LeadToolRuntimeError(
+    "bad_request",
+    "Preview session missing. Generate the PPT preview again before opening, downloading, or exporting.",
+    400,
+  )
+}
+
+async function persistLeadToolPreviewResult(params: {
+  toolSlug: string
+  inputPayload: Record<string, unknown>
+  deck: PptPreviewDeck
+  previewSessionId?: string
+  currentUser: AuthUser | null | undefined
+}) {
+  const platformRun = await createLeadToolPlatformRun({
+    currentUser: params.currentUser,
+    toolSlug: params.toolSlug,
+    action: "preview",
+    inputPayload: params.inputPayload,
+    normalizedResult: {
+      previewSessionId: params.previewSessionId ?? null,
+      deckTitle: params.deck.title,
+      variantCount: params.deck.variants.length,
+      pageCount: params.deck.pageCount ?? null,
+      resolvedPageCount: params.deck.resolvedPageCount ?? resolvePptPreviewDeckPageCount(params.deck),
+    },
+  })
+
+  const platformArtifact = await saveLeadToolPreviewArtifact({
+    currentUser: params.currentUser,
+    toolSlug: params.toolSlug,
+    run: platformRun,
+    deck: params.deck,
+    previewSessionId: params.previewSessionId,
+  })
+
+  return {
+    platformRunId: platformRun?.id,
+    platformArtifactId: platformArtifact?.id,
+  }
+}
+
+async function persistLeadToolSelectedResult(params: {
+  toolSlug: string
+  action: "download" | "finalize"
+  inputPayload: Record<string, unknown>
+  deck: PptPreviewDeck
+  selectedVariant: ReturnType<typeof getSelectedVariant>
+  previewSessionId?: string
+  currentUser: AuthUser | null | undefined
+  finalizeResult?: LeadToolPptFinalizeResponse
+  downloadResult?: LeadToolPptDownloadResponse
+}) {
+  const platformRun = await createLeadToolPlatformRun({
+    currentUser: params.currentUser,
+    toolSlug: params.toolSlug,
+    action: params.action,
+    inputPayload: params.inputPayload,
+    normalizedResult: {
+      selectedVariantKey: params.selectedVariant.key,
+      selectedVariantName: params.selectedVariant.name,
+      previewSessionId: params.previewSessionId ?? null,
+      pageCount: params.deck.pageCount ?? null,
+      resolvedPageCount: params.deck.resolvedPageCount ?? resolvePptPreviewDeckPageCount(params.deck),
+      action: params.action,
+    },
+  })
+
+  const platformArtifact = await saveLeadToolSelectedArtifact({
+    currentUser: params.currentUser,
+    toolSlug: params.toolSlug,
+    run: platformRun,
+    deck: params.deck,
+    selectedVariant: params.selectedVariant,
+    previewSessionId: params.previewSessionId,
+    action: params.action,
+    finalizeResult: params.finalizeResult,
+    downloadResult: params.downloadResult,
+  })
+
+  const platformWorkItem = await promoteLeadToolArtifactToWork({
+    currentUser: params.currentUser,
+    artifact: platformArtifact,
+    title: `${params.deck.title} ${params.selectedVariant.name}`,
+    summary: params.selectedVariant.summary,
+    metadata: {
+      toolSlug: params.toolSlug,
+      selectedVariantKey: params.selectedVariant.key,
+      selectedVariantStyleKey: params.selectedVariant.styleKey,
+      previewSessionId: params.previewSessionId ?? null,
+    },
+  })
+
+  return {
+    platformRunId: platformRun?.id,
+    platformArtifactId: platformArtifact?.id,
+    platformWorkItemId: platformWorkItem?.id,
+  }
+}
+
+export async function buildLeadToolPreview(slug: string, input: unknown, user?: AuthUser | null) {
   const tool = assertLiveTool(slug)
   const models = getLeadToolResolvedModels(slug)
 
@@ -227,12 +381,20 @@ export async function buildLeadToolPreview(slug: string, input: unknown) {
         allowMockFallback: false,
         resolvedModels: models,
       })
+      const platformMeta = await persistLeadToolPreviewResult({
+        toolSlug: tool.slug,
+        inputPayload: payload,
+        deck: result.deck,
+        previewSessionId: result.previewSessionId,
+        currentUser: user,
+      })
 
       return {
         ...result,
         meta: {
           ...result.meta,
           tool: tool.slug,
+          ...platformMeta,
         },
       }
     } catch (error) {
@@ -241,6 +403,13 @@ export async function buildLeadToolPreview(slug: string, input: unknown) {
           allowMockFallback: true,
           resolvedModels: models,
         })
+        const platformMeta = await persistLeadToolPreviewResult({
+          toolSlug: tool.slug,
+          inputPayload: payload,
+          deck: fallbackResult.deck,
+          previewSessionId: fallbackResult.previewSessionId,
+          currentUser: user,
+        })
 
         return {
           ...fallbackResult,
@@ -248,6 +417,7 @@ export async function buildLeadToolPreview(slug: string, input: unknown) {
             ...fallbackResult.meta,
             tool: tool.slug,
             providerFallback: error.message,
+            ...platformMeta,
           },
         }
       }
@@ -304,9 +474,9 @@ export async function buildLeadToolFinalize(slug: string, input: unknown, user: 
 
   const payload = protectedPptActionSchema.parse(input)
   const selectedVariant = getSelectedVariant(payload.deck, payload.selectedVariantKey)
+  assertPptProtectedArtifactReady(payload.deck, selectedVariant, payload.previewSessionId)
   const engines = getLeadToolPptEngines()
-
-  return engines.export.buildFinalize(
+  const result = await engines.export.buildFinalize(
     {
       deck: payload.deck,
       selectedVariant,
@@ -317,6 +487,27 @@ export async function buildLeadToolFinalize(slug: string, input: unknown, user: 
       resolvedModels: models,
     },
   )
+  const platformMeta = await persistLeadToolSelectedResult({
+    toolSlug: tool.slug,
+    action: "finalize",
+    inputPayload: {
+      selectedVariantKey: payload.selectedVariantKey,
+      previewSessionId: payload.previewSessionId ?? null,
+      deckTitle: payload.deck.title,
+      pageCount: payload.deck.pageCount ?? null,
+      resolvedPageCount: payload.deck.resolvedPageCount ?? resolvePptPreviewDeckPageCount(payload.deck),
+    },
+    deck: payload.deck,
+    selectedVariant,
+    previewSessionId: payload.previewSessionId,
+    currentUser: user,
+    finalizeResult: result,
+  })
+
+  return {
+    ...result,
+    meta: platformMeta,
+  }
 }
 
 export async function buildLeadToolDownload(slug: string, input: unknown, user: AuthUser | null) {
@@ -332,9 +523,9 @@ export async function buildLeadToolDownload(slug: string, input: unknown, user: 
 
   const payload = protectedPptActionSchema.parse(input)
   const selectedVariant = getSelectedVariant(payload.deck, payload.selectedVariantKey)
+  assertPptProtectedArtifactReady(payload.deck, selectedVariant, payload.previewSessionId)
   const engines = getLeadToolPptEngines()
-
-  return engines.export.buildDownload(
+  const result = await engines.export.buildDownload(
     {
       deck: payload.deck,
       selectedVariant,
@@ -344,4 +535,25 @@ export async function buildLeadToolDownload(slug: string, input: unknown, user: 
       user,
     },
   )
+  const platformMeta = await persistLeadToolSelectedResult({
+    toolSlug: tool.slug,
+    action: "download",
+    inputPayload: {
+      selectedVariantKey: payload.selectedVariantKey,
+      previewSessionId: payload.previewSessionId ?? null,
+      deckTitle: payload.deck.title,
+      pageCount: payload.deck.pageCount ?? null,
+      resolvedPageCount: payload.deck.resolvedPageCount ?? resolvePptPreviewDeckPageCount(payload.deck),
+    },
+    deck: payload.deck,
+    selectedVariant,
+    previewSessionId: payload.previewSessionId,
+    currentUser: user,
+    downloadResult: result,
+  })
+
+  return {
+    ...result,
+    meta: platformMeta,
+  }
 }

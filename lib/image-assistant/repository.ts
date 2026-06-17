@@ -913,6 +913,23 @@ export async function listImageAssistantAssets(
   return rows.map(mapAsset)
 }
 
+export async function listImageAssistantAssetsByIds(userId: number, assetIds: string[]) {
+  const parsedAssetIds = Array.from(
+    new Set(assetIds.map((value) => Number.parseInt(String(value), 10)).filter((value) => Number.isFinite(value) && value > 0)),
+  )
+  if (!parsedAssetIds.length) return [] as ImageAssistantAsset[]
+
+  const rows = await withDbRetry("list-image-assets-by-id", () =>
+    db
+      .select()
+      .from(imageDesignAssets)
+      .where(and(eq(imageDesignAssets.userId, userId), inArray(imageDesignAssets.id, parsedAssetIds)))
+      .orderBy(desc(imageDesignAssets.createdAt), desc(imageDesignAssets.id)),
+  )
+
+  return rows.map(mapAsset)
+}
+
 export async function createImageAssistantMessage(params: {
   sessionId: string
   role: "user" | "assistant" | "system"
@@ -1540,4 +1557,3 @@ export async function logImageAssistantExport(params: {
 
   return true
 }
-

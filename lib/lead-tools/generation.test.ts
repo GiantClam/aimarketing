@@ -45,6 +45,7 @@ test("falls back to mock PPT preview when no provider is available", async () =>
       prompt: "AI Marketing launch plan",
       scenario: "product-launch",
       language: "en-US",
+      pageCount: 5,
     },
     true,
   )
@@ -73,6 +74,7 @@ test("uses real structured PPT plan when provider is available", async () => {
       prompt: "Ignored by structured response",
       scenario: "sales-deck",
       language: "en-US",
+      pageCount: 5,
     },
     false,
   )

@@ -155,7 +155,7 @@ export const platformHubLinks: PlatformHubLink[] = [
   },
   {
     slug: "workflows",
-    title: { zh: "工作流模板", en: "Workflows" },
+    title: { zh: "工作流", en: "Workflows" },
     summary: { zh: "把反复出现的营销任务沉淀成可复用流程。", en: "Turn repeatable marketing work into reusable, visible workflow templates." },
     href: "/workflows",
   },
@@ -208,7 +208,7 @@ export const platformCapabilities: CapabilityDescriptor[] = [
       { zh: "后续承接企业级模板和品牌规范", en: "Ready to expand toward enterprise templates and brand systems." },
     ],
     publicHref: "/tools/ai-ppt-preview",
-    workspaceHref: "/tools/ai-ppt-preview",
+    workspaceHref: "/dashboard/capabilities?feature=ai-ppt",
     bindings: [
       {
         provider: "pptoken",

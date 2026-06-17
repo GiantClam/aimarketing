@@ -39,6 +39,7 @@ const IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS = Math.max(
   5_000,
   Number.parseInt(process.env.IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS || "", 10) || 240_000,
 )
+const MAX_IMAGE_ASSISTANT_CANDIDATES = 9
 
 function parseModelList(...values: Array<string | null | undefined>) {
   const result: string[] = []
@@ -369,7 +370,21 @@ export function buildImageAssistantProviderPlan(params?: {
   hasPptoken?: boolean
   hasAiberm?: boolean
   hasCrazyroute?: boolean
+  providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
 }) {
+  if (params?.providerLock) {
+    if (params.providerLock === "pptoken" && (params.hasPptoken ?? hasImageAssistantPptokenKey())) {
+      return ["pptoken"] satisfies ImageGenerationProvider[]
+    }
+    if (params.providerLock === "aiberm" && (params.hasAiberm ?? hasImageAssistantAibermKey())) {
+      return ["aiberm"] satisfies ImageGenerationProvider[]
+    }
+    if (params.providerLock === "crazyroute" && (params.hasCrazyroute ?? hasImageAssistantCrazyrouteKey())) {
+      return ["crazyroute"] satisfies ImageGenerationProvider[]
+    }
+    return []
+  }
+
   const plan: ImageGenerationProvider[] = []
 
   if (params?.hasPptoken ?? hasImageAssistantPptokenKey()) {
@@ -385,8 +400,13 @@ export function buildImageAssistantProviderPlan(params?: {
   return plan
 }
 
-function getProviderExecutionPlan(_params: { referenceImages?: ReferenceImageInput[] }) {
-  return buildImageAssistantProviderPlan()
+function getProviderExecutionPlan(params: {
+  referenceImages?: ReferenceImageInput[]
+  providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
+}) {
+  return buildImageAssistantProviderPlan({
+    providerLock: params.providerLock || null,
+  })
 }
 
 function requestOpenAiCompatibleImages(params: {
@@ -426,13 +446,14 @@ export async function generateOrEditImages(params: {
   taskType?: ImageAssistantTaskType
   sizePreset?: ImageAssistantSizePreset | null
   referenceImages?: ReferenceImageInput[]
+  providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   snapshotAssetId?: string | null
   maskAssetId?: string | null
   candidateCount?: number
   signal?: AbortSignal
 }) {
   const taskType = params.taskType || "generate"
-  const candidateCount = Math.max(1, Math.min(params.candidateCount || 1, 4))
+  const candidateCount = Math.max(1, Math.min(params.candidateCount || 1, MAX_IMAGE_ASSISTANT_CANDIDATES))
   const aspectRatio = normalizeAspectRatio(params.sizePreset)
   const providerDeadlineAt = Date.now() + IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS
   const getRemainingProviderBudgetMs = () => Math.max(0, providerDeadlineAt - Date.now())
@@ -449,18 +470,31 @@ export async function generateOrEditImages(params: {
   const inlineReferenceImages = (params.referenceImages || []).filter(
     (image): image is InlineReferenceImage => image.kind === "inline",
   )
-  const providerPlan = getProviderExecutionPlan({ referenceImages: params.referenceImages })
+  const providerPlan = getProviderExecutionPlan({
+    referenceImages: params.referenceImages,
+    providerLock: params.providerLock || null,
+  })
+  const providerIndexMap = new Map(providerPlan.map((provider, index) => [provider, index] as const))
 
   async function runProviderWithBudget<T>(
     provider: Exclude<ImageGenerationProvider, "fixture">,
     run: (signal: AbortSignal) => Promise<T>,
+    providerIndex: number,
   ) {
     const remainingBudgetMs = getRemainingProviderBudgetMs()
     if (remainingBudgetMs <= 0) {
       throw new Error("image_assistant_provider_timeout")
     }
 
-    const providerTimeoutMs = Math.max(1_000, Math.min(IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS, remainingBudgetMs))
+    const remainingProviders = Math.max(1, providerPlan.length - providerIndex)
+    const sharedProviderBudgetMs =
+      providerPlan.length > 1
+        ? Math.ceil(remainingBudgetMs / remainingProviders)
+        : remainingBudgetMs
+    const providerTimeoutMs = Math.max(
+      1_000,
+      Math.min(IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS, remainingBudgetMs, sharedProviderBudgetMs),
+    )
     const scopedAbort = createProviderScopedAbortSignal(params.signal, providerTimeoutMs)
 
     try {
@@ -483,7 +517,9 @@ export async function generateOrEditImages(params: {
     signal: params.signal,
     handlers: {
       aiberm: () =>
-        runProviderWithBudget("aiberm", (providerSignal) =>
+        runProviderWithBudget(
+          "aiberm",
+          (providerSignal) =>
           modelUsesOpenAiImageApi(IMAGE_ASSISTANT_AIBERM_MODELS[0])
             ? requestOpenAiCompatibleImages({
                 provider: "aiberm",
@@ -504,36 +540,43 @@ export async function generateOrEditImages(params: {
                 referenceImages: inlineReferenceImages,
                 signal: providerSignal,
               }),
+          providerIndexMap.get("aiberm") ?? 0,
         ),
       pptoken: () =>
-        runProviderWithBudget("pptoken", (providerSignal) =>
-          requestOpenAiCompatibleImages({
-            provider: "pptoken",
-            prompt: params.prompt,
-            taskType,
-            resolution: params.resolution,
-            sizePreset: params.sizePreset,
-            referenceImages: inlineReferenceImages,
-            snapshotAssetId: params.snapshotAssetId,
-            maskAssetId: params.maskAssetId,
-            candidateCount,
-            signal: providerSignal,
-          }),
+        runProviderWithBudget(
+          "pptoken",
+          (providerSignal) =>
+            requestOpenAiCompatibleImages({
+              provider: "pptoken",
+              prompt: params.prompt,
+              taskType,
+              resolution: params.resolution,
+              sizePreset: params.sizePreset,
+              referenceImages: inlineReferenceImages,
+              snapshotAssetId: params.snapshotAssetId,
+              maskAssetId: params.maskAssetId,
+              candidateCount,
+              signal: providerSignal,
+            }),
+          providerIndexMap.get("pptoken") ?? 0,
         ),
       crazyroute: () =>
-        runProviderWithBudget("crazyroute", (providerSignal) =>
-          requestOpenAiCompatibleImages({
-            provider: "crazyroute",
-            prompt: params.prompt,
-            taskType,
-            resolution: params.resolution,
-            sizePreset: params.sizePreset,
-            referenceImages: inlineReferenceImages,
-            snapshotAssetId: params.snapshotAssetId,
-            maskAssetId: params.maskAssetId,
-            candidateCount,
-            signal: providerSignal,
-          }),
+        runProviderWithBudget(
+          "crazyroute",
+          (providerSignal) =>
+            requestOpenAiCompatibleImages({
+              provider: "crazyroute",
+              prompt: params.prompt,
+              taskType,
+              resolution: params.resolution,
+              sizePreset: params.sizePreset,
+              referenceImages: inlineReferenceImages,
+              snapshotAssetId: params.snapshotAssetId,
+              maskAssetId: params.maskAssetId,
+              candidateCount,
+              signal: providerSignal,
+            }),
+          providerIndexMap.get("crazyroute") ?? 0,
         ),
     },
     onProviderFailure: ({ provider, nextProvider, error }) => {

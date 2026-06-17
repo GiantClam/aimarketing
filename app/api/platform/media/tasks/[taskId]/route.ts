@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
-import { hasFeatureAccess } from "@/lib/auth/guards"
+import { hasFeatureAccess, hasFeatureAccessWithFallback } from "@/lib/auth/guards"
+import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
 import { queryMiniMaxAudioTask } from "@/lib/platform/minimax-audio"
 import {
   hasRunningHubMediaTarget,
@@ -13,10 +14,30 @@ import { queryRunningHubVideoTask } from "@/lib/platform/runninghub-video"
 
 export const runtime = "nodejs"
 
-type MediaExecutionFeature = "image_design_generation" | "video_generation"
+type MediaExecutionFeature = "image_design_generation" | "video_generation" | "audio_generation"
 
 function resolveMediaExecutionFeature(mediaTarget: RunningHubMediaTarget | "ai-music"): MediaExecutionFeature {
-  return mediaTarget === "ai-image" ? "image_design_generation" : "video_generation"
+  if (mediaTarget === "ai-image") return "image_design_generation"
+  if (mediaTarget === "ai-music") return "audio_generation"
+  return "video_generation"
+}
+
+function buildMediaTaskResponse(input: {
+  capabilitySlug: RunningHubMediaTarget | "ai-music"
+  featureId?: string | null
+  taskId: string
+  data: Record<string, unknown>
+}) {
+  return (
+    normalizePlatformMediaExecutionPayload({
+      capabilitySlug: input.capabilitySlug,
+      featureId: input.featureId,
+      data: {
+        taskId: input.taskId,
+        ...input.data,
+      },
+    }) ?? { data: input.data }
+  )
 }
 
 export async function GET(
@@ -36,7 +57,13 @@ export async function GET(
     return NextResponse.json({ error: "Authentication required" }, { status: 401 })
   }
 
-  if (!hasFeatureAccess(currentUser, resolveMediaExecutionFeature(target))) {
+  const requiredFeature = resolveMediaExecutionFeature(target)
+  const hasAccess =
+    requiredFeature === "audio_generation"
+      ? hasFeatureAccessWithFallback(currentUser, "audio_generation", "video_generation")
+      : hasFeatureAccess(currentUser, requiredFeature)
+
+  if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -58,9 +85,14 @@ export async function GET(
       return result
     }
 
-    return NextResponse.json({
-      data: result,
-    })
+    return NextResponse.json(
+      buildMediaTaskResponse({
+        capabilitySlug: target,
+        featureId: typeof result.requestedTarget === "string" ? result.requestedTarget : null,
+        taskId: result.taskId,
+        data: result as Record<string, unknown>,
+      }),
+    )
   }
 
   if (!isRunningHubConfiguredForTarget(target)) {
@@ -91,15 +123,22 @@ export async function GET(
     return result
   }
 
-  return NextResponse.json({
-    data:
-      target === "ai-video"
-        ? result
-        : {
-            taskId,
-            mediaTarget: target,
-            provider: "runninghub",
-            ...result,
-          },
-  })
+  const responseData =
+    target === "ai-video"
+      ? (result as Record<string, unknown>)
+      : ({
+          taskId,
+          mediaTarget: target,
+          provider: "runninghub",
+          ...result,
+        } as Record<string, unknown>)
+
+  return NextResponse.json(
+    buildMediaTaskResponse({
+      capabilitySlug: target,
+      featureId: typeof responseData.requestedTarget === "string" ? responseData.requestedTarget : null,
+      taskId: typeof responseData.taskId === "string" ? responseData.taskId : taskId,
+      data: responseData,
+    }),
+  )
 }

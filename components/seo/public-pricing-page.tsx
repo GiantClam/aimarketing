@@ -19,7 +19,7 @@ export function PublicPricingPageContent() {
     <main className="min-h-screen bg-background text-foreground">
       <PublicSiteHeader activeKey="pricing" />
 
-      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
+      <section className="public-grid-bg public-page-hero-shell mx-auto max-w-7xl">
         <div className="flex flex-wrap items-center gap-2">
           <p className="public-kicker text-muted-foreground">{copy.pricingPage.eyebrow}</p>
           <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">{copy.pricingPage.matrixLabel}</span>
@@ -56,11 +56,11 @@ export function PublicPricingPageContent() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 pb-10">
+      <section className="public-page-bottom-shell mx-auto max-w-7xl">
         <PublicPricingGrid showActions />
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 pb-18">
+      <section className="public-page-bottom-shell mx-auto max-w-7xl">
         <div className="public-panel rounded-[12px] p-6 sm:p-8">
           <h2 className="font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">{copy.pricingPage.guardrailsTitle}</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">

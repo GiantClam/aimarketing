@@ -35,6 +35,7 @@ export default async function TaskDetailPage({
           eyebrow: "Task Detail",
           title: "任务详情",
           back: "返回任务中心",
+          workflowRun: "查看工作流结果页",
           events: "事件时间线",
           artifacts: "输出与素材",
           works: "作品提升记录",
@@ -43,6 +44,7 @@ export default async function TaskDetailPage({
           eyebrow: "Task Detail",
           title: "Task detail",
           back: "Back to task center",
+          workflowRun: "View workflow results",
           events: "Event timeline",
           artifacts: "Outputs and artifacts",
           works: "Promoted works",
@@ -50,9 +52,9 @@ export default async function TaskDetailPage({
 
   return (
     <div className="h-full overflow-auto bg-transparent">
-      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-10">
-        <div className="space-y-8">
-          <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+      <section className="public-grid-bg workspace-page-shell mx-auto max-w-7xl">
+        <div className="workspace-stack">
+          <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
             <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
             <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-4xl">
@@ -69,6 +71,14 @@ export default async function TaskDetailPage({
               >
                 {copy.back}
               </Link>
+              {run.kind === "workflow" && run.itemType === "workflow" ? (
+                <Link
+                  href={`/dashboard/workflows/runs/${run.id}`}
+                  className="dashboard-chip rounded-[4px] px-4 py-2 text-sm text-foreground transition hover:bg-primary hover:text-primary-foreground"
+                >
+                  {copy.workflowRun}
+                </Link>
+              ) : null}
             </div>
           </div>
 
@@ -85,7 +95,7 @@ export default async function TaskDetailPage({
           ) : null}
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
               <div className="dashboard-kicker text-muted-foreground">{copy.events}</div>
               <div className="mt-4 space-y-3">
                 {run.events.map((event) => (
@@ -96,7 +106,7 @@ export default async function TaskDetailPage({
               </div>
             </article>
 
-            <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
               <div className="dashboard-kicker text-muted-foreground">{copy.artifacts}</div>
               <div className="mt-4 space-y-3">
                 {run.artifacts.length === 0 ? (
@@ -111,7 +121,7 @@ export default async function TaskDetailPage({
             </article>
           </div>
 
-          <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+          <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
             <div className="dashboard-kicker text-muted-foreground">{copy.works}</div>
             <div className="mt-4 space-y-3">
               {run.workItems.length === 0 ? (

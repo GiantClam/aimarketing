@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
-import { loadEnterpriseKnowledgeContext, type EnterpriseKnowledgeContext } from "@/lib/dify/enterprise-knowledge"
+import { loadEnterpriseKnowledgeContext } from "@/lib/knowledge/service"
+import type { EnterpriseKnowledgeContext } from "@/lib/knowledge/types"
 import { generateTextWithWriterModel } from "@/lib/writer/aiberm"
 import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
 import { getLeadHunterAgentName, type LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
@@ -1170,5 +1171,4 @@ export function createLeadHunterSkillSseStream(input: LeadHunterSkillRunInput) {
 
   return { stream, done }
 }
-
 

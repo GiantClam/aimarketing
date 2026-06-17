@@ -662,11 +662,18 @@ function extractBriefFromLabeledLines(prompt: string) {
     .filter(Boolean)
 
   for (const line of lines) {
-    const match = /^([^:：]{2,24})\s*[:：]\s*(.+)$/i.exec(line)
-    if (!match) continue
+    const asciiColonIndex = line.indexOf(":")
+    const fullWidthColonIndex = line.indexOf("：")
+    const separatorIndex =
+      asciiColonIndex === -1
+        ? fullWidthColonIndex
+        : fullWidthColonIndex === -1
+          ? asciiColonIndex
+          : Math.min(asciiColonIndex, fullWidthColonIndex)
+    if (separatorIndex < 2 || separatorIndex > 24) continue
 
-    const label = match[1].trim().toLowerCase()
-    const value = truncate(match[2].trim(), 180)
+    const label = line.slice(0, separatorIndex).trim().toLowerCase()
+    const value = truncate(line.slice(separatorIndex + 1).trim(), 180)
     if (!value) continue
 
     if (!extracted.usage_preset && /^(usage|use case|用途|场景)$/.test(label)) {
@@ -1743,4 +1750,3 @@ export async function planImageAssistantTurn(input: {
     assistantReply: replyToUser,
   }
 }
-

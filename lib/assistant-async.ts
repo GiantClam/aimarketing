@@ -77,6 +77,8 @@ type ImageTurnTaskPayload = {
   brief?: Partial<ImageAssistantBrief> | null
   taskType: ImageAssistantTaskType
   referenceAssetIds?: string[]
+  referenceUrls?: string[]
+  providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
@@ -687,7 +689,7 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
     taskId,
     sessionId: payload.sessionId,
     taskType: payload.taskType,
-    referenceAssetCount: payload.referenceAssetIds?.length || 0,
+    referenceAssetCount: (payload.referenceAssetIds?.length || 0) + (payload.referenceUrls?.length || 0),
     sizePreset: payload.sizePreset,
     resolution: payload.resolution,
   })
@@ -707,6 +709,8 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
       brief: payload.brief,
       taskType: payload.taskType,
       referenceAssetIds: payload.referenceAssetIds,
+      referenceUrls: payload.referenceUrls,
+      providerLock: payload.providerLock || null,
       candidateCount: payload.candidateCount,
       sizePreset: payload.sizePreset,
       resolution: payload.resolution,

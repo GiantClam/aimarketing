@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import {
+  fetchVideoAgentUpstream,
+  getVideoAgentErrorMessage,
+  readJsonResponse,
+} from "@/lib/video-agent/upstream"
 
 // 设置运行时配置，避免超时
 export const runtime = 'nodejs'
@@ -17,28 +22,30 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // 代理请求到 video agent 后端，使用较长的超时时间
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 分钟超时
-
     try {
-      const response = await fetch(`${AGENT_URL}/video-agent/agent`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetchVideoAgentUpstream(
+        `${AGENT_URL}/video-agent/agent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...body,
+            user_id: auth.user.id,
+            user_email: auth.user.email,
+          }),
         },
-        body: JSON.stringify({
-          ...body,
-          user_id: auth.user.id,
-          user_email: auth.user.email,
-        }),
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
+        {
+          label: "video_agent.agent",
+          timeoutMs: 300_000,
+          attempts: 3,
+        },
+      )
 
       if (!response.ok) {
-        return new Response(JSON.stringify({ error: "后端请求失败" }), {
+        const payload = await readJsonResponse(response)
+        return new Response(JSON.stringify({ error: getVideoAgentErrorMessage(payload, "后端请求失败") }), {
           status: response.status,
           headers: { "Content-Type": "application/json" },
         })
@@ -65,9 +72,7 @@ export async function POST(request: NextRequest) {
         },
       })
     } catch (fetchError: any) {
-      clearTimeout(timeoutId)
-      
-      if (fetchError.name === 'AbortError') {
+      if (fetchError.name === "AbortError" || String(fetchError?.message || "").includes("video_agent.agent_timeout")) {
         return new Response(JSON.stringify({ error: "请求超时" }), {
           status: 504,
           headers: { "Content-Type": "application/json" },

@@ -18,9 +18,12 @@ const sampleDeck = {
   previewSessionId: "preview-session-1",
   provider: "pptoken",
   previewModel: "gpt-5.4",
+  pageCount: null,
+  resolvedPageCount: 5,
   variants: [
     {
       key: "ppt169_brutalist_ai_newspaper_2026",
+      styleKey: "ppt169_brutalist_ai_newspaper_2026",
       name: "Long Table",
       summary: "summary",
       stylePrompt: "style prompt",
@@ -105,6 +108,10 @@ let previewCalls: Array<unknown[]> = []
 let finalizeCalls: Array<unknown[]> = []
 let downloadCalls: Array<unknown[]> = []
 let seoCalls: Array<unknown[]> = []
+let createPlatformRunCalls: Array<unknown[]> = []
+let savePreviewArtifactCalls: Array<unknown[]> = []
+let saveSelectedArtifactCalls: Array<unknown[]> = []
+let promoteArtifactCalls: Array<unknown[]> = []
 let previewFailureMessage: string | null = null
 
 let buildLeadToolPreview: typeof import("./runtime").buildLeadToolPreview
@@ -223,6 +230,43 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/lib/lead-tools/platform-persistence") {
+    return {
+      createLeadToolPlatformRun: async (...args: unknown[]) => {
+        createPlatformRunCalls.push(args)
+        const currentUser = (args[0] as { currentUser?: { enterpriseId?: number | null } } | undefined)?.currentUser
+        if (!currentUser?.enterpriseId) {
+          return null
+        }
+        return { id: 101 }
+      },
+      saveLeadToolPreviewArtifact: async (...args: unknown[]) => {
+        savePreviewArtifactCalls.push(args)
+        const run = (args[0] as { run?: { id?: number } | null } | undefined)?.run
+        if (!run?.id) {
+          return null
+        }
+        return { id: 201 }
+      },
+      saveLeadToolSelectedArtifact: async (...args: unknown[]) => {
+        saveSelectedArtifactCalls.push(args)
+        const run = (args[0] as { run?: { id?: number } | null } | undefined)?.run
+        if (!run?.id) {
+          return null
+        }
+        return { id: 301 }
+      },
+      promoteLeadToolArtifactToWork: async (...args: unknown[]) => {
+        promoteArtifactCalls.push(args)
+        const artifact = (args[0] as { artifact?: { id?: number } | null } | undefined)?.artifact
+        if (!artifact?.id) {
+          return null
+        }
+        return { id: 401 }
+      },
+    }
+  }
+
   return originalLoad.call(this, request, parent, isMain)
 }
 
@@ -239,6 +283,10 @@ test.beforeEach(() => {
   finalizeCalls = []
   downloadCalls = []
   seoCalls = []
+  createPlatformRunCalls = []
+  savePreviewArtifactCalls = []
+  saveSelectedArtifactCalls = []
+  promoteArtifactCalls = []
   previewFailureMessage = null
 })
 
@@ -258,6 +306,7 @@ test("ppt preview delegates to the configured preview engine and preserves respo
     prompt: "做一份介绍 Step 3.7 Flash 的产品",
     scenario: "marketing-campaign",
     language: "zh-CN",
+    templateMode: "auto-4",
   })
   assert.deepEqual(previewCalls[0]?.[1], {
     allowMockFallback: false,
@@ -276,6 +325,38 @@ test("ppt preview delegates to the configured preview engine and preserves respo
   assert.equal(result.meta.exportRuntime, "ppt-master-agent")
 })
 
+test("ppt preview persists platform run metadata when an enterprise user is available", async () => {
+  const user = {
+    id: 7,
+    email: "user@example.com",
+    name: "Test User",
+    isDemo: false,
+    enterpriseId: 3,
+    enterpriseCode: "acme",
+    enterpriseName: "Acme",
+    enterpriseRole: "admin",
+    enterpriseStatus: "active",
+    permissions: {},
+  } as Parameters<typeof buildLeadToolPreview>[2]
+
+  const result = await buildLeadToolPreview(
+    "ai-ppt-preview",
+    {
+      prompt: "Persist this preview",
+      scenario: "marketing-campaign",
+      language: "zh-CN",
+    },
+    user,
+  )
+  const meta = result.meta as { platformRunId?: number; platformArtifactId?: number }
+
+  assert.equal(createPlatformRunCalls.length, 1)
+  assert.equal(savePreviewArtifactCalls.length, 1)
+  assert.equal(meta.platformRunId, 101)
+  assert.equal(meta.platformArtifactId, 201)
+  assert.equal((createPlatformRunCalls[0]?.[0] as { action: string }).action, "preview")
+})
+
 test("ppt preview accepts stepfun model values and forwards them to the preview engine", async () => {
   await buildLeadToolPreview("ai-ppt-preview", {
     prompt: "测试阶跃星辰 provider",
@@ -290,6 +371,25 @@ test("ppt preview accepts stepfun model values and forwards them to the preview 
     scenario: "marketing-campaign",
     language: "zh-CN",
     model: "step-3.7-flash",
+    templateMode: "auto-4",
+  })
+})
+
+test("ppt preview accepts arbitrary requested page counts", async () => {
+  await buildLeadToolPreview("ai-ppt-preview", {
+    prompt: "做一份 12 页的增长复盘",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    pageCount: 12,
+  })
+
+  assert.equal(previewCalls.length, 1)
+  assert.deepEqual(previewCalls[0]?.[0], {
+    prompt: "做一份 12 页的增长复盘",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    templateMode: "auto-4",
+    pageCount: 12,
   })
 })
 
@@ -355,6 +455,38 @@ test("ppt finalize validates the selected variant before delegating to the expor
   assert.equal(result.exportPlan.finalModel, "gpt-5.4")
 })
 
+test("ppt finalize persists selected output into platform work metadata", async () => {
+  const user = {
+    id: 7,
+    email: "user@example.com",
+    name: "Test User",
+    isDemo: false,
+    enterpriseId: 3,
+    enterpriseCode: "acme",
+    enterpriseName: "Acme",
+    enterpriseRole: "admin",
+    enterpriseStatus: "active",
+    permissions: {},
+  } as Parameters<typeof buildLeadToolFinalize>[2]
+
+  const result = await buildLeadToolFinalize(
+    "ai-ppt-preview",
+    {
+      deck: sampleDeck,
+      selectedVariantKey: "ppt169_brutalist_ai_newspaper_2026",
+      previewSessionId: "preview-session-1",
+    },
+    user,
+  )
+
+  assert.equal(createPlatformRunCalls.length, 1)
+  assert.equal(saveSelectedArtifactCalls.length, 1)
+  assert.equal(promoteArtifactCalls.length, 1)
+  assert.equal(result.meta?.platformRunId, 101)
+  assert.equal(result.meta?.platformArtifactId, 301)
+  assert.equal(result.meta?.platformWorkItemId, 401)
+})
+
 test("ppt download delegates to the export engine after auth and variant validation", async () => {
   const user = { email: "user@example.com" } as { email: string }
 
@@ -374,6 +506,39 @@ test("ppt download delegates to the export engine after auth and variant validat
     "ppt169_brutalist_ai_newspaper_2026",
   )
   assert.equal(result.artifact?.fileName, "step-3.7-flash.pptx")
+  assert.equal(result.meta?.platformRunId, undefined)
+})
+
+test("ppt download persists selected artifact metadata when enterprise context exists", async () => {
+  const user = {
+    id: 7,
+    email: "user@example.com",
+    name: "Test User",
+    isDemo: false,
+    enterpriseId: 3,
+    enterpriseCode: "acme",
+    enterpriseName: "Acme",
+    enterpriseRole: "admin",
+    enterpriseStatus: "active",
+    permissions: {},
+  } as Parameters<typeof buildLeadToolDownload>[2]
+
+  const result = await buildLeadToolDownload(
+    "ai-ppt-preview",
+    {
+      deck: sampleDeck,
+      selectedVariantKey: "ppt169_brutalist_ai_newspaper_2026",
+      previewSessionId: "preview-session-1",
+    },
+    user,
+  )
+
+  assert.equal(createPlatformRunCalls.length, 1)
+  assert.equal(saveSelectedArtifactCalls.length, 1)
+  assert.equal(promoteArtifactCalls.length, 1)
+  assert.equal(result.meta?.platformRunId, 101)
+  assert.equal(result.meta?.platformArtifactId, 301)
+  assert.equal(result.meta?.platformWorkItemId, 401)
 })
 
 test("ppt download still rejects unauthenticated protected actions before engine execution", async () => {
@@ -390,6 +555,54 @@ test("ppt download still rejects unauthenticated protected actions before engine
     (error: unknown) => {
       assert.ok(error instanceof LeadToolRuntimeError)
       assert.equal(error.status, 401)
+      return true
+    },
+  )
+
+  assert.equal(downloadCalls.length, 0)
+})
+
+test("ppt finalize rejects missing preview sessions instead of returning a placeholder export plan", async () => {
+  const user = { email: "user@example.com" } as Parameters<typeof buildLeadToolFinalize>[2]
+
+  await assert.rejects(
+    () =>
+      buildLeadToolFinalize(
+        "ai-ppt-preview",
+        {
+          deck: sampleDeck,
+          selectedVariantKey: "ppt169_brutalist_ai_newspaper_2026",
+        },
+        user,
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof LeadToolRuntimeError)
+      assert.equal(error.status, 400)
+      assert.match(error.message, /Preview session missing/u)
+      return true
+    },
+  )
+
+  assert.equal(finalizeCalls.length, 0)
+})
+
+test("ppt download rejects missing preview sessions instead of fabricating an export artifact", async () => {
+  const user = { email: "user@example.com" } as Parameters<typeof buildLeadToolDownload>[2]
+
+  await assert.rejects(
+    () =>
+      buildLeadToolDownload(
+        "ai-ppt-preview",
+        {
+          deck: sampleDeck,
+          selectedVariantKey: "ppt169_brutalist_ai_newspaper_2026",
+        },
+        user,
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof LeadToolRuntimeError)
+      assert.equal(error.status, 400)
+      assert.match(error.message, /Preview session missing/u)
       return true
     },
   )

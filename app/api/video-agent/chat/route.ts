@@ -3,6 +3,7 @@ import { NextRequest } from "next/server"
 import { requireSessionUser } from "@/lib/auth/guards"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
+import { fetchVideoAgentUpstream, getVideoAgentErrorMessage, readJsonResponse } from "@/lib/video-agent/upstream"
 
 export const runtime = "nodejs"
 export const maxDuration = 600
@@ -23,16 +24,18 @@ export async function GET(request: NextRequest) {
       return auth.response
     }
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 3000)
-
     try {
-      const response = await fetch(`${AGENT_URL}/health`, {
-        method: "GET",
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
+      const response = await fetchVideoAgentUpstream(
+        `${AGENT_URL}/health`,
+        {
+          method: "GET",
+        },
+        {
+          label: "video_agent.health",
+          timeoutMs: 3_000,
+          attempts: 2,
+        },
+      )
 
       if (response.ok || response.status === 404) {
         return createAvailabilityResponse(true, null)
@@ -40,8 +43,7 @@ export async function GET(request: NextRequest) {
 
       return createAvailabilityResponse(false, `agent_health_status_${response.status}`)
     } catch (error: any) {
-      clearTimeout(timeoutId)
-      if (error?.name === "AbortError") {
+      if (error?.name === "AbortError" || String(error?.message || "").includes("video_agent.health_timeout")) {
         return createAvailabilityResponse(false, "agent_health_timeout")
       }
       return createAvailabilityResponse(false, error?.message || "agent_health_fetch_failed")
@@ -71,33 +73,36 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const action = body.action
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 600_000)
-
     try {
-      const response = await fetch(`${AGENT_URL}/video-agent/chat`, {
-        method: "POST",
-        headers: {
-          Accept: "text/event-stream",
-          "Content-Type": "application/json",
+      const response = await fetchVideoAgentUpstream(
+        `${AGENT_URL}/video-agent/chat`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "text/event-stream",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...body,
+            user_id: auth.user.id,
+            user_email: auth.user.email,
+          }),
         },
-        body: JSON.stringify({
-          ...body,
-          user_id: auth.user.id,
-          user_email: auth.user.email,
-        }),
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
+        {
+          label: "video_agent.chat",
+          timeoutMs: 600_000,
+          attempts: 3,
+        },
+      )
 
       if (!response.ok) {
+        const payload = await readJsonResponse(response)
         logAuditEvent(request, "video.chat.upstream_error", {
           action,
           status: response.status,
           userId: auth.user.id,
         })
-        return new Response(JSON.stringify({ error: "Upstream request failed" }), {
+        return new Response(JSON.stringify({ error: getVideoAgentErrorMessage(payload, "Upstream request failed") }), {
           status: response.status,
           headers: { "Content-Type": "application/json" },
         })
@@ -130,11 +135,8 @@ export async function POST(request: NextRequest) {
           void pump()
         },
         cancel() {
-          try {
-            controller.abort()
-          } catch {
-            // Ignore abort failures during stream cancellation.
-          }
+          // The upstream request has already been established.
+          // Closing the local stream is sufficient here.
         },
       })
 
@@ -151,9 +153,7 @@ export async function POST(request: NextRequest) {
         },
       })
     } catch (fetchError: any) {
-      clearTimeout(timeoutId)
-
-      if (fetchError?.name === "AbortError") {
+      if (fetchError?.name === "AbortError" || String(fetchError?.message || "").includes("video_agent.chat_timeout")) {
         logAuditEvent(request, "video.chat.timeout", { action, userId: auth.user.id })
         return new Response(JSON.stringify({ error: "Request timed out" }), {
           status: 504,

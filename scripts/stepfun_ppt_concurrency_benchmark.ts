@@ -4,10 +4,15 @@ import path from "node:path"
 import { buildStyleAwarePrompt, normalizeLeadToolPptPlan } from "@/lib/lead-tools/generation-ppt-fixed"
 import {
   buildPptPreviewDeckFromPlans,
+  getPptPreviewLayoutSequence,
+  getPptPreviewTemplateCapability,
+  getPptPreviewTemplateLabel,
   getPptPreviewStyleSlots,
+  type PptFrontendTemplateId,
   type PptPreviewModelValue,
   resolvePptPreviewSlideIntent,
   type PptPreviewRequest,
+  type PptPreviewVariantDescriptor,
   type PptPreviewStyleKey,
   type PptPreviewVariantStyle,
   pptPreviewStyles,
@@ -239,8 +244,13 @@ function sanitizeRawPlan(rawPlan: unknown, request: PptPreviewRequest, style: Pp
 }
 
 function buildVariantSystemPrompt(request: PptPreviewRequest, style: PptPreviewVariantStyle) {
+  const templateId = getPptPreviewTemplateCapability(style.key).templateId as PptFrontendTemplateId
   return [
-    buildPreviewSystemPrompt(request.language),
+    buildPreviewSystemPrompt(request, {
+      layoutSequence: getPptPreviewLayoutSequence(request.pageCount),
+      templateMode: "auto-4",
+      templateLabel: getPptPreviewTemplateLabel(templateId, request.language),
+    }),
     request.language === "zh-CN"
       ? `风格要求：${style.stylePrompt} 直接按这种风格生成 9 页内容，不要先写一个通用版本再改写。每个 slide 对象必须输出 layout 与 intent。`
       : `Style requirement: ${style.stylePrompt} Generate the nine-slide plan directly in this style rather than drafting a neutral version first. Each slide object must output both layout and intent.`,
@@ -261,6 +271,12 @@ async function generateVariantPlan(params: {
   request: PptPreviewRequest
   style: PptPreviewVariantStyle
 }) {
+  const descriptor: PptPreviewVariantDescriptor = {
+    key: params.style.key,
+    slotLabel: "A",
+    style: params.style,
+    templateId: getPptPreviewTemplateCapability(params.style.key).templateId as PptFrontendTemplateId,
+  }
   const startedAt = Date.now()
   let payload:
     | {
@@ -288,7 +304,7 @@ async function generateVariantPlan(params: {
             },
             {
               role: "user",
-              content: buildStyleAwarePrompt(params.request, params.style),
+              content: buildStyleAwarePrompt(params.request, descriptor),
             },
           ],
           temperature: 0.4,
@@ -351,7 +367,9 @@ async function generateVariantPlan(params: {
 
   return {
     plan: {
+      variantKey: params.style.key,
       styleKey: params.style.key,
+      templateId: getPptPreviewTemplateCapability(params.style.key).templateId as PptFrontendTemplateId,
       title: normalizedPlan.title,
       outline: normalizedPlan.outline,
       provider: "stepfun",

@@ -48,8 +48,7 @@ export default async function DashboardCapabilitiesPage({
   )
 
   return (
-    <>
-      <WorkspaceCapabilitiesMediaWorkspace
+    <WorkspaceCapabilitiesMediaWorkspace
         locale={displayLocale}
         groups={mediaWorkspace.groups}
         features={mediaWorkspace.features}
@@ -79,6 +78,5 @@ export default async function DashboardCapabilitiesPage({
         }))}
         initialFeatureId={normalizeInitialFeatureId(resolvedSearchParams.feature)}
       />
-    </>
   )
 }

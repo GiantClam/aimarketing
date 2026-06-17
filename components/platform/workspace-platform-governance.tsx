@@ -1,8 +1,10 @@
 import Link from "next/link"
 import { CreditCard, Database, LayoutGrid, Network, Settings, Sparkles, Users2, Workflow } from "lucide-react"
 
+import { PlatformGovernanceSettingsPanel } from "@/components/platform/platform-governance-settings-panel"
 import { Button } from "@/components/ui/button"
 import type { AppLocale } from "@/lib/i18n/config"
+import type { CustomerGovernanceSnapshot } from "@/lib/platform/customer-governance"
 import type { PlatformGovernanceSnapshot } from "@/lib/platform/governance"
 import { WorkspacePlatformRuntimePanel } from "@/components/platform/workspace-platform-runtime-panel"
 import { getLocalizedWorkspaceEnterpriseSettingEntries } from "@/lib/platform/workspace-enterprise-settings"
@@ -17,6 +19,11 @@ const registryIcons = {
 
 function formatNumber(value: number | null) {
   if (typeof value !== "number" || Number.isNaN(value)) return "—"
+  return new Intl.NumberFormat("en-US").format(value)
+}
+
+function formatNumberOrFallback(value: number | null, fallback: string) {
+  if (typeof value !== "number" || Number.isNaN(value)) return fallback
   return new Intl.NumberFormat("en-US").format(value)
 }
 
@@ -36,12 +43,29 @@ function getRegistryLabel(itemType: keyof typeof registryIcons, locale: "zh" | "
   return "Workflows"
 }
 
+function getCustomerRuntimeStatusLabel(
+  status: CustomerGovernanceSnapshot["runtimes"][number]["status"],
+  locale: "zh" | "en",
+) {
+  if (locale === "zh") {
+    if (status === "ready") return "Ready"
+    if (status === "deferred") return "Deferred"
+    return "未启用"
+  }
+
+  if (status === "ready") return "Ready"
+  if (status === "deferred") return "Deferred"
+  return "Disabled"
+}
+
 export function WorkspacePlatformGovernance({
   locale,
   snapshot,
+  customerSnapshot,
 }: {
   locale: AppLocale
   snapshot: PlatformGovernanceSnapshot
+  customerSnapshot: CustomerGovernanceSnapshot | null
 }) {
   const displayLocale = locale === "zh" ? "zh" : "en"
   const copy =
@@ -63,9 +87,17 @@ export function WorkspacePlatformGovernance({
           settingsTitle: "治理入口",
           settingsBody:
             "更细的成员、知识、账单和工作台策略仍保留在原有页面，但现在都从同一个平台设置页回流。",
-          enterpriseIaTitle: "企业设置入口层",
+          enterpriseIaTitle: "企业设置入口与治理面",
           enterpriseIaBody:
-            "席位、用量、算力和 SSO 先以信息架构入口落位，帮助企业管理员知道这些治理面会落在哪些工作台路径上。",
+            "成员与知识相关配置现在已经在这里直接可管；席位、用量、算力和 SSO 继续先以信息架构入口落位，帮助企业管理员知道这些治理面会落在哪些工作台路径上。",
+          membersTitle: "企业成员与席位",
+          membersBody: "直接显示当前企业总成员数、活跃成员数，以及套餐能提供的 seat 上限。",
+          usageTitle: "共享额度与用量",
+          usageBody: "把共享 credits、当前计划和近 30 天的 credits 流水压成一个运营视角。",
+          ssoTitle: "SSO 就绪状态",
+          ssoBody: "这个 MVP 只展示域名和配置状态，不做真实 SSO 强制接入。",
+          runtimeStatusTitle: "客户侧运行时可用性",
+          runtimeStatusBody: "把客户会直接碰到的能力运行时压成 ready / deferred / runtime_disabled 三档。",
           credits: "可用积分",
           reserved: "预留积分",
           totalBalance: "账户余额",
@@ -89,6 +121,17 @@ export function WorkspacePlatformGovernance({
           deferred: "Deferred",
           publicVisible: "公开可见",
           workspaceVisible: "工作台可见",
+          totalMembers: "总成员",
+          activeMembers: "活跃成员",
+          seatLimit: "Seat 上限",
+          recentLedger: "近 30 天流水",
+          recentNetCredits: "近 30 天净积分",
+          ssoConfigured: "已配置",
+          ssoMissing: "未配置",
+          domain: "域名",
+          notConfigured: "未配置",
+          customerSnapshotUnavailable: "企业治理数据暂时不可用。这里明确显示为未配置，而不是伪造 0 或占位数字。",
+          settingsUnavailable: "治理设置暂时无法读取，请稍后重试。",
         }
       : {
           eyebrow: "Platform Governance",
@@ -107,9 +150,17 @@ export function WorkspacePlatformGovernance({
           settingsTitle: "Governance entry points",
           settingsBody:
             "Member, knowledge, billing, and detailed workspace settings still live on their existing pages, but they now roll back into one platform settings layer.",
-          enterpriseIaTitle: "Enterprise settings entry layer",
+          enterpriseIaTitle: "Enterprise settings entry and governance layer",
           enterpriseIaBody:
-            "Seats, usage, compute, and SSO land here as information architecture entry points first so admins know where each governance surface belongs.",
+            "Member and knowledge controls are now directly manageable here, while seats, usage, compute, and SSO still land as information-architecture entry points first.",
+          membersTitle: "Members and seats",
+          membersBody: "Show the company member footprint directly: total members, active members, and the seat limit available on the current plan.",
+          usageTitle: "Shared credits and usage",
+          usageBody: "Compress shared credits, current plan, and 30-day credit ledger activity into one operational view.",
+          ssoTitle: "SSO readiness",
+          ssoBody: "This MVP only shows the domain and readiness state. It does not enforce real SSO yet.",
+          runtimeStatusTitle: "Customer runtime availability",
+          runtimeStatusBody: "Collapse customer-facing capability runtimes into ready / deferred / runtime_disabled states.",
           credits: "Available credits",
           reserved: "Reserved credits",
           totalBalance: "Account balance",
@@ -133,8 +184,22 @@ export function WorkspacePlatformGovernance({
           deferred: "Deferred",
           publicVisible: "Public visible",
           workspaceVisible: "Workspace visible",
+          totalMembers: "Total members",
+          activeMembers: "Active members",
+          seatLimit: "Seat limit",
+          recentLedger: "30-day ledger",
+          recentNetCredits: "30-day net credits",
+          ssoConfigured: "Configured",
+          ssoMissing: "Not configured",
+          domain: "Domain",
+          notConfigured: "Not configured",
+          customerSnapshotUnavailable:
+            "Customer governance data is currently unavailable. This surface stays explicitly unconfigured instead of showing fake zero values.",
+          settingsUnavailable: "Governance settings are temporarily unavailable. Try again later.",
         }
 
+  const customerDataAvailable = Boolean(customerSnapshot)
+  const customerNotConfigured = copy.notConfigured
   const governanceLinks = [
     {
       slug: "billing",
@@ -165,9 +230,9 @@ export function WorkspacePlatformGovernance({
 
   return (
     <div className="h-full overflow-auto bg-transparent">
-      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-10">
-        <div className="space-y-8">
-          <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+      <section className="public-grid-bg workspace-page-shell mx-auto max-w-7xl">
+        <div className="workspace-stack">
+          <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
             <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
             <h1 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[0.02em] text-foreground lg:text-5xl">
               {copy.title}
@@ -188,7 +253,7 @@ export function WorkspacePlatformGovernance({
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">
-            <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
               <div className="dashboard-kicker text-muted-foreground">{copy.runtimeTitle}</div>
               <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
                 {snapshot.runtime.activeTextProvider || "Unconfigured"}
@@ -207,7 +272,7 @@ export function WorkspacePlatformGovernance({
               </div>
             </article>
 
-            <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
               <div className="dashboard-kicker text-muted-foreground">{copy.billingTitle}</div>
               <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
                 {snapshot.billing.planName || snapshot.billing.planCode || "—"}
@@ -247,7 +312,7 @@ export function WorkspacePlatformGovernance({
               </div>
             </article>
 
-            <article className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
               <div className="dashboard-kicker text-muted-foreground">{copy.registryTitle}</div>
               <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
                 {snapshot.canManageRegistry ? copy.canManage : copy.readOnly}
@@ -272,7 +337,87 @@ export function WorkspacePlatformGovernance({
             </article>
           </div>
 
-          <div className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+          <div className="grid gap-4 xl:grid-cols-4">
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.membersTitle}</div>
+              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {customerSnapshot ? formatNumber(customerSnapshot.members.active) : customerNotConfigured}
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.membersBody}</p>
+              <div className="mt-4 space-y-2">
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.totalMembers}: {customerSnapshot ? formatNumber(customerSnapshot.members.total) : customerNotConfigured}
+                </div>
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.activeMembers}: {customerSnapshot ? formatNumber(customerSnapshot.members.active) : customerNotConfigured}
+                </div>
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.seatLimit}: {customerSnapshot ? formatNumberOrFallback(customerSnapshot.members.seatLimit, customerNotConfigured) : customerNotConfigured}
+                </div>
+                {!customerDataAvailable ? (
+                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                    {copy.customerSnapshotUnavailable}
+                  </div>
+                ) : null}
+              </div>
+            </article>
+
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.usageTitle}</div>
+              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {customerSnapshot ? formatNumberOrFallback(customerSnapshot.usage.sharedCredits, customerNotConfigured) : customerNotConfigured}
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.usageBody}</p>
+              <div className="mt-4 space-y-2">
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.plan}: {customerSnapshot ? customerSnapshot.usage.currentPlan || customerNotConfigured : customerNotConfigured}
+                </div>
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.recentLedger}: {customerSnapshot ? formatNumberOrFallback(customerSnapshot.usage.recentLedgerEntries, customerNotConfigured) : customerNotConfigured}
+                </div>
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.recentNetCredits}: {customerSnapshot ? formatNumberOrFallback(customerSnapshot.usage.recentLedgerNetCredits, customerNotConfigured) : customerNotConfigured}
+                </div>
+              </div>
+            </article>
+
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.ssoTitle}</div>
+              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {customerSnapshot ? (customerSnapshot.sso.status === "configured" ? copy.ssoConfigured : copy.ssoMissing) : customerNotConfigured}
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.ssoBody}</p>
+              <div className="mt-4 space-y-2">
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.domain}: {customerSnapshot ? customerSnapshot.sso.domain || customerNotConfigured : customerNotConfigured}
+                </div>
+                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                  {copy.status}: {customerSnapshot ? (customerSnapshot.sso.status === "configured" ? copy.ssoConfigured : copy.ssoMissing) : customerNotConfigured}
+                </div>
+              </div>
+            </article>
+
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.runtimeStatusTitle}</div>
+              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {customerSnapshot ? String(customerSnapshot.runtimes.length) : customerNotConfigured}
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.runtimeStatusBody}</p>
+              <div className="mt-4 space-y-2">
+                {customerSnapshot ? customerSnapshot.runtimes.map((item) => (
+                  <div key={item.slug} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                    {item.slug}: {getCustomerRuntimeStatusLabel(item.status, displayLocale)}
+                  </div>
+                )) : (
+                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                    {copy.customerSnapshotUnavailable}
+                  </div>
+                )}
+              </div>
+            </article>
+          </div>
+
+          <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
             <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
             <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.settingsBody}</p>
             <div className="mt-5 flex flex-wrap gap-3">
@@ -290,7 +435,19 @@ export function WorkspacePlatformGovernance({
             </div>
           </div>
 
-          <div className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+          {customerSnapshot ? (
+            <PlatformGovernanceSettingsPanel locale={locale} snapshot={customerSnapshot} />
+          ) : (
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
+              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {customerNotConfigured}
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.settingsUnavailable}</p>
+            </article>
+          )}
+
+          <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
             <div className="dashboard-kicker text-muted-foreground">{copy.enterpriseIaTitle}</div>
             <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.enterpriseIaBody}</p>
             <div className="mt-5 grid gap-4 xl:grid-cols-2">

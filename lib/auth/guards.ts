@@ -6,12 +6,25 @@ import type { AuthUserPayload } from "@/lib/enterprise/server"
 import { isLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { isFeatureRuntimeEnabled } from "@/lib/runtime-features"
 
-export function hasFeatureAccess(user: AuthUserPayload, feature?: FeatureKey) {
+export type GuardFeatureKey = FeatureKey | "audio_generation"
+
+export function hasFeatureAccess(user: AuthUserPayload, feature?: GuardFeatureKey) {
   if (!feature) return true
   if (user.enterpriseStatus !== "active") return false
   const isEnterpriseAdmin = user.enterpriseRole === "admin" && user.enterpriseStatus === "active"
   if (isEnterpriseAdmin) return true
+  if (feature === "audio_generation") {
+    return Boolean((user.permissions as Record<string, boolean> | undefined)?.audio_generation)
+  }
   return Boolean(user.permissions?.[feature])
+}
+
+export function hasFeatureAccessWithFallback(
+  user: AuthUserPayload,
+  primaryFeature: GuardFeatureKey | null | undefined,
+  fallbackFeature?: FeatureKey,
+) {
+  return hasFeatureAccess(user, primaryFeature ?? undefined) || hasFeatureAccess(user, fallbackFeature)
 }
 
 export function getAdvisorFeature(advisorType: string | null | undefined): FeatureKey | null {
@@ -21,7 +34,7 @@ export function getAdvisorFeature(advisorType: string | null | undefined): Featu
   return null
 }
 
-export async function requireSessionUser(request: NextRequest, feature?: FeatureKey) {
+export async function requireSessionUser(request: NextRequest, feature?: GuardFeatureKey) {
   let user: Awaited<ReturnType<typeof getSessionUser>>
   try {
     user = await getSessionUser(request)
@@ -43,7 +56,7 @@ export async function requireSessionUser(request: NextRequest, feature?: Feature
     }
   }
 
-  if (feature && !isFeatureRuntimeEnabled(feature)) {
+  if (feature && feature !== "audio_generation" && !isFeatureRuntimeEnabled(feature)) {
     return {
       response: NextResponse.json({ error: "Feature disabled" }, { status: 410 }),
     }

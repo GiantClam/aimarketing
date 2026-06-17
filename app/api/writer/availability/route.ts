@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { hasFeatureAccess } from "@/lib/auth/guards"
 import { getSessionUser } from "@/lib/auth/session"
-import { getEnterpriseDifyKnowledgeStatus } from "@/lib/dify/enterprise-knowledge"
+import { getEnterpriseKnowledgeStatus } from "@/lib/knowledge/service"
 import { getWriterSkillsAvailability } from "@/lib/writer/skills"
 
 export async function GET(req: NextRequest) {
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const knowledge = await getEnterpriseDifyKnowledgeStatus(currentUser.enterpriseId)
+    const knowledge = await getEnterpriseKnowledgeStatus(currentUser.enterpriseId)
     const writerAvailability = getWriterSkillsAvailability()
     const hasCopywritingAccess = hasFeatureAccess(currentUser, "copywriting_generation")
 

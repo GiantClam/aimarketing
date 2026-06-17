@@ -28,6 +28,7 @@ export function WorkspacePlatformRegistryAdmin({
   canManage: initialCanManage,
   entries: initialEntries,
   executions: initialExecutions = [],
+  hiddenSlugs = [],
 }: {
   locale: "zh" | "en"
   itemType: PlatformRegistryItemType
@@ -36,14 +37,18 @@ export function WorkspacePlatformRegistryAdmin({
   canManage: boolean
   entries: PlatformRegistryControlEntry[]
   executions?: PlatformRegistryEntryExecutionState[]
+  hiddenSlugs?: string[]
 }) {
-  const [entries, setEntries] = useState(initialEntries)
+  const visibleInitialEntries = initialEntries.filter((entry) => !hiddenSlugs.includes(entry.slug))
+  const visibleInitialExecutions = initialExecutions.filter((execution) => !hiddenSlugs.includes(execution.slug))
+
+  const [entries, setEntries] = useState(visibleInitialEntries)
   const [canManage, setCanManage] = useState(initialCanManage)
   const [executions, setExecutions] = useState<Record<string, PlatformRegistryEntryExecutionState>>(
-    Object.fromEntries(initialExecutions.map((execution) => [execution.slug, execution])),
+    Object.fromEntries(visibleInitialExecutions.map((execution) => [execution.slug, execution])),
   )
   const [drafts, setDrafts] = useState<Record<string, DraftEntry>>(
-    Object.fromEntries(initialEntries.map((entry) => [entry.slug, cloneDraft(entry.config)])),
+    Object.fromEntries(visibleInitialEntries.map((entry) => [entry.slug, cloneDraft(entry.config)])),
   )
   const [savingSlug, setSavingSlug] = useState<string | null>(null)
   const [messages, setMessages] = useState<Record<string, string>>({})
@@ -111,8 +116,12 @@ export function WorkspacePlatformRegistryAdmin({
         const payload = await response.json().catch(() => null)
         if (cancelled || !payload?.data?.entries) return
 
-        const nextEntries = payload.data.entries as PlatformRegistryControlEntry[]
-        const nextExecutions = (payload.data.executions || []) as PlatformRegistryEntryExecutionState[]
+        const nextEntries = (payload.data.entries as PlatformRegistryControlEntry[]).filter(
+          (entry) => !hiddenSlugs.includes(entry.slug),
+        )
+        const nextExecutions = ((payload.data.executions || []) as PlatformRegistryEntryExecutionState[]).filter(
+          (execution) => !hiddenSlugs.includes(execution.slug),
+        )
         setEntries(nextEntries)
         setCanManage(Boolean(payload.data.canManage))
         setExecutions(Object.fromEntries(nextExecutions.map((execution) => [execution.slug, execution])))
@@ -127,7 +136,7 @@ export function WorkspacePlatformRegistryAdmin({
     return () => {
       cancelled = true
     }
-  }, [itemType, locale])
+  }, [hiddenSlugs, itemType, locale])
 
   const setDraft = (slug: string, partial: Partial<DraftEntry>) => {
     setDrafts((current) => ({
@@ -182,8 +191,12 @@ export function WorkspacePlatformRegistryAdmin({
         cache: "no-store",
       })
       const reloaded = await reload.json().catch(() => null)
-      const reloadedEntries = (reloaded?.data?.entries || []) as PlatformRegistryControlEntry[]
-      const reloadedExecutions = (reloaded?.data?.executions || []) as PlatformRegistryEntryExecutionState[]
+      const reloadedEntries = ((reloaded?.data?.entries || []) as PlatformRegistryControlEntry[]).filter(
+        (item) => !hiddenSlugs.includes(item.slug),
+      )
+      const reloadedExecutions = ((reloaded?.data?.executions || []) as PlatformRegistryEntryExecutionState[]).filter(
+        (execution) => !hiddenSlugs.includes(execution.slug),
+      )
 
       setMessages((current) => ({
         ...current,
@@ -216,9 +229,9 @@ export function WorkspacePlatformRegistryAdmin({
   }
 
   return (
-    <section className="public-grid-bg mx-auto max-w-7xl px-6 pb-10">
-      <div className="space-y-8">
-        <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+    <section className="public-grid-bg workspace-page-shell-bottom mx-auto max-w-7xl">
+      <div className="workspace-stack">
+        <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
           <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
           <h2 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[0.02em] text-foreground lg:text-5xl">
             {title}
@@ -238,7 +251,7 @@ export function WorkspacePlatformRegistryAdmin({
                 ? entry.bindingOptions
                 : [{ value: draft.bindingTarget, label: draft.bindingTarget }]
             return (
-              <article key={entry.slug} className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+              <article key={entry.slug} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-3">
                     <div className="dashboard-kicker text-muted-foreground">{entry.surfaceLabel}</div>

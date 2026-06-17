@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import {
+  fetchVideoAgentUpstream,
+  getVideoAgentErrorMessage,
+  readJsonResponse,
+} from "@/lib/video-agent/upstream"
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -26,22 +31,31 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const res = await fetch(`${AGENT_URL}/video-agent/storyboard/confirm`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const res = await fetchVideoAgentUpstream(
+      `${AGENT_URL}/video-agent/storyboard/confirm`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          run_id: runId,
+          confirmed: confirmed,
+          feedback: feedback,
+          user_id: auth.user.id,
+          user_email: auth.user.email,
+        }),
       },
-      body: JSON.stringify({
-        run_id: runId,
-        confirmed: confirmed,
-        feedback: feedback,
-        user_id: auth.user.id,
-        user_email: auth.user.email,
-      }),
-    })
+      {
+        label: "video_agent.storyboard.confirm",
+        timeoutMs: 120_000,
+        attempts: 3,
+      },
+    )
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ error: "确认失败" }), {
+      const payload = await readJsonResponse(res)
+      return new Response(JSON.stringify({ error: getVideoAgentErrorMessage(payload, "确认失败") }), {
         status: res.status,
         headers: { "Content-Type": "application/json" },
       })
@@ -59,4 +73,3 @@ export async function POST(request: NextRequest) {
     })
   }
 }
-

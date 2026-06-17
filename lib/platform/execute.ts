@@ -23,6 +23,29 @@ export type PlatformExecutionGateResult =
   | { ok: true }
   | { ok: false; response: NextResponse }
 
+export type PlatformMediaExecutionResult = {
+  data: {
+    runId?: number
+    taskId?: string
+    capabilitySlug: string
+    featureId?: string
+    provider: string
+    status: "queued" | "running" | "succeeded" | "failed"
+    results: Array<{
+      url?: string | null
+      outputType?: string | null
+      text?: string | null
+      title?: string | null
+    }>
+    detailPath?: string | null
+    mediaTarget?: string
+    requestedTarget?: string
+    endpoint?: string | null
+    extra?: Record<string, unknown> | null
+    raw?: Record<string, unknown> | null
+  }
+}
+
 function normalizeAction(value: string | null | undefined) {
   return value?.trim().toLowerCase() || "execute"
 }
@@ -35,6 +58,96 @@ function buildExecutionJsonError(error: string, status: number, details?: Record
     },
     { status },
   )
+}
+
+function normalizePlatformMediaStatus(value: unknown): PlatformMediaExecutionResult["data"]["status"] {
+  const normalized = String(value || "").trim().toUpperCase()
+  if (normalized === "SUCCESS" || normalized === "SUCCEEDED") return "succeeded"
+  if (normalized === "FAILED" || normalized === "CANCELLED") return "failed"
+  if (normalized === "QUEUED" || normalized === "PENDING") return "queued"
+  return "running"
+}
+
+function normalizePlatformMediaResults(value: unknown): PlatformMediaExecutionResult["data"]["results"] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null
+      const record = item as Record<string, unknown>
+      return {
+        url: typeof record.url === "string" ? record.url : null,
+        outputType: typeof record.outputType === "string" ? record.outputType : null,
+        text: typeof record.text === "string" ? record.text : null,
+        title: typeof record.title === "string" ? record.title : null,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+}
+
+function inferPlatformMediaProvider(capabilitySlug: string, record: Record<string, unknown>) {
+  if (typeof record.provider === "string" && record.provider.trim()) return record.provider
+  if (capabilitySlug === "ai-music") return "minimax"
+  return "runninghub"
+}
+
+function inferPlatformMediaDetailPath(capabilitySlug: string, taskId: string | undefined) {
+  if (!taskId) return null
+  if (capabilitySlug !== "ai-image" && capabilitySlug !== "ai-video" && capabilitySlug !== "ai-music") return null
+  return `/api/platform/media/tasks/${encodeURIComponent(taskId)}?target=${encodeURIComponent(capabilitySlug)}`
+}
+
+export function normalizePlatformMediaExecutionPayload(input: {
+  capabilitySlug: string
+  featureId?: string | null
+  data: Record<string, unknown> | null | undefined
+}): PlatformMediaExecutionResult | null {
+  const record = input.data
+  if (!record || typeof record !== "object") return null
+
+  const rawTaskId =
+    typeof record.taskId === "string"
+      ? record.taskId
+      : typeof record.taskId === "number"
+        ? String(record.taskId)
+        : typeof record.runId === "number"
+          ? String(record.runId)
+          : undefined
+
+  const numericRunId =
+    typeof record.runId === "number"
+      ? record.runId
+      : rawTaskId && /^\d+$/.test(rawTaskId)
+        ? Number(rawTaskId)
+        : undefined
+
+  const capabilitySlug = input.capabilitySlug
+  const featureId =
+    input.featureId ||
+    (typeof record.featureId === "string" ? record.featureId : null) ||
+    (typeof record.requestedTarget === "string" ? record.requestedTarget : null) ||
+    undefined
+
+  return {
+    data: {
+      runId: numericRunId,
+      taskId: rawTaskId,
+      capabilitySlug,
+      featureId,
+      provider: inferPlatformMediaProvider(capabilitySlug, record),
+      status: normalizePlatformMediaStatus(record.status),
+      results: normalizePlatformMediaResults(record.results),
+      detailPath:
+        typeof record.detailPath === "string" && record.detailPath.trim()
+          ? record.detailPath
+          : inferPlatformMediaDetailPath(capabilitySlug, rawTaskId),
+      mediaTarget: typeof record.mediaTarget === "string" ? record.mediaTarget : capabilitySlug,
+      requestedTarget: typeof record.requestedTarget === "string" ? record.requestedTarget : featureId,
+      endpoint: typeof record.endpoint === "string" ? record.endpoint : null,
+      extra: record.extra && typeof record.extra === "object" ? (record.extra as Record<string, unknown>) : null,
+      raw: record.raw && typeof record.raw === "object" ? (record.raw as Record<string, unknown>) : null,
+    },
+  }
 }
 
 export function normalizePlatformRegistryItemType(value: string | null): PlatformRegistryItemType | null {

@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import {
+  fetchVideoAgentUpstream,
+  getVideoAgentErrorMessage,
+  readJsonResponse,
+} from "@/lib/video-agent/upstream"
 
 const AGENT_URL = process.env.AGENT_URL || process.env.NEXT_PUBLIC_AGENT_URL || "https://api.aimarketingsite.com"
 
@@ -13,26 +18,35 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    const response = await fetch(`${AGENT_URL}/jobs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetchVideoAgentUpstream(
+      `${AGENT_URL}/jobs`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...body,
+          user_id: auth.user.id,
+          user_email: auth.user.email,
+        }),
       },
-      body: JSON.stringify({
-        ...body,
-        user_id: auth.user.id,
-        user_email: auth.user.email,
-      }),
-    })
-
-    const data = await response.json()
+      {
+        label: "video_agent.jobs.create",
+        timeoutMs: 120_000,
+        attempts: 3,
+      },
+    )
 
     if (!response.ok) {
-      return new Response(JSON.stringify({ error: data.error || "创建任务失败" }), {
+      const payload = await readJsonResponse(response)
+      return new Response(JSON.stringify({ error: getVideoAgentErrorMessage(payload, "创建任务失败") }), {
         status: response.status,
         headers: { "Content-Type": "application/json" },
       })
     }
+
+    const data = await response.json().catch(() => null)
 
     return new Response(JSON.stringify(data), {
       headers: { "Content-Type": "application/json" },
@@ -57,8 +71,25 @@ export async function GET(request: NextRequest) {
     const runId = searchParams.get("run_id")
 
     if (runId) {
-      const response = await fetch(`${AGENT_URL}/jobs/${runId}`)
-      const data = await response.json()
+      const response = await fetchVideoAgentUpstream(
+        `${AGENT_URL}/jobs/${runId}`,
+        {
+          method: "GET",
+        },
+        {
+          label: "video_agent.jobs.status",
+          timeoutMs: 30_000,
+          attempts: 3,
+        },
+      )
+      if (!response.ok) {
+        const payload = await readJsonResponse(response)
+        return new Response(JSON.stringify({ error: getVideoAgentErrorMessage(payload, "查询任务失败") }), {
+          status: response.status,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+      const data = await response.json().catch(() => null)
       return new Response(JSON.stringify(data), {
         headers: { "Content-Type": "application/json" },
       })
@@ -76,4 +107,3 @@ export async function GET(request: NextRequest) {
     })
   }
 }
-

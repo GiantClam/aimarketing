@@ -4,9 +4,11 @@ import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 
 import { listBusinessAgentConfigs } from "@/lib/platform/business-agents"
+import { getImportedAgencyAgentSkillSourceMap } from "@/lib/platform/imported-agency-agents"
 
 const EXECUTIVE_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "executive-consulting-suite")
 const BUSINESS_AGENT_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "business-agents")
+const IMPORTED_AGENCY_AGENT_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "agency-agents")
 
 const skillCache = new Map<string, Promise<string>>()
 
@@ -82,6 +84,9 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
 const BUSINESS_AGENT_SKILL_MAP = Object.fromEntries(
   listBusinessAgentConfigs().map((agent) => [agent.agentId, [agent.promptDocumentPath]]),
 )
+const IMPORTED_AGENCY_AGENT_SKILL_MAP = Object.fromEntries(
+  Object.entries(getImportedAgencyAgentSkillSourceMap()).map(([agentId, sourcePath]) => [agentId, [sourcePath]]),
+)
 
 function getAgentSkillSource(agentId: string) {
   if (AGENT_SKILL_MAP[agentId]?.length) {
@@ -95,6 +100,13 @@ function getAgentSkillSource(agentId: string) {
     return {
       baseDir: BUSINESS_AGENT_SKILL_BASE_DIR,
       files: BUSINESS_AGENT_SKILL_MAP[agentId],
+    }
+  }
+
+  if (IMPORTED_AGENCY_AGENT_SKILL_MAP[agentId]?.length) {
+    return {
+      baseDir: IMPORTED_AGENCY_AGENT_SKILL_BASE_DIR,
+      files: IMPORTED_AGENCY_AGENT_SKILL_MAP[agentId],
     }
   }
 

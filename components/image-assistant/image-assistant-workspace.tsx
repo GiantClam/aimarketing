@@ -3232,7 +3232,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             patchBounds: null,
             canvasWidth: shouldUseCanvasSnapshotEdit ? canvasAttachment?.width || null : null,
             canvasHeight: shouldUseCanvasSnapshotEdit ? canvasAttachment?.height || null : null,
-            candidateCount: 1,
+            candidateCount: effectiveKind === "generate" ? 9 : 1,
             sizePreset: canvasPatchSizePreset,
             resolution: submissionResolution,
             parentVersionId: detail?.session.current_version_id || null,

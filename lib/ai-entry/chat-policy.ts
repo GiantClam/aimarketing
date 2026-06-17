@@ -2,7 +2,7 @@ export function shouldQueryAiEntryEnterpriseKnowledge(input: {
   canQueryEnterpriseKnowledge: boolean
   effectiveAgentId?: string | null
 }) {
-  return Boolean(input.canQueryEnterpriseKnowledge && input.effectiveAgentId)
+  return Boolean(input.canQueryEnterpriseKnowledge)
 }
 
 export function getAiEntryWebSearchSystemRule(input: {

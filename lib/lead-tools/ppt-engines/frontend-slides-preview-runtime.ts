@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 
+import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
 import type {
   PptPreviewAsset,
   PptPreviewDeck,
@@ -246,15 +247,6 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;")
-}
-
-function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
 }
 
 function splitUnits(value: string) {
@@ -628,14 +620,14 @@ function repairVariantForRuntime(deck: PptPreviewDeck, variant: PptPreviewVarian
   const statsRows = getMetricRows(stats)
   const closingRows = getClosingRows(closing)
   const chartRows = deriveChartRowsFromTemplateFallbacks({
-    styleKey: variant.key,
+    styleKey: variant.styleKey,
     slide: chart,
     comparisonRows,
     statsRows,
     spotlightRows,
   })
   const processRows = deriveProcessRowsFromTemplateFallbacks({
-    styleKey: variant.key,
+    styleKey: variant.styleKey,
     slide: process,
     closingRows,
     agendaRows,
@@ -1848,7 +1840,7 @@ function renderNeoGridBoldSlides(deck: PptPreviewDeck, variant: PptPreviewVarian
 }
 
 function renderVariantSlides(deck: PptPreviewDeck, variant: PptPreviewVariant) {
-  switch (variant.key) {
+  switch (variant.styleKey) {
     case "ppt169_brutalist_ai_newspaper_2026":
       return renderLongTableSlides(deck, variant)
     case "ppt169_sugar_rush_memphis":
@@ -2796,7 +2788,7 @@ function buildControllerScript() {
 }
 
 function renderHtmlDocument(deck: PptPreviewDeck, variant: PptPreviewVariant) {
-  const theme = getTheme(variant.key)
+  const theme = getTheme(variant.styleKey)
   const slides = renderVariantSlides(deck, variant)
 
   return `<!DOCTYPE html>
@@ -2810,7 +2802,7 @@ function renderHtmlDocument(deck: PptPreviewDeck, variant: PptPreviewVariant) {
     <link href="${theme.fontHref}" rel="stylesheet" />
     <style>
       ${VIEWPORT_BASE_CSS}
-      ${buildVariantSpecificCss(theme, variant.key)}
+      ${buildVariantSpecificCss(theme, variant.styleKey)}
     </style>
   </head>
   <body class="${theme.deckClass}">
@@ -2874,7 +2866,7 @@ function renderPosterTextBlock(params: {
 }
 
 function renderPosterAsset(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: PptPreviewSlide, slideIndex: number) {
-  const theme = getTheme(variant.key)
+  const theme = getTheme(variant.styleKey)
   const bulletItems = slide.bullets.slice(0, 4)
   const bulletRows = bulletItems
     .map((bullet, index) => {
@@ -2972,11 +2964,11 @@ function materializeVariant(deck: PptPreviewDeck, variant: PptPreviewVariant) {
     ...repairedVariant,
     preview: {
       format: "svg" as const,
-      themeId: repairedVariant.key,
+      themeId: repairedVariant.styleKey,
       cover: slides[0] ?? renderPosterAsset(deck, repairedVariant, repairedVariant.slides[0]!, 0),
       slides,
       htmlDocument: {
-        fileName: `${slugify(deck.title || "deck")}-${repairedVariant.key}.html`,
+        fileName: buildPptExportFileName(deck, repairedVariant, "html"),
         html,
       },
     },

@@ -9,16 +9,26 @@ import { useI18n } from "@/components/locale-provider"
 import { LoginGateDialog } from "@/components/lead-tools/login-gate-dialog"
 import { Button } from "@/components/ui/button"
 import {
+  DEFAULT_PPT_PREVIEW_PAGE_COUNT,
+  getPptPreviewNarrativeAngleLabel,
+  getPptPreviewStyleSummary,
+  getPptPreviewTemplateLabel,
   pptLanguageOptions,
+  pptFrontendTemplateOptions,
   pptPreviewModelOptions,
-  pptPreviewStyles,
+  resolveOptionalPptPreviewPageCount,
+  resolvePptPreviewDeckPageCount,
+  resolvePptPreviewTemplateMode,
   pptScenarioOptions,
+  type PptFrontendTemplateId,
   type PptLanguage,
   type PptPreviewDeck,
   type PptPreviewModelValue,
+  type PptPreviewPageCount,
   type PptPreviewRequest,
-  type PptPreviewStyleKey,
+  type PptPreviewTemplateMode,
   type PptScenario,
+  buildMockPptPreview,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
   type ProtectedAction,
@@ -34,19 +44,15 @@ type PptPreviewWorkbenchProps = {
   initialScenario?: PptScenario
   initialLanguage?: PptLanguage
   initialModel?: PptPreviewModelValue
+  initialTemplateMode?: PptPreviewTemplateMode
+  initialTemplateId?: PptFrontendTemplateId
+  initialPageCount?: PptPreviewPageCount | null
   initialAction?: ProtectedAction
   initialDeck?: PptPreviewDeck | null
   initialDisplayDeck?: PptPreviewDeck | null
   skipSavedSession?: boolean
   embedded?: boolean
 }
-
-const variantSlots: Array<{ key: PptPreviewStyleKey; slot: "A" | "B" | "C" | "D" }> = [
-  { key: "ppt169_brutalist_ai_newspaper_2026", slot: "A" },
-  { key: "ppt169_sugar_rush_memphis", slot: "B" },
-  { key: "ppt169_pritzker_2026", slot: "C" },
-  { key: "ppt169_swiss_grid_systems", slot: "D" },
-]
 
 function getWorkbenchCopy(locale: "zh" | "en") {
   if (locale === "zh") {
@@ -55,6 +61,14 @@ function getWorkbenchCopy(locale: "zh" | "en") {
       projectTitle: "项目标题",
       scenario: "场景",
       language: "语言",
+      templateMode: "生成模式",
+      templatePreset: "模板",
+      pageCount: "页数",
+      pageCountHint: "留空时让 AI 自动规划；填写后接受 4-20 页。",
+      pageCountAuto: "AI 自动规划",
+      pageCountResolved: "本次已规划 {count} 页",
+      autoTemplates: "自动四模板",
+      singleTemplate: "单模板四叙事",
       modelFallback: "可扩展为更多预览模型。",
       execute4x: "执行 4X",
       fourParallel: "四份并行生成",
@@ -109,6 +123,14 @@ function getWorkbenchCopy(locale: "zh" | "en") {
     projectTitle: "Project Title",
     scenario: "Scenario",
     language: "Language",
+    templateMode: "Generation Mode",
+    templatePreset: "Template",
+    pageCount: "Page Count",
+    pageCountHint: "Leave blank to let AI plan it automatically, or enter any count from 4 to 20.",
+    pageCountAuto: "AI planned",
+    pageCountResolved: "This run resolved to {count} slides",
+    autoTemplates: "Auto 4 Templates",
+    singleTemplate: "Single Template / 4 Angles",
     modelFallback: "More preview models can be added here.",
     execute4x: "Run 4X",
     fourParallel: "Four parallel generations",
@@ -190,27 +212,19 @@ function getModelDescription(value: PptPreviewModelValue, locale: "zh" | "en") {
   return descriptions[value][locale]
 }
 
-function getVariantSummary(key: PptPreviewStyleKey, locale: "zh" | "en") {
-  const summaries: Record<PptPreviewStyleKey, { zh: string; en: string }> = {
-    "ppt169_brutalist_ai_newspaper_2026": {
-      zh: "frontend-slides 的长桌纪要模板，规则线、分栏和议题感最强，适合董事会汇报、策略复盘和结构化叙事。",
-      en: "A long-table review template in frontend-slides with the strongest ruled layout, agenda feel, and column structure for board updates, strategy reviews, and structured narratives.",
-    },
-    "ppt169_sugar_rush_memphis": {
-      zh: "frontend-slides 的轻快玩味模板，圆角、浮动贴纸和高亮色块最强，适合发布、教育和品牌故事。",
-      en: "A playful frontend-slides template with rounded geometry, floating sticker energy, and bright highlight blocks for launches, education, and brand storytelling.",
-    },
-    "ppt169_pritzker_2026": {
-      zh: "frontend-slides 的告示海报模板，大字号、强栏位和印刷张力最强，适合观点宣言、campaign 和冲击型表达。",
-      en: "A broadside-poster frontend-slides template with oversized type, strong columns, and print tension for bold points of view, campaigns, and impact-heavy statements.",
-    },
-    "ppt169_swiss_grid_systems": {
-      zh: "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
-      en: "A neo-grid frontend-slides template with visible grid structure, strong contrast blocks, and a modern strategy-interface feel for product, consulting, and analytical decks.",
-    },
+function getVariantSummary(
+  variant: Pick<NonNullable<PptPreviewDeck["variants"]>[number], "styleKey" | "narrativeAngle">,
+  locale: "zh" | "en",
+) {
+  const language = locale === "zh" ? "zh-CN" : "en-US"
+  const summary = getPptPreviewStyleSummary(variant.styleKey, language)
+
+  if (!variant.narrativeAngle) {
+    return summary
   }
 
-  return summaries[key][locale]
+  const angleLabel = getPptPreviewNarrativeAngleLabel(variant.narrativeAngle, language)
+  return `${angleLabel} · ${summary}`
 }
 
 function getLanguageLabel(value: PptLanguage, locale: "zh" | "en") {
@@ -322,6 +336,9 @@ export function PptPreviewWorkbench({
   initialScenario = "marketing-campaign",
   initialLanguage = "zh-CN",
   initialModel = "MiniMax-M2.7-highspeed",
+  initialTemplateMode = "auto-4",
+  initialTemplateId,
+  initialPageCount = null,
   initialAction,
   initialDeck = null,
   initialDisplayDeck = null,
@@ -340,10 +357,25 @@ export function PptPreviewWorkbench({
   const [scenario, setScenario] = useState<PptScenario>(initialScenario)
   const [language, setLanguage] = useState<PptLanguage>(initialLanguage)
   const [model, setModel] = useState<PptPreviewModelValue>(initialModel)
+  const [templateMode, setTemplateMode] = useState<PptPreviewTemplateMode>(
+    initialDeck?.templateMode ?? initialDisplayDeck?.templateMode ?? initialTemplateMode,
+  )
+  const [templateId, setTemplateId] = useState<PptFrontendTemplateId>(
+    initialDeck?.selectedTemplateId ?? initialDisplayDeck?.selectedTemplateId ?? initialTemplateId ?? "long-table",
+  )
+  const [pageCountInput, setPageCountInput] = useState<string>(
+    initialDeck?.pageCount != null
+      ? String(initialDeck.pageCount)
+      : initialDisplayDeck?.pageCount != null
+        ? String(initialDisplayDeck.pageCount)
+        : initialPageCount != null
+          ? String(initialPageCount)
+          : "",
+  )
   const [deck, setDeck] = useState<PptPreviewDeck | null>(initialDeck)
   const [previewSessionId, setPreviewSessionId] = useState<string | null>(initialDeck?.previewSessionId ?? null)
   const [selectedVariantKey, setSelectedVariantKey] = useState<string>(
-    initialDeck?.variants[0]?.key ?? "ppt169_brutalist_ai_newspaper_2026",
+    initialDeck?.variants[0]?.key ?? initialDisplayDeck?.variants[0]?.key ?? "ppt169_brutalist_ai_newspaper_2026",
   )
   const [slideIndexByVariant, setSlideIndexByVariant] = useState<Record<string, number>>({})
   const [isGenerating, setIsGenerating] = useState(false)
@@ -351,13 +383,40 @@ export function PptPreviewWorkbench({
   const [isRunningProtectedAction, setIsRunningProtectedAction] = useState(false)
   const [loginGateAction, setLoginGateAction] = useState<ProtectedAction | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
-  const [lastGeneratedRequest, setLastGeneratedRequest] = useState<PptPreviewRequest | null>(
-    initialDeck ? { prompt: initialPrompt, scenario: initialScenario, language: initialLanguage, model: initialModel } : null,
-  )
+  const requestedPageCount = useMemo(() => resolveOptionalPptPreviewPageCount(pageCountInput), [pageCountInput])
+  const effectiveTemplateMode = resolvePptPreviewTemplateMode({
+    templateMode,
+    templateId,
+  })
   const visibleDeck = deck ?? initialDisplayDeck
+  const resolvedPageCount =
+    visibleDeck?.resolvedPageCount ??
+    (visibleDeck ? resolvePptPreviewDeckPageCount(visibleDeck) : requestedPageCount ?? DEFAULT_PPT_PREVIEW_PAGE_COUNT)
+  const [lastGeneratedRequest, setLastGeneratedRequest] = useState<PptPreviewRequest | null>(
+    initialDeck
+      ? {
+          prompt: initialPrompt,
+          scenario: initialScenario,
+          language: initialLanguage,
+          model: initialModel,
+          templateMode: initialDeck.templateMode ?? initialTemplateMode,
+          templateId: initialDeck.selectedTemplateId ?? initialTemplateId,
+          pageCount: initialDeck.pageCount ?? initialPageCount ?? null,
+        }
+      : null,
+  )
 
   const canUseProtectedActions = Boolean(user) && !isDemoMode
-  const redirectTo = getToolReturnPath(prompt, scenario, language, model, loginGateAction ?? undefined)
+  const redirectTo = getToolReturnPath(
+    prompt,
+    scenario,
+    language,
+    model,
+    effectiveTemplateMode,
+    effectiveTemplateMode === "single-template" ? templateId : undefined,
+    requestedPageCount ?? undefined,
+    loginGateAction ?? undefined,
+  )
 
   useEffect(() => {
     if (skipSavedSession) {
@@ -373,10 +432,20 @@ export function PptPreviewWorkbench({
     setScenario(savedSession.request.scenario)
     setLanguage(savedSession.request.language)
     setModel(savedSession.request.model ?? initialModel)
+    setTemplateMode(savedSession.request.templateMode ?? initialTemplateMode)
+    if (savedSession.request.templateId) {
+      setTemplateId(savedSession.request.templateId)
+    }
+    setPageCountInput(savedSession.request.pageCount != null ? String(savedSession.request.pageCount) : initialPageCount != null ? String(initialPageCount) : "")
     setDeck(savedSession.generatedDeck ?? null)
     setLastGeneratedRequest(savedSession.generatedDeck ? savedSession.request : null)
     setPreviewSessionId(savedSession.previewSessionId ?? savedSession.generatedDeck?.previewSessionId ?? null)
-    setSelectedVariantKey(savedSession.selectedVariantKey ?? "ppt169_brutalist_ai_newspaper_2026")
+    setSelectedVariantKey(
+      savedSession.selectedVariantKey ??
+        savedSession.generatedDeck?.variants[0]?.key ??
+        initialDisplayDeck?.variants[0]?.key ??
+        "ppt169_brutalist_ai_newspaper_2026",
+    )
 
     if (savedSession.slideIndexByVariant) {
       setSlideIndexByVariant(savedSession.slideIndexByVariant)
@@ -388,14 +457,22 @@ export function PptPreviewWorkbench({
         [savedSession.selectedVariantKey]: savedSession.selectedSlideIndex ?? 0,
       })
     }
-  }, [initialModel, skipSavedSession])
+  }, [initialDisplayDeck?.variants, initialModel, initialPageCount, initialTemplateMode, skipSavedSession])
 
   useEffect(() => {
     if (!prompt.trim() && !deck) {
       return
     }
 
-    const request: PptPreviewRequest = { prompt, scenario, language, model }
+    const request: PptPreviewRequest = {
+      prompt,
+      scenario,
+      language,
+      model,
+      templateMode: effectiveTemplateMode,
+      templateId: effectiveTemplateMode === "single-template" ? templateId : undefined,
+      pageCount: requestedPageCount ?? undefined,
+    }
     const selectedSlideIndex = slideIndexByVariant[selectedVariantKey] ?? 0
 
     savePptPreviewSession({
@@ -407,7 +484,19 @@ export function PptPreviewWorkbench({
       generatedDeck: deck ?? undefined,
       lastActionAt: new Date().toISOString(),
     })
-  }, [deck, language, model, previewSessionId, prompt, scenario, selectedVariantKey, slideIndexByVariant])
+  }, [
+    deck,
+    effectiveTemplateMode,
+    language,
+    model,
+    requestedPageCount,
+    previewSessionId,
+    prompt,
+    scenario,
+    selectedVariantKey,
+    slideIndexByVariant,
+    templateId,
+  ])
 
   useEffect(() => {
     if (!isGenerating) {
@@ -422,13 +511,21 @@ export function PptPreviewWorkbench({
     return () => window.clearInterval(timer)
   }, [isGenerating, loadingMessageCount])
 
-  const variantMap = useMemo(() => {
-    const next = new Map<string, NonNullable<PptPreviewWorkbenchProps["initialDeck"]>["variants"][number]>()
-    visibleDeck?.variants.forEach((variant) => {
-      next.set(variant.key, variant)
+  const boardTemplateDeck = useMemo(() => {
+    if (visibleDeck) {
+      return visibleDeck
+    }
+
+    return buildMockPptPreview({
+      prompt,
+      scenario,
+      language,
+      model,
+      templateMode: effectiveTemplateMode,
+      templateId: effectiveTemplateMode === "single-template" ? templateId : undefined,
+      pageCount: requestedPageCount ?? undefined,
     })
-    return next
-  }, [visibleDeck])
+  }, [effectiveTemplateMode, language, model, prompt, requestedPageCount, scenario, templateId, visibleDeck])
 
   const previewIsStale = Boolean(
     deck &&
@@ -436,8 +533,19 @@ export function PptPreviewWorkbench({
       (lastGeneratedRequest.prompt !== prompt ||
         lastGeneratedRequest.scenario !== scenario ||
         lastGeneratedRequest.language !== language ||
-        (lastGeneratedRequest.model ?? initialModel) !== model),
+        (lastGeneratedRequest.model ?? initialModel) !== model ||
+        resolvePptPreviewTemplateMode(lastGeneratedRequest) !== effectiveTemplateMode ||
+        (resolvePptPreviewTemplateMode(lastGeneratedRequest) === "single-template"
+          ? lastGeneratedRequest.templateId !== templateId
+          : false) ||
+        resolveOptionalPptPreviewPageCount(lastGeneratedRequest.pageCount) !== requestedPageCount),
   )
+
+  useEffect(() => {
+    if (!boardTemplateDeck.variants.some((variant) => variant.key === selectedVariantKey)) {
+      setSelectedVariantKey(boardTemplateDeck.variants[0]?.key ?? "ppt169_brutalist_ai_newspaper_2026")
+    }
+  }, [boardTemplateDeck, selectedVariantKey])
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -447,12 +555,19 @@ export function PptPreviewWorkbench({
     params.set("scenario", scenario)
     params.set("language", language)
     params.set("model", model)
+    params.set("templateMode", effectiveTemplateMode)
+    if (effectiveTemplateMode === "single-template") {
+      params.set("templateId", templateId)
+    }
+    if (requestedPageCount != null) {
+      params.set("pageCount", String(requestedPageCount))
+    }
     if (previewSessionId && !previewIsStale) {
       params.set("previewSessionId", previewSessionId)
     }
 
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }, [language, model, pathname, previewIsStale, previewSessionId, prompt, router, scenario])
+  }, [effectiveTemplateMode, language, model, pathname, previewIsStale, previewSessionId, prompt, requestedPageCount, router, scenario, templateId])
 
   useEffect(() => {
     if (!deck || !previewIsStale || isGenerating) {
@@ -624,6 +739,9 @@ export function PptPreviewWorkbench({
           scenario,
           language,
           model,
+          templateMode: effectiveTemplateMode,
+          templateId: effectiveTemplateMode === "single-template" ? templateId : undefined,
+          pageCount: requestedPageCount ?? undefined,
         }),
       })
 
@@ -638,14 +756,25 @@ export function PptPreviewWorkbench({
 
       startTransition(() => {
         setDeck(nextDeck)
-        setLastGeneratedRequest({ prompt, scenario, language, model })
+        setLastGeneratedRequest({
+          prompt,
+          scenario,
+          language,
+          model,
+          templateMode: effectiveTemplateMode,
+          templateId: effectiveTemplateMode === "single-template" ? templateId : undefined,
+          pageCount: requestedPageCount ?? undefined,
+        })
         setPreviewSessionId(data.previewSessionId ?? nextDeck.previewSessionId ?? null)
         setSelectedVariantKey(nextDeck.variants[0]?.key ?? "ppt169_brutalist_ai_newspaper_2026")
         setSlideIndexByVariant(nextIndexes)
+        const nextResolvedPageCount = nextDeck.resolvedPageCount ?? resolvePptPreviewDeckPageCount(nextDeck)
         setStatusMessage(
-          nextDeck.previewEngine === "frontend-slides-html"
-            ? formatCopy(copy.generatedHtml, { language: getLanguageLabel(language, locale), scenario: getScenarioLabel(scenario, locale) })
-            : formatCopy(copy.generatedSvg, { language: getLanguageLabel(language, locale), scenario: getScenarioLabel(scenario, locale) }),
+          `${
+            nextDeck.previewEngine === "frontend-slides-html"
+              ? formatCopy(copy.generatedHtml, { language: getLanguageLabel(language, locale), scenario: getScenarioLabel(scenario, locale) })
+              : formatCopy(copy.generatedSvg, { language: getLanguageLabel(language, locale), scenario: getScenarioLabel(scenario, locale) })
+          } ${formatCopy(copy.pageCountResolved, { count: String(nextResolvedPageCount) })}`,
         )
       })
     } catch (error) {
@@ -663,26 +792,20 @@ export function PptPreviewWorkbench({
     void runProtectedAction(initialAction, selectedVariantKey)
   }, [canUseProtectedActions, deck, initialAction, isRunningProtectedAction, runProtectedAction, selectedVariantKey])
 
-  const boardVariants = variantSlots.map(({ key, slot }) => {
-    const liveVariant = variantMap.get(key)
-    const fallbackVariant = pptPreviewStyles.find((variant) => variant.key === key)
-    const variant = liveVariant ?? fallbackVariant
-
-    if (!variant) {
-      return null
-    }
-
-    const slideCount = liveVariant?.preview?.slides.length ?? liveVariant?.slides.length ?? 5
-    const slideIndex = getVariantSlideIndex(slideIndexByVariant, key, slideCount)
-    const currentSlide = liveVariant?.slides[slideIndex]
+  const boardVariants = boardTemplateDeck.variants.map((variant) => {
+    const liveVariant = visibleDeck?.variants.find((item) => item.key === variant.key)
+    const resolvedVariant = liveVariant ?? variant
+    const slideCount = liveVariant?.preview?.slides.length ?? resolvedVariant.slides.length ?? resolvedPageCount
+    const slideIndex = getVariantSlideIndex(slideIndexByVariant, resolvedVariant.key, slideCount)
+    const currentSlide = resolvedVariant.slides[slideIndex]
     const currentAsset = liveVariant?.preview?.slides[slideIndex]
     const currentHtmlDocument = liveVariant?.preview?.htmlDocument
     const status =
       !visibleDeck ? (isGenerating ? "RUNNING" : "IDLE") : deck ? (deck.source === "mock" ? "FALLBACK" : "READY") : "IDLE"
 
     return {
-      slot,
-      variant,
+      slot: resolvedVariant.slotLabel ?? "A",
+      variant: resolvedVariant,
       liveVariant,
       slideCount,
       slideIndex,
@@ -690,7 +813,7 @@ export function PptPreviewWorkbench({
       currentAsset,
       currentHtmlDocument,
       status,
-      isFocused: selectedVariantKey === key,
+      isFocused: selectedVariantKey === resolvedVariant.key,
     }
   })
 
@@ -705,20 +828,21 @@ export function PptPreviewWorkbench({
   const shell = (
     <div
       className={cn(
-        "mx-auto h-[calc(100svh-16px)] w-full overflow-hidden rounded-[10px] border border-black/10 bg-white shadow-[0_28px_80px_-40px_rgba(0,0,0,0.28)]",
+        "mx-auto w-full overflow-hidden rounded-[10px] border border-black/10 bg-white shadow-[0_28px_80px_-40px_rgba(0,0,0,0.28)]",
+        embedded ? "h-[calc(100svh-96px)]" : "h-[calc(100svh-16px)]",
         embedded ? "max-w-[1500px]" : "max-w-[1500px]",
       )}
     >
       <div className="grid h-full min-h-0 md:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="relative flex min-h-0 flex-col gap-1.5 overflow-hidden border-b border-black/8 bg-white/88 p-2.5 md:border-b-0 md:border-r">
+        <aside className="relative flex min-h-0 flex-col gap-1.5 overflow-x-hidden overflow-y-auto border-b border-black/8 bg-white/88 p-2.5 md:border-b-0 md:border-r">
           <div className="space-y-1.5">
             <div className="flex items-center gap-3 font-display text-sm font-black uppercase tracking-tight text-foreground">
               <div className="grid h-7 w-7 place-items-center rounded-[2px] bg-primary text-[0.85rem] text-primary-foreground">4X</div>
-              <span>AI Marketing // HTML Slides Preview</span>
+              <span>AI Marketing // PPT Generator Studio</span>
             </div>
             <div className="space-y-0.5">
               <h1 className="font-display text-[1.8rem] font-black uppercase leading-[0.88] tracking-[-0.04em] text-foreground sm:text-[2rem]">
-                AI PPT PREVIEW
+                AI PPT GENERATOR
               </h1>
               <div className="h-1 w-full max-w-[180px] bg-[linear-gradient(90deg,var(--color-primary)_0_38%,transparent_38%_45%,#2d6bff_45%_67%,transparent_67%_75%,#ff6a2a_75%_100%)]" />
             </div>
@@ -798,6 +922,91 @@ export function PptPreviewWorkbench({
                   ))}
                 </div>
               </div>
+
+              <div className="grid gap-1.5">
+                <div className="font-display text-xs font-black uppercase text-muted-foreground">{copy.pageCount}</div>
+                <input
+                  type="number"
+                  min={4}
+                  max={20}
+                  inputMode="numeric"
+                  value={pageCountInput}
+                  onChange={(event) => setPageCountInput(event.target.value.replace(/[^\d]/g, ""))}
+                  onBlur={() => setPageCountInput(requestedPageCount != null ? String(requestedPageCount) : "")}
+                  placeholder={isZh ? "留空交给 AI" : "Leave blank for AI"}
+                  className="h-10 rounded-[2px] border border-black/14 bg-black/[0.03] px-3 text-sm font-semibold text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary"
+                />
+                <p className="text-[10px] leading-3.5 text-muted-foreground">
+                  {copy.pageCountHint}
+                  {" "}
+                  {formatCopy(copy.pageCountAuto, { count: String(resolvedPageCount) })}
+                  {`: ${resolvedPageCount}`}
+                </p>
+              </div>
+
+              <div className="grid gap-1.5">
+                <div className="font-display text-xs font-black uppercase text-muted-foreground">{copy.templateMode}</div>
+                <div className="grid gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTemplateMode("auto-4")}
+                    className={cn(
+                      "min-h-10 rounded-[2px] border px-2.5 py-1.5 text-left transition",
+                      effectiveTemplateMode === "auto-4"
+                        ? "border-primary bg-primary/10"
+                        : "border-black/10 bg-black/[0.02] hover:border-black/25 hover:bg-black/[0.04]",
+                    )}
+                  >
+                    <div className="font-display text-[13px] font-black text-foreground">{copy.autoTemplates}</div>
+                    <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">A / B / C / D = four different frontend templates</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateMode("single-template")}
+                    className={cn(
+                      "min-h-10 rounded-[2px] border px-2.5 py-1.5 text-left transition",
+                      effectiveTemplateMode === "single-template"
+                        ? "border-primary bg-primary/10"
+                        : "border-black/10 bg-black/[0.02] hover:border-black/25 hover:bg-black/[0.04]",
+                    )}
+                  >
+                    <div className="font-display text-[13px] font-black text-foreground">{copy.singleTemplate}</div>
+                    <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                      {isZh
+                        ? "同一模板下自动生成 4 个叙事角度候选。"
+                        : "Generate four narrative-angle candidates inside one chosen template."}
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {effectiveTemplateMode === "single-template" ? (
+                <div className="grid gap-1.5">
+                  <div className="font-display text-xs font-black uppercase text-muted-foreground">{copy.templatePreset}</div>
+                  <div className="grid gap-1.5">
+                    {pptFrontendTemplateOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setTemplateId(option.id)}
+                        className={cn(
+                          "min-h-10 rounded-[2px] border px-2.5 py-1.5 text-left transition",
+                          templateId === option.id
+                            ? "border-primary bg-primary/10"
+                            : "border-black/10 bg-black/[0.02] hover:border-black/25 hover:bg-black/[0.04]",
+                        )}
+                      >
+                        <div className="font-display text-[13px] font-black text-foreground">
+                          {getPptPreviewTemplateLabel(option.id, language)}
+                        </div>
+                        <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                          {language === "zh-CN" ? option.summary.zh : option.summary.en}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -857,7 +1066,9 @@ export function PptPreviewWorkbench({
 
                   <div className="relative z-10 flex items-start justify-between gap-2 px-3 py-2">
                     <div className="min-w-0">
-                      <p className="font-display text-[10px] font-black uppercase text-muted-foreground">{slot} / {variant.name}</p>
+                      <p className="font-display text-[10px] font-black uppercase text-muted-foreground">
+                        {slot} / {variant.narrativeAngle ? getPptPreviewNarrativeAngleLabel(variant.narrativeAngle, language) : variant.name}
+                      </p>
                       <h2 className="line-clamp-1 font-display text-[1.1rem] font-black uppercase tracking-[-0.05em] text-foreground">
                         {currentSlide?.title ?? variant.name}
                       </h2>
@@ -967,7 +1178,7 @@ export function PptPreviewWorkbench({
 
                   <div className="flex items-center justify-between gap-2 px-3 py-1.5">
                     <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground">
-                      {getVariantSummary(variant.key, locale)}
+                      {getVariantSummary(variant, locale)}
                     </p>
                     <div className="flex shrink-0 gap-2">
                       <Button

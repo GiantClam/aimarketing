@@ -43,12 +43,23 @@ export type PptPreviewStyleKey =
   | "ppt169_pritzker_2026"
   | "ppt169_swiss_grid_systems"
 export type PptPreviewModelValue = "MiniMax-M2.7-highspeed" | "MiniMax-M3" | "gpt-5.4" | "step-3.7-flash"
+export type PptPreviewTemplateMode = "auto-4" | "single-template"
+export type PptFrontendTemplateId = "long-table" | "playful" | "broadside" | "neo-grid-bold"
+export type PptPreviewPageCount = number
+export type PptPreviewNarrativeAngle = "executive-brief" | "campaign-story" | "data-proof" | "action-plan"
+
+export const MIN_PPT_PREVIEW_PAGE_COUNT = 4
+export const MAX_PPT_PREVIEW_PAGE_COUNT = 20
+export const DEFAULT_PPT_PREVIEW_PAGE_COUNT = 9
 
 export type PptPreviewRequest = {
   prompt: string
   scenario: PptScenario
   language: PptLanguage
   model?: PptPreviewModelValue
+  templateMode?: PptPreviewTemplateMode
+  templateId?: PptFrontendTemplateId
+  pageCount?: PptPreviewPageCount | null
 }
 
 export type PptPreviewSlide = {
@@ -134,7 +145,12 @@ export type PptPreviewVariantStyle = {
   strengths: readonly string[]
 }
 
-export type PptPreviewVariant = PptPreviewVariantStyle & {
+export type PptPreviewVariant = Omit<PptPreviewVariantStyle, "key"> & {
+  key: string
+  styleKey: PptPreviewStyleKey
+  templateId?: PptFrontendTemplateId
+  narrativeAngle?: PptPreviewNarrativeAngle
+  slotLabel?: "A" | "B" | "C" | "D"
   outline?: string[]
   slides: PptPreviewSlide[]
   preview?: {
@@ -161,6 +177,18 @@ export type PptPreviewDeck = {
   provider?: string
   previewModel?: string
   source?: "live" | "mock"
+  templateMode?: PptPreviewTemplateMode
+  selectedTemplateId?: PptFrontendTemplateId | null
+  pageCount?: PptPreviewPageCount | null
+  resolvedPageCount?: PptPreviewPageCount
+}
+
+export type PptPreviewVariantDescriptor = {
+  key: string
+  slotLabel: "A" | "B" | "C" | "D"
+  style: PptPreviewVariantStyle
+  templateId: PptFrontendTemplateId
+  narrativeAngle?: PptPreviewNarrativeAngle
 }
 
 export const pptPreviewStyleIntentMap: Readonly<
@@ -311,6 +339,108 @@ export const pptPreviewStyleCapabilities: Readonly<Record<PptPreviewStyleKey, re
   "ppt169_swiss_grid_systems": pptPreviewTemplateCapabilities["ppt169_swiss_grid_systems"].slots.map((slot) => slot.intent),
 } as const
 
+export const pptFrontendTemplateOptions = [
+  {
+    id: "long-table",
+    label: { zh: "长桌纪要", en: "Long Table" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "规则线、分栏和议题感最强。", en: "Ruled, structured, boardroom-style." },
+  },
+  {
+    id: "playful",
+    label: { zh: "轻快玩味", en: "Playful" },
+    styleKey: "ppt169_sugar_rush_memphis",
+    summary: { zh: "圆角、贴纸和高亮色块最强。", en: "Rounded, bright, energetic." },
+  },
+  {
+    id: "broadside",
+    label: { zh: "告示海报", en: "Broadside" },
+    styleKey: "ppt169_pritzker_2026",
+    summary: { zh: "大字号、强栏位和宣言感最强。", en: "Poster-like, bold, declarative." },
+  },
+  {
+    id: "neo-grid-bold",
+    label: { zh: "新网格粗体", en: "Neo Grid Bold" },
+    styleKey: "ppt169_swiss_grid_systems",
+    summary: { zh: "可见网格、强对比模块和策略界面感最强。", en: "Visible grids, modular, strategic." },
+  },
+] as const satisfies ReadonlyArray<{
+  id: PptFrontendTemplateId
+  label: { zh: string; en: string }
+  styleKey: PptPreviewStyleKey
+  summary: { zh: string; en: string }
+}>
+
+export const pptPreviewNarrativeAngles = [
+  {
+    id: "executive-brief",
+    slotLabel: "A",
+    label: { zh: "Executive Brief", en: "Executive Brief" },
+    prompt: {
+      zh: "把这一版写成适合管理层快速决策的 executive brief，优先给结论、风险和下一步。",
+      en: "Write this version as an executive brief that prioritizes the call, risk posture, and immediate next steps.",
+    },
+  },
+  {
+    id: "campaign-story",
+    slotLabel: "B",
+    label: { zh: "Campaign Story", en: "Campaign Story" },
+    prompt: {
+      zh: "把这一版写成更有叙事节奏和受众牵引的 campaign story，强调场景、传播和说服路径。",
+      en: "Write this version as a campaign story with stronger narrative momentum, audience pull, and persuasion pacing.",
+    },
+  },
+  {
+    id: "data-proof",
+    slotLabel: "C",
+    label: { zh: "Data Proof", en: "Data Proof" },
+    prompt: {
+      zh: "把这一版写成 data proof 视角，优先用证据、指标和对照关系支撑判断。",
+      en: "Write this version from a data-proof angle that leans on evidence, metrics, and comparative support.",
+    },
+  },
+  {
+    id: "action-plan",
+    slotLabel: "D",
+    label: { zh: "Action Plan", en: "Action Plan" },
+    prompt: {
+      zh: "把这一版写成 action plan，优先说明执行顺序、负责人视角和落地动作。",
+      en: "Write this version as an action plan that makes execution order, ownership, and rollout steps explicit.",
+    },
+  },
+] as const satisfies ReadonlyArray<{
+  id: PptPreviewNarrativeAngle
+  slotLabel: "A" | "B" | "C" | "D"
+  label: { zh: string; en: string }
+  prompt: { zh: string; en: string }
+}>
+
+export const pptPreviewLayoutSequenceByPageCount: Readonly<Record<number, readonly PptPreviewLayout[]>> = {
+  5: ["cover", "agenda", "insight", "comparison", "timeline"],
+  7: ["cover", "agenda", "insight", "evidence", "stats", "process", "timeline"],
+  9: ["cover", "agenda", "insight", "comparison", "evidence", "stats", "chart", "process", "timeline"],
+} as const
+
+const pptPreviewBaseLayoutsBeforeClosing: readonly PptPreviewLayout[] = [
+  "cover",
+  "agenda",
+  "insight",
+  "comparison",
+  "evidence",
+  "stats",
+  "chart",
+  "process",
+] as const
+
+const pptPreviewRepeatableMiddleLayouts: readonly PptPreviewLayout[] = [
+  "insight",
+  "comparison",
+  "evidence",
+  "stats",
+  "chart",
+  "process",
+] as const
+
 export const pptPreviewLayouts: readonly PptPreviewLayout[] = [
   "cover",
   "agenda",
@@ -378,8 +508,142 @@ export function getPptPreviewTemplateSlotByIntent(styleKey: PptPreviewStyleKey, 
   return pptPreviewTemplateCapabilities[styleKey].slots.find((slot) => slot.intent === intent)
 }
 
-export function buildPptPreviewIntentSequenceLabel(styleKey: PptPreviewStyleKey, language: PptLanguage) {
-  const sequence = getPptPreviewStyleIntentSequence(styleKey)
+export function resolveOptionalPptPreviewPageCount(value: unknown): PptPreviewPageCount | null {
+  if (value === null || value === undefined || value === "") {
+    return null
+  }
+
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value.trim(), 10) : Number.NaN
+  if (!Number.isFinite(parsed)) {
+    return null
+  }
+
+  return Math.max(MIN_PPT_PREVIEW_PAGE_COUNT, Math.min(MAX_PPT_PREVIEW_PAGE_COUNT, Math.round(parsed)))
+}
+
+export function resolvePptPreviewPageCount(value: unknown, fallback = DEFAULT_PPT_PREVIEW_PAGE_COUNT): PptPreviewPageCount {
+  return resolveOptionalPptPreviewPageCount(value) ?? fallback
+}
+
+export function getPptPreviewLayoutSequence(pageCount: PptPreviewPageCount | undefined | null): PptPreviewLayout[] {
+  const resolvedPageCount = resolvePptPreviewPageCount(pageCount)
+  const predefinedSequence = pptPreviewLayoutSequenceByPageCount[resolvedPageCount]
+  if (predefinedSequence) {
+    return [...predefinedSequence]
+  }
+
+  if (resolvedPageCount <= 1) {
+    return ["cover"]
+  }
+
+  if (resolvedPageCount === 2) {
+    return ["cover", "timeline"]
+  }
+
+  if (resolvedPageCount === 3) {
+    return ["cover", "agenda", "timeline"]
+  }
+
+  const sequence: PptPreviewLayout[] = [
+    ...pptPreviewBaseLayoutsBeforeClosing.slice(0, Math.min(resolvedPageCount - 1, pptPreviewBaseLayoutsBeforeClosing.length)),
+  ]
+  let repeatIndex = 0
+  while (sequence.length < resolvedPageCount - 1) {
+    sequence.push(pptPreviewRepeatableMiddleLayouts[repeatIndex % pptPreviewRepeatableMiddleLayouts.length]!)
+    repeatIndex += 1
+  }
+
+  return [...sequence, "timeline"]
+}
+
+export function getPptPreviewStyleSlotSequence(styleKey: PptPreviewStyleKey, pageCount: PptPreviewPageCount | undefined | null) {
+  return getPptPreviewLayoutSequence(pageCount)
+    .map((layout) => getPptPreviewTemplateSlotByLayout(styleKey, layout))
+    .filter((slot): slot is NonNullable<typeof slot> => Boolean(slot))
+}
+
+export function resolvePptPreviewDeckPageCount(deck: Pick<PptPreviewDeck, "resolvedPageCount" | "pageCount" | "variants"> | null | undefined) {
+  if (!deck) {
+    return DEFAULT_PPT_PREVIEW_PAGE_COUNT
+  }
+
+  const variantSlideCount = Math.max(0, ...deck.variants.map((variant) => variant.slides.length))
+  const fallbackCount = variantSlideCount > 0 ? variantSlideCount : deck.pageCount
+  return resolvePptPreviewPageCount(deck.resolvedPageCount ?? fallbackCount)
+}
+
+export function resolvePptPreviewTemplateMode(request: Pick<PptPreviewRequest, "templateMode" | "templateId">) {
+  if (request.templateMode === "single-template" && request.templateId) {
+    return "single-template" as const
+  }
+
+  return "auto-4" as const
+}
+
+export function getPptFrontendTemplateOption(templateId: PptFrontendTemplateId) {
+  return pptFrontendTemplateOptions.find((option) => option.id === templateId)
+}
+
+export function getPptPreviewStyleKeyByTemplateId(templateId: PptFrontendTemplateId) {
+  return getPptFrontendTemplateOption(templateId)?.styleKey ?? null
+}
+
+export function getPptPreviewNarrativeAngleOption(angle: PptPreviewNarrativeAngle) {
+  return pptPreviewNarrativeAngles.find((item) => item.id === angle)
+}
+
+export function getPptPreviewTemplateLabel(templateId: PptFrontendTemplateId, language: PptLanguage) {
+  const option = getPptFrontendTemplateOption(templateId)
+  if (!option) return templateId
+  return language === "zh-CN" ? option.label.zh : option.label.en
+}
+
+export function getPptPreviewNarrativeAngleLabel(angle: PptPreviewNarrativeAngle, language: PptLanguage) {
+  const option = getPptPreviewNarrativeAngleOption(angle)
+  if (!option) return angle
+  return language === "zh-CN" ? option.label.zh : option.label.en
+}
+
+export function getPptPreviewNarrativeAnglePrompt(angle: PptPreviewNarrativeAngle, language: PptLanguage) {
+  const option = getPptPreviewNarrativeAngleOption(angle)
+  if (!option) return ""
+  return language === "zh-CN" ? option.prompt.zh : option.prompt.en
+}
+
+export function buildPptPreviewVariantDescriptors(request: PptPreviewRequest): PptPreviewVariantDescriptor[] {
+  const templateMode = resolvePptPreviewTemplateMode(request)
+
+  if (templateMode === "single-template" && request.templateId) {
+    const styleKey = getPptPreviewStyleKeyByTemplateId(request.templateId)
+    const style = styleKey ? getPptPreviewStyleByKey(styleKey) : null
+    if (style) {
+      return pptPreviewNarrativeAngles.map((angle) => ({
+        key: `${request.templateId}-${angle.id}`,
+        slotLabel: angle.slotLabel,
+        style,
+        templateId: request.templateId as PptFrontendTemplateId,
+        narrativeAngle: angle.id,
+      }))
+    }
+  }
+
+  const slotLabels: Array<"A" | "B" | "C" | "D"> = ["A", "B", "C", "D"]
+  return pptPreviewStyles.map((style, index) => ({
+    key: style.key,
+    slotLabel: slotLabels[index] ?? "D",
+    style,
+    templateId: pptPreviewTemplateCapabilities[style.key].templateId as PptFrontendTemplateId,
+  }))
+}
+
+export function buildPptPreviewIntentSequenceLabel(
+  styleKey: PptPreviewStyleKey,
+  language: PptLanguage,
+  pageCount?: PptPreviewPageCount | null,
+) {
+  const sequence = pageCount
+    ? getPptPreviewStyleSlotSequence(styleKey, pageCount).map((slot) => slot.intent)
+    : getPptPreviewStyleIntentSequence(styleKey)
   const zhLabels: Record<PptPreviewPageIntent, string> = {
     cover: "封面",
     contents: "目录",
@@ -548,8 +812,18 @@ const pptPreviewStyleSummaries: Record<PptPreviewStyleKey, { zh: string; en: str
   },
 }
 
-export function getPptPreviewStyleSummary(styleKey: PptPreviewStyleKey, language: PptLanguage) {
-  return language === "zh-CN" ? pptPreviewStyleSummaries[styleKey].zh : pptPreviewStyleSummaries[styleKey].en
+export function getPptPreviewStyleSummary(styleKey: PptPreviewStyleKey | null | undefined, language: PptLanguage) {
+  const localizedSummary = styleKey ? pptPreviewStyleSummaries[styleKey as PptPreviewStyleKey] : undefined
+  if (localizedSummary) {
+    return language === "zh-CN" ? localizedSummary.zh : localizedSummary.en
+  }
+
+  const style = styleKey ? getPptPreviewStyleByKey(styleKey as PptPreviewStyleKey) : undefined
+  if (style?.summary) {
+    return style.summary
+  }
+
+  return language === "zh-CN" ? "正式 AI PPT 模板。" : "Formal AI PPT template."
 }
 
 const scenarioDescriptors: Record<PptScenario, { chinese: string; english: string; outline: string[] }> = {
@@ -577,6 +851,38 @@ const scenarioDescriptors: Record<PptScenario, { chinese: string; english: strin
 
 function sentenceByLanguage(language: PptLanguage, zh: string, en: string) {
   return language === "zh-CN" ? zh : en
+}
+
+function buildExtendedScenarioOutline(
+  scenario: PptScenario,
+  layouts: readonly PptPreviewLayout[],
+  language: PptLanguage,
+) {
+  const descriptor = scenarioDescriptors[scenario]
+  const layoutLabels: Record<PptPreviewLayout, { zh: string; en: string }> = {
+    cover: { zh: "主题封面", en: "Topic Cover" },
+    agenda: { zh: "内容导航", en: "Content Map" },
+    insight: { zh: "核心判断", en: "Core Insight" },
+    comparison: { zh: "方案对照", en: "Option Comparison" },
+    evidence: { zh: "证据补充", en: "Proof Layer" },
+    stats: { zh: "指标补充", en: "Metric Layer" },
+    chart: { zh: "图示扩展", en: "Chart Extension" },
+    process: { zh: "执行细化", en: "Execution Detail" },
+    timeline: { zh: "收尾动作", en: "Closing Actions" },
+  }
+
+  const occurrences = new Map<PptPreviewLayout, number>()
+  return layouts.map((layout, index) => {
+    const baseOutline = descriptor.outline[index]
+    if (baseOutline) {
+      return baseOutline
+    }
+
+    const occurrence = (occurrences.get(layout) ?? 0) + 1
+    occurrences.set(layout, occurrence)
+    const label = layoutLabels[layout]
+    return language === "zh-CN" ? `${label.zh} ${occurrence}` : `${label.en} ${occurrence}`
+  })
 }
 
 function applyTemplateSlotMetadata<T extends { layout: PptPreviewLayout; intent?: PptPreviewPageIntent }>(
@@ -840,88 +1146,163 @@ export function getPptPreviewStyleByKey(styleKey: PptPreviewStyleKey) {
   return pptPreviewStyles.find((style) => style.key === styleKey)
 }
 
+export function getPptPreviewVariantStyleKey(variant: Pick<PptPreviewVariant, "styleKey">) {
+  return variant.styleKey
+}
+
 export function buildMockPptPreview(request: PptPreviewRequest): PptPreviewDeck {
   const title = request.prompt.trim() || sentenceByLanguage(request.language, "AI 营销方案", "AI Marketing Plan")
-  const descriptor = scenarioDescriptors[request.scenario]
+  const requestedPageCount = resolveOptionalPptPreviewPageCount(request.pageCount)
+  const pageCount = resolvePptPreviewPageCount(request.pageCount)
+  const layouts = getPptPreviewLayoutSequence(pageCount)
+  const outline = buildExtendedScenarioOutline(request.scenario, layouts, request.language)
+  const variantDescriptors = buildPptPreviewVariantDescriptors(request)
+  const templateMode = resolvePptPreviewTemplateMode(request)
 
   return {
     title,
     scenario: request.scenario,
     language: request.language,
     generatedAt: new Date().toISOString(),
-    outline: descriptor.outline.slice(0, 9),
+    outline,
     provider: "mock",
     source: "mock",
-    variants: pptPreviewStyles.map((style) => ({
-      ...style,
-      summary: getPptPreviewStyleSummary(style.key, request.language),
-      slides: buildMockVariantSlides(style, title, request.scenario, request.language),
-    })),
+    templateMode,
+    selectedTemplateId: templateMode === "single-template" ? request.templateId ?? null : null,
+    pageCount: requestedPageCount,
+    resolvedPageCount: pageCount,
+    variants: variantDescriptors.map((variantDescriptor) => {
+      const mockSlides = buildMockVariantSlides(variantDescriptor.style, title, request.scenario, request.language)
+      const slideByLayout = new Map(mockSlides.map((slide) => [slide.layout, slide]))
+      const layoutOccurrences = new Map<PptPreviewLayout, number>()
+
+      return {
+        key: variantDescriptor.key,
+        styleKey: variantDescriptor.style.key,
+        templateId: variantDescriptor.templateId,
+        narrativeAngle: variantDescriptor.narrativeAngle,
+        slotLabel: variantDescriptor.slotLabel,
+        name: variantDescriptor.style.name,
+        summary: getPptPreviewStyleSummary(variantDescriptor.style.key, request.language),
+        stylePrompt: variantDescriptor.style.stylePrompt,
+        palette: variantDescriptor.style.palette,
+        strengths: variantDescriptor.style.strengths,
+        outline,
+        slides: layouts
+          .map((layout) => {
+            const templateSlide = slideByLayout.get(layout)
+            if (!templateSlide) {
+              return null
+            }
+
+            const occurrence = (layoutOccurrences.get(layout) ?? 0) + 1
+            layoutOccurrences.set(layout, occurrence)
+
+            return {
+              ...templateSlide,
+              id: `${variantDescriptor.key}-${layout}-${occurrence}`,
+              title: occurrence > 1 ? `${templateSlide.title} ${occurrence}` : templateSlide.title,
+            }
+          })
+          .filter((slide): slide is NonNullable<typeof slide> => Boolean(slide)),
+      }
+    }),
   }
 }
 
 export function buildPptPreviewDeckFromPlans(
   request: PptPreviewRequest,
   plans: Array<{
+    variantKey: string
     styleKey: PptPreviewStyleKey
+    templateId: PptFrontendTemplateId
+    narrativeAngle?: PptPreviewNarrativeAngle
     title: string
     outline: readonly string[]
     provider?: string
     slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
   }>,
+  options?: {
+    resolvedPageCount?: PptPreviewPageCount | null
+  },
 ): PptPreviewDeck {
   const firstPlan = plans[0]
   const fallbackTitle = request.prompt.trim() || sentenceByLanguage(request.language, "AI 营销方案", "AI Marketing Plan")
-  const descriptor = scenarioDescriptors[request.scenario]
+  const requestedPageCount = resolveOptionalPptPreviewPageCount(request.pageCount)
+  const pageCount = resolvePptPreviewPageCount(
+    options?.resolvedPageCount ?? firstPlan?.slides.length ?? firstPlan?.outline.length ?? request.pageCount,
+  )
+  const layouts = getPptPreviewLayoutSequence(pageCount)
+  const fallbackOutline = buildExtendedScenarioOutline(request.scenario, layouts, request.language)
+  const variantDescriptors = buildPptPreviewVariantDescriptors(request)
+  const templateMode = resolvePptPreviewTemplateMode(request)
 
   return {
     title: firstPlan?.title.trim() || fallbackTitle,
     scenario: request.scenario,
     language: request.language,
     generatedAt: new Date().toISOString(),
-    outline: (firstPlan?.outline ?? descriptor.outline).slice(0, 9),
+    outline: (firstPlan?.outline?.length ? firstPlan.outline : fallbackOutline).slice(0, pageCount),
     provider: firstPlan?.provider || "live",
     source: "live",
-    variants: pptPreviewStyles.map((style) => {
-      const plan = plans.find((item) => item.styleKey === style.key)
-      const slides = (plan?.slides ?? buildMockVariantSlides(style, fallbackTitle, request.scenario, request.language)).slice(0, 9)
-      const fallbackSlideTitles = (plan?.outline ?? descriptor.outline).slice(0, 9)
+    templateMode,
+    selectedTemplateId: templateMode === "single-template" ? request.templateId ?? null : null,
+    pageCount: requestedPageCount,
+    resolvedPageCount: pageCount,
+    variants: variantDescriptors.map((variantDescriptor) => {
+      const style = variantDescriptor.style
+      const plan = plans.find((item) => item.variantKey === variantDescriptor.key)
+      const fallbackSlides = buildMockVariantSlides(style, fallbackTitle, request.scenario, request.language)
+      const slideCandidates = plan?.slides ?? fallbackSlides
+      const fallbackSlideTitles = (plan?.outline?.length ? plan.outline : fallbackOutline).slice(0, pageCount)
+      const slideByLayout = new Map(slideCandidates.map((slide) => [slide.layout, slide]))
 
       return {
-        ...style,
+        key: variantDescriptor.key,
+        styleKey: style.key,
+        templateId: variantDescriptor.templateId,
+        narrativeAngle: variantDescriptor.narrativeAngle,
+        slotLabel: variantDescriptor.slotLabel,
+        name: style.name,
         summary: getPptPreviewStyleSummary(style.key, request.language),
-        outline: (plan?.outline ?? descriptor.outline).slice(0, 9),
-        slides: slides.map((slide, index) => ({
-          ...applyTemplateSlotMetadata(style.key, slide),
-          intent: slide.intent ?? resolvePptPreviewSlideIntent(style.key, slide.layout),
-          kicker:
-            !slide.kicker?.trim() || /^slide\s+\d+$/i.test(slide.kicker.trim())
-              ? buildPreviewStyleKicker(style.key, slide.layout, request.language)
-              : slide.kicker.trim(),
-          title: buildPreviewStyleTitle(
-            style.key,
-            slide.layout,
-            (slide.title?.trim() || (index === 0 ? fallbackTitle : fallbackSlideTitles[index] || fallbackTitle)).replace(
-              /\s*\/\s*(cover|agenda|insight|comparison|evidence|stats|chart|process|timeline)$/i,
-              "",
+        stylePrompt: style.stylePrompt,
+        palette: style.palette,
+        strengths: style.strengths,
+        outline: (plan?.outline?.length ? plan.outline : fallbackOutline).slice(0, pageCount),
+        slides: layouts
+          .map((layout) => slideByLayout.get(layout) ?? fallbackSlides.find((slide) => slide.layout === layout))
+          .filter((slide): slide is NonNullable<typeof slide> => Boolean(slide))
+          .map((slide, index) => ({
+            ...applyTemplateSlotMetadata(style.key, slide),
+            intent: slide.intent ?? resolvePptPreviewSlideIntent(style.key, slide.layout),
+            kicker:
+              !slide.kicker?.trim() || /^slide\s+\d+$/i.test(slide.kicker.trim())
+                ? buildPreviewStyleKicker(style.key, slide.layout, request.language)
+                : slide.kicker.trim(),
+            title: buildPreviewStyleTitle(
+              style.key,
+              slide.layout,
+              (slide.title?.trim() || (index === 0 ? fallbackTitle : fallbackSlideTitles[index] || fallbackTitle)).replace(
+                /\s*\/\s*(cover|agenda|insight|comparison|evidence|stats|chart|process|timeline)$/i,
+                "",
+              ),
+              fallbackTitle,
+              request.language,
             ),
-            fallbackTitle,
-            request.language,
-          ),
-          body: buildPreviewStyleBody(style.key, slide.body?.trim() || "", request.language),
-          bullets: (slide.bullets ?? []).slice(0, 4).map((bullet, bulletIndex) =>
-            buildPreviewStyleBullet(style.key, bullet, bulletIndex, request.language),
-          ),
-          contentsItems: slide.contentsItems?.slice(0, 9),
-          comparisonItems: slide.comparisonItems?.slice(0, 4),
-          spotlightItems: slide.spotlightItems?.slice(0, 4),
-          metricItems: slide.metricItems?.slice(0, 4),
-          chartItems: slide.chartItems?.slice(0, 4),
-          processItems: slide.processItems?.slice(0, 4),
-          closingItems: slide.closingItems?.slice(0, 4),
-          id: `${style.key}-${slide.layout}-${index + 1}`,
-          accent: style.palette.accent,
-        })),
+            body: buildPreviewStyleBody(style.key, slide.body?.trim() || "", request.language),
+            bullets: (slide.bullets ?? []).slice(0, 4).map((bullet, bulletIndex) =>
+              buildPreviewStyleBullet(style.key, bullet, bulletIndex, request.language),
+            ),
+            contentsItems: slide.contentsItems?.slice(0, 9),
+            comparisonItems: slide.comparisonItems?.slice(0, 4),
+            spotlightItems: slide.spotlightItems?.slice(0, 4),
+            metricItems: slide.metricItems?.slice(0, 4),
+            chartItems: slide.chartItems?.slice(0, 4),
+            processItems: slide.processItems?.slice(0, 4),
+            closingItems: slide.closingItems?.slice(0, 4),
+            id: `${variantDescriptor.key}-${slide.layout}-${index + 1}`,
+            accent: style.palette.accent,
+          })),
       }
     }),
   }

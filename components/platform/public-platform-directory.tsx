@@ -54,8 +54,8 @@ export function PublicPlatformDirectory({
   const detailsLabel = locale === "zh" ? "查看详情" : "View Details"
 
   return (
-    <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
-      <div className="space-y-8">
+    <section className="public-grid-bg public-page-hero-shell mx-auto max-w-7xl">
+      <div className="workspace-stack">
         <div className="max-w-4xl space-y-4">
           <div className="public-kicker text-muted-foreground">{eyebrow}</div>
           <h1 className="public-display max-w-5xl text-5xl text-foreground lg:text-6xl">{title}</h1>

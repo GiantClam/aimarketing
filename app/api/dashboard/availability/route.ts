@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { hasFeatureAccess } from "@/lib/auth/guards"
 import { getSessionUser } from "@/lib/auth/session"
 import { getAdvisorAvailability } from "@/lib/dify/config"
-import { getEnterpriseDifyKnowledgeStatus } from "@/lib/dify/enterprise-knowledge"
 import { getImageAssistantAvailability } from "@/lib/image-assistant/aiberm"
+import { getEnterpriseKnowledgeStatus } from "@/lib/knowledge/service"
 import { getWriterSkillsAvailability } from "@/lib/writer/skills"
 
 export async function GET(req: NextRequest) {
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       userEmail: currentUser.email,
       enterpriseId: currentUser.enterpriseId,
     })
-    const knowledgePromise = getEnterpriseDifyKnowledgeStatus(currentUser.enterpriseId)
+    const knowledgePromise = getEnterpriseKnowledgeStatus(currentUser.enterpriseId)
     const writerSkillsAvailability = getWriterSkillsAvailability()
 
     const imageAssistantAvailability = getImageAssistantAvailability()

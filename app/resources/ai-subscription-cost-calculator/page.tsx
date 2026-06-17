@@ -51,7 +51,7 @@ export default async function AiSubscriptionCostCalculatorPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <PublicSiteHeader activeKey="resources" />
 
-      <section className="public-grid-bg mx-auto max-w-7xl px-6 py-16 lg:py-20">
+      <section className="public-grid-bg public-page-hero-shell mx-auto max-w-7xl">
         <div className="flex flex-wrap items-center gap-2">
           <p className="public-kicker text-muted-foreground">{copy.eyebrow}</p>
           <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">
@@ -70,7 +70,7 @@ export default async function AiSubscriptionCostCalculatorPage() {
         </p>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 pb-18">
+      <section className="public-page-bottom-shell mx-auto max-w-7xl">
         <AiCostCalculator locale={locale} />
       </section>
 

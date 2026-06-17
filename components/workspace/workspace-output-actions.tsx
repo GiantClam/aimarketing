@@ -27,23 +27,23 @@ function getCopy(locale: "zh" | "en", artifactLabel: string) {
   if (locale === "zh") {
     return {
       title: "输出动作",
-      description: "统一的企业输出动作先以安全占位形式表达，不调用不存在的素材库、知识库或分享后端。",
+      description: "统一处理下载、链接分享、作品库留存和知识入库，不再把已接通的动作继续写成占位语义。",
       actions: {
         download: {
           label: "下载",
-          note: `${artifactLabel} 的下载动作当前为安全占位，后续再接真实导出能力。`,
+          note: `${artifactLabel} 当前没有可直接下载的产物。`,
         },
         share: {
           label: "分享",
-          note: `${artifactLabel} 的分享动作当前为安全占位，后续再接真实分享链路。`,
+          note: `${artifactLabel} 当前还没有可复制的分享链接。`,
         },
         asset: {
-          label: "保存到素材库",
-          note: `${artifactLabel} 的素材库保存当前只做前端占位，不会写入不存在的后端。`,
+          label: "保存到作品库",
+          note: `${artifactLabel} 当前还不能写入作品库。`,
         },
         knowledge: {
           label: "加入知识库",
-          note: `${artifactLabel} 的知识沉淀当前只做前端占位，不会调用知识写入后端。`,
+          note: `${artifactLabel} 当前还不能进入知识入库队列。`,
         },
       },
     }
@@ -52,23 +52,23 @@ function getCopy(locale: "zh" | "en", artifactLabel: string) {
   return {
     title: "Output actions",
     description:
-      "This unified enterprise action bar is intentionally a safe placeholder. It does not call a missing asset library, sharing, or knowledge backend yet.",
+      "Handle download, link sharing, work-library retention, and knowledge ingestion from one bar without describing already-wired actions as placeholders.",
     actions: {
       download: {
         label: "Download",
-        note: `Download for ${artifactLabel} is a safe placeholder until a real export runtime is connected.`,
+        note: `No downloadable artifact is currently available for ${artifactLabel}.`,
       },
       share: {
         label: "Share",
-        note: `Share for ${artifactLabel} is a safe placeholder until a real sharing flow is connected.`,
+        note: `No shareable link is currently available for ${artifactLabel}.`,
       },
       asset: {
-        label: "Save to asset library",
-        note: `Saving ${artifactLabel} to the asset library is a front-end placeholder only and does not write to a missing backend.`,
+        label: "Save to work library",
+        note: `${artifactLabel} cannot be written into the work library yet.`,
       },
       knowledge: {
         label: "Add to knowledge base",
-        note: `Adding ${artifactLabel} to the knowledge base is a front-end placeholder only and does not call a missing write API.`,
+        note: `${artifactLabel} cannot be queued for knowledge ingestion yet.`,
       },
     },
   }
@@ -154,7 +154,12 @@ export function WorkspaceOutputActions({
           return
         }
 
-        await navigator.clipboard.writeText(shareUrl)
+        const resolvedShareUrl =
+          typeof window === "undefined"
+            ? shareUrl
+            : new URL(shareUrl, window.location.origin).toString()
+
+        await navigator.clipboard.writeText(resolvedShareUrl)
         toast.success(copy.actions.share.label, {
           description: locale === "zh" ? "链接已复制到剪贴板。" : "Link copied to clipboard.",
         })
@@ -181,8 +186,8 @@ export function WorkspaceOutputActions({
         description:
           action === "asset"
             ? locale === "zh"
-              ? "已记录到共享素材库目录。"
-              : "Saved into the shared asset library."
+              ? "已保存到共享作品库。"
+              : "Saved into the shared work library."
             : locale === "zh"
               ? "已进入知识入库队列。"
               : "Queued for knowledge-base ingestion.",
@@ -197,7 +202,7 @@ export function WorkspaceOutputActions({
   }
 
   return (
-    <section className={cn("dashboard-panel rounded-[12px] border border-border bg-card/85 p-5", className)}>
+    <section className={cn("dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85", className)}>
       <div className="space-y-2">
         <div className="dashboard-kicker text-muted-foreground">{title || copy.title}</div>
         <p className="text-sm leading-7 text-muted-foreground">{description || copy.description}</p>

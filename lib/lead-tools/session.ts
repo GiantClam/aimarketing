@@ -1,4 +1,13 @@
-import type { PptLanguage, PptPreviewDeck, PptPreviewModelValue, PptPreviewRequest, PptScenario } from "./ppt-preview-data-fixed"
+import type {
+  PptFrontendTemplateId,
+  PptLanguage,
+  PptPreviewDeck,
+  PptPreviewModelValue,
+  PptPreviewPageCount,
+  PptPreviewRequest,
+  PptPreviewTemplateMode,
+  PptScenario,
+} from "./ppt-preview-data-fixed"
 
 const STORAGE_KEY = "lead-tools:ai-ppt-preview-session"
 
@@ -23,6 +32,9 @@ export function getToolReturnPath(
   scenario: PptScenario,
   language: PptLanguage,
   model?: PptPreviewModelValue,
+  templateMode?: PptPreviewTemplateMode,
+  templateId?: PptFrontendTemplateId,
+  pageCount?: PptPreviewPageCount,
   action?: ProtectedAction,
 ) {
   const searchParams = new URLSearchParams()
@@ -36,6 +48,18 @@ export function getToolReturnPath(
 
   if (model) {
     searchParams.set("model", model)
+  }
+
+  if (templateMode) {
+    searchParams.set("templateMode", templateMode)
+  }
+
+  if (templateId) {
+    searchParams.set("templateId", templateId)
+  }
+
+  if (pageCount) {
+    searchParams.set("pageCount", String(pageCount))
   }
 
   if (action) {
@@ -57,7 +81,21 @@ export function loadPptPreviewSession() {
   }
 
   try {
-    return JSON.parse(rawValue) as PptPreviewSession
+    const parsed = JSON.parse(rawValue) as PptPreviewSession
+    if (parsed.generatedDeck) {
+      const normalizedSession: PptPreviewSession = {
+        request: parsed.request,
+        previewSessionId: parsed.previewSessionId ?? parsed.generatedDeck.previewSessionId,
+        selectedVariantKey: parsed.selectedVariantKey,
+        selectedSlideIndex: parsed.selectedSlideIndex,
+        slideIndexByVariant: parsed.slideIndexByVariant,
+        lastActionAt: parsed.lastActionAt,
+      }
+      savePptPreviewSession(normalizedSession)
+      return normalizedSession
+    }
+
+    return parsed
   } catch {
     window.localStorage.removeItem(STORAGE_KEY)
     return null

@@ -82,9 +82,9 @@ export function WorkspacePlatformRuntimePanel({
         }
 
   return (
-    <section className="public-grid-bg mx-auto max-w-7xl px-6 pb-10">
-      <div className="space-y-8">
-        <div className="public-panel rounded-[12px] border border-border bg-card/80 p-6 lg:p-8">
+    <section className="public-grid-bg workspace-page-shell-bottom mx-auto max-w-7xl">
+      <div className="workspace-stack">
+        <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
           <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
           <h2 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[0.02em] text-foreground lg:text-5xl">
             {copy.title}
@@ -105,7 +105,7 @@ export function WorkspacePlatformRuntimePanel({
           <div className="dashboard-kicker text-muted-foreground">{copy.providers}</div>
           <div className="grid gap-4 xl:grid-cols-2">
             {snapshot.providers.map((provider) => (
-              <article key={`${provider.scope}-${provider.id}`} className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+              <article key={`${provider.scope}-${provider.id}`} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-3">
                     <div className="dashboard-kicker text-muted-foreground">{provider.scope.toUpperCase()}</div>
@@ -157,7 +157,7 @@ export function WorkspacePlatformRuntimePanel({
           <div className="dashboard-kicker text-muted-foreground">{copy.tasks}</div>
           <div className="grid gap-4 xl:grid-cols-2">
             {snapshot.tasks.map((task) => (
-              <article key={task.id} className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+              <article key={task.id} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-3">
                     <div className="dashboard-kicker text-muted-foreground">{task.capabilitySlug}</div>
@@ -198,7 +198,7 @@ export function WorkspacePlatformRuntimePanel({
           <div className="dashboard-kicker text-muted-foreground">{copy.entitlements}</div>
           <div className="grid gap-4 xl:grid-cols-2">
             {snapshot.entitlements.map((item) => (
-              <article key={item.feature} className="dashboard-panel rounded-[12px] border border-border bg-card/85 p-5">
+              <article key={item.feature} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-3">
                     <div className="dashboard-kicker text-muted-foreground">{getAccessModelLabel(item.accessModel, locale)}</div>

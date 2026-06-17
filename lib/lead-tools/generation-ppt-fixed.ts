@@ -9,19 +9,28 @@ import {
   type PptMasterPreviewRuntimeSlideResult,
 } from "@/lib/lead-tools/ppt-master-runtime"
 import {
+  MAX_PPT_PREVIEW_PAGE_COUNT,
+  MIN_PPT_PREVIEW_PAGE_COUNT,
+  buildPptPreviewVariantDescriptors,
   buildPptPreviewTemplateCapabilityLabel,
   buildPptPreviewIntentSequenceLabel,
   buildMockPptPreview,
   buildPptPreviewDeckFromPlans,
+  getPptPreviewLayoutSequence,
+  getPptPreviewNarrativeAngleLabel,
+  getPptPreviewNarrativeAnglePrompt,
+  getPptPreviewStyleSlotSequence,
+  getPptPreviewTemplateLabel,
   getPptPreviewTemplateSlotByLayout,
-  getPptPreviewStyleIntentSequence,
-  getPptPreviewStyleSlots,
   isPptPreviewLayout,
   isPptPreviewPageIntent,
+  resolveOptionalPptPreviewPageCount,
   type PptPreviewDeck,
+  type PptPreviewVariantDescriptor,
   type PptPreviewRequest,
   type PptPreviewSlide,
-  pptPreviewStyles,
+  resolvePptPreviewPageCount,
+  resolvePptPreviewTemplateMode,
   resolvePptPreviewSlideLayout,
   resolvePptPreviewSlideIntent,
   type PptPreviewVariantStyle,
@@ -32,18 +41,8 @@ import { generateTextWithWriterModel, hasAibermApiKey, hasCrazyrouteApiKey } fro
 
 type LeadToolPptPlan = {
   title: string
-  outline: [string, string, string, string, string, string, string, string, string]
-  slides: [
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-    Omit<PptPreviewSlide, "id" | "accent">,
-  ]
+  outline: string[]
+  slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
 }
 
 const RUNTIME_SLIDE_ATTEMPT_TIMEOUT_MS = 300_000
@@ -95,10 +94,11 @@ function sanitizeRawPlan(rawPlan: unknown, request: PptPreviewRequest, style: Pp
   const plan = rawPlan as Record<string, unknown>
   const rawSlides = Array.isArray(plan.slides) ? plan.slides : []
   const outline = Array.isArray(plan.outline) ? plan.outline.map((item) => normalizeText(item)).filter(Boolean) : []
+  const styleSlots = getPptPreviewStyleSlotSequence(style.key, request.pageCount)
   const effectiveSlides =
     rawSlides.length > 0
       ? rawSlides
-      : getPptPreviewStyleSlots(style.key).map((slot, index) => ({
+      : styleSlots.map((slot, index) => ({
           layout: slot.layout,
           intent: resolvePptPreviewSlideIntent(style.key, slot.layout),
           title: index === 0 ? normalizeText(plan.title) || request.prompt : outline[index] || `${request.prompt} ${index + 1}`,
@@ -624,6 +624,84 @@ async function generateTextWithLeadToolPreviewProvider(params: {
   }
 }
 
+function estimateAutoPptPageCount(request: PptPreviewRequest) {
+  const promptLength = request.prompt.trim().length
+  let estimate =
+    request.scenario === "training"
+      ? 10
+      : request.scenario === "sales-deck"
+        ? 8
+        : request.scenario === "product-launch"
+          ? 9
+          : 8
+
+  if (promptLength >= 90) {
+    estimate += 4
+  } else if (promptLength >= 55) {
+    estimate += 2
+  } else if (promptLength >= 28) {
+    estimate += 1
+  }
+
+  return resolvePptPreviewPageCount(estimate)
+}
+
+function extractPlannedPageCount(rawText: string) {
+  const cleanedText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
+  const jsonMatch = cleanedText.match(/\{[\s\S]*?"pageCount"\s*:\s*(\d+)[\s\S]*?\}/i)
+  if (jsonMatch?.[1]) {
+    return resolvePptPreviewPageCount(Number.parseInt(jsonMatch[1], 10))
+  }
+
+  const digitMatch = cleanedText.match(/\b(\d{1,2})\b/)
+  if (digitMatch?.[1]) {
+    return resolvePptPreviewPageCount(Number.parseInt(digitMatch[1], 10))
+  }
+
+  return null
+}
+
+async function resolveLeadToolPptPageCount(request: PptPreviewRequest) {
+  const requestedPageCount = resolveOptionalPptPreviewPageCount(request.pageCount)
+  if (requestedPageCount != null) {
+    return requestedPageCount
+  }
+
+  const fallbackCount = estimateAutoPptPageCount(request)
+
+  try {
+    const providerResult = await generateTextWithLeadToolPreviewProvider({
+      systemPrompt:
+        request.language === "zh-CN"
+          ? [
+              "你是演示文稿策划器里的页数规划助手。",
+              `请在 ${MIN_PPT_PREVIEW_PAGE_COUNT} 到 ${MAX_PPT_PREVIEW_PAGE_COUNT} 之间选择一个最合适的页数。`,
+              "只返回一个 JSON 对象，格式必须是 {\"pageCount\": number, \"reason\": string}。",
+              "页数要由主题复杂度、场景和信息密度决定，不要默认 9 页。",
+            ].join(" ")
+          : [
+              "You are the slide-count planner for a presentation workflow.",
+              `Choose the most appropriate page count between ${MIN_PPT_PREVIEW_PAGE_COUNT} and ${MAX_PPT_PREVIEW_PAGE_COUNT}.`,
+              'Return exactly one JSON object in the form {"pageCount": number, "reason": string}.',
+              "The count must reflect topic complexity, scenario, and information density rather than defaulting to nine slides.",
+            ].join(" "),
+      userPrompt: [
+        `Topic: ${request.prompt}`,
+        `Scenario: ${request.scenario}`,
+        `Language: ${request.language}`,
+        request.language === "zh-CN"
+          ? "如果主题需要更多证据、对照、图表或执行步骤，就适当增加页数；如果主题非常单一，就保持更紧凑。"
+          : "Increase the count when the topic needs more proof, comparison, charts, or execution detail; keep it tighter when the topic is narrow.",
+      ].join("\n"),
+      model: resolveRequestedPreviewModel(request),
+    })
+
+    return extractPlannedPageCount(providerResult.text) ?? fallbackCount
+  } catch {
+    return fallbackCount
+  }
+}
+
 function extractJsonObjectBlock(rawText: string) {
   const cleanedText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
   const candidates: string[] = []
@@ -917,7 +995,8 @@ function getLayoutTextLimits(layout: PptPreviewSlide["layout"], language: PptPre
 }
 
 export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewRequest, style: PptPreviewVariantStyle): LeadToolPptPlan {
-  const styleSlots = getPptPreviewStyleSlots(style.key)
+  const pageCount = resolvePptPreviewPageCount(request.pageCount)
+  const styleSlots = getPptPreviewStyleSlotSequence(style.key, pageCount)
   const fallbackTitle = request.prompt.trim()
   const rawSlides = Array.isArray(rawPlan?.slides) ? rawPlan.slides : []
   const normalizedCandidates = rawSlides.map((rawSlide: any, index: number) => {
@@ -1120,7 +1199,7 @@ export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewReques
       ? stripMarkdownDecorations(rawPlan.title)
       : fallbackTitle
 
-  const normalizedOutline = (rawOutline.length >= 9 ? rawOutline : slides.map((slide) => slide.title).slice(0, 9)) as LeadToolPptPlan["outline"]
+  const normalizedOutline = (rawOutline.length >= pageCount ? rawOutline : slides.map((slide) => slide.title).slice(0, pageCount)) as LeadToolPptPlan["outline"]
 
   return {
     title: normalizedTitle,
@@ -1129,10 +1208,22 @@ export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewReques
   }
 }
 
-export function buildStyleAwarePrompt(request: PptPreviewRequest, style: PptPreviewVariantStyle) {
-  const intentSequence = buildPptPreviewIntentSequenceLabel(style.key, request.language)
-  const rawIntentSequence = getPptPreviewStyleIntentSequence(style.key).join(", ")
+export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: PptPreviewVariantDescriptor) {
+  const { style } = descriptor
+  const pageCount = resolvePptPreviewPageCount(request.pageCount)
+  const layoutSequence = getPptPreviewLayoutSequence(pageCount)
+  const styleSlots = getPptPreviewStyleSlotSequence(style.key, pageCount)
+  const intentSequence = buildPptPreviewIntentSequenceLabel(style.key, request.language, pageCount)
+  const rawIntentSequence = styleSlots.map((slot) => slot.intent).join(", ")
   const capabilityLabel = buildPptPreviewTemplateCapabilityLabel(style.key, request.language)
+  const templateMode = resolvePptPreviewTemplateMode(request)
+  const templateLabel = getPptPreviewTemplateLabel(descriptor.templateId, request.language)
+  const narrativeAngleLabel = descriptor.narrativeAngle
+    ? getPptPreviewNarrativeAngleLabel(descriptor.narrativeAngle, request.language)
+    : undefined
+  const narrativeAnglePrompt = descriptor.narrativeAngle
+    ? getPptPreviewNarrativeAnglePrompt(descriptor.narrativeAngle, request.language)
+    : undefined
   const densityHint =
     request.language === "zh-CN"
       ? style.key === "ppt169_swiss_grid_systems"
@@ -1143,7 +1234,13 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, style: PptPrev
         : ""
 
   return [
-    buildPreviewUserPrompt(request),
+    buildPreviewUserPrompt(request, {
+      layoutSequence,
+      templateMode,
+      templateLabel,
+      narrativeAngleLabel,
+      narrativeAnglePrompt,
+    }),
     "",
     request.language === "zh-CN" ? `Preset label: ${style.name}` : `Preset label: ${style.name}`,
     `Style intent: ${style.summary}`,
@@ -1158,26 +1255,29 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, style: PptPrev
     request.language === "zh-CN"
       ? [
           "直接以该风格写完整的九页结构，不要先写通用版。",
+          `这次只需要输出 ${pageCount} 页，对应 layout 顺序固定为 ${layoutSequence.join(", ")}。`,
           "这一路必须有独立的叙事角度、章节命名和判断，不要和其他风格只做同义改写。",
           "Long Table 要像长桌纪要和董事会讨论；Playful 要像轻快发布和友好品牌表达；Broadside 要像海报宣言和印刷告示；Neo-Grid Bold 要像现代策略界面和粗体网格评审。",
           "虽然 slides 的字段顺序固定，但内容必须按该模板的原生页型去写，不要把九页都写成普通文字页。",
-          "layout 顺序固定为 cover, agenda, insight, comparison, evidence, stats, chart, process, timeline。",
+          `layout 顺序固定为 ${layoutSequence.join(", ")}。`,
           "agenda 页优先产出 contentsItems；comparison 页优先产出 comparisonItems；evidence 页优先产出 spotlightItems；stats 页优先产出 metricItems；chart 页优先产出 chartItems；process 页优先产出 processItems；timeline 页优先产出 closingItems，不要只给 bullets。",
           "agenda 页的五个章节名必须体现该风格自己的信息组织方式，不要复用通用目录词。",
           "cover 页标题可以重写，但必须明确包含主题对象，不要简单等于原始 prompt。",
+          templateMode === "single-template" && narrativeAnglePrompt ? `当前候选的叙事角要求：${narrativeAnglePrompt}` : "",
           densityHint,
         ].join("\n")
       : [
-          "Write the nine-slide structure directly in this style rather than drafting a neutral base plan.",
+          `Write the ${pageCount}-slide structure directly in this style rather than drafting a neutral base plan.`,
           "This lane must introduce its own narrative angle, chapter naming, and judgment instead of producing a synonym pass of the other styles.",
           "Long Table should feel like a chaired long-table memo; Playful should feel like a bright launch narrative; Broadside should read like a printed declaration; Neo-Grid Bold should feel like a modern strategy interface review.",
           "Even though the field order is fixed, write each slot according to this preset's native page intent rather than treating all nine as generic text slides.",
-          "The fixed layout order is: cover, agenda, insight, comparison, evidence, stats, chart, process, timeline.",
+          `The fixed layout order is: ${layoutSequence.join(", ")}.`,
           "Prefer returning contentsItems on agenda slides, comparisonItems on comparison slides, spotlightItems on evidence slides, metricItems on stats slides, chartItems on chart slides, processItems on process slides, and closingItems on closing slides rather than relying on bullets alone.",
           "The agenda slide must use chapter names that reflect this style's own information architecture rather than a generic shared outline.",
           "The cover title may be rewritten, but it must still explicitly name the topic rather than merely echoing the raw prompt.",
           "The last slide should usually function as a closing page with actions, watchpoints, or a final verdict rather than a literal timeline.",
           "Keep titles short and oversized. At least one slide should feel naturally chartable or card-based instead of paragraph-heavy.",
+          templateMode === "single-template" && narrativeAnglePrompt ? narrativeAnglePrompt : "",
           densityHint,
         ].join("\n"),
   ].join("\n")
@@ -1302,8 +1402,19 @@ async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideCont
   }
 }
 
-async function generateVariantPlan(request: PptPreviewRequest, style: PptPreviewVariantStyle) {
+async function generateVariantPlan(request: PptPreviewRequest, descriptor: PptPreviewVariantDescriptor) {
+  const { style } = descriptor
   const requestedModel = resolveRequestedPreviewModel(request)
+  const pageCount = resolvePptPreviewPageCount(request.pageCount)
+  const layoutSequence = getPptPreviewLayoutSequence(pageCount)
+  const templateMode = resolvePptPreviewTemplateMode(request)
+  const templateLabel = getPptPreviewTemplateLabel(descriptor.templateId, request.language)
+  const narrativeAngleLabel = descriptor.narrativeAngle
+    ? getPptPreviewNarrativeAngleLabel(descriptor.narrativeAngle, request.language)
+    : undefined
+  const narrativeAnglePrompt = descriptor.narrativeAngle
+    ? getPptPreviewNarrativeAnglePrompt(descriptor.narrativeAngle, request.language)
+    : undefined
   let lastError: unknown = null
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -1317,10 +1428,16 @@ async function generateVariantPlan(request: PptPreviewRequest, style: PptPreview
 
       const providerResult = await generateTextWithLeadToolPreviewProvider({
         systemPrompt: [
-          buildPreviewSystemPrompt(request.language),
+          buildPreviewSystemPrompt(request, {
+            layoutSequence,
+            templateMode,
+            templateLabel,
+            narrativeAngleLabel,
+            narrativeAnglePrompt,
+          }),
           request.language === "zh-CN"
-            ? `风格要求：${style.stylePrompt} 直接按这种风格生成 9 页内容，不要先写一个通用版本再改写。每个 slide 对象必须输出 layout 与 intent。`
-            : `Style requirement: ${style.stylePrompt} Generate the nine-slide plan directly in this style rather than drafting a neutral version first. Each slide object must output both layout and intent.`,
+            ? `风格要求：${style.stylePrompt} 直接按这种风格生成 ${pageCount} 页内容，不要先写一个通用版本再改写。每个 slide 对象必须输出 layout 与 intent。`
+            : `Style requirement: ${style.stylePrompt} Generate the ${pageCount}-slide plan directly in this style rather than drafting a neutral version first. Each slide object must output both layout and intent.`,
           retryGuardrail,
           request.language === "zh-CN"
             ? "只输出一个 JSON 对象，不要 markdown，不要解释。"
@@ -1328,7 +1445,7 @@ async function generateVariantPlan(request: PptPreviewRequest, style: PptPreview
         ]
           .filter(Boolean)
           .join(" "),
-        userPrompt: buildStyleAwarePrompt(request, style),
+        userPrompt: buildStyleAwarePrompt(request, descriptor),
         model: requestedModel,
       })
 
@@ -1340,7 +1457,10 @@ async function generateVariantPlan(request: PptPreviewRequest, style: PptPreview
       }
 
       return {
+        variantKey: descriptor.key,
         styleKey: style.key,
+        templateId: descriptor.templateId,
+        narrativeAngle: descriptor.narrativeAngle,
         title: normalizedPlan.title,
         outline: normalizedPlan.outline,
         provider: providerResult.providerId,
@@ -1368,11 +1488,19 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
 }
 
 export async function generateLeadToolPptStoryDeck(request: PptPreviewRequest): Promise<PptPreviewDeck> {
-  const plans = await Promise.all(pptPreviewStyles.map((style) => generateVariantPlan(request, style)))
+  const resolvedPageCount = await resolveLeadToolPptPageCount(request)
+  const resolvedRequest = {
+    ...request,
+    pageCount: resolvedPageCount,
+  }
+  const variantDescriptors = buildPptPreviewVariantDescriptors(request)
+  const plans = await Promise.all(variantDescriptors.map((descriptor) => generateVariantPlan(resolvedRequest, descriptor)))
   return {
-    ...buildPptPreviewDeckFromPlans(request, plans),
+    ...buildPptPreviewDeckFromPlans(request, plans, {
+      resolvedPageCount,
+    }),
     provider: plans[0]?.provider ?? "unknown",
-    previewModel: plans[0]?.previewModel ?? resolveRequestedPreviewModel(request),
+    previewModel: plans[0]?.previewModel ?? resolveRequestedPreviewModel(resolvedRequest),
   }
 }
 

@@ -62,7 +62,7 @@ function getBindingTargetHrefs(bindingTarget: string) {
   }
 
   if (bindingTarget === "ai-ppt") {
-    return { publicHref: "/tools/ai-ppt-preview", workspaceHref: "/tools/ai-ppt-preview" }
+    return { publicHref: "/tools/ai-ppt-preview", workspaceHref: "/dashboard/capabilities?feature=ai-ppt" }
   }
 
   if (bindingTarget === "ai-image") {

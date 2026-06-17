@@ -44,7 +44,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "content-growth",
     agentId: "business-content-growth",
     promptDocumentPath: "content-growth.md",
-    name: { zh: "内容增长 Agent", en: "Content Growth Agent" },
+    name: { zh: "内容增长智能体", en: "Content Growth Agent" },
     summary: {
       zh: "围绕选题、SEO、分发与复用，帮助团队形成可执行的内容增长动作。",
       en: "Helps teams turn planning, SEO, distribution, and reuse into executable content-growth actions.",
@@ -65,7 +65,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "content-growth",
     agentId: "business-seo-repurpose",
     promptDocumentPath: "seo-repurpose.md",
-    name: { zh: "SEO 复用 Agent", en: "SEO Repurpose Agent" },
+    name: { zh: "SEO 复用智能体", en: "SEO Repurpose Agent" },
     summary: {
       zh: "专注关键词切入、内容复用和搜索流量承接，把单次内容变成持续产出。",
       en: "Specializes in keyword angles, repurposing, and turning one asset into an ongoing search-output loop.",
@@ -86,7 +86,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "brand-creative",
     agentId: "business-brand-creative",
     promptDocumentPath: "brand-creative.md",
-    name: { zh: "品牌创意 Agent", en: "Brand Creative Agent" },
+    name: { zh: "品牌创意智能体", en: "Brand Creative Agent" },
     summary: {
       zh: "围绕品牌叙事、创意方向、提案与素材沉淀，组织统一创作工作台。",
       en: "Organizes brand narrative, creative direction, proposals, and asset retention in one creative workbench.",
@@ -107,7 +107,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "brand-creative",
     agentId: "business-campaign-creative",
     promptDocumentPath: "campaign-creative.md",
-    name: { zh: "Campaign 创意 Agent", en: "Campaign Creative Agent" },
+    name: { zh: "Campaign 创意智能体", en: "Campaign Creative Agent" },
     summary: {
       zh: "更偏 campaign 执行与创意物料协调，帮助团队组织广告、图片、文案和提案物料。",
       en: "Focuses on campaign execution and creative asset coordination across ads, visuals, copy, and decks.",
@@ -128,7 +128,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "brand-creative",
     agentId: "business-video-creative",
     promptDocumentPath: "video-creative.md",
-    name: { zh: "视频创意 Agent", en: "Video Creative Agent" },
+    name: { zh: "视频创意智能体", en: "Video Creative Agent" },
     summary: {
       zh: "围绕脚本、镜头结构、视觉节奏和视频卖点包装，帮助团队把创意方向转成可执行视频方案。",
       en: "Turns campaign narrative, shot structure, pacing, and offer framing into executable video concepts.",
@@ -149,7 +149,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "lead-conversion",
     agentId: "business-lead-conversion",
     promptDocumentPath: "lead-conversion.md",
-    name: { zh: "获客转化 Agent", en: "Lead Conversion Agent" },
+    name: { zh: "获客转化智能体", en: "Lead Conversion Agent" },
     summary: {
       zh: "围绕目标客户识别、线索筛选、触达准备与转化动作，组织获客前链路。",
       en: "Structures acquisition work across target selection, qualification, outreach prep, and conversion moves.",
@@ -170,7 +170,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "lead-conversion",
     agentId: "business-outreach-planner",
     promptDocumentPath: "outreach-planner.md",
-    name: { zh: "外联转化 Agent", en: "Outreach Conversion Agent" },
+    name: { zh: "外联转化智能体", en: "Outreach Conversion Agent" },
     summary: {
       zh: "专注线索触达、外联节奏和初次转化推进，让获客动作更像可执行销售前链路。",
       en: "Focuses on outreach, cadence, and first-touch conversion progression for pre-sales teams.",
@@ -191,7 +191,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "sales-close",
     agentId: "business-sales-close",
     promptDocumentPath: "sales-close.md",
-    name: { zh: "销售成交 Agent", en: "Sales Close Agent" },
+    name: { zh: "销售成交智能体", en: "Sales Close Agent" },
     summary: {
       zh: "围绕成交推进、异议处理、提案说法与会后跟进，提供销售专家工作台。",
       en: "Provides an expert workbench for close strategy, objections, proposal language, and follow-up actions.",
@@ -212,7 +212,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "sales-close",
     agentId: "business-objection-handler",
     promptDocumentPath: "objection-handler.md",
-    name: { zh: "异议处理 Agent", en: "Objection Handling Agent" },
+    name: { zh: "异议处理智能体", en: "Objection Handling Agent" },
     summary: {
       zh: "专门处理客户疑虑、报价摩擦和跟进推进，适合销售一线快速复盘与改写回应。",
       en: "Specializes in buyer objections, pricing friction, and follow-up progression for frontline sales teams.",
@@ -233,7 +233,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "enterprise-operations",
     agentId: "business-enterprise-operations",
     promptDocumentPath: "enterprise-operations.md",
-    name: { zh: "企业运营 Agent", en: "Enterprise Operations Agent" },
+    name: { zh: "企业运营智能体", en: "Enterprise Operations Agent" },
     summary: {
       zh: "围绕任务、工作流、用量、协作与治理，帮助企业运营团队看清执行状态。",
       en: "Helps operations teams make sense of tasks, workflows, usage, collaboration, and governance posture.",
@@ -254,7 +254,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "enterprise-operations",
     agentId: "business-governance-capacity",
     promptDocumentPath: "governance-capacity.md",
-    name: { zh: "席位与治理 Agent", en: "Seats and Governance Agent" },
+    name: { zh: "席位与治理智能体", en: "Seats and Governance Agent" },
     summary: {
       zh: "更偏席位规划、算力治理、协作规则和扩容节奏，帮助管理员做平台治理动作。",
       en: "Focuses on seat planning, compute governance, collaboration rules, and expansion pacing for admins.",
@@ -275,7 +275,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "knowledge-assets",
     agentId: "business-knowledge-assets",
     promptDocumentPath: "knowledge-assets.md",
-    name: { zh: "知识与资产 Agent", en: "Knowledge and Assets Agent" },
+    name: { zh: "知识与资产智能体", en: "Knowledge and Assets Agent" },
     summary: {
       zh: "围绕素材、作品、知识沉淀与复用策略，组织企业资产视角下的工作台。",
       en: "Organizes asset, work, knowledge-retention, and reuse strategy in one business-facing workbench.",
@@ -296,7 +296,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "knowledge-assets",
     agentId: "business-asset-curator",
     promptDocumentPath: "asset-curator.md",
-    name: { zh: "资产整理 Agent", en: "Asset Curator Agent" },
+    name: { zh: "资产整理智能体", en: "Asset Curator Agent" },
     summary: {
       zh: "更偏素材整理、作品升格和团队复用，帮助把零散输出变成可管理资产。",
       en: "Focuses on asset curation, work-item promotion, and team reuse so outputs become manageable assets.",
@@ -317,7 +317,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "knowledge-assets",
     agentId: "business-video-asset-ops",
     promptDocumentPath: "video-asset-ops.md",
-    name: { zh: "视频资产 Agent", en: "Video Asset Agent" },
+    name: { zh: "视频资产智能体", en: "Video Asset Agent" },
     summary: {
       zh: "围绕视频素材沉淀、复用拆条、命名归档和知识写入，帮助团队把视频输出变成可复用资产。",
       en: "Helps teams retain, repurpose, name, and archive video outputs as reusable assets and knowledge items.",
@@ -338,7 +338,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "brand-creative",
     agentId: "business-pr-communications",
     promptDocumentPath: "pr-communications.md",
-    name: { zh: "PR 传播 Agent", en: "PR Communications Agent" },
+    name: { zh: "PR 传播智能体", en: "PR Communications Agent" },
     summary: {
       zh: "围绕媒体叙事、危机沟通、发布节奏和高管观点输出传播方案。",
       en: "Plans media narrative, crisis communication, launch cadence, and executive thought leadership.",
@@ -359,7 +359,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "brand-creative",
     agentId: "business-ui-design-system",
     promptDocumentPath: "ui-design-system.md",
-    name: { zh: "UI 设计系统 Agent", en: "UI Design System Agent" },
+    name: { zh: "UI 设计系统智能体", en: "UI Design System Agent" },
     summary: {
       zh: "把产品界面、组件规范、视觉层级和可访问性转成设计系统建议。",
       en: "Turns interface work into component rules, visual hierarchy, accessibility, and design-system guidance.",
@@ -380,7 +380,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "brand-creative",
     agentId: "business-ux-architect",
     promptDocumentPath: "ux-architect.md",
-    name: { zh: "UX 架构 Agent", en: "UX Architect Agent" },
+    name: { zh: "UX 架构智能体", en: "UX Architect Agent" },
     summary: {
       zh: "围绕用户任务、信息架构、页面结构和交互路径设计可落地体验方案。",
       en: "Designs task flows, information architecture, page structure, and interaction paths for usable experiences.",
@@ -401,7 +401,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "sales-close",
     agentId: "business-proposal-strategist",
     promptDocumentPath: "proposal-strategist.md",
-    name: { zh: "销售提案 Agent", en: "Proposal Strategist Agent" },
+    name: { zh: "销售提案智能体", en: "Proposal Strategist Agent" },
     summary: {
       zh: "围绕 RFP、销售提案、赢单主题和高层摘要设计可成交材料。",
       en: "Structures RFP responses, proposals, win themes, and executive summaries for sales teams.",
@@ -422,7 +422,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "compliance-risk",
     agentId: "business-compliance-auditor",
     promptDocumentPath: "compliance-auditor.md",
-    name: { zh: "合规审计 Agent", en: "Compliance Auditor Agent" },
+    name: { zh: "合规审计智能体", en: "Compliance Auditor Agent" },
     summary: {
       zh: "围绕 SOC 2、ISO 27001、HIPAA、PCI 等控制框架做证据与缺口审查。",
       en: "Reviews control evidence and readiness gaps across SOC 2, ISO 27001, HIPAA, PCI, and similar frameworks.",
@@ -443,7 +443,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "compliance-risk",
     agentId: "business-privacy-officer",
     promptDocumentPath: "privacy-officer.md",
-    name: { zh: "隐私官 Agent", en: "Privacy Officer Agent" },
+    name: { zh: "隐私官智能体", en: "Privacy Officer Agent" },
     summary: {
       zh: "围绕 GDPR、CCPA、数据流、DPIA、DSAR 和供应商隐私风险做实务筛查。",
       en: "Screens GDPR, CCPA, data mapping, DPIA, DSAR, and vendor privacy risks.",
@@ -464,7 +464,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "compliance-risk",
     agentId: "business-healthcare-marketing-compliance",
     promptDocumentPath: "healthcare-marketing-compliance.md",
-    name: { zh: "医疗营销合规 Agent", en: "Healthcare Marketing Compliance Agent" },
+    name: { zh: "医疗营销合规智能体", en: "Healthcare Marketing Compliance Agent" },
     summary: {
       zh: "针对中国医疗、药品、器械、保健品营销内容做广告法和行业规则风险筛查。",
       en: "Screens China healthcare, drug, device, and supplement marketing content against advertising and industry rules.",
@@ -485,7 +485,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "training-enablement",
     agentId: "business-training-designer",
     promptDocumentPath: "training-designer.md",
-    name: { zh: "培训设计 Agent", en: "Training Designer Agent" },
+    name: { zh: "培训设计智能体", en: "Training Designer Agent" },
     summary: {
       zh: "用 ADDIE、SAM 和 Kirkpatrick 思路把能力缺口转成课程、练习和评估方案。",
       en: "Uses ADDIE, SAM, and Kirkpatrick-style thinking to turn capability gaps into curriculum, practice, and measurement.",
@@ -506,7 +506,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "talent-recruiting",
     agentId: "business-recruitment-specialist",
     promptDocumentPath: "recruitment-specialist.md",
-    name: { zh: "招聘专家 Agent", en: "Recruitment Specialist Agent" },
+    name: { zh: "招聘专家智能体", en: "Recruitment Specialist Agent" },
     summary: {
       zh: "围绕岗位画像、渠道策略、候选人筛选、面试题和招聘合规组织招聘动作。",
       en: "Structures role profiles, sourcing channels, candidate screening, interview questions, and recruiting compliance.",
@@ -527,7 +527,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "talent-recruiting",
     agentId: "business-hr-onboarding",
     promptDocumentPath: "hr-onboarding.md",
-    name: { zh: "入职赋能 Agent", en: "HR Onboarding Agent" },
+    name: { zh: "入职赋能智能体", en: "HR Onboarding Agent" },
     summary: {
       zh: "围绕员工入职、合规材料、角色学习路径和 30/60/90 天计划组织 onboarding。",
       en: "Plans employee onboarding, compliance materials, role learning paths, and 30/60/90-day ramp plans.",
@@ -548,7 +548,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "legal-ops",
     agentId: "business-legal-document-review",
     promptDocumentPath: "legal-document-review.md",
-    name: { zh: "合同审查 Agent", en: "Legal Document Review Agent" },
+    name: { zh: "合同审查智能体", en: "Legal Document Review Agent" },
     summary: {
       zh: "围绕合同、条款、版本差异和商业风险做结构化法律风险初筛。",
       en: "Screens contracts, clauses, version differences, and commercial legal risks in a structured way.",
@@ -569,7 +569,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
     businessSlug: "legal-ops",
     agentId: "business-legal-client-intake",
     promptDocumentPath: "legal-client-intake.md",
-    name: { zh: "法律 Intake Agent", en: "Legal Client Intake Agent" },
+    name: { zh: "法律 Intake 智能体", en: "Legal Client Intake Agent" },
     summary: {
       zh: "围绕案件事实、相关方、时间线、利益冲突和律师交接材料组织 intake。",
       en: "Organizes facts, parties, timeline, conflicts, and attorney handoff materials for legal intake.",
