@@ -5,6 +5,7 @@ import { requireSessionUser } from "@/lib/auth/guards"
 import { getImageAssistantSessionDetail, listImageAssistantAssets } from "@/lib/image-assistant/repository"
 import { resolveImageAssistantRequestOptions } from "@/lib/image-assistant/request-options"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
+import { resolveGovernedImageAssistantSelectionForUser } from "@/lib/platform/model-governance"
 import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
@@ -76,6 +77,13 @@ async function hasActualEditContext(input: {
   return referencedAssets.some((asset) => editContextAssetTypes.has(asset.asset_type))
 }
 
+function normalizeProviderLock(input: unknown) {
+  if (input === "pptoken" || input === "aiberm" || input === "crazyroute") {
+    return input
+  }
+  return null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireSessionUser(req, "image_design_generation")
@@ -106,6 +114,9 @@ export async function POST(req: NextRequest) {
     const referenceAssetIds = Array.isArray(body?.referenceAssetIds)
       ? (body.referenceAssetIds as unknown[]).filter((value: unknown): value is string => typeof value === "string")
       : []
+    const requestedModelOptionId = typeof body?.modelOptionId === "string" ? body.modelOptionId.trim() : null
+    const requestedProviderLock = normalizeProviderLock(body?.providerLock)
+    const requestedModel = typeof body?.model === "string" ? body.model.trim() : null
     const snapshotAssetId = typeof body?.snapshotAssetId === "string" ? body.snapshotAssetId : null
     const maskAssetId = typeof body?.maskAssetId === "string" ? body.maskAssetId : null
     const shouldKeepEditMode = await hasActualEditContext({
@@ -117,6 +128,19 @@ export async function POST(req: NextRequest) {
     })
     const workflowName = shouldKeepEditMode ? "image_turn_edit" : "image_turn_generate"
     const taskType = shouldKeepEditMode ? "edit" : "generate"
+    const governedSelection = await resolveGovernedImageAssistantSelectionForUser({
+      user: auth.user,
+      modelOptionId: requestedModelOptionId,
+      providerLock: requestedProviderLock,
+      model: requestedModel,
+      taskType,
+      hasReferenceInput: Boolean(referenceAssetIds.length),
+      hasMask: Boolean(maskAssetId),
+      hasSnapshot: Boolean(snapshotAssetId),
+    })
+    const providerLock = governedSelection.providerLock
+    const model = governedSelection.model
+    const modelOptionId = governedSelection.modelOptionId
     const requestOptions = resolveImageAssistantRequestOptions({
       prompt,
       sizePreset: body?.sizePreset,
@@ -142,9 +166,21 @@ export async function POST(req: NextRequest) {
         brief,
         taskType,
         referenceAssetIds,
+        modelOptionId,
+        enterpriseRole: auth.user.enterpriseRole || null,
+        enterpriseStatus: auth.user.enterpriseStatus || null,
+        providerLock,
+        model,
         candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
         sizePreset: requestOptions.sizePreset,
         resolution: requestOptions.resolution,
+        imageSize: typeof body?.imageSize === "string" ? body.imageSize : null,
+        imageQuality: typeof body?.imageQuality === "string" ? body.imageQuality : null,
+        imageBackground: typeof body?.imageBackground === "string" ? body.imageBackground : null,
+        imageOutputFormat: typeof body?.imageOutputFormat === "string" ? body.imageOutputFormat : null,
+        imageOutputCompression: Number.isFinite(body?.imageOutputCompression) ? Number(body.imageOutputCompression) : null,
+        imageModeration: typeof body?.imageModeration === "string" ? body.imageModeration : null,
+        imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
         parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
         guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       })
@@ -195,9 +231,21 @@ export async function POST(req: NextRequest) {
         brief,
         taskType,
         referenceAssetIds,
+        modelOptionId,
+        enterpriseRole: auth.user.enterpriseRole || null,
+        enterpriseStatus: auth.user.enterpriseStatus || null,
+        providerLock,
+        model,
         candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
         sizePreset: requestOptions.sizePreset,
         resolution: requestOptions.resolution,
+        imageSize: typeof body?.imageSize === "string" ? body.imageSize : null,
+        imageQuality: typeof body?.imageQuality === "string" ? body.imageQuality : null,
+        imageBackground: typeof body?.imageBackground === "string" ? body.imageBackground : null,
+        imageOutputFormat: typeof body?.imageOutputFormat === "string" ? body.imageOutputFormat : null,
+        imageOutputCompression: Number.isFinite(body?.imageOutputCompression) ? Number(body.imageOutputCompression) : null,
+        imageModeration: typeof body?.imageModeration === "string" ? body.imageModeration : null,
+        imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
         parentVersionId: typeof body?.parentVersionId === "string" ? body.parentVersionId : null,
         guidedSelection: normalizeGuidedSelection(body?.guidedSelection),
       },

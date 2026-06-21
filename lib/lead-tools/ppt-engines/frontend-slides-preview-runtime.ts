@@ -388,6 +388,36 @@ function renderFooter(label: string, progressPercent: number) {
   `
 }
 
+function renderWorkflowImageFigure(
+  slide: PptPreviewSlide | undefined,
+  placement: "cover" | "inline" = "inline",
+) {
+  const imageUrl = slide?.image?.url?.trim()
+  if (!imageUrl) return ""
+
+  const title = slide.image?.title?.trim() || slide?.title?.trim() || "Workflow image"
+  const sourceNodeKey = slide.image?.sourceNodeKey?.trim() || ""
+  const caption = slide.image?.title?.trim() || ""
+
+  return `
+    <figure class="workflow-image-figure workflow-image-${placement}">
+      <div class="workflow-image-frame">
+        <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" loading="lazy" />
+      </div>
+      ${
+        caption || sourceNodeKey
+          ? `
+            <figcaption class="workflow-image-caption">
+              ${caption ? `<span>${escapeHtml(caption)}</span>` : '<span></span>'}
+              ${sourceNodeKey ? `<span class="workflow-image-source">${escapeHtml(sourceNodeKey)}</span>` : ""}
+            </figcaption>
+          `
+          : ""
+      }
+    </figure>
+  `
+}
+
 function renderBulletList(bullets: string[]) {
   return `
     <ul class="bullet-list">
@@ -755,6 +785,7 @@ function renderLongTableSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
               <div class="big-edition">No. ${issueNumber}</div>
               <div class="big-edition-lab">${escapeHtml(buildDeckDateStamp(deck.generatedAt))} · ${escapeHtml(variant.name)}</div>
               <div class="big-edition-meta">${escapeHtml(variant.summary)}</div>
+              ${renderWorkflowImageFigure(cover, "cover")}
               <aside class="panel committee-note">
                 <h3>Table Stakes</h3>
                 ${renderBulletList(cover?.bullets ?? [])}
@@ -815,6 +846,7 @@ function renderLongTableSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
             <div class="quote-signoff">
               ${insightPoints.map((bullet) => `<span>${escapeHtml(bullet)}</span>`).join("")}
             </div>
+            ${renderWorkflowImageFigure(insight)}
           </div>
           ${renderFooter(variant.name, NINE_PAGE_PROGRESS[2])}
         </div>
@@ -846,6 +878,7 @@ function renderLongTableSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
                 )
                 .join("")}
             </div>
+            ${renderWorkflowImageFigure(comparison)}
           </div>
           ${renderFooter(deck.title, NINE_PAGE_PROGRESS[3])}
         </div>
@@ -868,9 +901,10 @@ function renderLongTableSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
                     <span class="compare-label">${String(index + 1).padStart(2, "0")}</span>
                     <p><strong>${escapeHtml(item.title)}</strong><br />${escapeHtml(item.detail)}</p>
                   </article>`,
-              )
-              .join("")}
+                )
+                .join("")}
           </div>
+          ${renderWorkflowImageFigure(evidence)}
           ${renderFooter(deck.title, NINE_PAGE_PROGRESS[4])}
         </div>
       </section>
@@ -1055,6 +1089,7 @@ function renderPlayfulSlides(deck: PptPreviewDeck, variant: PptPreviewVariant) {
               </svg>
             </div>
           </article>
+          ${renderWorkflowImageFigure(cover, "cover")}
           <div class="play-card-grid">
             ${coverPoints
               .map(
@@ -1106,6 +1141,7 @@ function renderPlayfulSlides(deck: PptPreviewDeck, variant: PptPreviewVariant) {
               ${insightPoints.map((bullet) => `<span class="brand-chip">${escapeHtml(bullet)}</span>`).join("")}
             </div>
           </div>
+          ${renderWorkflowImageFigure(insight)}
           <div class="brand-frame" aria-hidden="true"></div>
           ${renderFooter(variant.name, NINE_PAGE_PROGRESS[2])}
         </div>
@@ -1127,6 +1163,7 @@ function renderPlayfulSlides(deck: PptPreviewDeck, variant: PptPreviewVariant) {
                 </article>`,
             ).join("")}
           </div>
+          ${renderWorkflowImageFigure(comparison)}
           ${renderFooter(deck.title, NINE_PAGE_PROGRESS[3])}
         </div>
       </section>
@@ -1151,9 +1188,10 @@ function renderPlayfulSlides(deck: PptPreviewDeck, variant: PptPreviewVariant) {
                     <span class="card-index">${String(index + 1).padStart(2, "0")}</span>
                     <p><strong>${escapeHtml(item.title)}</strong><br />${escapeHtml(item.detail)}</p>
                   </article>`,
-              )
+                )
               .join("")}
           </div>
+          ${renderWorkflowImageFigure(evidence)}
           ${renderFooter(deck.title, NINE_PAGE_PROGRESS[4])}
         </div>
       </section>
@@ -1314,6 +1352,7 @@ function renderBroadsideSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
             <span>${escapeHtml(variant.summary)}</span>
             <span>${escapeHtml(deck.language)} / ${escapeHtml(deck.scenario.replace(/-/g, " "))}</span>
           </div>
+          ${renderWorkflowImageFigure(cover, "cover")}
           <aside class="poster-columns">
             ${coverPoints.map((bullet) => `<article class="poster-slab"><p>${escapeHtml(bullet)}</p></article>`).join("")}
           </aside>
@@ -1359,6 +1398,7 @@ function renderBroadsideSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
             <h2 class="title broadside-h1 accent-ink">${escapeHtml(insight?.title ?? "")}</h2>
             <p class="subtitle broadside-lead">${escapeHtml(insight?.body ?? "")}</p>
           </div>
+          ${renderWorkflowImageFigure(insight)}
           <div class="broadside-notes">
             ${(insight?.bullets ?? [])
               .slice(0, 4)
@@ -1382,6 +1422,7 @@ function renderBroadsideSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
             <h2 class="title broadside-h1">${escapeHtml(comparison?.title ?? "")}</h2>
             <p class="subtitle broadside-lead">${escapeHtml(comparison?.body ?? "")}</p>
           </div>
+          ${renderWorkflowImageFigure(comparison)}
           <div class="broadside-notes">
             ${comparisonRows.map((item) => `<div class="note-row"><span>${escapeHtml(item.label)}</span><p><strong>${escapeHtml(item.title)}</strong> ${escapeHtml(item.detail)}</p></div>`).join("")}
           </div>
@@ -1402,6 +1443,7 @@ function renderBroadsideSlides(deck: PptPreviewDeck, variant: PptPreviewVariant)
             <h2 class="title broadside-h1 accent-ink">${escapeHtml(evidence?.title ?? "")}</h2>
             <p class="subtitle broadside-lead">${escapeHtml(evidence?.body ?? "")}</p>
           </div>
+          ${renderWorkflowImageFigure(evidence)}
           <div class="broadside-notes">
             ${spotlightRows
               .map((item, index) => `<div class="note-row"><span>${escapeHtml(String(index + 1).padStart(2, "0"))}</span><p><strong>${escapeHtml(item.title)}</strong> ${escapeHtml(item.detail)}</p></div>`)
@@ -1620,6 +1662,7 @@ function renderNeoGridBoldSlides(deck: PptPreviewDeck, variant: PptPreviewVarian
               </div>
             </article>
             <div class="neo-side-stack">
+              ${renderWorkflowImageFigure(cover, "cover")}
               <div class="neo-cover-code panel">
                 <div class="neo-qr-grid">
                   ${Array.from({ length: 16 }, (_, index) => `<i class="${index % 3 === 0 ? "accent" : ""}"></i>`).join("")}
@@ -1683,6 +1726,7 @@ function renderNeoGridBoldSlides(deck: PptPreviewDeck, variant: PptPreviewVarian
               ${renderBulletList(insightPoints)}
             </aside>
           </div>
+          ${renderWorkflowImageFigure(insight)}
           ${renderFooter(variant.name, NINE_PAGE_PROGRESS[2])}
         </div>
       </section>
@@ -1717,6 +1761,7 @@ function renderNeoGridBoldSlides(deck: PptPreviewDeck, variant: PptPreviewVarian
                 .join("")}
             </div>
           </div>
+          ${renderWorkflowImageFigure(comparison)}
           ${renderFooter(deck.title, NINE_PAGE_PROGRESS[3])}
         </div>
       </section>
@@ -1734,6 +1779,7 @@ function renderNeoGridBoldSlides(deck: PptPreviewDeck, variant: PptPreviewVarian
               ${renderBulletList(spotlightRows.map((item) => `${item.title}: ${item.detail}`))}
             </aside>
           </div>
+          ${renderWorkflowImageFigure(evidence)}
           ${renderFooter(variant.summary, NINE_PAGE_PROGRESS[4])}
         </div>
       </section>
@@ -2009,6 +2055,58 @@ function buildVariantSpecificCss(theme: FrontendSlidesTheme, styleKey: PptPrevie
     grid-template-columns: auto 1fr;
     gap: 1rem;
     align-items: center;
+  }
+
+  .workflow-image-figure {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0;
+    width: 100%;
+  }
+
+  .workflow-image-inline {
+    margin-top: 1rem;
+  }
+
+  .workflow-image-frame {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    min-height: 11rem;
+    aspect-ratio: 16 / 9;
+    border-radius: 1.1rem;
+    border: 1px solid color-mix(in srgb, var(--deck-border) 88%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--deck-accent) 14%, transparent), transparent 45%),
+      color-mix(in srgb, var(--deck-panel) 92%, white 8%);
+    box-shadow: 0 22px 40px color-mix(in srgb, var(--deck-accent) 10%, transparent);
+  }
+
+  .workflow-image-cover .workflow-image-frame {
+    min-height: 14rem;
+    aspect-ratio: 4 / 3;
+  }
+
+  .workflow-image-frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .workflow-image-caption {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: center;
+    color: var(--deck-secondary);
+    font: 700 var(--small-size)/1.2 var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .workflow-image-source {
+    opacity: 0.88;
   }
   `
 

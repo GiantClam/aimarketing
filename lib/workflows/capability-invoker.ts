@@ -17,9 +17,9 @@ import {
   resolvePlatformCapabilityExecutionProxyTarget,
 } from "@/lib/platform/execute"
 import { getPlatformBindingTargetExecutionState, getPlatformCapabilityExecutionState } from "@/lib/platform/execution"
+import { shouldChargeSharedCreditsForCapability } from "@/lib/platform/shared-credits-policy"
 import { buildWorkflowImageGenerateRequestBody } from "@/lib/workflows/image-capability-request"
 import {
-  buildWorkflowImagePromptReferenceSection,
   isEmbeddableWorkflowImagePromptUrl,
 } from "@/lib/workflows/image-prompt-references"
 import type {
@@ -39,9 +39,21 @@ type WorkflowCapabilityInvokerOptions = {
   callTimeoutMs?: number
 }
 
+const DEFAULT_WORKFLOW_CAPABILITY_TIMEOUT_MS = 120_000
+const DEFAULT_IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS = 240_000
+const DEFAULT_WORKFLOW_IMAGE_TIMEOUT_BUFFER_MS = 30_000
+const DEFAULT_WORKFLOW_PPT_TIMEOUT_MS = 300_000
+
 function normalizeOrigin(value: string | undefined) {
   const trimmed = value?.trim()
   return trimmed || "http://127.0.0.1:3000"
+}
+
+function parsePositiveIntegerEnv(name: string) {
+  const raw = process.env[name]
+  if (typeof raw !== "string" || !raw.trim()) return null
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
 function sleep(ms: number) {
@@ -63,6 +75,49 @@ function extractUrlLikeItems(input: WorkflowCapabilityInvokeParams["input"]): st
   return refs
     .map((item) => item.url?.trim() || "")
     .filter((url) => isEmbeddableWorkflowImagePromptUrl(url))
+}
+
+export function resolveWorkflowCapabilityCallTimeoutMs(
+  capabilitySlug: WorkflowCapabilityInvokeParams["capabilitySlug"],
+  overrideTimeoutMs?: number,
+) {
+  if (Number.isFinite(overrideTimeoutMs) && (overrideTimeoutMs as number) > 0) {
+    return overrideTimeoutMs as number
+  }
+
+  const defaultTimeoutMs =
+    parsePositiveIntegerEnv("WORKFLOW_CAPABILITY_TIMEOUT_MS") ||
+    DEFAULT_WORKFLOW_CAPABILITY_TIMEOUT_MS
+
+  if (capabilitySlug === "ai-ppt") {
+    const pptSpecificTimeoutMs =
+      parsePositiveIntegerEnv("WORKFLOW_PPT_CAPABILITY_TIMEOUT_MS") ||
+      DEFAULT_WORKFLOW_PPT_TIMEOUT_MS
+
+    return Math.max(defaultTimeoutMs, pptSpecificTimeoutMs)
+  }
+
+  if (capabilitySlug !== "ai-image") {
+    return defaultTimeoutMs
+  }
+
+  const imageSpecificTimeoutMs = parsePositiveIntegerEnv("WORKFLOW_IMAGE_CAPABILITY_TIMEOUT_MS")
+  const imageProviderTotalTimeoutMs = Math.max(
+    30_000,
+    parsePositiveIntegerEnv("IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS") ||
+      DEFAULT_IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS,
+  )
+  const imageTimeoutBufferMs = Math.max(
+    0,
+    parsePositiveIntegerEnv("WORKFLOW_IMAGE_TASK_TIMEOUT_BUFFER_MS") ||
+      DEFAULT_WORKFLOW_IMAGE_TIMEOUT_BUFFER_MS,
+  )
+
+  return Math.max(
+    defaultTimeoutMs,
+    imageSpecificTimeoutMs || 0,
+    imageProviderTotalTimeoutMs + imageTimeoutBufferMs,
+  )
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -108,7 +163,40 @@ function findPrimaryAudioUrl(input: WorkflowCapabilityInvokeParams["input"]) {
   return input.audio[0]?.url || findFirstAssetUrlByMimePrefix(input, "audio/")
 }
 
-function buildPromptText(params: WorkflowCapabilityInvokeParams, locale: "zh" | "en") {
+function extractWorkflowPptInputImages(input: WorkflowCapabilityInvokeParams["input"]) {
+  const collected = new Map<string, {
+    url: string
+    title?: string | null
+    mimeType?: string | null
+    sourceNodeKey?: string | null
+  }>()
+
+  for (const item of input.image) {
+    const url = item.url?.trim() || item.downloadUrl?.trim() || ""
+    if (!url || collected.has(url)) continue
+    collected.set(url, {
+      url,
+      title: item.title?.trim() || null,
+      mimeType: item.mimeType?.trim() || null,
+      sourceNodeKey: item.sourceNodeKey?.trim() || null,
+    })
+  }
+
+  for (const item of input.asset) {
+    const url = item.url?.trim() || ""
+    if (!url || collected.has(url) || !item.mimeType?.startsWith("image/")) continue
+    collected.set(url, {
+      url,
+      title: item.fileName?.trim() || null,
+      mimeType: item.mimeType?.trim() || null,
+      sourceNodeKey: null,
+    })
+  }
+
+  return [...collected.values()]
+}
+
+function buildPromptText(params: WorkflowCapabilityInvokeParams, _locale: "zh" | "en") {
   const inheritedText = params.input.text.map((item) => item.trim()).filter(Boolean)
   const configuredPrompt =
     inheritedText.length > 0
@@ -118,19 +206,13 @@ function buildPromptText(params: WorkflowCapabilityInvokeParams, locale: "zh" | 
         : typeof params.node.config.promptTemplate === "string"
           ? params.node.config.promptTemplate.trim()
           : ""
-  const imageReferenceSection = buildWorkflowImagePromptReferenceSection({
-    references: params.node.config.imagePromptReferences,
-    inputImages: params.input.image,
-    locale,
-  })
-  const hasImageReferenceSection = Boolean(imageReferenceSection)
   const referenceUrls = extractUrlLikeItems(params.input)
+  const includeReferenceUrls = params.capabilitySlug !== "ai-image" && params.capabilitySlug !== "ai-ppt"
 
   const sections = [
     configuredPrompt,
     inheritedText.length > 0 ? inheritedText.join("\n\n") : "",
-    imageReferenceSection,
-    referenceUrls.length > 0 && !hasImageReferenceSection
+    includeReferenceUrls && referenceUrls.length > 0
       ? `Reference URLs:\n${referenceUrls.map((url) => `- ${url}`).join("\n")}`
       : "",
   ].filter(Boolean)
@@ -287,6 +369,23 @@ function coerceNumericHeader(value: string | null) {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : undefined
 }
 
+function extractDownloadFileName(headers: Headers) {
+  const contentDisposition = headers.get("content-disposition") || ""
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    const decoded = decodeURIComponent(utf8Match[1]).trim()
+    if (decoded) return decoded
+  }
+
+  const asciiMatch = contentDisposition.match(/filename="([^"]+)"/i)
+  if (asciiMatch?.[1]) {
+    const decoded = asciiMatch[1].trim()
+    if (decoded) return decoded
+  }
+
+  return null
+}
+
 async function pollMediaTaskUntilComplete(input: {
   origin: string
   taskId: string
@@ -294,10 +393,15 @@ async function pollMediaTaskUntilComplete(input: {
   cookieHeader?: string | null
   requestIp?: string
   currentUser?: AuthUser | null
-  maxPollAttempts: number
+  maxPollAttempts?: number
   pollIntervalMs: number
 }) {
-  for (let attempt = 0; attempt < input.maxPollAttempts; attempt += 1) {
+  const maxPollAttempts =
+    Number.isFinite(input.maxPollAttempts) && (input.maxPollAttempts as number) > 0
+      ? (input.maxPollAttempts as number)
+      : null
+
+  for (let attempt = 0; maxPollAttempts === null || attempt < maxPollAttempts; attempt += 1) {
     if (attempt > 0) {
       await sleep(input.pollIntervalMs)
     }
@@ -342,10 +446,15 @@ async function pollAssistantTaskUntilComplete(input: {
   cookieHeader?: string | null
   requestIp?: string
   currentUser?: AuthUser | null
-  maxPollAttempts: number
+  maxPollAttempts?: number
   pollIntervalMs: number
 }) {
-  for (let attempt = 0; attempt < input.maxPollAttempts; attempt += 1) {
+  const maxPollAttempts =
+    Number.isFinite(input.maxPollAttempts) && (input.maxPollAttempts as number) > 0
+      ? (input.maxPollAttempts as number)
+      : null
+
+  for (let attempt = 0; maxPollAttempts === null || attempt < maxPollAttempts; attempt += 1) {
     if (attempt > 0) {
       await sleep(input.pollIntervalMs)
     }
@@ -418,6 +527,67 @@ function buildCapabilityGateError(responsePayload: Record<string, unknown> | nul
   }
 
   return "workflow_capability_gate_failed"
+}
+
+function resolveWorkflowSharedCreditsRequired(params: {
+  capabilitySlug: WorkflowCapabilityInvokeParams["capabilitySlug"]
+  prompt: string
+  locale: "zh" | "en"
+  invokeParams: WorkflowCapabilityInvokeParams
+  usesSharedCredits: boolean
+}) {
+  const { capabilitySlug, invokeParams, locale, prompt, usesSharedCredits } = params
+
+  if (!usesSharedCredits) {
+    return false
+  }
+
+  if (capabilitySlug === "ai-chat") {
+    const selectedProviderId = normalizeOptionalText(invokeParams.node.config.selectedProviderId)
+    const selectedModelId = normalizeOptionalText(invokeParams.node.config.selectedModelId)
+
+    return shouldChargeSharedCreditsForCapability({
+      capabilitySlug,
+      usesSharedCredits,
+      body: selectedProviderId
+        ? {
+            modelConfig: {
+              providerId: selectedProviderId,
+              ...(selectedModelId ? { modelId: selectedModelId } : {}),
+            },
+          }
+        : {},
+    })
+  }
+
+  if (capabilitySlug === "ai-image") {
+    return shouldChargeSharedCreditsForCapability({
+      capabilitySlug,
+      usesSharedCredits,
+      body: buildWorkflowImageGenerateRequestBody(invokeParams, prompt, locale),
+    })
+  }
+
+  if (capabilitySlug === "ai-video") {
+    return shouldChargeSharedCreditsForCapability({
+      capabilitySlug,
+      usesSharedCredits,
+      body: {
+        ...buildVideoGenerateRequestBody(invokeParams, prompt),
+        referenceUrls: extractUrlLikeItems(invokeParams.input),
+      },
+    })
+  }
+
+  if (capabilitySlug === "ai-music") {
+    return shouldChargeSharedCreditsForCapability({
+      capabilitySlug,
+      usesSharedCredits,
+      body: buildAudioGenerateRequestBody(invokeParams, prompt),
+    })
+  }
+
+  return usesSharedCredits
 }
 
 function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, prompt: string) {
@@ -569,13 +739,23 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
       runtimeStatus: executionState.runtimeStatus,
       accessState: executionState.accessState,
       usesSharedCredits: executionState.usesSharedCredits,
+      sharedCreditsRequired: resolveWorkflowSharedCreditsRequired({
+        capabilitySlug: params.capabilitySlug,
+        prompt,
+        locale,
+        invokeParams: params,
+        usesSharedCredits: executionState.usesSharedCredits,
+      }),
       billingCanSpendCredits: executionState.billing?.canSpendCredits ?? null,
     })
     if (!gate.ok) {
       throw new Error(buildCapabilityGateError(await parseJsonResponse(gate.response)))
     }
 
-    const callTimeoutMs = options.callTimeoutMs ?? 120_000
+    const callTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs(
+      params.capabilitySlug,
+      options.callTimeoutMs,
+    )
 
     if (params.capabilitySlug === "ai-chat") {
       const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
@@ -659,6 +839,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
     }
 
     if (params.capabilitySlug === "ai-ppt") {
+      const inputImages = extractWorkflowPptInputImages(params.input)
       const previewBody = {
         prompt,
         scenario: typeof params.node.config.scenario === "string" ? params.node.config.scenario : "marketing-campaign",
@@ -667,6 +848,13 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
         templateMode: typeof params.node.config.templateMode === "string" ? params.node.config.templateMode : "auto-4",
         templateId: typeof params.node.config.templateId === "string" ? params.node.config.templateId : undefined,
         pageCount: typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined,
+        images:
+          inputImages.length > 0
+            ? inputImages.map((image, index) => ({
+                ...image,
+                role: index === 0 ? "cover" : "content",
+              }))
+            : undefined,
       }
       const previewResponse = await withTimeout(
         leadToolPreviewPost(
@@ -734,16 +922,18 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
       const artifactId = coerceNumericHeader(downloadResponse.headers.get("x-platform-artifact-id"))
       const workItemId = coerceNumericHeader(downloadResponse.headers.get("x-platform-work-item-id"))
       const contentType = downloadResponse.headers.get("content-type") || "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      const downloadFileName = extractDownloadFileName(downloadResponse.headers) || "workflow-deck"
+      const previewUrl = artifactId ? `/api/platform/artifacts/${artifactId}/download` : null
+      const downloadUrl = artifactId ? `/api/platform/artifacts/${artifactId}/download?download=1` : previewUrl
 
       return {
         output: {
           ppt: [{
             artifactId,
-            title: typeof previewPayload?.deck === "object" && previewPayload.deck && typeof (previewPayload.deck as Record<string, unknown>).title === "string"
-              ? ((previewPayload.deck as Record<string, unknown>).title as string)
-              : "Workflow deck",
+            title: downloadFileName,
             mimeType: contentType,
-            url: artifactId ? `/api/platform/artifacts/${artifactId}/download?download=1` : null,
+            url: previewUrl,
+            downloadUrl,
           }],
         },
         metadata: {
@@ -809,15 +999,16 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
         if (!asyncTaskId) {
           throw new Error("workflow_image_async_task_missing")
         }
-        const asyncResult = await withTimeout(pollAssistantTaskUntilComplete({
+        const assistantPollIntervalMs = options.pollIntervalMs ?? 3000
+        const asyncResult = await pollAssistantTaskUntilComplete({
           origin,
           taskId: asyncTaskId,
           cookieHeader: options.cookieHeader,
           requestIp: options.requestIp,
           currentUser: options.currentUser,
-          maxPollAttempts: options.maxPollAttempts ?? 120,
-          pollIntervalMs: options.pollIntervalMs ?? 3000,
-        }), callTimeoutMs, "workflow_image_task_timeout")
+          maxPollAttempts: options.maxPollAttempts,
+          pollIntervalMs: assistantPollIntervalMs,
+        })
         const asyncOutcome = typeof asyncResult.outcome === "string" ? asyncResult.outcome : null
         const asyncVersionId = typeof asyncResult.version_id === "string" ? asyncResult.version_id : null
         const asyncSessionId =
@@ -903,7 +1094,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
               currentUser: options.currentUser,
-              maxPollAttempts: options.maxPollAttempts ?? 60,
+              maxPollAttempts: options.maxPollAttempts,
               pollIntervalMs: options.pollIntervalMs ?? 3000,
             }), callTimeoutMs, "workflow_image_task_timeout")
           : mediaPayload
@@ -982,7 +1173,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
               currentUser: options.currentUser,
-              maxPollAttempts: options.maxPollAttempts ?? 90,
+              maxPollAttempts: options.maxPollAttempts,
               pollIntervalMs: options.pollIntervalMs ?? 5000,
             }), callTimeoutMs, "workflow_video_task_timeout")
           : mediaPayload
@@ -1030,7 +1221,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
               currentUser: options.currentUser,
-              maxPollAttempts: options.maxPollAttempts ?? 90,
+              maxPollAttempts: options.maxPollAttempts,
               pollIntervalMs: options.pollIntervalMs ?? 4000,
             }), callTimeoutMs, "workflow_audio_task_timeout")
           : mediaPayload

@@ -183,10 +183,50 @@ test("resolveWorkflowImagePromptRuntimeReferences keeps data url tokens untouche
       { url: "https://example.com/1.png" },
       { url: "data:image/png;base64,abc123" },
     ],
+    locale: "zh",
   })
 
-  assert.equal(resolved.prompt, "将图2中的人物替换为{{图3}}")
+  assert.equal(resolved.prompt, "将第一张输入图中的人物替换为第二张输入图")
   assert.deepEqual(resolved.referenceUrls, ["https://example.com/1.png"])
+})
+
+test("resolveWorkflowImagePromptRuntimeReferences maps alias tokens to input image positions", () => {
+  const resolved = resolveWorkflowImagePromptRuntimeReferences({
+    prompt: "Replace {{图2}} with {{图3}} while keeping the layout from {{image-2}}.",
+    references: [
+      { sourceNodeKey: "image-2", alias: "图2" },
+      { sourceNodeKey: "image-3", alias: "图3" },
+    ],
+    inputImages: [
+      { url: "https://example.com/1.png" },
+      { url: "https://example.com/2.png" },
+    ],
+    locale: "en",
+  })
+
+  assert.equal(
+    resolved.prompt,
+    "Replace the first input image with the second input image while keeping the layout from the first input image.",
+  )
+  assert.deepEqual(resolved.referenceUrls, ["https://example.com/1.png", "https://example.com/2.png"])
+})
+
+test("resolveWorkflowImagePromptRuntimeReferences matches images by source node key when input order differs", () => {
+  const resolved = resolveWorkflowImagePromptRuntimeReferences({
+    prompt: "将{{图2}}中的人物替换为{{图3}}",
+    references: [
+      { sourceNodeKey: "image-2", alias: "图2" },
+      { sourceNodeKey: "image-3", alias: "图3" },
+    ],
+    inputImages: [
+      { url: "https://example.com/3.png", sourceNodeKey: "image-3" },
+      { url: "https://example.com/2.png", sourceNodeKey: "image-2" },
+    ],
+    locale: "zh",
+  })
+
+  assert.equal(resolved.prompt, "将第二张输入图中的人物替换为第一张输入图")
+  assert.deepEqual(resolved.referenceUrls, ["https://example.com/2.png", "https://example.com/3.png"])
 })
 
 test("isEmbeddableWorkflowImagePromptUrl rejects data urls", () => {

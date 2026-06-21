@@ -1,6 +1,14 @@
 import { createOpenAI } from "@ai-sdk/openai"
 
-export type AiEntryProviderId = "pptoken" | "openrouter" | "aiberm" | "crazyroute"
+export type AiEntryProviderId =
+  | "pptoken"
+  | "openrouter"
+  | "aiberm"
+  | "crazyroute"
+  | "enterprise-openai-compatible"
+  | "enterprise-qwen-official"
+  | "enterprise-minimax-official"
+  | "enterprise-glm-official"
 
 export type AiEntryProviderConfig = {
   id: AiEntryProviderId
@@ -44,6 +52,7 @@ type ExecuteAiEntryOptions = {
   forceModelAcrossProviders?: boolean
   disableSameProviderModelFallback?: boolean
   directProviderFailoverOnError?: boolean
+  providerConfigs?: AiEntryProviderConfig[]
 }
 
 type GlobalWithAiEntryRoutingState = typeof globalThis & {
@@ -574,12 +583,19 @@ async function buildProviderRuntimes(
     options?.disableSameProviderModelFallback,
   )
 
-  let configs = getConfiguredAiEntryProviders()
+  const explicitProviderConfigs =
+    Array.isArray(options?.providerConfigs) && options.providerConfigs.length > 0
+      ? options.providerConfigs.filter((item) => item.apiKey && item.baseURL)
+      : null
+
+  let configs = explicitProviderConfigs || getConfiguredAiEntryProviders()
   if (configs.length === 0) return []
 
   const routingModel = preferredModel || getAiEntryDefaultModel()
   const allowPptoken = isOpenAiFamilyModel(routingModel)
-  configs = configs.filter((item) => (allowPptoken ? true : item.id !== "pptoken"))
+  configs = configs.filter((item) =>
+    allowPptoken ? true : item.id !== "pptoken",
+  )
   if (configs.length === 0) return []
 
   if (preferredProviderId) {
@@ -593,14 +609,16 @@ async function buildProviderRuntimes(
     }
   }
 
-  const defaultOrder: AiEntryProviderId[] = allowPptoken
-    ? ["pptoken", "openrouter", "aiberm", "crazyroute"]
-    : ["openrouter", "aiberm", "crazyroute"]
-  configs.sort((a, b) => defaultOrder.indexOf(a.id) - defaultOrder.indexOf(b.id))
-  if (preferredProviderId && !forcePreferredProvider) {
-    const preferred = configs.find((item) => item.id === preferredProviderId)
-    if (preferred) {
-      configs = [preferred, ...configs.filter((item) => item.id !== preferredProviderId)]
+  if (!explicitProviderConfigs) {
+    const defaultOrder: AiEntryProviderId[] = allowPptoken
+      ? ["pptoken", "openrouter", "aiberm", "crazyroute"]
+      : ["openrouter", "aiberm", "crazyroute"]
+    configs.sort((a, b) => defaultOrder.indexOf(a.id) - defaultOrder.indexOf(b.id))
+    if (preferredProviderId && !forcePreferredProvider) {
+      const preferred = configs.find((item) => item.id === preferredProviderId)
+      if (preferred) {
+        configs = [preferred, ...configs.filter((item) => item.id !== preferredProviderId)]
+      }
     }
   }
 
@@ -681,7 +699,7 @@ export async function executeAiEntryWithProviderFailover<T>(
   const providers = await buildProviderRuntimes(options)
   if (providers.length === 0) {
     throw new Error(
-      "No configured AI entry providers. Configure at least one of: pptoken, openrouter, aiberm, crazyroute.",
+      "No configured AI entry providers. Configure at least one AI entry runtime provider.",
     )
   }
 

@@ -53,6 +53,7 @@ type ChatAttachment = {
   name: string
   mediaType: string
   size: number
+  artifactId?: number
   dataUrl?: string
   text?: string
 }
@@ -104,6 +105,14 @@ type ExtractedChatAttachmentResponse = {
     text?: string
     textCharCount?: number
     truncated?: boolean
+  }
+  error?: string
+}
+type UploadedAssetLibraryAttachmentResponse = {
+  data?: {
+    artifact?: {
+      id?: number
+    }
   }
   error?: string
 }
@@ -427,6 +436,26 @@ async function extractDocumentAttachment(file: File): Promise<ChatAttachment> {
   }
 }
 
+async function uploadChatAttachmentToAssetLibrary(file: File): Promise<number> {
+  const formData = new FormData()
+  formData.set("file", file)
+  formData.set("surface", "ai-entry")
+
+  const response = await fetch("/api/platform/assets/upload", {
+    method: "POST",
+    body: formData,
+    credentials: "same-origin",
+  })
+  const payload = (await response.json().catch(() => null)) as UploadedAssetLibraryAttachmentResponse | null
+  const artifactId = payload?.data?.artifact?.id
+
+  if (!response.ok || typeof artifactId !== "number" || artifactId <= 0) {
+    throw new Error(payload?.error || `asset_library_upload_failed_${response.status}`)
+  }
+
+  return artifactId
+}
+
 function renderAttachmentError(code: string, isZh: boolean) {
   const messages: Record<string, { zh: string; en: string }> = {
     unsupported_file_type: {
@@ -453,12 +482,17 @@ function renderAttachmentError(code: string, isZh: boolean) {
       zh: "DOCX 解析失败，请确认文件未损坏。",
       en: "DOCX parsing failed. Check that the file is not corrupted.",
     },
+    asset_library_upload_failed: {
+      zh: "附件写入素材库失败，请稍后重试。",
+      en: "Failed to save the attachment into the asset library. Please try again.",
+    },
     pdf_parse_failed: {
       zh: "PDF 解析失败，请确认文件可打开且包含可复制文字。",
       en: "PDF parsing failed. Check that the file opens and contains copyable text.",
     },
   }
-  const message = messages[code]
+  const normalizedCode = code.startsWith("asset_library_upload_failed") ? "asset_library_upload_failed" : code
+  const message = messages[normalizedCode]
   if (message) return isZh ? message.zh : message.en
   return isZh ? `附件解析失败：${code}` : `Attachment parsing failed: ${code}`
 }
@@ -1371,12 +1405,23 @@ export function AiEntryWorkspace({
             continue
           }
 
+          let artifactId: number
+          try {
+            artifactId = await uploadChatAttachmentToAssetLibrary(file)
+          } catch (error) {
+            const code = error instanceof Error ? error.message : "asset_library_upload_failed"
+            setErrorMessage(renderAttachmentError(code, isZh))
+            hadAttachmentError = true
+            continue
+          }
+
           if (file.type.startsWith("image/")) {
             nextAttachments.push({
               id: `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
               name: file.name,
               mediaType: file.type,
               size: file.size,
+              artifactId,
               dataUrl: await readFileAsDataUrl(file),
             })
             continue
@@ -1388,6 +1433,7 @@ export function AiEntryWorkspace({
               name: file.name,
               mediaType: file.type || "text/plain",
               size: file.size,
+              artifactId,
               text: await file.text(),
             })
             continue
@@ -1395,7 +1441,10 @@ export function AiEntryWorkspace({
 
           if (isParseableDocumentFile(file)) {
             try {
-              nextAttachments.push(await extractDocumentAttachment(file))
+              nextAttachments.push({
+                ...(await extractDocumentAttachment(file)),
+                artifactId,
+              })
             } catch (error) {
               const code = error instanceof Error ? error.message : "attachment_parse_failed"
               setErrorMessage(renderAttachmentError(code, isZh))

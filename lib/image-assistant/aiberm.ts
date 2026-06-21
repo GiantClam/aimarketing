@@ -1,22 +1,57 @@
 import { writerRequestJson } from "@/lib/writer/network"
 
 import {
+  generateOrEditImagesWithGoogle,
+  getImageAssistantGoogleModel,
+  type GoogleImageRuntimeConfig,
   type ImageAssistantFileReference,
 } from "@/lib/image-assistant/google"
 import {
   generateImagesWithOpenAiCompatibleProvider,
   getOpenAiCompatibleImageProviderConfig,
   hasOpenAiCompatibleImageProviderKey,
+  type OpenAiCompatibleImageProviderConfig,
   type OpenAiCompatibleImageProviderId,
   type OpenAiCompatibleInlineImage,
 } from "@/lib/image-assistant/openai-compatible-image"
 import { executeImageProviderPlan, type ImageGenerationProvider } from "@/lib/image-generation/provider-orchestration"
 import { isImageAssistantR2Available } from "@/lib/image-assistant/r2"
+import {
+  isRunningHubConfiguredForTarget,
+  queryRunningHubTask,
+  submitRunningHubTask,
+  uploadRunningHubBinary,
+  type RunningHubConfig,
+} from "@/lib/platform/runninghub"
+import type {
+  GptImage2Background,
+  GptImage2OutputFormat,
+  GptImage2Quality,
+  GptImage2Moderation,
+  GptImage2ResponseFormat,
+} from "@/lib/image-assistant/model-options"
 import type { ImageAssistantResolution, ImageAssistantSizePreset, ImageAssistantTaskType } from "@/lib/image-assistant/types"
 
 type InlineReferenceImage = OpenAiCompatibleInlineImage
 type FileReferenceImage = ImageAssistantFileReference & { assetId?: string | null }
 type ReferenceImageInput = InlineReferenceImage | FileReferenceImage
+export type ImageAssistantRuntimeProviderConfig =
+  | {
+      kind: "openai-compatible"
+      provider: OpenAiCompatibleImageProviderId
+      config: OpenAiCompatibleImageProviderConfig
+      model?: string | null
+    }
+  | {
+      kind: "google"
+      config: GoogleImageRuntimeConfig
+      model?: string | null
+    }
+  | {
+      kind: "runninghub"
+      config: RunningHubConfig
+      model?: string | null
+    }
 
 const PRIMARY_IMAGE_ASSISTANT_AIBERM_MODEL =
   process.env.IMAGE_ASSISTANT_AIBERM_MODEL || process.env.WRITER_AIBERM_IMAGE_MODEL || "gpt-image-2"
@@ -40,6 +75,10 @@ const IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS = Math.max(
   Number.parseInt(process.env.IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS || "", 10) || 240_000,
 )
 const MAX_IMAGE_ASSISTANT_CANDIDATES = 9
+const RUNNINGHUB_IMAGE_POLL_INTERVAL_MS = Math.max(
+  1_000,
+  Number.parseInt(process.env.RUNNINGHUB_IMAGE_POLL_INTERVAL_MS || "", 10) || 2_000,
+)
 
 function parseModelList(...values: Array<string | null | undefined>) {
   const result: string[] = []
@@ -196,7 +235,30 @@ function createProviderScopedAbortSignal(parentSignal?: AbortSignal, timeoutMs?:
   }
 }
 
-export function getImageAssistantModel(_resolution: ImageAssistantResolution) {
+function toSafeBaseUrlHost(value: string | null | undefined) {
+  const normalized = String(value || "").trim()
+  if (!normalized) return null
+
+  try {
+    return new URL(normalized).host
+  } catch {
+    return normalized
+  }
+}
+
+export function getImageAssistantModel(
+  _resolution: ImageAssistantResolution,
+  runtimeProviderConfig?: ImageAssistantRuntimeProviderConfig | null,
+) {
+  if (runtimeProviderConfig?.kind === "runninghub") {
+    return runtimeProviderConfig.model || "runninghub-image-workflow"
+  }
+  if (runtimeProviderConfig?.kind === "google") {
+    return runtimeProviderConfig.model || getImageAssistantGoogleModel(runtimeProviderConfig.config)
+  }
+  if (runtimeProviderConfig?.kind === "openai-compatible") {
+    return runtimeProviderConfig.model || runtimeProviderConfig.config.model || "gpt-image-2"
+  }
   if (hasImageAssistantPptokenKey()) {
     return getOpenAiCompatibleImageProviderConfig("pptoken")?.model || "gpt-image-2"
   }
@@ -209,7 +271,54 @@ export function getImageAssistantModel(_resolution: ImageAssistantResolution) {
   return "gpt-image-2"
 }
 
-export function getImageAssistantAvailability() {
+export function getImageAssistantAvailability(params?: {
+  runtimeProviderConfig?: ImageAssistantRuntimeProviderConfig | null
+}) {
+  if (params?.runtimeProviderConfig?.kind === "runninghub") {
+    const model = params.runtimeProviderConfig.model || "runninghub-image-workflow"
+    const enabled = isRunningHubConfiguredForTarget("ai-image", params.runtimeProviderConfig.config)
+    return {
+      enabled,
+      reason: enabled ? null : "runninghub_not_configured",
+      provider: "runninghub",
+      models: {
+        highQuality: model,
+        lowCost: model,
+      },
+    }
+  }
+
+  if (params?.runtimeProviderConfig?.kind === "google") {
+    const model =
+      params.runtimeProviderConfig.model ||
+      getImageAssistantGoogleModel(params.runtimeProviderConfig.config)
+    return {
+      enabled: true,
+      reason: null,
+      provider: "google",
+      models: {
+        highQuality: model,
+        lowCost: model,
+      },
+    }
+  }
+
+  if (params?.runtimeProviderConfig?.kind === "openai-compatible") {
+    const model =
+      params.runtimeProviderConfig.model ||
+      params.runtimeProviderConfig.config.model ||
+      "gpt-image-2"
+    return {
+      enabled: true,
+      reason: null,
+      provider: params.runtimeProviderConfig.provider,
+      models: {
+        highQuality: model,
+        lowCost: model,
+      },
+    }
+  }
+
   const preferredProvider = hasImageAssistantPptokenKey()
     ? "pptoken"
     : hasImageAssistantAibermKey()
@@ -262,6 +371,204 @@ export function getImageAssistantAvailability() {
       highQuality: getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
       lowCost: hasImageAssistantAibermKey() ? IMAGE_ASSISTANT_AIBERM_MODELS[0] : getImageAssistantModel(DEFAULT_IMAGE_RESOLUTION),
     },
+  }
+}
+
+function sleepWithSignal(ms: number, signal?: AbortSignal) {
+  if (!signal) {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms))
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+
+    const onAbort = () => {
+      clearTimeout(timeoutId)
+      signal.removeEventListener("abort", onAbort)
+      const error = new Error("request_aborted")
+      error.name = "AbortError"
+      reject(error)
+    }
+
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+
+    signal.addEventListener("abort", onAbort, { once: true })
+  })
+}
+
+function inlineReferenceToBlob(reference: InlineReferenceImage) {
+  return new Blob([Buffer.from(reference.base64Data, "base64")], {
+    type: reference.mimeType || "image/png",
+  })
+}
+
+async function uploadRunningHubReferenceImage(params: {
+  config: RunningHubConfig
+  reference: InlineReferenceImage
+  index: number
+}) {
+  const extension = params.reference.mimeType === "image/jpeg"
+    ? "jpg"
+    : params.reference.mimeType === "image/webp"
+      ? "webp"
+      : "png"
+
+  const uploaded = await uploadRunningHubBinary({
+    config: params.config,
+    file: inlineReferenceToBlob(params.reference),
+    fileName: `image-assistant-reference-${params.index + 1}.${extension}`,
+  })
+
+  return {
+    assetId: params.reference.assetId || null,
+    mimeType: params.reference.mimeType,
+    fileName: uploaded.fileName,
+    downloadUrl: uploaded.downloadUrl,
+  }
+}
+
+function extractRunningHubImageResultUrls(result: Awaited<ReturnType<typeof queryRunningHubTask>>) {
+  if (!result?.results?.length) {
+    return []
+  }
+
+  return result.results
+    .map((item) => (typeof item?.url === "string" ? item.url.trim() : ""))
+    .filter(Boolean)
+}
+
+async function waitForRunningHubImageResults(params: {
+  taskId: string
+  config: RunningHubConfig
+  signal?: AbortSignal
+}) {
+  const deadlineAt = Date.now() + IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS
+
+  while (Date.now() < deadlineAt) {
+    const task = await queryRunningHubTask(params.taskId, params.config)
+    const status = String(task?.status || "").toUpperCase()
+
+    if (status === "SUCCESS") {
+      const images = extractRunningHubImageResultUrls(task)
+      if (images.length === 0) {
+        throw new Error("runninghub_image_results_missing")
+      }
+
+      return {
+        status,
+        images,
+      }
+    }
+
+    if (status === "FAILED") {
+      throw new Error(task?.errorMessage || task?.errorCode || "runninghub_image_task_failed")
+    }
+
+    await sleepWithSignal(RUNNINGHUB_IMAGE_POLL_INTERVAL_MS, params.signal)
+  }
+
+  throw new Error("runninghub_image_timeout")
+}
+
+async function generateOrEditImagesWithRunningHub(params: {
+  prompt: string
+  taskType: ImageAssistantTaskType
+  model?: string | null
+  sizePreset?: ImageAssistantSizePreset | null
+  resolution: ImageAssistantResolution
+  imageSize?: string | null
+  imageQuality?: GptImage2Quality | null
+  imageBackground?: GptImage2Background | null
+  imageOutputFormat?: GptImage2OutputFormat | null
+  imageOutputCompression?: number | null
+  imageModeration?: GptImage2Moderation | null
+  imageResponseFormat?: GptImage2ResponseFormat | null
+  referenceImages?: InlineReferenceImage[]
+  snapshotAssetId?: string | null
+  maskAssetId?: string | null
+  candidateCount: number
+  config: RunningHubConfig
+  signal?: AbortSignal
+}) {
+  const uploadedReferences = await Promise.all(
+    (params.referenceImages || []).map((reference, index) =>
+      uploadRunningHubReferenceImage({
+        config: params.config,
+        reference,
+        index,
+      }),
+    ),
+  )
+
+  const maskImage =
+    (params.maskAssetId
+      ? uploadedReferences.find((reference) => reference.assetId === params.maskAssetId) || null
+      : null)
+  const snapshotImage =
+    (params.snapshotAssetId
+      ? uploadedReferences.find((reference) => reference.assetId === params.snapshotAssetId) || null
+      : null)
+  const contentReferences = uploadedReferences.filter((reference) => reference.assetId !== params.maskAssetId)
+  const primaryImage = snapshotImage || contentReferences[0] || null
+  const mode =
+    params.taskType === "generate" && contentReferences.length === 0 && !snapshotImage ? "txt2img" : "img2img"
+
+  const submit = await submitRunningHubTask({
+    mediaTarget: "ai-image",
+    config: params.config,
+    payload: {
+      prompt: params.prompt,
+      model: params.model || null,
+      candidateCount: params.candidateCount,
+      sizePreset: params.sizePreset || null,
+      resolution: params.resolution,
+      imageSize: params.imageSize || null,
+      imageQuality: params.imageQuality || null,
+      imageBackground: params.imageBackground || null,
+      imageOutputFormat: params.imageOutputFormat || null,
+      imageOutputCompression: params.imageOutputCompression ?? null,
+      imageModeration: params.imageModeration || null,
+      imageResponseFormat: params.imageResponseFormat || null,
+      taskType: params.taskType,
+      mode,
+      workflowMode: mode,
+      inputMode: mode,
+      referenceImages: contentReferences.map((reference) => ({
+        assetId: reference.assetId,
+        fileName: reference.fileName,
+        mimeType: reference.mimeType,
+        url: reference.downloadUrl,
+      })),
+      referenceImageUrls: contentReferences.map((reference) => reference.downloadUrl),
+      inputImageUrl: primaryImage?.downloadUrl || null,
+      inputImageUrls: contentReferences.map((reference) => reference.downloadUrl),
+      imageUrl: primaryImage?.downloadUrl || null,
+      sourceImageUrl: primaryImage?.downloadUrl || null,
+      snapshotImageUrl: snapshotImage?.downloadUrl || primaryImage?.downloadUrl || null,
+      maskImageUrl: maskImage?.downloadUrl || null,
+    },
+  })
+
+  const completed = await waitForRunningHubImageResults({
+    taskId: submit.taskId,
+    config: params.config,
+    signal: params.signal,
+  })
+
+  return {
+    provider: "runninghub" as const,
+    model: params.model || "runninghub-image-workflow",
+    textSummary:
+      mode === "txt2img"
+        ? "Generated image results with RunningHub text-to-image."
+        : "Generated image results with RunningHub image-to-image.",
+    images: completed.images,
   }
 }
 
@@ -411,17 +718,28 @@ function getProviderExecutionPlan(params: {
 
 function requestOpenAiCompatibleImages(params: {
   provider: OpenAiCompatibleImageProviderId
+  config?: OpenAiCompatibleImageProviderConfig | null
   prompt: string
   taskType: ImageAssistantTaskType
+  model?: string | null
   sizePreset?: ImageAssistantSizePreset | null
   resolution: ImageAssistantResolution
+  imageSize?: string | null
+  imageQuality?: GptImage2Quality | null
+  imageBackground?: GptImage2Background | null
+  imageOutputFormat?: GptImage2OutputFormat | null
+  imageOutputCompression?: number | null
+  imageModeration?: GptImage2Moderation | null
+  imageResponseFormat?: GptImage2ResponseFormat | null
   referenceImages?: InlineReferenceImage[]
   snapshotAssetId?: string | null
   maskAssetId?: string | null
   candidateCount?: number
   signal?: AbortSignal
 }) {
-  const config = getOpenAiCompatibleImageProviderConfig(params.provider)
+  const config =
+    params.config ||
+    getOpenAiCompatibleImageProviderConfig(params.provider)
   if (!config) {
     throw new Error(`image_assistant_${params.provider}_api_key_missing`)
   }
@@ -430,8 +748,16 @@ function requestOpenAiCompatibleImages(params: {
     config,
     prompt: params.prompt,
     taskType: params.taskType,
+    model: params.model,
     sizePreset: params.sizePreset,
     resolution: params.resolution,
+    imageSize: params.imageSize,
+    imageQuality: params.imageQuality,
+    imageBackground: params.imageBackground,
+    imageOutputFormat: params.imageOutputFormat,
+    imageOutputCompression: params.imageOutputCompression,
+    imageModeration: params.imageModeration,
+    imageResponseFormat: params.imageResponseFormat,
     referenceImages: params.referenceImages,
     snapshotAssetId: params.snapshotAssetId,
     maskAssetId: params.maskAssetId,
@@ -444,12 +770,21 @@ export async function generateOrEditImages(params: {
   prompt: string
   resolution: ImageAssistantResolution
   taskType?: ImageAssistantTaskType
+  model?: string | null
   sizePreset?: ImageAssistantSizePreset | null
+  imageSize?: string | null
+  imageQuality?: GptImage2Quality | null
+  imageBackground?: GptImage2Background | null
+  imageOutputFormat?: GptImage2OutputFormat | null
+  imageOutputCompression?: number | null
+  imageModeration?: GptImage2Moderation | null
+  imageResponseFormat?: GptImage2ResponseFormat | null
   referenceImages?: ReferenceImageInput[]
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
   snapshotAssetId?: string | null
   maskAssetId?: string | null
   candidateCount?: number
+  runtimeProviderConfig?: ImageAssistantRuntimeProviderConfig | null
   signal?: AbortSignal
 }) {
   const taskType = params.taskType || "generate"
@@ -461,7 +796,7 @@ export async function generateOrEditImages(params: {
   if (shouldUseImageAssistantFixtures()) {
     return {
       provider: "fixture",
-      model: getImageAssistantModel(params.resolution),
+      model: params.model || getImageAssistantModel(params.resolution),
       textSummary: "Generated local fixture image results.",
       images: Array.from({ length: candidateCount }, (_, index) => buildFixtureDataUrl(params.prompt, aspectRatio, index)),
     }
@@ -470,11 +805,110 @@ export async function generateOrEditImages(params: {
   const inlineReferenceImages = (params.referenceImages || []).filter(
     (image): image is InlineReferenceImage => image.kind === "inline",
   )
-  const providerPlan = getProviderExecutionPlan({
-    referenceImages: params.referenceImages,
-    providerLock: params.providerLock || null,
-  })
+
+  if (params.runtimeProviderConfig?.kind === "runninghub") {
+    const result = await generateOrEditImagesWithRunningHub({
+      prompt: params.prompt,
+      taskType,
+      model: params.model || params.runtimeProviderConfig.model || "runninghub-image-workflow",
+      sizePreset: params.sizePreset,
+      resolution: params.resolution,
+      imageSize: params.imageSize,
+      imageQuality: params.imageQuality,
+      imageBackground: params.imageBackground,
+      imageOutputFormat: params.imageOutputFormat,
+      imageOutputCompression: params.imageOutputCompression,
+      imageModeration: params.imageModeration,
+      imageResponseFormat: params.imageResponseFormat,
+      referenceImages: inlineReferenceImages,
+      snapshotAssetId: params.snapshotAssetId,
+      maskAssetId: params.maskAssetId,
+      candidateCount,
+      config: params.runtimeProviderConfig.config,
+      signal: params.signal,
+    })
+
+    return {
+      provider: result.provider,
+      model: result.model,
+      textSummary: result.textSummary,
+      images: result.images,
+    }
+  }
+
+  if (params.runtimeProviderConfig?.kind === "google") {
+    const fileReferenceImages = (params.referenceImages || []).filter(
+      (image): image is FileReferenceImage => image.kind === "file",
+    )
+    const result = await generateOrEditImagesWithGoogle({
+      prompt: params.prompt,
+      resolution: params.resolution,
+      sizePreset: params.sizePreset,
+      referenceImages: fileReferenceImages,
+      config: params.runtimeProviderConfig.config,
+      signal: params.signal,
+    })
+
+    return {
+      provider: "google",
+      model: result.model,
+      textSummary: result.textSummary,
+      images: result.images,
+    }
+  }
+
+  if (params.runtimeProviderConfig?.kind === "openai-compatible") {
+    const result = await requestOpenAiCompatibleImages({
+      provider: params.runtimeProviderConfig.provider,
+      config: params.runtimeProviderConfig.config,
+      prompt: params.prompt,
+      taskType,
+      model:
+        params.model ||
+        params.runtimeProviderConfig.model ||
+        params.runtimeProviderConfig.config.model,
+      sizePreset: params.sizePreset,
+      resolution: params.resolution,
+      imageSize: params.imageSize,
+      imageQuality: params.imageQuality,
+      imageBackground: params.imageBackground,
+      imageOutputFormat: params.imageOutputFormat,
+      imageOutputCompression: params.imageOutputCompression,
+      imageModeration: params.imageModeration,
+      imageResponseFormat: params.imageResponseFormat,
+      referenceImages: inlineReferenceImages,
+      snapshotAssetId: params.snapshotAssetId,
+      maskAssetId: params.maskAssetId,
+      candidateCount,
+      signal: params.signal,
+    })
+
+    return {
+      provider: params.runtimeProviderConfig.provider,
+      model: result.model,
+      textSummary: result.textSummary,
+      images: result.images,
+    }
+  }
+
+  const providerPlan =
+    params.runtimeProviderConfig
+      ? []
+      : getProviderExecutionPlan({
+          referenceImages: params.referenceImages,
+          providerLock: params.providerLock || null,
+        })
   const providerIndexMap = new Map(providerPlan.map((provider, index) => [provider, index] as const))
+
+  console.info("image-assistant.provider.plan", {
+    providerPlan,
+    providerLock: params.providerLock || null,
+    taskType,
+    candidateCount,
+    model: params.model || null,
+    imageSize: params.imageSize || null,
+    imageQuality: params.imageQuality || null,
+  })
 
   async function runProviderWithBudget<T>(
     provider: Exclude<ImageGenerationProvider, "fixture">,
@@ -519,63 +953,119 @@ export async function generateOrEditImages(params: {
       aiberm: () =>
         runProviderWithBudget(
           "aiberm",
-          (providerSignal) =>
-          modelUsesOpenAiImageApi(IMAGE_ASSISTANT_AIBERM_MODELS[0])
-            ? requestOpenAiCompatibleImages({
-                provider: "aiberm",
-                prompt: params.prompt,
-                taskType,
-                resolution: params.resolution,
-                sizePreset: params.sizePreset,
-                referenceImages: inlineReferenceImages,
-                snapshotAssetId: params.snapshotAssetId,
-                maskAssetId: params.maskAssetId,
-                candidateCount,
-                signal: providerSignal,
-              })
-            : requestImages({
-                prompt: params.prompt,
-                resolution: params.resolution,
-                sizePreset: params.sizePreset,
-                referenceImages: inlineReferenceImages,
-                signal: providerSignal,
-              }),
+          (providerSignal) => {
+            const requestedModel = params.model || IMAGE_ASSISTANT_AIBERM_MODELS[0]
+            const usesOpenAiImageApi = modelUsesOpenAiImageApi(requestedModel)
+            const providerConfig = usesOpenAiImageApi
+              ? getOpenAiCompatibleImageProviderConfig("aiberm")
+              : null
+
+            console.info("image-assistant.provider.start", {
+              provider: "aiberm",
+              model: requestedModel,
+              baseUrlHost: toSafeBaseUrlHost(providerConfig?.baseUrl || AIBERM_API_BASE),
+              taskType,
+            })
+
+            return usesOpenAiImageApi
+              ? requestOpenAiCompatibleImages({
+                  provider: "aiberm",
+                  prompt: params.prompt,
+                  taskType,
+                  model: requestedModel,
+                  resolution: params.resolution,
+                  sizePreset: params.sizePreset,
+                  imageSize: params.imageSize,
+                  imageQuality: params.imageQuality,
+                  imageBackground: params.imageBackground,
+                  imageOutputFormat: params.imageOutputFormat,
+                  imageOutputCompression: params.imageOutputCompression,
+                  imageModeration: params.imageModeration,
+                  imageResponseFormat: params.imageResponseFormat,
+                  referenceImages: inlineReferenceImages,
+                  snapshotAssetId: params.snapshotAssetId,
+                  maskAssetId: params.maskAssetId,
+                  candidateCount,
+                  signal: providerSignal,
+                })
+              : requestImages({
+                  prompt: params.prompt,
+                  resolution: params.resolution,
+                  sizePreset: params.sizePreset,
+                  referenceImages: inlineReferenceImages,
+                  signal: providerSignal,
+                })
+          },
           providerIndexMap.get("aiberm") ?? 0,
         ),
       pptoken: () =>
         runProviderWithBudget(
           "pptoken",
-          (providerSignal) =>
-            requestOpenAiCompatibleImages({
+          (providerSignal) => {
+            const providerConfig = getOpenAiCompatibleImageProviderConfig("pptoken")
+            console.info("image-assistant.provider.start", {
+              provider: "pptoken",
+              model: params.model || providerConfig?.model || "gpt-image-2",
+              baseUrlHost: toSafeBaseUrlHost(providerConfig?.baseUrl),
+              taskType,
+            })
+
+            return requestOpenAiCompatibleImages({
               provider: "pptoken",
               prompt: params.prompt,
               taskType,
+              model: params.model,
               resolution: params.resolution,
               sizePreset: params.sizePreset,
+              imageSize: params.imageSize,
+              imageQuality: params.imageQuality,
+              imageBackground: params.imageBackground,
+              imageOutputFormat: params.imageOutputFormat,
+              imageOutputCompression: params.imageOutputCompression,
+              imageModeration: params.imageModeration,
+              imageResponseFormat: params.imageResponseFormat,
               referenceImages: inlineReferenceImages,
               snapshotAssetId: params.snapshotAssetId,
               maskAssetId: params.maskAssetId,
               candidateCount,
               signal: providerSignal,
-            }),
+            })
+          },
           providerIndexMap.get("pptoken") ?? 0,
         ),
       crazyroute: () =>
         runProviderWithBudget(
           "crazyroute",
-          (providerSignal) =>
-            requestOpenAiCompatibleImages({
+          (providerSignal) => {
+            const providerConfig = getOpenAiCompatibleImageProviderConfig("crazyroute")
+            console.info("image-assistant.provider.start", {
+              provider: "crazyroute",
+              model: params.model || providerConfig?.model || "gpt-image-2",
+              baseUrlHost: toSafeBaseUrlHost(providerConfig?.baseUrl),
+              taskType,
+            })
+
+            return requestOpenAiCompatibleImages({
               provider: "crazyroute",
               prompt: params.prompt,
               taskType,
+              model: params.model,
               resolution: params.resolution,
               sizePreset: params.sizePreset,
+              imageSize: params.imageSize,
+              imageQuality: params.imageQuality,
+              imageBackground: params.imageBackground,
+              imageOutputFormat: params.imageOutputFormat,
+              imageOutputCompression: params.imageOutputCompression,
+              imageModeration: params.imageModeration,
+              imageResponseFormat: params.imageResponseFormat,
               referenceImages: inlineReferenceImages,
               snapshotAssetId: params.snapshotAssetId,
               maskAssetId: params.maskAssetId,
               candidateCount,
               signal: providerSignal,
-            }),
+            })
+          },
           providerIndexMap.get("crazyroute") ?? 0,
         ),
     },

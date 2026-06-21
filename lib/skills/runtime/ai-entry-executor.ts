@@ -7,15 +7,17 @@ import {
 
 import {
   executeAiEntryWithProviderFailover,
+  type AiEntryProviderConfig,
   type AiEntryProviderId,
 } from "@/lib/ai-entry/provider-routing"
 
-type ProviderOptions = {
+export type ProviderOptions = {
   preferredProviderId?: AiEntryProviderId | null
   preferredModel?: string
   forceModelAcrossProviders?: boolean
   disableSameProviderModelFallback?: boolean
   directProviderFailoverOnError?: boolean
+  providerConfigs?: AiEntryProviderConfig[]
 }
 
 type ProviderRunInfo = {

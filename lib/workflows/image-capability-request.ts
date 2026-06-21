@@ -1,14 +1,10 @@
 import type { WorkflowCapabilityInvokeParams } from "@/lib/workflows/node-executors"
+import { normalizeWorkflowImageConfig } from "@/lib/image-assistant/model-options"
+import { buildGovernedImageAssistantModelOptionId } from "@/lib/platform/governed-image-model-option-id"
 import {
   isEmbeddableWorkflowImagePromptUrl,
   resolveWorkflowImagePromptRuntimeReferences,
 } from "@/lib/workflows/image-prompt-references"
-
-function normalizeOptionalText(value: unknown) {
-  if (typeof value !== "string") return null
-  const trimmed = value.trim()
-  return trimmed || null
-}
 
 function extractWorkflowImageAssistantReferenceId(item: WorkflowCapabilityInvokeParams["input"]["image"][number]) {
   if (typeof item.assetId === "string" && item.assetId.trim()) {
@@ -22,19 +18,24 @@ function extractWorkflowImageAssistantReferenceId(item: WorkflowCapabilityInvoke
   return null
 }
 
-function inferOrientationFromSizePreset(sizePreset: string | null) {
-  if (sizePreset === "9:16") return "portrait"
-  if (sizePreset === "1:1") return "square"
-  return "landscape"
+function inferOrientationFromImageSize(size: string) {
+  const normalized = size.trim().toLowerCase()
+  if (normalized === "auto") return "landscape"
+  const matched = normalized.match(/^(\d{2,4})x(\d{2,4})$/u)
+  if (!matched) return "landscape"
+  const width = Number.parseInt(matched[1], 10)
+  const height = Number.parseInt(matched[2], 10)
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return "landscape"
+  if (width === height) return ""
+  return width > height ? "landscape" : "portrait"
 }
 
-function buildDefaultImageComposition(sizePreset: string | null, locale: "zh" | "en") {
-  const preset = sizePreset || "16:9"
+function buildDefaultImageComposition(size: string, locale: "zh" | "en") {
   if (locale === "zh") {
-    return `按 ${preset} 画幅组织画面，主体明确，保留自然留白，整体适合直接生成成品图。`
+    return `按 ${size} 规格组织画面，主体明确，保留自然留白，整体适合直接生成成品图。`
   }
 
-  return `Use a ${preset} composition with a clear focal subject, clean negative space, and production-ready framing.`
+  return `Use a ${size} composition with a clear focal subject, clean negative space, and production-ready framing.`
 }
 
 function buildDefaultImageStyle(locale: "zh" | "en") {
@@ -59,6 +60,7 @@ export function buildWorkflowImageAssistantReferenceAssetIds(input: WorkflowCapa
 export function buildWorkflowImageAssistantReferenceUrls(
   params: Pick<WorkflowCapabilityInvokeParams, "node" | "input">,
   prompt: string,
+  locale: "zh" | "en",
 ) {
   const fallbackUrls = [
     ...new Set(
@@ -72,6 +74,7 @@ export function buildWorkflowImageAssistantReferenceUrls(
     prompt,
     references: params.node.config.imagePromptReferences,
     inputImages: params.input.image,
+    locale,
   })
 
   if (resolved.referenceUrls.length > 0) {
@@ -86,36 +89,59 @@ export function buildWorkflowImageGenerateRequestBody(
   prompt: string,
   locale: "zh" | "en",
 ) {
-  const sizePreset = normalizeOptionalText(params.node.config.sizePreset) || "16:9"
-  const resolution = normalizeOptionalText(params.node.config.resolution) || "512"
+  const normalizedConfig = normalizeWorkflowImageConfig(params.node.config)
+  const selectedProviderId =
+    typeof params.node.config.selectedProviderId === "string" ? params.node.config.selectedProviderId.trim() : ""
+  const selectedModelId =
+    typeof params.node.config.selectedModelId === "string" ? params.node.config.selectedModelId.trim() : ""
+  const selectedModelOptionId =
+    (typeof params.node.config.selectedModelOptionId === "string" && params.node.config.selectedModelOptionId.trim()
+      ? params.node.config.selectedModelOptionId.trim()
+      : null) ||
+    (selectedProviderId && selectedModelId && selectedProviderId !== "runninghub"
+      ? buildGovernedImageAssistantModelOptionId({
+          providerId: selectedProviderId,
+          modelId: selectedModelId,
+        })
+      : null)
   const referenceAssetIds = buildWorkflowImageAssistantReferenceAssetIds(params.input)
   const resolvedReferences = resolveWorkflowImagePromptRuntimeReferences({
     prompt,
     references: params.node.config.imagePromptReferences,
     inputImages: params.input.image,
+    locale,
   })
 
   return {
     prompt: resolvedReferences.prompt,
     preferAsync: true,
-    providerLock: null,
-    sizePreset,
-    resolution,
+    modelOptionId: selectedModelOptionId,
+    providerLock: normalizedConfig.providerLock,
+    model: normalizedConfig.modelId,
     candidateCount: 1,
+    sizePreset: normalizedConfig.sizePreset,
+    resolution: normalizedConfig.resolution,
+    imageSize: normalizedConfig.imageSize,
+    imageQuality: normalizedConfig.imageQuality,
+    imageBackground: normalizedConfig.imageBackground,
+    imageOutputFormat: normalizedConfig.imageOutputFormat,
+    imageOutputCompression: normalizedConfig.imageOutputCompression,
+    imageModeration: normalizedConfig.imageModeration,
+    imageResponseFormat: "url",
     referenceAssetIds,
     referenceUrls:
       referenceAssetIds.length === 0 && resolvedReferences.referenceUrls.length > 0
         ? resolvedReferences.referenceUrls
-        : buildWorkflowImageAssistantReferenceUrls(params, prompt),
+        : buildWorkflowImageAssistantReferenceUrls(params, prompt, locale),
     brief: {
       goal: resolvedReferences.prompt,
       subject: resolvedReferences.prompt,
       style: buildDefaultImageStyle(locale),
-      composition: buildDefaultImageComposition(sizePreset, locale),
+      composition: buildDefaultImageComposition(normalizedConfig.imageSize, locale),
       constraints: "",
-      orientation: inferOrientationFromSizePreset(sizePreset),
-      size_preset: sizePreset,
-      resolution,
+      orientation: inferOrientationFromImageSize(normalizedConfig.imageSize),
+      size_preset: normalizedConfig.sizePreset || "",
+      resolution: normalizedConfig.resolution || "",
       usage_preset: "workflow_node",
       usage_label: locale === "zh" ? "工作流节点生成" : "Workflow node generation",
       ratio_confirmed: true,

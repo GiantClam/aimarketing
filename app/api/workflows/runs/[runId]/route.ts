@@ -30,7 +30,10 @@ function serializeWorkflowNodeExecutionsStatus(
     errorMessage: execution.errorMessage ?? null,
     creditsConsumed: execution.creditsConsumed ?? 0,
     inputPayload: null,
-    outputPayload: null,
+    outputPayload:
+      execution.outputPayload && typeof execution.outputPayload === "object"
+        ? execution.outputPayload
+        : null,
     startedAt: execution.startedAt ? execution.startedAt.toISOString() : null,
     finishedAt: execution.finishedAt ? execution.finishedAt.toISOString() : null,
     createdAt: execution.createdAt ? execution.createdAt.toISOString() : null,
@@ -64,7 +67,7 @@ export async function GET(
         return NextResponse.json({ error: "workflow_run_not_found" }, { status: 404 })
       }
 
-      if (statusDetail.run.status === "queued" || statusDetail.run.status === "running") {
+      if (statusDetail.run.status === "running") {
         void runWorkflowTaskRecoveryPass({
           runId: numericRunId,
           requestOrigin: new URL(request.url).origin,

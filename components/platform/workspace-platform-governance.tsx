@@ -1,12 +1,14 @@
 import Link from "next/link"
 import { CreditCard, Database, LayoutGrid, Network, Settings, Sparkles, Users2, Workflow } from "lucide-react"
 
+import { EnterpriseKnowledgeGovernancePanel } from "@/components/platform/enterprise-knowledge-governance-panel"
+import { EnterpriseMemberGovernancePanel } from "@/components/platform/enterprise-member-governance-panel"
 import { PlatformGovernanceSettingsPanel } from "@/components/platform/platform-governance-settings-panel"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AppLocale } from "@/lib/i18n/config"
 import type { CustomerGovernanceSnapshot } from "@/lib/platform/customer-governance"
 import type { PlatformGovernanceSnapshot } from "@/lib/platform/governance"
-import { WorkspacePlatformRuntimePanel } from "@/components/platform/workspace-platform-runtime-panel"
 import { getLocalizedWorkspaceEnterpriseSettingEntries } from "@/lib/platform/workspace-enterprise-settings"
 
 const registryIcons = {
@@ -62,10 +64,16 @@ export function WorkspacePlatformGovernance({
   locale,
   snapshot,
   customerSnapshot,
+  currentUserId,
+  canViewEnterpriseGovernance,
+  canManageEnterpriseGovernance,
 }: {
   locale: AppLocale
   snapshot: PlatformGovernanceSnapshot
   customerSnapshot: CustomerGovernanceSnapshot | null
+  currentUserId: number
+  canViewEnterpriseGovernance: boolean
+  canManageEnterpriseGovernance: boolean
 }) {
   const displayLocale = locale === "zh" ? "zh" : "en"
   const copy =
@@ -90,6 +98,17 @@ export function WorkspacePlatformGovernance({
           enterpriseIaTitle: "企业设置入口与治理面",
           enterpriseIaBody:
             "成员与知识相关配置现在已经在这里直接可管；席位、用量、算力和 SSO 继续先以信息架构入口落位，帮助企业管理员知道这些治理面会落在哪些工作台路径上。",
+          tabsTitle: "企业设置板块",
+          tabsBody:
+            "把企业治理配置拆成清晰的 tab：治理偏好、模型配置、企业管理员面板分别承接，避免管理员在个人设置和平台设置之间来回跳转。",
+          governanceTab: "治理设置",
+          modelTab: "模型配置",
+          adminTab: "企业管理员",
+          adminTitle: "企业管理员配置入口",
+          adminBody:
+            "原来出现在个人设置里的管理员入口已经收回到企业设置。这里同时承接成员审核、权限分配、知识连接和顾问工作流治理。",
+          adminMovedTag: "已从个人设置迁移",
+          personalSettingsLink: "打开个人设置",
           membersTitle: "企业成员与席位",
           membersBody: "直接显示当前企业总成员数、活跃成员数，以及套餐能提供的 seat 上限。",
           usageTitle: "共享额度与用量",
@@ -153,6 +172,17 @@ export function WorkspacePlatformGovernance({
           enterpriseIaTitle: "Enterprise settings entry and governance layer",
           enterpriseIaBody:
             "Member and knowledge controls are now directly manageable here, while seats, usage, compute, and SSO still land as information-architecture entry points first.",
+          tabsTitle: "Enterprise settings sections",
+          tabsBody:
+            "Split enterprise controls into clear tabs so governance preferences, model configuration, and admin operations each have a dedicated surface.",
+          governanceTab: "Governance",
+          modelTab: "Model config",
+          adminTab: "Enterprise admin",
+          adminTitle: "Enterprise admin controls",
+          adminBody:
+            "The admin handoff that used to sit in personal settings now lives here alongside member reviews, permissions, knowledge bindings, and advisor workflow governance.",
+          adminMovedTag: "Moved from personal settings",
+          personalSettingsLink: "Open personal settings",
           membersTitle: "Members and seats",
           membersBody: "Show the company member footprint directly: total members, active members, and the seat limit available on the current plan.",
           usageTitle: "Shared credits and usage",
@@ -417,67 +447,144 @@ export function WorkspacePlatformGovernance({
             </article>
           </div>
 
-          <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-            <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
-            <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.settingsBody}</p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              {governanceLinks.map((item) => {
-                const Icon = item.icon
-                return (
-                  <Button key={item.slug} className="public-button-primary h-10 px-4" asChild>
-                    <Link href={item.href}>
-                      <Icon className="mr-2 h-4 w-4" />
-                      {item.title}
-                    </Link>
-                  </Button>
-                )
-              })}
-            </div>
-          </div>
+          <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 p-5">
+            <div className="dashboard-kicker text-muted-foreground">{copy.tabsTitle}</div>
+            <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+              {copy.tabsTitle}
+            </h2>
+            <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.tabsBody}</p>
 
-          {customerSnapshot ? (
-            <PlatformGovernanceSettingsPanel locale={locale} snapshot={customerSnapshot} />
-          ) : (
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {customerNotConfigured}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.settingsUnavailable}</p>
-            </article>
-          )}
+            <Tabs defaultValue="governance" className="mt-6 space-y-5">
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-[10px] bg-muted/60 p-1">
+                <TabsTrigger value="governance" className="h-10 min-w-[120px] rounded-[8px] px-4">
+                  {copy.governanceTab}
+                </TabsTrigger>
+                <TabsTrigger value="models" className="h-10 min-w-[120px] rounded-[8px] px-4">
+                  {copy.modelTab}
+                </TabsTrigger>
+                <TabsTrigger value="admin" className="h-10 min-w-[120px] rounded-[8px] px-4">
+                  {copy.adminTab}
+                </TabsTrigger>
+              </TabsList>
 
-          <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-            <div className="dashboard-kicker text-muted-foreground">{copy.enterpriseIaTitle}</div>
-            <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.enterpriseIaBody}</p>
-            <div className="mt-5 grid gap-4 xl:grid-cols-2">
-              {enterpriseSettings.map((item) => (
-                <article key={item.slug} className="rounded-[10px] border border-border bg-background p-4">
-                  <div className="dashboard-kicker text-muted-foreground">ENTERPRISE SETTINGS</div>
-                  <h3 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                    {item.title}
-                  </h3>
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.summary}</p>
-                  <div className="mt-4 space-y-2">
-                    {item.bullets.slice(0, 2).map((point) => (
-                      <div key={point} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                        {point}
-                      </div>
-                    ))}
+              <TabsContent value="governance" className="space-y-5">
+                <div className="dashboard-panel rounded-[10px] border border-border bg-background/70 p-4">
+                  <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
+                  <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.settingsBody}</p>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    {governanceLinks.map((item) => {
+                      const Icon = item.icon
+                      return (
+                        <Button key={item.slug} className="public-button-primary h-10 px-4" asChild>
+                          <Link href={item.href}>
+                            <Icon className="mr-2 h-4 w-4" />
+                            {item.title}
+                          </Link>
+                        </Button>
+                      )
+                    })}
                   </div>
-                  <div className="mt-5">
+                </div>
+
+                {customerSnapshot ? (
+                  <PlatformGovernanceSettingsPanel
+                    locale={locale}
+                    snapshot={customerSnapshot}
+                    visibleSections={["governance"]}
+                  />
+                ) : (
+                  <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+                    <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
+                    <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                      {customerNotConfigured}
+                    </h2>
+                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.settingsUnavailable}</p>
+                  </article>
+                )}
+              </TabsContent>
+
+              <TabsContent value="models" className="space-y-5">
+                {customerSnapshot ? (
+                  <PlatformGovernanceSettingsPanel
+                    locale={locale}
+                    snapshot={customerSnapshot}
+                    runtimeProviders={snapshot.runtime.providers}
+                    visibleSections={["models"]}
+                    initialCategory="text_generation"
+                  />
+                ) : (
+                  <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+                    <div className="dashboard-kicker text-muted-foreground">{copy.modelTab}</div>
+                    <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                      {customerNotConfigured}
+                    </h2>
+                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.settingsUnavailable}</p>
+                  </article>
+                )}
+              </TabsContent>
+
+              <TabsContent value="admin" className="space-y-5">
+                <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 p-5">
+                  <div className="dashboard-kicker text-muted-foreground">{copy.adminMovedTag}</div>
+                  <h3 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                    {copy.adminTitle}
+                  </h3>
+                  <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.adminBody}</p>
+                  <div className="mt-5 flex flex-wrap gap-3">
                     <Button className="public-button-primary h-10 px-4" asChild>
-                      <Link href={item.href}>{item.title}</Link>
+                      <Link href="/dashboard/settings">
+                        <Settings className="mr-2 h-4 w-4" />
+                        {copy.personalSettingsLink}
+                      </Link>
                     </Button>
                   </div>
                 </article>
-              ))}
-            </div>
+
+                <EnterpriseMemberGovernancePanel
+                  locale={locale}
+                  currentUserId={currentUserId}
+                  canManage={canManageEnterpriseGovernance}
+                />
+
+                <EnterpriseKnowledgeGovernancePanel
+                  locale={locale}
+                  currentUserId={currentUserId}
+                  canView={canViewEnterpriseGovernance}
+                  canManage={canManageEnterpriseGovernance}
+                />
+
+                <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 p-5">
+                  <div className="dashboard-kicker text-muted-foreground">{copy.enterpriseIaTitle}</div>
+                  <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.enterpriseIaBody}</p>
+                  <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                    {enterpriseSettings.map((item) => (
+                      <article key={item.slug} className="rounded-[10px] border border-border bg-background p-4">
+                        <div className="dashboard-kicker text-muted-foreground">ENTERPRISE SETTINGS</div>
+                        <h3 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                          {item.title}
+                        </h3>
+                        <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.summary}</p>
+                        <div className="mt-4 space-y-2">
+                          {item.bullets.slice(0, 2).map((point) => (
+                            <div key={point} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                              {point}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-5">
+                          <Button className="public-button-primary h-10 px-4" asChild>
+                            <Link href={item.href}>{item.title}</Link>
+                          </Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </section>
-
-      <WorkspacePlatformRuntimePanel locale={displayLocale} snapshot={snapshot.runtime} />
     </div>
   )
 }

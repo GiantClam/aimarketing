@@ -26,6 +26,7 @@ import { ragflowKnowledgeProvider } from "@/lib/knowledge/providers/ragflow"
 import type {
   EnterpriseKnowledgeContext,
   KnowledgeChunkingConfig,
+  KnowledgeDataset,
   KnowledgeDocument,
   KnowledgeOverview,
   KnowledgeRecentActivity,
@@ -36,9 +37,18 @@ import type {
 } from "@/lib/knowledge/types"
 
 const DEFAULT_SOURCE_NAME = "RAGFlow Enterprise Knowledge"
+const DEFAULT_RAGFLOW_DATASET_CATEGORY: KnowledgeScope = "general"
 
 function isProcessingDocumentStatus(status: KnowledgeDocument["status"]) {
   return status === "uploaded" || status === "parsing" || status === "reparsing"
+}
+
+function buildDefaultRagflowDatasetName(enterpriseId: number) {
+  return `Enterprise ${enterpriseId} Knowledge Base`
+}
+
+function buildDefaultRagflowDatasetDescription(enterpriseId: number) {
+  return `Default isolated knowledge dataset for enterprise ${enterpriseId}.`
 }
 
 async function syncKnowledgeDocumentsFromProvider(enterpriseId: number) {
@@ -209,43 +219,71 @@ function getProviderForType(type: KnowledgeSource["providerType"]): KnowledgePro
   throw new Error(`knowledge_provider_unsupported:${type}`)
 }
 
+async function ensurePersistedKnowledgeSource(source: KnowledgeSource) {
+  if (typeof source.id === "number") {
+    return source
+  }
+
+  return saveKnowledgeSource({
+    enterpriseId: source.enterpriseId,
+    providerType: source.providerType,
+    name: source.name,
+    baseUrl: source.baseUrl,
+    apiKey: source.apiKey,
+    status: source.status,
+    enabled: source.enabled,
+    lastError: source.lastError,
+    checkedAt: source.lastCheckedAt ? new Date(source.lastCheckedAt) : null,
+  })
+}
+
+async function ensureDefaultRagflowDatasetForEnterprise(enterpriseId: number, requestSource?: KnowledgeSource | null) {
+  const localDatasets = await listKnowledgeDatasetsByEnterprise(enterpriseId)
+  if (localDatasets.length > 0) {
+    return localDatasets
+  }
+
+  const source = requestSource ?? (await getKnowledgeSource(enterpriseId))
+  if (!source?.enabled) {
+    return localDatasets
+  }
+
+  const provider = getProviderForType(source.providerType)
+  if (!provider.createRemoteDataset || !provider.listRemoteDatasets) {
+    return localDatasets
+  }
+
+  const persistedSource = await ensurePersistedKnowledgeSource(source)
+  const expectedDatasetName = buildDefaultRagflowDatasetName(enterpriseId)
+  const remoteDatasets = await provider.listRemoteDatasets(persistedSource)
+  const matchedRemoteDataset = remoteDatasets.find((dataset) => dataset.name.trim() === expectedDatasetName)
+  const targetDataset = matchedRemoteDataset
+    ? {
+        providerDatasetId: matchedRemoteDataset.id,
+        name: matchedRemoteDataset.name,
+      }
+    : await provider.createRemoteDataset({
+        source: persistedSource,
+        name: expectedDatasetName,
+        description: buildDefaultRagflowDatasetDescription(enterpriseId),
+        chunkMethod: "naive",
+        category: DEFAULT_RAGFLOW_DATASET_CATEGORY,
+      })
+
+  return syncKnowledgeDatasets(enterpriseId, persistedSource.id || 0, [
+    {
+      providerDatasetId: targetDataset.providerDatasetId,
+      name: targetDataset.name,
+      category: DEFAULT_RAGFLOW_DATASET_CATEGORY,
+    },
+  ])
+}
+
 async function listKnowledgeDatasetsWithAutoSync(enterpriseId: number) {
   const localDatasets = await listKnowledgeDatasetsByEnterprise(enterpriseId)
   if (localDatasets.length > 0) return localDatasets
 
-  const source = await getKnowledgeSource(enterpriseId)
-  if (!source?.enabled) return localDatasets
-
-  const provider = getProviderForType(source.providerType)
-  if (!provider.listRemoteDatasets) return localDatasets
-
-  const persistedSource =
-    typeof source.id === "number"
-      ? source
-      : await saveKnowledgeSource({
-          enterpriseId: source.enterpriseId,
-          providerType: source.providerType,
-          name: source.name,
-          baseUrl: source.baseUrl,
-          apiKey: source.apiKey,
-          status: source.status,
-          enabled: source.enabled,
-          lastError: source.lastError,
-          checkedAt: source.lastCheckedAt ? new Date(source.lastCheckedAt) : null,
-        })
-
-  const remoteDatasets = await provider.listRemoteDatasets(persistedSource)
-  if (remoteDatasets.length === 0) return localDatasets
-
-  return syncKnowledgeDatasets(
-    enterpriseId,
-    persistedSource.id || 0,
-    remoteDatasets.map((dataset) => ({
-      providerDatasetId: dataset.id,
-      name: dataset.name,
-      category: "general",
-    })),
-  )
+  return ensureDefaultRagflowDatasetForEnterprise(enterpriseId)
 }
 
 export async function getKnowledgeSource(enterpriseId: number) {
@@ -409,19 +447,7 @@ export async function refreshKnowledgeSourceConnection(params: {
       }
 
   if (result.ok && shouldPersist && params.syncDatasets !== false) {
-    const provider = getProviderForType(syncedSource.providerType)
-    const remoteDatasets = await provider.listRemoteDatasets?.(syncedSource)
-    if (remoteDatasets && remoteDatasets.length > 0) {
-      await syncKnowledgeDatasets(
-        params.enterpriseId,
-        syncedSource.id || 0,
-        remoteDatasets.map((dataset) => ({
-          providerDatasetId: dataset.id,
-          name: dataset.name,
-          category: "general",
-        })),
-      )
-    }
+    await ensureDefaultRagflowDatasetForEnterprise(params.enterpriseId, syncedSource)
   }
 
   return {
@@ -458,6 +484,20 @@ export async function saveRagflowKnowledgeSource(params: {
   })
 
   return result
+}
+
+export async function ensureEnterpriseDefaultKnowledgeWorkspace(enterpriseId: number) {
+  const source = await getKnowledgeSource(enterpriseId)
+  if (!source?.enabled) {
+    return { source: null, datasets: [] as KnowledgeDataset[] }
+  }
+
+  const persistedSource = await ensurePersistedKnowledgeSource(source)
+  const datasets = await ensureDefaultRagflowDatasetForEnterprise(enterpriseId, persistedSource)
+  return {
+    source: persistedSource,
+    datasets,
+  }
 }
 
 export async function getKnowledgeWorkspaceSnapshot(enterpriseId: number): Promise<{

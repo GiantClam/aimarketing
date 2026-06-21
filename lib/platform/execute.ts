@@ -253,9 +253,19 @@ export function evaluatePlatformExecutionGate(input: {
   runtimeStatus: PlatformCapabilityRuntimeStatus | null
   accessState: PlatformCapabilityAccessState | null
   usesSharedCredits?: boolean
+  sharedCreditsRequired?: boolean
   billingCanSpendCredits?: boolean | null
 }) {
-  const { currentUser, requiresLogin, runtimeStatus, accessState, usesSharedCredits, billingCanSpendCredits } = input
+  const {
+    currentUser,
+    requiresLogin,
+    runtimeStatus,
+    accessState,
+    usesSharedCredits,
+    sharedCreditsRequired,
+    billingCanSpendCredits,
+  } = input
+  const shouldCheckSharedCredits = sharedCreditsRequired ?? usesSharedCredits ?? false
 
   if (runtimeStatus === "deferred") {
     return {
@@ -302,7 +312,7 @@ export function evaluatePlatformExecutionGate(input: {
   if (
     currentUser &&
     isBillingCreditEnforcementEnabled() &&
-    usesSharedCredits &&
+    shouldCheckSharedCredits &&
     billingCanSpendCredits === false
   ) {
     return {

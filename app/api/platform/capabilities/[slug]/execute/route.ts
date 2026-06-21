@@ -9,6 +9,7 @@ import {
   proxyPlatformExecutionRequest,
   resolvePlatformCapabilityExecutionProxyTarget,
 } from "@/lib/platform/execute"
+import { shouldChargeSharedCreditsForCapability } from "@/lib/platform/shared-credits-policy"
 
 export const runtime = "nodejs"
 
@@ -42,19 +43,32 @@ export async function POST(
     return NextResponse.json({ error: "unsupported_action" }, { status: 400 })
   }
 
+  const rawBody = await request.text()
+  let parsedBody: Record<string, unknown> | null = null
+  if (rawBody.trim()) {
+    try {
+      parsedBody = (JSON.parse(rawBody) as Record<string, unknown>) || null
+    } catch {
+      parsedBody = null
+    }
+  }
+
   const gate = evaluatePlatformExecutionGate({
     currentUser,
     requiresLogin: target.requiresLogin,
     runtimeStatus: state.runtimeStatus,
     accessState: state.accessState,
     usesSharedCredits: state.usesSharedCredits,
+    sharedCreditsRequired: shouldChargeSharedCreditsForCapability({
+      capabilitySlug: slug,
+      body: parsedBody,
+      usesSharedCredits: state.usesSharedCredits,
+    }),
     billingCanSpendCredits: state.billing?.canSpendCredits ?? null,
   })
   if (!gate.ok) {
     return gate.response
   }
-
-  const rawBody = await request.text()
   const proxied = await proxyPlatformExecutionRequest(request, target, rawBody, {
     "x-platform-capability-slug": slug,
     "x-platform-capability-action": target.action,

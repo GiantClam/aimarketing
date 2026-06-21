@@ -5,7 +5,7 @@ import {
   resolvePlatformArtifactSourceUrl,
 } from "@/lib/platform/artifact-actions"
 import {
-  listPlatformArtifactsForEnterprise,
+  listRecentPlatformArtifactsForEnterprise,
   type PlatformArtifactRecord,
 } from "@/lib/platform/task-run-store"
 
@@ -60,6 +60,6 @@ export function mapArtifactToEnterpriseAssetLibraryCandidate(
 export async function listEnterpriseAssetLibraryCandidates(
   enterpriseId: number,
 ): Promise<EnterpriseAssetLibraryCandidate[]> {
-  const artifacts = await listPlatformArtifactsForEnterprise(enterpriseId)
+  const artifacts = await listRecentPlatformArtifactsForEnterprise(enterpriseId, 120)
   return artifacts.filter(isUploadSourceArtifact).map(mapArtifactToEnterpriseAssetLibraryCandidate)
 }

@@ -5,8 +5,8 @@ import { createWorkflowCapabilityInvoker } from "@/lib/workflows/capability-invo
 import { retryWorkflowNodeExecution, runWorkflowDefinition, type WorkflowNodeRunState } from "@/lib/workflows/execution"
 import {
   applyWorkflowNodeResultPreviews,
+  collectWorkflowPersistenceTargets,
   buildWorkflowRunNormalizedResult,
-  collectWorkflowPersistedSourceNodeKeys,
   persistFinalWorkflowOutputs,
   syncWorkflowNodeExecutions,
 } from "@/lib/workflows/run-persistence"
@@ -105,7 +105,8 @@ async function finalizeWorkflowRun(input: {
     enterpriseId: input.currentUser.enterpriseId!,
     ownerUserId: input.currentUser.id,
     nodeStates: input.nodeStates,
-    persistedSourceNodeKeys: collectWorkflowPersistedSourceNodeKeys({
+    workflowNodes: input.workflow.nodes,
+    persistenceTargets: collectWorkflowPersistenceTargets({
       nodes: input.workflow.nodes,
       edges: input.workflow.edges,
     }),

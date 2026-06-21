@@ -388,9 +388,12 @@ function buildWorkflowNodeInfoList(entries: Array<{ nodeId: string; fieldName: s
   return entries.filter((entry) => entry.fieldValue !== undefined && entry.fieldValue !== null)
 }
 
-async function submitTextToVideoTask(params: Record<string, unknown>) {
-  const config = getRunningHubConfig()
-  if (!config.seedanceTextToVideoEndpoint) {
+async function submitTextToVideoTask(
+  params: Record<string, unknown>,
+  config?: ReturnType<typeof getRunningHubConfig>,
+) {
+  const resolvedConfig = config ?? getRunningHubConfig()
+  if (!resolvedConfig.seedanceTextToVideoEndpoint) {
     throw new Error("runninghub_not_configured")
   }
 
@@ -400,8 +403,8 @@ async function submitTextToVideoTask(params: Record<string, unknown>) {
   }
 
   return submitRunningHubRawTask({
-    endpoint: config.seedanceTextToVideoEndpoint,
-    config,
+    endpoint: resolvedConfig.seedanceTextToVideoEndpoint,
+    config: resolvedConfig,
     payload: {
       prompt,
       resolution: normalizeOptionalText(params.resolution) || "720p",
@@ -415,9 +418,12 @@ async function submitTextToVideoTask(params: Record<string, unknown>) {
   })
 }
 
-async function submitImageToVideoTask(params: Record<string, unknown>) {
-  const config = getRunningHubConfig()
-  if (!config.seedanceImageToVideoEndpoint) {
+async function submitImageToVideoTask(
+  params: Record<string, unknown>,
+  config?: ReturnType<typeof getRunningHubConfig>,
+) {
+  const resolvedConfig = config ?? getRunningHubConfig()
+  if (!resolvedConfig.seedanceImageToVideoEndpoint) {
     throw new Error("runninghub_not_configured")
   }
 
@@ -428,8 +434,8 @@ async function submitImageToVideoTask(params: Record<string, unknown>) {
 
   const lastFrameUrl = normalizeOptionalText(params.lastFrameUrl)
   return submitRunningHubRawTask({
-    endpoint: config.seedanceImageToVideoEndpoint,
-    config,
+    endpoint: resolvedConfig.seedanceImageToVideoEndpoint,
+    config: resolvedConfig,
     payload: {
       prompt: normalizeOptionalText(params.prompt),
       resolution: normalizeOptionalText(params.resolution) || "720p",
@@ -448,9 +454,12 @@ async function submitImageToVideoTask(params: Record<string, unknown>) {
   })
 }
 
-async function submitDigitalHumanTask(params: Record<string, unknown>) {
-  const config = getRunningHubConfig()
-  if (!config.digitalHumanWorkflowId) {
+async function submitDigitalHumanTask(
+  params: Record<string, unknown>,
+  config?: ReturnType<typeof getRunningHubConfig>,
+) {
+  const resolvedConfig = config ?? getRunningHubConfig()
+  if (!resolvedConfig.digitalHumanWorkflowId) {
     throw new Error("runninghub_not_configured")
   }
 
@@ -471,8 +480,8 @@ async function submitDigitalHumanTask(params: Record<string, unknown>) {
   }
 
   return submitRunningHubWorkflowTask({
-    workflowId: config.digitalHumanWorkflowId,
-    config,
+    workflowId: resolvedConfig.digitalHumanWorkflowId,
+    config: resolvedConfig,
     nodeInfoList: buildWorkflowNodeInfoList([
       { nodeId: "243", fieldName: "audio", fieldValue: audioUrl },
       { nodeId: "244", fieldName: "string", fieldValue: script },
@@ -486,9 +495,12 @@ async function submitDigitalHumanTask(params: Record<string, unknown>) {
   })
 }
 
-async function submitVideoEnhanceTask(params: Record<string, unknown>) {
-  const config = getRunningHubConfig()
-  if (!config.videoEnhanceWorkflowId) {
+async function submitVideoEnhanceTask(
+  params: Record<string, unknown>,
+  config?: ReturnType<typeof getRunningHubConfig>,
+) {
+  const resolvedConfig = config ?? getRunningHubConfig()
+  if (!resolvedConfig.videoEnhanceWorkflowId) {
     throw new Error("runninghub_not_configured")
   }
 
@@ -500,8 +512,8 @@ async function submitVideoEnhanceTask(params: Record<string, unknown>) {
   }
 
   return submitRunningHubWorkflowTask({
-    workflowId: config.videoEnhanceWorkflowId,
-    config,
+    workflowId: resolvedConfig.videoEnhanceWorkflowId,
+    config: resolvedConfig,
     nodeInfoList: buildWorkflowNodeInfoList([
       { nodeId: "33", fieldName: "video", fieldValue: sourceVideoUrl },
       {
@@ -529,6 +541,7 @@ export async function executeRunningHubVideoFeature(input: {
   currentUser: RunningHubVideoRuntimeUser
   featureId: RunningHubVideoFeatureId
   params: Record<string, unknown>
+  config?: ReturnType<typeof getRunningHubConfig>
 }) {
   const run = await createRunningHubVideoRun({
     currentUser: input.currentUser,
@@ -538,12 +551,12 @@ export async function executeRunningHubVideoFeature(input: {
 
   const task =
     input.featureId === "image-to-video"
-      ? await submitImageToVideoTask(input.params)
+      ? await submitImageToVideoTask(input.params, input.config)
       : input.featureId === "digital-human"
-        ? await submitDigitalHumanTask(input.params)
+        ? await submitDigitalHumanTask(input.params, input.config)
         : input.featureId === "video-enhance"
-          ? await submitVideoEnhanceTask(input.params)
-          : await submitTextToVideoTask(input.params)
+          ? await submitVideoEnhanceTask(input.params, input.config)
+          : await submitTextToVideoTask(input.params, input.config)
 
   const detail = await patchRunningHubVideoRun({
     runId: run.id,
@@ -581,6 +594,7 @@ export async function executeRunningHubVideoFeature(input: {
 export async function queryRunningHubVideoTask(input: {
   currentUser: RunningHubVideoRuntimeUser
   runId: number
+  config?: ReturnType<typeof getRunningHubConfig>
 }) {
   const run = await getRunningHubVideoRunForUser(input.runId, input.currentUser)
   if (!run) {
@@ -592,7 +606,7 @@ export async function queryRunningHubVideoTask(input: {
     return buildTaskResponseFromRun(run)
   }
 
-  const query = await queryRunningHubTask(run.externalRunId)
+  const query = await queryRunningHubTask(run.externalRunId, input.config)
   if (!query) {
     return buildTaskResponseFromRun(run)
   }

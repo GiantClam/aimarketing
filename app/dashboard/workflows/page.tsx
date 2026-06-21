@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { WorkflowListPage } from "@/components/workflows/workflow-list-page"
 import { requireServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
-import { listPlatformTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
+import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
 import { listWorkflowDefinitionsForEnterprise } from "@/lib/workflows/store"
 
 function getWorkflowIdFromNormalizedResult(value: unknown) {
@@ -24,14 +24,7 @@ export default async function DashboardWorkflowsPage() {
 
   const workflows = await listWorkflowDefinitionsForEnterprise(enterpriseId)
 
-  const recentRuns = (await listPlatformTaskRunsForEnterprise(enterpriseId))
-    .filter((run) => run.kind === "workflow" && run.itemType === "workflow")
-    .sort((left, right) => {
-      const leftTime = left.createdAt instanceof Date ? left.createdAt.getTime() : 0
-      const rightTime = right.createdAt instanceof Date ? right.createdAt.getTime() : 0
-      return rightTime - leftTime
-    })
-    .slice(0, 10)
+  const recentRuns = (await listRecentWorkflowTaskRunsForEnterprise(enterpriseId, 10))
     .map((run) => ({
       id: run.id,
       workflowId: getWorkflowIdFromNormalizedResult(run.normalizedResult),

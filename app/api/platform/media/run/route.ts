@@ -4,6 +4,12 @@ import { getSessionUser } from "@/lib/auth/session"
 import { hasFeatureAccess, hasFeatureAccessWithFallback } from "@/lib/auth/guards"
 import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
 import {
+  resolveEnterpriseImageRuntimeForEnterprise,
+  resolveEnterpriseAudioRuntimeForEnterprise,
+  resolveEnterpriseVideoRuntimeForEnterprise,
+} from "@/lib/platform/enterprise-runtime-config"
+import { canUserAccessGovernedMediaRoute } from "@/lib/platform/model-governance"
+import {
   executeMiniMaxAudioFeature,
   isMiniMaxAudioConfigured,
   resolveMiniMaxFeatureId,
@@ -49,6 +55,13 @@ function resolveMediaExecutionFeature(
   return "video_generation"
 }
 
+function resolveRunningHubImageRouteMode(action: string) {
+  if (action === "edit" || action === "edit-image") {
+    return "img2img" as const
+  }
+  return "txt2img" as const
+}
+
 function buildMediaExecutionResponse(input: {
   capabilitySlug: RunningHubMediaTarget | "ai-music"
   featureId?: string | null
@@ -88,10 +101,60 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
+  const routeAccessAllowed =
+    target === "ai-image"
+      ? await canUserAccessGovernedMediaRoute({
+          user: currentUser,
+          routeId: "runninghub-image",
+          category: "image_generation",
+        })
+      : target === "ai-video"
+        ? await canUserAccessGovernedMediaRoute({
+            user: currentUser,
+            routeId: "runninghub-video",
+            category: "video_generation",
+          })
+        : await canUserAccessGovernedMediaRoute({
+            user: currentUser,
+            routeId: "minimax-audio",
+            category: "audio_generation",
+          })
+
+  if (!routeAccessAllowed) {
+    return NextResponse.json({ error: "model_access_denied" }, { status: 403 })
+  }
+
   const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>
+  const enterpriseImageRuntime =
+    target === "ai-image"
+      ? await resolveEnterpriseImageRuntimeForEnterprise({
+          enterpriseId: currentUser.enterpriseId,
+          routeMode: resolveRunningHubImageRouteMode(action),
+        })
+      : null
+  const enterpriseAudioRuntime =
+    target === "ai-music"
+      ? await resolveEnterpriseAudioRuntimeForEnterprise({
+          enterpriseId: currentUser.enterpriseId,
+        })
+      : null
+  const enterpriseVideoRuntime =
+    target === "ai-video"
+      ? await resolveEnterpriseVideoRuntimeForEnterprise({
+          enterpriseId: currentUser.enterpriseId,
+        })
+      : null
 
   if (target === "ai-music") {
-    if (!isMiniMaxAudioConfigured()) {
+    if (
+      currentUser.enterpriseStatus === "active" &&
+      typeof currentUser.enterpriseId === "number" &&
+      !enterpriseAudioRuntime
+    ) {
+      return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
+    }
+
+    if (!isMiniMaxAudioConfigured(enterpriseAudioRuntime?.config)) {
       return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
     }
 
@@ -107,6 +170,8 @@ export async function POST(request: NextRequest) {
       currentUser,
       featureId,
       params: payload.params && typeof payload.params === "object" ? (payload.params as Record<string, unknown>) : payload,
+      config: enterpriseAudioRuntime?.config,
+      defaultModel: enterpriseAudioRuntime?.model || null,
     }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error)
       return NextResponse.json({ error: message || "minimax_audio_execute_failed" }, { status: 502 })
@@ -125,7 +190,32 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  if (!isRunningHubConfiguredForTarget(target)) {
+  if (
+    target === "ai-image" &&
+    currentUser.enterpriseStatus === "active" &&
+    typeof currentUser.enterpriseId === "number" &&
+    !enterpriseImageRuntime
+  ) {
+    return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
+  }
+
+  if (
+    target === "ai-video" &&
+    currentUser.enterpriseStatus === "active" &&
+    typeof currentUser.enterpriseId === "number" &&
+    !enterpriseVideoRuntime
+  ) {
+    return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
+  }
+
+  const runningHubConfig =
+    target === "ai-image"
+      ? enterpriseImageRuntime?.kind === "runninghub"
+        ? enterpriseImageRuntime.config
+        : undefined
+      : enterpriseVideoRuntime?.config
+
+  if (!isRunningHubConfiguredForTarget(target, runningHubConfig)) {
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
   }
 
@@ -145,6 +235,7 @@ export async function POST(request: NextRequest) {
               "",
             platformAction: action,
           },
+          config: enterpriseVideoRuntime?.config,
         }).catch((error) => {
           const message = error instanceof Error ? error.message : String(error)
           return NextResponse.json({ error: message || "runninghub_video_execute_failed" }, { status: 502 })
@@ -157,6 +248,7 @@ export async function POST(request: NextRequest) {
             userId: currentUser.id,
             enterpriseId: currentUser.enterpriseId,
           },
+          config: runningHubConfig,
         }).catch((error) => {
           const message = error instanceof Error ? error.message : String(error)
           return NextResponse.json({ error: message || "runninghub_submit_failed" }, { status: 502 })

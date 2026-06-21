@@ -7,6 +7,11 @@ import { useRouter } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CompactBusinessCard } from "@/components/workspace/compact-business-card"
+import {
+  buildCompactCardSummary,
+  pickPrimaryStatusBadge,
+} from "@/lib/workspace/compact-business-card"
 import type { WorkflowDefinition } from "@/lib/workflows/store"
 
 type WorkflowListDefinition = Omit<WorkflowDefinition, "createdAt" | "updatedAt"> & {
@@ -54,7 +59,6 @@ export function WorkflowListPage({
   const router = useRouter()
   const [workflows, setWorkflows] = useState(initialWorkflows)
   const [submitting, setSubmitting] = useState(false)
-  const [duplicatingId, setDuplicatingId] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
 
@@ -188,27 +192,6 @@ export function WorkflowListPage({
     }
   }
 
-  async function handleDuplicate(workflow: WorkflowListDefinition) {
-    setDuplicatingId(workflow.id)
-    setErrorMessage("")
-
-    try {
-      const created = await createWorkflow({
-        title: `${workflow.title} Copy`,
-        description: workflow.description,
-        nodes: workflow.nodes,
-        edges: workflow.edges,
-        metadata: workflow.metadata,
-      })
-      setWorkflows((current) => [created, ...current])
-      router.push(`/dashboard/workflows/${created.id}`)
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "workflow_duplicate_failed")
-    } finally {
-      setDuplicatingId(null)
-    }
-  }
-
   return (
     <div className="h-full overflow-auto bg-transparent">
       <section className="public-grid-bg workspace-page-shell mx-auto max-w-7xl">
@@ -236,90 +219,54 @@ export function WorkflowListPage({
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <button
-                type="button"
+              <CompactBusinessCard
+                title={copy.createTitle}
+                summary={copy.createDescription}
+                status={null}
+                actionLabel={submitting ? copy.createPending : copy.createAction}
                 onClick={() => void handleCreate()}
-                disabled={submitting}
-                className="dashboard-panel workspace-card-panel mx-auto flex min-h-[300px] w-full max-w-[340px] flex-col items-center justify-center rounded-[12px] border border-dashed border-primary/35 bg-card/85 p-5 text-center transition hover:border-primary/60 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-70"
-                aria-label={copy.createAction}
-              >
-                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-primary/30 bg-[linear-gradient(135deg,rgba(214,160,74,0.2),rgba(214,160,74,0.04))] text-primary">
-                  <Plus className="h-9 w-9" />
-                </div>
-                <div className="mt-4 dashboard-kicker text-muted-foreground">{copy.createTitle}</div>
-                <h3 className="mt-2 font-display text-xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                  {submitting ? copy.createPending : copy.createAction}
-                </h3>
-                <p className="mt-2 max-w-xs text-sm leading-6 text-muted-foreground">{copy.createDescription}</p>
-              </button>
+                media={
+                  <div className="flex h-24 items-center justify-center border border-dashed border-primary/25 bg-[linear-gradient(135deg,rgba(214,160,74,0.18),rgba(214,160,74,0.03))] text-primary">
+                    <Plus className="h-8 w-8" />
+                  </div>
+                }
+                className={`mx-auto w-full max-w-[340px] border-dashed border-primary/35 bg-card/85 transition hover:-translate-y-0.5 hover:border-primary/60 hover:bg-primary/5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)] ${
+                  submitting ? "pointer-events-none opacity-70" : ""
+                }`}
+              />
 
               {pagedWorkflows.map((workflow) => {
                 const openHref = `/dashboard/workflows/${workflow.id}`
+                const summary = buildCompactCardSummary([workflow.description], workflow.slug) || workflow.title
+                const status = pickPrimaryStatusBadge([
+                  {
+                    label: statusLabel(workflow.status),
+                    tone:
+                      workflow.status === "live"
+                        ? "success"
+                        : workflow.status === "archived"
+                          ? "danger"
+                          : "warning",
+                  },
+                ])
+                const mediaBackground =
+                  workflow.status === "live"
+                    ? "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(255,255,255,0.72) 55%, rgba(34,197,94,0.04))"
+                    : workflow.status === "archived"
+                      ? "linear-gradient(135deg, rgba(244,63,94,0.18), rgba(255,255,255,0.72) 55%, rgba(244,63,94,0.04))"
+                      : "linear-gradient(135deg, rgba(214,160,74,0.20), rgba(255,255,255,0.76) 58%, rgba(214,160,74,0.04))"
 
                 return (
-                  <article
+                  <CompactBusinessCard
                     key={workflow.id}
-                    className="dashboard-panel workspace-card-panel mx-auto w-full max-w-[340px] overflow-hidden rounded-[14px] border border-border bg-card/90 p-0 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)]"
-                  >
-                    <div
-                      className="min-h-[118px] border-b border-border/60 px-4 py-3.5"
-                      style={{
-                        background:
-                          workflow.status === "live"
-                            ? "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(255,255,255,0.72) 55%, rgba(34,197,94,0.04))"
-                            : workflow.status === "archived"
-                              ? "linear-gradient(135deg, rgba(244,63,94,0.18), rgba(255,255,255,0.72) 55%, rgba(244,63,94,0.04))"
-                              : "linear-gradient(135deg, rgba(214,160,74,0.20), rgba(255,255,255,0.76) 58%, rgba(214,160,74,0.04))",
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 space-y-3">
-                          <Badge variant="outline" className={`rounded-[999px] border px-2.5 py-1 font-display text-[11px] uppercase tracking-[0.08em] ${getStatusTone(workflow.status)}`}>
-                            {statusLabel(workflow.status)}
-                          </Badge>
-                          <h3 className="line-clamp-2 font-display text-2xl font-extrabold uppercase tracking-[0.01em] text-foreground">
-                            {workflow.title}
-                          </h3>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 px-4 py-4">
-                      <p className="min-h-16 text-sm leading-6 text-muted-foreground line-clamp-3">
-                        {workflow.description || workflow.slug || workflow.title}
-                      </p>
-
-                      <div className="space-y-3 border-t border-border/60 pt-3">
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                          <span className="rounded-full bg-muted/70 px-2 py-1">
-                            {copy.updated}: {formatTimestamp(workflow.updatedAt, locale)}
-                          </span>
-                          <span className="rounded-full bg-muted/70 px-2 py-1">
-                            {copy.nodes}: {workflow.nodes.length}
-                          </span>
-                          <span className="rounded-full bg-muted/70 px-2 py-1">
-                            {copy.edges}: {workflow.edges.length}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button className="public-button-primary h-8 w-full px-3.5 text-xs" asChild>
-                            <Link href={openHref}>{copy.openCardAction}</Link>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 w-full rounded-[8px] px-3.5 text-xs"
-                            disabled={duplicatingId === workflow.id}
-                            onClick={() => {
-                              void handleDuplicate(workflow)
-                            }}
-                          >
-                            {duplicatingId === workflow.id ? copy.duplicatePending : copy.duplicateAction}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
+                    title={workflow.title}
+                    summary={summary}
+                    status={status}
+                    actionLabel={copy.openCardAction}
+                    href={openHref}
+                    media={<div className="h-24 border-b border-border/60" style={{ background: mediaBackground }} />}
+                    className="mx-auto w-full max-w-[340px] overflow-hidden transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)]"
+                  />
                 )
               })}
 

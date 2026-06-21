@@ -52,13 +52,11 @@ export function WorkspacePlatformRuntimePanel({
     locale === "zh"
       ? {
           eyebrow: "Runtime Control Surface",
-          title: "Provider Routing / Task Runtime / Entitlements",
+          title: "Task Runtime / Entitlements",
           description:
-            "这里直接读取当前仓库里的真实 provider、任务模式和权限钩子，而不是再维护一套脱离运行时的静态平台说明。",
-          providers: "Provider Routing",
+            "这里直接读取当前仓库里的真实任务模式和权限钩子，不再重复展示已经并入模型配置 tab 的 Provider Routing。",
           tasks: "Task Runtime",
           entitlements: "Entitlement Hooks",
-          activeTextProvider: "当前文本主路由",
           runtimeId: "运行时",
           models: "模型 / Runtime",
           statuses: "状态流",
@@ -67,13 +65,11 @@ export function WorkspacePlatformRuntimePanel({
         }
       : {
           eyebrow: "Runtime Control Surface",
-          title: "Provider Routing / Task Runtime / Entitlements",
+          title: "Task Runtime / Entitlements",
           description:
-            "This panel reads the real provider, task-mode, and entitlement hooks from the current codebase instead of maintaining a detached platform brochure.",
-          providers: "Provider Routing",
+            "This panel reads the real task-mode and entitlement hooks from the current codebase, without duplicating Provider Routing that now lives in the model-config tab.",
           tasks: "Task Runtime",
           entitlements: "Entitlement Hooks",
-          activeTextProvider: "Active text route",
           runtimeId: "Runtime",
           models: "Model / Runtime",
           statuses: "Statuses",
@@ -93,63 +89,14 @@ export function WorkspacePlatformRuntimePanel({
 
           <div className="mt-6 flex flex-wrap gap-3">
             <span className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-              {copy.activeTextProvider}: {snapshot.activeTextProvider || (locale === "zh" ? "未配置" : "Not configured")}
-            </span>
-            <span className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
               {copy.generatedAt}: {snapshot.generatedAt}
             </span>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="dashboard-kicker text-muted-foreground">{copy.providers}</div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            {snapshot.providers.map((provider) => (
-              <article key={`${provider.scope}-${provider.id}`} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-3">
-                    <div className="dashboard-kicker text-muted-foreground">{provider.scope.toUpperCase()}</div>
-                    <h3 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                      {provider.id}
-                    </h3>
-                  </div>
-                  <Badge variant="outline" className="rounded-[4px] border-primary/30 bg-background/70 font-display text-[11px] uppercase tracking-[0.08em]">
-                    {getStatusLabel(provider.configured, locale)}
-                  </Badge>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="dashboard-chip rounded-[4px] px-3 py-2 text-xs leading-5 text-muted-foreground">
-                    {provider.role}
-                  </span>
-                  {provider.active ? (
-                    <span className="dashboard-chip rounded-[4px] px-3 py-2 text-xs leading-5 text-muted-foreground">
-                      {locale === "zh" ? "当前活跃" : "Currently active"}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-4 space-y-2 text-sm leading-7 text-muted-foreground">
-                  <div>
-                    <strong className="text-foreground">{copy.models}:</strong> {provider.model || (locale === "zh" ? "未提供" : "Not provided")}
-                  </div>
-                  <div>
-                    <strong className="text-foreground">Base URL:</strong> {provider.baseURL || "—"}
-                  </div>
-                  <div>
-                    <strong className="text-foreground">{copy.capabilities}:</strong> {provider.capabilitySlugs.join(", ")}
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-2">
-                  {provider.notes.map((note) => (
-                    <div key={note} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                      {note}
-                    </div>
-                  ))}
-                </div>
-              </article>
-            ))}
+            <span className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+              {copy.tasks}: {snapshot.tasks.length}
+            </span>
+            <span className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+              {copy.entitlements}: {snapshot.entitlements.length}
+            </span>
           </div>
         </div>
 

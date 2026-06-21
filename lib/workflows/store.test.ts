@@ -196,3 +196,43 @@ test("workflow store clears legacy llm tuning fields on load", async () => {
     systemPrompt: "keep this",
   })
 })
+
+test("workflow store clears legacy image sizing fields on load", async () => {
+  const store = createInMemoryWorkflowStore()
+
+  const created = await createWorkflowDefinition(
+    {
+      enterpriseId: 12,
+      ownerUserId: 5,
+      title: "Legacy image node",
+      nodes: [
+        {
+          nodeKey: "image-3",
+          type: "image_generate",
+          title: "图片生成",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            selectedProviderId: "aiberm",
+            selectedModelId: "gpt-image-2",
+            sizePreset: "16:9",
+            resolution: "512",
+            imageSize: "1024x1024",
+            imageQuality: "auto",
+            previewImageUrl: "https://example.com/preview.png",
+          },
+        },
+      ],
+    },
+    store,
+  )
+
+  const loaded = await getWorkflowDefinition(created.id, 12, store)
+  assert.deepEqual(loaded?.nodes[0]?.config, {
+    selectedProviderId: "aiberm",
+    selectedModelId: "gpt-image-2",
+    imageSize: "1024x1024",
+    imageQuality: "auto",
+    previewImageUrl: "https://example.com/preview.png",
+  })
+})

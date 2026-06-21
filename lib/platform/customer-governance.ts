@@ -8,6 +8,7 @@ import {
   mergeEnterpriseModelConfigurationSecrets,
   normalizeEnterpriseModelConfiguration,
   redactEnterpriseModelConfigurationSecrets,
+  validateEnterpriseModelConfiguration,
   type EnterpriseModelConfiguration,
 } from "@/lib/platform/model-config"
 import { getPlatformRuntimeSnapshot, type PlatformRuntimeSnapshot } from "@/lib/platform/runtime"
@@ -163,11 +164,14 @@ export function buildCustomerGovernanceSnapshot(parts: CustomerGovernanceSnapsho
 export function normalizeCustomerGovernanceSettingsPatch(
   patch: Partial<Pick<CustomerGovernanceSettings, "ssoDomain" | "seatRequestNote" | "runtimeIntakeMode" | "modelConfig">>,
 ) {
+  const modelConfig = normalizeEnterpriseModelConfiguration(patch.modelConfig)
+  validateEnterpriseModelConfiguration(modelConfig)
+
   return {
     ssoDomain: normalizeOptionalText(patch.ssoDomain, 255),
     seatRequestNote: normalizeOptionalText(patch.seatRequestNote, 4_000),
     runtimeIntakeMode: normalizeRuntimeIntakeMode(patch.runtimeIntakeMode),
-    modelConfig: normalizeEnterpriseModelConfiguration(patch.modelConfig),
+    modelConfig,
   }
 }
 

@@ -111,6 +111,13 @@ function mapAssetToMediaRef(asset: WorkflowNodeInputBundle["asset"][number]): Wo
   }
 }
 
+function withSourceNodeKey(media: WorkflowMediaRef, sourceNodeKey: string): WorkflowMediaRef {
+  return {
+    ...media,
+    sourceNodeKey: media.sourceNodeKey ?? sourceNodeKey,
+  }
+}
+
 function projectParentOutputToInputKind(
   parentState: WorkflowNodeRunState,
   targetKind: WorkflowValueKind,
@@ -125,42 +132,58 @@ function projectParentOutputToInputKind(
   }
 
   if (targetKind === "image") {
-    if (parentState.output.image?.length) return { image: parentState.output.image }
+    if (parentState.output.image?.length) {
+      return {
+        image: parentState.output.image.map((item) => withSourceNodeKey(item, parentState.nodeKey)),
+      }
+    }
     if (!parentState.output.asset?.length) return {}
     const matched = parentState.output.asset.filter((asset) => inferWorkflowValueKindFromMimeType(asset.mimeType) === "image")
     if (matched.length !== parentState.output.asset.length) {
       throw new Error(`workflow_edge_asset_type_mismatch:${targetNodeKey}:image`)
     }
-    return { image: matched.map(mapAssetToMediaRef) }
+    return { image: matched.map((asset) => withSourceNodeKey(mapAssetToMediaRef(asset), parentState.nodeKey)) }
   }
 
   if (targetKind === "video") {
-    if (parentState.output.video?.length) return { video: parentState.output.video }
+    if (parentState.output.video?.length) {
+      return {
+        video: parentState.output.video.map((item) => withSourceNodeKey(item, parentState.nodeKey)),
+      }
+    }
     if (!parentState.output.asset?.length) return {}
     const matched = parentState.output.asset.filter((asset) => inferWorkflowValueKindFromMimeType(asset.mimeType) === "video")
     if (matched.length !== parentState.output.asset.length) {
       throw new Error(`workflow_edge_asset_type_mismatch:${targetNodeKey}:video`)
     }
-    return { video: matched.map(mapAssetToMediaRef) }
+    return { video: matched.map((asset) => withSourceNodeKey(mapAssetToMediaRef(asset), parentState.nodeKey)) }
   }
 
   if (targetKind === "audio") {
-    if (parentState.output.audio?.length) return { audio: parentState.output.audio }
+    if (parentState.output.audio?.length) {
+      return {
+        audio: parentState.output.audio.map((item) => withSourceNodeKey(item, parentState.nodeKey)),
+      }
+    }
     if (!parentState.output.asset?.length) return {}
     const matched = parentState.output.asset.filter((asset) => inferWorkflowValueKindFromMimeType(asset.mimeType) === "audio")
     if (matched.length !== parentState.output.asset.length) {
       throw new Error(`workflow_edge_asset_type_mismatch:${targetNodeKey}:audio`)
     }
-    return { audio: matched.map(mapAssetToMediaRef) }
+    return { audio: matched.map((asset) => withSourceNodeKey(mapAssetToMediaRef(asset), parentState.nodeKey)) }
   }
 
-  if (parentState.output.ppt?.length) return { ppt: parentState.output.ppt }
+  if (parentState.output.ppt?.length) {
+    return {
+      ppt: parentState.output.ppt.map((item) => withSourceNodeKey(item, parentState.nodeKey)),
+    }
+  }
   if (!parentState.output.asset?.length) return {}
   const matched = parentState.output.asset.filter((asset) => inferWorkflowValueKindFromMimeType(asset.mimeType) === "ppt")
   if (matched.length !== parentState.output.asset.length) {
     throw new Error(`workflow_edge_asset_type_mismatch:${targetNodeKey}:ppt`)
   }
-  return { ppt: matched.map(mapAssetToMediaRef) }
+  return { ppt: matched.map((asset) => withSourceNodeKey(mapAssetToMediaRef(asset), parentState.nodeKey)) }
 }
 
 export function validateWorkflowGraph(input: {
@@ -381,7 +404,12 @@ export async function runWorkflowDefinition(input: WorkflowRunDefinitionInput): 
         if (!state || state.status !== "queued") continue
 
         const parents = plan.parentMap.get(node.nodeKey) ?? []
-        if (parents.some((parentNodeKey) => nodeStates[parentNodeKey]?.status === "failed")) {
+        if (
+          parents.some((parentNodeKey) => {
+            const parentStatus = nodeStates[parentNodeKey]?.status
+            return parentStatus === "failed" || parentStatus === "cancelled"
+          })
+        ) {
           state.status = "cancelled"
           state.finishedAt = new Date()
           state.errorMessage = "workflow_upstream_failed"
@@ -484,19 +512,51 @@ export function collectWorkflowBranchNodeKeys(input: {
   return collectBranchNodeKeys(input.nodeKey, plan.childMap)
 }
 
+export function collectWorkflowRetryNodeKeys(input: {
+  mode: "node" | "branch"
+  nodeKey: string
+  nodes: WorkflowDefinitionNode[]
+  edges: WorkflowDefinitionEdge[]
+  nodeStates?: Record<string, Pick<WorkflowNodeRunState, "status"> | undefined>
+}) {
+  const plan = buildExecutableWorkflowPlan({
+    nodes: input.nodes,
+    edges: input.edges,
+  })
+
+  const rerunNodeKeys = new Set(
+    input.mode === "branch"
+      ? collectBranchNodeKeys(input.nodeKey, plan.childMap)
+      : [input.nodeKey],
+  )
+  const queue = [...rerunNodeKeys]
+
+  while (queue.length > 0) {
+    const nextNodeKey = queue.shift()!
+    for (const parentNodeKey of plan.parentMap.get(nextNodeKey) ?? []) {
+      if (rerunNodeKeys.has(parentNodeKey)) continue
+      const parentStatus = input.nodeStates?.[parentNodeKey]?.status
+      if (parentStatus === "succeeded" || parentStatus === "failed" || parentStatus === "cancelled") continue
+      rerunNodeKeys.add(parentNodeKey)
+      queue.push(parentNodeKey)
+    }
+  }
+
+  return [...rerunNodeKeys]
+}
+
 export async function retryWorkflowNodeExecution(input: WorkflowRunDefinitionInput & {
   nodeStates: Record<string, WorkflowNodeRunState>
   mode: "node" | "branch"
   nodeKey: string
 }) {
-  const rerunNodeKeys =
-    input.mode === "branch"
-      ? collectWorkflowBranchNodeKeys({
-          nodeKey: input.nodeKey,
-          nodes: input.nodes,
-          edges: input.edges,
-        })
-      : [input.nodeKey]
+  const rerunNodeKeys = collectWorkflowRetryNodeKeys({
+    mode: input.mode,
+    nodeKey: input.nodeKey,
+    nodes: input.nodes,
+    edges: input.edges,
+    nodeStates: input.nodeStates,
+  })
 
   return runWorkflowDefinition({
     enterpriseId: input.enterpriseId,

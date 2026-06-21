@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { serializePlatformWorkflowRun, updatePlatformWorkflowRun } from "@/lib/platform/workflow-runner"
-import { collectWorkflowBranchNodeKeys } from "@/lib/workflows/execution"
+import { collectWorkflowRetryNodeKeys } from "@/lib/workflows/execution"
 import {
   getWorkflowRunDetail,
   resetWorkflowNodeExecutions,
@@ -19,6 +19,20 @@ type RetryRequest = {
 function parseRunId(value: string) {
   const numeric = Number(value)
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null
+}
+
+function buildLatestWorkflowNodeStatuses(
+  nodeExecutions: NonNullable<Awaited<ReturnType<typeof getWorkflowRunDetail>>>["nodeExecutions"],
+) {
+  const latestStatuses: Record<string, { status: string }> = {}
+
+  for (const execution of nodeExecutions) {
+    latestStatuses[execution.nodeKey] = {
+      status: execution.status,
+    }
+  }
+
+  return latestStatuses
 }
 
 export async function POST(
@@ -50,14 +64,13 @@ export async function POST(
       return NextResponse.json({ error: "workflow_run_not_found" }, { status: 404 })
     }
 
-    const rerunNodeKeys =
-      body.mode === "node"
-        ? [body.nodeKey.trim()]
-        : collectWorkflowBranchNodeKeys({
-            nodeKey: body.nodeKey.trim(),
-            nodes: detail.workflow.nodes,
-            edges: detail.workflow.edges,
-          })
+    const rerunNodeKeys = collectWorkflowRetryNodeKeys({
+      mode: body.mode,
+      nodeKey: body.nodeKey.trim(),
+      nodes: detail.workflow.nodes,
+      edges: detail.workflow.edges,
+      nodeStates: buildLatestWorkflowNodeStatuses(detail.nodeExecutions),
+    })
 
     await resetWorkflowNodeExecutions(numericRunId, rerunNodeKeys)
     await updatePlatformWorkflowRun({

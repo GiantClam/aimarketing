@@ -15,6 +15,17 @@ function sanitizeFileNameSegment(value: string) {
 
 function extensionFromMimeType(contentType: string) {
   const normalized = contentType.trim().toLowerCase()
+  if (normalized === "text/html" || normalized.startsWith("text/html;")) return "html"
+  if (normalized === "text/plain" || normalized.startsWith("text/plain;")) return "txt"
+  if (normalized === "text/markdown" || normalized.startsWith("text/markdown;")) return "md"
+  if (normalized === "application/pdf") return "pdf"
+  if (normalized === "application/json") return "json"
+  if (normalized === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return "pptx"
+  if (normalized === "application/vnd.ms-powerpoint") return "ppt"
+  if (normalized === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx"
+  if (normalized === "application/msword") return "doc"
+  if (normalized === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "xlsx"
+  if (normalized === "application/vnd.ms-excel") return "xls"
   if (normalized === "video/mp4") return "mp4"
   if (normalized === "video/quicktime") return "mov"
   if (normalized === "video/webm") return "webm"
@@ -32,6 +43,24 @@ function ensureFileName(input: { title: string; contentType: string; suggestedEx
   if (/\.[a-zA-Z0-9]{2,6}$/.test(safeTitle)) return safeTitle
   const extension = sanitizeFileNameSegment(input.suggestedExtension || "") || extensionFromMimeType(input.contentType)
   return `${safeTitle}.${extension}`
+}
+
+function ensureExplicitFileName(fileName: string, contentType: string) {
+  const trimmed = fileName.trim()
+  if (!trimmed) {
+    return ensureFileName({
+      title: "artifact",
+      contentType,
+    })
+  }
+
+  const normalized = trimmed.replace(/\s+/g, "-")
+  const safeName = sanitizeFileNameSegment(normalized) || "artifact"
+  if (/\.[a-zA-Z0-9]{2,8}$/.test(safeName)) {
+    return safeName
+  }
+
+  return `${safeName}.${extensionFromMimeType(contentType)}`
 }
 
 function buildPlatformArtifactStorageKey(input: {
@@ -97,5 +126,44 @@ export async function mirrorPlatformArtifactToR2(input: {
     storageKey,
     publicUrl: getR2PublicUrl(storageKey),
     contentType,
+  }
+}
+
+export async function uploadPlatformArtifactBufferToR2(input: {
+  buffer: Uint8Array | Buffer
+  enterpriseId: number
+  runId: number
+  provider: string
+  fileName: string
+  contentType: string
+}) {
+  const client = getR2Client()
+  if (!client) {
+    throw new Error("platform_artifact_r2_config_missing")
+  }
+
+  const normalizedFileName = ensureExplicitFileName(input.fileName, input.contentType)
+  const storageKey = buildPlatformArtifactStorageKey({
+    enterpriseId: input.enterpriseId,
+    runId: input.runId,
+    provider: input.provider,
+    fileName: normalizedFileName,
+  })
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: getR2BucketName(),
+      Key: storageKey,
+      Body: Buffer.from(input.buffer),
+      ContentType: input.contentType,
+      CacheControl: "public, max-age=31536000, immutable",
+    }),
+  )
+
+  return {
+    storageKey,
+    publicUrl: getR2PublicUrl(storageKey),
+    contentType: input.contentType,
+    fileName: normalizedFileName,
   }
 }

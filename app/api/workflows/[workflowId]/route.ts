@@ -26,6 +26,18 @@ function parseWorkflowId(value: string) {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null
 }
 
+async function measureWorkflowRouteStep<T>(label: string, operation: () => Promise<T>) {
+  const startedAt = Date.now()
+  try {
+    return await operation()
+  } finally {
+    console.info("workflow.route.timing", {
+      label,
+      durationMs: Date.now() - startedAt,
+    })
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ workflowId: string }> },
@@ -63,8 +75,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ workflowId: string }> },
 ) {
+  const requestStartedAt = Date.now()
   try {
-    const currentUser = await getSessionUser(request).catch(() => null)
+    const currentUser = await measureWorkflowRouteStep("patch.session-user", () => getSessionUser(request).catch(() => null))
     if (!currentUser) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
@@ -78,18 +91,28 @@ export async function PATCH(
       return NextResponse.json({ error: "invalid_workflow_id" }, { status: 400 })
     }
 
-    const body = (await request.json().catch(() => ({}))) as WorkflowUpdateBody
+    const body = (await measureWorkflowRouteStep("patch.request-json", () => request.json().catch(() => ({})))) as WorkflowUpdateBody
 
-    const data = await updateWorkflowDefinition({
+    const data = await measureWorkflowRouteStep("patch.update-workflow-definition", () =>
+      updateWorkflowDefinition({
+        workflowId: numericWorkflowId,
+        enterpriseId: currentUser.enterpriseId,
+        title: typeof body.title === "string" ? body.title : undefined,
+        description: body.description,
+        status: body.status ?? undefined,
+        triggerType: body.triggerType ?? undefined,
+        metadata: body.metadata,
+        nodes: Array.isArray(body.nodes) ? body.nodes : undefined,
+        edges: Array.isArray(body.edges) ? body.edges : undefined,
+      }),
+    )
+
+    console.info("workflow.route.timing", {
+      label: "patch.total",
+      durationMs: Date.now() - requestStartedAt,
       workflowId: numericWorkflowId,
-      enterpriseId: currentUser.enterpriseId,
-      title: typeof body.title === "string" ? body.title : undefined,
-      description: body.description,
-      status: body.status ?? undefined,
-      triggerType: body.triggerType ?? undefined,
-      metadata: body.metadata,
-      nodes: Array.isArray(body.nodes) ? body.nodes : undefined,
-      edges: Array.isArray(body.edges) ? body.edges : undefined,
+      nodeCount: Array.isArray(body.nodes) ? body.nodes.length : null,
+      edgeCount: Array.isArray(body.edges) ? body.edges.length : null,
     })
 
     return NextResponse.json({ data })

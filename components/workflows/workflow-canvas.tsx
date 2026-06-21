@@ -41,7 +41,6 @@ import {
 
 const NODE_WIDTH = 336
 const PORT_PANEL_TOP = 52
-const PORT_LABEL_TOP = 8
 const PORT_ITEM_START_Y = 30
 const PORT_ITEM_GAP = 36
 const PORT_PANEL_BOTTOM_PADDING = 28
@@ -143,6 +142,15 @@ type WorkflowCanvasProps = {
       }>
     }>
   }
+  workflowImageProviderOptions: Array<{
+    providerId: string
+    label: string
+    models: Array<{
+      modelId: string
+      label: string
+      optionId?: string | null
+    }>
+  }>
   voiceOptions: Array<{
     voiceId: string
     voiceName: string
@@ -360,6 +368,7 @@ export function WorkflowCanvas({
   edges,
   assets,
   llmModelCatalog,
+  workflowImageProviderOptions,
   voiceOptions,
   selectedNodeKey,
   pendingConnectionSourceKey,
@@ -385,8 +394,6 @@ export function WorkflowCanvas({
           addFirstBody: "从左侧节点库拖入固定节点，或直接点击添加。节点会保持确定性连线，并可直接在卡片内编辑。",
           cancelLink: "取消连线",
           dragOutput: "从此节点拖出连接",
-          inputPort: "输入",
-          outputPort: "输出",
         }
       : {
           empty: "Empty canvas",
@@ -394,8 +401,6 @@ export function WorkflowCanvas({
           addFirstBody: "Drag a fixed node from the library or click add. Nodes stay deterministic and editable directly in each card.",
           cancelLink: "Cancel link",
           dragOutput: "Drag a connection from this node",
-          inputPort: "Input",
-          outputPort: "Output",
         }
 
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -1172,22 +1177,6 @@ export function WorkflowCanvas({
                 </div>
 
                 <div className="relative border-b border-border/70 bg-background/68 px-3" style={{ height: portPanelHeight }}>
-                  {displayInputKinds.length > 0 ? (
-                    <div
-                      className="pointer-events-none absolute left-3 text-[9px] font-black uppercase tracking-[0.12em] text-foreground"
-                      style={{ top: PORT_LABEL_TOP }}
-                    >
-                      {copy.inputPort}
-                    </div>
-                  ) : null}
-                  {outputKinds.length > 0 ? (
-                    <div
-                      className="pointer-events-none absolute right-3 text-[9px] font-black uppercase tracking-[0.12em] text-foreground"
-                      style={{ top: PORT_LABEL_TOP }}
-                    >
-                      {copy.outputPort}
-                    </div>
-                  ) : null}
                   {displayInputKinds.map((kind, index) => (
                     <div
                       key={`${node.nodeKey}-${kind}-input-label`}
@@ -1215,6 +1204,7 @@ export function WorkflowCanvas({
                       node={node}
                       assets={assets}
                       llmModelCatalog={llmModelCatalog}
+                      workflowImageProviderOptions={workflowImageProviderOptions}
                       voiceOptions={voiceOptions}
                       textPromptSuggestions={textPromptSuggestions}
                       uploadPending={uploadPending}

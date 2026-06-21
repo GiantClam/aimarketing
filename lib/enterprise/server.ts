@@ -39,7 +39,12 @@ export function generateEnterpriseCode(name: string) {
   return `${normalized || "enterprise"}-${rand}`
 }
 
-let ensureEnterpriseAuthTablesPromise: Promise<void> | null = null
+type GlobalWithEnterpriseEnsureState = typeof globalThis & {
+  __aimarketingEnsureEnterpriseAuthTablesPromise__?: Promise<void> | null
+}
+
+const enterpriseEnsureState = globalThis as GlobalWithEnterpriseEnsureState
+let ensureEnterpriseAuthTablesPromise = enterpriseEnsureState.__aimarketingEnsureEnterpriseAuthTablesPromise__ ?? null
 
 export async function ensureEnterpriseAuthTables() {
   if (!ensureEnterpriseAuthTablesPromise) {
@@ -171,8 +176,10 @@ export async function ensureEnterpriseAuthTables() {
       `)
     })().catch((error) => {
       ensureEnterpriseAuthTablesPromise = null
+      enterpriseEnsureState.__aimarketingEnsureEnterpriseAuthTablesPromise__ = null
       throw error
     })
+    enterpriseEnsureState.__aimarketingEnsureEnterpriseAuthTablesPromise__ = ensureEnterpriseAuthTablesPromise
   }
 
   await ensureEnterpriseAuthTablesPromise

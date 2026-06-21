@@ -12,6 +12,7 @@ import {
 } from "@/lib/enterprise/server"
 import { logAuditEvent } from "@/lib/server/audit"
 import { buildEmailVerificationUrl, resendEmailVerification } from "@/lib/auth/email-verification"
+import { ensureEnterpriseDefaultKnowledgeWorkspace } from "@/lib/knowledge/service"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
@@ -103,6 +104,12 @@ export async function POST(request: NextRequest) {
         await db.update(enterprises).set({ createdBy: user.id, updatedAt: new Date() }).where(eq(enterprises.id, enterprise.id))
         await ensurePermissions(user.id, true)
         await provisionDefaultBillingForUserId(user.id)
+        await ensureEnterpriseDefaultKnowledgeWorkspace(enterprise.id).catch((error) => {
+          console.warn("auth.register.ragflow_default_workspace_failed", {
+            enterpriseId: enterprise.id,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        })
         await resendEmailVerification({
           userId: user.id,
           email: normalizedEmail,

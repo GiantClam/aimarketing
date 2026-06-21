@@ -12,6 +12,7 @@ import { WorkflowNodeOutputPreview } from "@/components/workflows/workflow-node-
 import { cn } from "@/lib/utils"
 import { isWorkflowNodeType, resolveWorkflowNodeTitle } from "@/lib/workflows/schema"
 import { buildWorkflowRunStatusPath } from "@/lib/workflows/run-status-path"
+import { isWorkflowRunActiveStatus } from "@/lib/workflows/run-status"
 
 type WorkflowRunStatus = string
 type WorkflowNodeExecutionStatus = string
@@ -239,7 +240,7 @@ export function WorkflowRunResultsPage({
   }, [initialDetail])
 
   useEffect(() => {
-    if (detail.run.status !== "running" && detail.run.status !== "queued") return
+    if (!isWorkflowRunActiveStatus(detail.run.status)) return
 
     let cancelled = false
     detailRequestInFlightRef.current = false
@@ -259,7 +260,7 @@ export function WorkflowRunResultsPage({
         if (!payload?.data?.run || cancelled) return
 
         const nextStatus = payload.data.run.status
-        if (nextStatus === "running" || nextStatus === "queued") {
+        if (isWorkflowRunActiveStatus(nextStatus)) {
           setDetail((current) => ({
             ...current,
             run: {
@@ -297,7 +298,7 @@ export function WorkflowRunResultsPage({
       detailRequestInFlightRef.current = false
       window.clearInterval(timer)
     }
-  }, [detail.detailPath, detail.run.status, onDetailChange])
+  }, [detail.detailPath, detail.run.status, detail.statusPath, onDetailChange])
 
   const copy =
     locale === "zh"

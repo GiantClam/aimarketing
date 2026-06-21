@@ -1,0 +1,210 @@
+import type { AiEntryModelCatalog, AiEntryModelGroup, AiEntryModelOption } from "@/lib/ai-entry/model-catalog"
+import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
+import type { EnterpriseModelRouteAssignment } from "@/lib/platform/model-config"
+
+export type ModelGovernanceUser = {
+  id: number
+  enterpriseId: number | null
+  enterpriseRole: string | null
+  enterpriseStatus: string | null
+}
+
+export type RuntimeProviderLike = {
+  id: string
+  scope: "text" | "image" | "video" | "audio" | "agent" | "tooling"
+  configured: boolean
+  active: boolean
+  model: string | null
+  baseURL: string | null
+}
+
+export type WorkflowImageProviderOptionLike = {
+  providerId: string
+  label: string
+  models: Array<{
+    modelId: string
+    label: string
+  }>
+}
+
+type GovernedTextProviderOption = {
+  providerId: AiEntryProviderId
+  label: string
+  modelId: string
+  baseUrl: string | null
+  active: boolean
+}
+
+const AI_ENTRY_PROVIDER_IDS = new Set<AiEntryProviderId>([
+  "pptoken",
+  "openrouter",
+  "aiberm",
+  "crazyroute",
+  "enterprise-openai-compatible",
+  "enterprise-qwen-official",
+  "enterprise-minimax-official",
+  "enterprise-glm-official",
+])
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function isEnterpriseAdmin(user: ModelGovernanceUser | null | undefined) {
+  return user?.enterpriseRole === "admin" && user?.enterpriseStatus === "active"
+}
+
+function hasEnterpriseContext(user: ModelGovernanceUser | null | undefined) {
+  return Boolean(user && typeof user.enterpriseId === "number" && user.enterpriseId > 0)
+}
+
+function hasActiveEnterpriseContext(user: ModelGovernanceUser | null | undefined) {
+  return hasEnterpriseContext(user) && user?.enterpriseStatus === "active"
+}
+
+function findRouteAssignment(
+  assignments: EnterpriseModelRouteAssignment[],
+  routeId: string,
+) {
+  return assignments.find((item) => normalizeText(item.routeId) === routeId) || null
+}
+
+export function canUserAccessAssignedRoute(params: {
+  user: ModelGovernanceUser | null | undefined
+  assignedUserIds?: number[]
+}) {
+  const { user } = params
+  const assignedUserIds = Array.isArray(params.assignedUserIds)
+    ? [...new Set(params.assignedUserIds.filter((value) => Number.isInteger(value) && value > 0))]
+    : []
+
+  if (!user) return assignedUserIds.length === 0
+  if (isEnterpriseAdmin(user)) return true
+  if (hasEnterpriseContext(user) && user.enterpriseStatus !== "active") return false
+  if (assignedUserIds.length === 0) return true
+  return assignedUserIds.includes(user.id)
+}
+
+function filterAssignedItems<T>(params: {
+  user: ModelGovernanceUser | null | undefined
+  items: T[]
+  getId: (item: T) => string
+  assignments: EnterpriseModelRouteAssignment[]
+}) {
+  const { user, items, getId, assignments } = params
+  if (hasEnterpriseContext(user) && !hasActiveEnterpriseContext(user)) {
+    return [] as T[]
+  }
+
+  return items.filter((item) => {
+    const assignment = findRouteAssignment(assignments, getId(item))
+    return canUserAccessAssignedRoute({
+      user,
+      assignedUserIds: assignment?.assignedUserIds,
+    })
+  })
+}
+
+export function getRuntimeProviderLabel(providerId: string) {
+  if (providerId === "pptoken") return "PPToken"
+  if (providerId === "openrouter") return "OpenRouter"
+  if (providerId === "aiberm") return "AIBERM"
+  if (providerId === "crazyroute") return "Crazyroute"
+  if (providerId === "enterprise-openai-compatible") return "OpenAI Compatible"
+  if (providerId === "enterprise-qwen-official") return "Qwen Official"
+  if (providerId === "enterprise-minimax-official") return "MiniMax Official"
+  if (providerId === "enterprise-glm-official") return "GLM Official"
+  if (providerId === "runninghub-image") return "RunningHub Image"
+  if (providerId === "runninghub-video") return "RunningHub Video"
+  if (providerId === "minimax-audio") return "MiniMax Audio"
+  return providerId
+}
+
+function buildCatalogModel(modelId: string): AiEntryModelOption {
+  return {
+    id: modelId,
+    name: modelId,
+    runtimeId: modelId,
+    canonicalId: modelId,
+    aliases: [modelId],
+  }
+}
+
+function buildCatalogGroup(provider: GovernedTextProviderOption): AiEntryModelGroup {
+  return {
+    family: provider.providerId,
+    label: provider.label,
+    models: [buildCatalogModel(provider.modelId)],
+  }
+}
+
+export function buildGovernedAiEntryModelCatalog(params: {
+  user: ModelGovernanceUser | null | undefined
+  runtimeProviders: RuntimeProviderLike[]
+  assignments?: EnterpriseModelRouteAssignment[]
+  requestedProviderId?: AiEntryProviderId | null
+}) {
+  const assignments = params.assignments || []
+  const candidateProviders = params.runtimeProviders
+    .filter((provider) => AI_ENTRY_PROVIDER_IDS.has(provider.id as AiEntryProviderId))
+    .filter((provider) => provider.scope === "text" && provider.configured)
+    .map((provider) => ({
+      providerId: provider.id as AiEntryProviderId,
+      label: getRuntimeProviderLabel(provider.id),
+      modelId: normalizeText(provider.model),
+      baseUrl: provider.baseURL,
+      active: provider.active,
+    }))
+    .filter((provider) => provider.modelId)
+  const accessibleProviders = filterAssignedItems({
+    user: params.user,
+    assignments,
+    items: candidateProviders,
+    getId: (provider) => provider.providerId,
+  })
+
+  const requestedProvider =
+    params.requestedProviderId
+      ? accessibleProviders.find((provider) => provider.providerId === params.requestedProviderId) || null
+      : null
+  const selectedProvider =
+    requestedProvider ||
+    accessibleProviders.find((provider) => provider.active) ||
+    accessibleProviders[0] ||
+    null
+  const modelGroups = accessibleProviders.map(buildCatalogGroup)
+  const models = modelGroups.flatMap((group) => group.models)
+
+  return {
+    providerId: selectedProvider?.providerId || null,
+    providerBaseUrl: selectedProvider?.baseUrl || null,
+    selectedProviderId: selectedProvider?.providerId || null,
+    selectedModelId: selectedProvider?.modelId || null,
+    models,
+    modelGroups,
+    cached: false,
+    fetchedAt: Date.now(),
+    recentDays: null,
+    recentStrict: false,
+    providers: accessibleProviders.map((provider) => ({
+      id: provider.providerId,
+      label: provider.label,
+    })),
+  } satisfies AiEntryModelCatalog & {
+    providers: Array<{ id: AiEntryProviderId; label: string }>
+  }
+}
+
+export function buildGovernedWorkflowImageProviderOptions(params: {
+  user: ModelGovernanceUser | null | undefined
+  providers: WorkflowImageProviderOptionLike[]
+  assignments?: EnterpriseModelRouteAssignment[]
+}) {
+  const assignments = params.assignments || []
+  return filterAssignedItems({
+    user: params.user,
+    assignments,
+    items: params.providers,
+    getId: (provider) => provider.providerId,
+  })
+}

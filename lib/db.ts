@@ -53,9 +53,14 @@ function getConnectionCandidates(): string[] {
     process.env.POSTGRES_URL_NON_POOLING,
   ]
 
-  const orderedCandidates = isDevelopment && preferNonPooling
+  // In local dev, mixed fallback from pooled -> direct can permanently strand the
+  // app on an unreachable direct host after one transient pooled timeout. When
+  // callers explicitly prefer pooled connections, keep the candidate set pooled-only.
+  const orderedCandidates = preferNonPooling
     ? [...directCandidates, ...pooledCandidates]
-    : [...pooledCandidates, ...directCandidates]
+    : pooledCandidates.some((value) => typeof value === "string" && value.length > 0)
+      ? pooledCandidates
+      : directCandidates
   const normalized = orderedCandidates
     .filter((value): value is string => typeof value === "string" && value.length > 0)
     .map((value) => isValidConnectionString(value))

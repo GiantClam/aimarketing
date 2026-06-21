@@ -378,6 +378,136 @@ test("normalizeWorkflowRunStatusFromNodeExecutions marks zombie running runs as 
   assert.ok(normalized.finishedAt)
 })
 
+test("normalizeWorkflowRunStatusFromNodeExecutions derives running from mixed non-terminal node states", () => {
+  const now = new Date()
+  const run = {
+    id: 91,
+    enterpriseId: 151,
+    userId: 96,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "test",
+    externalRunId: null,
+    externalSystem: null,
+    status: "failed",
+    inputPayload: { workflowId: 2 },
+    normalizedResult: null,
+    startedAt: null,
+    finishedAt: now,
+    createdAt: now,
+    updatedAt: now,
+    events: [],
+    artifacts: [],
+    workItems: [],
+    knowledgeSaveJobs: [],
+  } satisfies WorkflowRunDetail["run"]
+
+  const nodeExecutions = [
+    {
+      id: 200,
+      runId: 91,
+      workflowId: 2,
+      nodeKey: "text-input-1",
+      nodeType: "text_input",
+      status: "succeeded",
+      providerId: null,
+      modelId: null,
+      taskRunId: null,
+      creditsConsumed: 0,
+      startedAt: now,
+      finishedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 201,
+      runId: 91,
+      workflowId: 2,
+      nodeKey: "image-3",
+      nodeType: "image_generate",
+      status: "queued",
+      providerId: null,
+      modelId: null,
+      taskRunId: null,
+      creditsConsumed: 0,
+      startedAt: null,
+      finishedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ] satisfies WorkflowRunDetail["nodeExecutions"]
+
+  const normalized = normalizeWorkflowRunStatusFromNodeExecutions(run, nodeExecutions)
+
+  assert.equal(normalized.status, "running")
+  assert.equal(normalized.finishedAt, null)
+})
+
+test("normalizeWorkflowRunStatusFromNodeExecutions derives success once every node succeeds", () => {
+  const now = new Date()
+  const run = {
+    id: 92,
+    enterpriseId: 151,
+    userId: 96,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "test",
+    externalRunId: null,
+    externalSystem: null,
+    status: "running",
+    inputPayload: { workflowId: 2 },
+    normalizedResult: null,
+    startedAt: now,
+    finishedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    events: [],
+    artifacts: [],
+    workItems: [],
+    knowledgeSaveJobs: [],
+  } satisfies WorkflowRunDetail["run"]
+
+  const nodeExecutions = [
+    {
+      id: 202,
+      runId: 92,
+      workflowId: 2,
+      nodeKey: "text-input-1",
+      nodeType: "text_input",
+      status: "succeeded",
+      providerId: null,
+      modelId: null,
+      taskRunId: null,
+      creditsConsumed: 0,
+      startedAt: now,
+      finishedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 203,
+      runId: 92,
+      workflowId: 2,
+      nodeKey: "image-3",
+      nodeType: "image_generate",
+      status: "succeeded",
+      providerId: null,
+      modelId: null,
+      taskRunId: null,
+      creditsConsumed: 0,
+      startedAt: now,
+      finishedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ] satisfies WorkflowRunDetail["nodeExecutions"]
+
+  const normalized = normalizeWorkflowRunStatusFromNodeExecutions(run, nodeExecutions)
+
+  assert.equal(normalized.status, "succeeded")
+  assert.ok(normalized.finishedAt)
+})
+
 test("normalizeWorkflowNodeStatusesForRunningRun exposes the next ready queued node as running", () => {
   const now = new Date()
   const nodeExecutions = [

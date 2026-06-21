@@ -197,9 +197,15 @@ export function buildWorkflowImagePromptReferenceSection(input: {
   locale: WorkflowLocale
 }) {
   const references = parseWorkflowImagePromptReferences(input.references)
+  const imagesBySourceNodeKey = new Map(
+    input.inputImages
+      .filter((image) => typeof image.sourceNodeKey === "string" && image.sourceNodeKey.trim())
+      .map((image) => [image.sourceNodeKey!.trim(), image] as const),
+  )
   const lines = references
     .map((reference, index) => {
-      const url = input.inputImages[index]?.url?.trim()
+      const image = imagesBySourceNodeKey.get(reference.sourceNodeKey.trim()) ?? input.inputImages[index]
+      const url = image?.url?.trim()
       if (!url) return null
       const label = isEmbeddableWorkflowImagePromptUrl(url)
         ? url
@@ -218,10 +224,45 @@ export function buildWorkflowImagePromptReferenceSection(input: {
     : `Image references:\nWhen the prompt uses the tokens below, treat them as the corresponding input images.\n${lines.join("\n")}`
 }
 
+const CHINESE_INPUT_IMAGE_POSITION_LABELS = [
+  "第一张输入图",
+  "第二张输入图",
+  "第三张输入图",
+  "第四张输入图",
+  "第五张输入图",
+  "第六张输入图",
+  "第七张输入图",
+  "第八张输入图",
+  "第九张输入图",
+  "第十张输入图",
+] as const
+
+const ENGLISH_INPUT_IMAGE_POSITION_LABELS = [
+  "the first input image",
+  "the second input image",
+  "the third input image",
+  "the fourth input image",
+  "the fifth input image",
+  "the sixth input image",
+  "the seventh input image",
+  "the eighth input image",
+  "the ninth input image",
+  "the tenth input image",
+] as const
+
+function getWorkflowInputImagePositionLabel(index: number, locale: WorkflowLocale) {
+  if (locale === "zh") {
+    return CHINESE_INPUT_IMAGE_POSITION_LABELS[index] || `第${index + 1}张输入图`
+  }
+
+  return ENGLISH_INPUT_IMAGE_POSITION_LABELS[index] || `input image ${index + 1}`
+}
+
 export function resolveWorkflowImagePromptRuntimeReferences(input: {
   prompt: string | null | undefined
   references: unknown
   inputImages: WorkflowMediaRef[]
+  locale?: WorkflowLocale
 }) {
   const prompt = typeof input.prompt === "string" ? input.prompt : ""
   if (!prompt) {
@@ -234,11 +275,19 @@ export function resolveWorkflowImagePromptRuntimeReferences(input: {
   let nextPrompt = prompt
   const matchedUrls: string[] = []
   const references = parseWorkflowImagePromptReferences(input.references)
+  const locale = input.locale === "zh" ? "zh" : "en"
+  const imagesBySourceNodeKey = new Map(
+    input.inputImages
+      .filter((image) => typeof image.sourceNodeKey === "string" && image.sourceNodeKey.trim())
+      .map((image, index) => [image.sourceNodeKey!.trim(), { image, index }] as const),
+  )
 
   for (const [index, reference] of references.entries()) {
-    const url = input.inputImages[index]?.url?.trim()
-    if (!url) continue
-    const promptLabel = reference.alias.trim() || reference.sourceNodeKey.trim()
+    const matchedImage = imagesBySourceNodeKey.get(reference.sourceNodeKey.trim())
+    const image = matchedImage?.image ?? input.inputImages[index]
+    if (!image) continue
+    const url = image.url?.trim() || ""
+    const promptLabel = getWorkflowInputImagePositionLabel(matchedImage?.index ?? index, locale)
 
     const aliases = [reference.alias.trim(), reference.sourceNodeKey.trim()].filter(Boolean)
     let matched = false
@@ -247,9 +296,7 @@ export function resolveWorkflowImagePromptRuntimeReferences(input: {
       const tokenPattern = new RegExp(`\\{\\{\\s*${escapeRegExp(alias)}\\s*\\}\\}`, "g")
       if (!tokenPattern.test(nextPrompt)) continue
       matched = true
-      if (isEmbeddableWorkflowImagePromptUrl(url)) {
-        nextPrompt = nextPrompt.replace(tokenPattern, promptLabel)
-      }
+      nextPrompt = nextPrompt.replace(tokenPattern, promptLabel)
     }
 
     if (matched && isEmbeddableWorkflowImagePromptUrl(url)) {

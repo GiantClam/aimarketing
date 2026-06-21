@@ -92,6 +92,8 @@ const enterpriseUser = {
   permissions: {},
 } as unknown as AuthUser
 
+const enterpriseId = 3
+
 test("preview persistence creates a tool run and a lightweight deck artifact", async () => {
   const store = createInMemoryPlatformTaskRunStore()
 
@@ -184,12 +186,29 @@ test("selected output persistence creates artifact and promotes it into work", a
   })
 
   assert.ok(artifact)
+  assert.equal(artifact.kind, "file")
+  assert.equal(artifact.title, "formal-ai-ppt.pptx")
+  assert.equal(artifact.mimeType, "application/vnd.openxmlformats-officedocument.presentationml.presentation")
   const payload = artifact.payload as {
     artifactType?: string
-    downloadResult?: { fileName?: string | null }
+    embeddedContentBase64?: string
   }
-  assert.equal(payload.artifactType, "lead_tool_download_selection")
-  assert.equal(payload.downloadResult?.fileName, "formal-ai-ppt.pptx")
+  assert.equal(payload.artifactType, "lead_tool_download_file")
+  assert.ok(payload.embeddedContentBase64)
+
+  const persistedArtifacts = await store.listPlatformArtifactsForEnterprise(enterpriseId)
+  assert.equal(persistedArtifacts.length, 2)
+  const metadataArtifact = persistedArtifacts.find((item) => item.kind === "json")
+  const metadataPayload = metadataArtifact?.payload as
+    | {
+        artifactType?: string
+        downloadResult?: { fileName?: string | null; resultArtifactId?: number | null }
+      }
+    | undefined
+  assert.equal(metadataPayload?.artifactType, "lead_tool_download_selection")
+  assert.equal(metadataPayload?.downloadResult?.fileName, "formal-ai-ppt.pptx")
+  assert.equal(metadataPayload?.downloadResult?.resultArtifactId, artifact.id)
+
   assert.ok(workItem)
   assert.equal(workItem.type, "deck")
   assert.equal(workItem.title, "Formal AI PPT Variant A")

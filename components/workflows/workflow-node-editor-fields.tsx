@@ -5,7 +5,11 @@ import Link from "next/link"
 import { AudioLines, ExternalLink, FileUp, ImageIcon, Trash2, Video } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  resolveWorkflowImageModelKind,
+} from "@/lib/image-assistant/model-options"
 import type { WorkflowDefinitionNode } from "@/lib/workflows/schema"
 
 type WorkflowAssetCandidate = {
@@ -29,12 +33,20 @@ type UploadedWorkflowFile = {
 type WorkflowLlmModelOption = {
   modelId: string
   label: string
+  optionId?: string | null
 }
 
 type WorkflowLlmProviderOption = {
   providerId: string
   label: string
   models: WorkflowLlmModelOption[]
+}
+
+type WorkflowModelSelectOption = {
+  value: string
+  providerId: string
+  modelId: string
+  label: string
 }
 
 type WorkflowVoiceOption = {
@@ -58,6 +70,11 @@ type WorkflowNodeEditorFieldsProps = {
     defaultModelId: string | null
     providers: WorkflowLlmProviderOption[]
   }
+  workflowImageProviderOptions: Array<{
+    providerId: string
+    label: string
+    models: WorkflowLlmModelOption[]
+  }>
   voiceOptions: WorkflowVoiceOption[]
   textPromptSuggestions?: Array<{
     sourceNodeKey: string
@@ -88,6 +105,43 @@ function asNumber(value: unknown, fallback: number) {
 
 function asBooleanString(value: unknown, fallback: "true" | "false" = "true") {
   return value === "false" ? "false" : value === "true" ? "true" : fallback
+}
+
+function buildWorkflowModelSelectionValue(input: {
+  providerId: string
+  modelId: string
+}) {
+  return `${input.providerId}::${encodeURIComponent(input.modelId)}`
+}
+
+function parseWorkflowModelSelectionValue(value: string) {
+  const separatorIndex = value.indexOf("::")
+  if (separatorIndex <= 0) return null
+  const providerId = value.slice(0, separatorIndex).trim()
+  const encodedModelId = value.slice(separatorIndex + 2)
+  const modelId = decodeURIComponent(encodedModelId).trim()
+  if (!providerId || !modelId) return null
+  return { providerId, modelId }
+}
+
+function buildWorkflowModelSelectOption(input: {
+  providerId: string
+  providerLabel: string
+  modelId: string
+  modelLabel?: string | null
+  optionId?: string | null
+}) {
+  return {
+    value:
+      input.optionId ||
+      buildWorkflowModelSelectionValue({
+        providerId: input.providerId,
+        modelId: input.modelId,
+      }),
+    providerId: input.providerId,
+    modelId: input.modelId,
+    label: `${input.providerLabel} / ${(input.modelLabel || input.modelId).trim() || input.modelId}`,
+  } satisfies WorkflowModelSelectOption
 }
 
 function SectionLabel({ children }: { children: string }) {
@@ -207,6 +261,7 @@ export function WorkflowNodeEditorFields({
   node,
   assets,
   llmModelCatalog,
+  workflowImageProviderOptions,
   voiceOptions,
   textPromptSuggestions = [],
   uploadPending,
@@ -242,6 +297,15 @@ export function WorkflowNodeEditorFields({
           size: "尺寸",
           resolution: "分辨率",
           count: "数量",
+          quality: "质量",
+          background: "背景",
+          format: "格式",
+          compression: "压缩率",
+          moderation: "审核",
+          customSize: "自定义尺寸",
+          customSizePlaceholder: "例如 1536x864",
+          autoSize: "自动",
+          unsupportedModelParams: "当前模型暂未配置参数面板。",
           mode: "模式",
           duration: "时长",
           ratio: "画幅",
@@ -261,6 +325,9 @@ export function WorkflowNodeEditorFields({
           pageCount: "页数",
           scenario: "场景",
           language: "语言",
+          fileName: "文件名称",
+          fileNamePlaceholder: "留空时自动生成不重复名称",
+          fileNameHint: "如果作品库中存在同名文件，将使用新结果覆盖旧文件。",
           latestPreview: "最近预览",
           auto: "自动",
           modelAuto: "自动路由",
@@ -289,6 +356,15 @@ export function WorkflowNodeEditorFields({
           size: "Size",
           resolution: "Resolution",
           count: "Count",
+          quality: "Quality",
+          background: "Background",
+          format: "Format",
+          compression: "Compression",
+          moderation: "Moderation",
+          customSize: "Custom size",
+          customSizePlaceholder: "For example 1536x864",
+          autoSize: "Auto",
+          unsupportedModelParams: "This model does not have a configured parameter panel yet.",
           mode: "Mode",
           duration: "Duration",
           ratio: "Ratio",
@@ -308,6 +384,9 @@ export function WorkflowNodeEditorFields({
           pageCount: "Pages",
           scenario: "Scenario",
           language: "Language",
+          fileName: "File name",
+          fileNamePlaceholder: "Leave empty to auto-generate a unique name",
+          fileNameHint: "If the work library already contains the same file name, the new result replaces it.",
           latestPreview: "Latest preview",
           auto: "Auto",
           modelAuto: "Auto routing",
@@ -400,8 +479,18 @@ export function WorkflowNodeEditorFields({
           { value: "de", label: "German" },
           { value: "es", label: "Spanish" },
         ]
-  const imageSizeOptions: OptionItem[] = ["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"].map((value) => ({ value, label: value }))
-  const imageResolutionOptions: OptionItem[] = ["512", "1K", "2K", "4K"].map((value) => ({ value, label: value }))
+  const workflowImageProviders = workflowImageProviderOptions
+  const imageModelSizeOptions: OptionItem[] = [
+    { value: "auto", label: copy.autoSize },
+    { value: "1024x1024", label: "1024x1024" },
+    { value: "1536x1024", label: "1536x1024" },
+    { value: "1024x1536", label: "1024x1536" },
+    { value: "custom", label: copy.customSize },
+  ]
+  const imageQualityOptions: OptionItem[] = ["auto", "low", "medium", "high"].map((value) => ({ value, label: value }))
+  const imageBackgroundOptions: OptionItem[] = ["auto", "opaque", "transparent"].map((value) => ({ value, label: value }))
+  const imageFormatOptions: OptionItem[] = ["png", "jpeg", "webp"].map((value) => ({ value, label: value }))
+  const imageModerationOptions: OptionItem[] = ["auto", "low"].map((value) => ({ value, label: value }))
   const videoModeOptions: OptionItem[] =
     locale === "zh"
       ? [
@@ -516,16 +605,97 @@ export function WorkflowNodeEditorFields({
     null
   const currentSelectedModelId =
     asString(node.config.selectedModelId) || activeProvider?.models[0]?.modelId || llmModelCatalog.defaultModelId || ""
-  const llmModelSelectOptions: WorkflowLlmModelOption[] = [...(activeProvider?.models || [])]
+  const llmModelSelectOptions: WorkflowModelSelectOption[] = llmModelCatalog.providers.flatMap((provider) =>
+    provider.models.map((model) =>
+      buildWorkflowModelSelectOption({
+        providerId: provider.providerId,
+        providerLabel: provider.label,
+        modelId: model.modelId,
+        modelLabel: model.label,
+        optionId: model.optionId,
+      }),
+    ),
+  )
+  const currentLlmModelSelectionValue =
+    llmModelSelectOptions.find(
+      (option) =>
+        option.providerId === currentSelectedProviderId &&
+        option.modelId === currentSelectedModelId,
+    )?.value ||
+    (currentSelectedProviderId && currentSelectedModelId
+      ? buildWorkflowModelSelectionValue({
+          providerId: currentSelectedProviderId,
+          modelId: currentSelectedModelId,
+        })
+      : "")
   if (
+    currentSelectedProviderId &&
     currentSelectedModelId &&
-    !llmModelSelectOptions.some((option) => option.modelId === currentSelectedModelId)
+    currentLlmModelSelectionValue &&
+    !llmModelSelectOptions.some((option) => option.value === currentLlmModelSelectionValue)
   ) {
-    llmModelSelectOptions.push({
-      modelId: currentSelectedModelId,
-      label: currentSelectedModelId,
-    })
+    llmModelSelectOptions.push(
+      buildWorkflowModelSelectOption({
+        providerId: currentSelectedProviderId,
+        providerLabel: activeProvider?.label || currentSelectedProviderId,
+        modelId: currentSelectedModelId,
+      }),
+    )
   }
+  const currentImageProviderId =
+    asString(node.config.selectedProviderId) || workflowImageProviders[0]?.providerId || "pptoken"
+  const activeImageProvider =
+    workflowImageProviders.find((provider) => provider.providerId === currentImageProviderId) ||
+    workflowImageProviders[0] ||
+    null
+  const currentImageModelId =
+    asString(node.config.selectedModelId) || activeImageProvider?.models[0]?.modelId || "gpt-image-2"
+  const currentImageModelOptionId = asString(node.config.selectedModelOptionId)
+  const imageModelSelectOptions: WorkflowModelSelectOption[] = workflowImageProviders.flatMap((provider) =>
+    provider.models.map((model) =>
+      buildWorkflowModelSelectOption({
+        providerId: provider.providerId,
+        providerLabel: provider.label,
+        modelId: model.modelId,
+        modelLabel: model.label,
+        optionId: model.optionId,
+      }),
+    ),
+  )
+  const currentImageModelSelectionValue =
+    imageModelSelectOptions.find((option) => option.value === currentImageModelOptionId)?.value ||
+    imageModelSelectOptions.find(
+      (option) =>
+        option.providerId === currentImageProviderId &&
+        option.modelId === currentImageModelId,
+    )?.value ||
+    (currentImageProviderId && currentImageModelId
+      ? buildWorkflowModelSelectionValue({
+          providerId: currentImageProviderId,
+          modelId: currentImageModelId,
+        })
+      : "")
+  if (
+    currentImageProviderId &&
+    currentImageModelId &&
+    currentImageModelSelectionValue &&
+    !imageModelSelectOptions.some((option) => option.value === currentImageModelSelectionValue)
+  ) {
+    imageModelSelectOptions.push(
+      buildWorkflowModelSelectOption({
+        providerId: currentImageProviderId,
+        providerLabel: activeImageProvider?.label || currentImageProviderId,
+        modelId: currentImageModelId,
+      }),
+    )
+  }
+  const currentImageModelKind = resolveWorkflowImageModelKind(currentImageModelId)
+  const currentImageSize = asString(node.config.imageSize)
+  const imageSizeSelection = imageModelSizeOptions.some((option) => option.value === currentImageSize)
+    ? currentImageSize
+    : currentImageSize
+      ? "custom"
+      : "1024x1024"
 
   const textPromptAutocompleteState = useMemo(
     () => getTextPromptAutocompleteState(asString(node.config.text), textSelectionStart),
@@ -538,6 +708,7 @@ export function WorkflowNodeEditorFields({
       if (!query) return true
       return (
         suggestion.alias.toLowerCase().includes(query) ||
+        suggestion.sourceNodeKey.toLowerCase().includes(query) ||
         suggestion.sourceTitle.toLowerCase().includes(query) ||
         suggestion.targetNodeTitle.toLowerCase().includes(query)
       )
@@ -738,7 +909,9 @@ export function WorkflowNodeEditorFields({
                     >
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-foreground">{suggestion.token}</div>
-                        <div className="truncate text-[11px] text-muted-foreground">{suggestion.sourceTitle}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {suggestion.sourceNodeKey} · {suggestion.alias} · {suggestion.sourceTitle}
+                        </div>
                       </div>
                       <div className="truncate text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
                         {copy.suggestionTarget} {suggestion.targetNodeTitle}
@@ -790,43 +963,25 @@ export function WorkflowNodeEditorFields({
       {node.type === "llm_generate" ? (
         <div className="space-y-3">
           <div className="space-y-2">
-            <SectionLabel>{copy.provider}</SectionLabel>
-            <select
-              value={currentSelectedProviderId}
-              onChange={(event) => {
-                const nextProviderId = event.target.value
-                const nextProvider =
-                  llmModelCatalog.providers.find((provider) => provider.providerId === nextProviderId) || null
-                updateConfig({
-                  selectedProviderId: nextProviderId || null,
-                  selectedModelId: nextProvider?.models[0]?.modelId || null,
-                })
-              }}
-              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
-            >
-              {llmModelCatalog.providers.map((provider) => (
-                <option key={provider.providerId} value={provider.providerId}>
-                  {provider.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
             <SectionLabel>{copy.model}</SectionLabel>
             <select
-              value={currentSelectedModelId}
+              value={currentLlmModelSelectionValue}
               onChange={(event) => {
-                const nextModelId = event.target.value
+                const selectedOption =
+                  llmModelSelectOptions.find((option) => option.value === event.target.value) || null
+                const parsed = selectedOption || parseWorkflowModelSelectionValue(event.target.value)
+                if (!parsed) return
                 updateConfig({
-                  selectedProviderId: currentSelectedProviderId || null,
-                  selectedModelId: nextModelId || null,
+                  selectedProviderId: parsed.providerId || null,
+                  selectedModelId: parsed.modelId || null,
+                  selectedModelOptionId: event.target.value || null,
                 })
               }}
               disabled={llmModelSelectOptions.length === 0}
               className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
             >
               {llmModelSelectOptions.map((option) => (
-                <option key={option.modelId} value={option.modelId}>
+                <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
@@ -846,21 +1001,114 @@ export function WorkflowNodeEditorFields({
       {node.type === "image_generate" ? (
         <div className="space-y-3">
           <div className="space-y-2">
-            <SectionLabel>{copy.size}</SectionLabel>
-            <OptionChips
-              options={imageSizeOptions}
-              value={asString(node.config.sizePreset) || "16:9"}
-              onChange={(value) => updateConfig({ sizePreset: value })}
-            />
+            <SectionLabel>{copy.model}</SectionLabel>
+            <select
+              value={currentImageModelSelectionValue}
+              onChange={(event) => {
+                const selectedOption =
+                  imageModelSelectOptions.find((option) => option.value === event.target.value) || null
+                const parsed = selectedOption || parseWorkflowModelSelectionValue(event.target.value)
+                if (!parsed) return
+                updateConfig({
+                  selectedProviderId: parsed.providerId || null,
+                  selectedModelId: parsed.modelId || null,
+                  selectedModelOptionId: event.target.value || null,
+                })
+              }}
+              disabled={imageModelSelectOptions.length === 0}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {imageModelSelectOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="space-y-2">
-            <SectionLabel>{copy.resolution}</SectionLabel>
-            <OptionChips
-              options={imageResolutionOptions}
-              value={asString(node.config.resolution) || "512"}
-              onChange={(value) => updateConfig({ resolution: value })}
-            />
-          </div>
+          {currentImageModelKind === "gpt-image-2" ? (
+            <>
+              <div className="space-y-2">
+                <SectionLabel>{copy.size}</SectionLabel>
+                <OptionChips
+                  options={imageModelSizeOptions}
+                  value={imageSizeSelection}
+                  onChange={(value) =>
+                    updateConfig({
+                      imageSize: value === "custom" ? asString(node.config.imageSize) || "1536x864" : value,
+                    })
+                  }
+                />
+              </div>
+              {imageSizeSelection === "custom" ? (
+                <div className="space-y-2">
+                  <SectionLabel>{copy.customSize}</SectionLabel>
+                  <input
+                    value={asString(node.config.imageSize)}
+                    onChange={(event) => updateConfig({ imageSize: event.target.value })}
+                    placeholder={copy.customSizePlaceholder}
+                    className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+                  />
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <SectionLabel>{copy.quality}</SectionLabel>
+                <OptionChips
+                  options={imageQualityOptions}
+                  value={asString(node.config.imageQuality) || "auto"}
+                  onChange={(value) => updateConfig({ imageQuality: value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <SectionLabel>{copy.background}</SectionLabel>
+                <OptionChips
+                  options={imageBackgroundOptions}
+                  value={asString(node.config.imageBackground) || "auto"}
+                  onChange={(value) => updateConfig({ imageBackground: value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <SectionLabel>{copy.format}</SectionLabel>
+                <OptionChips
+                  options={imageFormatOptions}
+                  value={asString(node.config.imageOutputFormat) || "png"}
+                  onChange={(value) => updateConfig({ imageOutputFormat: value })}
+                />
+              </div>
+              {["jpeg", "webp"].includes(asString(node.config.imageOutputFormat) || "png") ? (
+                <div className="space-y-2">
+                  <SectionLabel>{copy.compression}</SectionLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={
+                      typeof node.config.imageOutputCompression === "number"
+                        ? String(node.config.imageOutputCompression)
+                        : asString(node.config.imageOutputCompression)
+                    }
+                    onChange={(event) =>
+                      updateConfig({
+                        imageOutputCompression: event.target.value === "" ? null : Number(event.target.value),
+                      })
+                    }
+                    className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+                  />
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <SectionLabel>{copy.moderation}</SectionLabel>
+                <OptionChips
+                  options={imageModerationOptions}
+                  value={asString(node.config.imageModeration) || "auto"}
+                  onChange={(value) => updateConfig({ imageModeration: value })}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="rounded-[12px] border border-border/70 bg-background/55 px-3 py-2 text-xs text-muted-foreground">
+              {copy.unsupportedModelParams}
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -1063,6 +1311,21 @@ export function WorkflowNodeEditorFields({
               value={asString(node.config.scenario) || "marketing-campaign"}
               onChange={(value) => updateConfig({ scenario: value })}
             />
+          </div>
+        </div>
+      ) : null}
+
+      {node.type === "product_store" ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <SectionLabel>{copy.fileName}</SectionLabel>
+            <Input
+              value={asString(node.config.storedFileName)}
+              onChange={(event) => updateConfig({ storedFileName: event.target.value })}
+              placeholder={copy.fileNamePlaceholder}
+              className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+            />
+            <div className="text-xs leading-5 text-muted-foreground">{copy.fileNameHint}</div>
           </div>
         </div>
       ) : null}

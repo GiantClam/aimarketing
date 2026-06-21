@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { hasFeatureAccess, hasFeatureAccessWithFallback } from "@/lib/auth/guards"
+import {
+  resolveEnterpriseAudioRuntimeForEnterprise,
+  resolveEnterpriseVideoRuntimeForEnterprise,
+} from "@/lib/platform/enterprise-runtime-config"
 import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
 import { queryMiniMaxAudioTask } from "@/lib/platform/minimax-audio"
 import {
@@ -68,6 +72,17 @@ export async function GET(
   }
 
   if (target === "ai-music") {
+    const enterpriseAudioRuntime = await resolveEnterpriseAudioRuntimeForEnterprise({
+      enterpriseId: currentUser.enterpriseId,
+    })
+    if (
+      currentUser.enterpriseStatus === "active" &&
+      typeof currentUser.enterpriseId === "number" &&
+      !enterpriseAudioRuntime
+    ) {
+      return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
+    }
+
     const runId = Number(taskId)
     if (!Number.isFinite(runId) || runId <= 0) {
       return NextResponse.json({ error: "invalid_media_task_id" }, { status: 400 })
@@ -76,6 +91,7 @@ export async function GET(
     const result = await queryMiniMaxAudioTask({
       currentUser,
       runId,
+      config: enterpriseAudioRuntime?.config,
     }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error)
       return NextResponse.json({ error: message || "minimax_audio_query_failed" }, { status: 502 })
@@ -95,7 +111,23 @@ export async function GET(
     )
   }
 
-  if (!isRunningHubConfiguredForTarget(target)) {
+  const enterpriseVideoRuntime =
+    target === "ai-video"
+      ? await resolveEnterpriseVideoRuntimeForEnterprise({
+          enterpriseId: currentUser.enterpriseId,
+        })
+      : null
+
+  if (
+    target === "ai-video" &&
+    currentUser.enterpriseStatus === "active" &&
+    typeof currentUser.enterpriseId === "number" &&
+    !enterpriseVideoRuntime
+  ) {
+    return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
+  }
+
+  if (!isRunningHubConfiguredForTarget(target, enterpriseVideoRuntime?.config)) {
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
   }
 
@@ -109,6 +141,7 @@ export async function GET(
           return queryRunningHubVideoTask({
             currentUser,
             runId,
+            config: enterpriseVideoRuntime?.config,
           }).catch((error) => {
             const message = error instanceof Error ? error.message : String(error)
             return NextResponse.json({ error: message || "runninghub_video_query_failed" }, { status: 502 })

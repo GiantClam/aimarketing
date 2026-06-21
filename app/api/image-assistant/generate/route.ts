@@ -7,6 +7,7 @@ import { getImageAssistantSessionDetail, listImageAssistantVersions } from "@/li
 import { resolveImageAssistantRequestOptions } from "@/lib/image-assistant/request-options"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import { getFallbackReferenceAssetIdsFromVersions, shouldUseImplicitEditMode } from "@/lib/image-assistant/turn-routing"
+import { resolveGovernedImageAssistantSelectionForUser } from "@/lib/platform/model-governance"
 import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
@@ -127,7 +128,9 @@ export async function POST(req: NextRequest) {
     const parentVersionId = typeof body?.parentVersionId === "string" ? body.parentVersionId : null
     const explicitReferenceAssetIds = normalizeReferenceAssetIds(body?.referenceAssetIds)
     const explicitReferenceUrls = normalizeReferenceUrls(body?.referenceUrls)
-    const providerLock = normalizeProviderLock(body?.providerLock)
+    const requestedModelOptionId = typeof body?.modelOptionId === "string" ? body.modelOptionId.trim() : null
+    const requestedProviderLock = normalizeProviderLock(body?.providerLock)
+    const requestedModel = typeof body?.model === "string" ? body.model.trim() : null
     const disableReferenceCarryover = body?.disableReferenceCarryover === true
     const sessionCurrentVersionId = normalizeSessionCurrentVersionId(session)
     const isLikelyReferenceEditPrompt = looksLikeReferenceEditIntent({
@@ -155,6 +158,17 @@ export async function POST(req: NextRequest) {
     const effectiveReferenceAssetIds = (explicitReferenceAssetIds.length
       ? explicitReferenceAssetIds
       : implicitReferenceAssetIds) as string[]
+    const governedSelection = await resolveGovernedImageAssistantSelectionForUser({
+      user: auth.user,
+      modelOptionId: requestedModelOptionId,
+      providerLock: requestedProviderLock,
+      model: requestedModel,
+      taskType: effectiveTaskType,
+      hasReferenceInput: Boolean(effectiveReferenceAssetIds.length || explicitReferenceUrls.length),
+    })
+    const providerLock = governedSelection.providerLock
+    const model = governedSelection.model
+    const modelOptionId = governedSelection.modelOptionId
     const effectiveWorkflowName = shouldPromoteToEdit ? "image_turn_edit" : "image_turn_generate"
     const requestOptions = resolveImageAssistantRequestOptions({
       prompt,
@@ -186,10 +200,21 @@ export async function POST(req: NextRequest) {
         taskType: effectiveTaskType,
         referenceAssetIds: effectiveReferenceAssetIds,
         referenceUrls: explicitReferenceUrls,
+        modelOptionId,
+        enterpriseRole: auth.user.enterpriseRole || null,
+        enterpriseStatus: auth.user.enterpriseStatus || null,
         providerLock,
+        model,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
         sizePreset: requestOptions.sizePreset,
         resolution: requestOptions.resolution,
+        imageSize: typeof body?.imageSize === "string" ? body.imageSize : null,
+        imageQuality: typeof body?.imageQuality === "string" ? body.imageQuality : null,
+        imageBackground: typeof body?.imageBackground === "string" ? body.imageBackground : null,
+        imageOutputFormat: typeof body?.imageOutputFormat === "string" ? body.imageOutputFormat : null,
+        imageOutputCompression: Number.isFinite(body?.imageOutputCompression) ? Number(body.imageOutputCompression) : null,
+        imageModeration: typeof body?.imageModeration === "string" ? body.imageModeration : null,
+        imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
         parentVersionId,
         guidedSelection,
       })
@@ -241,10 +266,21 @@ export async function POST(req: NextRequest) {
         taskType: effectiveTaskType,
         referenceAssetIds: effectiveReferenceAssetIds,
         referenceUrls: explicitReferenceUrls,
+        modelOptionId,
+        enterpriseRole: auth.user.enterpriseRole || null,
+        enterpriseStatus: auth.user.enterpriseStatus || null,
         providerLock,
+        model,
         candidateCount: Number.isFinite(body?.candidateCount) ? Number(body.candidateCount) : 1,
         sizePreset: requestOptions.sizePreset,
         resolution: requestOptions.resolution,
+        imageSize: typeof body?.imageSize === "string" ? body.imageSize : null,
+        imageQuality: typeof body?.imageQuality === "string" ? body.imageQuality : null,
+        imageBackground: typeof body?.imageBackground === "string" ? body.imageBackground : null,
+        imageOutputFormat: typeof body?.imageOutputFormat === "string" ? body.imageOutputFormat : null,
+        imageOutputCompression: Number.isFinite(body?.imageOutputCompression) ? Number(body.imageOutputCompression) : null,
+        imageModeration: typeof body?.imageModeration === "string" ? body.imageModeration : null,
+        imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
         parentVersionId,
         guidedSelection,
       },

@@ -183,6 +183,68 @@ test("runninghub raw submit surfaces business errors returned with http 200", as
   }
 })
 
+test("runninghub task submit/query helpers honor an explicit config override", async () => {
+  const previousFetch = globalThis.fetch
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url === "https://enterprise.runninghub.local/enterprise-image") {
+      assert.equal(init?.method, "POST")
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          data: {
+            taskId: "enterprise-task-1",
+            status: "QUEUED",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }
+
+    if (url === "https://enterprise.runninghub.local/enterprise-query") {
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          data: {
+            taskId: "enterprise-task-1",
+            status: "SUCCESS",
+            results: [{ url: "https://enterprise.example.com/output.mp4" }],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }
+
+    return new Response("not found", { status: 404 })
+  }
+
+  try {
+    const config: RunningHubConfig = {
+      ...baseConfig,
+      baseUrl: "https://enterprise.runninghub.local",
+      queryPath: "/enterprise-query",
+      image: {
+        configured: true,
+        endpoint: "/enterprise-image",
+      },
+    }
+
+    const submit = await submitRunningHubTask({
+      mediaTarget: "ai-image",
+      payload: { prompt: "Enterprise image task" },
+      config,
+    })
+    assert.equal(submit.taskId, "enterprise-task-1")
+
+    const query = await queryRunningHubTask("enterprise-task-1", config)
+    assert.equal(query?.status, "SUCCESS")
+    assert.deepEqual(query?.results, [{ url: "https://enterprise.example.com/output.mp4" }])
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
 test("runninghub raw submit keeps generic missing-task error when envelope is success-shaped but empty", async () => {
   const previousFetch = globalThis.fetch
 

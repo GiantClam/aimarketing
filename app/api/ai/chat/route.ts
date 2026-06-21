@@ -12,7 +12,6 @@ import {
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
 import { type AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
-import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
 import {
   isAiEntryAgentId,
 } from "@/lib/ai-entry/agent-catalog"
@@ -33,6 +32,7 @@ import {
 } from "@/lib/ai-entry/identity"
 import { loadEnterpriseKnowledgeContext } from "@/lib/knowledge/service"
 import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
+import { hasCustomAiChatModelSelection } from "@/lib/platform/shared-credits-policy"
 import {
   normalizeAttachmentList,
   normalizeMessages,
@@ -42,6 +42,7 @@ import {
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
+  type ProviderOptions,
   runAiEntryConsultingBlocking,
   runAiEntryConsultingStreaming,
 } from "@/lib/skills/runtime/ai-entry-executor"
@@ -53,6 +54,8 @@ import {
   reserveFeatureCredits,
   type BillingReservation,
 } from "@/lib/billing/runtime"
+import { getGovernedAiEntryModelCatalogForUser } from "@/lib/platform/model-governance"
+import { getEnterpriseTextRuntimeProviderConfigsForUser } from "@/lib/platform/enterprise-runtime-config"
 
 export const runtime = "nodejs"
 
@@ -313,8 +316,13 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
     providerId = "crazyroute"
   } else if (
     rawProviderId === "pptoken" ||
+    rawProviderId === "openrouter" ||
     rawProviderId === "aiberm" ||
-    rawProviderId === "crazyroute"
+    rawProviderId === "crazyroute" ||
+    rawProviderId === "enterprise-openai-compatible" ||
+    rawProviderId === "enterprise-qwen-official" ||
+    rawProviderId === "enterprise-minimax-official" ||
+    rawProviderId === "enterprise-glm-official"
   ) {
     providerId = rawProviderId
   }
@@ -334,13 +342,25 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
 
 async function resolveModelConfig(
   input: ReturnType<typeof parseModelConfig>,
+  user: {
+    id: number
+    enterpriseId: number | null
+    enterpriseRole: string | null
+    enterpriseStatus: string | null
+  },
   options?: {
     forceConsultingModel?: boolean
     consultingModelMode?: AiEntryConsultingModelMode
   },
 ) {
   const requestedProviderId = input?.providerId || null
-  const catalog = await getAiEntryModelCatalog({ providerId: requestedProviderId })
+  const catalog = await getGovernedAiEntryModelCatalogForUser({
+    user,
+    requestedProviderId,
+  })
+  if (catalog.models.length === 0) {
+    throw new Error("ai_entry_model_unavailable_for_user")
+  }
   const availableModelIds = catalog.models.map((item) => item.id)
   const allCatalogModelAliases = catalog.models.flatMap((item) =>
     [
@@ -514,7 +534,7 @@ export async function POST(request: NextRequest) {
     const forcedReplyLanguage = resolveForcedReplyLanguage(normalizedMessages)
     const agentConfig = parseAgentConfig(body.agentConfig)
     const conversationScope: AiEntryConversationScope = parseConversationScope(body)
-    const modelConfig = await resolveModelConfig(parseModelConfig(body.modelConfig), {
+    const modelConfig = await resolveModelConfig(parseModelConfig(body.modelConfig), currentUser, {
       forceConsultingModel: agentConfig.lockModelToConsultingModel,
       consultingModelMode: agentConfig.consultingModelMode,
     })
@@ -671,20 +691,35 @@ export async function POST(request: NextRequest) {
 
     const maxStepCount = effectiveSelectedToolIds.length > 0 ? 8 : 1
     const stopWhen = stepCountIs(maxStepCount)
-    const providerOptions = modelConfig
-      ? {
-          preferredProviderId: modelConfig.providerId || undefined,
-          preferredModel:
-            modelConfig.providerModelId || modelConfig.modelId || undefined,
-          ...(agentConfig.lockModelToConsultingModel
-            ? {
-                forceModelAcrossProviders: true,
-                disableSameProviderModelFallback: true,
-                directProviderFailoverOnError: true,
-              }
-            : {}),
-        }
-      : undefined
+    const enterpriseTextRuntime = await getEnterpriseTextRuntimeProviderConfigsForUser(
+      currentUser,
+    )
+    const providerOptions: ProviderOptions | undefined =
+      modelConfig || enterpriseTextRuntime
+        ? {
+            preferredProviderId:
+              modelConfig?.providerId ||
+              enterpriseTextRuntime?.selectedProviderId ||
+              undefined,
+            preferredModel:
+              modelConfig?.providerModelId ||
+              modelConfig?.modelId ||
+              enterpriseTextRuntime?.selectedModelId ||
+              undefined,
+            ...(enterpriseTextRuntime?.providerConfigs?.length
+              ? {
+                  providerConfigs: enterpriseTextRuntime.providerConfigs,
+                }
+              : {}),
+            ...(agentConfig.lockModelToConsultingModel
+              ? {
+                  forceModelAcrossProviders: true,
+                  disableSameProviderModelFallback: true,
+                  directProviderFailoverOnError: true,
+                }
+              : {}),
+          }
+        : undefined
 
     console.info("ai-entry.chat.request.start", {
       traceId,
@@ -702,7 +737,8 @@ export async function POST(request: NextRequest) {
       selectedToolIds: effectiveSelectedToolIds,
     })
 
-    const shouldReserveAiEntryCredits = !currentUser.isDemo
+    const shouldReserveAiEntryCredits =
+      !currentUser.isDemo && !hasCustomAiChatModelSelection(body.modelConfig)
     if (shouldReserveAiEntryCredits) {
       const reserveEstimate = estimateTextCredits({
         featureKey: "ai_entry_chat",

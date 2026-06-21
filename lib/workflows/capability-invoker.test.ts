@@ -16,11 +16,18 @@ const nodeModule = require("node:module") as {
 const originalLoad = nodeModule._load
 
 let workflowImageGenerateBodies: Record<string, unknown>[] = []
+let leadToolPreviewBodies: Record<string, unknown>[] = []
+let leadToolDownloadBodies: Record<string, unknown>[] = []
 let taskPollCount = 0
+let taskPollResponses: Array<Record<string, unknown>> = []
 let sessionDetailCount = 0
 let sessionDetailResponses: Record<string, unknown>[] = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
+  if (request === "server-only" || request === "client-only") {
+    return {}
+  }
+
   if (request === "next/server") {
     class TestNextRequest {
       url: string
@@ -67,8 +74,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       GET: async () => {
         taskPollCount += 1
-        return new Response(
-          JSON.stringify({
+        const payload =
+          taskPollResponses.shift() || {
             data: {
               status: "success",
               result: {
@@ -77,7 +84,9 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
                 version_id: "version-3",
               },
             },
-          }),
+          }
+        return new Response(
+          JSON.stringify(payload),
           { status: 200, headers: { "content-type": "application/json" } },
         )
       },
@@ -129,10 +138,16 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/platform/execute") {
     return {
       evaluatePlatformExecutionGate: () => ({ ok: true }),
-      resolvePlatformCapabilityExecutionProxyTarget: () => ({
-        downstreamPath: "/api/image-assistant/generate",
-        requiresLogin: true,
-      }),
+      resolvePlatformCapabilityExecutionProxyTarget: (capabilitySlug: string) =>
+        capabilitySlug === "ai-ppt"
+          ? {
+              downstreamPath: "/api/tools/ai-ppt-preview/download",
+              requiresLogin: true,
+            }
+          : {
+              downstreamPath: "/api/image-assistant/generate",
+              requiresLogin: true,
+            },
       resolvePlatformBindingExecutionProxyTarget: () => ({
         downstreamPath: "/api/image-assistant/generate",
         requiresLogin: true,
@@ -148,12 +163,45 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/app/api/tools/[slug]/preview/route") {
+    return {
+      POST: async (req: { json: () => Promise<Record<string, unknown>> }) => {
+        leadToolPreviewBodies.push(await req.json())
+        return new Response(
+          JSON.stringify({
+            previewSessionId: "preview-session-9",
+            deck: {
+              title: "Workflow deck",
+              variants: [{ key: "variant-a" }],
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      },
+    }
+  }
+
+  if (request === "@/app/api/tools/[slug]/download/route") {
+    return {
+      POST: async (req: { json: () => Promise<Record<string, unknown>> }) => {
+        leadToolDownloadBodies.push(await req.json())
+        return new Response("<html>deck</html>", {
+          status: 200,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "content-disposition": `attachment; filename="workflow-deck.html"; filename*=UTF-8''workflow-deck.html`,
+            "x-platform-artifact-id": "36",
+            "x-platform-work-item-id": "6",
+          },
+        })
+      },
+    }
+  }
+
   if (
     request === "@/app/api/ai/chat/route" ||
     request === "@/app/api/platform/media/run/route" ||
     request === "@/app/api/platform/media/tasks/[taskId]/route" ||
-    request === "@/app/api/tools/[slug]/download/route" ||
-    request === "@/app/api/tools/[slug]/preview/route" ||
     request === "@/app/api/video-agent/workflow/route" ||
     request === "@/app/api/writer/chat/stream/route"
   ) {
@@ -175,6 +223,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 }
 
 let createWorkflowCapabilityInvoker: typeof import("./capability-invoker").createWorkflowCapabilityInvoker
+let resolveWorkflowCapabilityCallTimeoutMs: typeof import("./capability-invoker").resolveWorkflowCapabilityCallTimeoutMs
 
 function createImageParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): WorkflowCapabilityInvokeParams {
   return {
@@ -188,8 +237,14 @@ function createImageParams(overrides?: Partial<WorkflowCapabilityInvokeParams>):
       positionX: 0,
       positionY: 0,
       config: {
-        sizePreset: "16:9",
-        resolution: "2K",
+        selectedProviderId: "pptoken",
+        selectedModelId: "gpt-image-2",
+        imageSize: "1536x1024",
+        imageQuality: "high",
+        imageBackground: "opaque",
+        imageOutputFormat: "png",
+        imageModeration: "auto",
+        imageResponseFormat: "url",
         imagePromptReferences: [
           { sourceNodeKey: "image-2", alias: "图2" },
           { sourceNodeKey: "image-3", alias: "图3" },
@@ -211,6 +266,34 @@ function createImageParams(overrides?: Partial<WorkflowCapabilityInvokeParams>):
   }
 }
 
+function createPptParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): WorkflowCapabilityInvokeParams {
+  return {
+    nodeType: "ppt_generate",
+    capabilitySlug: "ai-ppt",
+    action: "generate",
+    node: {
+      nodeKey: "ppt-1",
+      type: "ppt_generate",
+      title: "PPT",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        scenario: "marketing-campaign",
+        language: "zh-CN",
+      },
+    },
+    input: {
+      text: ["做一份增长复盘幻灯片"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+    ...overrides,
+  }
+}
+
 test("image capability request derives reference asset ids from upstream image outputs", () => {
   const ids = buildWorkflowImageAssistantReferenceAssetIds(createImageParams().input)
   assert.deepEqual(ids, ["asset-2", "789"])
@@ -224,14 +307,19 @@ test("image capability request injects a complete default brief for workflow exe
   )
 
   assert.equal(body.preferAsync, true)
-  assert.equal(body.providerLock, null)
+  assert.equal(body.providerLock, "pptoken")
+  assert.equal(body.model, "gpt-image-2")
   assert.equal(body.candidateCount, 1)
-  assert.equal(body.sizePreset, "16:9")
-  assert.equal(body.resolution, "2K")
+  assert.equal(body.imageSize, "1536x1024")
+  assert.equal(body.imageQuality, "high")
+  assert.equal(body.imageBackground, "opaque")
+  assert.equal(body.imageOutputFormat, "png")
+  assert.equal(body.imageModeration, "auto")
+  assert.equal(body.imageResponseFormat, "url")
   assert.deepEqual(body.referenceAssetIds, ["asset-2", "789"])
   assert.deepEqual(body.referenceUrls, [])
-  assert.equal(body.prompt, "将图2 中人物替换图3中的人物")
-  assert.equal(body.brief.size_preset, "16:9")
+  assert.equal(body.prompt, "将第一张输入图 中人物替换第二张输入图中的人物")
+  assert.equal(body.brief.size_preset, "")
   assert.equal(body.brief.ratio_confirmed, true)
   assert.equal(typeof body.brief.style, "string")
   assert.equal(body.brief.style.length > 0, true)
@@ -252,7 +340,7 @@ test("image capability request falls back to all upstream image urls when no ali
     },
   })
 
-  const urls = buildWorkflowImageAssistantReferenceUrls(params, "生成一张新的海报")
+  const urls = buildWorkflowImageAssistantReferenceUrls(params, "生成一张新的海报", "zh")
   assert.deepEqual(urls, [])
 })
 
@@ -277,17 +365,50 @@ test("image capability request avoids embedding data urls in prompt and referenc
 
   assert.deepEqual(body.referenceAssetIds, ["asset-2", "asset-3"])
   assert.deepEqual(body.referenceUrls, [])
-  assert.equal(body.prompt, "将图2 中人物替换{{图3}}中的人物")
+  assert.equal(body.prompt, "将第一张输入图 中人物替换第二张输入图中的人物")
+})
+
+test("image capability request honors explicit workflow image provider selection without fallback", () => {
+  const body = buildWorkflowImageGenerateRequestBody(
+    createImageParams({
+      node: {
+        nodeKey: "image-3",
+        title: "图片生成",
+        type: "image_generate",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          prompt: "",
+          selectedProviderId: "crazyroute",
+          selectedModelId: "gpt-image-2",
+          imageSize: "1024x1024",
+          imagePromptReferences: [
+            { sourceNodeKey: "image-2", alias: "图2" },
+            { sourceNodeKey: "image-3", alias: "图3" },
+          ],
+        },
+      },
+    }),
+    "将{{图2}} 中人物替换{{图3}}中的人物",
+    "zh",
+  )
+
+  assert.equal(body.providerLock, "crazyroute")
 })
 
 test.before(async () => {
   const module = await import("./capability-invoker")
-  createWorkflowCapabilityInvoker = module.createWorkflowCapabilityInvoker
+  const resolvedModule = "default" in module ? module.default : module
+  createWorkflowCapabilityInvoker = resolvedModule.createWorkflowCapabilityInvoker
+  resolveWorkflowCapabilityCallTimeoutMs = resolvedModule.resolveWorkflowCapabilityCallTimeoutMs
 })
 
 test.beforeEach(() => {
   workflowImageGenerateBodies = []
+  leadToolPreviewBodies = []
+  leadToolDownloadBodies = []
   taskPollCount = 0
+  taskPollResponses = []
   sessionDetailCount = 0
   sessionDetailResponses = [{
     data: {
@@ -323,7 +444,13 @@ test("workflow image capability submits async image task and resolves final sess
 
   assert.equal(workflowImageGenerateBodies.length, 1)
   assert.equal(workflowImageGenerateBodies[0]?.preferAsync, true)
-  assert.equal(workflowImageGenerateBodies[0]?.providerLock, null)
+  assert.equal(workflowImageGenerateBodies[0]?.providerLock, "pptoken")
+  assert.equal(
+    workflowImageGenerateBodies[0]?.prompt,
+    "将第一张输入图 中人物替换第二张输入图中的人物",
+  )
+  assert.equal(String(workflowImageGenerateBodies[0]?.prompt).includes("图片引用"), false)
+  assert.equal(String(workflowImageGenerateBodies[0]?.prompt).includes("https://"), false)
   assert.equal(taskPollCount, 1)
   assert.equal(sessionDetailCount, 1)
   assert.deepEqual(result.output.image, [{
@@ -389,11 +516,153 @@ test("workflow image capability refetches session detail when candidates are sti
   }])
 })
 
-test("workflow capability invoker enforces call timeout for stuck ai chat calls", async () => {
-  const module = await import("./capability-invoker")
+test("workflow image capability waits for terminal task state and surfaces node failure reason", async () => {
+  taskPollResponses = [
+    {
+      data: {
+        status: "running",
+        result: null,
+      },
+    },
+    {
+      data: {
+        status: "running",
+        result: null,
+      },
+    },
+    {
+      data: {
+        status: "failed",
+        result: {
+          error: "image_assistant_provider_timeout",
+        },
+      },
+    },
+  ]
+
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+    maxPollAttempts: 5,
+    pollIntervalMs: 1,
+  })
 
   await assert.rejects(
-    () => module.withTimeout(new Promise<string>(() => {}), 10, "workflow_ai_chat_timeout"),
+    () => invoke(createImageParams()),
+    /image_assistant_provider_timeout/,
+  )
+  assert.equal(taskPollCount, 3)
+})
+
+test("workflow capability invoker enforces call timeout for stuck ai chat calls", async () => {
+  const module = await import("./capability-invoker")
+  const resolvedModule = "default" in module ? module.default : module
+
+  await assert.rejects(
+    () => resolvedModule.withTimeout(new Promise<string>(() => {}), 10, "workflow_ai_chat_timeout"),
     /workflow_ai_chat_timeout/,
   )
+})
+
+test("workflow image capability timeout defaults above image provider total budget", () => {
+  const chatTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-chat")
+  const pptTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-ppt")
+  const imageTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-image")
+
+  assert.equal(chatTimeoutMs, 120_000)
+  assert.equal(pptTimeoutMs, 300_000)
+  assert.equal(imageTimeoutMs, 270_000)
+  assert.equal(pptTimeoutMs > chatTimeoutMs, true)
+  assert.equal(imageTimeoutMs > chatTimeoutMs, true)
+})
+
+test("workflow capability timeout override still wins over capability defaults", () => {
+  assert.equal(resolveWorkflowCapabilityCallTimeoutMs("ai-image", 15_000), 15_000)
+  assert.equal(resolveWorkflowCapabilityCallTimeoutMs("ai-ppt", 18_000), 18_000)
+  assert.equal(resolveWorkflowCapabilityCallTimeoutMs("ai-chat", 9_000), 9_000)
+})
+
+test("workflow ppt capability returns preview and download urls that point at the persisted artifact", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+  })
+
+  const result = await invoke(createPptParams())
+
+  assert.equal(leadToolPreviewBodies.length, 1)
+  assert.equal(leadToolDownloadBodies.length, 1)
+  assert.deepEqual(result.output.ppt, [{
+    artifactId: 36,
+    title: "workflow-deck.html",
+    mimeType: "text/html; charset=utf-8",
+    url: "/api/platform/artifacts/36/download",
+    downloadUrl: "/api/platform/artifacts/36/download?download=1",
+  }])
+  assert.deepEqual(result.metadata, {
+    selectedVariantKey: "variant-a",
+    previewSessionId: "preview-session-9",
+    workItemId: 6,
+  })
+})
+
+test("workflow ppt capability forwards structured image inputs to preview generation", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+  })
+
+  await invoke(createPptParams({
+    input: {
+      text: ["做一份品牌提案"],
+      asset: [
+        {
+          source: "upload",
+          fileName: "brand-board.png",
+          mimeType: "image/png",
+          url: "https://example.com/brand-board.png",
+        },
+      ],
+      image: [
+        {
+          url: "https://example.com/hero.png",
+          title: "主视觉",
+          sourceNodeKey: "image-2",
+        },
+      ],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  }))
+
+  assert.equal(leadToolPreviewBodies.length, 1)
+  assert.deepEqual(leadToolPreviewBodies[0]?.images, [
+    {
+      url: "https://example.com/hero.png",
+      title: "主视觉",
+      mimeType: null,
+      sourceNodeKey: "image-2",
+      role: "cover",
+    },
+    {
+      url: "https://example.com/brand-board.png",
+      title: "brand-board.png",
+      mimeType: "image/png",
+      sourceNodeKey: null,
+      role: "content",
+    },
+  ])
 })

@@ -10,6 +10,21 @@ import { getPlatformArtifact } from "@/lib/platform/task-run-store"
 
 export const runtime = "nodejs"
 
+function readEmbeddedArtifactContent(
+  artifact: Awaited<ReturnType<typeof getPlatformArtifact>>,
+): { bytes: Uint8Array; contentType: string } | null {
+  if (!artifact?.payload || typeof artifact.payload !== "object") return null
+
+  const payload = artifact.payload as Record<string, unknown>
+  const encoded = typeof payload.embeddedContentBase64 === "string" ? payload.embeddedContentBase64.trim() : ""
+  if (!encoded) return null
+
+  return {
+    bytes: Buffer.from(encoded, "base64"),
+    contentType: artifact.mimeType || "application/octet-stream",
+  }
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ artifactId: string }> },
@@ -24,29 +39,40 @@ export async function GET(
     }
 
     const artifact = assertArtifactEnterpriseAccess(currentUser, await getPlatformArtifact(numericArtifactId))
-    const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
-    if (!sourceUrl) {
-      return NextResponse.json({ error: "artifact_source_unavailable" }, { status: 404 })
-    }
-
-    const response = await fetch(sourceUrl, {
-      cache: "no-store",
-    })
-    if (!response.ok) {
-      return NextResponse.json({ error: "platform_artifact_download_failed" }, { status: 502 })
-    }
-
     const forceDownload = new URL(request.url).searchParams.get("download") === "1"
     const headers = new Headers()
-    headers.set("Content-Type", artifact.mimeType || response.headers.get("content-type") || "application/octet-stream")
     headers.set(
       "Content-Disposition",
       forceDownload ? buildAttachmentContentDisposition(artifact.title) : `inline; filename="${artifact.title}"`,
     )
     headers.set("Cache-Control", "private, no-store")
 
-    return new NextResponse(response.body, {
-      status: response.status,
+    const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
+    if (sourceUrl) {
+      const response = await fetch(sourceUrl, {
+        cache: "no-store",
+      })
+      if (!response.ok) {
+        return NextResponse.json({ error: "platform_artifact_download_failed" }, { status: 502 })
+      }
+
+      headers.set("Content-Type", artifact.mimeType || response.headers.get("content-type") || "application/octet-stream")
+
+      return new NextResponse(response.body, {
+        status: response.status,
+        headers,
+      })
+    }
+
+    const embeddedContent = readEmbeddedArtifactContent(artifact)
+    if (!embeddedContent) {
+      return NextResponse.json({ error: "artifact_source_unavailable" }, { status: 404 })
+    }
+
+    headers.set("Content-Type", embeddedContent.contentType)
+
+    return new NextResponse(Buffer.from(embeddedContent.bytes), {
+      status: 200,
       headers,
     })
   } catch (error) {

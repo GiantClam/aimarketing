@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
-import { listPlatformTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
+import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
 import {
   createPlatformWorkflowRun,
   serializePlatformWorkflowRun,
   updatePlatformWorkflowRun,
 } from "@/lib/platform/workflow-runner"
-import { collectWorkflowBranchNodeKeys } from "@/lib/workflows/execution"
+import { collectWorkflowRetryNodeKeys } from "@/lib/workflows/execution"
 import { findLatestWorkflowRunRecordForWorkflow, resolveWorkflowResumeNodeKey } from "@/lib/workflows/manual-resume"
 import {
   createWorkflowNodeExecutionRecords,
@@ -22,6 +22,20 @@ export const runtime = "nodejs"
 function parseWorkflowId(value: string) {
   const numeric = Number(value)
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null
+}
+
+function buildLatestWorkflowNodeStatuses(
+  nodeExecutions: NonNullable<Awaited<ReturnType<typeof getWorkflowRunDetail>>>["nodeExecutions"],
+) {
+  const latestStatuses: Record<string, { status: string }> = {}
+
+  for (const execution of nodeExecutions) {
+    latestStatuses[execution.nodeKey] = {
+      status: execution.status,
+    }
+  }
+
+  return latestStatuses
 }
 
 export async function POST(
@@ -49,13 +63,13 @@ export async function POST(
     }
 
     const latestRunRecord = findLatestWorkflowRunRecordForWorkflow(
-      await listPlatformTaskRunsForEnterprise(currentUser.enterpriseId),
+      await listRecentWorkflowTaskRunsForEnterprise(currentUser.enterpriseId, 40),
       workflow.id,
     )
     const latestRunDetail = latestRunRecord ? await getWorkflowRunDetail(latestRunRecord.id, currentUser.enterpriseId) : null
     const latestRunStatus = latestRunDetail?.run.status ?? latestRunRecord?.status ?? null
 
-    if ((latestRunStatus === "queued" || latestRunStatus === "running") && latestRunRecord && latestRunDetail) {
+    if (latestRunStatus === "running" && latestRunRecord && latestRunDetail) {
       void runWorkflowTaskRecoveryPass({
         runId: latestRunRecord.id,
         requestOrigin: new URL(request.url).origin,
@@ -88,10 +102,12 @@ export async function POST(
 
       if (latestRunDetail && retryNodeKey) {
         const retryMode = "branch" as const
-        const rerunNodeKeys = collectWorkflowBranchNodeKeys({
+        const rerunNodeKeys = collectWorkflowRetryNodeKeys({
+          mode: retryMode,
           nodeKey: retryNodeKey,
           nodes: latestRunDetail.workflow.nodes,
           edges: latestRunDetail.workflow.edges,
+          nodeStates: buildLatestWorkflowNodeStatuses(latestRunDetail.nodeExecutions),
         })
 
         await resetWorkflowNodeExecutions(latestRunRecord.id, rerunNodeKeys)

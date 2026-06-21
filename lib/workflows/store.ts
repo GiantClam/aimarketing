@@ -98,6 +98,7 @@ export type WorkflowRunStatusDetail = {
       | "providerId"
       | "modelId"
       | "taskRunId"
+      | "outputPayload"
       | "errorMessage"
       | "creditsConsumed"
       | "startedAt"
@@ -122,6 +123,10 @@ function sanitizeWorkflowNodeConfig(type: WorkflowNodeType, config: WorkflowDefi
     delete normalizedConfig.responseLength
     delete normalizedConfig.language
     delete normalizedConfig.reasoningMode
+  }
+  if (type === "image_generate") {
+    delete normalizedConfig.sizePreset
+    delete normalizedConfig.resolution
   }
 
   return normalizedConfig
@@ -171,7 +176,25 @@ async function withWorkflowDbRetry<T>(label: string, operation: () => Promise<T>
   })
 }
 
-let ensureWorkflowTablesPromise: Promise<void> | null = null
+async function measureWorkflowStoreStep<T>(label: string, meta: Record<string, unknown>, operation: () => Promise<T>) {
+  const startedAt = Date.now()
+  try {
+    return await operation()
+  } finally {
+    console.info("workflow.store.timing", {
+      label,
+      durationMs: Date.now() - startedAt,
+      ...meta,
+    })
+  }
+}
+
+type GlobalWithWorkflowEnsureState = typeof globalThis & {
+  __aimarketingEnsureWorkflowTablesPromise__?: Promise<void> | null
+}
+
+const workflowEnsureState = globalThis as GlobalWithWorkflowEnsureState
+let ensureWorkflowTablesPromise = workflowEnsureState.__aimarketingEnsureWorkflowTablesPromise__ ?? null
 
 export async function ensureWorkflowTables() {
   if (!ensureWorkflowTablesPromise) {
@@ -321,8 +344,10 @@ export async function ensureWorkflowTables() {
       )
     })().catch((error) => {
       ensureWorkflowTablesPromise = null
+      workflowEnsureState.__aimarketingEnsureWorkflowTablesPromise__ = null
       throw error
     })
+    workflowEnsureState.__aimarketingEnsureWorkflowTablesPromise__ = ensureWorkflowTablesPromise
   }
 
   await ensureWorkflowTablesPromise
@@ -459,6 +484,30 @@ function toWorkflowDefinition(
   }
 }
 
+function areWorkflowNodeDefinitionsEqual(left: WorkflowDefinitionNode, right: WorkflowDefinitionNode) {
+  return (
+    left.nodeKey === right.nodeKey &&
+    left.type === right.type &&
+    left.title === right.title &&
+    left.positionX === right.positionX &&
+    left.positionY === right.positionY &&
+    JSON.stringify(left.config) === JSON.stringify(right.config)
+  )
+}
+
+function getWorkflowEdgeSignature(edge: Pick<WorkflowDefinitionEdge, "sourceNodeKey" | "targetNodeKey" | "inputName">) {
+  return JSON.stringify([edge.sourceNodeKey, edge.targetNodeKey, edge.inputName ?? null])
+}
+
+function countWorkflowEdgesBySignature(edges: WorkflowDefinitionEdge[]) {
+  const counts = new Map<string, number>()
+  for (const edge of edges) {
+    const signature = getWorkflowEdgeSignature(edge)
+    counts.set(signature, (counts.get(signature) ?? 0) + 1)
+  }
+  return counts
+}
+
 async function buildUniqueWorkflowSlug(enterpriseId: number, title: string, excludeWorkflowId?: number) {
   const baseSlug = normalizeSlug(title)
 
@@ -487,32 +536,51 @@ async function buildUniqueWorkflowSlug(enterpriseId: number, title: string, excl
 }
 
 async function loadWorkflowDefinitionFromDb(workflowId: number, enterpriseId: number) {
-  const rows = await withWorkflowDbRetry("workflow-store.select-workflow", () =>
-    db
-      .select()
-      .from(platformWorkflows)
-      .where(and(eq(platformWorkflows.id, workflowId), eq(platformWorkflows.enterpriseId, enterpriseId)))
-      .limit(1),
+  const startedAt = Date.now()
+  const rows = await measureWorkflowStoreStep(
+    "select-workflow-row",
+    { workflowId, enterpriseId },
+    () =>
+      withWorkflowDbRetry("workflow-store.select-workflow", () =>
+        db
+          .select()
+          .from(platformWorkflows)
+          .where(and(eq(platformWorkflows.id, workflowId), eq(platformWorkflows.enterpriseId, enterpriseId)))
+          .limit(1),
+      ),
   )
   const workflow = rows[0]
   if (!workflow) return null
 
   const [nodes, edges] = await Promise.all([
-    withWorkflowDbRetry("workflow-store.select-nodes", () =>
-      db
-        .select()
-        .from(platformWorkflowNodes)
-        .where(eq(platformWorkflowNodes.workflowId, workflow.id))
-        .orderBy(asc(platformWorkflowNodes.id)),
+    measureWorkflowStoreStep("select-workflow-nodes", { workflowId: workflow.id }, () =>
+      withWorkflowDbRetry("workflow-store.select-nodes", () =>
+        db
+          .select()
+          .from(platformWorkflowNodes)
+          .where(eq(platformWorkflowNodes.workflowId, workflow.id))
+          .orderBy(asc(platformWorkflowNodes.id)),
+      ),
     ),
-    withWorkflowDbRetry("workflow-store.select-edges", () =>
-      db
-        .select()
-        .from(platformWorkflowEdges)
-        .where(eq(platformWorkflowEdges.workflowId, workflow.id))
-        .orderBy(asc(platformWorkflowEdges.id)),
+    measureWorkflowStoreStep("select-workflow-edges", { workflowId: workflow.id }, () =>
+      withWorkflowDbRetry("workflow-store.select-edges", () =>
+        db
+          .select()
+          .from(platformWorkflowEdges)
+          .where(eq(platformWorkflowEdges.workflowId, workflow.id))
+          .orderBy(asc(platformWorkflowEdges.id)),
+      ),
     ),
   ])
+
+  console.info("workflow.store.timing", {
+    label: "load-workflow-definition-total",
+    workflowId: workflow.id,
+    enterpriseId,
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    durationMs: Date.now() - startedAt,
+  })
 
   return toWorkflowDefinition(workflow, nodes, edges)
 }
@@ -619,9 +687,55 @@ const dbWorkflowStore: WorkflowStore = {
     const nodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
     const nodeKeys = new Set(nodes.map((node) => node.nodeKey))
     const edges = normalizeWorkflowEdges(input.edges ?? existing.edges, nodeKeys)
+    const status = normalizeStatus(input.status ?? existing.status)
+    const triggerType = normalizeTriggerType(input.triggerType ?? existing.triggerType)
+    const metadata = input.metadata !== undefined ? input.metadata : existing.metadata
     const slug =
       title === existing.title ? existing.slug : await buildUniqueWorkflowSlug(input.enterpriseId, title, input.workflowId)
     const now = new Date()
+
+    const existingNodesByKey = new Map(existing.nodes.map((node) => [node.nodeKey, node]))
+    const nextNodesByKey = new Map(nodes.map((node) => [node.nodeKey, node]))
+    const nodeKeysToDelete = existing.nodes
+      .filter((node) => !nextNodesByKey.has(node.nodeKey))
+      .map((node) => node.nodeKey)
+    const nodesToInsert = nodes.filter((node) => !existingNodesByKey.has(node.nodeKey))
+    const nodesToUpdate = nodes.filter((node) => {
+      const current = existingNodesByKey.get(node.nodeKey)
+      return current ? !areWorkflowNodeDefinitionsEqual(current, node) : false
+    })
+
+    const existingEdgeCounts = countWorkflowEdgesBySignature(existing.edges)
+    const nextEdgeCounts = countWorkflowEdgesBySignature(edges)
+    const edgeSignaturesToRewrite = new Set<string>()
+
+    for (const [signature, count] of existingEdgeCounts.entries()) {
+      if (count !== (nextEdgeCounts.get(signature) ?? 0)) {
+        edgeSignaturesToRewrite.add(signature)
+      }
+    }
+    for (const [signature, count] of nextEdgeCounts.entries()) {
+      if (count !== (existingEdgeCounts.get(signature) ?? 0)) {
+        edgeSignaturesToRewrite.add(signature)
+      }
+    }
+
+    const edgesToInsert = edges.filter((edge) => edgeSignaturesToRewrite.has(getWorkflowEdgeSignature(edge)))
+    const definitionChanged =
+      title !== existing.title ||
+      description !== existing.description ||
+      status !== existing.status ||
+      triggerType !== existing.triggerType ||
+      slug !== existing.slug ||
+      JSON.stringify(metadata) !== JSON.stringify(existing.metadata) ||
+      nodeKeysToDelete.length > 0 ||
+      nodesToInsert.length > 0 ||
+      nodesToUpdate.length > 0 ||
+      edgeSignaturesToRewrite.size > 0
+
+    if (!definitionChanged) {
+      return existing
+    }
 
     await db.transaction(async (tx) => {
       await tx
@@ -629,20 +743,53 @@ const dbWorkflowStore: WorkflowStore = {
         .set({
           title,
           slug,
-          status: normalizeStatus(input.status ?? existing.status),
-          triggerType: normalizeTriggerType(input.triggerType ?? existing.triggerType),
+          status,
+          triggerType,
           description,
-          metadata: input.metadata !== undefined ? input.metadata : existing.metadata,
+          metadata,
           updatedAt: now,
         })
         .where(and(eq(platformWorkflows.id, input.workflowId), eq(platformWorkflows.enterpriseId, input.enterpriseId)))
 
-      await tx.delete(platformWorkflowEdges).where(eq(platformWorkflowEdges.workflowId, input.workflowId))
-      await tx.delete(platformWorkflowNodes).where(eq(platformWorkflowNodes.workflowId, input.workflowId))
+      if (edgeSignaturesToRewrite.size > 0) {
+        for (const signature of edgeSignaturesToRewrite) {
+          const [sourceNodeKey, targetNodeKey, inputName] = JSON.parse(signature) as [string, string, string | null]
+          await tx
+            .delete(platformWorkflowEdges)
+            .where(
+              and(
+                eq(platformWorkflowEdges.workflowId, input.workflowId),
+                eq(platformWorkflowEdges.sourceNodeKey, sourceNodeKey),
+                eq(platformWorkflowEdges.targetNodeKey, targetNodeKey),
+                inputName === null ? sql`${platformWorkflowEdges.inputName} IS NULL` : eq(platformWorkflowEdges.inputName, inputName),
+              ),
+            )
+        }
+      }
 
-      if (nodes.length > 0) {
+      if (nodeKeysToDelete.length > 0) {
+        await tx
+          .delete(platformWorkflowNodes)
+          .where(and(eq(platformWorkflowNodes.workflowId, input.workflowId), inArray(platformWorkflowNodes.nodeKey, nodeKeysToDelete)))
+      }
+
+      for (const node of nodesToUpdate) {
+        await tx
+          .update(platformWorkflowNodes)
+          .set({
+            type: node.type,
+            title: node.title,
+            positionX: node.positionX,
+            positionY: node.positionY,
+            config: node.config,
+            updatedAt: now,
+          })
+          .where(and(eq(platformWorkflowNodes.workflowId, input.workflowId), eq(platformWorkflowNodes.nodeKey, node.nodeKey)))
+      }
+
+      if (nodesToInsert.length > 0) {
         await tx.insert(platformWorkflowNodes).values(
-          nodes.map((node) => ({
+          nodesToInsert.map((node) => ({
             workflowId: input.workflowId,
             nodeKey: node.nodeKey,
             type: node.type,
@@ -656,9 +803,9 @@ const dbWorkflowStore: WorkflowStore = {
         )
       }
 
-      if (edges.length > 0) {
+      if (edgesToInsert.length > 0) {
         await tx.insert(platformWorkflowEdges).values(
-          edges.map((edge) => ({
+          edgesToInsert.map((edge) => ({
             workflowId: input.workflowId,
             sourceNodeKey: edge.sourceNodeKey,
             targetNodeKey: edge.targetNodeKey,
@@ -669,9 +816,18 @@ const dbWorkflowStore: WorkflowStore = {
       }
     })
 
-    const updated = await loadWorkflowDefinitionFromDb(input.workflowId, input.enterpriseId)
-    if (!updated) throw new Error("workflow_definition_not_found_after_update")
-    return updated
+    return {
+      ...existing,
+      title,
+      slug,
+      status,
+      triggerType,
+      description,
+      metadata: metadata ?? null,
+      updatedAt: now,
+      nodes,
+      edges,
+    }
   },
 }
 
@@ -893,6 +1049,7 @@ export async function listWorkflowNodeExecutionStatuses(runId: number) {
         providerId: platformWorkflowNodeExecutions.providerId,
         modelId: platformWorkflowNodeExecutions.modelId,
         taskRunId: platformWorkflowNodeExecutions.taskRunId,
+        outputPayload: platformWorkflowNodeExecutions.outputPayload,
         errorMessage: platformWorkflowNodeExecutions.errorMessage,
         creditsConsumed: platformWorkflowNodeExecutions.creditsConsumed,
         startedAt: platformWorkflowNodeExecutions.startedAt,
@@ -1000,23 +1157,35 @@ export function normalizeWorkflowRunStatusFromNodeExecutions(
   run: WorkflowRunStatusDetail["run"],
   nodeExecutions: WorkflowRunStatusDetail["nodeExecutions"],
 ) {
-  if (run.status !== "running") return run
   if (nodeExecutions.length === 0) return run
 
-  const hasActiveNode = nodeExecutions.some((execution) => execution.status === "queued" || execution.status === "running")
-  if (hasActiveNode) return run
-
-  const hasFailedNode = nodeExecutions.some((execution) => execution.status === "failed")
-  const hasCancelledNode = nodeExecutions.some((execution) => execution.status === "cancelled")
-  const hasSuccessfulNode = nodeExecutions.every((execution) => execution.status === "succeeded")
-
-  if (!hasFailedNode && !hasCancelledNode && !hasSuccessfulNode) return run
+  const hasFailedNode = nodeExecutions.some(
+    (execution) => execution.status === "failed" || execution.status === "cancelled",
+  )
+  const hasSuccessfulNode =
+    nodeExecutions.length > 0 && nodeExecutions.every((execution) => execution.status === "succeeded")
+  const derivedStatus = hasFailedNode ? "failed" : hasSuccessfulNode ? "succeeded" : "running"
+  const startedAtCandidates = nodeExecutions
+    .map((execution) => execution.startedAt)
+    .filter((value): value is Date => value instanceof Date)
+  const finishedAtCandidates = nodeExecutions
+    .flatMap((execution) => [execution.finishedAt, execution.updatedAt, execution.startedAt, execution.createdAt])
+    .filter((value): value is Date => value instanceof Date)
+  const earliestStartedAt =
+    startedAtCandidates.length > 0
+      ? new Date(Math.min(...startedAtCandidates.map((value) => value.getTime())))
+      : null
+  const latestFinishedAt =
+    finishedAtCandidates.length > 0
+      ? new Date(Math.max(...finishedAtCandidates.map((value) => value.getTime())))
+      : null
 
   return {
     ...run,
-    status: hasFailedNode || hasCancelledNode ? "failed" : "succeeded",
-    finishedAt: run.finishedAt ?? new Date(),
-    updatedAt: new Date(),
+    status: derivedStatus,
+    startedAt: run.startedAt ?? earliestStartedAt,
+    finishedAt: derivedStatus === "running" ? null : run.finishedAt ?? latestFinishedAt ?? new Date(),
+    updatedAt: latestFinishedAt && latestFinishedAt.getTime() > run.updatedAt.getTime() ? latestFinishedAt : run.updatedAt,
   }
 }
 

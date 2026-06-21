@@ -163,8 +163,8 @@ test("media runtime builder promotes RunningHub video/image and MiniMax audio ta
   assert.equal(runtime.runningHubImageConfigured, true)
   assert.equal(runtime.runningHubVideoConfigured, true)
   assert.equal(runtime.runningHubMusicConfigured, false)
-  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.runtimeId, "runninghub-image")
-  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.enabled, true)
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.runtimeId, "image-assistant")
+  assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-image")?.enabled, false)
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-video")?.runtimeId, "runninghub-video")
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-video")?.enabled, true)
   assert.equal(runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.runtimeId, "minimax-audio")
@@ -173,7 +173,7 @@ test("media runtime builder promotes RunningHub video/image and MiniMax audio ta
     runtime.tasks.find((task) => task.capabilitySlug === "ai-music")?.notes.join(" ") ?? "",
     /audio_generation/,
   )
-  assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-image")?.role, "primary")
+  assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-image")?.role, "fallback")
   assert.equal(runtime.providers.find((provider) => provider.id === "runninghub-video")?.role, "primary")
   assert.equal(runtime.providers.find((provider) => provider.id === "minimax-audio")?.role, "primary")
 })

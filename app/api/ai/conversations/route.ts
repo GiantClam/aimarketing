@@ -7,7 +7,6 @@ import {
   listAiEntryConversations,
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
-import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
 import {
   AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID,
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
@@ -18,6 +17,7 @@ import {
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { loadExecutiveSkillForAgent } from "@/lib/ai-entry/executive-skill-loader"
+import { getGovernedAiEntryModelCatalogForUser } from "@/lib/platform/model-governance"
 
 function parseLimit(input: string | null, fallback: number) {
   const parsed = Number.parseInt(input || "", 10)
@@ -31,7 +31,12 @@ function parseAgentId(input: string | null | undefined) {
 }
 
 async function resolveCreateConversationModelId(
-  userId: number,
+  user: {
+    id: number
+    enterpriseId: number | null
+    enterpriseRole: string | null
+    enterpriseStatus: string | null
+  },
   requestedModelId: string | null,
   scope: AiEntryConversationScope,
   agentId: string | null,
@@ -43,7 +48,7 @@ async function resolveCreateConversationModelId(
   const resolveRequestedFromCatalog = async () => {
     if (!requestedModelId) return null
     try {
-      const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
+      const catalog = await getGovernedAiEntryModelCatalogForUser({ user })
       const matched = resolveEquivalentModelId(
         requestedModelId,
         catalog.models.map((item) => item.id),
@@ -56,7 +61,7 @@ async function resolveCreateConversationModelId(
 
   if (options?.forceConsultingModel) {
     try {
-      const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
+      const catalog = await getGovernedAiEntryModelCatalogForUser({ user })
       const consultingModelId = pickConsultingModelId(catalog.models)
       if (consultingModelId) return consultingModelId
     } catch (error) {
@@ -71,7 +76,7 @@ async function resolveCreateConversationModelId(
   if (requestedModelId) return await resolveRequestedFromCatalog()
 
   try {
-    const catalog = await getAiEntryModelCatalog({ onlyRecentDays: null })
+    const catalog = await getGovernedAiEntryModelCatalogForUser({ user })
     if (catalog.selectedModelId) return catalog.selectedModelId
   } catch (error) {
     console.warn("ai-entry.conversation.create.default-model.resolve.failed", {
@@ -79,7 +84,7 @@ async function resolveCreateConversationModelId(
     })
   }
 
-  const latestModelId = await getLatestAiEntryConversationModelId(userId, scope, agentId)
+  const latestModelId = await getLatestAiEntryConversationModelId(user.id, scope, agentId)
   if (latestModelId) return latestModelId
 
   return AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
@@ -148,7 +153,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const resolvedModelId = await resolveCreateConversationModelId(
-      auth.user.id,
+      auth.user,
       rawModelId,
       conversationScope,
       rawAgentId,

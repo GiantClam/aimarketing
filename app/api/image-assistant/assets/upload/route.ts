@@ -6,6 +6,10 @@ import { fileToBuffer, sha256Buffer } from "@/lib/image-assistant/assets"
 import { createImageAssistantAsset, getImageAssistantSession } from "@/lib/image-assistant/repository"
 import { isImageAssistantR2Available, uploadImageAssistantBuffer } from "@/lib/image-assistant/r2"
 import type { ImageAssistantAssetType } from "@/lib/image-assistant/types"
+import {
+  registerAssetLibraryArtifactReference,
+  uploadAssetLibraryArtifactBuffer,
+} from "@/lib/platform/asset-library-ingest"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -100,6 +104,43 @@ export async function POST(req: NextRequest) {
       sha256: sha256Buffer(buffer),
       status: "ready",
     })
+
+    const assetLibraryPayload = {
+      entry: "image_assistant_upload",
+      imageAssistantAssetId: asset.id,
+      imageAssistantAssetType: assetType,
+      imageAssistantReferenceRole: referenceRole,
+      imageAssistantSessionId: sessionId,
+      source: "assistant" as const,
+    }
+
+    if (storageProvider === "r2" && storageKey) {
+      await registerAssetLibraryArtifactReference({
+        currentUser: auth.user,
+        runKind: "tool",
+        itemType: "image_asset",
+        itemSlug: "image-assistant-upload",
+        title: file.name,
+        mimeType: file.type,
+        storageKey,
+        publicUrl,
+        source: "assistant",
+        payload: assetLibraryPayload,
+      })
+    } else {
+      await uploadAssetLibraryArtifactBuffer({
+        currentUser: auth.user,
+        runKind: "tool",
+        itemType: "image_asset",
+        itemSlug: "image-assistant-upload",
+        provider: "image-assistant",
+        fileName: file.name,
+        mimeType: file.type,
+        buffer,
+        source: "assistant",
+        payload: assetLibraryPayload,
+      })
+    }
 
     return NextResponse.json({ data: asset })
   } catch (error: any) {

@@ -282,8 +282,9 @@ function resolveRunningHubSubmitError(
 export async function submitRunningHubTask(input: {
   mediaTarget: RunningHubMediaTarget
   payload: Record<string, unknown>
+  config?: RunningHubConfig
 }) {
-  const config = getRunningHubConfig()
+  const config = input.config ?? getRunningHubConfig()
   const target = resolveRunningHubProviderTarget(input.mediaTarget, config)
   if (!config.apiKey || !target.configured || !target.endpoint) {
     throw new Error("runninghub_not_configured")
@@ -419,8 +420,7 @@ export async function uploadRunningHubBinary(input: {
   }
 }
 
-export async function queryRunningHubTask(taskId: string) {
-  const config = getRunningHubConfig()
+export async function queryRunningHubTask(taskId: string, config = getRunningHubConfig()) {
   if (!config.apiKey) {
     throw new Error("runninghub_not_configured")
   }

@@ -84,6 +84,76 @@ test("createPlatformTaskRun saves a queued run and appendPlatformRunEvent adds a
   assert.equal(hydrated.events[0]?.message, "workflow_queued")
 })
 
+test("listRecentWorkflowTaskRunsForEnterprise limits results to workflow runs", async () => {
+  const store = createInMemoryPlatformTaskRunStore()
+
+  await store.createPlatformTaskRun({
+    enterpriseId: 12,
+    userId: 7,
+    kind: "media",
+    itemType: "tool",
+    itemSlug: "not-a-workflow",
+  })
+  const firstWorkflow = await store.createPlatformTaskRun({
+    enterpriseId: 12,
+    userId: 7,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "first-workflow",
+  })
+  const secondWorkflow = await store.createPlatformTaskRun({
+    enterpriseId: 12,
+    userId: 7,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "second-workflow",
+  })
+
+  const recent = await store.listRecentWorkflowTaskRunsForEnterprise(12, 1)
+
+  assert.deepEqual(
+    recent.map((run) => run.id),
+    [secondWorkflow.id],
+  )
+  assert.equal(recent[0]?.kind, "workflow")
+  assert.equal(recent[0]?.itemType, "workflow")
+  assert.notEqual(recent[0]?.id, firstWorkflow.id)
+})
+
+test("listRecentPlatformArtifactsForEnterprise applies the requested limit", async () => {
+  const store = createInMemoryPlatformTaskRunStore()
+  const run = await store.createPlatformTaskRun({
+    enterpriseId: 13,
+    userId: 7,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "artifact-limit",
+  })
+
+  const firstArtifact = await store.savePlatformArtifact({
+    runId: run.id,
+    enterpriseId: 13,
+    ownerUserId: 7,
+    kind: "file",
+    title: "first",
+  })
+  const secondArtifact = await store.savePlatformArtifact({
+    runId: run.id,
+    enterpriseId: 13,
+    ownerUserId: 7,
+    kind: "file",
+    title: "second",
+  })
+
+  const recent = await store.listRecentPlatformArtifactsForEnterprise(13, 1)
+
+  assert.deepEqual(
+    recent.map((artifact) => artifact.id),
+    [secondArtifact.id],
+  )
+  assert.notEqual(recent[0]?.id, firstArtifact.id)
+})
+
 test("savePlatformArtifact and promotePlatformArtifactToWorkItem preserve run lineage", async () => {
   const store = createInMemoryPlatformTaskRunStore()
   const run = await store.createPlatformTaskRun({
@@ -224,6 +294,53 @@ test("deletePlatformWorkItem removes only the selected work record", async () =>
   assert.deepEqual(workItems.map((item) => item.id), [workB.id])
   assert.equal(hydrated[0]?.artifact.id, artifact.id)
   assert.equal(hydrated[0]?.referenceCount, 1)
+})
+
+test("movePlatformArtifactToAssetLibrary removes work records and marks artifact as import", async () => {
+  const store = createInMemoryPlatformTaskRunStore()
+  const run = await store.createPlatformTaskRun({
+    enterpriseId: 11,
+    userId: 4,
+    kind: "workflow",
+    itemType: "workflow",
+    itemSlug: "move-to-assets",
+  })
+
+  const artifact = await store.savePlatformArtifact({
+    runId: run.id,
+    enterpriseId: 11,
+    ownerUserId: 4,
+    kind: "file",
+    title: "generated-image.png",
+    mimeType: "image/png",
+    payload: {
+      source: "generated",
+      entry: "image_assistant_generate",
+    },
+  })
+
+  const workA = await store.promotePlatformArtifactToWorkItem({
+    sourceArtifactId: artifact.id,
+    enterpriseId: 11,
+    ownerUserId: 4,
+    type: "image_set",
+    title: "generated image a",
+  })
+  const workB = await store.promotePlatformArtifactToWorkItem({
+    sourceArtifactId: artifact.id,
+    enterpriseId: 11,
+    ownerUserId: 4,
+    type: "image_set",
+    title: "generated image b",
+  })
+
+  const result = await store.movePlatformArtifactToAssetLibrary(artifact.id, 11)
+  const updatedArtifact = await store.getPlatformArtifact(artifact.id)
+
+  assert.deepEqual(result?.deletedWorkItemIds, [workA.id, workB.id])
+  assert.equal((updatedArtifact?.payload as { source?: string } | null)?.source, "import")
+  assert.equal((updatedArtifact?.payload as { movedFromWorkLibrary?: boolean } | null)?.movedFromWorkLibrary, true)
+  assert.equal((await store.listPlatformWorkItemsForEnterprise(11)).length, 0)
 })
 
 test("deletePlatformArtifactPermanently removes artifact and all related work items", async () => {

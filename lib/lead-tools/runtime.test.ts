@@ -393,6 +393,52 @@ test("ppt preview accepts arbitrary requested page counts", async () => {
   })
 })
 
+test("ppt preview forwards structured input images to the preview engine", async () => {
+  await buildLeadToolPreview("ai-ppt-preview", {
+    prompt: "做一份带封面图的品牌方案",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    images: [
+      {
+        url: "https://example.com/cover.png",
+        title: "封面图",
+        sourceNodeKey: "image-2",
+        role: "cover",
+      },
+      {
+        url: "https://example.com/reference.png",
+        title: "参考图",
+        mimeType: "image/png",
+        sourceNodeKey: "image-3",
+        role: "content",
+      },
+    ],
+  })
+
+  assert.equal(previewCalls.length, 1)
+  assert.deepEqual(previewCalls[0]?.[0], {
+    prompt: "做一份带封面图的品牌方案",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    templateMode: "auto-4",
+    images: [
+      {
+        url: "https://example.com/cover.png",
+        title: "封面图",
+        sourceNodeKey: "image-2",
+        role: "cover",
+      },
+      {
+        url: "https://example.com/reference.png",
+        title: "参考图",
+        mimeType: "image/png",
+        sourceNodeKey: "image-3",
+        role: "content",
+      },
+    ],
+  })
+})
+
 test("ppt preview falls back to mock rendering when the preferred provider is missing", async () => {
   previewFailureMessage = "lead_tool_provider_missing:minimax:MiniMax-M2.7-highspeed"
 

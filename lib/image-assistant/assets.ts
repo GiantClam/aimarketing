@@ -232,6 +232,19 @@ export async function urlToInlineImage(url: string, options: AssetFetchOptions =
   }
 }
 
+export async function imageSourceToDataUrl(imageSource: string, options: AssetFetchOptions = {}) {
+  const trimmed = imageSource.trim()
+  if (!trimmed) {
+    throw new Error("image_asset_source_missing")
+  }
+  if (trimmed.toLowerCase().startsWith("data:")) {
+    return trimmed
+  }
+
+  const inline = await urlToInlineImage(trimmed, options)
+  return `data:${inline.mimeType};base64,${inline.base64Data}`
+}
+
 export async function loadImageSourceForModel(url: string, options: AssetFetchOptions = {}) {
   if (url.startsWith("data:")) {
     return normalizeImageForModel(parseDataUrl(url))

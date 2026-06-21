@@ -787,6 +787,8 @@ export async function executeMiniMaxAudioFeature(input: {
   currentUser: MiniMaxRuntimeUser
   featureId: MiniMaxAudioFeatureId
   params: Record<string, unknown>
+  config?: MiniMaxAudioConfig
+  defaultModel?: string | null
 }) {
   const run = await createMiniMaxMediaRun({
     currentUser: input.currentUser,
@@ -805,7 +807,10 @@ export async function executeMiniMaxAudioFeature(input: {
     }
 
     const task = await createMiniMaxAsyncSpeechTask({
-      model: normalizeOptionalText(input.params.model) || "speech-2.8-hd",
+      model:
+        normalizeOptionalText(input.params.model) ||
+        normalizeOptionalText(input.defaultModel) ||
+        "speech-2.8-hd",
       text: prompt,
       language_boost: normalizeOptionalText(input.params.languageBoost) || "auto",
       voice_setting: {
@@ -820,7 +825,7 @@ export async function executeMiniMaxAudioFeature(input: {
         format: "mp3",
         channel: 2,
       },
-    })
+    }, input.config)
 
     const detail = await patchMiniMaxMediaRun({
       runId: run.id,
@@ -887,7 +892,7 @@ export async function executeMiniMaxAudioFeature(input: {
       }
     }
 
-    const result = await cloneMiniMaxVoice(cloneBody)
+    const result = await cloneMiniMaxVoice(cloneBody, input.config)
     let artifact: PlatformArtifactRecord | null = null
     if (result.demoAudioUrl) {
       artifact = await saveExternalAudioArtifact({
@@ -969,7 +974,7 @@ export async function executeMiniMaxAudioFeature(input: {
       mode: "write_full_song",
       prompt: lyricsPrompt,
       title: normalizeOptionalText(input.params.title) || undefined,
-    })
+    }, input.config)
     lyrics = lyricsResult.lyrics
     lyricsMeta = {
       title: lyricsResult.title,
@@ -982,7 +987,10 @@ export async function executeMiniMaxAudioFeature(input: {
   }
 
   const music = await generateMiniMaxMusic({
-    model: "music-2.6",
+    model:
+      normalizeOptionalText(input.params.model) ||
+      normalizeOptionalText(input.defaultModel) ||
+      "music-2.6",
     prompt: stylePrompt,
     lyrics,
     output_format: "url",
@@ -992,7 +1000,7 @@ export async function executeMiniMaxAudioFeature(input: {
       format: "mp3",
     },
     aigc_watermark: false,
-  })
+  }, input.config)
 
   const musicTitle = buildMusicTitle(input.params, normalizeOptionalText(String(lyricsMeta?.title || "")))
   const artifact = await saveExternalAudioArtifact({
@@ -1052,6 +1060,7 @@ export async function executeMiniMaxAudioFeature(input: {
 export async function queryMiniMaxAudioTask(input: {
   currentUser: MiniMaxRuntimeUser
   runId: number
+  config?: MiniMaxAudioConfig
 }) {
   const run = await getMiniMaxMediaRunForUser(input.runId, input.currentUser)
   if (!run) {
@@ -1063,7 +1072,7 @@ export async function queryMiniMaxAudioTask(input: {
     return buildTaskResponseFromRun(run)
   }
 
-  const query = await queryMiniMaxAsyncSpeechTask(run.externalRunId)
+  const query = await queryMiniMaxAsyncSpeechTask(run.externalRunId, input.config)
   const currentNormalizedResult =
     run.normalizedResult && typeof run.normalizedResult === "object" ? run.normalizedResult : {}
 

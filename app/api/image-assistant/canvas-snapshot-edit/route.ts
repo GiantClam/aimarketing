@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { enqueueAssistantTask, ensureImageAssistantSessionForTask } from "@/lib/assistant-async"
 import { requireSessionUser } from "@/lib/auth/guards"
 import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
+import { resolveGovernedImageAssistantSelectionForUser } from "@/lib/platform/model-governance"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
@@ -36,6 +37,13 @@ function normalizeGuidedSelection(input: unknown): ImageAssistantGuidedSelection
     question_id: questionId,
     option_id: optionId,
   }
+}
+
+function normalizeProviderLock(input: unknown) {
+  if (input === "pptoken" || input === "aiberm" || input === "crazyroute") {
+    return input
+  }
+  return null
 }
 
 function buildSelectionPrompt(input: {
@@ -144,6 +152,19 @@ export async function POST(req: NextRequest) {
       sessionId: typeof body?.sessionId === "string" ? body.sessionId : null,
       title: prompt.trim() || (typeof brief?.goal === "string" ? brief.goal : "canvas edit"),
     })
+    const requestedModelOptionId = typeof body?.modelOptionId === "string" ? body.modelOptionId.trim() : null
+    const requestedProviderLock = normalizeProviderLock(body?.providerLock)
+    const requestedModel = typeof body?.model === "string" ? body.model.trim() : null
+    const governedSelection = await resolveGovernedImageAssistantSelectionForUser({
+      user: auth.user,
+      modelOptionId: requestedModelOptionId,
+      providerLock: requestedProviderLock,
+      model: requestedModel,
+      taskType: "mask_edit",
+      hasReferenceInput: Boolean(referenceAssetIds.length),
+      hasMask: typeof body?.maskAssetId === "string" && body.maskAssetId.trim().length > 0,
+      hasSnapshot: typeof body?.snapshotAssetId === "string" && body.snapshotAssetId.trim().length > 0,
+    })
     const task = await enqueueAssistantTask({
       userId: auth.user.id,
       workflowName: "image_turn_canvas_edit",
@@ -157,6 +178,11 @@ export async function POST(req: NextRequest) {
         brief,
         taskType: "mask_edit",
         referenceAssetIds,
+        modelOptionId: governedSelection.modelOptionId,
+        enterpriseRole: auth.user.enterpriseRole || null,
+        enterpriseStatus: auth.user.enterpriseStatus || null,
+        providerLock: governedSelection.providerLock,
+        model: governedSelection.model,
         candidateCount: Number.parseInt(String(body?.candidateCount || "1"), 10),
         sizePreset: typeof body?.sizePreset === "string" ? body.sizePreset : null,
         resolution: typeof body?.resolution === "string" ? body.resolution : null,

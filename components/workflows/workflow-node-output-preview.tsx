@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
-import { Check, Copy, Download, Link2, Pause, Play } from "lucide-react"
+import { Check, Copy, Download, ExternalLink, Link2, Pause, Play } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { copyTextToClipboard } from "@/lib/browser/clipboard"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
@@ -22,6 +23,7 @@ type OutputFileItem = {
   mimeType: string
   title: string
   url: string | null
+  downloadUrl: string | null
 }
 
 function getCopy(locale: "zh" | "en") {
@@ -36,12 +38,14 @@ function getCopy(locale: "zh" | "en") {
         file: "文件",
         copyText: "复制文本",
         copyLink: "复制链接",
+        open: "预览",
         download: "下载",
         tapToPreview: "点击查看",
         doubleTapToPreview: "双击播放",
         tapToPlay: "点击播放",
         tapToPause: "点击暂停",
         copied: "已复制到剪贴板。",
+        copyFailed: "复制失败，请重试。",
         downloaded: "已开始下载。",
         running: "运行中，等待输出...",
         failed: "本次执行未产出可展示结果。",
@@ -60,12 +64,14 @@ function getCopy(locale: "zh" | "en") {
         file: "Files",
         copyText: "Copy text",
         copyLink: "Copy link",
+        open: "Open",
         download: "Download",
         tapToPreview: "Tap to preview",
         doubleTapToPreview: "Double-click to play",
         tapToPlay: "Tap to play",
         tapToPause: "Tap to pause",
         copied: "Copied to clipboard.",
+        copyFailed: "Copy failed. Please try again.",
         downloaded: "Download started.",
         running: "Running, waiting for output...",
         failed: "This execution did not produce a previewable result.",
@@ -158,6 +164,12 @@ function normalizeFileItems(value: unknown): OutputFileItem[] {
         mimeType,
         title: normalizedTitle,
         url,
+        downloadUrl:
+          typeof record.downloadUrl === "string" && record.downloadUrl.trim()
+            ? record.downloadUrl.trim()
+            : artifactId
+              ? `/api/platform/artifacts/${artifactId}/download?download=1`
+              : url,
       }
 
       if (artifactId !== undefined) {
@@ -172,7 +184,7 @@ function normalizeFileItems(value: unknown): OutputFileItem[] {
 function dedupeFileItems(items: OutputFileItem[]) {
   const seen = new Set<string>()
   return items.filter((item) => {
-    const key = `${item.artifactId ?? "na"}:${item.url ?? "na"}:${item.title}:${item.mimeType}`
+    const key = `${item.artifactId ?? "na"}:${item.url ?? "na"}:${item.downloadUrl ?? "na"}:${item.title}:${item.mimeType}`
     if (seen.has(key)) return false
     seen.add(key)
     return true
@@ -190,13 +202,19 @@ function downloadTextFile(title: string, value: string) {
 }
 
 function triggerDownload(item: OutputFileItem) {
-  if (!item.url) return
+  const targetUrl = item.downloadUrl || item.url
+  if (!targetUrl) return
   const anchor = document.createElement("a")
-  anchor.href = item.url
+  anchor.href = targetUrl
   anchor.target = "_blank"
   anchor.rel = "noreferrer"
   anchor.download = item.title
   anchor.click()
+}
+
+function openFilePreview(item: OutputFileItem) {
+  if (!item.url) return
+  window.open(item.url, "_blank", "noopener,noreferrer")
 }
 
 function Section({
@@ -372,11 +390,14 @@ export function WorkflowNodeOutputPreview({
   }, [outputPayload])
 
   const copyText = async (key: string, value: string) => {
-    if (!navigator.clipboard) return
-    await navigator.clipboard.writeText(value)
-    setActiveCopyKey(key)
-    toast.success(copy.copied)
-    window.setTimeout(() => setActiveCopyKey((current) => (current === key ? null : current)), 1200)
+    try {
+      await copyTextToClipboard(value)
+      setActiveCopyKey(key)
+      toast.success(copy.copied)
+      window.setTimeout(() => setActiveCopyKey((current) => (current === key ? null : current)), 1200)
+    } catch {
+      toast.error(copy.copyFailed)
+    }
   }
 
   const resolvedErrorMessage = humanizeWorkflowErrorMessage(locale, errorMessage)
@@ -414,7 +435,8 @@ export function WorkflowNodeOutputPreview({
                         variant="outline"
                         size="sm"
                         className="h-7 rounded-[8px] border-border bg-background/80 px-2 text-[11px]"
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation()
                           void copyText(`text-${index}`, value)
                         }}
                       >
@@ -425,7 +447,8 @@ export function WorkflowNodeOutputPreview({
                         variant="outline"
                         size="sm"
                         className="h-7 rounded-[8px] border-border bg-background/80 px-2 text-[11px]"
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation()
                           downloadTextFile(`node-output-${index + 1}`, value)
                           toast.success(copy.downloaded)
                         }}
@@ -603,6 +626,18 @@ export function WorkflowNodeOutputPreview({
                           {activeCopyKey === `file-link-${index}` ? <Check className="size-3.5" /> : <Link2 className="size-3.5" />}
                         </Button>
                       ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 rounded-[8px] border-border bg-background/80 px-2 text-[11px]"
+                        onClick={() => {
+                          openFilePreview(item)
+                        }}
+                        disabled={!item.url}
+                      >
+                        <ExternalLink className="size-3.5" />
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"

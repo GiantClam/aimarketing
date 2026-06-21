@@ -1,14 +1,10 @@
+import {
+  normalizeIncomingResolution,
+  normalizeIncomingSizePreset,
+} from "@/lib/image-assistant/model-options"
 import type { ImageAssistantResolution, ImageAssistantSizePreset } from "@/lib/image-assistant/types"
 
 const SIZE_PRESETS = new Set<ImageAssistantSizePreset>(["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"])
-
-function normalizeIncomingSizePreset(value: unknown): ImageAssistantSizePreset | null {
-  return SIZE_PRESETS.has(value as ImageAssistantSizePreset) ? (value as ImageAssistantSizePreset) : null
-}
-
-function normalizeIncomingResolution(value: unknown): ImageAssistantResolution | null {
-  return value === "512" || value === "1K" || value === "2K" || value === "4K" ? value : null
-}
 
 export function inferImageAssistantRequestOptionsFromPrompt(prompt: string) {
   const normalizedPrompt = prompt.normalize("NFKC")

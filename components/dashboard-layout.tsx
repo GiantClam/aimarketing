@@ -15,11 +15,9 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
-  Network,
   PanelLeftClose,
   PanelLeftOpen,
   PenSquare,
-  Plug,
   Radar,
   Search,
   Settings,
@@ -275,9 +273,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const platformSectionLabel = locale === "zh" ? "\u5e73\u53f0\u4e2d\u53f0" : "Platform"
   const capabilityCenterLabel = locale === "zh" ? "\u80fd\u529b\u4e2d\u5fc3" : "Capabilities"
   const agentPlatformLabel = locale === "zh" ? "\u667a\u80fd\u4f53\u4e2d\u53f0" : "Agent Platform"
-  const pluginsLabel = locale === "zh" ? "\u63d2\u4ef6\u76ee\u5f55" : "Plugins"
-  const mcpServicesLabel = locale === "zh" ? "MCP \u670d\u52a1" : "MCP Services"
-  const workflowsLabel = locale === "zh" ? "\u5de5\u4f5c\u6d41\u6a21\u677f" : "Workflows"
+  const workflowsLabel = locale === "zh" ? "\u5de5\u4f5c\u6d41" : "Workflows"
   const platformSettingsLabel = locale === "zh" ? "\u4f01\u4e1a\u8bbe\u7f6e" : "Enterprise Settings"
   const resourcesSectionLabel = locale === "zh" ? "资源入口" : "Resources"
   const taskCenterLabel = locale === "zh" ? "任务中心" : "Task Center"
@@ -548,8 +544,6 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     <div className="space-y-1">
                       <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} collapsed active={isSidebarLinkActive("/dashboard/capabilities")} />
                       <DashboardMenuLink href="/dashboard/agent-platform" label={agentPlatformLabel} icon={Bot} collapsed active={isSidebarLinkActive("/dashboard/agent-platform")} />
-                      <DashboardMenuLink href="/dashboard/plugins" label={pluginsLabel} icon={Plug} collapsed active={isSidebarLinkActive("/dashboard/plugins")} />
-                      <DashboardMenuLink href="/dashboard/mcp-services" label={mcpServicesLabel} icon={Network} collapsed active={isSidebarLinkActive("/dashboard/mcp-services")} />
                       <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} collapsed active={isSidebarLinkActive("/dashboard/workflows")} />
                       <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} collapsed active={isSidebarLinkActive("/dashboard/platform-settings")} />
                     </div>
@@ -557,8 +551,6 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     <div className="space-y-1">
                       <DashboardMenuLink href="/dashboard/capabilities" label={capabilityCenterLabel} icon={LayoutGrid} collapsed={false} active={isSidebarLinkActive("/dashboard/capabilities")} />
                       <DashboardMenuLink href="/dashboard/agent-platform" label={agentPlatformLabel} icon={Bot} collapsed={false} active={isSidebarLinkActive("/dashboard/agent-platform")} />
-                      <DashboardMenuLink href="/dashboard/plugins" label={pluginsLabel} icon={Plug} collapsed={false} active={isSidebarLinkActive("/dashboard/plugins")} />
-                      <DashboardMenuLink href="/dashboard/mcp-services" label={mcpServicesLabel} icon={Network} collapsed={false} active={isSidebarLinkActive("/dashboard/mcp-services")} />
                       <DashboardMenuLink href="/dashboard/workflows" label={workflowsLabel} icon={Workflow} collapsed={false} active={isSidebarLinkActive("/dashboard/workflows")} />
                       <DashboardMenuLink href="/dashboard/platform-settings" label={platformSettingsLabel} icon={Settings} collapsed={false} active={isSidebarLinkActive("/dashboard/platform-settings")} />
                     </div>

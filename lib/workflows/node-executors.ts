@@ -3,11 +3,13 @@ import type { WorkflowDefinitionNode, WorkflowNodeType, WorkflowValueKind } from
 
 export type WorkflowMediaRef = {
   url?: string | null
+  downloadUrl?: string | null
   title?: string | null
   mimeType?: string | null
   artifactId?: number
   assetId?: string | null
   storageKey?: string
+  sourceNodeKey?: string | null
 }
 
 export type WorkflowNodeInputBundle = {

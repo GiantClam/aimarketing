@@ -48,7 +48,7 @@ export function WorkspaceWorkflowRunner({
   const selectedItem = items.find((item) => item.slug === selectedSlug) || items[0] || null
 
   useEffect(() => {
-    if (!detailPath || !run || (run.status !== "running" && run.status !== "queued")) return
+    if (!detailPath || !run || run.status !== "running") return
 
     let cancelled = false
     detailRequestInFlightRef.current = false
@@ -144,7 +144,7 @@ export function WorkspaceWorkflowRunner({
 
       setRun(payload.data.run as WorkflowRunDetail)
       setDetailPath(payload.data.detailPath as string)
-      setMessage(payload.data.run.status === "running" || payload.data.run.status === "queued" ? copy.running : copy.success)
+      setMessage(payload.data.run.status === "running" ? copy.running : copy.success)
     } catch (error) {
       setMessage(`${copy.failed}: ${error instanceof Error ? error.message : "unknown_error"}`)
     } finally {

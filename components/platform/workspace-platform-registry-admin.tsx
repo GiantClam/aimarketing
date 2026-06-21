@@ -6,6 +6,10 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import type { PlatformRegistryControlEntry, PlatformRegistryItemType } from "@/lib/platform/control-plane"
 import type { PlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
+import {
+  buildCompactCardSummary,
+  pickPrimaryStatusBadge,
+} from "@/lib/workspace/compact-business-card"
 
 type DraftEntry = PlatformRegistryControlEntry["config"]
 
@@ -18,6 +22,34 @@ function cloneDraft(config: PlatformRegistryControlEntry["config"]): DraftEntry 
     bindingMode: config.bindingMode,
     notes: config.notes,
   }
+}
+
+function getEntryStatusBadge(status: PlatformRegistryControlEntry["status"], locale: "zh" | "en") {
+  if (status === "live") {
+    return {
+      label: locale === "zh" ? "已上线" : "Live",
+      tone: "success" as const,
+    }
+  }
+
+  if (status === "beta") {
+    return {
+      label: locale === "zh" ? "测试中" : "Beta",
+      tone: "warning" as const,
+    }
+  }
+
+  return {
+    label: locale === "zh" ? "规划中" : "Planned",
+    tone: "neutral" as const,
+  }
+}
+
+function getEntryStatusToneClass(tone: "neutral" | "success" | "warning" | "danger") {
+  if (tone === "success") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+  if (tone === "warning") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+  if (tone === "danger") return "border-destructive/30 bg-destructive/10 text-destructive"
+  return "border-border bg-background/70 text-foreground"
 }
 
 export function WorkspacePlatformRegistryAdmin({
@@ -246,6 +278,17 @@ export function WorkspacePlatformRegistryAdmin({
           {entries.map((entry) => {
             const draft = drafts[entry.slug]
             const execution = executions[entry.slug]
+            const status = pickPrimaryStatusBadge([getEntryStatusBadge(entry.status, locale)])
+            const summary =
+              buildCompactCardSummary(
+                [
+                  entry.summary,
+                  execution?.summary,
+                  draft.notes,
+                  execution?.notes[0],
+                ],
+                entry.slug,
+              ) || entry.title
             const bindingOptions =
               entry.bindingOptions.length > 0
                 ? entry.bindingOptions
@@ -253,16 +296,20 @@ export function WorkspacePlatformRegistryAdmin({
             return (
               <article key={entry.slug} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="space-y-3">
+                  <div className="min-w-0 flex-1 space-y-2">
                     <div className="dashboard-kicker text-muted-foreground">{entry.surfaceLabel}</div>
-                    <h3 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                    <h3 className="line-clamp-2 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
                       {entry.title}
                     </h3>
-                    <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{entry.summary}</p>
+                    <p className="max-w-3xl line-clamp-1 text-sm text-muted-foreground">{summary}</p>
                   </div>
-                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-xs uppercase tracking-[0.12em] text-foreground/80">
-                    {entry.status}
-                  </div>
+                  {status ? (
+                    <div
+                      className={`dashboard-chip rounded-[4px] border px-3 py-2 text-xs uppercase tracking-[0.12em] ${getEntryStatusToneClass(status.tone)}`}
+                    >
+                      {status.label}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -341,26 +388,12 @@ export function WorkspacePlatformRegistryAdmin({
                   </label>
                 </div>
 
-                <div className="mt-4 space-y-2">
-                  {execution ? (
-                    <>
-                      <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                        <span className="font-medium text-foreground">{copy.currentExecution}:</span> {execution.label}
-                      </div>
-                      <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                        <span className="font-medium text-foreground">{copy.mappedCapability}:</span> {execution.mappedCapabilitySlug || "—"}
-                      </div>
-                      <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                        <span className="font-medium text-foreground">{copy.access}:</span> {execution.accessState || "—"}
-                      </div>
-                    </>
-                  ) : null}
-                  {entry.proofPoints.map((point) => (
-                    <div key={point} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                      {point}
-                    </div>
-                  ))}
-                </div>
+                {execution ? (
+                  <div className="mt-4 rounded-[8px] border border-border bg-background/60 px-3 py-2 text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">{copy.currentExecution}:</span> {execution.label}
+                    {execution.mappedCapabilitySlug ? ` · ${copy.mappedCapability}: ${execution.mappedCapabilitySlug}` : ""}
+                  </div>
+                ) : null}
 
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <Button

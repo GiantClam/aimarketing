@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { WorkspaceComposerPanel, WorkspacePromptChips, WorkspacePromptGrid } from "@/components/workspace/workspace-primitives"
 import {
@@ -84,10 +85,19 @@ type Availability = {
   enabled: boolean
   reason: string | null
   provider: string
+  selectedModelOptionId?: string | null
   models?: {
     highQuality?: string | null
     lowCost?: string | null
   } | null
+  accessibleModels?: Array<{
+    id: string
+    label: string
+    providerId: string
+    providerLabel: string
+    modelId: string
+    source: "workspace" | "enterprise"
+  }>
 }
 
 type CanvasTool = "select" | "brush" | "eraser" | "shape"
@@ -1568,6 +1578,7 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   )
   const promptPresets = useMemo(() => [...imageCopy.promptPresets] as PromptPreset[], [imageCopy.promptPresets])
   const [availability, setAvailability] = useState<Availability | null>(null)
+  const [selectedModelOptionId, setSelectedModelOptionId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId)
   const [detail, setDetail] = useState<ImageAssistantSessionDetail | null>(null)
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
@@ -1887,8 +1898,23 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
 
     return null
   }, [latestAssistantMessage, versionById])
+  const accessibleModelOptions = useMemo(() => availability?.accessibleModels || [], [availability?.accessibleModels])
+  const selectedAvailabilityModelOption = useMemo(() => {
+    if (!accessibleModelOptions.length) return null
+    const requestedId = selectedModelOptionId || availability?.selectedModelOptionId || null
+    return (
+      (requestedId
+        ? accessibleModelOptions.find((option) => option.id === requestedId) || null
+        : null) ||
+      accessibleModelOptions[0] ||
+      null
+    )
+  }, [accessibleModelOptions, availability?.selectedModelOptionId, selectedModelOptionId])
   const configuredImageModelName =
-    availability?.models?.highQuality || availability?.models?.lowCost || null
+    selectedAvailabilityModelOption?.label ||
+    availability?.models?.highQuality ||
+    availability?.models?.lowCost ||
+    null
   const currentImageModelDisplay =
     latestAssistantModelName || configuredImageModelName || availability?.provider || chatComposerCopy.modelPending
   const clarificationCarryoverReferenceAssetIds = useMemo(
@@ -2371,6 +2397,21 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
   useEffect(() => {
     void requestJson("/api/image-assistant/availability").then((json) => setAvailability(json.data))
   }, [])
+
+  useEffect(() => {
+    const nextAccessibleModels = availability?.accessibleModels || []
+    if (!nextAccessibleModels.length) {
+      setSelectedModelOptionId(null)
+      return
+    }
+
+    setSelectedModelOptionId((current) => {
+      if (current && nextAccessibleModels.some((option) => option.id === current)) {
+        return current
+      }
+      return availability?.selectedModelOptionId || nextAccessibleModels[0]?.id || null
+    })
+  }, [availability])
 
   useEffect(() => {
     modeRef.current = mode
@@ -3223,6 +3264,8 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
             prompt: submissionPrompt,
             brief: submissionBrief,
             referenceAssetIds: nextReferenceAssetIds,
+            modelOptionId: selectedAvailabilityModelOption?.id || null,
+            model: selectedAvailabilityModelOption?.modelId || null,
             disableReferenceCarryover,
             snapshotAssetId: shouldUseCanvasSnapshotEdit ? canvasSnapshotAssetId : null,
             maskAssetId: shouldUseCanvasSnapshotEdit ? canvasMaskAssetId : null,
@@ -5146,13 +5189,31 @@ export function ImageAssistantWorkspace({ initialSessionId }: { initialSessionId
                             {" / "}
                             {currentResolutionDisplay}
                           </p>
-                          <p className="text-[11px] leading-5 text-muted-foreground">
-                            {chatComposerCopy.currentModelLabel}
-                            {": "}
-                            <span className="font-medium text-foreground">{currentImageModelDisplay}</span>
-                            {" / "}
-                            {extraCopy.uploadLimit}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] leading-5 text-muted-foreground">
+                            <span>{chatComposerCopy.currentModelLabel}:</span>
+                            {accessibleModelOptions.length > 0 ? (
+                              <Select
+                                value={selectedAvailabilityModelOption?.id || undefined}
+                                onValueChange={setSelectedModelOptionId}
+                                disabled={accessibleModelOptions.length <= 1}
+                              >
+                                <SelectTrigger className="h-7 min-w-[220px] max-w-full rounded-[6px] border-border bg-background px-2.5 text-[11px] text-foreground">
+                                  <SelectValue placeholder={chatComposerCopy.modelPending} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {accessibleModelOptions.map((option) => (
+                                    <SelectItem key={option.id} value={option.id} className="text-xs">
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="font-medium text-foreground">{currentImageModelDisplay}</span>
+                            )}
+                            <span>/</span>
+                            <span>{extraCopy.uploadLimit}</span>
+                          </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] text-muted-foreground">Ctrl/Cmd + Enter</span>
                             {isBusy ? (

@@ -144,9 +144,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         listRemoteDatasets: async () => ragflowRemoteDatasets,
         createRemoteDataset: async (args: unknown) => {
           createdRemoteDatasetArgs = args
+          const row = args as { name?: string }
           return {
             providerDatasetId: "ds_created_1",
-            name: "Campaign Ops",
+            name: typeof row?.name === "string" && row.name.trim() ? row.name.trim() : "Campaign Ops",
           }
         },
         listRemoteDocuments: async () => ragflowRemoteDocuments,
@@ -175,6 +176,7 @@ let getKnowledgeWorkspaceSnapshot: typeof import("./service").getKnowledgeWorksp
 let listKnowledgeDatasetsSnapshot: typeof import("./service").listKnowledgeDatasetsSnapshot
 let createKnowledgeDataset: typeof import("./service").createKnowledgeDataset
 let refreshKnowledgeSourceConnection: typeof import("./service").refreshKnowledgeSourceConnection
+let ensureEnterpriseDefaultKnowledgeWorkspace: typeof import("./service").ensureEnterpriseDefaultKnowledgeWorkspace
 let saveKnowledgeDocumentChunkEdit: typeof import("./service").saveKnowledgeDocumentChunkEdit
 let removeKnowledgeDocument: typeof import("./service").removeKnowledgeDocument
 let migrateKnowledgeDocumentDataset: typeof import("./service").migrateKnowledgeDocumentDataset
@@ -187,6 +189,7 @@ test.before(async () => {
   listKnowledgeDatasetsSnapshot = service.listKnowledgeDatasetsSnapshot
   createKnowledgeDataset = service.createKnowledgeDataset
   refreshKnowledgeSourceConnection = service.refreshKnowledgeSourceConnection
+  ensureEnterpriseDefaultKnowledgeWorkspace = service.ensureEnterpriseDefaultKnowledgeWorkspace
   saveKnowledgeDocumentChunkEdit = service.saveKnowledgeDocumentChunkEdit
   removeKnowledgeDocument = service.removeKnowledgeDocument
   migrateKnowledgeDocumentDataset = service.migrateKnowledgeDocumentDataset
@@ -546,7 +549,7 @@ test("getKnowledgeWorkspaceSnapshot backfills chunk rows for ready documents wit
   assert.equal(replacedChunkSets[0]?.chunks.length, 2)
 })
 
-test("listKnowledgeDatasetsSnapshot auto-syncs remote datasets when the local dataset table is empty", async () => {
+test("listKnowledgeDatasetsSnapshot creates an isolated default dataset when the local dataset table is empty", async () => {
   source = {
     id: 10,
     enterpriseId: 7,
@@ -567,10 +570,37 @@ test("listKnowledgeDatasetsSnapshot auto-syncs remote datasets when the local da
 
   const snapshot = await listKnowledgeDatasetsSnapshot(7)
 
-  assert.equal(snapshot.length, 2)
-  assert.equal(snapshot[0]?.providerDatasetId, "ds_general")
-  assert.equal(snapshot[1]?.providerDatasetId, "ds_brand")
+  assert.equal(snapshot.length, 1)
+  assert.equal(snapshot[0]?.providerDatasetId, "ds_created_1")
+  assert.equal(snapshot[0]?.name, "Enterprise 7 Knowledge Base")
   assert.equal(snapshot[0]?.enabled, true)
+  assert.equal(createdRemoteDatasetArgs.name, "Enterprise 7 Knowledge Base")
+  assert.equal(createdRemoteDatasetArgs.category, "general")
+})
+
+test("ensureEnterpriseDefaultKnowledgeWorkspace reuses the enterprise-matched remote dataset when it already exists", async () => {
+  source = {
+    id: 10,
+    enterpriseId: 7,
+    providerType: "ragflow",
+    name: "RAGFlow Enterprise Knowledge",
+    baseUrl: "https://ragflow.example.com",
+    apiKey: "secret",
+    status: "healthy",
+    enabled: true,
+    lastCheckedAt: null,
+    lastError: null,
+  }
+  ragflowRemoteDatasets = [
+    { id: "ds_general", name: "General" },
+    { id: "ds_enterprise_7", name: "Enterprise 7 Knowledge Base" },
+  ]
+
+  const result = await ensureEnterpriseDefaultKnowledgeWorkspace(7)
+
+  assert.equal(result.datasets.length, 1)
+  assert.equal(result.datasets[0]?.providerDatasetId, "ds_enterprise_7")
+  assert.equal(createdRemoteDatasetArgs, null)
 })
 
 test("createKnowledgeDataset creates a remote ragflow dataset and persists the synced local record", async () => {
@@ -630,7 +660,7 @@ test("createKnowledgeDataset persists env-backed source before syncing the new d
   assert.equal(dataset.providerDatasetId, "ds_created_1")
 })
 
-test("refreshKnowledgeSourceConnection persists healthy status and syncs remote datasets", async () => {
+test("refreshKnowledgeSourceConnection persists healthy status and ensures only the isolated default dataset", async () => {
   source = {
     id: 10,
     enterpriseId: 7,
@@ -654,7 +684,9 @@ test("refreshKnowledgeSourceConnection persists healthy status and syncs remote 
   assert.equal(result.test.ok, true)
   assert.equal(result.source.status, "healthy")
   assert.equal(datasets.length, 1)
-  assert.equal(datasets[0]?.providerDatasetId, "ds_general")
+  assert.equal(datasets[0]?.providerDatasetId, "ds_created_1")
+  assert.equal(datasets[0]?.name, "Enterprise 7 Knowledge Base")
+  assert.equal(createdRemoteDatasetArgs.name, "Enterprise 7 Knowledge Base")
 })
 
 test("saveKnowledgeDocumentChunkEdit preserves enterprise boundary and marks the chunk as edited", async () => {

@@ -3,6 +3,10 @@ import type { PptPreviewDeck, PptPreviewVariant } from "@/lib/lead-tools/ppt-pre
 import type { LeadToolPptDownloadResponse, LeadToolPptFinalizeResponse } from "@/lib/lead-tools/ppt-engines/types"
 import { inferWorkItemTypeFromArtifact } from "@/lib/platform/artifact-actions"
 import {
+  isPlatformArtifactR2Available,
+  uploadPlatformArtifactBufferToR2,
+} from "@/lib/platform/artifact-storage"
+import {
   platformTaskRunStore,
   type PlatformArtifactRecord,
   type PlatformTaskRunRecord,
@@ -136,6 +140,80 @@ function buildLeadToolSelectedArtifactTitle(action: Exclude<LeadToolPlatformRunA
   return `${deck.title || "Untitled"} ${variant.name} ${actionLabel}`
 }
 
+function buildLeadToolSelectedFilePayload(input: SaveLeadToolSelectedArtifactInput) {
+  return {
+    toolSlug: input.toolSlug,
+    artifactType: `lead_tool_${input.action}_file`,
+    previewSessionId: input.previewSessionId ?? input.deck.previewSessionId ?? null,
+    deckTitle: input.deck.title,
+    selectedVariant: {
+      key: input.selectedVariant.key,
+      styleKey: input.selectedVariant.styleKey,
+      templateId: input.selectedVariant.templateId,
+      narrativeAngle: input.selectedVariant.narrativeAngle,
+      slotLabel: input.selectedVariant.slotLabel,
+      name: input.selectedVariant.name,
+      summary: input.selectedVariant.summary,
+      slideCount: input.selectedVariant.slides.length,
+    },
+    source: "generated" as const,
+  }
+}
+
+async function saveLeadToolDownloadFileArtifact(
+  input: Omit<SaveLeadToolSelectedArtifactInput, "run"> & {
+    actor: EnterpriseLeadToolUser
+    run: PlatformTaskRunRecord
+    artifact: NonNullable<LeadToolPptDownloadResponse["artifact"]>
+  },
+) {
+  const store = input.store ?? platformTaskRunStore
+  const payload = buildLeadToolSelectedFilePayload(input)
+
+  if (isPlatformArtifactR2Available()) {
+    try {
+      const uploaded = await uploadPlatformArtifactBufferToR2({
+        buffer: input.artifact.buffer,
+        enterpriseId: input.actor.enterpriseId,
+        runId: input.run.id,
+        provider: input.toolSlug,
+        fileName: input.artifact.fileName,
+        contentType: input.artifact.contentType,
+      })
+
+      return store.savePlatformArtifact({
+        runId: input.run.id,
+        enterpriseId: input.actor.enterpriseId,
+        ownerUserId: input.actor.id,
+        kind: "file",
+        title: uploaded.fileName,
+        mimeType: uploaded.contentType,
+        storageKey: uploaded.storageKey,
+        payload,
+      })
+    } catch (error) {
+      console.warn("lead-tool.platform-persistence.r2-upload-fallback", {
+        toolSlug: input.toolSlug,
+        fileName: input.artifact.fileName,
+        message: error instanceof Error ? error.message : "unknown_error",
+      })
+    }
+  }
+
+  return store.savePlatformArtifact({
+    runId: input.run.id,
+    enterpriseId: input.actor.enterpriseId,
+    ownerUserId: input.actor.id,
+    kind: "file",
+    title: input.artifact.fileName,
+    mimeType: input.artifact.contentType,
+    payload: {
+      ...payload,
+      embeddedContentBase64: Buffer.from(input.artifact.buffer).toString("base64"),
+    },
+  })
+}
+
 export async function createLeadToolPlatformRun(input: CreateLeadToolPlatformRunInput): Promise<PlatformTaskRunRecord | null> {
   const actor = getEnterpriseLeadToolUser(input.currentUser)
   if (!actor) return null
@@ -185,8 +263,15 @@ export async function saveLeadToolSelectedArtifact(
   if (!actor || !input.run) return null
 
   const store = input.store ?? platformTaskRunStore
+  const savedResultArtifact = input.downloadResult?.artifact
+    ? await saveLeadToolDownloadFileArtifact({
+        ...input,
+        actor,
+        artifact: input.downloadResult.artifact,
+      })
+    : null
 
-  return store.savePlatformArtifact({
+  const metadataArtifact = await store.savePlatformArtifact({
     runId: input.run.id,
     enterpriseId: actor.enterpriseId,
     ownerUserId: actor.id,
@@ -223,10 +308,13 @@ export async function saveLeadToolSelectedArtifact(
         ? {
             fileName: input.downloadResult.artifact?.fileName ?? null,
             contentType: input.downloadResult.artifact?.contentType ?? null,
+            resultArtifactId: savedResultArtifact?.id ?? null,
           }
         : null,
     },
   })
+
+  return savedResultArtifact ?? metadataArtifact
 }
 
 export async function promoteLeadToolArtifactToWork(

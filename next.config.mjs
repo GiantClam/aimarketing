@@ -1,3 +1,4 @@
+/* global process */
 /** @type {import('next').NextConfig} */
 const isVercelBuild = process.env.VERCEL === "1" || process.env.VERCEL === "true"
 

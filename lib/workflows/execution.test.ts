@@ -1,7 +1,13 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { buildExecutableWorkflowPlan, retryWorkflowNodeExecution, runWorkflowDefinition, validateWorkflowGraph } from "@/lib/workflows/execution"
+import {
+  buildExecutableWorkflowPlan,
+  collectWorkflowRetryNodeKeys,
+  retryWorkflowNodeExecution,
+  runWorkflowDefinition,
+  validateWorkflowGraph,
+} from "@/lib/workflows/execution"
 import type { WorkflowDefinitionNode, WorkflowDefinitionEdge } from "@/lib/workflows/schema"
 
 test("execution plan exposes two parallel image nodes after one llm node", () => {
@@ -207,6 +213,104 @@ test("retryWorkflowNodeExecution emits running updates for retried nodes", async
   assert.deepEqual(updates, ["img-1:running", "img-1:succeeded"])
 })
 
+test("retryWorkflowNodeExecution cancels queued descendants when a non-retried parent is already cancelled", async () => {
+  const nodes: WorkflowDefinitionNode[] = [
+    { nodeKey: "text-1", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: { text: "Prompt" } },
+    { nodeKey: "fail-1", type: "image_generate", title: "Fail branch", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "cancelled-mid", type: "image_generate", title: "Cancelled mid", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "retry-1", type: "image_generate", title: "Retry branch", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "join-1", type: "image_generate", title: "Join", positionX: 0, positionY: 0, config: {} },
+  ]
+  const edges: WorkflowDefinitionEdge[] = [
+    { sourceNodeKey: "text-1", targetNodeKey: "fail-1", inputName: "text" },
+    { sourceNodeKey: "text-1", targetNodeKey: "retry-1", inputName: "text" },
+    { sourceNodeKey: "fail-1", targetNodeKey: "cancelled-mid", inputName: "images" },
+    { sourceNodeKey: "cancelled-mid", targetNodeKey: "join-1", inputName: "images" },
+    { sourceNodeKey: "retry-1", targetNodeKey: "join-1", inputName: "images" },
+  ]
+
+  let shouldFailRetryBranch = true
+  const firstRun = await runWorkflowDefinition({
+    enterpriseId: 1,
+    ownerUserId: 1,
+    nodes,
+    edges,
+    executorContext: {
+      capabilityInvoker: async ({ node, nodeType }) => {
+        if (nodeType !== "image_generate") {
+          return { output: {} }
+        }
+        if (node.nodeKey === "fail-1") {
+          throw new Error("upstream_provider_timeout")
+        }
+        if (node.nodeKey === "retry-1" && shouldFailRetryBranch) {
+          throw new Error("branch_provider_timeout")
+        }
+        return { output: { image: [{ url: `https://example.com/${node.nodeKey}.png` }] } }
+      },
+    },
+  })
+
+  assert.equal(firstRun.status, "failed")
+  assert.equal(firstRun.nodeStates["cancelled-mid"]?.status, "cancelled")
+  assert.equal(firstRun.nodeStates["join-1"]?.status, "cancelled")
+
+  shouldFailRetryBranch = false
+  const retried = await retryWorkflowNodeExecution({
+    enterpriseId: 1,
+    ownerUserId: 1,
+    nodes,
+    edges,
+    nodeStates: firstRun.nodeStates,
+    nodeKey: "retry-1",
+    mode: "branch",
+    executorContext: {
+      capabilityInvoker: async ({ node, nodeType }) => {
+        if (nodeType !== "image_generate") {
+          return { output: {} }
+        }
+        return { output: { image: [{ url: `https://example.com/${node.nodeKey}.png` }] } }
+      },
+    },
+  })
+
+  assert.equal(retried.status, "failed")
+  assert.equal(retried.nodeStates["retry-1"]?.status, "succeeded")
+  assert.equal(retried.nodeStates["cancelled-mid"]?.status, "cancelled")
+  assert.equal(retried.nodeStates["join-1"]?.status, "cancelled")
+  assert.equal(retried.nodeStates["join-1"]?.errorMessage, "workflow_upstream_failed")
+})
+
+test("collectWorkflowRetryNodeKeys includes unsucceeded blocking parents for branch retries", () => {
+  const nodes: WorkflowDefinitionNode[] = [
+    { nodeKey: "text-1", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: { text: "Prompt" } },
+    { nodeKey: "image-2", type: "image_generate", title: "Image 2", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "image-3", type: "image_generate", title: "Image 3", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "image-4", type: "image_generate", title: "Image 4", positionX: 0, positionY: 0, config: {} },
+  ]
+  const edges: WorkflowDefinitionEdge[] = [
+    { sourceNodeKey: "text-1", targetNodeKey: "image-2", inputName: "text" },
+    { sourceNodeKey: "text-1", targetNodeKey: "image-3", inputName: "text" },
+    { sourceNodeKey: "image-2", targetNodeKey: "image-4", inputName: "images" },
+    { sourceNodeKey: "image-3", targetNodeKey: "image-4", inputName: "images" },
+  ]
+
+  const rerunNodeKeys = collectWorkflowRetryNodeKeys({
+    mode: "branch",
+    nodeKey: "image-3",
+    nodes,
+    edges,
+    nodeStates: {
+      "text-1": { status: "succeeded" },
+      "image-2": { status: "running" },
+      "image-3": { status: "failed" },
+      "image-4": { status: "queued" },
+    },
+  })
+
+  assert.deepEqual(new Set(rerunNodeKeys), new Set(["image-2", "image-3", "image-4"]))
+})
+
 test("runWorkflowDefinition emits node state updates for running and completed phases", async () => {
   const updates: string[] = []
   const nodes: WorkflowDefinitionNode[] = [
@@ -290,6 +394,50 @@ test("runWorkflowDefinition scopes upstream inputs by edge inputName", async () 
     text: ["Use this prompt only"],
     imageCount: 1,
   })
+})
+
+test("runWorkflowDefinition preserves source node keys on typed image inputs", async () => {
+  const nodes: WorkflowDefinitionNode[] = [
+    { nodeKey: "text-1", type: "text_input", title: "Prompt", positionX: 0, positionY: 0, config: { text: "Use this prompt only" } },
+    { nodeKey: "image-2", type: "image_generate", title: "Source image 2", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "image-3", type: "image_generate", title: "Source image 3", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "image-4", type: "image_generate", title: "Target image", positionX: 0, positionY: 0, config: {} },
+  ]
+  const edges: WorkflowDefinitionEdge[] = [
+    { sourceNodeKey: "text-1", targetNodeKey: "image-2", inputName: "text" },
+    { sourceNodeKey: "text-1", targetNodeKey: "image-3", inputName: "text" },
+    { sourceNodeKey: "image-2", targetNodeKey: "image-4", inputName: "images" },
+    { sourceNodeKey: "image-3", targetNodeKey: "image-4", inputName: "images" },
+  ]
+
+  let capturedSourceNodeKeys: Array<string | null | undefined> = []
+
+  const result = await runWorkflowDefinition({
+    enterpriseId: 1,
+    ownerUserId: 1,
+    nodes,
+    edges,
+    executorContext: {
+      capabilityInvoker: async ({ node, nodeType, input }) => {
+        if (nodeType !== "image_generate") {
+          return { output: {} }
+        }
+
+        if (node.nodeKey === "image-4") {
+          capturedSourceNodeKeys = input.image.map((item) => item.sourceNodeKey)
+        }
+
+        return {
+          output: {
+            image: [{ url: `https://example.com/${node.nodeKey}.png`, title: node.title }],
+          },
+        }
+      },
+    },
+  })
+
+  assert.equal(result.status, "succeeded")
+  assert.deepEqual(capturedSourceNodeKeys, ["image-2", "image-3"])
 })
 
 test("runWorkflowDefinition maps upload assets into typed image inputs by mime type", async () => {

@@ -1,9 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import {
-  ArrowUpRight,
   Bot,
   FileText,
   ImageIcon,
@@ -15,13 +13,16 @@ import {
   Users2,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { CompactBusinessCard } from "@/components/workspace/compact-business-card"
 import type {
   PlatformDirectoryAvailability,
   PublicToolsCenterEntry,
 } from "@/lib/platform/directory-registry"
+import {
+  buildCompactCardSummary,
+  pickPrimaryStatusBadge,
+} from "@/lib/workspace/compact-business-card"
 import { cn } from "@/lib/utils"
 
 const iconMap = {
@@ -132,32 +133,19 @@ function getSceneLabel(value: SceneFilterValue, locale: "zh" | "en") {
   return labels[value]
 }
 
-function getAccessLabel(entry: PublicToolsCenterEntry, locale: "zh" | "en") {
-  if (entry.accessMode === "guest") {
-    return locale === "zh" ? "游客可直接使用" : "Guest access"
-  }
-
-  if (entry.accessMode === "preview_then_login") {
-    return locale === "zh" ? "先预览，下载时登录" : "Preview first, login for download"
-  }
-
-  if (entry.accessMode === "workspace_entry") {
-    return locale === "zh" ? "登录后进入工作台" : "Log in to continue in workspace"
-  }
-
-  if (entry.accessMode === "public_directory") {
-    return locale === "zh" ? "公开目录入口" : "Public directory entry"
-  }
-
-  return locale === "zh" ? "仅展示入口，不触发生成" : "Entry only, no generation yet"
-}
-
 function getEntryKindLabel(entry: PublicToolsCenterEntry, locale: "zh" | "en") {
   if (entry.kind === "directory") {
     return locale === "zh" ? "平台入口" : "Platform entry"
   }
 
   return locale === "zh" ? "工具入口" : "Tool entry"
+}
+
+function getAvailabilityTone(availability: PlatformDirectoryAvailability) {
+  if (availability === "available") return "success" as const
+  if (availability === "enterprise_only") return "warning" as const
+  if (availability === "waitlist") return "neutral" as const
+  return "neutral" as const
 }
 
 export function ToolCardGrid({
@@ -299,72 +287,39 @@ export function ToolCardGrid({
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredEntries.map((entry) => {
             const Icon = iconMap[entry.icon] ?? FileText
+            const summary = buildCompactCardSummary([entry.tagline, entry.description], entry.slug) || entry.title
+            const status = pickPrimaryStatusBadge([
+              {
+                label: getAvailabilityLabel(entry.availability, {
+                  availableLabel,
+                  comingSoonLabel,
+                  waitlistLabel,
+                  enterpriseOnlyLabel,
+                }),
+                tone: getAvailabilityTone(entry.availability),
+              },
+            ])
 
             return (
-              <Card
+              <CompactBusinessCard
                 key={`${entry.kind}:${entry.slug}`}
-                className="border-border/70 bg-card/90 shadow-[0_18px_60px_-36px_rgba(0,0,0,0.65)] transition-transform duration-200 hover:-translate-y-1"
-              >
-                <CardHeader className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-primary/25 via-primary/10 to-transparent text-primary">
+                title={entry.title}
+                summary={summary}
+                status={status}
+                actionLabel={entry.availability === "available" ? openToolLabel : previewToolLabel}
+                href={entry.href}
+                className="border-border/70 shadow-[0_18px_60px_-36px_rgba(0,0,0,0.65)] transition-transform duration-200 hover:-translate-y-1"
+                media={
+                  <div className="flex h-20 items-end rounded-[12px] bg-gradient-to-br from-primary/20 via-primary/5 to-transparent p-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-background/80 text-primary shadow-sm">
                       <Icon className="h-5 w-5" />
                     </div>
-                    <Badge variant={entry.availability === "available" ? "default" : "outline"}>
-                      {getAvailabilityLabel(entry.availability, {
-                        availableLabel,
-                        comingSoonLabel,
-                        waitlistLabel,
-                        enterpriseOnlyLabel,
-                      })}
-                    </Badge>
+                    <div className="ml-3 line-clamp-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      {getEntryKindLabel(entry, locale)} · {getMediaLabel(entry.media, locale)}
+                    </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="public-kicker text-muted-foreground">{getEntryKindLabel(entry, locale)}</div>
-                    <CardTitle className="text-xl">{entry.title}</CardTitle>
-                    <CardDescription className="leading-6">{entry.tagline}</CardDescription>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="border-primary/20 bg-primary/5 text-muted-foreground">
-                      {getMediaLabel(entry.media, locale)}
-                    </Badge>
-                    <Badge variant="outline" className="border-primary/20 bg-primary/5 text-muted-foreground">
-                      {getAccessLabel(entry, locale)}
-                    </Badge>
-                    {entry.scenes.slice(0, 2).map((scene) => (
-                      <Badge key={`${entry.slug}:${scene}`} variant="outline" className="border-primary/20 bg-primary/5 text-muted-foreground">
-                        {getSceneLabel(scene, locale)}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  <p className="text-sm leading-6 text-muted-foreground">{entry.description}</p>
-
-                  <div className="space-y-2">
-                    {entry.proofPoints.slice(0, 3).map((point) => (
-                      <div
-                        key={`${entry.slug}:${point}`}
-                        className="rounded-[8px] border border-border/70 bg-background/65 px-3 py-2 text-sm leading-6 text-muted-foreground"
-                      >
-                        {point}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-
-                <CardFooter>
-                  <Button asChild className="w-full" variant={entry.availability === "available" ? "default" : "outline"}>
-                    <Link href={entry.href}>
-                      {entry.availability === "available" ? openToolLabel : previewToolLabel}
-                      <ArrowUpRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                </CardFooter>
-              </Card>
+                }
+              />
             )
           })}
         </div>

@@ -33,6 +33,13 @@ const pptPreviewPageCountSchema = z
   .int("Page count must be an integer")
   .min(MIN_PPT_PREVIEW_PAGE_COUNT, `Page count must be at least ${MIN_PPT_PREVIEW_PAGE_COUNT}`)
   .max(MAX_PPT_PREVIEW_PAGE_COUNT, `Page count must be at most ${MAX_PPT_PREVIEW_PAGE_COUNT}`)
+const pptPreviewInputImageSchema = z.object({
+  url: z.string().trim().url("Image URL must be a valid URL"),
+  title: z.string().trim().nullable().optional(),
+  mimeType: z.string().trim().nullable().optional(),
+  sourceNodeKey: z.string().trim().nullable().optional(),
+  role: z.enum(["cover", "content", "logo", "reference"]).optional(),
+})
 const pptPreviewNarrativeAngleSchema = z.enum(["executive-brief", "campaign-story", "data-proof", "action-plan"])
 
 const pptPreviewSlideSchema = z.object({
@@ -185,6 +192,7 @@ const pptPreviewRequestSchema = z
     templateMode: pptPreviewTemplateModeSchema.default("auto-4"),
     templateId: pptFrontendTemplateIdSchema.optional(),
     pageCount: pptPreviewPageCountSchema.nullable().optional(),
+    images: z.array(pptPreviewInputImageSchema).max(12).optional(),
   })
   .superRefine((value, context) => {
     if (value.templateMode === "single-template" && !value.templateId) {

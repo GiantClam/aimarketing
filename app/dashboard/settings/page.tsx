@@ -423,45 +423,6 @@ export default function SettingsPage() {
 
             <section className="space-y-4">
               <div className="space-y-2">
-                <SectionEyebrow>{t("企业设置", "Platform settings")}</SectionEyebrow>
-                <h2 className="font-sans text-2xl font-semibold text-foreground">{t("企业管理员配置入口", "Enterprise admin entry points")}</h2>
-                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("企业治理动作不再散落在个人设置页。这里保留一个清晰跳转，帮助管理员快速回到正确的治理面。", "Company governance actions no longer live inside personal settings. This section keeps a clear handoff back to the correct admin surface.")}</p>
-              </div>
-
-              <Card className={settingsSharpCardClass}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 font-sans text-xl">
-                    <Building2 className="h-5 w-5 text-primary" />
-                    {t("企业治理跳转", "Enterprise governance handoff")}
-                  </CardTitle>
-                  <CardDescription>{t("个人设置只负责当前账号。企业管理员相关的全局配置统一放进企业设置。", "Personal settings now focus on the current account only. Admin-level company configuration lives in platform settings.")}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className={`${settingsSharpShellClass} space-y-3 p-4`}>
-                    <p className="text-sm font-medium text-foreground">{t("已迁移的配置项", "Moved configuration areas")}</p>
-                    <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                      <div>{t("成员审核与成员权限", "Member reviews and member permissions")}</div>
-                      <div>{t("RAGFlow 连接与共享知识绑定", "RAGFlow connection and shared knowledge bindings")}</div>
-                      <div>{t("顾问工作流与执行模式", "Advisor workflows and execution modes")}</div>
-                      <div>{t("后续企业级 AI 治理能力", "Future enterprise AI governance controls")}</div>
-                    </div>
-                  </div>
-                  {canUseEnterpriseSettings ? (
-                    <Button type="button" className="dashboard-button-primary px-5" asChild>
-                      <Link href={enterpriseSettingsHref}>
-                        {isEnterpriseAdmin ? t("进入企业设置", "Go to platform settings") : t("查看企业设置", "View platform settings")}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{t("当前账号尚未绑定企业，暂时没有企业设置可用。", "This account is not bound to a company yet, so enterprise settings are not available.")}</p>
-                  )}
-                </CardContent>
-              </Card>
-            </section>
-
-            <section className="space-y-4">
-              <div className="space-y-2">
                 <SectionEyebrow>{t("安全设置", "Security settings")}</SectionEyebrow>
                 <h2 className="font-sans text-2xl font-semibold text-foreground">{t("密码与登录凭证", "Password and sign-in credentials")}</h2>
                 <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{t("修改密码仍然属于个人账号操作，继续保留在当前页面。", "Password changes remain a personal-account action and stay on this page.")}</p>

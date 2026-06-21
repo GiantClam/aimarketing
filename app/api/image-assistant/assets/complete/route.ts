@@ -12,6 +12,7 @@ import {
   isImageAssistantStorageKeyOwnedByUser,
 } from "@/lib/image-assistant/r2"
 import type { ImageAssistantAssetType, ImageAssistantReferenceRole } from "@/lib/image-assistant/types"
+import { registerAssetLibraryArtifactReference } from "@/lib/platform/asset-library-ingest"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -96,6 +97,25 @@ export async function POST(req: NextRequest) {
       height: Number.isFinite(height) ? height : null,
       sha256,
       status: "ready",
+    })
+
+    await registerAssetLibraryArtifactReference({
+      currentUser: auth.user,
+      runKind: "tool",
+      itemType: "image_asset",
+      itemSlug: "image-assistant-upload",
+      title: storageKey.split("/").pop() || storageKey,
+      mimeType: uploaded.contentType,
+      storageKey,
+      publicUrl: uploaded.publicUrl,
+      source: "assistant",
+      payload: {
+        entry: "image_assistant_complete",
+        imageAssistantAssetId: asset.id,
+        imageAssistantAssetType: assetType,
+        imageAssistantReferenceRole: referenceRole,
+        imageAssistantSessionId: sessionId,
+      },
     })
 
     return NextResponse.json({ data: asset })

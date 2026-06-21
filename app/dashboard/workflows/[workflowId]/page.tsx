@@ -2,15 +2,17 @@ import { notFound } from "next/navigation"
 
 import { WorkflowBuilderPage } from "@/components/workflows/workflow-builder-page"
 import { hasFeatureAccessWithFallback } from "@/lib/auth/guards"
-import { getAiEntryModelCatalog } from "@/lib/ai-entry/model-catalog"
-import { getConfiguredAiEntryProviders } from "@/lib/ai-entry/provider-routing"
 import { requireServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
-import { listEnterpriseAssetLibraryCandidates } from "@/lib/platform/assets"
 import { isMiniMaxAudioConfigured, listMiniMaxVoices } from "@/lib/platform/minimax-audio"
-import { listPlatformTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
-import { serializePlatformWorkflowRun } from "@/lib/platform/workflow-runner"
+import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
+import { serializeWorkflowRunDetail } from "@/lib/workflows/run-detail-serialization"
 import { getWorkflowDefinition, getWorkflowRunDetail } from "@/lib/workflows/store"
+import { findLatestWorkflowRunRecordForWorkflow } from "@/lib/workflows/manual-resume"
+import {
+  getGovernedAiEntryModelCatalogForUser,
+  resolveGovernedImageAssistantSelectionForUser,
+} from "@/lib/platform/model-governance"
 
 function getProviderLabel(providerId: string) {
   if (providerId === "pptoken") return "PPTOKEN"
@@ -19,41 +21,20 @@ function getProviderLabel(providerId: string) {
   return "CrazyRouter"
 }
 
-function resolveWorkflowIdFromRun(run: { inputPayload: Record<string, unknown> | null; normalizedResult: Record<string, unknown> | null }) {
-  const inputWorkflowId =
-    run.inputPayload && typeof run.inputPayload.workflowId === "number" ? run.inputPayload.workflowId : null
-  if (inputWorkflowId && Number.isInteger(inputWorkflowId) && inputWorkflowId > 0) return inputWorkflowId
-
-  const resultWorkflowId =
-    run.normalizedResult && typeof run.normalizedResult.workflowId === "number" ? run.normalizedResult.workflowId : null
-  if (resultWorkflowId && Number.isInteger(resultWorkflowId) && resultWorkflowId > 0) return resultWorkflowId
-
-  return null
-}
-
-function serializeWorkflowRunDetail(
-  detail: NonNullable<Awaited<ReturnType<typeof getWorkflowRunDetail>>>,
+async function measureWorkflowBuilderPageStep<T>(
+  workflowId: number,
+  label: string,
+  operation: () => Promise<T>,
 ) {
-  return {
-    run: serializePlatformWorkflowRun(detail.run),
-    workflow: {
-      ...detail.workflow,
-      createdAt: detail.workflow.createdAt.toISOString(),
-      updatedAt: detail.workflow.updatedAt.toISOString(),
-      edges: detail.workflow.edges.map((edge) => ({
-        ...edge,
-        inputName: edge.inputName ?? null,
-      })),
-    },
-    nodeExecutions: detail.nodeExecutions.map((execution) => ({
-      ...execution,
-      startedAt: execution.startedAt ? execution.startedAt.toISOString() : null,
-      finishedAt: execution.finishedAt ? execution.finishedAt.toISOString() : null,
-      createdAt: execution.createdAt ? execution.createdAt.toISOString() : null,
-      updatedAt: execution.updatedAt ? execution.updatedAt.toISOString() : null,
-    })),
-    detailPath: `/api/workflows/runs/${detail.run.id}`,
-    statusPath: `/api/workflows/runs/${detail.run.id}?mode=status`,
+  const startedAt = Date.now()
+  try {
+    return await operation()
+  } finally {
+    console.info("workflow.builder-page.timing", {
+      workflowId,
+      label,
+      durationMs: Date.now() - startedAt,
+    })
   }
 }
 
@@ -62,39 +43,47 @@ export default async function WorkflowBuilderRoutePage({
 }: {
   params: Promise<{ workflowId: string }>
 }) {
-  const locale = await getRequestLocale()
+  const requestStartedAt = Date.now()
+  const locale = await measureWorkflowBuilderPageStep(0, "request-locale", () => getRequestLocale())
   const displayLocale = locale === "zh" ? "zh" : "en"
-  const { workflowId } = await params
+  const { workflowId } = await measureWorkflowBuilderPageStep(0, "route-params", () => params)
   const numericWorkflowId = Number(workflowId)
-  const currentUser = await requireServerSessionUser(`/dashboard/workflows/${workflowId}`)
-  const configuredProviders = getConfiguredAiEntryProviders()
-
+  const currentUser = await measureWorkflowBuilderPageStep(numericWorkflowId, "session-user", () =>
+    requireServerSessionUser(`/dashboard/workflows/${workflowId}`),
+  )
   if (!currentUser.enterpriseId || !Number.isInteger(numericWorkflowId) || numericWorkflowId <= 0) {
     notFound()
   }
+  const enterpriseId = currentUser.enterpriseId
 
-  const [workflow, assets, llmDefaultCatalog, llmProviderCatalogs, taskRuns, voiceOptions] = await Promise.all([
-    getWorkflowDefinition(numericWorkflowId, currentUser.enterpriseId),
-    listEnterpriseAssetLibraryCandidates(currentUser.enterpriseId),
-    getAiEntryModelCatalog().catch(() => null),
-    Promise.all(
-      configuredProviders.map(async (provider) => ({
-        providerId: provider.id,
-        catalog: await getAiEntryModelCatalog({ providerId: provider.id }).catch(() => null),
-      })),
+  const [workflow, llmProviderCatalog, workflowImageSelection, recentWorkflowRuns, voiceOptions] = await Promise.all([
+    measureWorkflowBuilderPageStep(numericWorkflowId, "workflow-definition", () =>
+      getWorkflowDefinition(numericWorkflowId, enterpriseId),
     ),
-    listPlatformTaskRunsForEnterprise(currentUser.enterpriseId),
+    measureWorkflowBuilderPageStep(numericWorkflowId, "llm-provider-catalog", () =>
+      getGovernedAiEntryModelCatalogForUser({
+        user: currentUser,
+      }).catch(() => null),
+    ),
+    measureWorkflowBuilderPageStep(numericWorkflowId, "workflow-image-providers", () =>
+      resolveGovernedImageAssistantSelectionForUser({ user: currentUser }).catch(() => null),
+    ),
+    measureWorkflowBuilderPageStep(numericWorkflowId, "recent-workflow-runs", () =>
+      listRecentWorkflowTaskRunsForEnterprise(enterpriseId, 40),
+    ),
     hasFeatureAccessWithFallback(currentUser, "audio_generation", "video_generation") && isMiniMaxAudioConfigured()
-      ? listMiniMaxVoices("all")
-          .then((result) =>
-            result.voices.map((voice) => ({
-              voiceId: voice.voiceId,
-              voiceName: voice.voiceName,
-              category: voice.category,
-              description: voice.description,
-            })),
-          )
-          .catch(() => [])
+      ? measureWorkflowBuilderPageStep(numericWorkflowId, "voice-options", () =>
+          listMiniMaxVoices("all")
+            .then((result) =>
+              result.voices.map((voice) => ({
+                voiceId: voice.voiceId,
+                voiceName: voice.voiceName,
+                category: voice.category,
+                description: voice.description,
+              })),
+            )
+            .catch(() => []),
+        )
       : Promise.resolve([]),
   ])
 
@@ -102,14 +91,20 @@ export default async function WorkflowBuilderRoutePage({
     notFound()
   }
 
-  const latestRun =
-    taskRuns.find(
-      (run) =>
-        run.kind === "workflow" &&
-        run.itemType === "workflow" &&
-        resolveWorkflowIdFromRun(run) === numericWorkflowId,
-    ) ?? null
-  const latestRunDetail = latestRun ? await getWorkflowRunDetail(latestRun.id, currentUser.enterpriseId) : null
+  const latestRun = findLatestWorkflowRunRecordForWorkflow(recentWorkflowRuns, numericWorkflowId)
+  const latestRunDetail = latestRun
+    ? await measureWorkflowBuilderPageStep(numericWorkflowId, "latest-run-detail", () =>
+        getWorkflowRunDetail(latestRun.id, enterpriseId),
+      )
+    : null
+  const serializedLatestRunDetail = serializeWorkflowRunDetail(latestRunDetail)
+  console.info("workflow.builder-page.timing", {
+    workflowId: numericWorkflowId,
+    label: "total",
+    durationMs: Date.now() - requestStartedAt,
+    providerCatalogCount: llmProviderCatalog?.providers.length ?? 0,
+    latestRunId: latestRun?.id ?? null,
+  })
 
   return (
     <WorkflowBuilderPage
@@ -123,23 +118,55 @@ export default async function WorkflowBuilderRoutePage({
           inputName: edge.inputName ?? null,
         })),
       }}
-      assets={assets}
+      assets={[]}
       llmModelCatalog={{
-        defaultProviderId: llmDefaultCatalog?.selectedProviderId || llmDefaultCatalog?.providerId || null,
-        defaultModelId: llmDefaultCatalog?.selectedModelId || llmDefaultCatalog?.models[0]?.id || null,
-        providers: llmProviderCatalogs
-          .map(({ providerId, catalog }) => ({
-            providerId,
-            label: getProviderLabel(providerId),
-            models: (catalog?.models || []).map((model) => ({
-              modelId: model.id,
-              label: model.name || model.id,
-            })),
+        defaultProviderId: llmProviderCatalog?.selectedProviderId || llmProviderCatalog?.providerId || null,
+        defaultModelId: llmProviderCatalog?.selectedModelId || llmProviderCatalog?.models[0]?.id || null,
+        providers: (llmProviderCatalog?.providers || [])
+          .map((provider) => ({
+            providerId: provider.id,
+            label: provider.label || getProviderLabel(provider.id),
+            models: (llmProviderCatalog?.modelGroups.find((group) => group.family === provider.id)?.models || [])
+              .map((model) => ({
+                modelId: model.id,
+                label: model.name || model.id,
+              })),
           }))
           .filter((provider) => provider.models.length > 0),
       }}
+      workflowImageProviderOptions={
+        Object.values(
+          (workflowImageSelection?.modelOptions || []).reduce<Record<string, { providerId: string; label: string; models: Array<{ modelId: string; label: string; optionId?: string | null }> }>>(
+            (accumulator, option) => {
+              const current =
+                accumulator[option.providerId] ||
+                {
+                  providerId: option.providerId,
+                  label: option.providerLabel,
+                  models: [],
+                }
+              current.models.push({
+                modelId: option.modelId,
+                label: option.label,
+                optionId: option.id,
+              })
+              accumulator[option.providerId] = current
+              return accumulator
+            },
+            {},
+          ),
+        )
+      }
       voiceOptions={voiceOptions}
-      initialLatestRunDetail={latestRunDetail ? serializeWorkflowRunDetail(latestRunDetail) : null}
+      initialLatestRunDetail={
+        serializedLatestRunDetail
+          ? {
+              ...serializedLatestRunDetail,
+              detailPath: `/api/workflows/runs/${latestRun!.id}`,
+            }
+          : null
+      }
+      initialLatestRunId={latestRun?.id ?? null}
     />
   )
 }

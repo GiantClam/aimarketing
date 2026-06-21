@@ -10,6 +10,7 @@ import { WorkflowCanvas } from "@/components/workflows/workflow-canvas"
 import { WorkflowNodeConfigPanel } from "@/components/workflows/workflow-node-config-panel"
 import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palette"
 import { type WorkflowRunResultsDetail } from "@/components/workflows/workflow-run-results-page"
+import { buildGovernedImageAssistantModelOptionId } from "@/lib/platform/governed-image-model-option-id"
 import {
   canWorkflowNodeConnectValueKind,
   getDefaultWorkflowNodeTitle,
@@ -25,6 +26,7 @@ import {
   replaceWorkflowImagePromptAliasTokensBatch,
 } from "@/lib/workflows/image-prompt-references"
 import { buildWorkflowRunStatusPath } from "@/lib/workflows/run-status-path"
+import { isWorkflowRunActiveStatus, isWorkflowRunResumableStatus } from "@/lib/workflows/run-status"
 import type { WorkflowDefinition } from "@/lib/workflows/store"
 
 type SerializedWorkflowEdge = Omit<WorkflowDefinitionEdge, "inputName"> & {
@@ -76,6 +78,16 @@ type WorkflowLlmModelCatalog = {
       modelId: string
       label: string
     }>
+  }>
+}
+
+type WorkflowImageProviderOption = {
+  providerId: string
+  label: string
+  models: Array<{
+    modelId: string
+    label: string
+    optionId?: string | null
   }>
 }
 
@@ -232,11 +244,107 @@ function collapseNodeExecutionsToLatest(detail: WorkflowRunResultsDetail | null)
   return [...latestByNodeKey.values()]
 }
 
+function resolveWorkflowResumeNodeKeyFromDetail(detail: WorkflowRunResultsDetail) {
+  const latestByNodeKey = new Map<string, WorkflowRunResultsDetail["nodeExecutions"][number]>()
+
+  for (const execution of detail.nodeExecutions) {
+    const current = latestByNodeKey.get(execution.nodeKey)
+    if (!current || execution.id >= current.id) {
+      latestByNodeKey.set(execution.nodeKey, execution)
+    }
+  }
+
+  for (const node of detail.workflow.nodes) {
+    const execution = latestByNodeKey.get(node.nodeKey)
+    if (execution?.status === "failed") return node.nodeKey
+  }
+
+  for (const node of detail.workflow.nodes) {
+    const execution = latestByNodeKey.get(node.nodeKey)
+    if (execution?.status === "cancelled") return node.nodeKey
+  }
+
+  return null
+}
+
+function collectWorkflowBranchNodeKeysFromDefinition(input: {
+  nodeKey: string
+  nodes: WorkflowDefinitionNode[]
+  edges: SerializedWorkflowEdge[]
+}) {
+  const childMap = new Map<string, string[]>()
+  for (const node of input.nodes) {
+    childMap.set(node.nodeKey, [])
+  }
+
+  for (const edge of input.edges) {
+    const current = childMap.get(edge.sourceNodeKey) ?? []
+    current.push(edge.targetNodeKey)
+    childMap.set(edge.sourceNodeKey, current)
+  }
+
+  const collected = new Set<string>([input.nodeKey])
+  const queue = [input.nodeKey]
+
+  while (queue.length > 0) {
+    const next = queue.shift()!
+    for (const childNodeKey of childMap.get(next) ?? []) {
+      if (collected.has(childNodeKey)) continue
+      collected.add(childNodeKey)
+      queue.push(childNodeKey)
+    }
+  }
+
+  return [...collected]
+}
+
+function buildOptimisticResumeDetail(detail: WorkflowRunResultsDetail) {
+  const resumeNodeKey = resolveWorkflowResumeNodeKeyFromDetail(detail)
+  if (!resumeNodeKey) return null
+
+  const rerunNodeKeys = new Set(
+    collectWorkflowBranchNodeKeysFromDefinition({
+      nodeKey: resumeNodeKey,
+      nodes: detail.workflow.nodes as WorkflowDefinitionNode[],
+      edges: detail.workflow.edges as SerializedWorkflowEdge[],
+    }),
+  )
+  const nowIso = new Date().toISOString()
+
+  return {
+    ...detail,
+    run: {
+      ...detail.run,
+      status: "running",
+      startedAt: detail.run.startedAt ?? nowIso,
+      finishedAt: null,
+      updatedAt: nowIso,
+    },
+    nodeExecutions: detail.nodeExecutions.map((execution) => {
+      if (!rerunNodeKeys.has(execution.nodeKey)) return execution
+
+      return {
+        ...execution,
+        status: execution.nodeKey === resumeNodeKey ? "running" : "queued",
+        providerId: null,
+        modelId: null,
+        taskRunId: null,
+        errorMessage: null,
+        creditsConsumed: 0,
+        startedAt: execution.nodeKey === resumeNodeKey ? nowIso : null,
+        finishedAt: null,
+        updatedAt: nowIso,
+      }
+    }),
+  } satisfies WorkflowRunResultsDetail
+}
+
 function buildNode(
   type: WorkflowNodeType,
   nodes: WorkflowDefinitionNode[],
   locale: WorkflowLocale,
   llmModelCatalog: WorkflowLlmModelCatalog,
+  workflowImageProviderOptions: WorkflowImageProviderOption[],
   voiceOptions: WorkflowVoiceOption[],
   position?: { x: number; y: number },
 ) {
@@ -268,9 +376,21 @@ function buildNode(
               }
             : type === "image_generate"
               ? {
-                  sizePreset: "16:9",
-                  resolution: "512",
+                  selectedProviderId: workflowImageProviderOptions[0]?.providerId || "pptoken",
+                  selectedModelId: workflowImageProviderOptions[0]?.models[0]?.modelId || "gpt-image-2",
+                  selectedModelOptionId:
+                    workflowImageProviderOptions[0]?.models[0]?.optionId ||
+                    buildGovernedImageAssistantModelOptionId({
+                      providerId: workflowImageProviderOptions[0]?.providerId || "pptoken",
+                      modelId: workflowImageProviderOptions[0]?.models[0]?.modelId || "gpt-image-2",
+                    }),
                   candidateCount: 1,
+                  imageSize: "1024x1024",
+                  imageQuality: "auto",
+                  imageBackground: "auto",
+                  imageOutputFormat: "png",
+                  imageModeration: "auto",
+                  imageResponseFormat: "url",
                 }
               : type === "video_generate"
                 ? {
@@ -369,15 +489,19 @@ export function WorkflowBuilderPage({
   initialWorkflow,
   assets,
   llmModelCatalog,
+  workflowImageProviderOptions,
   voiceOptions,
   initialLatestRunDetail = null,
+  initialLatestRunId = null,
 }: {
   locale: "zh" | "en"
   initialWorkflow: SerializedWorkflowDefinition
   assets: WorkflowAssetCandidate[]
   llmModelCatalog: WorkflowLlmModelCatalog
+  workflowImageProviderOptions: WorkflowImageProviderOption[]
   voiceOptions: WorkflowVoiceOption[]
   initialLatestRunDetail?: WorkflowRunResultsDetail | null
+  initialLatestRunId?: number | null
 }) {
   const canvasShellRef = useRef<HTMLDivElement | null>(null)
   const dragMovedRef = useRef<Record<FloatingControlKey, boolean>>({
@@ -385,10 +509,11 @@ export function WorkflowBuilderPage({
     settings: false,
   })
   const [workflow, setWorkflow] = useState(initialWorkflow)
+  const [assetCandidates, setAssetCandidates] = useState(assets)
   const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(initialWorkflow.nodes[0]?.nodeKey ?? null)
   const [pendingConnectionSourceKey, setPendingConnectionSourceKey] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [running, setRunning] = useState(false)
+  const [runActionPending, setRunActionPending] = useState(false)
   const [uploadPending, setUploadPending] = useState(false)
   const [libraryCollapsed, setLibraryCollapsed] = useState(true)
   const [settingsCollapsed, setSettingsCollapsed] = useState(false)
@@ -402,9 +527,85 @@ export function WorkflowBuilderPage({
   const [latestRunDetail, setLatestRunDetail] = useState<WorkflowRunResultsDetail | null>(initialLatestRunDetail)
   const [savedSnapshot, setSavedSnapshot] = useState(() => buildSnapshot(initialWorkflow))
   const latestRunRequestInFlightRef = useRef(false)
+  const assetCandidatesRequestedRef = useRef(false)
+  const latestRunInitialFetchRequestedRef = useRef(false)
 
   const dirty = useMemo(() => buildSnapshot(workflow) !== savedSnapshot, [savedSnapshot, workflow])
   const latestNodeExecutions = useMemo(() => collapseNodeExecutionsToLatest(latestRunDetail), [latestRunDetail])
+  const latestRunStatus = latestRunDetail?.run.status ?? null
+  const hasActiveRun = isWorkflowRunActiveStatus(latestRunStatus)
+  const canResumeRun = isWorkflowRunResumableStatus(latestRunStatus)
+  const controlsLocked = saving || runActionPending || hasActiveRun
+  const selectedNode = useMemo(
+    () => workflow.nodes.find((node) => node.nodeKey === selectedNodeKey) ?? null,
+    [selectedNodeKey, workflow.nodes],
+  )
+
+  useEffect(() => {
+    if (assetCandidates.length > 0) return
+    if (selectedNode?.type !== "upload") return
+    if (assetCandidatesRequestedRef.current) return
+
+    assetCandidatesRequestedRef.current = true
+    let cancelled = false
+
+    void fetch("/api/platform/assets/candidates", {
+      credentials: "same-origin",
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { data?: WorkflowAssetCandidate[]; error?: string } | null
+        if (!response.ok || !Array.isArray(payload?.data)) {
+          throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_asset_candidates_failed")
+        }
+        if (!cancelled) {
+          setAssetCandidates(payload.data)
+        }
+      })
+      .catch((error) => {
+        console.error("workflow.asset-candidates.fetch.failed", {
+          message: error instanceof Error ? error.message : String(error),
+        })
+        assetCandidatesRequestedRef.current = false
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [assetCandidates.length, selectedNode?.type])
+
+  useEffect(() => {
+    if (latestRunDetail) return
+    if (!initialLatestRunId) return
+    if (latestRunInitialFetchRequestedRef.current) return
+
+    latestRunInitialFetchRequestedRef.current = true
+    let cancelled = false
+
+    void fetch(`/api/workflows/runs/${initialLatestRunId}`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { data?: WorkflowRunResultsDetail; error?: string } | null
+        if (!response.ok || !payload?.data?.run) {
+          throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_latest_run_fetch_failed")
+        }
+        if (!cancelled) {
+          setLatestRunDetail(payload.data)
+        }
+      })
+      .catch((error) => {
+        console.error("workflow.latest-run.fetch.failed", {
+          runId: initialLatestRunId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        latestRunInitialFetchRequestedRef.current = false
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialLatestRunId, latestRunDetail])
 
   const getDockedFloatingControlX = useCallback(
     (control: FloatingControlKey, collapsed: boolean, dock: FloatingControlDock, containerWidth: number) => {
@@ -667,6 +868,7 @@ export function WorkflowBuilderPage({
           duplicateSuffix: "副本",
           runStarted: "工作流已开始运行，节点状态会在画布中实时刷新。",
           resumeStarted: "工作流已从失败节点继续运行，节点状态会在画布中实时刷新。",
+          activeRunAttached: "已连接到当前运行中的工作流，节点状态会在画布中实时刷新。",
           latestRunReady: "运行结果已在当前编排页更新。",
         }
       : {
@@ -695,16 +897,13 @@ export function WorkflowBuilderPage({
           duplicateSuffix: "Copy",
           runStarted: "Workflow run started. Node states will refresh directly on the canvas.",
           resumeStarted: "Workflow resumed from the failed node. Node states will refresh directly on the canvas.",
+          activeRunAttached: "Attached to the current active run. Node states will refresh directly on the canvas.",
           latestRunReady: "Run results were updated in the current builder.",
         }
 
   useEffect(() => {
-    if (latestRunDetail?.run.status !== "running" && latestRunDetail?.run.status !== "queued") {
-      setRunning(false)
-      return
-    }
+    if (!isWorkflowRunActiveStatus(latestRunDetail?.run.status)) return
 
-    setRunning(true)
     let cancelled = false
     latestRunRequestInFlightRef.current = false
 
@@ -736,7 +935,7 @@ export function WorkflowBuilderPage({
             : current,
         )
 
-        if (nextStatus !== "running" && nextStatus !== "queued") {
+        if (!isWorkflowRunActiveStatus(nextStatus)) {
           const fullResponse = await fetch(latestRunDetail.detailPath, {
             credentials: "same-origin",
             cache: "no-store",
@@ -849,7 +1048,15 @@ export function WorkflowBuilderPage({
 
   const addNode = (type: WorkflowNodeType, position?: { x: number; y: number }) => {
     setWorkflow((current) => {
-      const nextNode = buildNode(type, current.nodes, locale, llmModelCatalog, voiceOptions, position)
+      const nextNode = buildNode(
+        type,
+        current.nodes,
+        locale,
+        llmModelCatalog,
+        workflowImageProviderOptions,
+        voiceOptions,
+        position,
+      )
       return {
         ...current,
         nodes: [...current.nodes, nextNode],
@@ -939,6 +1146,10 @@ export function WorkflowBuilderPage({
   }
 
   async function saveWorkflow(currentWorkflow: SerializedWorkflowDefinition) {
+    if (buildSnapshot(currentWorkflow) === savedSnapshot) {
+      return currentWorkflow
+    }
+
     const response = await fetch(`/api/workflows/${currentWorkflow.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -984,11 +1195,17 @@ export function WorkflowBuilderPage({
       return
     }
 
-    setRunning(true)
+    setRunActionPending(true)
     setMessage(null)
     setErrorMessage(null)
 
     try {
+      const optimisticResumeDetail =
+        canResumeRun && latestRunDetail ? buildOptimisticResumeDetail(latestRunDetail) : null
+      if (optimisticResumeDetail) {
+        setLatestRunDetail(optimisticResumeDetail)
+      }
+
       const activeWorkflow = await saveWorkflow(workflow)
       const response = await fetch(`/api/workflows/${activeWorkflow.id}/run`, {
         method: "POST",
@@ -1000,10 +1217,17 @@ export function WorkflowBuilderPage({
         throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_run_failed")
       }
       setLatestRunDetail(payload.data as WorkflowRunResultsDetail)
-      setMessage(payload.data.executionMode === "resume" ? copy.resumeStarted : copy.runStarted)
+      setMessage(
+        payload.data.executionMode === "resume"
+          ? payload.data.resumedFrom
+            ? copy.resumeStarted
+            : copy.activeRunAttached
+          : copy.runStarted,
+      )
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "workflow_run_failed")
-      setRunning(false)
+    } finally {
+      setRunActionPending(false)
     }
   }
 
@@ -1113,11 +1337,11 @@ export function WorkflowBuilderPage({
               <Button type="button" variant="outline" className="h-9 rounded-[8px]" asChild>
                 <Link href="/dashboard/workflows">{copy.list}</Link>
               </Button>
-              <Button type="button" variant="outline" className="h-9 rounded-[8px]" onClick={() => void handleSave()} disabled={saving || running}>
+              <Button type="button" variant="outline" className="h-9 rounded-[8px]" onClick={() => void handleSave()} disabled={controlsLocked}>
                 {saving ? copy.savePending : copy.save}
               </Button>
-              <Button type="button" className="public-button-primary h-9 px-4" onClick={() => void handleRun()} disabled={running || saving}>
-                {running ? copy.runPending : latestRunDetail?.run.status === "failed" ? copy.resume : copy.run}
+              <Button type="button" className="public-button-primary h-9 px-4" onClick={() => void handleRun()} disabled={controlsLocked}>
+                {hasActiveRun || runActionPending ? copy.runPending : canResumeRun ? copy.resume : copy.run}
               </Button>
             </div>
           </div>
@@ -1140,8 +1364,9 @@ export function WorkflowBuilderPage({
                 locale={locale}
                 nodes={workflow.nodes}
                 edges={workflow.edges}
-                assets={assets}
+                assets={assetCandidates}
                 llmModelCatalog={llmModelCatalog}
+                workflowImageProviderOptions={workflowImageProviderOptions}
                 voiceOptions={voiceOptions}
                 selectedNodeKey={selectedNodeKey}
                 pendingConnectionSourceKey={pendingConnectionSourceKey}
@@ -1168,7 +1393,7 @@ export function WorkflowBuilderPage({
               {libraryCollapsed ? (
                 <button
                   type="button"
-                  className="absolute z-20 inline-flex h-10 cursor-grab items-center gap-2 rounded-[12px] border border-border/80 bg-background/92 px-3 text-foreground shadow-[0_10px_30px_rgba(15,23,42,0.14)] transition hover:border-primary/50 hover:bg-primary hover:text-primary-foreground active:cursor-grabbing"
+                  className="absolute z-20 inline-flex h-10 cursor-grab items-center gap-2 rounded-[12px] border border-primary/70 bg-primary px-3 text-primary-foreground shadow-[0_14px_34px_rgba(252,211,77,0.42)] ring-1 ring-primary/35 transition hover:border-primary hover:bg-[#ffe95c] hover:text-primary-foreground active:cursor-grabbing"
                   style={{ left: libraryPosition.x, top: libraryPosition.y }}
                   onPointerDown={(event) => startFloatingControlDrag("library", event)}
                   onClick={() => handleFloatingControlToggle("library", () => setLibraryCollapsed(false))}
@@ -1206,7 +1431,7 @@ export function WorkflowBuilderPage({
               {settingsCollapsed ? (
                 <button
                   type="button"
-                  className="absolute z-20 inline-flex h-10 cursor-grab items-center gap-2 rounded-[12px] border border-border/80 bg-background/92 px-3 text-foreground shadow-[0_10px_30px_rgba(15,23,42,0.14)] transition hover:border-primary/50 hover:bg-primary hover:text-primary-foreground active:cursor-grabbing"
+                  className="absolute z-20 inline-flex h-10 cursor-grab items-center gap-2 rounded-[12px] border border-primary/70 bg-primary px-3 text-primary-foreground shadow-[0_14px_34px_rgba(252,211,77,0.42)] ring-1 ring-primary/35 transition hover:border-primary hover:bg-[#ffe95c] hover:text-primary-foreground active:cursor-grabbing"
                   style={{ left: settingsPosition.x, top: settingsPosition.y }}
                   onPointerDown={(event) => startFloatingControlDrag("settings", event)}
                   onClick={() => handleFloatingControlToggle("settings", () => setSettingsCollapsed(false))}

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import {
+  ArrowRight,
   Download,
   ExternalLink,
   FileAudio,
@@ -29,6 +30,7 @@ import { filterWorkLibraryCandidates, groupWorkLibraryCandidates } from "@/lib/p
 type WorkspaceWorkLibraryItem = EnterpriseWorkLibraryCandidate
 
 type PendingAction =
+  | { kind: "move"; item: WorkspaceWorkLibraryItem }
   | { kind: "remove"; item: WorkspaceWorkLibraryItem }
   | { kind: "delete"; item: WorkspaceWorkLibraryItem }
   | null
@@ -158,6 +160,8 @@ export function WorkspaceWorkLibrary({
           noResults: "没有匹配的作品。",
           open: "查看",
           download: "下载",
+          move: "移到素材库",
+          moveConfirm: "确认移动",
           remove: "移出作品库",
           removeConfirm: "确认移出",
           delete: "彻底删除",
@@ -174,6 +178,8 @@ export function WorkspaceWorkLibrary({
           filePreview: "文件预览",
           missingSource: "当前文件没有可访问源地址。",
           busy: "处理中...",
+          moveTitle: "移动到素材库",
+          moveDescription: "会移除该文件的全部作品库记录，并将底层文件保留到素材库中。",
           removeTitle: "移出作品库",
           removeDescription: "仅删除作品库记录，保留底层文件。",
           deleteTitle: "彻底删除文件",
@@ -191,6 +197,8 @@ export function WorkspaceWorkLibrary({
           noResults: "No matching works.",
           open: "Open",
           download: "Download",
+          move: "Move to assets",
+          moveConfirm: "Confirm move",
           remove: "Remove",
           removeConfirm: "Confirm remove",
           delete: "Delete",
@@ -207,6 +215,8 @@ export function WorkspaceWorkLibrary({
           filePreview: "File preview",
           missingSource: "This file does not currently expose a source URL.",
           busy: "Working...",
+          moveTitle: "Move to asset library",
+          moveDescription: "This removes all work-library records for the file and keeps the underlying file in the asset library.",
           removeTitle: "Remove from work library",
           removeDescription: "This removes only the work-library record and keeps the underlying file.",
           deleteTitle: "Permanently delete file",
@@ -231,7 +241,13 @@ export function WorkspaceWorkLibrary({
     setErrorMessage(null)
 
     try {
-      if (pendingAction.kind === "remove") {
+      if (pendingAction.kind === "move") {
+        const response = await fetch(`/api/platform/artifacts/${pendingAction.item.artifactId}/move-to-assets`, {
+          method: "POST",
+        })
+        if (!response.ok) throw new Error("move_failed")
+        setItems((current) => current.filter((item) => item.artifactId !== pendingAction.item.artifactId))
+      } else if (pendingAction.kind === "remove") {
         const response = await fetch(`/api/platform/work-items/${pendingAction.item.workId}`, {
           method: "DELETE",
         })
@@ -319,34 +335,20 @@ export function WorkspaceWorkLibrary({
                         <div className="mt-4 space-y-3">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <h3 className="truncate text-base font-semibold text-foreground" title={item.title}>
-                                {item.title}
-                              </h3>
+                              <div className="flex items-start justify-between gap-3">
+                                <h3 className="line-clamp-2 min-w-0 flex-1 text-base font-semibold leading-6 text-foreground" title={item.title}>
+                                  {item.title}
+                                </h3>
+                                <div className="shrink-0 text-xs text-muted-foreground">
+                                  {formatWorkTimestamp(item.createdAt, locale)}
+                                </div>
+                              </div>
                               <div className="mt-2 flex flex-wrap gap-2">
                                 <Badge variant="secondary">{item.mimeType || item.type}</Badge>
                                 {item.source ? <Badge variant="outline">{item.source}</Badge> : null}
                               </div>
                             </div>
                           </div>
-
-                          <dl className="grid gap-2 text-sm text-muted-foreground">
-                            <div className="flex justify-between gap-3">
-                              <dt>{copy.created}</dt>
-                              <dd className="text-right text-foreground/85">{formatWorkTimestamp(item.createdAt, locale)}</dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                              <dt>{copy.artifactId}</dt>
-                              <dd className="text-right text-foreground/85">{item.artifactId}</dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                              <dt>{copy.workId}</dt>
-                              <dd className="text-right text-foreground/85">{item.workId}</dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                              <dt>{copy.referenceCount}</dt>
-                              <dd className="text-right text-foreground/85">{item.referenceCount}</dd>
-                            </div>
-                          </dl>
 
                           <div className="flex flex-wrap gap-2">
                             <Button size="sm" onClick={() => setActivePreviewItem(item)}>
@@ -358,6 +360,10 @@ export function WorkspaceWorkLibrary({
                                 <Download className="size-4" />
                                 {copy.download}
                               </a>
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setPendingAction({ kind: "move", item })}>
+                              <ArrowRight className="size-4" />
+                              {copy.move}
                             </Button>
                             <Button size="sm" variant="outline" onClick={() => setPendingAction({ kind: "remove", item })}>
                               <Trash2 className="size-4" />
@@ -422,9 +428,19 @@ export function WorkspaceWorkLibrary({
       <Dialog open={Boolean(pendingAction)} onOpenChange={(open) => (!open ? setPendingAction(null) : null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{pendingAction?.kind === "delete" ? copy.deleteTitle : copy.removeTitle}</DialogTitle>
+            <DialogTitle>
+              {pendingAction?.kind === "delete"
+                ? copy.deleteTitle
+                : pendingAction?.kind === "move"
+                  ? copy.moveTitle
+                  : copy.removeTitle}
+            </DialogTitle>
             <DialogDescription>
-              {pendingAction?.kind === "delete" ? copy.deleteDescription : copy.removeDescription}
+              {pendingAction?.kind === "delete"
+                ? copy.deleteDescription
+                : pendingAction?.kind === "move"
+                  ? copy.moveDescription
+                  : copy.removeDescription}
             </DialogDescription>
           </DialogHeader>
           {pendingAction ? (
@@ -449,6 +465,8 @@ export function WorkspaceWorkLibrary({
                 ? copy.busy
                 : pendingAction?.kind === "delete"
                   ? copy.deleteConfirm
+                  : pendingAction?.kind === "move"
+                    ? copy.moveConfirm
                   : copy.removeConfirm}
             </Button>
           </DialogFooter>

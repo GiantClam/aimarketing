@@ -11,11 +11,16 @@ const originalLoad = nodeModule._load
 type ConversationTurnParams = {
   userId: number
   enterpriseId?: number | null
+  enterpriseRole?: string | null
+  enterpriseStatus?: string | null
   requestIp: string
   sessionId?: string | null
   prompt: string
   taskType: "generate" | "edit"
   referenceAssetIds?: string[]
+  modelOptionId?: string | null
+  providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
+  model?: string | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
@@ -59,6 +64,28 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       enqueueAssistantTask: async (input: { workflowName: string; payload: ConversationTurnParams & { kind: string } }) => {
         enqueueCalls.push(input)
         return { id: "task-1" }
+      },
+    }
+  }
+  if (request === "@/lib/platform/model-governance") {
+    return {
+      resolveGovernedImageAssistantSelectionForUser: async (input: {
+        modelOptionId?: string | null
+        model?: string | null
+      }) => {
+        const optionId = input.modelOptionId || "workspace:pptoken:gpt-image-2"
+        const providerId = optionId.includes(":aiberm:") ? "aiberm" : optionId.includes(":crazyroute:") ? "crazyroute" : "pptoken"
+        return {
+          source: "workspace",
+          modelOptionId: optionId,
+          providerId,
+          providerLabel: providerId,
+          providerLock: providerId,
+          model: input.model || "gpt-image-2",
+          modelOptions: [],
+          providerOptions: [],
+          enterpriseRuntime: null,
+        }
       },
     }
   }
@@ -193,6 +220,8 @@ test("generate route keeps generate mode for explicit reference prompt without e
       prompt: "Use this image as style reference and generate a new campaign poster",
       sessionId: "s-1",
       referenceAssetIds: ["asset-1"],
+      modelOptionId: "workspace:aiberm:gpt-image-2",
+      model: "gpt-image-2",
       candidateCount: 1,
       preferAsync: false,
     }),
@@ -202,6 +231,9 @@ test("generate route keeps generate mode for explicit reference prompt without e
   assert.equal(runTurnCalls.length, 1)
   assert.equal(runTurnCalls[0].taskType, "generate")
   assert.deepEqual(runTurnCalls[0].referenceAssetIds, ["asset-1"])
+  assert.equal(runTurnCalls[0].modelOptionId, "workspace:aiberm:gpt-image-2")
+  assert.equal(runTurnCalls[0].providerLock, "aiberm")
+  assert.equal(runTurnCalls[0].model, "gpt-image-2")
   assert.equal(enqueueCalls.length, 0)
 })
 

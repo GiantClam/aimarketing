@@ -59,34 +59,30 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
       id: imageAvailability.provider,
       scope: "image",
       configured: imageAvailability.enabled,
-      active: imageAvailability.enabled && !runningHubImageConfigured,
+      active: imageAvailability.enabled,
       model: `${imageAvailability.models.highQuality} / ${imageAvailability.models.lowCost}`,
       baseURL: null,
-      role: runningHubImageConfigured ? "fallback" : getImageProviderRole(imageAvailability.provider),
+      role: getImageProviderRole(imageAvailability.provider),
       capabilitySlugs: ["ai-image"],
       notes: uniqueNotes([
         imageAvailability.reason ? `Image runtime reason: ${imageAvailability.reason}.` : "Image runtime is ready.",
-        runningHubImageConfigured
-          ? "Current image flows can be routed through RunningHub while the image-assistant runtime stays available as fallback."
-          : "Current image flows still run through the existing image-assistant runtime.",
+        "Current image flows run through the image-assistant execution path.",
       ]),
     },
     {
       id: "runninghub-image",
       scope: "image",
       configured: runningHubImageConfigured,
-      active: runningHubImageConfigured,
+      active: false,
       model: null,
       baseURL: runningHubConfig.baseUrl,
-      role: runningHubImageConfigured ? "primary" : "planned",
+      role: runningHubImageConfigured ? "fallback" : "planned",
       capabilitySlugs: ["ai-image", "runninghub-media"],
       notes: [
         runningHubImageConfigured
-          ? "Configured as the shared image provider in the unified media runtime."
+          ? "Configured in the shared media runtime, but no longer the primary execution path for AI image capability."
           : "Reserved as the target image provider in the shared media runtime.",
-        runningHubImageConfigured
-          ? "Image capability can execute through the platform media adapter."
-          : "Image capability still falls back to the existing image-assistant execution layer today.",
+        "AI image capability now resolves through the governed image-assistant runtime.",
       ],
     },
     {
@@ -133,16 +129,12 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
       capabilitySlug: "ai-image",
       title: "AI image assistant queue",
       mode: "async",
-      enabled: runningHubImageConfigured || imageAvailability.enabled,
-      runtimeId: runningHubImageConfigured ? "runninghub-image" : "image-assistant",
+      enabled: imageAvailability.enabled,
+      runtimeId: "image-assistant",
       statuses: ["queued", "running", "succeeded", "failed", "cancelled"],
       notes: [
-        runningHubImageConfigured
-          ? "Image generation is now available through the shared RunningHub media adapter."
-          : "Image generation defaults to the async assistant queue for stability.",
-        runningHubImageConfigured
-          ? "Image-assistant stays available as an implementation fallback when RunningHub is not configured."
-          : "Direct execution still exists as an explicit opt-in path.",
+        "Image generation defaults to the async assistant queue for stability.",
+        "Governed enterprise image providers resolve through the same image-assistant runtime path.",
       ],
     },
     {

@@ -35,6 +35,13 @@ import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/co
 import type { WriterConversationStatus, WriterHistoryEntry, WriterPreloadedBrief } from "@/lib/writer/types"
 import type { WriterAgentType } from "@/lib/writer/memory/types"
 import type { ImageAssistantBrief, ImageAssistantGuidedSelection, ImageAssistantTaskType } from "@/lib/image-assistant/types"
+import type {
+  GptImage2Background,
+  GptImage2OutputFormat,
+  GptImage2Quality,
+  GptImage2Moderation,
+  GptImage2ResponseFormat,
+} from "@/lib/image-assistant/model-options"
 
 type AssistantTaskStatus = "pending" | "running" | "success" | "failed"
 type AssistantTaskProgressStatus = "running" | "completed" | "failed" | "info"
@@ -71,6 +78,8 @@ type ImageTurnTaskPayload = {
   kind: "image_turn"
   userId: number
   enterpriseId?: number | null
+  enterpriseRole?: string | null
+  enterpriseStatus?: string | null
   requestIp: string
   sessionId: string
   prompt: string
@@ -78,10 +87,19 @@ type ImageTurnTaskPayload = {
   taskType: ImageAssistantTaskType
   referenceAssetIds?: string[]
   referenceUrls?: string[]
+  modelOptionId?: string | null
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
+  model?: string | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
+  imageSize?: string | null
+  imageQuality?: GptImage2Quality | null
+  imageBackground?: GptImage2Background | null
+  imageOutputFormat?: GptImage2OutputFormat | null
+  imageOutputCompression?: number | null
+  imageModeration?: GptImage2Moderation | null
+  imageResponseFormat?: GptImage2ResponseFormat | null
   parentVersionId?: string | null
   extraInstructions?: string | null
   snapshotAssetId?: string | null
@@ -692,6 +710,8 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
     referenceAssetCount: (payload.referenceAssetIds?.length || 0) + (payload.referenceUrls?.length || 0),
     sizePreset: payload.sizePreset,
     resolution: payload.resolution,
+    imageSize: payload.imageSize,
+    model: payload.model,
   })
   const memoryBridge = await resolveImageAssistantMemoryBridge({
     userId: payload.userId,
@@ -710,10 +730,21 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
       taskType: payload.taskType,
       referenceAssetIds: payload.referenceAssetIds,
       referenceUrls: payload.referenceUrls,
+      modelOptionId: payload.modelOptionId || null,
+      enterpriseRole: payload.enterpriseRole || null,
+      enterpriseStatus: payload.enterpriseStatus || null,
       providerLock: payload.providerLock || null,
+      model: payload.model || null,
       candidateCount: payload.candidateCount,
       sizePreset: payload.sizePreset,
       resolution: payload.resolution,
+      imageSize: payload.imageSize,
+      imageQuality: payload.imageQuality,
+      imageBackground: payload.imageBackground,
+      imageOutputFormat: payload.imageOutputFormat,
+      imageOutputCompression: payload.imageOutputCompression,
+      imageModeration: payload.imageModeration,
+      imageResponseFormat: payload.imageResponseFormat,
       parentVersionId: payload.parentVersionId,
       extraInstructions: payload.extraInstructions,
       snapshotAssetId: payload.snapshotAssetId,

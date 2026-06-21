@@ -797,3 +797,32 @@ test("policy errors skip same-provider model variants and switch provider", asyn
     },
   )
 })
+
+test("explicit provider configs allow enterprise runtime without env providers", async () => {
+  const attempts: string[] = []
+
+  const result = await executeAiEntryWithProviderFailover(
+    async (params) => {
+      attempts.push(`${params.providerId}:${params.model}`)
+      return "ok"
+    },
+    {
+      preferredProviderId: "enterprise-qwen-official",
+      preferredModel: "qwen-max",
+      providerConfigs: [
+        {
+          id: "enterprise-qwen-official",
+          apiKey: "enterprise-secret",
+          baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          model: "qwen-max",
+        },
+      ],
+      forcePreferredProvider: true,
+    },
+  )
+
+  assert.equal(result.providerId, "enterprise-qwen-official")
+  assert.equal(result.model, "qwen-max")
+  assert.deepEqual(result.providerOrder, ["enterprise-qwen-official"])
+  assert.deepEqual(attempts, ["enterprise-qwen-official:qwen-max"])
+})

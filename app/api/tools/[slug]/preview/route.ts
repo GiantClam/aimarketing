@@ -8,6 +8,9 @@ type ToolRouteContext = {
   params: Promise<{ slug: string }>
 }
 
+export const runtime = "nodejs"
+export const maxDuration = 300
+
 export async function POST(request: NextRequest, context: ToolRouteContext) {
   const { slug } = await context.params
 

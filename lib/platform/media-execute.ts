@@ -43,19 +43,6 @@ export function resolvePlatformMediaExecutionProxyTarget(
   runningHubConfig = getRunningHubConfig(),
 ): PlatformExecutionProxyTarget | null {
   if (mediaTarget === "ai-image") {
-    if (isRunningHubConfiguredForTarget("ai-image", runningHubConfig)) {
-      if (action === "execute" || action === "generate" || action === "generate-image") {
-        return buildRunningHubProxyTarget("ai-image", "generate")
-      }
-      if (action === "edit" || action === "edit-image") {
-        return buildRunningHubProxyTarget("ai-image", "edit")
-      }
-      if (action === "export" || action === "export-image") {
-        return buildRunningHubProxyTarget("ai-image", "export")
-      }
-      return null
-    }
-
     if (action === "execute" || action === "generate" || action === "generate-image") {
       return {
         action: "generate",

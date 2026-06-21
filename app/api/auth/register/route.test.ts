@@ -15,6 +15,7 @@ let updateCalls: Array<{ table: unknown; values: unknown }> = []
 let ensurePermissionsCalls: Array<{ userId: number; enabled: boolean }> = []
 let provisionCalls: number[] = []
 let resendEmailCalls: Array<Record<string, unknown>> = []
+let ensureEnterpriseDefaultKnowledgeWorkspaceCalls: number[] = []
 let generatedCode = "new-enterprise"
 
 const schemaTables = {
@@ -109,6 +110,14 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       },
     }
   }
+  if (request === "@/lib/knowledge/service") {
+    return {
+      ensureEnterpriseDefaultKnowledgeWorkspace: async (enterpriseId: number) => {
+        ensureEnterpriseDefaultKnowledgeWorkspaceCalls.push(enterpriseId)
+        return { source: null, datasets: [] }
+      },
+    }
+  }
   if (request === "@/lib/server/rate-limit") {
     return {
       checkRateLimit: async () => ({ ok: true, remaining: 5, resetAt: Date.now() + 60_000 }),
@@ -149,6 +158,7 @@ test.beforeEach(() => {
   ensurePermissionsCalls = []
   provisionCalls = []
   resendEmailCalls = []
+  ensureEnterpriseDefaultKnowledgeWorkspaceCalls = []
   generatedCode = "new-enterprise"
 })
 
@@ -179,6 +189,7 @@ test("register create provisions default billing for the new enterprise admin", 
   assert.equal(response.body?.email, "alice@example.com")
   assert.deepEqual(ensurePermissionsCalls, [{ userId: 202, enabled: true }])
   assert.deepEqual(provisionCalls, [202])
+  assert.deepEqual(ensureEnterpriseDefaultKnowledgeWorkspaceCalls, [101])
   assert.equal(resendEmailCalls.length, 1)
   assert.equal(insertCalls.length >= 2, true)
   assert.deepEqual(insertCalls[0], {

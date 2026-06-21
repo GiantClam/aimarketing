@@ -118,17 +118,24 @@ test("buildCustomerGovernanceSnapshot maps member, credit, runtime, and sso post
 })
 
 test("normalizeCustomerGovernanceSettingsPatch trims values and keeps supported modes", () => {
+  const validModelConfig = buildDefaultEnterpriseModelConfiguration()
+  validModelConfig.text_generation.providers[0] = {
+    ...validModelConfig.text_generation.providers[0],
+    baseUrl: "https://openrouter.ai/api/v1",
+  }
+
   assert.deepEqual(
     normalizeCustomerGovernanceSettingsPatch({
       ssoDomain: "  acme.com  ",
       seatRequestNote: "  Review seat upgrades weekly.  ",
       runtimeIntakeMode: "admin_review",
+      modelConfig: validModelConfig,
     }),
     {
       ssoDomain: "acme.com",
       seatRequestNote: "Review seat upgrades weekly.",
       runtimeIntakeMode: "admin_review",
-      modelConfig: buildDefaultEnterpriseModelConfiguration(),
+      modelConfig: validModelConfig,
     },
   )
 
@@ -137,12 +144,42 @@ test("normalizeCustomerGovernanceSettingsPatch trims values and keeps supported 
       ssoDomain: "   ",
       seatRequestNote: "",
       runtimeIntakeMode: "unsupported" as never,
+      modelConfig: validModelConfig,
     }),
     {
       ssoDomain: null,
       seatRequestNote: null,
       runtimeIntakeMode: "workspace_default",
-      modelConfig: buildDefaultEnterpriseModelConfiguration(),
+      modelConfig: validModelConfig,
     },
+  )
+})
+
+test("normalizeCustomerGovernanceSettingsPatch rejects selected OpenAI compatible providers without base url", () => {
+  const modelConfig = buildDefaultEnterpriseModelConfiguration()
+  modelConfig.text_generation.selectedProviderId = "openai_compatible"
+  modelConfig.text_generation.providers[0] = {
+    ...modelConfig.text_generation.providers[0],
+    modelId: "gpt-4.1-mini",
+    baseUrl: null,
+  }
+
+  assert.throws(
+    () =>
+      normalizeCustomerGovernanceSettingsPatch({
+        modelConfig,
+      }),
+    /base_url_required:text_generation:openai_compatible/,
+  )
+})
+
+test("normalizeCustomerGovernanceSettingsPatch allows untouched default model config placeholders", () => {
+  const modelConfig = buildDefaultEnterpriseModelConfiguration()
+
+  assert.doesNotThrow(() =>
+    normalizeCustomerGovernanceSettingsPatch({
+      seatRequestNote: "Leave defaults untouched for now.",
+      modelConfig,
+    }),
   )
 })

@@ -9,6 +9,7 @@ import {
   resolvePlatformBindingExecutionProxyTarget,
 } from "@/lib/platform/execute"
 import { getPlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
+import { shouldChargeSharedCreditsForCapability } from "@/lib/platform/shared-credits-policy"
 
 export const runtime = "nodejs"
 
@@ -45,19 +46,32 @@ export async function POST(
     return NextResponse.json({ error: "unsupported_action" }, { status: 400 })
   }
 
+  const rawBody = await request.text()
+  let parsedBody: Record<string, unknown> | null = null
+  if (rawBody.trim()) {
+    try {
+      parsedBody = (JSON.parse(rawBody) as Record<string, unknown>) || null
+    } catch {
+      parsedBody = null
+    }
+  }
+
   const gate = evaluatePlatformExecutionGate({
     currentUser,
     requiresLogin: target.requiresLogin,
     runtimeStatus: execution.runtimeStatus,
     accessState: execution.accessState,
     usesSharedCredits: execution.usesSharedCredits,
+    sharedCreditsRequired: shouldChargeSharedCreditsForCapability({
+      capabilitySlug: execution.bindingTarget,
+      body: parsedBody,
+      usesSharedCredits: execution.usesSharedCredits,
+    }),
     billingCanSpendCredits: execution.billing?.canSpendCredits ?? null,
   })
   if (!gate.ok) {
     return gate.response
   }
-
-  const rawBody = await request.text()
   return proxyPlatformExecutionRequest(request, target, rawBody, {
     "x-platform-registry-item-type": normalizedItemType,
     "x-platform-registry-slug": slug,

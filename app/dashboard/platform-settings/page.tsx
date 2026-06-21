@@ -19,5 +19,14 @@ export default async function DashboardPlatformSettingsPage() {
     getCustomerGovernanceSnapshot(currentUser).catch(() => null),
   ])
 
-  return <WorkspacePlatformGovernance locale={locale} snapshot={snapshot} customerSnapshot={customerSnapshot} />
+  return (
+    <WorkspacePlatformGovernance
+      locale={locale}
+      snapshot={snapshot}
+      customerSnapshot={customerSnapshot}
+      currentUserId={currentUser.id}
+      canViewEnterpriseGovernance={Boolean(currentUser.enterpriseId)}
+      canManageEnterpriseGovernance={currentUser.enterpriseRole === "admin"}
+    />
+  )
 }

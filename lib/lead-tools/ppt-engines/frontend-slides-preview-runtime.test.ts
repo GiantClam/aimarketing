@@ -254,6 +254,51 @@ test("frontend slides runtime renders materially different HTML structures per v
   assert.doesNotMatch(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /sticker-band|playful-doodle-frame|doodle-flow/)
 })
 
+test("frontend slides runtime renders workflow input images as structured slide media", async () => {
+  const deckWithImages = {
+    ...sampleDeck,
+    variants: sampleDeck.variants.map((variant) => ({
+      ...variant,
+      slides: variant.slides.map((slide) => {
+        if (slide.layout === "cover") {
+          return {
+            ...slide,
+            image: {
+              url: "https://example.com/cover.png",
+              title: "封面图",
+              sourceNodeKey: "image-1",
+              role: "cover" as const,
+            },
+          }
+        }
+
+        if (slide.layout === "insight") {
+          return {
+            ...slide,
+            image: {
+              url: "https://example.com/insight.png",
+              title: "洞察图",
+              sourceNodeKey: "image-2",
+              role: "content" as const,
+            },
+          }
+        }
+
+        return slide
+      }),
+    })),
+  }
+
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(deckWithImages)
+  const html = deck.variants[0]?.preview?.htmlDocument?.html ?? ""
+
+  assert.match(html, /workflow-image-figure/)
+  assert.match(html, /https:\/\/example\.com\/cover\.png/)
+  assert.match(html, /https:\/\/example\.com\/insight\.png/)
+  assert.match(html, /image-1/)
+  assert.match(html, /image-2/)
+})
+
 test("neo-grid fallback derives chart and process copy from neighboring structured slides", async () => {
   const deck = {
     ...sampleDeck,

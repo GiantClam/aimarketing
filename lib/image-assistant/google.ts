@@ -10,6 +10,11 @@ export type ImageAssistantFileReference = {
   fileUri: string
 }
 
+export type GoogleImageRuntimeConfig = {
+  apiKey: string
+  model: string
+}
+
 const GOOGLE_IMAGE_API_KEY =
   process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
 const PRIMARY_GOOGLE_IMAGE_MODEL =
@@ -85,13 +90,18 @@ function isFallbackEligibleGoogleError(error: unknown) {
   )
 }
 
-function getGoogleClient() {
-  if (!GOOGLE_IMAGE_API_KEY) {
+function getGoogleClient(runtimeConfig?: GoogleImageRuntimeConfig | null) {
+  const apiKey = runtimeConfig?.apiKey?.trim() || GOOGLE_IMAGE_API_KEY
+  if (!apiKey) {
     throw new Error("google_image_api_key_missing")
   }
 
+  if (runtimeConfig?.apiKey?.trim()) {
+    return new GoogleGenAI({ apiKey })
+  }
+
   if (!googleClient) {
-    googleClient = new GoogleGenAI({ apiKey: GOOGLE_IMAGE_API_KEY })
+    googleClient = new GoogleGenAI({ apiKey })
   }
 
   return googleClient
@@ -125,12 +135,12 @@ function extractTextSummary(data: any) {
   return typeof textPart?.text === "string" ? textPart.text : ""
 }
 
-export function hasImageAssistantGoogleKey() {
-  return Boolean(GOOGLE_IMAGE_API_KEY)
+export function hasImageAssistantGoogleKey(runtimeConfig?: GoogleImageRuntimeConfig | null) {
+  return Boolean(runtimeConfig?.apiKey?.trim() || GOOGLE_IMAGE_API_KEY)
 }
 
-export function getImageAssistantGoogleModel() {
-  return GOOGLE_IMAGE_MODELS[0] || "gemini-2.5-flash-image"
+export function getImageAssistantGoogleModel(runtimeConfig?: GoogleImageRuntimeConfig | null) {
+  return runtimeConfig?.model?.trim() || GOOGLE_IMAGE_MODELS[0] || "gemini-2.5-flash-image"
 }
 
 async function waitForUploadedFileActive(fileName: string, abortSignal?: AbortSignal) {
@@ -193,13 +203,17 @@ export async function generateOrEditImagesWithGoogle(params: {
   resolution: ImageAssistantResolution
   sizePreset?: ImageAssistantSizePreset | null
   referenceImages?: ImageAssistantFileReference[]
+  config?: GoogleImageRuntimeConfig | null
   signal?: AbortSignal
 }) {
-  const ai = getGoogleClient()
+  const ai = getGoogleClient(params.config)
   let lastError: unknown = null
+  const models = params.config?.model?.trim()
+    ? [params.config.model.trim()]
+    : GOOGLE_IMAGE_MODELS
 
-  for (let modelIndex = 0; modelIndex < GOOGLE_IMAGE_MODELS.length; modelIndex += 1) {
-    const model = GOOGLE_IMAGE_MODELS[modelIndex]
+  for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+    const model = models[modelIndex]
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
@@ -252,10 +266,10 @@ export async function generateOrEditImagesWithGoogle(params: {
       }
     }
 
-    if (modelIndex < GOOGLE_IMAGE_MODELS.length - 1 && isFallbackEligibleGoogleError(lastError)) {
+    if (modelIndex < models.length - 1 && isFallbackEligibleGoogleError(lastError)) {
       console.warn("image-assistant.google.generate.fallback", {
         fromModel: model,
-        toModel: GOOGLE_IMAGE_MODELS[modelIndex + 1],
+        toModel: models[modelIndex + 1],
         message: lastError instanceof Error ? lastError.message : String(lastError),
       })
       continue

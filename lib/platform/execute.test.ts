@@ -47,10 +47,10 @@ test("capability execute target maps AI image export to image assistant export r
   })
 })
 
-test("capability execute target maps AI image into RunningHub when media provider is configured", () => {
+test("capability execute target keeps AI image on image assistant even when RunningHub is configured", () => {
   assert.deepEqual(resolvePlatformCapabilityExecutionProxyTarget("ai-image", "generate", configuredRunningHub), {
     action: "generate",
-    downstreamPath: "/api/platform/media/run?target=ai-image&action=generate",
+    downstreamPath: "/api/image-assistant/generate",
     requiresLogin: true,
   })
 })

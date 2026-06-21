@@ -5,10 +5,10 @@ import {
   buildOpenAiCompatibleImageRequestParts,
   generateImagesWithOpenAiCompatibleProvider,
   getOpenAiCompatibleImageProviderConfig,
-  mapGptImage2Quality,
-  mapGptImage2Size,
+  setOpenAiCompatibleImageCurlRunnerForTests,
   type OpenAiCompatibleInlineImage,
 } from "./openai-compatible-image"
+import { mapGptImage2Quality, mapGptImage2Size, normalizeWorkflowImageConfig } from "./model-options"
 
 const image = (assetId: string, base64Data = "aW1hZ2U="): OpenAiCompatibleInlineImage => ({
   kind: "inline",
@@ -29,7 +29,12 @@ test("gpt-image-2 request parts: text-to-image uses generations endpoint", () =>
   assert.equal(parts.endpoint, "/images/generations")
   assert.equal(parts.model, "gpt-image-2")
   assert.equal(parts.size, "1024x1024")
-  assert.equal(parts.quality, "medium")
+  assert.equal(parts.quality, "auto")
+  assert.equal(parts.background, "auto")
+  assert.equal(parts.outputFormat, "png")
+  assert.equal(parts.outputCompression, null)
+  assert.equal(parts.moderation, "auto")
+  assert.equal(parts.responseFormat, "url")
   assert.deepEqual(parts.images, [])
   assert.equal(parts.mask, null)
 })
@@ -39,8 +44,7 @@ test("gpt-image-2 request parts: image edit uses edits endpoint and excludes mas
     model: "openai/gpt-image-2",
     prompt: "Improve the layout",
     taskType: "edit",
-    sizePreset: "16:9",
-    resolution: "2K",
+    imageSize: "2048x1152",
     referenceImages: [image("ref-1"), image("mask-1")],
     maskAssetId: "mask-1",
   })
@@ -59,8 +63,7 @@ test("gpt-image-2 request parts: generate with style references stays on generat
     model: "gpt-image-2",
     prompt: "Use this image as style reference and generate a new campaign poster",
     taskType: "generate",
-    sizePreset: "16:9",
-    resolution: "2K",
+    imageSize: "1536x1024",
     referenceImages: [image("style-ref")],
   })
 
@@ -77,8 +80,7 @@ test("gpt-image-2 request parts: mask edit puts snapshot first and passes mask s
     model: "gpt-image-2",
     prompt: "Replace the selected area with a seasonal product badge",
     taskType: "mask_edit",
-    sizePreset: "3:4",
-    resolution: "1K",
+    imageSize: "1024x1536",
     referenceImages: [image("style-ref"), image("mask-asset"), image("snapshot-asset")],
     snapshotAssetId: "snapshot-asset",
     maskAssetId: "mask-asset",
@@ -100,6 +102,17 @@ test("gpt-image-2 size and quality mapping covers high and low tiers", () => {
   assert.equal(mapGptImage2Quality("4K"), "high")
 })
 
+test("workflow image config derives gpt-image-2 quality from resolution when unset", () => {
+  const normalized = normalizeWorkflowImageConfig({
+    selectedProviderId: "pptoken",
+    selectedModelId: "gpt-image-2",
+    resolution: "512",
+    sizePreset: "16:9",
+  })
+
+  assert.equal(normalized.imageQuality, "low")
+})
+
 test("gpt-image-2 mask edit requires a mask asset", () => {
   assert.throws(
     () =>
@@ -117,11 +130,10 @@ test("gpt-image-2 mask edit requires a mask asset", () => {
 
 test("gpt-image-2 provider request forwards n=9 for text-to-image generation", async () => {
   const originalFetch = globalThis.fetch
-  let requestedN: unknown = null
+  let requestBody: Record<string, unknown> | null = null
 
   globalThis.fetch = (async (_input, init) => {
-    const requestBody = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>
-    requestedN = requestBody.n
+    requestBody = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>
     return {
       ok: true,
       json: async () => ({
@@ -142,12 +154,26 @@ test("gpt-image-2 provider request forwards n=9 for text-to-image generation", a
       },
       prompt: "Generate nine related campaign concepts",
       taskType: "generate",
-      sizePreset: "1:1",
-      resolution: "2K",
+      model: "gpt-image-2",
+      imageSize: "1536x1024",
+      imageQuality: "high",
+      imageBackground: "opaque",
+      imageOutputFormat: "webp",
+      imageOutputCompression: 85,
+      imageModeration: "low",
+      imageResponseFormat: "url",
       candidateCount: 9,
     })
 
-    assert.equal(requestedN, 9)
+    assert.ok(requestBody)
+    assert.equal(requestBody.n, 9)
+    assert.equal(requestBody.size, "1536x1024")
+    assert.equal(requestBody.quality, "high")
+    assert.equal(requestBody.background, "opaque")
+    assert.equal(requestBody.output_format, "webp")
+    assert.equal(requestBody.output_compression, 85)
+    assert.equal(requestBody.moderation, "low")
+    assert.equal(requestBody.response_format, "url")
     assert.equal(result.images.length, 9)
   } finally {
     globalThis.fetch = originalFetch
@@ -192,6 +218,59 @@ test("gpt-image-2 provider request retries transient fetch failures before succe
     assert.equal(attempts, 3)
     assert.equal(result.images.length, 1)
   } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("gpt-image-2 provider request prefers proxied curl for pptoken local-dev generations", async () => {
+  const originalFetch = globalThis.fetch
+  const originalProxy = process.env.LOCAL_DEV_HTTP_PROXY
+  let attempts = 0
+  let curlArgs: string[] | null = null
+
+  globalThis.fetch = (async () => {
+    attempts += 1
+    const error = new Error("fetch failed")
+    ;(error as Error & { cause?: { code: string } }).cause = { code: "UND_ERR_SOCKET" }
+    throw error
+  }) as typeof fetch
+
+  process.env.LOCAL_DEV_HTTP_PROXY = "http://127.0.0.1:7890"
+  setOpenAiCompatibleImageCurlRunnerForTests(async (args) => {
+    curlArgs = args
+    return {
+      stdout: JSON.stringify({
+        data: [{ b64_json: Buffer.from("curl-success").toString("base64") }],
+      }) + "\n__HTTP_STATUS__:200",
+      stderr: "",
+    }
+  })
+
+  try {
+    const result = await generateImagesWithOpenAiCompatibleProvider({
+      config: {
+        provider: "pptoken",
+        baseUrl: "https://api.pptoken.cc/v1",
+        apiKey: "test-key",
+        model: "gpt-image-2",
+      },
+      prompt: "Generate with curl fallback",
+      taskType: "generate",
+      sizePreset: "1:1",
+      resolution: "512",
+      attempts: 3,
+      timeoutMs: 5_000,
+    })
+
+    assert.equal(attempts, 0)
+    assert.ok(curlArgs)
+    assert.deepEqual(curlArgs.slice(0, 4), ["-sS", "--proxy", "http://127.0.0.1:7890", "--connect-timeout"])
+    assert.equal(result.images.length, 1)
+    assert.match(result.images[0], /^data:image\/png;base64,/)
+  } finally {
+    if (typeof originalProxy === "string") process.env.LOCAL_DEV_HTTP_PROXY = originalProxy
+    else delete process.env.LOCAL_DEV_HTTP_PROXY
+    setOpenAiCompatibleImageCurlRunnerForTests(null)
     globalThis.fetch = originalFetch
   }
 })

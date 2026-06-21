@@ -9,6 +9,9 @@ type ToolRouteContext = {
   params: Promise<{ slug: string }>
 }
 
+export const runtime = "nodejs"
+export const maxDuration = 300
+
 function toAsciiDownloadFileName(fileName: string) {
   const normalized = fileName
     .normalize("NFKD")

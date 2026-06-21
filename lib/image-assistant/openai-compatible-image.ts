@@ -1,9 +1,28 @@
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+
 import type {
   ImageAssistantResolution,
   ImageAssistantSizePreset,
   ImageAssistantTaskType,
 } from "@/lib/image-assistant/types"
+import {
+  normalizeGptImage2Background,
+  normalizeGptImage2OutputCompression,
+  normalizeGptImage2OutputFormat,
+  normalizeGptImage2Quality,
+  normalizeGptImage2ResponseFormat,
+  normalizeGptImage2Size,
+  normalizeGptImage2Moderation,
+  type GptImage2Background,
+  type GptImage2OutputFormat,
+  type GptImage2Quality,
+  type GptImage2Moderation,
+  type GptImage2ResponseFormat,
+} from "@/lib/image-assistant/model-options"
+import { getLocalDevProxyUrl, shouldBypassLocalDevProxy } from "@/lib/server/local-dev-proxy"
 import { withTaskTimeout } from "@/lib/task-timeout"
+import { hasWriterProxyTransport, writerFetch } from "@/lib/writer/network"
 
 export type OpenAiCompatibleImageProviderId = "pptoken" | "aiberm" | "crazyroute"
 
@@ -26,8 +45,12 @@ export type OpenAiCompatibleImageRequestParts = {
   model: string
   prompt: string
   size: string
-  quality: "low" | "medium" | "high"
-  outputFormat: "png"
+  quality: GptImage2Quality
+  background: GptImage2Background
+  outputFormat: GptImage2OutputFormat
+  outputCompression: number | null
+  moderation: GptImage2Moderation
+  responseFormat: GptImage2ResponseFormat
   images: OpenAiCompatibleInlineImage[]
   mask: OpenAiCompatibleInlineImage | null
 }
@@ -36,6 +59,16 @@ const DEFAULT_MODEL = "gpt-image-2"
 const MAX_OPENAI_COMPATIBLE_IMAGE_CANDIDATES = 9
 const OPENAI_COMPATIBLE_IMAGE_REQUEST_TIMEOUT_MS = 120_000
 const OPENAI_COMPATIBLE_IMAGE_REQUEST_ATTEMPTS = 3
+const OPENAI_COMPATIBLE_IMAGE_CURL_MAX_BUFFER_BYTES = 20 * 1024 * 1024
+
+const execFileAsync = promisify(execFile)
+
+type CurlRunner = (args: string[]) => Promise<{ stdout: string; stderr: string }>
+
+let curlRunner: CurlRunner = async (args) =>
+  execFileAsync("curl", args, {
+    maxBuffer: OPENAI_COMPATIBLE_IMAGE_CURL_MAX_BUFFER_BYTES,
+  })
 
 function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
@@ -43,6 +76,24 @@ function normalizeText(raw: unknown) {
 
 function trimBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/u, "")
+}
+
+function buildCurlProxyArgs(endpoint: string) {
+  const proxyUrl = getLocalDevProxyUrl()
+  if (!proxyUrl || shouldBypassLocalDevProxy(endpoint)) {
+    return []
+  }
+
+  return ["--proxy", proxyUrl]
+}
+
+export function setOpenAiCompatibleImageCurlRunnerForTests(runner: CurlRunner | null) {
+  curlRunner = runner
+    ? runner
+    : async (args) =>
+        execFileAsync("curl", args, {
+          maxBuffer: OPENAI_COMPATIBLE_IMAGE_CURL_MAX_BUFFER_BYTES,
+        })
 }
 
 function sleep(ms: number) {
@@ -162,32 +213,6 @@ export function hasOpenAiCompatibleImageProviderKey(
   return Boolean(getOpenAiCompatibleImageProviderConfig(provider))
 }
 
-export function mapGptImage2Size(
-  sizePreset?: ImageAssistantSizePreset | null,
-  resolution?: ImageAssistantResolution | null,
-) {
-  const preset = sizePreset || "1:1"
-  const tier = resolution || "2K"
-
-  if (preset === "1:1") {
-    if (tier === "4K") return "4096x4096"
-    if (tier === "2K") return "2048x2048"
-    return "1024x1024"
-  }
-  if (preset === "4:5") return tier === "4K" ? "2048x2560" : "1024x1280"
-  if (preset === "3:4") return tier === "4K" ? "2048x3072" : "1024x1536"
-  if (preset === "4:3") return tier === "4K" ? "3072x2048" : "1536x1024"
-  if (preset === "16:9") return tier === "4K" ? "3840x2160" : "2048x1152"
-  if (preset === "9:16") return tier === "4K" ? "2160x3840" : "1152x2048"
-  return "1024x1024"
-}
-
-export function mapGptImage2Quality(resolution?: ImageAssistantResolution | null) {
-  if (resolution === "512") return "low"
-  if (resolution === "4K") return "high"
-  return "medium"
-}
-
 function withoutMaskAsset(
   referenceImages: OpenAiCompatibleInlineImage[],
   maskAssetId?: string | null,
@@ -220,6 +245,13 @@ export function buildOpenAiCompatibleImageRequestParts(params: {
   taskType: ImageAssistantTaskType
   sizePreset?: ImageAssistantSizePreset | null
   resolution?: ImageAssistantResolution | null
+  imageSize?: string | null
+  imageQuality?: GptImage2Quality | null
+  imageBackground?: GptImage2Background | null
+  imageOutputFormat?: GptImage2OutputFormat | null
+  imageOutputCompression?: number | null
+  imageModeration?: GptImage2Moderation | null
+  imageResponseFormat?: GptImage2ResponseFormat | null
   referenceImages?: OpenAiCompatibleInlineImage[]
   snapshotAssetId?: string | null
   maskAssetId?: string | null
@@ -248,9 +280,16 @@ export function buildOpenAiCompatibleImageRequestParts(params: {
     endpoint: isEditTask ? "/images/edits" : "/images/generations",
     model: normalizeText(params.model) || DEFAULT_MODEL,
     prompt,
-    size: mapGptImage2Size(params.sizePreset, params.resolution),
-    quality: mapGptImage2Quality(params.resolution),
-    outputFormat: "png",
+    size: normalizeGptImage2Size(params.imageSize),
+    quality: normalizeGptImage2Quality(params.imageQuality),
+    background: normalizeGptImage2Background(params.imageBackground),
+    outputFormat: normalizeGptImage2OutputFormat(params.imageOutputFormat),
+    outputCompression: normalizeGptImage2OutputCompression(
+      params.imageOutputCompression,
+      normalizeGptImage2OutputFormat(params.imageOutputFormat),
+    ),
+    moderation: normalizeGptImage2Moderation(params.imageModeration),
+    responseFormat: normalizeGptImage2ResponseFormat(params.imageResponseFormat),
     images:
       params.taskType === "mask_edit"
         ? orderImagesForMaskEdit({
@@ -277,12 +316,116 @@ function dataUrlFromImageApiItem(item: unknown) {
   return url || null
 }
 
+function extractOpenAiCompatibleImageErrorMessage(
+  provider: OpenAiCompatibleImageProviderId,
+  payload: Record<string, unknown> | null,
+  status?: number,
+) {
+  if (typeof payload?.error === "object" && payload.error && "message" in payload.error) {
+    return String((payload.error as Record<string, unknown>).message || "")
+  }
+
+  if (typeof payload?.message === "string" && payload.message.trim()) {
+    return payload.message.trim()
+  }
+
+  return status ? `image_assistant_${provider}_http_${status}` : `image_assistant_${provider}_request_failed`
+}
+
+function extractOpenAiCompatibleImageResults(payload: Record<string, unknown> | null) {
+  return (Array.isArray(payload?.data) ? payload.data : [])
+    .map(dataUrlFromImageApiItem)
+    .filter((value): value is string => Boolean(value))
+}
+
+async function requestOpenAiCompatibleImageGenerationWithCurl(params: {
+  config: OpenAiCompatibleImageProviderConfig
+  endpoint: string
+  requestParts: OpenAiCompatibleImageRequestParts
+  count: number
+  timeoutMs: number
+}) {
+  const requestBody = JSON.stringify({
+    model: params.requestParts.model,
+    prompt: params.requestParts.prompt,
+    size: params.requestParts.size,
+    quality: params.requestParts.quality,
+    background: params.requestParts.background,
+    output_format: params.requestParts.outputFormat,
+    ...(params.requestParts.outputCompression !== null
+      ? { output_compression: params.requestParts.outputCompression }
+      : {}),
+    moderation: params.requestParts.moderation,
+    response_format: params.requestParts.responseFormat,
+    n: params.count,
+  })
+
+  const proxyArgs = buildCurlProxyArgs(params.endpoint)
+  const args = [
+    "-sS",
+    ...proxyArgs,
+    "--connect-timeout",
+    String(Math.max(5, Math.ceil(params.timeoutMs / 3000))),
+    "--max-time",
+    String(Math.max(10, Math.ceil(params.timeoutMs / 1000))),
+    "-X",
+    "POST",
+    params.endpoint,
+    "-H",
+    `Authorization: Bearer ${params.config.apiKey}`,
+    "-H",
+    "Content-Type: application/json",
+    "-d",
+    requestBody,
+    "-w",
+    "\n__HTTP_STATUS__:%{http_code}",
+  ]
+
+  const { stdout } = await curlRunner(args)
+  const marker = "\n__HTTP_STATUS__:"
+  const markerIndex = stdout.lastIndexOf(marker)
+  if (markerIndex === -1) {
+    throw new Error("image_assistant_curl_response_malformed")
+  }
+
+  const responseBody = stdout.slice(0, markerIndex)
+  const status = Number.parseInt(stdout.slice(markerIndex + marker.length).trim(), 10)
+  const payload = (JSON.parse(responseBody || "null") as Record<string, unknown> | null) ?? null
+
+  if (!Number.isFinite(status) || status <= 0) {
+    throw new Error("image_assistant_curl_status_missing")
+  }
+
+  if (status < 200 || status >= 300) {
+    throw new Error(extractOpenAiCompatibleImageErrorMessage(params.config.provider, payload, status))
+  }
+
+  const images = extractOpenAiCompatibleImageResults(payload)
+  if (images.length === 0) {
+    throw new Error("image_assistant_images_missing")
+  }
+
+  return {
+    model: params.requestParts.model,
+    images,
+    textSummary: "Image generation completed.",
+  }
+}
+
 export async function generateImagesWithOpenAiCompatibleProvider(params: {
   config: OpenAiCompatibleImageProviderConfig
   prompt: string
   taskType: ImageAssistantTaskType
   sizePreset?: ImageAssistantSizePreset | null
   resolution?: ImageAssistantResolution | null
+  model?: string | null
+  imageSize?: string | null
+  imageQuality?: GptImage2Quality | null
+  imageBackground?: GptImage2Background | null
+  imageOutputFormat?: GptImage2OutputFormat | null
+  imageOutputCompression?: number | null
+  imageModeration?: GptImage2Moderation | null
+  imageResponseFormat?: GptImage2ResponseFormat | null
   referenceImages?: OpenAiCompatibleInlineImage[]
   snapshotAssetId?: string | null
   maskAssetId?: string | null
@@ -292,11 +435,18 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
   timeoutMs?: number
 }) {
   const requestParts = buildOpenAiCompatibleImageRequestParts({
-    model: params.config.model,
+    model: params.model || params.config.model,
     prompt: params.prompt,
     taskType: params.taskType,
     sizePreset: params.sizePreset,
     resolution: params.resolution,
+    imageSize: params.imageSize,
+    imageQuality: params.imageQuality,
+    imageBackground: params.imageBackground,
+    imageOutputFormat: params.imageOutputFormat,
+    imageOutputCompression: params.imageOutputCompression,
+    imageModeration: params.imageModeration,
+    imageResponseFormat: params.imageResponseFormat,
     referenceImages: params.referenceImages,
     snapshotAssetId: params.snapshotAssetId,
     maskAssetId: params.maskAssetId,
@@ -306,6 +456,24 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
   const attempts = Math.max(1, Math.min(params.attempts || OPENAI_COMPATIBLE_IMAGE_REQUEST_ATTEMPTS, 5))
   const timeoutMs = Math.max(1_000, params.timeoutMs || OPENAI_COMPATIBLE_IMAGE_REQUEST_TIMEOUT_MS)
   let lastError: unknown = null
+
+  if (
+    requestParts.endpoint === "/images/generations" &&
+    params.config.provider === "pptoken" &&
+    hasWriterProxyTransport()
+  ) {
+    console.info("image-assistant.openai-compatible.curl-preferred", {
+      provider: params.config.provider,
+      endpoint: requestParts.endpoint,
+    })
+    return requestOpenAiCompatibleImageGenerationWithCurl({
+      config: params.config,
+      endpoint,
+      requestParts,
+      count,
+      timeoutMs,
+    })
+  }
 
   const createRequestInit = (signal?: AbortSignal): RequestInit => {
     const requestInit: RequestInit = {
@@ -326,7 +494,13 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
         prompt: requestParts.prompt,
         size: requestParts.size,
         quality: requestParts.quality,
+        background: requestParts.background,
         output_format: requestParts.outputFormat,
+        ...(requestParts.outputCompression !== null
+          ? { output_compression: requestParts.outputCompression }
+          : {}),
+        moderation: requestParts.moderation,
+        response_format: requestParts.responseFormat,
         n: count,
       })
       return requestInit
@@ -356,7 +530,7 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
 
     try {
       const response = await withTaskTimeout(
-        fetch(endpoint, createRequestInit(abortController.signal)),
+        (hasWriterProxyTransport() ? writerFetch(endpoint, createRequestInit(abortController.signal)) : fetch(endpoint, createRequestInit(abortController.signal))),
         timeoutMs,
         `image_assistant_${params.config.provider}_request_timeout`,
         { abortController },
@@ -364,10 +538,7 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
       const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
 
       if (!response.ok) {
-        const message =
-          typeof payload?.error === "object" && payload.error && "message" in payload.error
-            ? String((payload.error as Record<string, unknown>).message || "")
-            : `image_assistant_${params.config.provider}_http_${response.status}`
+        const message = extractOpenAiCompatibleImageErrorMessage(params.config.provider, payload, response.status)
         const error = new Error(message || `image_assistant_${params.config.provider}_request_failed`)
         if (attempt < attempts && isRetryableOpenAiCompatibleImageStatus(response.status)) {
           console.warn("image-assistant.openai-compatible.retry", {
@@ -382,9 +553,7 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
         throw error
       }
 
-      const images = (Array.isArray(payload?.data) ? payload.data : [])
-        .map(dataUrlFromImageApiItem)
-        .filter((value): value is string => Boolean(value))
+      const images = extractOpenAiCompatibleImageResults(payload)
 
       if (images.length === 0) {
         throw new Error("image_assistant_images_missing")
@@ -409,6 +578,24 @@ export async function generateImagesWithOpenAiCompatibleProvider(params: {
         })
         await sleep(500 * attempt)
         continue
+      }
+      if (
+        requestParts.endpoint === "/images/generations" &&
+        params.config.provider === "pptoken" &&
+        isRetryableOpenAiCompatibleImageError(error)
+      ) {
+        console.warn("image-assistant.openai-compatible.curl-fallback", {
+          provider: params.config.provider,
+          endpoint: requestParts.endpoint,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        return requestOpenAiCompatibleImageGenerationWithCurl({
+          config: params.config,
+          endpoint,
+          requestParts,
+          count,
+          timeoutMs,
+        })
       }
       throw error
     } finally {

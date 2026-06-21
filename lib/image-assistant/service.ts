@@ -1,5 +1,5 @@
 import { checkRateLimit } from "@/lib/server/rate-limit"
-import { getInlineImageMetadata, urlToInlineImage } from "@/lib/image-assistant/assets"
+import { getInlineImageMetadata, imageSourceToDataUrl, urlToInlineImage } from "@/lib/image-assistant/assets"
 import { estimateGptImage2Credits } from "@/lib/billing/costing"
 import {
   finalizeReservedCredits,
@@ -14,6 +14,7 @@ import {
   hasImageAssistantCrazyrouteKey,
   hasImageAssistantPptokenKey,
   shouldUseImageAssistantFixtures,
+  type ImageAssistantRuntimeProviderConfig,
 } from "@/lib/image-assistant/aiberm"
 import { hasImageAssistantGoogleKey, uploadImageAssistantReferenceToGoogle } from "@/lib/image-assistant/google"
 import {
@@ -31,7 +32,16 @@ import {
   updateImageAssistantSession,
 } from "@/lib/image-assistant/repository"
 import { isImageAssistantR2Available, uploadImageAssistantDataUrl } from "@/lib/image-assistant/r2"
-import { mapGptImage2Quality, mapGptImage2Size } from "@/lib/image-assistant/openai-compatible-image"
+import { shouldPreferInlineReferenceImages } from "@/lib/image-assistant/reference-preference"
+import {
+  normalizeGptImage2BillingQuality,
+  normalizeWorkflowImageConfig,
+} from "@/lib/image-assistant/model-options"
+import {
+  resolveGovernedImageAssistantSelectionForUser,
+  type ModelGovernanceUser,
+} from "@/lib/platform/model-governance"
+import { hasCustomImageModelSelection } from "@/lib/platform/shared-credits-policy"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
 import {
   buildImageAssistantTurnContent,
@@ -64,6 +74,53 @@ function throwIfAborted(signal?: AbortSignal) {
 
 function logImageAssistantStage(stage: string, payload: Record<string, unknown>) {
   console.info(`image-assistant.${stage}`, payload)
+}
+
+function buildModelGovernanceUser(input: {
+  userId: number
+  enterpriseId?: number | null
+  enterpriseRole?: string | null
+  enterpriseStatus?: string | null
+}) {
+  return {
+    id: input.userId,
+    enterpriseId: input.enterpriseId || null,
+    enterpriseRole: input.enterpriseRole || null,
+    enterpriseStatus: input.enterpriseStatus || null,
+  } satisfies ModelGovernanceUser
+}
+
+function toRuntimeProviderConfig(
+  selection: Awaited<ReturnType<typeof resolveGovernedImageAssistantSelectionForUser>>,
+): ImageAssistantRuntimeProviderConfig | null {
+  const runtime = selection.enterpriseRuntime
+  if (!runtime) return null
+
+  if (runtime.kind === "google") {
+    return {
+      kind: "google",
+      config: {
+        apiKey: runtime.apiKey,
+        model: runtime.model,
+      },
+      model: runtime.model,
+    }
+  }
+
+  if (runtime.kind === "runninghub") {
+    return {
+      kind: "runninghub",
+      config: runtime.config,
+      model: runtime.model,
+    }
+  }
+
+  return {
+    kind: "openai-compatible",
+    provider: "pptoken",
+    config: runtime.config,
+    model: runtime.model,
+  }
 }
 
 function normalizeGuidedSelection(input: ImageAssistantGuidedSelection | null | undefined) {
@@ -216,11 +273,12 @@ async function ensureGeminiFileReferenceForAsset(params: {
   }
 }
 
-async function resolveReferenceImagesForModel(params: {
+export async function resolveReferenceImagesForModel(params: {
   userId: number
   sessionId: string
   referencedAssets: ImageAssistantAsset[]
   referenceUrls?: string[]
+  preferInline?: boolean
   signal?: AbortSignal
 }) {
   const assetsWithUrls = params.referencedAssets.filter((asset): asset is ImageAssistantAsset => Boolean(asset?.url))
@@ -251,14 +309,19 @@ async function resolveReferenceImagesForModel(params: {
         }),
     ])
 
-  if (shouldUseImageAssistantFixtures()) {
+  if (params.preferInline || shouldUseImageAssistantFixtures()) {
     return prepareInlineReferences()
   }
 
-  const shouldPrepareInlineReferences =
-    hasImageAssistantPptokenKey() ||
-    hasImageAssistantAibermKey() ||
-    hasImageAssistantCrazyrouteKey()
+  const shouldPrepareInlineReferences = shouldPreferInlineReferenceImages({
+    hasPptoken: hasImageAssistantPptokenKey(),
+    hasAiberm: hasImageAssistantAibermKey(),
+    hasCrazyroute: hasImageAssistantCrazyrouteKey(),
+  })
+
+  if (shouldPrepareInlineReferences) {
+    return prepareInlineReferences()
+  }
 
   if (hasImageAssistantGoogleKey()) {
     try {
@@ -302,11 +365,7 @@ async function resolveReferenceImagesForModel(params: {
     }
   }
 
-  if (!shouldPrepareInlineReferences) {
-    return []
-  }
-
-  return prepareInlineReferences()
+  return []
 }
 
 async function ensureImageAssistantSession(params: {
@@ -417,6 +476,26 @@ async function persistGeneratedAsset(params: {
   })
 }
 
+async function materializeGeneratedImageDataUrl(params: {
+  sessionId: string
+  index: number
+  imageSource: string
+  signal?: AbortSignal
+}) {
+  const dataUrl = await imageSourceToDataUrl(params.imageSource, {
+    signal: params.signal,
+  })
+
+  if (dataUrl !== params.imageSource) {
+    console.info("image-assistant.generated.remote-source.materialized", {
+      sessionId: params.sessionId,
+      index: params.index,
+    })
+  }
+
+  return dataUrl
+}
+
 async function backfillGeneratedAssetToR2(params: {
   userId: number
   sessionId: string
@@ -486,16 +565,27 @@ function scheduleGeneratedAssetBackfill(params: {
 export async function runImageAssistantJob(params: {
   userId: number
   enterpriseId?: number | null
+  enterpriseRole?: string | null
+  enterpriseStatus?: string | null
   requestIp: string
   sessionId?: string | null
   prompt: string
   taskType: ImageAssistantTaskType
   referenceAssetIds?: string[]
   referenceUrls?: string[]
+  modelOptionId?: string | null
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
+  model?: string | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
+  imageSize?: string | null
+  imageQuality?: "auto" | "low" | "medium" | "high" | null
+  imageBackground?: "auto" | "transparent" | "opaque" | null
+  imageOutputFormat?: "png" | "jpeg" | "webp" | null
+  imageOutputCompression?: number | null
+  imageModeration?: "auto" | "low" | null
+  imageResponseFormat?: "b64_json" | "url" | null
   parentVersionId?: string | null
   requestMessageId?: string | null
   snapshotAssetId?: string | null
@@ -510,6 +600,35 @@ export async function runImageAssistantJob(params: {
   if (!prompt) {
     throw new Error("prompt_required")
   }
+  const governedSelection = await resolveGovernedImageAssistantSelectionForUser({
+    user: buildModelGovernanceUser({
+      userId: params.userId,
+      enterpriseId: params.enterpriseId,
+      enterpriseRole: params.enterpriseRole,
+      enterpriseStatus: params.enterpriseStatus,
+    }),
+    modelOptionId: params.modelOptionId,
+    providerLock: params.providerLock,
+    model: params.model,
+    taskType: params.taskType,
+    hasReferenceInput: Boolean((params.referenceAssetIds?.length || 0) + (params.referenceUrls?.length || 0)),
+    hasMask: Boolean(params.maskAssetId),
+    hasSnapshot: Boolean(params.snapshotAssetId),
+  })
+  const normalizedImageConfig = normalizeWorkflowImageConfig({
+    selectedProviderId: governedSelection.providerLock,
+    selectedModelId: governedSelection.model,
+    candidateCount: params.candidateCount,
+    sizePreset: params.sizePreset,
+    resolution: params.resolution,
+    imageSize: params.imageSize,
+    imageQuality: params.imageQuality,
+    imageBackground: params.imageBackground,
+    imageOutputFormat: params.imageOutputFormat,
+    imageOutputCompression: params.imageOutputCompression,
+    imageModeration: params.imageModeration,
+    imageResponseFormat: params.imageResponseFormat,
+  })
 
   const limitKey = `image-assistant:${params.userId}:${params.requestIp}:${params.taskType}`
   const rateLimit = await checkRateLimit({ key: limitKey, limit: 20, windowMs: 60_000 })
@@ -529,12 +648,18 @@ export async function runImageAssistantJob(params: {
     sessionId,
     taskType: params.taskType,
     referenceAssetCount: (params.referenceAssetIds?.length || 0) + (params.referenceUrls?.length || 0),
-    candidateCount: params.candidateCount || 1,
-    sizePreset: params.sizePreset,
-    resolution: params.resolution,
+    candidateCount: normalizedImageConfig.candidateCount,
+    model: normalizedImageConfig.modelId,
+    modelOptionId: governedSelection.modelOptionId,
+    providerId: governedSelection.providerId,
+    imageSize: normalizedImageConfig.imageSize,
+    imageQuality: normalizedImageConfig.imageQuality,
   })
 
-  const availability = getImageAssistantAvailability()
+  const runtimeProviderConfig = toRuntimeProviderConfig(governedSelection)
+  const availability = getImageAssistantAvailability({
+    runtimeProviderConfig,
+  })
   if (!availability.enabled) {
     throw new Error(availability.reason || "image_assistant_unavailable")
   }
@@ -556,6 +681,7 @@ export async function runImageAssistantJob(params: {
     sessionId,
     referencedAssets,
     referenceUrls: params.referenceUrls,
+    preferInline: runtimeProviderConfig?.kind === "runninghub",
     signal: params.signal,
   })
   throwIfAborted(params.signal)
@@ -566,42 +692,55 @@ export async function runImageAssistantJob(params: {
     elapsedMs: Date.now() - startedAt,
   })
 
-  const normalizedResolution = normalizeResolution(params.resolution)
-  const normalizedSizePreset = normalizeSizePreset(params.sizePreset)
   const billingFeatureKey = getImageAssistantBillingFeatureKey(params.taskType)
   const billingEstimate = estimateGptImage2Credits({
     featureKey: billingFeatureKey,
-    size: mapGptImage2Size(normalizedSizePreset, normalizedResolution),
-    quality: mapGptImage2Quality(normalizedResolution),
-    imageCount: params.candidateCount || 1,
-    model: "gpt-image-2",
+    size: normalizedImageConfig.imageSize,
+    quality: normalizeGptImage2BillingQuality(normalizedImageConfig.imageQuality),
+    imageCount: normalizedImageConfig.candidateCount,
+    model: normalizedImageConfig.modelId,
   })
   const reserveIdempotencyKey = `image-assistant:${sessionId}:${params.requestMessageId || startedAt}:reserve`
-  const creditReservation: BillingReservation | null = await reserveFeatureCredits({
-    userId: params.userId,
-    enterpriseId: params.enterpriseId,
-    featureKey: billingFeatureKey,
-    amount: billingEstimate.credits,
-    idempotencyKey: reserveIdempotencyKey,
-    metadata: {
-      sessionId,
-      taskType: params.taskType,
-      estimate: billingEstimate,
-    },
+  const shouldChargeSharedCredits = !hasCustomImageModelSelection({
+    providerLock: normalizedImageConfig.providerLock,
+    model: normalizedImageConfig.modelId,
   })
+  const creditReservation: BillingReservation | null = shouldChargeSharedCredits
+    ? await reserveFeatureCredits({
+        userId: params.userId,
+        enterpriseId: params.enterpriseId,
+        featureKey: billingFeatureKey,
+        amount: billingEstimate.credits,
+        idempotencyKey: reserveIdempotencyKey,
+        metadata: {
+          sessionId,
+          taskType: params.taskType,
+          estimate: billingEstimate,
+        },
+      })
+    : null
 
   let generated: Awaited<ReturnType<typeof generateOrEditImages>>
   try {
     generated = await generateOrEditImages({
       prompt,
       taskType: params.taskType,
-      resolution: normalizedResolution,
-      sizePreset: normalizedSizePreset,
+      model: normalizedImageConfig.modelId,
+      resolution: normalizedImageConfig.resolution || normalizeResolution(params.resolution),
+      sizePreset: normalizedImageConfig.sizePreset || normalizeSizePreset(params.sizePreset),
+      imageSize: normalizedImageConfig.imageSize,
+      imageQuality: normalizedImageConfig.imageQuality,
+      imageBackground: normalizedImageConfig.imageBackground,
+      imageOutputFormat: normalizedImageConfig.imageOutputFormat,
+      imageOutputCompression: normalizedImageConfig.imageOutputCompression,
+      imageModeration: normalizedImageConfig.imageModeration,
+      imageResponseFormat: normalizedImageConfig.imageResponseFormat,
       referenceImages,
-      providerLock: params.providerLock || null,
+      providerLock: normalizedImageConfig.providerLock,
+      runtimeProviderConfig,
       snapshotAssetId: params.snapshotAssetId || null,
       maskAssetId: params.maskAssetId || null,
-      candidateCount: params.candidateCount || 1,
+      candidateCount: normalizedImageConfig.candidateCount,
       signal: params.signal,
     })
   } catch (error) {
@@ -628,8 +767,20 @@ export async function runImageAssistantJob(params: {
     elapsedMs: Date.now() - startedAt,
   })
 
+  const generatedImageDataUrls = await Promise.all(
+    generated.images.map((imageSource, index) =>
+      materializeGeneratedImageDataUrl({
+        sessionId,
+        index,
+        imageSource,
+        signal: params.signal,
+      }),
+    ),
+  )
+  throwIfAborted(params.signal)
+
   const persistedAssets = await Promise.all(
-    generated.images.map((dataUrl, index) =>
+    generatedImageDataUrls.map((dataUrl, index) =>
       persistGeneratedAsset({
         userId: params.userId,
         sessionId,
@@ -654,10 +805,18 @@ export async function runImageAssistantJob(params: {
         content: prompt,
         taskType: params.taskType,
         requestPayload: {
+          modelOptionId: governedSelection.modelOptionId,
+          providerId: governedSelection.providerId,
           referenceAssetIds: params.referenceAssetIds || [],
-          candidateCount: params.candidateCount || 1,
-          sizePreset: normalizeSizePreset(params.sizePreset),
-          resolution: normalizeResolution(params.resolution),
+          model: normalizedImageConfig.modelId,
+          candidateCount: normalizedImageConfig.candidateCount,
+          imageSize: normalizedImageConfig.imageSize,
+          imageQuality: normalizedImageConfig.imageQuality,
+          imageBackground: normalizedImageConfig.imageBackground,
+          imageOutputFormat: normalizedImageConfig.imageOutputFormat,
+          imageOutputCompression: normalizedImageConfig.imageOutputCompression,
+          imageModeration: normalizedImageConfig.imageModeration,
+          imageResponseFormat: normalizedImageConfig.imageResponseFormat,
           ...(params.requestPayload || {}),
         },
       })
@@ -754,7 +913,7 @@ export async function runImageAssistantJob(params: {
     userId: params.userId,
     sessionId,
     persistedAssets,
-    generatedImages: generated.images,
+    generatedImages: generatedImageDataUrls,
   })
   logImageAssistantStage("job.completed", {
     sessionId,
@@ -780,6 +939,8 @@ export async function runImageAssistantJob(params: {
 export async function runImageAssistantConversationTurn(params: {
   userId: number
   enterpriseId?: number | null
+  enterpriseRole?: string | null
+  enterpriseStatus?: string | null
   requestIp: string
   sessionId?: string | null
   prompt: string
@@ -787,10 +948,19 @@ export async function runImageAssistantConversationTurn(params: {
   taskType: ImageAssistantTaskType
   referenceAssetIds?: string[]
   referenceUrls?: string[]
+  modelOptionId?: string | null
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
+  model?: string | null
   candidateCount?: number
   sizePreset?: string | null
   resolution?: string | null
+  imageSize?: string | null
+  imageQuality?: "auto" | "low" | "medium" | "high" | null
+  imageBackground?: "auto" | "transparent" | "opaque" | null
+  imageOutputFormat?: "png" | "jpeg" | "webp" | null
+  imageOutputCompression?: number | null
+  imageModeration?: "auto" | "low" | null
+  imageResponseFormat?: "b64_json" | "url" | null
   parentVersionId?: string | null
   extraInstructions?: string | null
   snapshotAssetId?: string | null
@@ -801,6 +971,35 @@ export async function runImageAssistantConversationTurn(params: {
   signal?: AbortSignal
 }) {
   const startedAt = Date.now()
+  const governedSelection = await resolveGovernedImageAssistantSelectionForUser({
+    user: buildModelGovernanceUser({
+      userId: params.userId,
+      enterpriseId: params.enterpriseId,
+      enterpriseRole: params.enterpriseRole,
+      enterpriseStatus: params.enterpriseStatus,
+    }),
+    modelOptionId: params.modelOptionId,
+    providerLock: params.providerLock,
+    model: params.model,
+    taskType: params.taskType,
+    hasReferenceInput: Boolean((params.referenceAssetIds?.length || 0) + (params.referenceUrls?.length || 0)),
+    hasMask: Boolean(params.maskAssetId),
+    hasSnapshot: Boolean(params.snapshotAssetId),
+  })
+  const normalizedImageConfig = normalizeWorkflowImageConfig({
+    selectedProviderId: governedSelection.providerLock,
+    selectedModelId: governedSelection.model,
+    candidateCount: params.candidateCount,
+    sizePreset: params.sizePreset,
+    resolution: params.resolution,
+    imageSize: params.imageSize,
+    imageQuality: params.imageQuality,
+    imageBackground: params.imageBackground,
+    imageOutputFormat: params.imageOutputFormat,
+    imageOutputCompression: params.imageOutputCompression,
+    imageModeration: params.imageModeration,
+    imageResponseFormat: params.imageResponseFormat,
+  })
   const memoryBridge =
     params.memoryBridge ||
     (await resolveImageAssistantMemoryBridge({
@@ -831,8 +1030,11 @@ export async function runImageAssistantConversationTurn(params: {
     sessionId,
     taskType: params.taskType,
     referenceAssetCount: (params.referenceAssetIds?.length || 0) + (params.referenceUrls?.length || 0),
-    sizePreset: params.sizePreset,
-    resolution: params.resolution,
+    model: normalizedImageConfig.modelId,
+    modelOptionId: governedSelection.modelOptionId,
+    providerId: governedSelection.providerId,
+    imageSize: normalizedImageConfig.imageSize,
+    imageQuality: normalizedImageConfig.imageQuality,
     memoryAppliedCount: memoryBridge.memoryAppliedIds.length,
   })
 
@@ -906,8 +1108,8 @@ export async function runImageAssistantConversationTurn(params: {
     currentBrief: params.brief,
     previousState,
     taskType: params.taskType,
-    sizePreset: normalizeSizePreset(params.sizePreset),
-    resolution: normalizeResolution(params.resolution),
+    sizePreset: normalizedImageConfig.sizePreset || normalizeSizePreset(params.sizePreset),
+    resolution: normalizedImageConfig.resolution || normalizeResolution(params.resolution),
     referenceCount: referencedAssets.length + referenceUrls.length,
     extraInstructions: effectiveExtraInstructions,
   })
@@ -924,12 +1126,20 @@ export async function runImageAssistantConversationTurn(params: {
 
   const requestPayload = {
     workflow: "skills_tools",
+    modelOptionId: governedSelection.modelOptionId,
+    providerId: governedSelection.providerId,
     referenceAssetIds: (params.referenceAssetIds || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
     referenceUrls: (params.referenceUrls || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
-    providerLock: params.providerLock || null,
-    candidateCount: params.candidateCount || 1,
-    sizePreset: normalizeSizePreset(params.sizePreset),
-    resolution: normalizeResolution(params.resolution),
+    providerLock: normalizedImageConfig.providerLock,
+    model: normalizedImageConfig.modelId,
+    candidateCount: normalizedImageConfig.candidateCount,
+    imageSize: normalizedImageConfig.imageSize,
+    imageQuality: normalizedImageConfig.imageQuality,
+    imageBackground: normalizedImageConfig.imageBackground,
+    imageOutputFormat: normalizedImageConfig.imageOutputFormat,
+    imageOutputCompression: normalizedImageConfig.imageOutputCompression,
+    imageModeration: normalizedImageConfig.imageModeration,
+    imageResponseFormat: normalizedImageConfig.imageResponseFormat,
     snapshotAssetId: params.snapshotAssetId || null,
     maskAssetId: params.maskAssetId || null,
     versionMeta: params.versionMeta || null,
@@ -1001,10 +1211,21 @@ export async function runImageAssistantConversationTurn(params: {
     taskType: params.taskType,
     referenceAssetIds: (params.referenceAssetIds || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
     referenceUrls: (params.referenceUrls || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
-    providerLock: params.providerLock || null,
-    candidateCount: params.candidateCount || 1,
-    sizePreset: normalizeSizePreset(params.sizePreset),
-    resolution: normalizeResolution(params.resolution),
+    modelOptionId: governedSelection.modelOptionId,
+    enterpriseRole: params.enterpriseRole || null,
+    enterpriseStatus: params.enterpriseStatus || null,
+    providerLock: normalizedImageConfig.providerLock,
+    model: normalizedImageConfig.modelId,
+    candidateCount: normalizedImageConfig.candidateCount,
+    sizePreset: normalizedImageConfig.sizePreset || normalizeSizePreset(params.sizePreset),
+    resolution: normalizedImageConfig.resolution || normalizeResolution(params.resolution),
+    imageSize: normalizedImageConfig.imageSize,
+    imageQuality: normalizedImageConfig.imageQuality,
+    imageBackground: normalizedImageConfig.imageBackground,
+    imageOutputFormat: normalizedImageConfig.imageOutputFormat,
+    imageOutputCompression: normalizedImageConfig.imageOutputCompression,
+    imageModeration: normalizedImageConfig.imageModeration,
+    imageResponseFormat: normalizedImageConfig.imageResponseFormat,
     parentVersionId: params.parentVersionId || null,
     snapshotAssetId: params.snapshotAssetId || null,
     maskAssetId: params.maskAssetId || null,

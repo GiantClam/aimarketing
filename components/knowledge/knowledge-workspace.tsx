@@ -9,6 +9,7 @@ import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CompactBusinessCard } from "@/components/workspace/compact-business-card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
@@ -29,6 +30,10 @@ import type {
   KnowledgeSourceClientState,
   KnowledgeSourceTestResult,
 } from "@/lib/knowledge/types"
+import {
+  buildCompactCardSummary,
+  pickPrimaryStatusBadge,
+} from "@/lib/workspace/compact-business-card"
 
 type Copy = {
   eyebrow: string
@@ -196,6 +201,12 @@ function getSourceBadgeTone(status: KnowledgeSourceStatus | null, pending: boole
     return "rounded-[6px] border border-amber-300 bg-amber-50 text-amber-700"
   }
   return "rounded-[6px] border border-red-200 bg-red-50 text-red-700"
+}
+
+function getDatasetDocumentSummary(locale: AppLocale, count: number) {
+  return locale === "zh"
+    ? `${count} 个文档`
+    : `${count} document${count === 1 ? "" : "s"}`
 }
 
 async function fetchKnowledgeDatasets() {
@@ -1235,22 +1246,33 @@ export function KnowledgeWorkspace({
                     <div className="text-sm text-muted-foreground">{copy.datasetEmpty}</div>
                   ) : (
                     datasetOverviewItems.map((dataset) => (
-                      <div key={dataset.id} className="rounded-[10px] border border-border bg-background/70 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-medium text-foreground">{dataset.name}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {getCategoryLabel(copy, dataset.category)}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-xs text-muted-foreground">{copy.datasetDocumentCount}</div>
-                            <div className="mt-1 font-display text-xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                              {dataset.documentCount}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <CompactBusinessCard
+                        key={dataset.id}
+                        title={dataset.name}
+                        summary={
+                          buildCompactCardSummary([
+                            `${getCategoryLabel(copy, dataset.category)} · ${getDatasetDocumentSummary(locale, dataset.documentCount)}`,
+                          ]) || dataset.name
+                        }
+                        status={pickPrimaryStatusBadge([
+                          {
+                            label: getCategoryLabel(copy, dataset.category),
+                            tone: "neutral",
+                          },
+                        ])}
+                        actionLabel={locale === "zh" ? "查看" : "View"}
+                        onClick={() => {
+                          if (dataset.id > 0) {
+                            setSelectedDatasetId(String(dataset.id))
+                            setDatasetViewMode("current")
+                            return
+                          }
+
+                          setSelectedDatasetId("")
+                          setDatasetViewMode("all")
+                        }}
+                        className="bg-background/70 p-3"
+                      />
                     ))
                   )}
                 </div>

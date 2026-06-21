@@ -60,6 +60,15 @@ export type PptPreviewRequest = {
   templateMode?: PptPreviewTemplateMode
   templateId?: PptFrontendTemplateId
   pageCount?: PptPreviewPageCount | null
+  images?: PptPreviewInputImage[]
+}
+
+export type PptPreviewInputImage = {
+  url: string
+  title?: string | null
+  mimeType?: string | null
+  sourceNodeKey?: string | null
+  role?: "cover" | "content" | "logo" | "reference"
 }
 
 export type PptPreviewSlide = {
@@ -105,6 +114,7 @@ export type PptPreviewSlide = {
     label: string
     detail: string
   }>
+  image?: PptPreviewInputImage
   accent: string
 }
 
@@ -1236,6 +1246,7 @@ export function buildPptPreviewDeckFromPlans(
   const fallbackOutline = buildExtendedScenarioOutline(request.scenario, layouts, request.language)
   const variantDescriptors = buildPptPreviewVariantDescriptors(request)
   const templateMode = resolvePptPreviewTemplateMode(request)
+  const requestImages = normalizePptPreviewRequestImages(request.images)
 
   return {
     title: firstPlan?.title.trim() || fallbackTitle,
@@ -1269,41 +1280,99 @@ export function buildPptPreviewDeckFromPlans(
         palette: style.palette,
         strengths: style.strengths,
         outline: (plan?.outline?.length ? plan.outline : fallbackOutline).slice(0, pageCount),
-        slides: layouts
-          .map((layout) => slideByLayout.get(layout) ?? fallbackSlides.find((slide) => slide.layout === layout))
-          .filter((slide): slide is NonNullable<typeof slide> => Boolean(slide))
-          .map((slide, index) => ({
-            ...applyTemplateSlotMetadata(style.key, slide),
-            intent: slide.intent ?? resolvePptPreviewSlideIntent(style.key, slide.layout),
-            kicker:
-              !slide.kicker?.trim() || /^slide\s+\d+$/i.test(slide.kicker.trim())
-                ? buildPreviewStyleKicker(style.key, slide.layout, request.language)
-                : slide.kicker.trim(),
-            title: buildPreviewStyleTitle(
-              style.key,
-              slide.layout,
-              (slide.title?.trim() || (index === 0 ? fallbackTitle : fallbackSlideTitles[index] || fallbackTitle)).replace(
-                /\s*\/\s*(cover|agenda|insight|comparison|evidence|stats|chart|process|timeline)$/i,
-                "",
+        slides: assignRequestImagesToSlides(
+          layouts
+            .map((layout) => slideByLayout.get(layout) ?? fallbackSlides.find((slide) => slide.layout === layout))
+            .filter((slide): slide is NonNullable<typeof slide> => Boolean(slide))
+            .map((slide, index) => ({
+              ...applyTemplateSlotMetadata(style.key, slide),
+              intent: slide.intent ?? resolvePptPreviewSlideIntent(style.key, slide.layout),
+              kicker:
+                !slide.kicker?.trim() || /^slide\s+\d+$/i.test(slide.kicker.trim())
+                  ? buildPreviewStyleKicker(style.key, slide.layout, request.language)
+                  : slide.kicker.trim(),
+              title: buildPreviewStyleTitle(
+                style.key,
+                slide.layout,
+                (slide.title?.trim() || (index === 0 ? fallbackTitle : fallbackSlideTitles[index] || fallbackTitle)).replace(
+                  /\s*\/\s*(cover|agenda|insight|comparison|evidence|stats|chart|process|timeline)$/i,
+                  "",
+                ),
+                fallbackTitle,
+                request.language,
               ),
-              fallbackTitle,
-              request.language,
-            ),
-            body: buildPreviewStyleBody(style.key, slide.body?.trim() || "", request.language),
-            bullets: (slide.bullets ?? []).slice(0, 4).map((bullet, bulletIndex) =>
-              buildPreviewStyleBullet(style.key, bullet, bulletIndex, request.language),
-            ),
-            contentsItems: slide.contentsItems?.slice(0, 9),
-            comparisonItems: slide.comparisonItems?.slice(0, 4),
-            spotlightItems: slide.spotlightItems?.slice(0, 4),
-            metricItems: slide.metricItems?.slice(0, 4),
-            chartItems: slide.chartItems?.slice(0, 4),
-            processItems: slide.processItems?.slice(0, 4),
-            closingItems: slide.closingItems?.slice(0, 4),
-            id: `${variantDescriptor.key}-${slide.layout}-${index + 1}`,
-            accent: style.palette.accent,
-          })),
+              body: buildPreviewStyleBody(style.key, slide.body?.trim() || "", request.language),
+              bullets: (slide.bullets ?? []).slice(0, 4).map((bullet, bulletIndex) =>
+                buildPreviewStyleBullet(style.key, bullet, bulletIndex, request.language),
+              ),
+              contentsItems: slide.contentsItems?.slice(0, 9),
+              comparisonItems: slide.comparisonItems?.slice(0, 4),
+              spotlightItems: slide.spotlightItems?.slice(0, 4),
+              metricItems: slide.metricItems?.slice(0, 4),
+              chartItems: slide.chartItems?.slice(0, 4),
+              processItems: slide.processItems?.slice(0, 4),
+              closingItems: slide.closingItems?.slice(0, 4),
+              id: `${variantDescriptor.key}-${slide.layout}-${index + 1}`,
+              accent: style.palette.accent,
+            })),
+          requestImages,
+        ),
       }
     }),
   }
+}
+
+function normalizePptPreviewRequestImages(images: PptPreviewRequest["images"]): PptPreviewInputImage[] {
+  if (!Array.isArray(images)) return []
+
+  const seenUrls = new Set<string>()
+  return images
+    .map((image) => {
+      const url = typeof image?.url === "string" ? image.url.trim() : ""
+      if (!url || seenUrls.has(url)) return null
+      seenUrls.add(url)
+      return {
+        url,
+        title: typeof image?.title === "string" && image.title.trim() ? image.title.trim() : null,
+        mimeType: typeof image?.mimeType === "string" && image.mimeType.trim() ? image.mimeType.trim() : null,
+        sourceNodeKey:
+          typeof image?.sourceNodeKey === "string" && image.sourceNodeKey.trim() ? image.sourceNodeKey.trim() : null,
+        role: image?.role === "cover" || image?.role === "content" || image?.role === "logo" || image?.role === "reference"
+          ? image.role
+          : undefined,
+      } satisfies PptPreviewInputImage
+    })
+    .filter((image): image is PptPreviewInputImage => Boolean(image))
+}
+
+function supportsInlineRequestImage(layout: PptPreviewLayout) {
+  return layout === "cover" || layout === "insight" || layout === "comparison" || layout === "evidence"
+}
+
+function assignRequestImagesToSlides(slides: PptPreviewSlide[], images: PptPreviewInputImage[]) {
+  if (images.length === 0) return slides
+
+  const coverImage = images[0]
+  const contentImages = images.slice(1)
+  let contentIndex = 0
+
+  return slides.map((slide) => {
+    if (slide.layout === "cover") {
+      return {
+        ...slide,
+        image: coverImage ? { ...coverImage, role: "cover" } : undefined,
+      }
+    }
+
+    if (!supportsInlineRequestImage(slide.layout) || contentIndex >= contentImages.length) {
+      return slide
+    }
+
+    const image = contentImages[contentIndex]
+    contentIndex += 1
+    return {
+      ...slide,
+      image: image ? { ...image, role: "content" } : undefined,
+    }
+  })
 }
