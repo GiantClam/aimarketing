@@ -10,5 +10,5 @@ test("agent catalog exposes ppt assistant as an executive advisor", () => {
   assert.ok(catalog.some((entry) => entry.id === "executive-ppt"))
   assert.equal(item?.category, "executive")
   assert.equal(item?.name.zh, "PPT 助手")
-  assert.match(item?.description.en || "", /downloadable PPT/i)
+  assert.match(item?.description.en || "", /downloadable presentation deliverable/i)
 })

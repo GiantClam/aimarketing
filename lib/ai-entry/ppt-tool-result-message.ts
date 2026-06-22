@@ -9,6 +9,8 @@ type ExportPptDeckResult = {
   message?: unknown
 }
 
+type ArtifactDeliverableKind = "html" | "pptx" | "generic"
+
 function normalizeOptionalText(value: unknown) {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
@@ -33,6 +35,38 @@ function buildMarkdownLink(label: string, href: string | null) {
   return `- ${label}: [${href}](${href})`
 }
 
+function inferDeliverableKind(fileName: string | null): ArtifactDeliverableKind {
+  if (!fileName) return "generic"
+  const normalized = fileName.trim().toLowerCase()
+  if (normalized.endsWith(".html") || normalized.endsWith(".htm")) return "html"
+  if (normalized.endsWith(".pptx") || normalized.endsWith(".ppt")) return "pptx"
+  return "generic"
+}
+
+function getDeliverableCopy(kind: ArtifactDeliverableKind, isZh: boolean) {
+  if (kind === "html") {
+    return {
+      heading: isZh ? "已生成 HTML 成品：" : "HTML deliverable generated:",
+      previewLabel: isZh ? "在线打开链接" : "Open link",
+      downloadLabel: isZh ? "HTML 下载链接" : "HTML download link",
+    }
+  }
+
+  if (kind === "pptx") {
+    return {
+      heading: isZh ? "已生成 PPT 成品：" : "PPT deliverable generated:",
+      previewLabel: isZh ? "在线预览链接" : "Preview link",
+      downloadLabel: isZh ? "PPT 下载链接" : "PPT download link",
+    }
+  }
+
+  return {
+    heading: isZh ? "已生成可交付文件：" : "Deliverable generated:",
+    previewLabel: isZh ? "在线预览链接" : "Preview link",
+    downloadLabel: isZh ? "完整下载链接" : "Download link",
+  }
+}
+
 export function buildPptToolResultMessage(input: {
   toolName: string
   result: unknown
@@ -52,14 +86,16 @@ export function buildPptToolResultMessage(input: {
   const fileName = normalizeOptionalText(result.fileName)
   const title = normalizeOptionalText(result.title)
   const statusLine = normalizeOptionalText(result.message)
+  const deliverableKind = inferDeliverableKind(fileName)
+  const copy = getDeliverableCopy(deliverableKind, isZh)
 
   const lines = [
-    isZh ? "已生成可交付文件：" : "Deliverable generated:",
+    copy.heading,
     ...(title ? [`- ${isZh ? "标题" : "Title"}: ${title}`] : []),
     ...(fileName ? [`- ${isZh ? "文件名" : "File"}: ${fileName}`] : []),
     ...(statusLine ? [`- ${isZh ? "状态" : "Status"}: ${statusLine}`] : []),
-    buildMarkdownLink(isZh ? "在线预览链接" : "Preview link", previewUrl),
-    buildMarkdownLink(isZh ? "完整下载链接" : "Download link", downloadUrl),
+    buildMarkdownLink(copy.previewLabel, previewUrl),
+    buildMarkdownLink(copy.downloadLabel, downloadUrl),
     buildMarkdownLink(isZh ? "作品库链接" : "Work library", workLibraryUrl),
   ].filter((line): line is string => Boolean(line))
 
