@@ -35,6 +35,17 @@ function buildMarkdownLink(label: string, href: string | null) {
   return `- ${label}: [${href}](${href})`
 }
 
+export function stripPptArtifactRelativeLinks(content: string) {
+  if (!content.trim()) return content
+
+  return content
+    .replace(/(?:^|\n)\s*(?:下载链接|工作库入口)\s*[:：]?\s*`?\/(?:downloads\/)?api\/platform\/artifacts\/\d+\/download(?:\?download=1)?`?\s*(?=\n|$)/g, "\n")
+    .replace(/(?:^|\n)\s*`?\/(?:downloads\/)?api\/platform\/artifacts\/\d+\/download(?:\?download=1)?`?\s*(?=\n|$)/g, "\n")
+    .replace(/(?:^|\n)\s*(?:工作库入口)\s*[:：]?\s*`?\/dashboard\/works`?\s*(?=\n|$)/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 function inferDeliverableKind(fileName: string | null): ArtifactDeliverableKind {
   if (!fileName) return "generic"
   const normalized = fileName.trim().toLowerCase()

@@ -300,12 +300,33 @@ function splitFileNameExtension(fileName: string) {
   }
 }
 
+function extensionFromContentType(contentType: string | null | undefined) {
+  const normalized = String(contentType || "").trim().toLowerCase()
+  if (!normalized) return ""
+  if (normalized === "text/html" || normalized.startsWith("text/html;")) return ".html"
+  if (normalized === "text/plain" || normalized.startsWith("text/plain;")) return ".txt"
+  if (normalized === "text/markdown" || normalized.startsWith("text/markdown;")) return ".md"
+  if (normalized === "application/json") return ".json"
+  if (normalized === "application/pdf") return ".pdf"
+  if (normalized === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return ".pptx"
+  if (normalized === "application/vnd.ms-powerpoint") return ".ppt"
+  if (normalized === "audio/mpeg") return ".mp3"
+  if (normalized === "audio/wav") return ".wav"
+  if (normalized === "audio/mp4") return ".m4a"
+  if (normalized === "audio/ogg") return ".ogg"
+  if (normalized === "video/mp4") return ".mp4"
+  if (normalized === "image/png") return ".png"
+  if (normalized === "image/jpeg") return ".jpg"
+  if (normalized === "image/webp") return ".webp"
+  return ""
+}
+
 export function buildDownloadFileName(title: string, extension: string) {
   const base = normalizeStoredFileTitle(title)
   return `${base}.${extension.replace(/^\./, "")}`
 }
 
-function toAsciiDownloadFileName(fileName: string) {
+function toAsciiDownloadFileName(fileName: string, contentType?: string | null) {
   const { baseName, extension } = splitFileNameExtension(fileName)
   const normalizedBase = baseName
     .normalize("NFKD")
@@ -314,20 +335,20 @@ function toAsciiDownloadFileName(fileName: string) {
     .replace(/(^[,\-.\s]+|[,\-.\s]+$)/g, "")
 
   const safeBase = normalizeStoredFileTitle(normalizedBase)
-  return `${safeBase}${extension || ".bin"}`
+  return `${safeBase}${extension || extensionFromContentType(contentType) || ".bin"}`
 }
 
-function buildContentDisposition(dispositionType: "attachment" | "inline", fileName: string) {
-  const asciiFileName = toAsciiDownloadFileName(fileName)
+function buildContentDisposition(dispositionType: "attachment" | "inline", fileName: string, contentType?: string | null) {
+  const asciiFileName = toAsciiDownloadFileName(fileName, contentType)
   return `${dispositionType}; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
 }
 
-export function buildAttachmentContentDisposition(fileName: string) {
-  return buildContentDisposition("attachment", fileName)
+export function buildAttachmentContentDisposition(fileName: string, contentType?: string | null) {
+  return buildContentDisposition("attachment", fileName, contentType)
 }
 
-export function buildInlineContentDisposition(fileName: string) {
-  return buildContentDisposition("inline", fileName)
+export function buildInlineContentDisposition(fileName: string, contentType?: string | null) {
+  return buildContentDisposition("inline", fileName, contentType)
 }
 
 export function getMiniMaxAudioConfig(): MiniMaxAudioConfig {

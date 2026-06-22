@@ -45,7 +45,7 @@ import {
 } from "@/lib/ai-entry/chat-attachments"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
-import { buildPptToolResultMessage } from "@/lib/ai-entry/ppt-tool-result-message"
+import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "@/lib/ai-entry/ppt-tool-result-message"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
   type ProviderOptions,
@@ -1157,7 +1157,10 @@ export async function POST(request: NextRequest) {
             latestUserPrompt,
             forcedReplyLanguage,
           )
-          const resolvedStreamedAnswerWithTools = `${normalizedStreamedAnswer}${streamedToolAppendix}`.trim()
+          const sanitizedStreamedAnswer = streamedToolAppendix
+            ? stripPptArtifactRelativeLinks(normalizedStreamedAnswer)
+            : normalizedStreamedAnswer
+          const resolvedStreamedAnswerWithTools = `${sanitizedStreamedAnswer}${streamedToolAppendix}`.trim()
           sendEvent({
             event: "message_end",
             conversation_id: conversationId,

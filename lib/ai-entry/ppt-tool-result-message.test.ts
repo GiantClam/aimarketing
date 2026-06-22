@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { buildPptToolResultMessage } from "./ppt-tool-result-message"
+import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "./ppt-tool-result-message"
 
 test("ppt tool result message expands relative export links into absolute URLs", () => {
   const message = buildPptToolResultMessage({
@@ -73,5 +73,24 @@ test("ppt tool result message returns null for unrelated tools", () => {
       origin: "https://www.aimarketingsite.com",
     }),
     null,
+  )
+})
+
+test("stripPptArtifactRelativeLinks removes raw artifact and work library relative paths", () => {
+  const cleaned = stripPptArtifactRelativeLinks(`
+我已经拿到4个版式预览，准备直接导出成品。
+下载链接：/downloads/api/platform/artifacts/127/download?download=1
+
+已按 Neo-Grid Bold 版式导出成品。
+
+工作库入口：\`/dashboard/works\`
+`)
+
+  assert.equal(
+    cleaned,
+    [
+      "我已经拿到4个版式预览，准备直接导出成品。",
+      "已按 Neo-Grid Bold 版式导出成品。",
+    ].join("\n\n"),
   )
 })

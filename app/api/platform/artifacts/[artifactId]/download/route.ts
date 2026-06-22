@@ -43,7 +43,9 @@ export async function GET(
     const headers = new Headers()
     headers.set(
       "Content-Disposition",
-      forceDownload ? buildAttachmentContentDisposition(artifact.title) : buildInlineContentDisposition(artifact.title),
+      forceDownload
+        ? buildAttachmentContentDisposition(artifact.title, artifact.mimeType)
+        : buildInlineContentDisposition(artifact.title, artifact.mimeType),
     )
     headers.set("Cache-Control", "private, no-store")
 

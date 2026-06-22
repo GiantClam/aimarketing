@@ -91,6 +91,13 @@ test("inline content disposition keeps a UTF-8 filename fallback", () => {
   assert.match(header, /filename\*=UTF-8''/)
 })
 
+test("attachment content disposition infers html extension from content type when title extension is missing", () => {
+  const header = buildAttachmentContentDisposition("请生成一份 4 页中文产品方案演示稿", "text/html; charset=utf-8")
+  assert.match(header, /attachment;/)
+  assert.match(header, /filename="[^"]+\.html"/)
+  assert.match(header, /filename\*=UTF-8''/)
+})
+
 test("minimax audio stored download file name keeps the human title", () => {
   assert.equal(buildDownloadFileName("品牌发布曲，暖场版", "mp3"), "品牌发布曲，暖场版.mp3")
 })
