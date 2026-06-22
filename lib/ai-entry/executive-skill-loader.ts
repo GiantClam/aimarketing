@@ -47,6 +47,10 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
     "references/domains/growth.md",
     "references/diagnostic-core.md",
   ],
+  "executive-ppt": [
+    "references/domains/ppt-generation.md",
+    "references/diagnostic-core.md",
+  ],
   "executive-sales-strategy": [
     "SKILL.md",
     "references/domains/sales-strategy.md",

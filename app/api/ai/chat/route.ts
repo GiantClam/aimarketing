@@ -40,6 +40,7 @@ import {
   type IncomingMessage,
 } from "@/lib/ai-entry/chat-attachments"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
+import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
   type ProviderOptions,
@@ -665,9 +666,16 @@ export async function POST(request: NextRequest) {
     if (loadedCloseTools) {
       closeTools = loadedCloseTools
     }
+    const pptTools =
+      effectiveAgentId === "executive-ppt"
+        ? buildAiEntryPptTools({
+            currentUser,
+          })
+        : {}
     const webSearchTools = buildAiEntryWebSearchTools()
     const effectiveSelectedTools = {
       ...(selectedTools || {}),
+      ...pptTools,
       ...webSearchTools,
     }
     const effectiveSelectedToolIds = Object.keys(effectiveSelectedTools)

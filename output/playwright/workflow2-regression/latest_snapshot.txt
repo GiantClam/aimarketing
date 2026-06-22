@@ -1,0 +1,684 @@
+npm warn Unknown project config "auto-install-peers". This will stop working in the next major version of npm.
+npm warn Unknown project config "strict-peer-dependencies". This will stop working in the next major version of npm.
+### Page
+- Page URL: https://www.aimarketingsite.com/dashboard/workflows/2
+- Page Title: Multi-Model AI Workspace for Marketing Teams | AIMarketingSite
+### Snapshot
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e53]:
+    - complementary [ref=e54]:
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e60]: AI
+            - generic [ref=e61]:
+              - generic [ref=e62]:
+                - img [ref=e64]
+                - button "中文" [ref=e67]
+                - button "EN" [pressed] [ref=e68]
+              - button "Collapse sidebar" [ref=e69]:
+                - img
+          - paragraph [ref=e70]: 0086 (0086-5e14)
+        - generic [ref=e75]:
+          - button "AI Chat" [ref=e77]:
+            - generic [ref=e78]:
+              - img
+              - text: AI Chat
+            - img
+          - generic [ref=e79]:
+            - heading "Expert agents" [level=3] [ref=e80]
+            - button "Consulting Advisor" [ref=e82]:
+              - generic [ref=e83]:
+                - img
+                - text: Consulting Advisor
+              - img
+            - button "Brand strategy advisor" [ref=e85]:
+              - generic [ref=e86]:
+                - img
+                - text: Brand strategy advisor
+              - img
+            - button "Growth advisor" [ref=e88]:
+              - generic [ref=e89]:
+                - img
+                - text: Growth advisor
+              - img
+          - generic [ref=e90]:
+            - heading "Creative workspace" [level=3] [ref=e91]
+            - button "Multi-platform writing" [ref=e93]:
+              - generic [ref=e94]:
+                - img
+                - text: Multi-platform writing
+              - img
+            - button "Image design assistant" [ref=e96]:
+              - generic [ref=e97]:
+                - img
+                - text: Image design assistant
+              - img
+          - generic [ref=e98]:
+            - heading "Business" [level=3] [ref=e99]
+            - generic [ref=e100]:
+              - link "Content growth" [ref=e102] [cursor=pointer]:
+                - /url: /dashboard/business?view=content-growth&agent=business-content-growth
+                - button "Content growth" [ref=e103]:
+                  - img
+                  - text: Content growth
+              - link "Brand creative" [ref=e105] [cursor=pointer]:
+                - /url: /dashboard/business?view=brand-creative&agent=business-brand-creative
+                - button "Brand creative" [ref=e106]:
+                  - img
+                  - text: Brand creative
+              - link "Lead conversion" [ref=e108] [cursor=pointer]:
+                - /url: /dashboard/business?view=lead-conversion&agent=business-lead-conversion
+                - button "Lead conversion" [ref=e109]:
+                  - img
+                  - text: Lead conversion
+              - link "Sales close" [ref=e111] [cursor=pointer]:
+                - /url: /dashboard/business?view=sales-close&agent=business-sales-close
+                - button "Sales close" [ref=e112]:
+                  - img
+                  - text: Sales close
+              - link "Enterprise operations" [ref=e114] [cursor=pointer]:
+                - /url: /dashboard/business?view=enterprise-operations&agent=business-enterprise-operations
+                - button "Enterprise operations" [ref=e115]:
+                  - img
+                  - text: Enterprise operations
+              - link "Knowledge and assets" [ref=e117] [cursor=pointer]:
+                - /url: /dashboard/business?view=knowledge-assets&agent=business-knowledge-assets
+                - button "Knowledge and assets" [ref=e118]:
+                  - img
+                  - text: Knowledge and assets
+              - link "Compliance and risk" [ref=e120] [cursor=pointer]:
+                - /url: /dashboard/business?view=compliance-risk&agent=business-compliance-auditor
+                - button "Compliance and risk" [ref=e121]:
+                  - img
+                  - text: Compliance and risk
+              - link "Training enablement" [ref=e123] [cursor=pointer]:
+                - /url: /dashboard/business?view=training-enablement&agent=business-training-designer
+                - button "Training enablement" [ref=e124]:
+                  - img
+                  - text: Training enablement
+              - link "Talent and recruiting" [ref=e126] [cursor=pointer]:
+                - /url: /dashboard/business?view=talent-recruiting&agent=business-recruitment-specialist
+                - button "Talent and recruiting" [ref=e127]:
+                  - img
+                  - text: Talent and recruiting
+              - link "Legal and contracts" [ref=e129] [cursor=pointer]:
+                - /url: /dashboard/business?view=legal-ops&agent=business-legal-document-review
+                - button "Legal and contracts" [ref=e130]:
+                  - img
+                  - text: Legal and contracts
+          - generic [ref=e131]:
+            - heading "Platform" [level=3] [ref=e132]
+            - generic [ref=e133]:
+              - link "Capabilities" [ref=e134] [cursor=pointer]:
+                - /url: /dashboard/capabilities
+                - button "Capabilities" [ref=e135]:
+                  - img
+                  - text: Capabilities
+              - link "Agent Platform" [ref=e136] [cursor=pointer]:
+                - /url: /dashboard/agent-platform
+                - button "Agent Platform" [ref=e137]:
+                  - img
+                  - text: Agent Platform
+              - link "Workflows" [ref=e138] [cursor=pointer]:
+                - /url: /dashboard/workflows
+                - button "Workflows" [ref=e139]:
+                  - img
+                  - text: Workflows
+              - link "Enterprise Settings" [ref=e140] [cursor=pointer]:
+                - /url: /dashboard/platform-settings
+                - button "Enterprise Settings" [ref=e141]:
+                  - img
+                  - text: Enterprise Settings
+          - generic [ref=e142]:
+            - heading "Resources" [level=3] [ref=e143]
+            - generic [ref=e144]:
+              - link "Task Center" [ref=e145] [cursor=pointer]:
+                - /url: /dashboard/tasks
+                - button "Task Center" [ref=e146]:
+                  - img
+                  - text: Task Center
+              - link "Asset Library" [ref=e147] [cursor=pointer]:
+                - /url: /dashboard/assets
+                - button "Asset Library" [ref=e148]:
+                  - img
+                  - text: Asset Library
+              - link "Work Library" [ref=e149] [cursor=pointer]:
+                - /url: /dashboard/works
+                - button "Work Library" [ref=e150]:
+                  - img
+                  - text: Work Library
+              - link "Knowledge Base" [ref=e151] [cursor=pointer]:
+                - /url: /dashboard/knowledge-base
+                - button "Knowledge Base" [ref=e152]:
+                  - img
+                  - text: Knowledge Base
+              - link "Billing and usage" [ref=e153] [cursor=pointer]:
+                - /url: /dashboard/billing
+                - button "Billing and usage" [ref=e154]:
+                  - img
+                  - text: Billing and usage
+        - button "Settings" [ref=e157]:
+          - img [ref=e159]
+          - generic [ref=e160]:
+            - paragraph [ref=e161]: beihuang
+            - paragraph [ref=e162]: liulanggoukk@gmail.com
+          - img [ref=e163]
+    - main [ref=e166]:
+      - generic [ref=e170]:
+        - generic [ref=e171]:
+          - generic [ref=e172]:
+            - heading "Workflow builder" [level=1] [ref=e173]
+            - generic [ref=e174]: draft
+            - generic [ref=e175]: Unsaved
+          - generic [ref=e176]:
+            - link "Back to list" [ref=e177] [cursor=pointer]:
+              - /url: /dashboard/workflows
+            - button "Save workflow" [ref=e178]
+            - button "Resume run" [ref=e179]
+        - generic [ref=e180]: Resume will continue from the last failed “Image Generate” branch. Other failed nodes keep their previous result until that branch reaches them again.
+        - generic [ref=e182]:
+          - generic [ref=e184]:
+            - generic [ref=e185]:
+              - generic [ref=e186]: 100%
+              - button [ref=e187]:
+                - img
+              - button [ref=e188]:
+                - img
+              - button [ref=e189]:
+                - img
+            - generic [ref=e190]:
+              - img [ref=e191]
+              - article [ref=e216]:
+                - 'button "Drag a connection from this node: Text Input" [ref=e217]'
+                - generic [ref=e219]:
+                  - generic [ref=e220]:
+                    - img [ref=e224]
+                    - generic [ref=e227]:
+                      - generic [ref=e228]:
+                        - generic [ref=e229]: Text Input
+                        - generic [ref=e232]: Succeeded
+                      - generic [ref=e233]: text-input-1
+                  - generic [ref=e234]:
+                    - button [ref=e235]:
+                      - img
+                    - button [ref=e236]:
+                      - img
+                - generic [ref=e238]:
+                  - generic: Text
+                - generic [ref=e242]:
+                  - generic [ref=e243]: Text
+                  - textbox [ref=e245]: 海边沙滩场景，阳光明亮，蓝天白云，金色沙滩上摆放一张精致的沙滩椅，一位年轻成熟女性穿着时尚泳装，身体大部分盖着柔软的白色毛巾，慵懒地躺在沙滩椅上放松休息，姿态自然优雅，海风轻拂，背景可见蔚蓝大海与轻微海浪，整体画面写实、氛围高级、光影自然、色彩清新通透，摄影感强，高细节，电影级构图。
+              - article [ref=e248]:
+                - 'button "Drag a connection from this node: Image Generate" [ref=e251]'
+                - generic [ref=e253]:
+                  - generic [ref=e254]:
+                    - img [ref=e258]
+                    - generic [ref=e263]:
+                      - generic [ref=e264]:
+                        - generic [ref=e265]: Image Generate
+                        - generic [ref=e268]: Failed
+                      - generic [ref=e269]: image-2
+                  - generic [ref=e270]:
+                    - button [ref=e271]:
+                      - img
+                    - button [ref=e272]:
+                      - img
+                - generic [ref=e274]:
+                  - generic: Text
+                  - generic: Image
+                  - generic: Image
+                - generic [ref=e275]:
+                  - generic [ref=e278]:
+                    - generic [ref=e279]:
+                      - generic [ref=e280]: Model
+                      - combobox [ref=e281]:
+                        - option "PPTOKEN / PPTOKEN / gpt-image-2" [selected]
+                        - option "Aiberm / Aiberm / gpt-image-2"
+                        - option "CrazyRouter / CrazyRouter / gpt-image-2"
+                    - generic [ref=e282]:
+                      - generic [ref=e283]: Size
+                      - generic [ref=e284]:
+                        - button "Auto" [ref=e285]
+                        - button "1024x1024" [ref=e286]
+                        - button "1536x1024" [ref=e287]
+                        - button "1024x1536" [ref=e288]
+                        - button "Custom size" [ref=e289]
+                    - generic [ref=e290]:
+                      - generic [ref=e291]: Quality
+                      - generic [ref=e292]:
+                        - button "auto" [ref=e293]
+                        - button "low" [ref=e294]
+                        - button "medium" [ref=e295]
+                        - button "high" [ref=e296]
+                    - generic [ref=e297]:
+                      - generic [ref=e298]: Background
+                      - generic [ref=e299]:
+                        - button "auto" [ref=e300]
+                        - button "opaque" [ref=e301]
+                        - button "transparent" [ref=e302]
+                    - generic [ref=e303]:
+                      - generic [ref=e304]: Format
+                      - generic [ref=e305]:
+                        - button "png" [ref=e306]
+                        - button "jpeg" [ref=e307]
+                        - button "webp" [ref=e308]
+                    - generic [ref=e309]:
+                      - generic [ref=e310]: Moderation
+                      - generic [ref=e311]:
+                        - button "auto" [ref=e312]
+                        - button "low" [ref=e313]
+                  - generic [ref=e315]:
+                    - generic [ref=e316]:
+                      - generic [ref=e317]: Current output
+                      - generic [ref=e318]: failed
+                    - generic [ref=e319]:
+                      - generic [ref=e320]: This execution did not produce a previewable result.
+                      - generic [ref=e321]: "Failure reason: This run became stale and the node was terminated."
+              - article [ref=e326]:
+                - 'button "Drag a connection from this node: Image Generate" [ref=e329]'
+                - generic [ref=e331]:
+                  - generic [ref=e332]:
+                    - img [ref=e336]
+                    - generic [ref=e341]:
+                      - generic [ref=e342]:
+                        - generic [ref=e343]: Image Generate
+                        - generic [ref=e346]: Failed
+                      - generic [ref=e347]: image-3
+                  - generic [ref=e348]:
+                    - button [ref=e349]:
+                      - img
+                    - button [ref=e350]:
+                      - img
+                - generic [ref=e352]:
+                  - generic: Text
+                  - generic: Image
+                  - generic: Image
+                - generic [ref=e353]:
+                  - generic [ref=e356]:
+                    - generic [ref=e357]:
+                      - generic [ref=e358]: Model
+                      - combobox [ref=e359]:
+                        - option "PPTOKEN / PPTOKEN / gpt-image-2" [selected]
+                        - option "Aiberm / Aiberm / gpt-image-2"
+                        - option "CrazyRouter / CrazyRouter / gpt-image-2"
+                    - generic [ref=e360]:
+                      - generic [ref=e361]: Size
+                      - generic [ref=e362]:
+                        - button "Auto" [ref=e363]
+                        - button "1024x1024" [ref=e364]
+                        - button "1536x1024" [ref=e365]
+                        - button "1024x1536" [ref=e366]
+                        - button "Custom size" [ref=e367]
+                    - generic [ref=e368]:
+                      - generic [ref=e369]: Quality
+                      - generic [ref=e370]:
+                        - button "auto" [ref=e371]
+                        - button "low" [ref=e372]
+                        - button "medium" [ref=e373]
+                        - button "high" [ref=e374]
+                    - generic [ref=e375]:
+                      - generic [ref=e376]: Background
+                      - generic [ref=e377]:
+                        - button "auto" [ref=e378]
+                        - button "opaque" [ref=e379]
+                        - button "transparent" [ref=e380]
+                    - generic [ref=e381]:
+                      - generic [ref=e382]: Format
+                      - generic [ref=e383]:
+                        - button "png" [ref=e384]
+                        - button "jpeg" [ref=e385]
+                        - button "webp" [ref=e386]
+                    - generic [ref=e387]:
+                      - generic [ref=e388]: Moderation
+                      - generic [ref=e389]:
+                        - button "auto" [ref=e390]
+                        - button "low" [ref=e391]
+                  - generic [ref=e393]:
+                    - generic [ref=e394]:
+                      - generic [ref=e395]: Current output
+                      - generic [ref=e396]: failed
+                    - generic [ref=e397]:
+                      - generic [ref=e398]: This execution did not produce a previewable result.
+                      - generic [ref=e399]: "Failure reason: This run became stale and the node was terminated."
+              - article [ref=e404]:
+                - 'button "Drag a connection from this node: 文本输入 副本" [ref=e405]'
+                - generic [ref=e407]:
+                  - generic [ref=e408]:
+                    - img [ref=e412]
+                    - generic [ref=e415]:
+                      - generic [ref=e416]:
+                        - generic [ref=e417]: 文本输入 副本
+                        - generic [ref=e420]: Succeeded
+                      - generic [ref=e421]: text-input-2
+                  - generic [ref=e422]:
+                    - button [ref=e423]:
+                      - img
+                    - button [ref=e424]:
+                      - img
+                - generic [ref=e426]:
+                  - generic: Text
+                - generic [ref=e430]:
+                  - generic [ref=e431]: Text
+                  - textbox [ref=e433]: 中国美女保镖，正面全身照，干净背景
+              - article [ref=e436]:
+                - 'button "Drag a connection from this node: Image Generate" [ref=e439]'
+                - generic [ref=e441]:
+                  - generic [ref=e442]:
+                    - img [ref=e446]
+                    - generic [ref=e451]:
+                      - generic [ref=e452]:
+                        - generic [ref=e453]: Image Generate
+                        - generic [ref=e456]: Cancelled
+                      - generic [ref=e457]: image-4
+                  - generic [ref=e458]:
+                    - button [ref=e459]:
+                      - img
+                    - button [ref=e460]:
+                      - img
+                - generic [ref=e462]:
+                  - generic: Text
+                  - generic: Image
+                  - generic: Image
+                - generic [ref=e463]:
+                  - generic [ref=e466]:
+                    - generic [ref=e467]:
+                      - generic [ref=e468]: Model
+                      - combobox [ref=e469]:
+                        - option "PPTOKEN / PPTOKEN / gpt-image-2"
+                        - option "Aiberm / Aiberm / gpt-image-2" [selected]
+                        - option "CrazyRouter / CrazyRouter / gpt-image-2"
+                    - generic [ref=e470]:
+                      - generic [ref=e471]: Size
+                      - generic [ref=e472]:
+                        - button "Auto" [ref=e473]
+                        - button "1024x1024" [ref=e474]
+                        - button "1536x1024" [ref=e475]
+                        - button "1024x1536" [ref=e476]
+                        - button "Custom size" [ref=e477]
+                    - generic [ref=e478]:
+                      - generic [ref=e479]: Quality
+                      - generic [ref=e480]:
+                        - button "auto" [ref=e481]
+                        - button "low" [ref=e482]
+                        - button "medium" [ref=e483]
+                        - button "high" [ref=e484]
+                    - generic [ref=e485]:
+                      - generic [ref=e486]: Background
+                      - generic [ref=e487]:
+                        - button "auto" [ref=e488]
+                        - button "opaque" [ref=e489]
+                        - button "transparent" [ref=e490]
+                    - generic [ref=e491]:
+                      - generic [ref=e492]: Format
+                      - generic [ref=e493]:
+                        - button "png" [ref=e494]
+                        - button "jpeg" [ref=e495]
+                        - button "webp" [ref=e496]
+                    - generic [ref=e497]:
+                      - generic [ref=e498]: Moderation
+                      - generic [ref=e499]:
+                        - button "auto" [ref=e500]
+                        - button "low" [ref=e501]
+                  - generic [ref=e503]:
+                    - generic [ref=e504]:
+                      - generic [ref=e505]: Current output
+                      - generic [ref=e506]: cancelled
+                    - generic [ref=e507]:
+                      - generic [ref=e508]: This node did not complete execution.
+                      - generic [ref=e509]: "Not executed because: The workflow was cancelled before this node could run."
+              - article [ref=e516]:
+                - 'button "Drag a connection from this node: 文本输入 副本 副本" [ref=e517]'
+                - generic [ref=e519]:
+                  - generic [ref=e520]:
+                    - img [ref=e524]
+                    - generic [ref=e527]:
+                      - generic [ref=e528]:
+                        - generic [ref=e529]: 文本输入 副本 副本
+                        - generic [ref=e532]: Succeeded
+                      - generic [ref=e533]: text-input-3
+                  - generic [ref=e534]:
+                    - button [ref=e535]:
+                      - img
+                    - button [ref=e536]:
+                      - img
+                - generic [ref=e538]:
+                  - generic: Text
+                - generic [ref=e542]:
+                  - generic [ref=e543]: Text
+                  - textbox [ref=e545]: "将{{Image2}} 中人物替换{{Image3}}中的人物"
+              - article [ref=e548]:
+                - generic [ref=e551]:
+                  - generic [ref=e552]:
+                    - img [ref=e556]
+                    - generic [ref=e560]:
+                      - generic [ref=e561]:
+                        - generic [ref=e562]: Work Library
+                        - generic [ref=e565]: Cancelled
+                      - generic [ref=e566]: product-store-1
+                  - generic [ref=e567]:
+                    - button [ref=e568]:
+                      - img
+                    - button [ref=e569]:
+                      - img
+                - generic [ref=e571]:
+                  - generic: Multi-type input
+                - generic [ref=e572]:
+                  - generic [ref=e576]:
+                    - generic [ref=e577]: File name
+                    - textbox "Leave empty to auto-generate a unique name" [ref=e578]: 封面图
+                    - generic [ref=e579]: If the work library already contains the same file name, the new result replaces it.
+                  - generic [ref=e581]:
+                    - generic [ref=e582]:
+                      - generic [ref=e583]: Current output
+                      - generic [ref=e584]: cancelled
+                    - generic [ref=e585]:
+                      - generic [ref=e586]: This node did not complete execution.
+                      - generic [ref=e587]: "Not executed because: The workflow was cancelled before this node could run."
+              - article [ref=e590]:
+                - 'button "Drag a connection from this node: PPT Generate" [ref=e593]'
+                - generic [ref=e595]:
+                  - generic [ref=e596]:
+                    - img [ref=e600]
+                    - generic [ref=e603]:
+                      - generic [ref=e604]:
+                        - generic [ref=e605]: PPT Generate
+                        - generic [ref=e608]: Cancelled
+                      - generic [ref=e609]: ppt-1
+                  - generic [ref=e610]:
+                    - button [ref=e611]:
+                      - img
+                    - button [ref=e612]:
+                      - img
+                - generic [ref=e614]:
+                  - generic: Text
+                  - generic: Image
+                  - generic: PPT
+                - generic [ref=e615]:
+                  - generic [ref=e618]:
+                    - generic [ref=e619]:
+                      - generic [ref=e620]: Pages
+                      - generic [ref=e621]:
+                        - button "6" [ref=e622]
+                        - button "8" [ref=e623]
+                        - button "10" [ref=e624]
+                        - button "12" [ref=e625]
+                    - generic [ref=e626]:
+                      - generic [ref=e627]: Language
+                      - generic [ref=e628]:
+                        - button "Chinese" [ref=e629]
+                        - button "English" [ref=e630]
+                    - generic [ref=e631]:
+                      - generic [ref=e632]: Scenario
+                      - generic [ref=e633]:
+                        - button "Campaign" [ref=e634]
+                        - button "Launch" [ref=e635]
+                        - button "Proposal" [ref=e636]
+                  - generic [ref=e638]:
+                    - generic [ref=e639]:
+                      - generic [ref=e640]: Current output
+                      - generic [ref=e641]: cancelled
+                    - generic [ref=e642]:
+                      - generic [ref=e643]: This node did not complete execution.
+                      - generic [ref=e644]: "Not executed because: The workflow was cancelled before this node could run."
+              - article [ref=e650]:
+                - 'button "Drag a connection from this node: Text Input" [ref=e651]'
+                - generic [ref=e653]:
+                  - generic [ref=e654]:
+                    - img [ref=e658]
+                    - generic [ref=e661]:
+                      - generic [ref=e662]:
+                        - generic [ref=e663]: Text Input
+                        - generic [ref=e666]: Succeeded
+                      - generic [ref=e667]: text-input-4
+                  - generic [ref=e668]:
+                    - button [ref=e669]:
+                      - img
+                    - button [ref=e670]:
+                      - img
+                - generic [ref=e672]:
+                  - generic: Text
+                - generic [ref=e676]:
+                  - generic [ref=e677]: Text
+                  - textbox [ref=e679]: 解密霍尔木兹海峡安保情况介绍 ppt
+              - article [ref=e682]:
+                - generic [ref=e685]:
+                  - generic [ref=e686]:
+                    - img [ref=e690]
+                    - generic [ref=e694]:
+                      - generic [ref=e695]:
+                        - generic [ref=e696]: Work Library
+                        - generic [ref=e699]: Cancelled
+                      - generic [ref=e700]: product-store-2
+                  - generic [ref=e701]:
+                    - button [ref=e702]:
+                      - img
+                    - button [ref=e703]:
+                      - img
+                - generic [ref=e705]:
+                  - generic: Multi-type input
+                - generic [ref=e706]:
+                  - generic [ref=e710]:
+                    - generic [ref=e711]: File name
+                    - textbox "Leave empty to auto-generate a unique name" [ref=e712]: 霍尔木兹海峡现状
+                    - generic [ref=e713]: If the work library already contains the same file name, the new result replaces it.
+                  - generic [ref=e715]:
+                    - generic [ref=e716]:
+                      - generic [ref=e717]: Current output
+                      - generic [ref=e718]: cancelled
+                    - generic [ref=e719]:
+                      - generic [ref=e720]: This node did not complete execution.
+                      - generic [ref=e721]: "Not executed because: The workflow was cancelled before this node could run."
+              - article [ref=e724]:
+                - 'button "Drag a connection from this node: Video Generate" [ref=e728]'
+                - generic [ref=e730]:
+                  - generic [ref=e731]:
+                    - img [ref=e735]
+                    - generic [ref=e738]:
+                      - generic [ref=e740]: Video Generate
+                      - generic [ref=e741]: video-1
+                  - generic [ref=e742]:
+                    - button [ref=e743]:
+                      - img
+                    - button [ref=e744]:
+                      - img
+                - generic [ref=e746]:
+                  - generic: Text
+                  - generic: Image
+                  - generic: Video
+                  - generic: Video
+                - generic [ref=e750]:
+                  - generic [ref=e751]:
+                    - generic [ref=e752]: Mode
+                    - generic [ref=e753]:
+                      - button "Text to video" [ref=e754]
+                      - button "Image to video" [ref=e755]
+                  - generic [ref=e756]:
+                    - generic [ref=e757]: Resolution
+                    - generic [ref=e758]:
+                      - button "720p" [ref=e759]
+                      - button "1080p" [ref=e760]
+                  - generic [ref=e761]:
+                    - generic [ref=e762]: Duration
+                    - generic [ref=e763]:
+                      - button "5s" [ref=e764]
+                      - button "10s" [ref=e765]
+                      - button "15s" [ref=e766]
+                  - generic [ref=e767]:
+                    - generic [ref=e768]: Ratio
+                    - generic [ref=e769]:
+                      - button "Auto" [ref=e770]
+                      - button "16:9" [ref=e771]
+                      - button "9:16" [ref=e772]
+                      - button "1:1" [ref=e773]
+                  - generic [ref=e774]:
+                    - generic [ref=e775]: Sound
+                    - generic [ref=e776]:
+                      - button "On" [ref=e777]
+                      - button "Off" [ref=e778]
+              - article [ref=e784]:
+                - 'button "Drag a connection from this node: Text Input" [ref=e785]'
+                - generic [ref=e787]:
+                  - generic [ref=e788]:
+                    - img [ref=e792]
+                    - generic [ref=e795]:
+                      - generic [ref=e797]: Text Input
+                      - generic [ref=e798]: text-input-5
+                  - generic [ref=e799]:
+                    - button [ref=e800]:
+                      - img
+                    - button [ref=e801]:
+                      - img
+                - generic [ref=e803]:
+                  - generic: Text
+                - generic [ref=e807]:
+                  - generic [ref=e808]: Text
+                  - textbox [ref=e810]: 女人从沙滩椅上站起来打太极拳
+              - article [ref=e813]:
+                - generic [ref=e816]:
+                  - generic [ref=e817]:
+                    - img [ref=e821]
+                    - generic [ref=e825]:
+                      - generic [ref=e827]: Work Library
+                      - generic [ref=e828]: product-store-3
+                  - generic [ref=e829]:
+                    - button [ref=e830]:
+                      - img
+                    - button [ref=e831]:
+                      - img
+                - generic [ref=e833]:
+                  - generic: Multi-type input
+                - generic [ref=e838]:
+                  - generic [ref=e839]: File name
+                  - textbox "Leave empty to auto-generate a unique name" [ref=e840]: 太极拳
+                  - generic [ref=e841]: If the work library already contains the same file name, the new result replaces it.
+          - button "Expand node library" [ref=e844]:
+            - img [ref=e845]
+            - generic [ref=e848]: Node library
+          - complementary [ref=e849]:
+            - generic [ref=e850]:
+              - button "Collapse workflow settings" [ref=e851]:
+                - img [ref=e852]
+                - generic [ref=e855]: Workflow settings
+              - complementary [ref=e856]:
+                - generic [ref=e857]:
+                  - generic [ref=e858]: Workflow settings
+                  - heading "Workflow settings" [level=2] [ref=e859]
+                  - paragraph [ref=e860]: Only workflow-level metadata stays here. Edit node content directly inside the canvas cards.
+                - generic [ref=e861]:
+                  - generic [ref=e862]:
+                    - generic [ref=e863]: Workflow title
+                    - textbox "Workflow title" [ref=e864]: test
+                  - generic [ref=e865]:
+                    - generic [ref=e866]: Workflow description
+                    - textbox "Workflow description" [ref=e867]: test
+                  - generic [ref=e868]:
+                    - generic [ref=e869]: Status
+                    - combobox "Status" [ref=e870]:
+                      - option "draft" [selected]
+                      - option "live"
+                      - option "archived"
+  - region "Notifications alt+T"
+  - alert [ref=e52]
+```

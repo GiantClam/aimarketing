@@ -47,3 +47,14 @@ test("business agent prompt documents are loadable through the shared agent load
   assert.match(importedContent, /MEDDPICC/)
   assert.match(importedContent, /Forecast Accuracy/)
 })
+
+test("ppt assistant skill documents are loadable through the shared agent loader", async () => {
+  const { isExecutiveConsultingAgent, loadExecutiveSkillForAgent } = await import("./executive-skill-loader")
+
+  const content = await loadExecutiveSkillForAgent("executive-ppt")
+
+  assert.equal(isExecutiveConsultingAgent("executive-ppt"), true)
+  assert.match(content, /PPT Generation Advisor/)
+  assert.match(content, /preview_ppt_deck/)
+  assert.match(content, /export_ppt_deck/)
+})

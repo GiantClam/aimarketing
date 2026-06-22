@@ -72,6 +72,15 @@ const CORE_AGENTS: AiEntryAgentCatalogItem[] = [
     },
   },
   {
+    id: "executive-ppt",
+    category: "executive",
+    name: { zh: "PPT 助手", en: "PPT Assistant" },
+    description: {
+      zh: "通过对话梳理目标、结构与风格，并直接生成可下载的 PPT。",
+      en: "Use conversation to shape the goal, structure, and style, then generate a downloadable PPT.",
+    },
+  },
+  {
     id: "executive-sales-strategy",
     category: "executive",
     name: { zh: "销售策略顾问", en: "Sales Strategy Advisor" },

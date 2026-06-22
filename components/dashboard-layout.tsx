@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PenSquare,
+  Presentation,
   Radar,
   Search,
   Settings,
@@ -156,6 +157,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
   const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
   const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
+  const pptAssistantHref = "/dashboard/ai?entry=consulting-advisor&agent=executive-ppt"
   const businessSectionLabel = locale === "zh" ? "业务入口" : "Business"
   const currentBusinessAgentId = (searchParams.get("agent") || "").trim()
   const requestedBusinessView = searchParams.get("view")
@@ -380,6 +382,26 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                           title={consultingAdvisorLabel}
                           icon={Bot}
                           entryHref={consultingAdvisorHref}
+                        />
+                      ))}
+                    {hasAdvisorFeature &&
+                      (sidebarCollapsed ? (
+                        <Link href={pptAssistantHref}>
+                          <Button
+                            variant="ghost"
+                            className="mt-1 w-full justify-center"
+                            size="sm"
+                            title={messages.dashboardLayout.pptAssistant}
+                          >
+                            <Presentation className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AiEntrySidebarItem
+                          title={messages.dashboardLayout.pptAssistant}
+                          icon={Presentation}
+                          entryHref={pptAssistantHref}
+                          activeAgentId="executive-ppt"
                         />
                       ))}
                     {hasAdvisorFeature && advisor.brandStrategy && userEmail && (
