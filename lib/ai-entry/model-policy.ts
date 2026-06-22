@@ -3,6 +3,7 @@ export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"
+export const AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS = ["executive-ppt"] as const
 
 export type AiEntryConsultingModelMode = "quality"
 
@@ -20,6 +21,13 @@ export function normalizeModelFingerprint(value: string) {
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function isConsultingModelLockExemptAgent(agentId: unknown) {
+  const normalizedAgentId = normalizeText(agentId)
+  return AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS.includes(
+    normalizedAgentId as (typeof AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS)[number],
+  )
 }
 
 function isThinkingModelFingerprint(fingerprint: string) {
@@ -124,5 +132,9 @@ export function shouldLockConsultingAdvisorModel(input: {
   entryMode?: unknown
   agentId?: string | null
 }) {
-  return isConsultingAdvisorEntryMode(input.entryMode)
+  if (!isConsultingAdvisorEntryMode(input.entryMode)) {
+    return false
+  }
+
+  return !isConsultingModelLockExemptAgent(input.agentId)
 }

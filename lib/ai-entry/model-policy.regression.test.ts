@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
+  AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS,
   AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
   AI_ENTRY_SONNET_46_MODEL_HINT,
   isConsultingAdvisorEntryMode,
@@ -77,6 +78,14 @@ test("consulting entry mode detection and lock flag", () => {
     shouldLockConsultingAdvisorModel({
       entryMode: "other",
       agentId: "executive-diagnostic",
+    }),
+    false,
+  )
+  assert.deepEqual(AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS, ["executive-ppt"])
+  assert.equal(
+    shouldLockConsultingAdvisorModel({
+      entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
+      agentId: "executive-ppt",
     }),
     false,
   )

@@ -145,6 +145,11 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     return hasCopywritingFeature && writer.enabled
   }, [enterprisePending, enterpriseRejected, hasCopywritingFeature, writer.enabled])
 
+  const showPptAssistantEntry = useMemo(() => {
+    if (enterprisePending || enterpriseRejected) return false
+    return hasAdvisorFeature
+  }, [enterprisePending, enterpriseRejected, hasAdvisorFeature])
+
   const showImageAssistantEntry = useMemo(() => {
     if (enterprisePending || enterpriseRejected) return false
     return hasImageAssistantFeature && imageAssistant.enabled
@@ -384,26 +389,6 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                           entryHref={consultingAdvisorHref}
                         />
                       ))}
-                    {hasAdvisorFeature &&
-                      (sidebarCollapsed ? (
-                        <Link href={pptAssistantHref}>
-                          <Button
-                            variant="ghost"
-                            className="mt-1 w-full justify-center"
-                            size="sm"
-                            title={messages.dashboardLayout.pptAssistant}
-                          >
-                            <Presentation className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      ) : (
-                        <AiEntrySidebarItem
-                          title={messages.dashboardLayout.pptAssistant}
-                          icon={Presentation}
-                          entryHref={pptAssistantHref}
-                          activeAgentId="executive-ppt"
-                        />
-                      ))}
                     {hasAdvisorFeature && advisor.brandStrategy && userEmail && (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/advisor/brand-strategy/new">
@@ -486,7 +471,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   </div>
                 )}
 
-                {(showWriterEntry || showImageAssistantEntry) && (
+                {(showWriterEntry || showPptAssistantEntry || showImageAssistantEntry) && (
                   <div>
                     {!sidebarCollapsed && (
                       <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
@@ -504,10 +489,38 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         <WriterSidebarItem title={messages.dashboardLayout.writer} icon={PenSquare} />
                       )
                     ) : null}
+                    {showPptAssistantEntry ? (
+                      sidebarCollapsed ? (
+                        <Link href={pptAssistantHref}>
+                          <Button
+                            variant="ghost"
+                            className={showWriterEntry ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            size="sm"
+                            title={messages.dashboardLayout.pptAssistant}
+                            aria-label={messages.dashboardLayout.pptAssistant}
+                          >
+                            <Presentation className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AiEntrySidebarItem
+                          title={messages.dashboardLayout.pptAssistant}
+                          icon={Presentation}
+                          entryHref={pptAssistantHref}
+                          activeAgentId="executive-ppt"
+                        />
+                      )
+                    ) : null}
                     {showImageAssistantEntry ? (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/image-assistant">
-                          <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.imageAssistant} aria-label={messages.dashboardLayout.imageAssistant}>
+                          <Button
+                            variant="ghost"
+                            className={showWriterEntry || showPptAssistantEntry ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            size="sm"
+                            title={messages.dashboardLayout.imageAssistant}
+                            aria-label={messages.dashboardLayout.imageAssistant}
+                          >
                             <ImageIcon className="h-4 w-4" />
                           </Button>
                         </Link>
