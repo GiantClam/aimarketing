@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   buildAttachmentContentDisposition,
+  buildInlineContentDisposition,
   buildDownloadFileName,
   extractMiniMaxAudioFileFromTar,
   getMiniMaxAudioConfig,
@@ -80,6 +81,13 @@ test("minimax audio attachment content disposition keeps a UTF-8 filename fallba
   const header = buildAttachmentContentDisposition("品牌发布曲，暖场版.mp3")
   assert.match(header, /attachment;/)
   assert.match(header, /filename="minimax-audio\.mp3"/)
+  assert.match(header, /filename\*=UTF-8''/)
+})
+
+test("inline content disposition keeps a UTF-8 filename fallback", () => {
+  const header = buildInlineContentDisposition("请生成一份 6 页中文销售提案 PPT.pptx")
+  assert.match(header, /inline;/)
+  assert.match(header, /filename="[^"]+\.pptx"/)
   assert.match(header, /filename\*=UTF-8''/)
 })
 

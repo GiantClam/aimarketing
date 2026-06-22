@@ -5,7 +5,7 @@ import {
   assertArtifactEnterpriseAccess,
   resolvePlatformArtifactSourceUrl,
 } from "@/lib/platform/artifact-actions"
-import { buildAttachmentContentDisposition } from "@/lib/platform/minimax-audio"
+import { buildAttachmentContentDisposition, buildInlineContentDisposition } from "@/lib/platform/minimax-audio"
 import { getPlatformArtifact } from "@/lib/platform/task-run-store"
 
 export const runtime = "nodejs"
@@ -43,7 +43,7 @@ export async function GET(
     const headers = new Headers()
     headers.set(
       "Content-Disposition",
-      forceDownload ? buildAttachmentContentDisposition(artifact.title) : `inline; filename="${artifact.title}"`,
+      forceDownload ? buildAttachmentContentDisposition(artifact.title) : buildInlineContentDisposition(artifact.title),
     )
     headers.set("Cache-Control", "private, no-store")
 

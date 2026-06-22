@@ -317,9 +317,17 @@ function toAsciiDownloadFileName(fileName: string) {
   return `${safeBase}${extension || ".bin"}`
 }
 
-export function buildAttachmentContentDisposition(fileName: string) {
+function buildContentDisposition(dispositionType: "attachment" | "inline", fileName: string) {
   const asciiFileName = toAsciiDownloadFileName(fileName)
-  return `attachment; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+  return `${dispositionType}; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+}
+
+export function buildAttachmentContentDisposition(fileName: string) {
+  return buildContentDisposition("attachment", fileName)
+}
+
+export function buildInlineContentDisposition(fileName: string) {
+  return buildContentDisposition("inline", fileName)
 }
 
 export function getMiniMaxAudioConfig(): MiniMaxAudioConfig {
