@@ -1,12 +1,7 @@
 import assert from "node:assert/strict"
-import { createRequire } from "node:module"
 import test from "node:test"
 
-const require = createRequire(import.meta.url)
-const nodeModule = require("node:module") as {
-  _load: (request: string, parent: unknown, isMain: boolean) => unknown
-}
-const originalLoad = nodeModule._load
+import { getPptMasterEngines } from "./ppt-master-engine"
 
 const htmlDocument = {
   fileName: "ai-growth-deck-5p-long-table.html",
@@ -70,36 +65,7 @@ const htmlDeck = {
   ],
 }
 
-let exportCalls: Array<unknown[]> = []
-
-nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
-  if (request === "@/lib/lead-tools/pptx-export") {
-    return {
-      exportPptVariantToPptx: async (...args: unknown[]) => {
-        exportCalls.push(args)
-        return {
-          buffer: Buffer.from("pptx-binary"),
-          contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-          fileName: "ai-growth-deck-5p-long-table.pptx",
-        }
-      },
-    }
-  }
-
-  return originalLoad(request, parent, isMain)
-}
-
-const { getPptMasterEngines } = require("./ppt-master-engine.ts") as typeof import("./ppt-master-engine")
-
-test.after(() => {
-  nodeModule._load = originalLoad
-})
-
-test.beforeEach(() => {
-  exportCalls = []
-})
-
-test("frontend-slides finalize returns pptx export plan", async () => {
+test("frontend-slides finalize returns html export plan", async () => {
   const engines = getPptMasterEngines()
   const variant = htmlDeck.variants[0]
   assert.ok(variant)
@@ -120,12 +86,12 @@ test("frontend-slides finalize returns pptx export plan", async () => {
   )
 
   assert.equal(result.status, "ready")
-  assert.equal(result.exportPlan.output, "editable-pptx")
+  assert.equal(result.exportPlan.output, "html-file")
   assert.equal(result.exportPlan.selectedVariant, "Long Table")
-  assert.match(result.message, /PPTX/u)
+  assert.match(result.message, /HTML/u)
 })
 
-test("frontend-slides download exports pptx artifact", async () => {
+test("frontend-slides download returns html artifact", async () => {
   const engines = getPptMasterEngines()
   const variant = htmlDeck.variants[0]
   assert.ok(variant)
@@ -141,12 +107,9 @@ test("frontend-slides download exports pptx artifact", async () => {
     },
   )
 
-  assert.equal(exportCalls.length, 1)
   assert.ok(result.artifact)
-  assert.equal(
-    result.artifact.contentType,
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  )
-  assert.equal(result.artifact.fileName, "ai-growth-deck-5p-long-table.pptx")
-  assert.equal(Buffer.from(result.artifact.buffer).toString("utf8"), "pptx-binary")
+  assert.equal(result.artifact.contentType, "text/html; charset=utf-8")
+  assert.equal(result.artifact.fileName, "ai-growth-deck-5p-long-table.html")
+  const html = new TextDecoder().decode(result.artifact.buffer)
+  assert.match(html, /<!doctype html>/i)
 })

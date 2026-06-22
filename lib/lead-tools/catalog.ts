@@ -95,7 +95,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     shortName: "AI PPT",
     tagline: "输入主题，按模板生成 4 个正式候选；页数可指定，也可交给 AI 自动规划。",
     description:
-      "面向 SEO 引流与首页转化的正式 AI PPT 工具。游客先看到 4 个可对比的 HTML Slides 候选，可选模板、手填页数或留空让 AI 自动规划，再在登录后继续打开、下载和完整导出。",
+      "面向 SEO 引流与首页转化的正式 AI PPT 工具。游客先看到 4 个可对比的 HTML Slides 候选，可选模板、手填页数或留空让 AI 自动规划，再在登录后继续打开和下载 HTML 成品。",
     category: "Presentation",
     icon: "presentation",
     media: "presentation",
@@ -109,11 +109,11 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     finalizeRequiresLogin: true,
     previewModel: getLeadToolPreviewModel("ai-ppt-preview"),
     finalModel: getLeadToolFinalModel("ai-ppt-preview"),
-    proofPoints: ["4 个候选并排预览", "模板可切换，页数可手填或交给 AI", "登录前即可预览，登录后继续下载与完整导出"],
+    proofPoints: ["4 个候选并排预览", "模板可切换，页数可手填或交给 AI", "登录前即可预览，登录后继续打开与下载 HTML 成品"],
     faqs: [
       {
         question: "需要先登录才能看到结果吗？",
-        answer: "不需要。游客可以直接生成并比较 4 个候选版本，登录只在下载、打开受保护成品和完整导出时触发。",
+        answer: "不需要。游客可以直接生成并比较 4 个候选版本，登录只在打开或下载 HTML 成品时触发。",
       },
       {
         question: "可以自己选模板和页数吗？",
@@ -125,7 +125,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
       },
       {
         question: "为什么先做 HTML 预览，而不是直接下载 PPTX？",
-        answer: "HTML 预览更快出现，能先验证模板、文案和页数规划是否正确，再进入登录后的下载和完整导出链路。",
+        answer: "因为当前 frontend-slides 运行时原生输出就是 HTML。它更快，也更适合先验证模板、文案和页数规划是否正确。",
       },
     ],
   },
@@ -486,12 +486,12 @@ const localizedLeadToolCopy: Record<
       shortName: "AI PPT",
       tagline: "Enter one topic, pick a template flow, and get four formal candidates with manual or AI-planned page counts.",
       description:
-        "Generate four formal HTML Slides candidates first, compare template choices, narrative directions, and resolved page counts, then continue into protected open, download, and full export actions.",
-      proofPoints: ["4 candidates side by side", "Template choice plus manual or AI page planning", "Preview before login, continue download and full export after login"],
+        "Generate four formal HTML Slides candidates first, compare template choices, narrative directions, and resolved page counts, then continue into protected open and HTML download actions.",
+      proofPoints: ["4 candidates side by side", "Template choice plus manual or AI page planning", "Preview before login, continue open and HTML download after login"],
       faqs: [
         {
           question: "Do I need to log in before seeing results?",
-          answer: "No. Visitors can generate and compare all four candidates first. Login is only required for protected open, download, and full-export follow-up actions.",
+          answer: "No. Visitors can generate and compare all four candidates first. Login is only required for protected open and HTML download follow-up actions.",
         },
         {
           question: "Can I choose the template and page count?",
@@ -503,7 +503,7 @@ const localizedLeadToolCopy: Record<
         },
         {
           question: "Why preview in HTML before exporting PPTX?",
-          answer: "HTML preview lands faster and lets you validate template fit, copy, and page planning before spending time on protected download and full export.",
+          answer: "Because the current frontend-slides runtime natively outputs HTML. It lands faster and is the real downloadable artifact for this preview flow.",
         },
       ],
     },

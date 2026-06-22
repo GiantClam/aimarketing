@@ -937,7 +937,7 @@ function buildMockVariantSlides(
         `A ${style.name} preview deck built around "${topic}" so users can judge the direction before export.`,
       ),
       bullets: [
-        sentenceByLanguage(language, "预览优先速度，不等待完整 PPTX", "Preview prioritizes speed over final PPTX export"),
+        sentenceByLanguage(language, "预览优先速度，先输出可直接打开的 HTML", "Preview prioritizes speed and outputs HTML first"),
         sentenceByLanguage(language, "同一主题并发比较 4 种讲法", "Compare four narrative directions in parallel"),
         sentenceByLanguage(language, "把登录动作留给高意图节点", "Keep login for high-intent moments"),
       ],
@@ -992,13 +992,13 @@ function buildMockVariantSlides(
       title: sentenceByLanguage(language, "这条链路为什么更轻", "Why this pipeline feels lighter"),
       body: sentenceByLanguage(
         language,
-        "预览只解决“快看到”，成品层再解决“可编辑、可导出、可交付”。前者负责转化，后者负责完成任务。",
-        "Preview solves speed-to-visual. The final layer solves editability, export, and delivery. The first converts; the second completes the job.",
+        "预览只解决“快看到”，下载层再解决“可打开、可分享、可归档”。前者负责转化，后者负责交付。",
+        "Preview solves speed-to-visual. The download layer solves openability, sharing, and archiving. The first converts; the second delivers.",
       ),
       bullets: [
         sentenceByLanguage(language, "Preview: SVG 视觉结果", "Preview: SVG visual result"),
-        sentenceByLanguage(language, "Final: 可编辑 PPTX", "Final: editable PPTX"),
-        sentenceByLanguage(language, "登录留在下载和完整生成", "Login stays at download and final generation"),
+        sentenceByLanguage(language, "Download: HTML 成品", "Download: HTML artifact"),
+        sentenceByLanguage(language, "登录留在打开和下载动作", "Login stays at open and download moments"),
       ],
       comparisonItems: [
         {

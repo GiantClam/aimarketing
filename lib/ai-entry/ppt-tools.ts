@@ -180,13 +180,13 @@ export function buildAiEntryPptTools(input: {
                 : null,
           },
           nextStep:
-            "Choose the best variant key, then call export_ppt_deck to generate the downloadable PPTX file.",
+            "Choose the best variant key, then call export_ppt_deck to save the downloadable deck artifact to the work library.",
         }
       },
     }),
     export_ppt_deck: tool({
       description:
-        "Export a PPTX file from a previously generated preview session and selected variant. Use this after preview_ppt_deck when the user wants the actual PPT file.",
+        "Export the downloadable deck artifact from a previously generated preview session and selected variant. Use this after preview_ppt_deck when the user wants the actual deliverable file.",
       inputSchema: exportPptDeckInputSchema,
       execute: async ({ previewSessionId, selectedVariantKey }) => {
         const deck = await getPptPreviewSessionDeck(previewSessionId)
@@ -216,7 +216,11 @@ export function buildAiEntryPptTools(input: {
             : null
         const fileName =
           result.artifact?.fileName ||
-          buildPptExportFileName(result.deck, result.variant, "pptx")
+          buildPptExportFileName(
+            result.deck,
+            result.variant,
+            result.deck.previewEngine === "frontend-slides-html" ? "html" : "pptx",
+          )
 
         return {
           previewSessionId,
@@ -236,8 +240,8 @@ export function buildAiEntryPptTools(input: {
             ? buildArtifactDownloadUrl(artifactId, true)
             : null,
           message: artifactId
-            ? "PPT generated and saved to the work library."
-            : "PPT generated.",
+            ? "Deck artifact generated and saved to the work library."
+            : "Deck artifact generated.",
         }
       },
     }),
