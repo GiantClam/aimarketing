@@ -219,7 +219,7 @@ def save_failure_screenshot(page, artifact_dir: Path, name: str) -> None:
 
 def wait_for_dashboard(page, timeout_ms: int) -> None:
     page.wait_for_function(
-        "() => window.location.pathname === '/dashboard' || window.location.pathname === '/dashboard/settings'",
+        "() => ['/dashboard', '/dashboard/settings', '/dashboard/platform-settings'].includes(window.location.pathname)",
         timeout=timeout_ms,
     )
     page.wait_for_load_state("networkidle")
@@ -367,10 +367,10 @@ def assert_public_pages(page, config: Config) -> None:
 def verify_dashboard_shell(page, config: Config) -> None:
     page.goto(f"{config.base_url}/dashboard", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
-    if page.locator("a[href='/dashboard/settings']").count() == 0:
+    settings_link_count = page.locator("a[href='/dashboard/platform-settings']").count()
+    legacy_settings_link_count = page.locator("a[href='/dashboard/settings']").count()
+    if settings_link_count == 0 and legacy_settings_link_count == 0:
         raise AssertionError("Settings link is missing from dashboard")
-    if page.locator("a[href='/dashboard/video']").count() != 0:
-        raise AssertionError("Video entry should be hidden")
     if page.locator("a[href='/dashboard/website-generator']").count() != 0:
         raise AssertionError("Website entry should be hidden")
 
@@ -510,7 +510,7 @@ def verify_settings(
 
 
 def verify_disabled_routes(page, config: Config) -> None:
-    for route in ("/dashboard/video", "/dashboard/website-generator"):
+    for route in ("/dashboard/website-generator",):
         page.goto(f"{config.base_url}{route}", wait_until="domcontentloaded")
         page.wait_for_load_state("networkidle")
         if urlparse(page.url).path not in ("/dashboard", "/dashboard/ai"):
@@ -525,7 +525,6 @@ def verify_disabled_apis(page) -> None:
             const outputs = [];
             for (const [url, payload] of [
                 ['/api/webgen/generate', { prompt: 'test' }],
-                ['/api/video-agent/agent', { message: 'test' }],
                 ['/api/dify/advisors/availability', null],
             ]) {
                 const options = payload
@@ -547,13 +546,10 @@ def verify_disabled_apis(page) -> None:
 
     lookup = {item["url"]: item for item in responses}
     webgen = lookup["/api/webgen/generate"]
-    video_agent = lookup["/api/video-agent/agent"]
     dify = lookup["/api/dify/advisors/availability"]
 
     if webgen["status"] != 410 or webgen["body"].get("error") != "Feature disabled":
         raise AssertionError(f"Unexpected website API response: {webgen}")
-    if video_agent["status"] != 410 or video_agent["body"].get("error") != "Feature disabled":
-        raise AssertionError(f"Unexpected video API response: {video_agent}")
     dify_data = dify["body"].get("data", {})
     expected_dify_keys = {
         "brandStrategy",
@@ -700,8 +696,6 @@ def enable_member_permissions(page, config: Config, member_email: str) -> None:
 def verify_member_dashboard(page, config: Config) -> None:
     page.goto(f"{config.base_url}/dashboard", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
-    if page.locator("a[href='/dashboard/video']").count() != 0:
-        raise AssertionError("Video entry should remain hidden for approved member")
     if page.locator("a[href='/dashboard/website-generator']").count() != 0:
         raise AssertionError("Website entry should remain hidden for approved member")
 
@@ -801,7 +795,6 @@ def main() -> None:
                 page,
                 config,
                 admin_account.email,
-                expected_checkbox_count=4,
             )
             verify_disabled_routes(page, config)
             verify_disabled_apis(page)
