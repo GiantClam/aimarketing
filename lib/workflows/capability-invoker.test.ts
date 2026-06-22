@@ -562,6 +562,33 @@ test("workflow image capability waits for terminal task state and surfaces node 
   assert.equal(taskPollCount, 3)
 })
 
+test("workflow image capability timeout covers async task polling for the whole node execution", async () => {
+  taskPollResponses = Array.from({ length: 50 }, () => ({
+    data: {
+      status: "running",
+      result: null,
+    },
+  }))
+
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+    maxPollAttempts: 50,
+    pollIntervalMs: 20,
+    callTimeoutMs: 10,
+  })
+
+  await assert.rejects(
+    () => invoke(createImageParams()),
+    /workflow_image_timeout/,
+  )
+  assert.equal(taskPollCount > 0, true)
+})
+
 test("workflow capability invoker enforces call timeout for stuck ai chat calls", async () => {
   const module = await import("./capability-invoker")
   const resolvedModule = ("default" in module ? module.default : module) as typeof import("./capability-invoker")
@@ -572,7 +599,7 @@ test("workflow capability invoker enforces call timeout for stuck ai chat calls"
   )
 })
 
-test("workflow image capability timeout defaults above image provider total budget", () => {
+test("workflow capability timeout defaults use capability-level execution budgets", () => {
   const chatTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-chat")
   const pptTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-ppt")
   const imageTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-image")

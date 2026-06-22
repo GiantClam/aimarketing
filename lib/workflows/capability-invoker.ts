@@ -40,8 +40,7 @@ type WorkflowCapabilityInvokerOptions = {
 }
 
 const DEFAULT_WORKFLOW_CAPABILITY_TIMEOUT_MS = 120_000
-const DEFAULT_IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS = 300_000
-const DEFAULT_WORKFLOW_IMAGE_TIMEOUT_BUFFER_MS = 0
+const DEFAULT_WORKFLOW_IMAGE_TIMEOUT_MS = 300_000
 const DEFAULT_WORKFLOW_PPT_TIMEOUT_MS = 300_000
 
 function normalizeOrigin(value: string | undefined) {
@@ -62,12 +61,22 @@ function sleep(ms: number) {
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutError: string) {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(timeoutError)), timeoutMs)
-    }),
-  ])
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(timeoutError))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
 }
 
 function extractUrlLikeItems(input: WorkflowCapabilityInvokeParams["input"]): string[] {
@@ -101,23 +110,32 @@ export function resolveWorkflowCapabilityCallTimeoutMs(
     return defaultTimeoutMs
   }
 
-  const imageSpecificTimeoutMs = parsePositiveIntegerEnv("WORKFLOW_IMAGE_CAPABILITY_TIMEOUT_MS")
-  const imageProviderTotalTimeoutMs = Math.max(
-    30_000,
-    parsePositiveIntegerEnv("IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS") ||
-      DEFAULT_IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS,
-  )
-  const imageTimeoutBufferMs = Math.max(
-    0,
-    parsePositiveIntegerEnv("WORKFLOW_IMAGE_TASK_TIMEOUT_BUFFER_MS") ||
-      DEFAULT_WORKFLOW_IMAGE_TIMEOUT_BUFFER_MS,
-  )
+  const imageSpecificTimeoutMs =
+    parsePositiveIntegerEnv("WORKFLOW_IMAGE_CAPABILITY_TIMEOUT_MS") ||
+    DEFAULT_WORKFLOW_IMAGE_TIMEOUT_MS
 
-  return Math.max(
-    defaultTimeoutMs,
-    imageSpecificTimeoutMs || 0,
-    imageProviderTotalTimeoutMs + imageTimeoutBufferMs,
-  )
+  return Math.max(defaultTimeoutMs, imageSpecificTimeoutMs)
+}
+
+function resolveWorkflowCapabilityTimeoutError(
+  capabilitySlug: WorkflowCapabilityInvokeParams["capabilitySlug"],
+) {
+  switch (capabilitySlug) {
+    case "ai-chat":
+      return "workflow_ai_chat_timeout"
+    case "content-repurpose":
+      return "workflow_writer_timeout"
+    case "ai-ppt":
+      return "workflow_ppt_timeout"
+    case "ai-image":
+      return "workflow_image_timeout"
+    case "ai-video":
+      return "workflow_video_timeout"
+    case "ai-music":
+      return "workflow_audio_timeout"
+    default:
+      return "workflow_capability_timeout"
+  }
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -757,482 +775,456 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
       options.callTimeoutMs,
     )
 
-    if (params.capabilitySlug === "ai-chat") {
-      const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
-      const selectedModelId = normalizeOptionalText(params.node.config.selectedModelId)
-      const systemPrompt = normalizeOptionalText(params.node.config.systemPrompt)
-      const response = await withTimeout(
-        aiChatPost(
-          createJsonRequest({
-            origin,
-            path: "/api/ai/chat",
-            body: {
-              message: prompt,
-              stream: false,
-              ...(systemPrompt ? { systemPrompt } : {}),
-              ...(selectedProviderId
-                ? {
-                    modelConfig: {
-                      providerId: selectedProviderId,
-                      ...(selectedModelId ? { modelId: selectedModelId } : {}),
-                    },
-                  }
-                : {}),
-            },
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-        ),
-        callTimeoutMs,
-        "workflow_ai_chat_timeout",
-      )
-
-      if (!response || !response.ok) {
-        throw new Error(await parseErrorResponse(response))
-      }
-
-      const payload = await parseJsonResponse(response)
-      const message = typeof payload?.message === "string" ? payload.message : ""
-      if (!message.trim()) {
-        throw new Error("workflow_llm_empty_response")
-      }
-
-      return {
-        output: {
-          text: [message],
-        },
-        providerId: typeof payload?.provider === "string" ? payload.provider : null,
-        modelId: typeof payload?.providerModel === "string" ? payload.providerModel : null,
-      }
-    }
-
-    if (params.capabilitySlug === "content-repurpose") {
-      const response = await withTimeout(
-        writerChatStreamPost(
-          createJsonRequest({
-            origin,
-            path: "/api/writer/chat/stream",
-            body: {
-              query: prompt,
-              platform: normalizeOptionalText(params.node.config.platform) || "generic",
-              mode: normalizeOptionalText(params.node.config.mode) || "article",
-              language: normalizeOptionalText(params.node.config.language) || "auto",
-            },
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-        ),
-        callTimeoutMs,
-        "workflow_writer_timeout",
-      )
-
-      const message = await parseWriterStreamResponse(response)
-      return {
-        output: {
-          text: [message],
-        },
-        providerId: "writer",
-        modelId: "writer-skills",
-      }
-    }
-
-    if (params.capabilitySlug === "ai-ppt") {
-      const inputImages = extractWorkflowPptInputImages(params.input)
-      const previewBody = {
-        prompt,
-        scenario: typeof params.node.config.scenario === "string" ? params.node.config.scenario : "marketing-campaign",
-        language: typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN",
-        model: typeof params.node.config.model === "string" ? params.node.config.model : undefined,
-        templateMode: typeof params.node.config.templateMode === "string" ? params.node.config.templateMode : "auto-4",
-        templateId: typeof params.node.config.templateId === "string" ? params.node.config.templateId : undefined,
-        pageCount: typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined,
-        images:
-          inputImages.length > 0
-            ? inputImages.map((image, index) => ({
-                ...image,
-                role: index === 0 ? "cover" : "content",
-              }))
-            : undefined,
-      }
-      const previewResponse = await withTimeout(
-        leadToolPreviewPost(
-          createJsonRequest({
-            origin,
-            path: "/api/tools/ai-ppt-preview/preview",
-            body: previewBody,
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-          { params: Promise.resolve({ slug: "ai-ppt-preview" }) },
-        ),
-        callTimeoutMs,
-        "workflow_ppt_preview_timeout",
-      )
-
-      if (!previewResponse.ok) {
-        throw new Error(await parseErrorResponse(previewResponse))
-      }
-
-      const previewPayload = await parseJsonResponse(previewResponse)
-      const deck = previewPayload?.deck
-      const previewSessionId =
-        typeof previewPayload?.previewSessionId === "string" ? previewPayload.previewSessionId : undefined
-      const variants =
-        deck && typeof deck === "object" && Array.isArray((deck as Record<string, unknown>).variants)
-          ? ((deck as Record<string, unknown>).variants as Array<Record<string, unknown>>)
-          : []
-      const selectedVariantKey =
-        typeof params.node.config.selectedVariantKey === "string"
-          ? params.node.config.selectedVariantKey
-          : typeof variants[0]?.key === "string"
-            ? variants[0].key
-            : null
-
-      if (!deck || !selectedVariantKey) {
-        throw new Error("workflow_ppt_variant_missing")
-      }
-
-      const downloadResponse = await withTimeout(
-        leadToolDownloadPost(
-          createJsonRequest({
-            origin,
-            path: "/api/tools/ai-ppt-preview/download",
-            body: {
-              deck,
-              selectedVariantKey,
-              previewSessionId,
-            },
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-          { params: Promise.resolve({ slug: "ai-ppt-preview" }) },
-        ),
-        callTimeoutMs,
-        "workflow_ppt_download_timeout",
-      )
-
-      if (!downloadResponse.ok) {
-        throw new Error(await parseErrorResponse(downloadResponse))
-      }
-
-      const artifactId = coerceNumericHeader(downloadResponse.headers.get("x-platform-artifact-id"))
-      const workItemId = coerceNumericHeader(downloadResponse.headers.get("x-platform-work-item-id"))
-      const contentType = downloadResponse.headers.get("content-type") || "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-      const downloadFileName = extractDownloadFileName(downloadResponse.headers) || "workflow-deck"
-      const previewUrl = artifactId ? `/api/platform/artifacts/${artifactId}/download` : null
-      const downloadUrl = artifactId ? `/api/platform/artifacts/${artifactId}/download?download=1` : previewUrl
-
-      return {
-        output: {
-          ppt: [{
-            artifactId,
-            title: downloadFileName,
-            mimeType: contentType,
-            url: previewUrl,
-            downloadUrl,
-          }],
-        },
-        metadata: {
-          selectedVariantKey,
-          previewSessionId: previewSessionId || null,
-          workItemId: workItemId ?? null,
-        },
-      }
-    }
-
-    if (params.capabilitySlug === "ai-image") {
-      if (target.downstreamPath.startsWith("/api/image-assistant/generate")) {
-        const response = await withTimeout(
-          imageAssistantGeneratePost(
+    return withTimeout(
+      (async (): Promise<WorkflowNodeExecutionResult> => {
+        if (params.capabilitySlug === "ai-chat") {
+          const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
+          const selectedModelId = normalizeOptionalText(params.node.config.selectedModelId)
+          const systemPrompt = normalizeOptionalText(params.node.config.systemPrompt)
+          const response = await aiChatPost(
             createJsonRequest({
               origin,
-              path: "/api/image-assistant/generate",
-              body: buildWorkflowImageGenerateRequestBody(params, prompt, locale),
+              path: "/api/ai/chat",
+              body: {
+                message: prompt,
+                stream: false,
+                ...(systemPrompt ? { systemPrompt } : {}),
+                ...(selectedProviderId
+                  ? {
+                      modelConfig: {
+                        providerId: selectedProviderId,
+                        ...(selectedModelId ? { modelId: selectedModelId } : {}),
+                      },
+                    }
+                  : {}),
+              },
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
               currentUser: options.currentUser,
             }),
-          ),
-          callTimeoutMs,
-          "workflow_image_request_timeout",
-        )
+          )
 
-        if (!response || !response.ok) {
-          throw new Error(await parseErrorResponse(response))
-        }
+          if (!response || !response.ok) {
+            throw new Error(await parseErrorResponse(response))
+          }
 
-        const payload = await parseJsonResponse(response)
-        const payloadData = extractDataRecord(payload)
-        const directOutcome = typeof payloadData?.outcome === "string" ? payloadData.outcome : null
-        const directDetailSnapshot =
-          payloadData?.detail_snapshot && typeof payloadData.detail_snapshot === "object"
-            ? (payloadData.detail_snapshot as Record<string, unknown>)
-            : null
-        const directSessionId = typeof payloadData?.session_id === "string" ? payloadData.session_id : null
-        const directVersionId = typeof payloadData?.version_id === "string" ? payloadData.version_id : null
-
-        if (directOutcome === "needs_clarification") {
-          throw new Error("workflow_image_requires_more_detail")
-        }
-
-        if (directDetailSnapshot) {
-          const images = extractWorkflowImageCandidates(directDetailSnapshot, directVersionId)
-          if (images.length === 0) {
-            throw new Error("workflow_image_empty_response")
+          const payload = await parseJsonResponse(response)
+          const message = typeof payload?.message === "string" ? payload.message : ""
+          if (!message.trim()) {
+            throw new Error("workflow_llm_empty_response")
           }
 
           return {
             output: {
-              image: images,
+              text: [message],
+            },
+            providerId: typeof payload?.provider === "string" ? payload.provider : null,
+            modelId: typeof payload?.providerModel === "string" ? payload.providerModel : null,
+          }
+        }
+
+        if (params.capabilitySlug === "content-repurpose") {
+          const response = await writerChatStreamPost(
+            createJsonRequest({
+              origin,
+              path: "/api/writer/chat/stream",
+              body: {
+                query: prompt,
+                platform: normalizeOptionalText(params.node.config.platform) || "generic",
+                mode: normalizeOptionalText(params.node.config.mode) || "article",
+                language: normalizeOptionalText(params.node.config.language) || "auto",
+              },
+              cookieHeader: options.cookieHeader,
+              requestIp: options.requestIp,
+              currentUser: options.currentUser,
+            }),
+          )
+
+          const message = await parseWriterStreamResponse(response)
+          return {
+            output: {
+              text: [message],
+            },
+            providerId: "writer",
+            modelId: "writer-skills",
+          }
+        }
+
+        if (params.capabilitySlug === "ai-ppt") {
+          const inputImages = extractWorkflowPptInputImages(params.input)
+          const previewBody = {
+            prompt,
+            scenario: typeof params.node.config.scenario === "string" ? params.node.config.scenario : "marketing-campaign",
+            language: typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN",
+            model: typeof params.node.config.model === "string" ? params.node.config.model : undefined,
+            templateMode: typeof params.node.config.templateMode === "string" ? params.node.config.templateMode : "auto-4",
+            templateId: typeof params.node.config.templateId === "string" ? params.node.config.templateId : undefined,
+            pageCount: typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined,
+            images:
+              inputImages.length > 0
+                ? inputImages.map((image, index) => ({
+                    ...image,
+                    role: index === 0 ? "cover" : "content",
+                  }))
+                : undefined,
+          }
+          const previewResponse = await leadToolPreviewPost(
+            createJsonRequest({
+              origin,
+              path: "/api/tools/ai-ppt-preview/preview",
+              body: previewBody,
+              cookieHeader: options.cookieHeader,
+              requestIp: options.requestIp,
+              currentUser: options.currentUser,
+            }),
+            { params: Promise.resolve({ slug: "ai-ppt-preview" }) },
+          )
+
+          if (!previewResponse.ok) {
+            throw new Error(await parseErrorResponse(previewResponse))
+          }
+
+          const previewPayload = await parseJsonResponse(previewResponse)
+          const deck = previewPayload?.deck
+          const previewSessionId =
+            typeof previewPayload?.previewSessionId === "string" ? previewPayload.previewSessionId : undefined
+          const variants =
+            deck && typeof deck === "object" && Array.isArray((deck as Record<string, unknown>).variants)
+              ? ((deck as Record<string, unknown>).variants as Array<Record<string, unknown>>)
+              : []
+          const selectedVariantKey =
+            typeof params.node.config.selectedVariantKey === "string"
+              ? params.node.config.selectedVariantKey
+              : typeof variants[0]?.key === "string"
+                ? variants[0].key
+                : null
+
+          if (!deck || !selectedVariantKey) {
+            throw new Error("workflow_ppt_variant_missing")
+          }
+
+          const downloadResponse = await leadToolDownloadPost(
+            createJsonRequest({
+              origin,
+              path: "/api/tools/ai-ppt-preview/download",
+              body: {
+                deck,
+                selectedVariantKey,
+                previewSessionId,
+              },
+              cookieHeader: options.cookieHeader,
+              requestIp: options.requestIp,
+              currentUser: options.currentUser,
+            }),
+            { params: Promise.resolve({ slug: "ai-ppt-preview" }) },
+          )
+
+          if (!downloadResponse.ok) {
+            throw new Error(await parseErrorResponse(downloadResponse))
+          }
+
+          const artifactId = coerceNumericHeader(downloadResponse.headers.get("x-platform-artifact-id"))
+          const workItemId = coerceNumericHeader(downloadResponse.headers.get("x-platform-work-item-id"))
+          const contentType = downloadResponse.headers.get("content-type") || "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          const downloadFileName = extractDownloadFileName(downloadResponse.headers) || "workflow-deck"
+          const previewUrl = artifactId ? `/api/platform/artifacts/${artifactId}/download` : null
+          const downloadUrl = artifactId ? `/api/platform/artifacts/${artifactId}/download?download=1` : previewUrl
+
+          return {
+            output: {
+              ppt: [{
+                artifactId,
+                title: downloadFileName,
+                mimeType: contentType,
+                url: previewUrl,
+                downloadUrl,
+              }],
             },
             metadata: {
-              sessionId: directSessionId,
+              selectedVariantKey,
+              previewSessionId: previewSessionId || null,
+              workItemId: workItemId ?? null,
             },
           }
         }
 
-        const asyncTaskId = typeof payloadData?.task_id === "string" ? payloadData.task_id : null
-        if (!asyncTaskId) {
-          throw new Error("workflow_image_async_task_missing")
-        }
-        const assistantPollIntervalMs = options.pollIntervalMs ?? 3000
-        const asyncResult = await pollAssistantTaskUntilComplete({
-          origin,
-          taskId: asyncTaskId,
-          cookieHeader: options.cookieHeader,
-          requestIp: options.requestIp,
-          currentUser: options.currentUser,
-          maxPollAttempts: options.maxPollAttempts,
-          pollIntervalMs: assistantPollIntervalMs,
-        })
-        const asyncOutcome = typeof asyncResult.outcome === "string" ? asyncResult.outcome : null
-        const asyncVersionId = typeof asyncResult.version_id === "string" ? asyncResult.version_id : null
-        const asyncSessionId =
-          (typeof asyncResult.session_id === "string" && asyncResult.session_id) ||
-          directSessionId
+        if (params.capabilitySlug === "ai-image") {
+          if (target.downstreamPath.startsWith("/api/image-assistant/generate")) {
+            const response = await imageAssistantGeneratePost(
+              createJsonRequest({
+                origin,
+                path: "/api/image-assistant/generate",
+                body: buildWorkflowImageGenerateRequestBody(params, prompt, locale),
+                cookieHeader: options.cookieHeader,
+                requestIp: options.requestIp,
+                currentUser: options.currentUser,
+              }),
+            )
 
-        if (asyncOutcome === "needs_clarification") {
-          throw new Error("workflow_image_requires_more_detail")
-        }
-        if (!asyncSessionId) {
-          throw new Error("workflow_image_async_session_missing")
-        }
-        let sessionPayload = await fetchImageAssistantSessionDetail({
-          origin,
-          sessionId: asyncSessionId,
-          cookieHeader: options.cookieHeader,
-          requestIp: options.requestIp,
-          currentUser: options.currentUser,
-        })
-        let images = extractWorkflowImageCandidates(sessionPayload, asyncVersionId)
-        for (let attempt = 0; attempt < 5 && hasInlineWorkflowImageUrls(images); attempt += 1) {
-          await sleep(800)
-          sessionPayload = await fetchImageAssistantSessionDetail({
-            origin,
-            sessionId: asyncSessionId,
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          })
-          images = extractWorkflowImageCandidates(sessionPayload, asyncVersionId)
-        }
-        if (images.length === 0) {
-          throw new Error("workflow_image_empty_response")
-        }
+            if (!response || !response.ok) {
+              throw new Error(await parseErrorResponse(response))
+            }
 
-        return {
-          output: {
-            image: images,
-          },
-          metadata: {
-            sessionId: asyncSessionId,
-            outcome: asyncOutcome,
-            taskId: asyncTaskId,
-          },
-        }
-      }
+            const payload = await parseJsonResponse(response)
+            const payloadData = extractDataRecord(payload)
+            const directOutcome = typeof payloadData?.outcome === "string" ? payloadData.outcome : null
+            const directDetailSnapshot =
+              payloadData?.detail_snapshot && typeof payloadData.detail_snapshot === "object"
+                ? (payloadData.detail_snapshot as Record<string, unknown>)
+                : null
+            const directSessionId = typeof payloadData?.session_id === "string" ? payloadData.session_id : null
+            const directVersionId = typeof payloadData?.version_id === "string" ? payloadData.version_id : null
 
-      const mediaResponse = await withTimeout(
-        mediaRunPost(
-          createJsonRequest({
-            origin,
-            path: `/api/platform/media/run?target=ai-image&action=${encodeURIComponent(params.action)}`,
-            body: {
-              ...buildWorkflowImageGenerateRequestBody(params, prompt, locale),
-            },
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-        ),
-        callTimeoutMs,
-        "workflow_image_request_timeout",
-      )
+            if (directOutcome === "needs_clarification") {
+              throw new Error("workflow_image_requires_more_detail")
+            }
 
-      if (!mediaResponse.ok) {
-        throw new Error(await parseErrorResponse(mediaResponse))
-      }
+            if (directDetailSnapshot) {
+              const images = extractWorkflowImageCandidates(directDetailSnapshot, directVersionId)
+              if (images.length === 0) {
+                throw new Error("workflow_image_empty_response")
+              }
 
-      const mediaPayload = await parseJsonResponse(mediaResponse)
-      const mediaData =
-        mediaPayload?.data && typeof mediaPayload.data === "object"
-          ? (mediaPayload.data as Record<string, unknown>)
-          : null
-      const taskId = typeof mediaData?.taskId === "string" ? mediaData.taskId : null
-      const status = typeof mediaData?.status === "string" ? mediaData.status : ""
+              return {
+                output: {
+                  image: images,
+                },
+                metadata: {
+                  sessionId: directSessionId,
+                },
+              }
+            }
 
-      const finalPayload =
-        taskId && (status === "queued" || status === "running")
-          ? await withTimeout(pollMediaTaskUntilComplete({
+            const asyncTaskId = typeof payloadData?.task_id === "string" ? payloadData.task_id : null
+            if (!asyncTaskId) {
+              throw new Error("workflow_image_async_task_missing")
+            }
+            const assistantPollIntervalMs = options.pollIntervalMs ?? 3000
+            const asyncResult = await pollAssistantTaskUntilComplete({
               origin,
-              taskId,
-              target: "ai-image",
+              taskId: asyncTaskId,
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
               currentUser: options.currentUser,
               maxPollAttempts: options.maxPollAttempts,
-              pollIntervalMs: options.pollIntervalMs ?? 3000,
-            }), callTimeoutMs, "workflow_image_task_timeout")
-          : mediaPayload
+              pollIntervalMs: assistantPollIntervalMs,
+            })
+            const asyncOutcome = typeof asyncResult.outcome === "string" ? asyncResult.outcome : null
+            const asyncVersionId = typeof asyncResult.version_id === "string" ? asyncResult.version_id : null
+            const asyncSessionId =
+              (typeof asyncResult.session_id === "string" && asyncResult.session_id) ||
+              directSessionId
 
-      return {
-        output: {
-          image: extractMediaItems(finalPayload),
-        },
-      }
-    }
-
-    if (params.capabilitySlug === "ai-video") {
-      if (!target.downstreamPath.startsWith("/api/platform/media/run")) {
-        const response = await videoWorkflowPost(
-          createJsonRequest({
-            origin,
-            path: "/api/video-agent/workflow",
-            body: {
-              action: "plan",
-              goal: prompt,
-            },
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-        )
-
-        if (!response || !response.ok) {
-          throw new Error(await parseErrorResponse(response))
-        }
-
-        const payload = await parseJsonResponse(response)
-        return {
-          output: {
-            video: extractMediaItems(payload),
-          },
-          metadata: payload ?? null,
-        }
-      }
-
-      const mediaResponse = await withTimeout(
-        mediaRunPost(
-          createJsonRequest({
-            origin,
-            path: `/api/platform/media/run?target=ai-video&action=${encodeURIComponent(params.action)}`,
-            body: {
-              ...buildVideoGenerateRequestBody(params, prompt),
-              referenceUrls: extractUrlLikeItems(params.input),
-            },
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-        ),
-        callTimeoutMs,
-        "workflow_video_request_timeout",
-      )
-
-      if (!mediaResponse.ok) {
-        throw new Error(await parseErrorResponse(mediaResponse))
-      }
-
-      const mediaPayload = await parseJsonResponse(mediaResponse)
-      const mediaData =
-        mediaPayload?.data && typeof mediaPayload.data === "object"
-          ? (mediaPayload.data as Record<string, unknown>)
-          : null
-      const taskId = typeof mediaData?.taskId === "string" ? mediaData.taskId : null
-      const status = typeof mediaData?.status === "string" ? mediaData.status : ""
-      const finalPayload =
-        taskId && (status === "queued" || status === "running")
-          ? await withTimeout(pollMediaTaskUntilComplete({
+            if (asyncOutcome === "needs_clarification") {
+              throw new Error("workflow_image_requires_more_detail")
+            }
+            if (!asyncSessionId) {
+              throw new Error("workflow_image_async_session_missing")
+            }
+            let sessionPayload = await fetchImageAssistantSessionDetail({
               origin,
-              taskId,
-              target: "ai-video",
+              sessionId: asyncSessionId,
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
               currentUser: options.currentUser,
-              maxPollAttempts: options.maxPollAttempts,
-              pollIntervalMs: options.pollIntervalMs ?? 5000,
-            }), callTimeoutMs, "workflow_video_task_timeout")
-          : mediaPayload
+            })
+            let images = extractWorkflowImageCandidates(sessionPayload, asyncVersionId)
+            for (let attempt = 0; attempt < 5 && hasInlineWorkflowImageUrls(images); attempt += 1) {
+              await sleep(800)
+              sessionPayload = await fetchImageAssistantSessionDetail({
+                origin,
+                sessionId: asyncSessionId,
+                cookieHeader: options.cookieHeader,
+                requestIp: options.requestIp,
+                currentUser: options.currentUser,
+              })
+              images = extractWorkflowImageCandidates(sessionPayload, asyncVersionId)
+            }
+            if (images.length === 0) {
+              throw new Error("workflow_image_empty_response")
+            }
 
-      return {
-        output: {
-          video: extractMediaItems(finalPayload),
-        },
-      }
-    }
+            return {
+              output: {
+                image: images,
+              },
+              metadata: {
+                sessionId: asyncSessionId,
+                outcome: asyncOutcome,
+                taskId: asyncTaskId,
+              },
+            }
+          }
 
-    if (params.capabilitySlug === "ai-music") {
-      const mediaResponse = await withTimeout(
-        mediaRunPost(
-          createJsonRequest({
-            origin,
-            path: `/api/platform/media/run?target=ai-music&action=${encodeURIComponent(params.action)}`,
-            body: buildAudioGenerateRequestBody(params, prompt),
-            cookieHeader: options.cookieHeader,
-            requestIp: options.requestIp,
-            currentUser: options.currentUser,
-          }),
-        ),
-        callTimeoutMs,
-        "workflow_audio_request_timeout",
-      )
-
-      if (!mediaResponse.ok) {
-        throw new Error(await parseErrorResponse(mediaResponse))
-      }
-
-      const mediaPayload = await parseJsonResponse(mediaResponse)
-      const mediaData =
-        mediaPayload?.data && typeof mediaPayload.data === "object"
-          ? (mediaPayload.data as Record<string, unknown>)
-          : null
-      const taskId = typeof mediaData?.taskId === "string" ? mediaData.taskId : null
-      const status = typeof mediaData?.status === "string" ? mediaData.status : ""
-      const finalPayload =
-        taskId && (status === "queued" || status === "running")
-          ? await withTimeout(pollMediaTaskUntilComplete({
+          const mediaResponse = await mediaRunPost(
+            createJsonRequest({
               origin,
-              taskId,
-              target: "ai-music",
+              path: `/api/platform/media/run?target=ai-image&action=${encodeURIComponent(params.action)}`,
+              body: {
+                ...buildWorkflowImageGenerateRequestBody(params, prompt, locale),
+              },
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
               currentUser: options.currentUser,
-              maxPollAttempts: options.maxPollAttempts,
-              pollIntervalMs: options.pollIntervalMs ?? 4000,
-            }), callTimeoutMs, "workflow_audio_task_timeout")
-          : mediaPayload
+            }),
+          )
 
-      return {
-        output: {
-          audio: extractMediaItems(finalPayload),
-        },
-      }
-    }
+          if (!mediaResponse.ok) {
+            throw new Error(await parseErrorResponse(mediaResponse))
+          }
 
-    throw new Error("workflow_capability_not_supported")
+          const mediaPayload = await parseJsonResponse(mediaResponse)
+          const mediaData =
+            mediaPayload?.data && typeof mediaPayload.data === "object"
+              ? (mediaPayload.data as Record<string, unknown>)
+              : null
+          const taskId = typeof mediaData?.taskId === "string" ? mediaData.taskId : null
+          const status = typeof mediaData?.status === "string" ? mediaData.status : ""
+
+          const finalPayload =
+            taskId && (status === "queued" || status === "running")
+              ? await pollMediaTaskUntilComplete({
+                  origin,
+                  taskId,
+                  target: "ai-image",
+                  cookieHeader: options.cookieHeader,
+                  requestIp: options.requestIp,
+                  currentUser: options.currentUser,
+                  maxPollAttempts: options.maxPollAttempts,
+                  pollIntervalMs: options.pollIntervalMs ?? 3000,
+                })
+              : mediaPayload
+
+          return {
+            output: {
+              image: extractMediaItems(finalPayload),
+            },
+          }
+        }
+
+        if (params.capabilitySlug === "ai-video") {
+          if (!target.downstreamPath.startsWith("/api/platform/media/run")) {
+            const response = await videoWorkflowPost(
+              createJsonRequest({
+                origin,
+                path: "/api/video-agent/workflow",
+                body: {
+                  action: "plan",
+                  goal: prompt,
+                },
+                cookieHeader: options.cookieHeader,
+                requestIp: options.requestIp,
+                currentUser: options.currentUser,
+              }),
+            )
+
+            if (!response || !response.ok) {
+              throw new Error(await parseErrorResponse(response))
+            }
+
+            const payload = await parseJsonResponse(response)
+            return {
+              output: {
+                video: extractMediaItems(payload),
+              },
+              metadata: payload ?? null,
+            }
+          }
+
+          const mediaResponse = await mediaRunPost(
+            createJsonRequest({
+              origin,
+              path: `/api/platform/media/run?target=ai-video&action=${encodeURIComponent(params.action)}`,
+              body: {
+                ...buildVideoGenerateRequestBody(params, prompt),
+                referenceUrls: extractUrlLikeItems(params.input),
+              },
+              cookieHeader: options.cookieHeader,
+              requestIp: options.requestIp,
+              currentUser: options.currentUser,
+            }),
+          )
+
+          if (!mediaResponse.ok) {
+            throw new Error(await parseErrorResponse(mediaResponse))
+          }
+
+          const mediaPayload = await parseJsonResponse(mediaResponse)
+          const mediaData =
+            mediaPayload?.data && typeof mediaPayload.data === "object"
+              ? (mediaPayload.data as Record<string, unknown>)
+              : null
+          const taskId = typeof mediaData?.taskId === "string" ? mediaData.taskId : null
+          const status = typeof mediaData?.status === "string" ? mediaData.status : ""
+          const finalPayload =
+            taskId && (status === "queued" || status === "running")
+              ? await pollMediaTaskUntilComplete({
+                  origin,
+                  taskId,
+                  target: "ai-video",
+                  cookieHeader: options.cookieHeader,
+                  requestIp: options.requestIp,
+                  currentUser: options.currentUser,
+                  maxPollAttempts: options.maxPollAttempts,
+                  pollIntervalMs: options.pollIntervalMs ?? 5000,
+                })
+              : mediaPayload
+
+          return {
+            output: {
+              video: extractMediaItems(finalPayload),
+            },
+          }
+        }
+
+        if (params.capabilitySlug === "ai-music") {
+          const mediaResponse = await mediaRunPost(
+            createJsonRequest({
+              origin,
+              path: `/api/platform/media/run?target=ai-music&action=${encodeURIComponent(params.action)}`,
+              body: buildAudioGenerateRequestBody(params, prompt),
+              cookieHeader: options.cookieHeader,
+              requestIp: options.requestIp,
+              currentUser: options.currentUser,
+            }),
+          )
+
+          if (!mediaResponse.ok) {
+            throw new Error(await parseErrorResponse(mediaResponse))
+          }
+
+          const mediaPayload = await parseJsonResponse(mediaResponse)
+          const mediaData =
+            mediaPayload?.data && typeof mediaPayload.data === "object"
+              ? (mediaPayload.data as Record<string, unknown>)
+              : null
+          const taskId = typeof mediaData?.taskId === "string" ? mediaData.taskId : null
+          const status = typeof mediaData?.status === "string" ? mediaData.status : ""
+          const finalPayload =
+            taskId && (status === "queued" || status === "running")
+              ? await pollMediaTaskUntilComplete({
+                  origin,
+                  taskId,
+                  target: "ai-music",
+                  cookieHeader: options.cookieHeader,
+                  requestIp: options.requestIp,
+                  currentUser: options.currentUser,
+                  maxPollAttempts: options.maxPollAttempts,
+                  pollIntervalMs: options.pollIntervalMs ?? 4000,
+                })
+              : mediaPayload
+
+          return {
+            output: {
+              audio: extractMediaItems(finalPayload),
+            },
+          }
+        }
+
+        throw new Error("workflow_capability_not_supported")
+      })(),
+      callTimeoutMs,
+      resolveWorkflowCapabilityTimeoutError(params.capabilitySlug),
+    )
   }
 }
