@@ -85,7 +85,7 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
       providerId: "openai_compatible",
       providerLabel: "OpenAI Compatible",
       integrationLabel: "Compatible API",
-      models: ["硅基流动", "OpenRouter", "PPToken"],
+      models: ["PPToken", "硅基流动", "OpenRouter（通过 OpenAI Compatible 配置）"],
     },
     {
       providerId: "qwen_official",

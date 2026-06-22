@@ -191,7 +191,7 @@ test("fallback chain: selected model -> same provider default -> next provider d
   )
 })
 
-test("provider order: pptoken is the default provider before aiberm and crazyroute", async () => {
+test("provider order: system defaults no longer auto-inject openrouter", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
@@ -216,13 +216,13 @@ test("provider order: pptoken is the default provider before aiberm and crazyrou
       })
 
       assert.equal(result.providerId, "pptoken")
-      assert.deepEqual(result.result, ["pptoken", "openrouter", "aiberm", "crazyroute"])
+      assert.deepEqual(result.result, ["pptoken", "aiberm", "crazyroute"])
       assert.deepEqual(attempts, ["pptoken:pptoken/default-chat-model"])
     },
   )
 })
 
-test("provider order: non-openai models prefer openrouter before aiberm and crazyroute", async () => {
+test("provider order: non-openai system defaults keep only configured fallback providers", async () => {
   await withProviderEnv(
     {
       AI_ENTRY_OPENROUTER_API_KEY: "test-key-o",
@@ -248,9 +248,9 @@ test("provider order: non-openai models prefer openrouter before aiberm and craz
         },
       )
 
-      assert.equal(result.providerId, "openrouter")
-      assert.deepEqual(result.result, ["openrouter", "aiberm", "crazyroute"])
-      assert.deepEqual(attempts, ["openrouter:openrouter/default-chat-model"])
+      assert.equal(result.providerId, "aiberm")
+      assert.deepEqual(result.result, ["aiberm", "crazyroute"])
+      assert.deepEqual(attempts, ["aiberm:aiberm/default-chat-model"])
     },
   )
 })
@@ -825,4 +825,33 @@ test("explicit provider configs allow enterprise runtime without env providers",
   assert.equal(result.model, "qwen-max")
   assert.deepEqual(result.providerOrder, ["enterprise-qwen-official"])
   assert.deepEqual(attempts, ["enterprise-qwen-official:qwen-max"])
+})
+
+test("explicit provider configs still allow manually configured openrouter runtimes", async () => {
+  const attempts: string[] = []
+
+  const result = await executeAiEntryWithProviderFailover(
+    async (params) => {
+      attempts.push(`${params.providerId}:${params.model}`)
+      return "ok"
+    },
+    {
+      preferredProviderId: "openrouter",
+      preferredModel: "claude-sonnet-4.6",
+      providerConfigs: [
+        {
+          id: "openrouter",
+          apiKey: "manual-openrouter-secret",
+          baseURL: "https://openrouter.ai/api/v1",
+          model: "claude-sonnet-4.6",
+        },
+      ],
+      forcePreferredProvider: true,
+    },
+  )
+
+  assert.equal(result.providerId, "openrouter")
+  assert.equal(result.model, "claude-sonnet-4.6")
+  assert.deepEqual(result.providerOrder, ["openrouter"])
+  assert.deepEqual(attempts, ["openrouter:claude-sonnet-4.6"])
 })

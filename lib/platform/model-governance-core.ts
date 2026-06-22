@@ -1,4 +1,5 @@
 import type { AiEntryModelCatalog, AiEntryModelGroup, AiEntryModelOption } from "@/lib/ai-entry/model-catalog"
+import { serializeAiEntryModelSelection } from "@/lib/ai-entry/model-selection"
 import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 import type { EnterpriseModelRouteAssignment } from "@/lib/platform/model-config"
 
@@ -120,13 +121,21 @@ export function getRuntimeProviderLabel(providerId: string) {
   return providerId
 }
 
-function buildCatalogModel(modelId: string): AiEntryModelOption {
+function buildCatalogModel(provider: GovernedTextProviderOption): AiEntryModelOption {
+  const selectionId =
+    serializeAiEntryModelSelection({
+      providerId: provider.providerId,
+      modelId: provider.modelId,
+    }) || provider.modelId
   return {
-    id: modelId,
-    name: modelId,
-    runtimeId: modelId,
-    canonicalId: modelId,
-    aliases: [modelId],
+    id: selectionId,
+    name: `${provider.label} / ${provider.modelId}`,
+    modelId: provider.modelId,
+    providerId: provider.providerId,
+    providerLabel: provider.label,
+    runtimeId: provider.modelId,
+    canonicalId: provider.modelId,
+    aliases: [provider.modelId, `${provider.providerId}/${provider.modelId}`, selectionId],
   }
 }
 
@@ -134,7 +143,7 @@ function buildCatalogGroup(provider: GovernedTextProviderOption): AiEntryModelGr
   return {
     family: provider.providerId,
     label: provider.label,
-    models: [buildCatalogModel(provider.modelId)],
+    models: [buildCatalogModel(provider)],
   }
 }
 
@@ -179,7 +188,13 @@ export function buildGovernedAiEntryModelCatalog(params: {
     providerId: selectedProvider?.providerId || null,
     providerBaseUrl: selectedProvider?.baseUrl || null,
     selectedProviderId: selectedProvider?.providerId || null,
-    selectedModelId: selectedProvider?.modelId || null,
+    selectedModelId:
+      selectedProvider
+        ? serializeAiEntryModelSelection({
+            providerId: selectedProvider.providerId,
+            modelId: selectedProvider.modelId,
+          })
+        : null,
     models,
     modelGroups,
     cached: false,

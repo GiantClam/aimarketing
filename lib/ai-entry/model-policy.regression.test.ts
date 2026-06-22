@@ -6,9 +6,11 @@ import {
   AI_ENTRY_CONSULTING_ENTRY_MODE,
   AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS,
   AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
+  AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT,
   AI_ENTRY_SONNET_46_MODEL_HINT,
   isConsultingAdvisorEntryMode,
   pickConsultingModelId,
+  pickPptAssistantDefaultModelId,
   pickSonnet46ModelId,
   resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
@@ -55,6 +57,16 @@ test("pickConsultingModelId quality mode targets sonnet 4.6", () => {
   assert.equal(selected, "claude-sonnet-4.6")
 })
 
+test("pickPptAssistantDefaultModelId defaults PPT assistant to GPT 5.4", () => {
+  const selected = pickPptAssistantDefaultModelId([
+    { id: "aiberm::gpt-5.4", name: "AIBERM / GPT 5.4", providerId: "aiberm", modelId: "gpt-5.4" },
+    { id: "pptoken::gpt-5.4", name: "PPToken / GPT 5.4", providerId: "pptoken", modelId: "gpt-5.4" },
+    { id: "openrouter::claude-sonnet-4.6", name: "OpenRouter / Claude Sonnet 4.6", providerId: "openrouter", modelId: "claude-sonnet-4.6" },
+  ])
+
+  assert.equal(selected, "pptoken::gpt-5.4")
+})
+
 test("resolveConsultingModelMode always keeps consulting advisor on quality", () => {
   assert.equal(resolveConsultingModelMode({ requestedMode: "quality" }), "quality")
   assert.equal(resolveConsultingModelMode({ requestedMode: "deep" }), "quality")
@@ -92,4 +104,5 @@ test("consulting entry mode detection and lock flag", () => {
   assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT)
+  assert.equal(AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT, "gpt-5.4")
 })

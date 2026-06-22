@@ -41,7 +41,9 @@ import type { PendingTaskEvent } from "@/lib/assistant-task-events"
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
+  isConsultingAdvisorEntryMode,
   pickConsultingModelId,
+  pickPptAssistantDefaultModelId,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
@@ -126,6 +128,9 @@ type ChatMessage = {
 type ModelOption = {
   id: string
   name: string
+  modelId?: string
+  providerId?: string
+  providerLabel?: string
   runtimeId?: string
   canonicalId?: string
   aliases?: string[]
@@ -213,6 +218,9 @@ type ModelApiResponse = {
     models?: Array<{
       id?: string
       name?: string
+      modelId?: string
+      providerId?: string
+      providerLabel?: string
       runtimeId?: string
       canonicalId?: string
       aliases?: string[]
@@ -221,6 +229,9 @@ type ModelApiResponse = {
   models?: Array<{
     id?: string
     name?: string
+    modelId?: string
+    providerId?: string
+    providerLabel?: string
     runtimeId?: string
     canonicalId?: string
     aliases?: string[]
@@ -334,6 +345,26 @@ function resolveDisplayModelId(
   return mapped?.optionId || null
 }
 
+function resolveDisplayModelIdForProvider(input: {
+  rawModelId: string | null | undefined
+  providerId?: string | null | undefined
+  models: ModelOption[]
+}) {
+  const normalizedProviderId =
+    typeof input.providerId === "string" ? input.providerId.trim().toLowerCase() : ""
+  if (normalizedProviderId) {
+    const scopedModels = input.models.filter((item) => {
+      const providerId =
+        typeof item.providerId === "string" ? item.providerId.trim().toLowerCase() : ""
+      return providerId === normalizedProviderId
+    })
+    const scopedMatch = resolveDisplayModelId(input.rawModelId, scopedModels)
+    if (scopedMatch) return scopedMatch
+  }
+
+  return resolveDisplayModelId(input.rawModelId, input.models)
+}
+
 function dedupeStringList(values: Array<string | null | undefined>) {
   const seen = new Set<string>()
   const result: string[] = []
@@ -353,6 +384,24 @@ function dedupeModelsById(models: ModelOption[]) {
     seen.add(item.id)
     return true
   })
+}
+
+function dedupeModelGroups(groups: ModelGroupOption[]) {
+  const seen = new Set<string>()
+  return groups
+    .map((group) => {
+      const models = group.models.filter((item) => {
+        if (seen.has(item.id)) return false
+        seen.add(item.id)
+        return true
+      })
+      if (models.length === 0) return null
+      return {
+        ...group,
+        models,
+      } satisfies ModelGroupOption
+    })
+    .filter((group): group is ModelGroupOption => Boolean(group))
 }
 
 function inferProviderFamilyFromModel(model: ModelOption | null) {
@@ -385,6 +434,11 @@ function resolvePreferredProviderForModel(input: {
   selectedProviderId: string | null
   fallbackProviderId: string | null
 }) {
+  const explicitProviderId =
+    typeof input.selectedModel?.providerId === "string" && input.selectedModel.providerId.trim()
+      ? input.selectedModel.providerId.trim()
+      : null
+  if (explicitProviderId) return explicitProviderId
   const family = inferProviderFamilyFromModel(input.selectedModel)
   if (family === "openai") return "pptoken"
   if (family === "anthropic" || family === "gemini" || family === "minimax") {
@@ -728,17 +782,24 @@ export function AiEntryWorkspace({
   const routeAgentId = forcedAgentId || (searchParams.get("agent") || "").trim() || null
   const routeDraft = embedded ? draftSeed.trim() : (searchParams.get("draft") || "").trim()
   const routeEntryMode = (searchParams.get("entry") || "").trim()
+  const isPptAssistantRoute = routeAgentId === "executive-ppt"
+  const isConsultingEntry = useMemo(
+    () => isConsultingAdvisorEntryMode(routeEntryMode) && !isPptAssistantRoute,
+    [isPptAssistantRoute, routeEntryMode],
+  )
+  const effectiveEntryMode = isConsultingEntry ? AI_ENTRY_CONSULTING_ENTRY_MODE : null
   const shouldLockModel = useMemo(
     () =>
       shouldLockConsultingAdvisorModel({
-        entryMode: routeEntryMode,
+        entryMode: effectiveEntryMode,
+        agentId: routeAgentId,
       }),
-    [routeEntryMode],
+    [effectiveEntryMode, routeAgentId],
   )
-  const workspaceTitle = shouldLockModel
+  const workspaceTitle = isConsultingEntry
     ? (isZh ? "咨询专家" : "Consulting Advisor")
     : copy.title
-  const workspaceSubtitle = shouldLockModel
+  const workspaceSubtitle = isConsultingEntry
     ? (isZh ? "企业咨询专家对话入口" : "Enterprise consulting advisor entry")
     : copy.subtitle
   const lockedConsultingModelId = useMemo(
@@ -747,11 +808,18 @@ export function AiEntryWorkspace({
       AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
     [models],
   )
+  const preferredUnlockedModelId = useMemo(() => {
+    if (models.length === 0) return null
+    if (isPptAssistantRoute) {
+      return pickPptAssistantDefaultModelId(models) || models[0]?.id || null
+    }
+    return models[0]?.id || null
+  }, [isPptAssistantRoute, models])
   const showLanding =
     !embedded &&
     !isConversationLoading &&
     messages.length === 0 &&
-    !(shouldLockModel && Boolean(conversationId))
+    !(isConsultingEntry && Boolean(conversationId))
   const selectedModel = useMemo(
     () => models.find((item) => item.id === selectedModelId) || null,
     [models, selectedModelId],
@@ -819,6 +887,15 @@ export function AiEntryWorkspace({
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages])
+
+  useEffect(() => {
+    if (embedded) return
+    if (!isPptAssistantRoute || !isConsultingAdvisorEntryMode(routeEntryMode)) return
+    const params = new URLSearchParams(search)
+    params.delete("entry")
+    const nextSearch = params.toString()
+    router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname)
+  }, [embedded, isPptAssistantRoute, pathname, routeEntryMode, router, search])
 
   useEffect(() => {
     if (shouldLockModel) return
@@ -1046,15 +1123,31 @@ export function AiEntryWorkspace({
             typeof item?.canonicalId === "string" && item.canonicalId.trim()
               ? item.canonicalId.trim()
               : undefined
+          const modelId =
+            typeof item?.modelId === "string" && item.modelId.trim()
+              ? item.modelId.trim()
+              : runtimeId || canonicalId || id
+          const providerId =
+            typeof item?.providerId === "string" && item.providerId.trim()
+              ? item.providerId.trim()
+              : undefined
+          const providerLabel =
+            typeof item?.providerLabel === "string" && item.providerLabel.trim()
+              ? item.providerLabel.trim()
+              : undefined
           const normalizedAliases = dedupeStringList([
             ...(Array.isArray(item?.aliases) ? item.aliases : []),
             id,
+            modelId,
             runtimeId,
             canonicalId,
           ])
           return {
             id,
             name: typeof item?.name === "string" && item.name.trim() ? item.name.trim() : id,
+            modelId,
+            providerId,
+            providerLabel,
             runtimeId,
             canonicalId,
             aliases: normalizedAliases,
@@ -1072,10 +1165,11 @@ export function AiEntryWorkspace({
             return { family, label, models: groupModels } as ModelGroupOption
           })
           .filter((item): item is ModelGroupOption => Boolean(item))
+        const dedupedModelGroups = dedupeModelGroups(normalizedGroups)
 
         const normalizedModels = dedupeModelsById(
-          normalizedGroups.length > 0
-            ? normalizedGroups.flatMap((group) => group.models)
+          dedupedModelGroups.length > 0
+            ? dedupedModelGroups.flatMap((group) => group.models)
             : (payload?.models || []).map(normalizeModel).filter((item): item is ModelOption => Boolean(item)),
         )
 
@@ -1088,22 +1182,30 @@ export function AiEntryWorkspace({
         setModelProviderId(selectedProviderId)
         setModels(normalizedModels)
         setModelGroups(
-          normalizedGroups.length > 0
-            ? normalizedGroups
+          dedupedModelGroups.length > 0
+            ? dedupedModelGroups
             : normalizedModels.length > 0
               ? [{ family: "all", label: "All models", models: normalizedModels }]
               : [],
         )
         const preferredFromCatalog =
           typeof payload?.selectedModelId === "string" ? payload.selectedModelId : null
-        const preferredFromStorage = shouldLockModel ? null : readPersistedSelectedModelId()
+        const preferredFromStorage =
+          shouldLockModel || isPptAssistantRoute ? null : readPersistedSelectedModelId()
         const consultingModelFallback =
           pickConsultingModelId(normalizedModels) ||
           AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
+        const pptAssistantDefaultModelId = isPptAssistantRoute
+          ? pickPptAssistantDefaultModelId(normalizedModels)
+          : null
 
         setSelectedModelId((current) => {
           if (shouldLockModel) {
             return consultingModelFallback
+          }
+
+          if (pptAssistantDefaultModelId) {
+            return pptAssistantDefaultModelId
           }
 
           const normalizedCurrent =
@@ -1147,7 +1249,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [isZh, shouldLockModel])
+  }, [isPptAssistantRoute, isZh, shouldLockModel])
 
   useEffect(() => {
     let cancelled = false
@@ -1238,9 +1340,9 @@ export function AiEntryWorkspace({
     }
 
     if (!selectedModelId || !models.some((item) => item.id === selectedModelId)) {
-      setSelectedModelId(models[0]?.id || null)
+      setSelectedModelId(preferredUnlockedModelId)
     }
-  }, [lockedConsultingModelId, models, selectedModelId, shouldLockModel])
+  }, [lockedConsultingModelId, models, preferredUnlockedModelId, selectedModelId, shouldLockModel])
 
   useEffect(() => {
     setErrorMessage(null)
@@ -1255,7 +1357,10 @@ export function AiEntryWorkspace({
       setMessages([])
       setIsConversationLoading(false)
       if (!shouldLockModel && models.length > 0) {
-        setSelectedModelId(models[0]?.id || null)
+        setSelectedModelId((current) => {
+          if (current && models.some((item) => item.id === current)) return current
+          return preferredUnlockedModelId
+        })
       }
       return
     }
@@ -1281,7 +1386,7 @@ export function AiEntryWorkspace({
       setIsConversationLoading(true)
       try {
         const params = new URLSearchParams({ conversation_id: initialConversationId, limit: "200" })
-        if (routeEntryMode) params.set("entryMode", routeEntryMode)
+        if (effectiveEntryMode) params.set("entryMode", effectiveEntryMode)
         if (routeAgentId && !shouldLockModel) params.set("agent", routeAgentId)
         const response = await fetch(`/api/ai/messages?${params.toString()}`, { cache: "no-store", credentials: "same-origin" })
         const payload = (await response.json().catch(() => null)) as MessageApiResponse | null
@@ -1347,7 +1452,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [copy, initialConversationId, models, routeAgentId, routeEntryMode, shouldLockModel])
+  }, [copy, effectiveEntryMode, initialConversationId, models, preferredUnlockedModelId, routeAgentId, shouldLockModel])
 
   const renderModelSelectContent = useCallback(() => {
     if (modelsLoading) return <SelectItem value="__loading" disabled>{copy.modelLoading}</SelectItem>
@@ -1503,7 +1608,7 @@ export function AiEntryWorkspace({
           ? forcedAgentId
           : selectedAgentId
       const shouldSendAgentConfig =
-        shouldLockModel ||
+        isConsultingEntry ||
         Boolean(effectiveRequestAgentId && (embedded || isAgentSelectionExplicit))
 
       const response = await fetch("/api/ai/chat", {
@@ -1522,7 +1627,7 @@ export function AiEntryWorkspace({
             datasetIds: selectedKnowledgeDatasetIds,
           },
           conversationId,
-          conversationScope: shouldLockModel ? "consulting" : "chat",
+          conversationScope: isConsultingEntry ? "consulting" : "chat",
           modelConfig:
             selectedModelId
               ? {
@@ -1532,16 +1637,20 @@ export function AiEntryWorkspace({
                       selectedProviderId: modelProviderId,
                       fallbackProviderId: modelProviderId,
                     }) || undefined,
-                  modelId: selectedModelId,
+                  modelId:
+                    selectedModel?.modelId ||
+                    selectedModel?.runtimeId ||
+                    selectedModel?.canonicalId ||
+                    selectedModelId,
                 }
               : undefined,
           agentConfig:
             shouldSendAgentConfig
               ? {
-                  ...(!shouldLockModel && effectiveRequestAgentId
+                  ...(effectiveRequestAgentId
                     ? { agentId: effectiveRequestAgentId }
                     : {}),
-                  ...(shouldLockModel
+                  ...(isConsultingEntry
                     ? {
                         entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
                       }
@@ -1605,10 +1714,11 @@ export function AiEntryWorkspace({
           }
 
           if (event.event === "provider_selected" || event.event === "provider_fallback") {
-            const normalizedProviderModel = resolveDisplayModelId(
-              typeof event.provider_model === "string" ? event.provider_model : null,
+            const normalizedProviderModel = resolveDisplayModelIdForProvider({
+              rawModelId: typeof event.provider_model === "string" ? event.provider_model : null,
+              providerId: typeof event.provider === "string" ? event.provider : null,
               models,
-            )
+            })
             const detail = [event.provider, normalizedProviderModel || selectedModelId]
               .filter(Boolean)
               .join(" / ")
@@ -1715,10 +1825,11 @@ export function AiEntryWorkspace({
               ? event.answer.trim()
               : streamedText.trim()
 
-            const resolvedProviderModelId = resolveDisplayModelId(
-              typeof event.provider_model === "string" ? event.provider_model : null,
+            const resolvedProviderModelId = resolveDisplayModelIdForProvider({
+              rawModelId: typeof event.provider_model === "string" ? event.provider_model : null,
+              providerId: typeof event.provider === "string" ? event.provider : null,
               models,
-            )
+            })
             if (resolvedProviderModelId) {
               setSelectedModelId(resolvedProviderModelId)
             }
@@ -1855,11 +1966,11 @@ export function AiEntryWorkspace({
     modelProviderId,
     models,
     selectedKnowledgeDatasetIds,
+    isConsultingEntry,
     isAgentSelectionExplicit,
     selectedAgentId,
     selectedModel,
     selectedModelId,
-    shouldLockModel,
   ])
 
   const renderSelectors = (buttonHeight: "h-10" | "h-9") => (

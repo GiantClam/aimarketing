@@ -58,9 +58,9 @@ test("buildGovernedAiEntryModelCatalog keeps only account-visible runtime models
   })
 
   assert.equal(catalog.selectedProviderId, "pptoken")
-  assert.equal(catalog.selectedModelId, "gpt-5.4-mini")
+  assert.equal(catalog.selectedModelId, "pptoken::gpt-5.4-mini")
   assert.deepEqual(catalog.providers.map((item) => item.id), ["pptoken", "aiberm"])
-  assert.deepEqual(catalog.models.map((item) => item.id), ["gpt-5.4-mini", "gpt-5.4"])
+  assert.deepEqual(catalog.models.map((item) => item.id), ["pptoken::gpt-5.4-mini", "aiberm::gpt-5.4"])
 })
 
 test("buildGovernedAiEntryModelCatalog falls back when requested provider is not accessible", () => {
@@ -77,7 +77,7 @@ test("buildGovernedAiEntryModelCatalog falls back when requested provider is not
   })
 
   assert.equal(catalog.selectedProviderId, "pptoken")
-  assert.equal(catalog.selectedModelId, "gpt-5.4-mini")
+  assert.equal(catalog.selectedModelId, "pptoken::gpt-5.4-mini")
 })
 
 test("buildGovernedWorkflowImageProviderOptions respects account assignments", () => {

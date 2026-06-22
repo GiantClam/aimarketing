@@ -2,6 +2,7 @@ export const AI_ENTRY_CONSULTING_ENTRY_MODE = "consulting-advisor"
 export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
+export const AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT = "gpt-5.4"
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"
 export const AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS = ["executive-ppt"] as const
 
@@ -10,6 +11,9 @@ export type AiEntryConsultingModelMode = "quality"
 type ModelCandidate = {
   id?: string | null
   name?: string | null
+  modelId?: string | null
+  providerId?: string | null
+  providerLabel?: string | null
   aliases?: string[] | null
   runtimeId?: string | null
   canonicalId?: string | null
@@ -119,6 +123,48 @@ export function pickConsultingModelId(
 
 export function pickSonnet46ModelId(models: ModelCandidate[]) {
   return pickModelByHint(models, AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT)
+}
+
+export function getPptAssistantDefaultModelHint() {
+  return (
+    normalizeText(process.env.AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL) ||
+    AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT
+  )
+}
+
+export function pickPptAssistantDefaultModelId(models: ModelCandidate[]) {
+  const modelHint = getPptAssistantDefaultModelHint()
+  const matched = models
+    .map((item) => {
+      const id = normalizeText(item.id)
+      if (!id || !isModelHintMatch(item, modelHint)) return null
+      const providerId = normalizeText(item.providerId).toLowerCase()
+      return {
+        id,
+        providerId,
+      }
+    })
+    .filter((item): item is { id: string; providerId: string } => Boolean(item))
+
+  if (matched.length === 0) return null
+
+  matched.sort((a, b) => {
+    const getProviderScore = (providerId: string) => {
+      if (providerId === "pptoken") return 0
+      if (providerId === "aiberm") return 1
+      if (providerId === "crazyroute") return 2
+      if (providerId === "openrouter") return 3
+      return 4
+    }
+
+    const aProviderScore = getProviderScore(a.providerId)
+    const bProviderScore = getProviderScore(b.providerId)
+    if (aProviderScore !== bProviderScore) return aProviderScore - bProviderScore
+    if (a.id.length !== b.id.length) return a.id.length - b.id.length
+    return a.id.localeCompare(b.id, "en", { sensitivity: "base" })
+  })
+
+  return matched[0]?.id || null
 }
 
 export function isConsultingAdvisorEntryMode(value: unknown) {

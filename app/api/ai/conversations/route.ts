@@ -16,6 +16,7 @@ import {
   type AiEntryConsultingModelMode,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
+import { parseAiEntryModelSelection } from "@/lib/ai-entry/model-selection"
 import { loadExecutiveSkillForAgent } from "@/lib/ai-entry/executive-skill-loader"
 import { getGovernedAiEntryModelCatalogForUser } from "@/lib/platform/model-governance"
 
@@ -49,11 +50,38 @@ async function resolveCreateConversationModelId(
     if (!requestedModelId) return null
     try {
       const catalog = await getGovernedAiEntryModelCatalogForUser({ user })
+      const requestedSelection = parseAiEntryModelSelection(requestedModelId)
+      const aliasPool = catalog.models.flatMap((item) =>
+        [
+          item.id,
+          item.modelId,
+          item.runtimeId,
+          item.canonicalId,
+          ...(Array.isArray(item.aliases) ? item.aliases : []),
+        ].filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+      )
       const matched = resolveEquivalentModelId(
         requestedModelId,
-        catalog.models.map((item) => item.id),
+        aliasPool,
       )
-      return matched || requestedModelId
+      const matchedOption =
+        catalog.models.find((item) => {
+          if (
+            requestedSelection &&
+            item.providerId === requestedSelection.providerId &&
+            item.modelId === requestedSelection.modelId
+          ) {
+            return true
+          }
+          return [
+            item.id,
+            item.modelId,
+            item.runtimeId,
+            item.canonicalId,
+            ...(Array.isArray(item.aliases) ? item.aliases : []),
+          ].includes(matched || requestedModelId)
+        }) || null
+      return matchedOption?.id || matched || requestedModelId
     } catch {
       return requestedModelId
     }

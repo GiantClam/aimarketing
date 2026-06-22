@@ -75,7 +75,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     previewEnabled: false,
     downloadRequiresLogin: true,
     finalizeRequiresLogin: false,
-    previewModel: "pptoken + openrouter",
+    previewModel: "pptoken + enterprise routing",
     finalModel: "ai-entry workspace runtime",
     proofPoints: ["统一 AI 对话入口", "登录后进入现有 workspace", "对齐平台级 provider routing"],
     faqs: [

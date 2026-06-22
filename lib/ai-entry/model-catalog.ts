@@ -110,6 +110,9 @@ type GlobalWithAiEntryModelCache = typeof globalThis & {
 export type AiEntryModelOption = {
   id: string
   name: string
+  modelId?: string
+  providerId?: AiEntryProviderId | string
+  providerLabel?: string
   runtimeId?: string
   canonicalId?: string
   aliases?: string[]

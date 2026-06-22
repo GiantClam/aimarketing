@@ -75,7 +75,6 @@ type ProviderModelsApiResponse = {
 }
 
 const DEFAULT_AIBERM_BASE_URL = "https://aiberm.com/v1"
-const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 const DEFAULT_PPTOKEN_BASE_URL = "https://api.pptoken.org/v1"
 const DEFAULT_MODEL = "openai/gpt-5.4-mini"
 const PROVIDER_MODEL_LIST_CACHE_TTL_MS = parsePositiveInt(
@@ -502,30 +501,6 @@ function getRawProviderConfigs(): AiEntryProviderConfig[] {
         fallbackModel,
     },
     {
-      id: "openrouter",
-      apiKey:
-        normalizeText(process.env.AI_ENTRY_OPENROUTER_API_KEY) ||
-        normalizeText(process.env.OPENROUTER_API_KEY),
-      baseURL:
-        normalizeText(process.env.AI_ENTRY_OPENROUTER_BASE_URL) ||
-        normalizeText(process.env.OPENROUTER_BASE_URL) ||
-        DEFAULT_OPENROUTER_BASE_URL,
-      model:
-        normalizeText(process.env.AI_ENTRY_OPENROUTER_MODEL) ||
-        normalizeText(process.env.OPENROUTER_MODEL) ||
-        fallbackModel,
-      headers: {
-        "HTTP-Referer":
-          normalizeText(process.env.AI_ENTRY_OPENROUTER_REFERER) ||
-          normalizeText(process.env.OPENROUTER_SITE_URL) ||
-          normalizeText(process.env.NEXT_PUBLIC_APP_URL),
-        "X-Title":
-          normalizeText(process.env.AI_ENTRY_OPENROUTER_TITLE) ||
-          normalizeText(process.env.OPENROUTER_APP_NAME) ||
-          "Aimarketing",
-      },
-    },
-    {
       id: "aiberm",
       apiKey:
         normalizeText(process.env.AI_ENTRY_AIBERM_API_KEY) ||
@@ -611,9 +586,15 @@ async function buildProviderRuntimes(
 
   if (!explicitProviderConfigs) {
     const defaultOrder: AiEntryProviderId[] = allowPptoken
-      ? ["pptoken", "openrouter", "aiberm", "crazyroute"]
-      : ["openrouter", "aiberm", "crazyroute"]
-    configs.sort((a, b) => defaultOrder.indexOf(a.id) - defaultOrder.indexOf(b.id))
+      ? ["pptoken", "aiberm", "crazyroute", "openrouter"]
+      : ["aiberm", "crazyroute", "openrouter"]
+    configs.sort((a, b) => {
+      const aRank = defaultOrder.indexOf(a.id)
+      const bRank = defaultOrder.indexOf(b.id)
+      const normalizedARank = aRank === -1 ? defaultOrder.length : aRank
+      const normalizedBRank = bRank === -1 ? defaultOrder.length : bRank
+      return normalizedARank - normalizedBRank
+    })
     if (preferredProviderId && !forcePreferredProvider) {
       const preferred = configs.find((item) => item.id === preferredProviderId)
       if (preferred) {

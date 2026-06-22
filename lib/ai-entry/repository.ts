@@ -7,6 +7,10 @@ import {
   pickPreferredDisplayModelId,
   stripProviderPrefix,
 } from "@/lib/ai-entry/model-id-registry"
+import {
+  parseAiEntryModelSelection,
+  serializeAiEntryModelSelection,
+} from "@/lib/ai-entry/model-selection"
 
 const AI_ENTRY_CHAT_TITLE_PREFIX = "[ai-entry] "
 const AI_ENTRY_CONSULTING_TITLE_PREFIX = "[ai-consulting] "
@@ -130,6 +134,15 @@ function normalizeConversationName(name: string | null | undefined) {
 function normalizeModelId(modelId: string | null | undefined) {
   const normalized = typeof modelId === "string" ? modelId.trim() : ""
   if (!normalized) return null
+  const selection = parseAiEntryModelSelection(normalized)
+  if (selection) {
+    return (
+      serializeAiEntryModelSelection({
+        providerId: selection.providerId,
+        modelId: selection.modelId,
+      }) || normalized
+    )
+  }
   const canonical = pickPreferredDisplayModelId([
     normalized,
     stripProviderPrefix(normalized),

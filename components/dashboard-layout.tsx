@@ -162,7 +162,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
   const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
   const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
-  const pptAssistantHref = "/dashboard/ai?entry=consulting-advisor&agent=executive-ppt"
+  const pptAssistantHref = "/dashboard/ai?agent=executive-ppt"
   const businessSectionLabel = locale === "zh" ? "业务入口" : "Business"
   const currentBusinessAgentId = (searchParams.get("agent") || "").trim()
   const requestedBusinessView = searchParams.get("view")

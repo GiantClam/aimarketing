@@ -122,16 +122,13 @@ export function getPlatformRuntimeSnapshot(): PlatformRuntimeSnapshot {
       active: activeAiEntryProvider?.id === provider.id,
       model: provider.model,
       baseURL: provider.baseURL,
-      role:
-        provider.id === "pptoken" || provider.id === "openrouter"
-          ? ("primary" as const)
-          : ("fallback" as const),
+      role: provider.id === "pptoken" ? ("primary" as const) : ("fallback" as const),
       capabilitySlugs: ["ai-chat", "agent-platform"],
       notes: uniqueNotes([
         provider.id === "pptoken"
           ? "Preferred text route for OpenAI-family traffic."
           : provider.id === "openrouter"
-            ? "Primary multi-family text route in the shared platform provider layer."
+            ? "Available only when explicitly configured or explicitly selected."
             : "Available as provider failover in ai-entry routing.",
       ]),
     })),

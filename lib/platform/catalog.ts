@@ -185,11 +185,6 @@ export const platformCapabilities: CapabilityDescriptor[] = [
         status: "active",
         note: { zh: "当前文本主路由之一。", en: "Current primary routing path for text models." },
       },
-      {
-        provider: "openrouter",
-        status: "planned",
-        note: { zh: "目标纳入统一文本 provider routing。", en: "Target routing path in the unified text provider layer." },
-      },
     ],
   },
   {
@@ -214,11 +209,6 @@ export const platformCapabilities: CapabilityDescriptor[] = [
         provider: "pptoken",
         status: "active",
         note: { zh: "当前 PPT 预览默认依赖文本 provider 路由。", en: "Current PPT preview uses the shared text provider routing." },
-      },
-      {
-        provider: "openrouter",
-        status: "planned",
-        note: { zh: "作为未来统一文本路由的补充。", en: "Planned as an additional path in the unified text layer." },
       },
     ],
   },

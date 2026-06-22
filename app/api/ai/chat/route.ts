@@ -24,6 +24,10 @@ import {
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import {
+  parseAiEntryModelSelection,
+  serializeAiEntryModelSelection,
+} from "@/lib/ai-entry/model-selection"
+import {
   getAiEntryWebSearchSystemRule,
   shouldQueryAiEntryEnterpriseKnowledge,
 } from "@/lib/ai-entry/chat-policy"
@@ -355,9 +359,12 @@ async function resolveModelConfig(
   },
 ) {
   const requestedProviderId = input?.providerId || null
+  const requestedSelection = parseAiEntryModelSelection(input?.modelId)
+  const effectiveRequestedProviderId =
+    requestedProviderId || (requestedSelection?.providerId as AiEntryProviderId | undefined) || null
   const catalog = await getGovernedAiEntryModelCatalogForUser({
     user,
-    requestedProviderId,
+    requestedProviderId: effectiveRequestedProviderId,
   })
   if (catalog.models.length === 0) {
     throw new Error("ai_entry_model_unavailable_for_user")
@@ -366,6 +373,11 @@ async function resolveModelConfig(
   const allCatalogModelAliases = catalog.models.flatMap((item) =>
     [
       item.id,
+      item.modelId,
+      item.providerId && item.modelId ? serializeAiEntryModelSelection({
+        providerId: item.providerId,
+        modelId: item.modelId,
+      }) : null,
       item.canonicalId,
       item.runtimeId,
       ...(Array.isArray(item.aliases) ? item.aliases : []),
@@ -374,10 +386,34 @@ async function resolveModelConfig(
   const findCatalogModelOption = (value: string | null | undefined) => {
     const normalized = typeof value === "string" ? value.trim() : ""
     if (!normalized) return null
+    const selection = parseAiEntryModelSelection(normalized)
     return (
       catalog.models.find((item) => {
+        if (
+          effectiveRequestedProviderId &&
+          item.providerId &&
+          item.providerId !== effectiveRequestedProviderId
+        ) {
+          return false
+        }
+        if (
+          selection &&
+          item.providerId &&
+          item.modelId &&
+          item.providerId === selection.providerId &&
+          item.modelId === selection.modelId
+        ) {
+          return true
+        }
         const aliases = [
           item.id,
+          item.modelId,
+          item.providerId && item.modelId
+            ? serializeAiEntryModelSelection({
+                providerId: item.providerId,
+                modelId: item.modelId,
+              })
+            : null,
           item.canonicalId,
           item.runtimeId,
           ...(Array.isArray(item.aliases) ? item.aliases : []),
@@ -389,44 +425,79 @@ async function resolveModelConfig(
     )
   }
   const catalogFallbackModelId = catalog.selectedModelId || catalog.models[0]?.id || null
-  const requestedModelId = input?.modelId || null
+  const requestedModelId = requestedSelection?.modelId || input?.modelId || null
   if (options?.forceConsultingModel) {
     const lockedModelId =
       pickConsultingModelId(catalog.models) ||
       AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
-    const resolvedProviderId = requestedProviderId || catalog.providerId || null
+    const lockedModelOption = findCatalogModelOption(lockedModelId) || null
+    const resolvedProviderId =
+      (lockedModelOption?.providerId as AiEntryProviderId | undefined) ||
+      effectiveRequestedProviderId ||
+      catalog.providerId ||
+      null
+    const resolvedLockedModelId =
+      lockedModelOption?.modelId ||
+      lockedModelOption?.runtimeId ||
+      requestedSelection?.modelId ||
+      lockedModelId
 
-    if (requestedModelId && requestedModelId !== lockedModelId) {
+    if (requestedModelId && requestedModelId !== resolvedLockedModelId) {
       console.warn("ai-entry.chat.model.locked.override", {
         requestedModelId,
-        lockedModelId,
+        lockedModelId: resolvedLockedModelId,
         providerId: resolvedProviderId,
       })
     }
 
     return {
       providerId: resolvedProviderId,
-      modelId: lockedModelId,
-      providerModelId: lockedModelId,
+      modelId: resolvedLockedModelId,
+      providerModelId: resolvedLockedModelId,
+      selectionId:
+        lockedModelOption?.id ||
+        (resolvedProviderId && resolvedLockedModelId
+          ? serializeAiEntryModelSelection({
+              providerId: resolvedProviderId,
+              modelId: resolvedLockedModelId,
+            })
+          : null),
     }
   }
 
   const normalizedRequestedModelId = resolveEquivalentModelId(
-    requestedModelId,
+    input?.modelId || requestedModelId,
     allCatalogModelAliases.length > 0 ? allCatalogModelAliases : availableModelIds,
   )
   const requestedModelOption =
-    findCatalogModelOption(normalizedRequestedModelId || requestedModelId) || null
+    findCatalogModelOption(normalizedRequestedModelId || input?.modelId || requestedModelId) || null
   const fallbackModelOption = findCatalogModelOption(catalogFallbackModelId) || null
-  const resolvedModelId = requestedModelOption?.id || fallbackModelOption?.id || catalogFallbackModelId
+  const resolvedModelId =
+    requestedModelOption?.modelId ||
+    requestedModelOption?.runtimeId ||
+    fallbackModelOption?.modelId ||
+    fallbackModelOption?.runtimeId ||
+    catalogFallbackModelId
+  const resolvedSelectionId =
+    requestedModelOption?.id ||
+    fallbackModelOption?.id ||
+    (effectiveRequestedProviderId && resolvedModelId
+      ? serializeAiEntryModelSelection({
+          providerId: effectiveRequestedProviderId,
+          modelId: resolvedModelId,
+        })
+      : null)
   const resolvedProviderModelId =
     requestedModelOption?.runtimeId ||
-    requestedModelOption?.aliases?.[0] ||
-    requestedModelOption?.id ||
+    requestedModelOption?.modelId ||
     fallbackModelOption?.runtimeId ||
-    fallbackModelOption?.aliases?.[0] ||
+    fallbackModelOption?.modelId ||
     resolvedModelId
-  const resolvedProviderId = requestedProviderId || catalog.providerId
+  const resolvedProviderId =
+    (requestedModelOption?.providerId as AiEntryProviderId | undefined) ||
+    (fallbackModelOption?.providerId as AiEntryProviderId | undefined) ||
+    effectiveRequestedProviderId ||
+    catalog.providerId
 
   if (requestedModelId && resolvedModelId !== requestedModelId) {
     console.warn("ai-entry.chat.model.unavailable.fallback", {
@@ -440,6 +511,7 @@ async function resolveModelConfig(
     providerId: resolvedProviderId,
     modelId: resolvedModelId,
     providerModelId: resolvedProviderModelId,
+    selectionId: resolvedSelectionId,
   }
 }
 
@@ -555,7 +627,7 @@ export async function POST(request: NextRequest) {
         currentUser.id,
         body.conversationId,
         latestUserPrompt || "New chat",
-        modelConfig?.modelId,
+        modelConfig?.selectionId || modelConfig?.modelId,
         conversationScope,
         agentConfig.agentId,
       )
