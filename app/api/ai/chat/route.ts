@@ -45,6 +45,7 @@ import {
 } from "@/lib/ai-entry/chat-attachments"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
+import { buildPptToolResultMessage } from "@/lib/ai-entry/ppt-tool-result-message"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
   type ProviderOptions,
@@ -311,6 +312,12 @@ function getAiEntryUsageTokens(rawUsage: unknown, fallbackInputText: string, fal
     Number(usage?.outputTokens ?? usage?.completionTokens ?? usage?.completion_tokens ?? 0) ||
     estimateTextTokens(fallbackOutputText)
   return { inputTokens, outputTokens }
+}
+
+function appendUniqueToolAppendix(current: string, next: string | null) {
+  if (!next?.trim()) return current
+  if (current.includes(next)) return current
+  return `${current}${next}`
 }
 
 function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
@@ -605,6 +612,8 @@ export async function POST(request: NextRequest) {
 
     const latestUserPrompt = getLatestUserPrompt(normalizedMessages) || fallbackPrompt
     const forcedReplyLanguage = resolveForcedReplyLanguage(normalizedMessages)
+    const isZh = forcedReplyLanguage !== "en"
+    const requestOrigin = request.nextUrl.origin
     const agentConfig = parseAgentConfig(body.agentConfig)
     const conversationScope: AiEntryConversationScope = parseConversationScope(body)
     const modelConfig = await resolveModelConfig(parseModelConfig(body.modelConfig), currentUser, {
@@ -985,6 +994,7 @@ export async function POST(request: NextRequest) {
         let providerSelectedAtMs: number | null = null
         let firstTextDeltaAtMs: number | null = null
         let lastTextDeltaAtMs: number | null = null
+        let streamedToolAppendix = ""
         const sendEvent = (payload: Record<string, unknown>) => {
           controller.enqueue(encoder.encode(buildSseEvent(payload)))
         }
@@ -1112,6 +1122,15 @@ export async function POST(request: NextRequest) {
               })
             },
             onToolResult: (payload) => {
+              streamedToolAppendix = appendUniqueToolAppendix(
+                streamedToolAppendix,
+                buildPptToolResultMessage({
+                  toolName: payload.toolName,
+                  result: payload.result,
+                  origin: requestOrigin,
+                  isZh,
+                }),
+              )
               sendEvent({
                 event: "tool_result",
                 conversation_id: conversationId,
@@ -1138,10 +1157,11 @@ export async function POST(request: NextRequest) {
             latestUserPrompt,
             forcedReplyLanguage,
           )
+          const resolvedStreamedAnswerWithTools = `${normalizedStreamedAnswer}${streamedToolAppendix}`.trim()
           sendEvent({
             event: "message_end",
             conversation_id: conversationId,
-            answer: normalizedStreamedAnswer,
+            answer: resolvedStreamedAnswerWithTools,
             provider: execution.providerId,
             provider_model: execution.model,
             agent_id: effectiveAgentId,
@@ -1154,7 +1174,7 @@ export async function POST(request: NextRequest) {
               userId: currentUser.id,
               conversationId,
               userPrompt: latestUserPrompt,
-              assistantMessage: normalizedStreamedAnswer,
+              assistantMessage: resolvedStreamedAnswerWithTools,
               knowledgeSource,
               scope: conversationScope,
               agentId: agentConfig.agentId,
@@ -1163,7 +1183,7 @@ export async function POST(request: NextRequest) {
           const usageTokens = getAiEntryUsageTokens(
             null,
             normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n"),
-            normalizedStreamedAnswer,
+            resolvedStreamedAnswerWithTools,
           )
           const actualCost = estimateTextCredits({
             featureKey: "ai_entry_chat",

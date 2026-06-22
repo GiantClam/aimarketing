@@ -1831,9 +1831,10 @@ export function AiEntryWorkspace({
             streamedText += delta
             setMessages((previous) =>
               {
+                const nextContent = `${streamedText}${streamedToolAppendix}`
                 const next = previous.map((item) =>
                   item.id === assistantMessageId
-                    ? { ...item, content: streamedText }
+                    ? { ...item, content: nextContent }
                     : item,
                 )
                 savePendingConversationMessages(latestConversationIdRef.current, next)
@@ -1847,7 +1848,10 @@ export function AiEntryWorkspace({
             const finalText = typeof event.answer === "string" && event.answer.trim()
               ? event.answer.trim()
               : streamedText.trim()
-            const resolvedTextWithTools = `${finalText}${streamedToolAppendix}`.trim()
+            const resolvedTextWithTools =
+              streamedToolAppendix.trim() && finalText.includes(streamedToolAppendix.trim())
+                ? finalText
+                : `${finalText}${streamedToolAppendix}`.trim()
 
             const resolvedProviderModelId = resolveDisplayModelIdForProvider({
               rawModelId: typeof event.provider_model === "string" ? event.provider_model : null,
