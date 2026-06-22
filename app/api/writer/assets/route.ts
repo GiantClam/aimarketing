@@ -265,14 +265,48 @@ function resolveWriterImageProvider(
   return successfulAsset?.provider || getPreferredWriterImageProvider()
 }
 
+async function updateWriterAssetConversationStatus(input: {
+  userId: number
+  conversationId: string | null
+  status: "image_generating" | "ready" | "failed"
+}) {
+  if (!input.conversationId) {
+    return
+  }
+
+  try {
+    await updateWriterConversationMeta(input.userId, input.conversationId, {
+      status: input.status,
+      imagesRequested: true,
+    })
+  } catch (dbError) {
+    console.warn(`writer.assets.db_update_${input.status}_failed`, {
+      conversationId: input.conversationId,
+      error: dbError instanceof Error ? dbError.message : String(dbError),
+    })
+  }
+}
+
 function createWriterAssetSseResponse(
   run: (emit: (event: Record<string, unknown>) => void) => Promise<void>,
 ) {
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      let streamClosed = false
+
       const emit = (event: Record<string, unknown>) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+        if (streamClosed) return false
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          return true
+        } catch (error) {
+          if (error instanceof Error && /controller is already closed/i.test(error.message)) {
+            streamClosed = true
+            return false
+          }
+          throw error
+        }
       }
 
       try {
@@ -283,8 +317,25 @@ function createWriterAssetSseResponse(
           error: error instanceof Error ? error.message : "writer_assets_failed",
         })
       } finally {
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-        controller.close()
+        if (!streamClosed) {
+          try {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+          } catch (error) {
+            if (!(error instanceof Error && /controller is already closed/i.test(error.message))) {
+              throw error
+            }
+          }
+        }
+        if (!streamClosed) {
+          streamClosed = true
+          try {
+            controller.close()
+          } catch (error) {
+            if (!(error instanceof Error && /controller is already closed/i.test(error.message))) {
+              throw error
+            }
+          }
+        }
       }
     },
   })
@@ -504,28 +555,16 @@ export async function POST(request: NextRequest) {
     const plannedAssets = buildPendingWriterAssets(markdown, platform, mode)
     const baseProviderPlan = buildWriterImageProviderPlan()
 
-    if (conversationId) {
-      try {
-        await updateWriterConversationMeta(auth.user.id, conversationId, {
-          status: "image_generating",
-          imagesRequested: true,
-        })
-      } catch (dbError) {
-        console.warn("writer.assets.db_update_generating_failed", { conversationId, error: dbError instanceof Error ? dbError.message : String(dbError) })
-      }
-    }
+    await updateWriterAssetConversationStatus({
+      userId: auth.user.id,
+      conversationId,
+      status: "image_generating",
+    })
 
     if (baseProviderPlan.length === 0) {
       const errorMessage = "Configure at least one writer image provider: pptoken, aiberm, crazyroute."
       const failedAssets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, errorMessage), platform, mode)
-      if (conversationId) {
-        try {
-          await updateWriterConversationMeta(auth.user.id, conversationId, {
-            status: "failed",
-            imagesRequested: true,
-          })
-        } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
-      }
+      await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
       if (streamMode) {
         return createWriterAssetSseResponse(async (emit) => {
           emit({ event: "start", total: failedAssets.length })
@@ -561,14 +600,7 @@ export async function POST(request: NextRequest) {
     if (!isWriterR2Available()) {
       const errorMessage = "writer_r2_config_missing"
       const failedAssets = ensureWriterAssetOrder(markWriterAssetsFailed(plannedAssets, errorMessage), platform, mode)
-      if (conversationId) {
-        try {
-          await updateWriterConversationMeta(auth.user.id, conversationId, {
-            status: "failed",
-            imagesRequested: true,
-          })
-        } catch (dbError) { console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError)) }
-      }
+      await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
       if (streamMode) {
         return createWriterAssetSseResponse(async (emit) => {
           emit({ event: "start", total: failedAssets.length })
@@ -609,14 +641,36 @@ export async function POST(request: NextRequest) {
         let creditFinalized = false
         try {
           if (plannedAssets.length > 0) {
-            creditReservation = await reserveWriterImageCredits({
-              userId: auth.user.id,
-              enterpriseId: auth.user.enterpriseId,
-              provider: preferredProvider,
-              imageCount: plannedAssets.length,
-              idempotencyKey: `writer-image:stream:reserve:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
-              conversationId,
-            })
+            try {
+              creditReservation = await reserveWriterImageCredits({
+                userId: auth.user.id,
+                enterpriseId: auth.user.enterpriseId,
+                provider: preferredProvider,
+                imageCount: plannedAssets.length,
+                idempotencyKey: `writer-image:stream:reserve:${auth.user.id}:${conversationId || "new"}:${Date.now()}`,
+                conversationId,
+              })
+            } catch (billingError) {
+              if (billingError instanceof Error && billingError.message === "insufficient_credits") {
+                await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
+                emit({
+                  event: "done",
+                  ok: false,
+                  error: "insufficient_credits",
+                  data: {
+                    provider: preferredProvider,
+                    model: getWriterImageModelForProvider(preferredProvider),
+                    assets: ensureWriterAssetOrder(
+                      markWriterAssetsFailed(plannedAssets, "insufficient_credits"),
+                      platform,
+                      mode,
+                    ),
+                  },
+                })
+                return
+              }
+              throw billingError
+            }
           }
 
           const generatedAssets = await generateWriterAssetsBatch({
@@ -645,19 +699,11 @@ export async function POST(request: NextRequest) {
             assets: orderedAssets,
           }
 
-          if (conversationId) {
-            try {
-              await updateWriterConversationMeta(auth.user.id, conversationId, {
-                status: successCount > 0 ? "ready" : "failed",
-                imagesRequested: true,
-              })
-            } catch (dbError) {
-              console.warn("writer.assets.db_update_after_stream_failed", {
-                conversationId,
-                error: dbError instanceof Error ? dbError.message : String(dbError),
-              })
-            }
-          }
+          await updateWriterAssetConversationStatus({
+            userId: auth.user.id,
+            conversationId,
+            status: successCount > 0 ? "ready" : "failed",
+          })
 
           if (successCount > 0) {
             await finalizeWriterImageCredits({
@@ -707,6 +753,7 @@ export async function POST(request: NextRequest) {
               })
             })
           }
+          await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
           throw error
         }
       })
@@ -727,6 +774,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (billingError) {
       if (billingError instanceof Error && billingError.message === "insufficient_credits") {
+        await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
         return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
       }
       throw billingError
@@ -756,16 +804,7 @@ export async function POST(request: NextRequest) {
           message: billingError instanceof Error ? billingError.message : String(billingError),
         })
       })
-      if (conversationId) {
-        try {
-          await updateWriterConversationMeta(auth.user.id, conversationId, {
-            status: "failed",
-            imagesRequested: true,
-          })
-        } catch (dbError) {
-          console.warn("writer.assets.db_update_failed", dbError instanceof Error ? dbError.message : String(dbError))
-        }
-      }
+      await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "failed" })
 
       return NextResponse.json(
         {
@@ -795,19 +834,7 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    if (conversationId) {
-      try {
-        await updateWriterConversationMeta(auth.user.id, conversationId, {
-          status: "ready",
-          imagesRequested: true,
-        })
-      } catch (dbError) {
-        console.warn("writer.assets.db_update_ready_failed", {
-          conversationId,
-          error: dbError instanceof Error ? dbError.message : String(dbError),
-        })
-      }
-    }
+    await updateWriterAssetConversationStatus({ userId: auth.user.id, conversationId, status: "ready" })
 
     return NextResponse.json({
       data: {

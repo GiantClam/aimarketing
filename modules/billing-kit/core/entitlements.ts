@@ -1,7 +1,7 @@
 import { pool } from "@/modules/billing-kit/host/db"
 import type { AuthUserPayload } from "@/modules/billing-kit/host/enterprise"
 
-import { ensureDefaultFreeBillingForUser } from "./default-free-plan"
+import { ensureDemoBillingCreditFloor } from "./default-free-plan"
 import { getBillingPlan, isPlanUpgrade, type BillingPlan, type BillingPlanCode } from "./plans"
 
 export type BillingSubscriptionStatus = "pending" | "active" | "suspended" | "cancelled" | "expired"
@@ -75,7 +75,7 @@ export async function getBillingEntitlementForUser(user: AuthUserPayload): Promi
   const subscriptionRow = subscriptionResult.rows[0] || null
   const accountRow = accountResult.rows[0] || null
   if (!subscriptionRow) {
-    const freeState = await ensureDefaultFreeBillingForUser(user)
+    const freeState = await ensureDemoBillingCreditFloor(user)
     return {
       plan: getBillingPlan("free"),
       subscription: freeState.subscription,

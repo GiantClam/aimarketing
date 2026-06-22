@@ -1,10 +1,11 @@
 import { pool } from "@/modules/billing-kit/host/db"
 import type { AuthUserPayload } from "@/modules/billing-kit/host/enterprise"
 
-import { getBillingPlan } from "./plans"
+import { getBillingPlan, getDefaultFreeTrialCredits } from "./plans"
 
 const FREE_PLAN_CODE = "free"
 const FREE_TRIAL_FEATURE_KEY = "free_trial_grant"
+const DEMO_CREDIT_FLOOR_FEATURE_KEY = "demo_credit_floor"
 
 export type DefaultFreeBillingState = {
   subscription: {
@@ -31,6 +32,14 @@ function toIsoOrNull(value: unknown) {
 
 function readNumber(value: unknown) {
   return Number(value || 0)
+}
+
+function getDemoCreditFloor() {
+  const configured = Number.parseInt(String(process.env.BILLING_DEMO_CREDIT_FLOOR || ""), 10)
+  if (Number.isFinite(configured) && configured > 0) {
+    return configured
+  }
+  return getDefaultFreeTrialCredits()
 }
 
 export async function ensureDefaultFreeBillingForUser(user: AuthUserPayload): Promise<DefaultFreeBillingState> {
@@ -189,6 +198,123 @@ export async function ensureDefaultFreeBillingForUser(user: AuthUserPayload): Pr
         balance,
         reservedBalance,
         availableCredits: Math.max(0, balance - reservedBalance),
+      },
+    }
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function ensureDemoBillingCreditFloor(user: AuthUserPayload): Promise<DefaultFreeBillingState> {
+  const state = await ensureDefaultFreeBillingForUser(user)
+  if (!user.isDemo) {
+    return state
+  }
+
+  const minimumAvailableCredits = getDemoCreditFloor()
+  if (minimumAvailableCredits <= 0 || state.creditAccount.availableCredits >= minimumAvailableCredits) {
+    return state
+  }
+
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+
+    const accountResult = await client.query(
+      `
+        SELECT id, balance, reserved_balance
+        FROM "AI_MARKETING_credit_accounts"
+        WHERE
+          ($1::integer IS NOT NULL AND enterprise_id = $1)
+          OR ($1::integer IS NULL AND owner_user_id = $2)
+        ORDER BY updated_at DESC NULLS LAST, id DESC
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [user.enterpriseId, user.id],
+    )
+
+    const accountRow = accountResult.rows[0] || null
+    if (!accountRow) {
+      await client.query("ROLLBACK")
+      return state
+    }
+
+    const balance = readNumber(accountRow.balance)
+    const reservedBalance = readNumber(accountRow.reserved_balance)
+    const availableCredits = Math.max(0, balance - reservedBalance)
+    if (availableCredits >= minimumAvailableCredits) {
+      await client.query("COMMIT")
+      return {
+        ...state,
+        creditAccount: {
+          id: Number(accountRow.id),
+          balance,
+          reservedBalance,
+          availableCredits,
+        },
+      }
+    }
+
+    const topUpAmount = minimumAvailableCredits - availableCredits
+    const nextBalance = balance + topUpAmount
+    const topUpIdempotencyKey = `demo-floor:${user.enterpriseId || `user-${user.id}`}:${minimumAvailableCredits}:${Date.now()}`
+
+    await client.query(
+      `
+        INSERT INTO "AI_MARKETING_credit_ledger" (
+          credit_account_id,
+          enterprise_id,
+          user_id,
+          entry_type,
+          feature_key,
+          amount,
+          balance_after,
+          reserved_balance_after,
+          idempotency_key,
+          metadata
+        ) VALUES ($1, $2, $3, 'grant', $4, $5, $6, $7, $8, $9::jsonb)
+      `,
+      [
+        accountRow.id,
+        user.enterpriseId,
+        user.id,
+        DEMO_CREDIT_FLOOR_FEATURE_KEY,
+        topUpAmount,
+        nextBalance,
+        reservedBalance,
+        topUpIdempotencyKey,
+        JSON.stringify({
+          floor: minimumAvailableCredits,
+          availableBefore: availableCredits,
+          reason: "demo_credit_floor",
+        }),
+      ],
+    )
+
+    await client.query(
+      `
+        UPDATE "AI_MARKETING_credit_accounts"
+        SET balance = $2,
+            monthly_grant_balance = monthly_grant_balance + $3,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `,
+      [accountRow.id, nextBalance, topUpAmount],
+    )
+
+    await client.query("COMMIT")
+
+    return {
+      ...state,
+      creditAccount: {
+        id: Number(accountRow.id),
+        balance: nextBalance,
+        reservedBalance,
+        availableCredits: Math.max(0, nextBalance - reservedBalance),
       },
     }
   } catch (error) {

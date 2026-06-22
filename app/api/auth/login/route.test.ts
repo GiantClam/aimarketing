@@ -12,7 +12,7 @@ let currentUserRows: Array<{ id: number; password: string | null; emailVerified:
 let loginPayload: Record<string, unknown> | null = null
 let verifyPasswordCalls = 0
 let createUserSessionCalls = 0
-let ensureDefaultFreeBillingCalls = 0
+let ensureDemoBillingCreditFloorCalls = 0
 let shouldThrowSessionDbError = false
 let shouldThrowEnterpriseAuthTableError = false
 
@@ -92,8 +92,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
   if (request === "@/lib/billing/default-free-plan") {
     return {
-      ensureDefaultFreeBillingForUser: async () => {
-        ensureDefaultFreeBillingCalls += 1
+      ensureDemoBillingCreditFloor: async () => {
+        ensureDemoBillingCreditFloorCalls += 1
       },
     }
   }
@@ -148,7 +148,7 @@ test.beforeEach(() => {
   loginPayload = null
   verifyPasswordCalls = 0
   createUserSessionCalls = 0
-  ensureDefaultFreeBillingCalls = 0
+  ensureDemoBillingCreditFloorCalls = 0
   shouldThrowSessionDbError = false
   shouldThrowEnterpriseAuthTableError = false
 })
@@ -206,7 +206,7 @@ test("login allows verified users to create a session", async () => {
   assert.equal(response.body?.user?.email, "cf_x@qq.com")
   assert.equal(verifyPasswordCalls, 1)
   assert.equal(createUserSessionCalls, 1)
-  assert.equal(ensureDefaultFreeBillingCalls, 1)
+  assert.equal(ensureDemoBillingCreditFloorCalls, 1)
   assert.equal(response.sessionCookieApplied, true)
 })
 

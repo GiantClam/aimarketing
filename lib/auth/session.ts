@@ -27,6 +27,7 @@ export function isDemoSessionDbHydrationEnabled() {
   const explicit = process.env.DEMO_SESSION_DB_HYDRATE?.trim().toLowerCase()
   if (explicit === "true") return true
   if (explicit === "false") return false
+  if (process.env.ALLOW_DEMO_LOGIN === "true") return true
   return process.env.NODE_ENV === "development"
 }
 

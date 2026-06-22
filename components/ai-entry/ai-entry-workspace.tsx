@@ -952,13 +952,6 @@ export function AiEntryWorkspace({
 
   useEffect(() => {
     if (embedded) return
-    if (!initialConversationId && pathname === "/dashboard/ai" && conversationId) {
-      setConversationId(null)
-      latestConversationIdRef.current = null
-      setIsConversationLoading(false)
-      return
-    }
-
     const targetPath = conversationId ? `/dashboard/ai/${conversationId}` : "/dashboard/ai"
     const params = new URLSearchParams(search)
     if (conversationId) {

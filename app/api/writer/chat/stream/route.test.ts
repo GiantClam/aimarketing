@@ -11,6 +11,7 @@ const originalLoad = nodeModule._load
 let reserveShouldThrow = false
 let finalizeCalls = 0
 let releaseCalls = 0
+let emitLateProgressAfterResolve = false
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -76,12 +77,24 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/skills/runtime/registry") {
     return {
       loadWriterSkillRunner: () => ({
-        runBlocking: async () => ({
-          answer: "Generated draft",
-          outcome: "draft_ready",
-          routing: { renderPlatform: "wechat", renderMode: "article" },
-          diagnostics: { ok: true },
-        }),
+        runBlocking: async (input?: { onProgress?: (event: { type: string; label: string; status: string }) => Promise<void> | void }) => {
+          if (emitLateProgressAfterResolve) {
+            setTimeout(() => {
+              void input?.onProgress?.({
+                type: "draft_ready",
+                label: "Draft ready",
+                status: "completed",
+              })
+            }, 0)
+          }
+
+          return {
+            answer: "Generated draft",
+            outcome: "draft_ready",
+            routing: { renderPlatform: "wechat", renderMode: "article" },
+            diagnostics: { ok: true },
+          }
+        },
       }),
     }
   }
@@ -115,6 +128,7 @@ test.beforeEach(() => {
   reserveShouldThrow = false
   finalizeCalls = 0
   releaseCalls = 0
+  emitLateProgressAfterResolve = false
 })
 
 test.after(() => {
@@ -145,6 +159,25 @@ test("writer chat stream route finalizes credits on success", async () => {
   const text = await new Response(response.body).text()
   assert.match(text, /conversation_init/)
   assert.match(text, /message_end/)
+  assert.equal(finalizeCalls, 1)
+  assert.equal(releaseCalls, 0)
+})
+
+test("writer chat stream route ignores late progress events after the stream closes", async () => {
+  emitLateProgressAfterResolve = true
+
+  const response = await POST({
+    json: async () => ({
+      query: "write a launch post",
+    }),
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  const text = await new Response(response.body).text()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  assert.match(text, /message_end/)
+  assert.doesNotMatch(text, /"event":"error"/)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
 })

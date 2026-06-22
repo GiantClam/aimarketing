@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { ensureDefaultFreeBillingForUser } from "@/lib/billing/default-free-plan"
+import { ensureDemoBillingCreditFloor } from "@/lib/billing/default-free-plan"
 import { users } from "@/lib/db/schema"
 import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
 import {
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User is not bound to any enterprise" }, { status: 403 })
     }
 
-    await ensureDefaultFreeBillingForUser(payload)
+    await ensureDemoBillingCreditFloor(payload)
 
     const { sessionToken, expiresAt } = await createUserSession(user.id, request)
     logAuditEvent(request, "auth.login.success", { userId: user.id, enterpriseId: payload.enterpriseId })

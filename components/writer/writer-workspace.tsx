@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Children, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import {
@@ -793,6 +793,17 @@ function renderMarkdown(content: string, assets: WriterAsset[], className?: stri
             )
           },
           p({ children }) {
+            const childNodes = Children.toArray(children)
+            const hasBlockMediaChild = childNodes.some(
+              (child) =>
+                isValidElement(child) &&
+                (child.type === "figure" || child.type === "img" || child.type === "div"),
+            )
+
+            if (hasBlockMediaChild) {
+              return <div className="space-y-4 whitespace-pre-wrap break-words">{children}</div>
+            }
+
             return <p className="whitespace-pre-wrap break-words">{children}</p>
           },
           ul({ children }) {

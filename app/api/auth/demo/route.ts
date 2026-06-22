@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 
+import { ensureDemoBillingCreditFloor } from "@/lib/billing/default-free-plan"
 import {
   applyDemoSessionCookie,
   createDemoAuthPayload,
@@ -93,6 +94,8 @@ export async function POST(request: NextRequest) {
       if (!payload) {
         return NextResponse.json({ error: "demo user not found" }, { status: 404 })
       }
+
+      await ensureDemoBillingCreditFloor(payload)
 
       logAuditEvent(request, "auth.demo.success", { userId, enterpriseId: payload.enterpriseId })
       const response = NextResponse.json({ user: payload })

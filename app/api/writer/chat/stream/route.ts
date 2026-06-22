@@ -39,6 +39,10 @@ function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
 }
 
+function isClosedStreamControllerError(error: unknown) {
+  return error instanceof Error && /controller is already closed/i.test(error.message)
+}
+
 function splitAnswerIntoChunks(answer: string) {
   const normalized = answer.trim()
   if (!normalized) return []
@@ -157,11 +161,35 @@ export async function POST(req: NextRequest) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        let streamClosed = false
+
+        const closeStream = () => {
+          if (streamClosed) return
+          streamClosed = true
+          try {
+            controller.close()
+          } catch (error) {
+            if (!isClosedStreamControllerError(error)) {
+              throw error
+            }
+          }
+        }
+
         const sendEvent = (payload: Record<string, unknown>) => {
-          controller.enqueue(encoder.encode(buildSseEvent(payload)))
+          if (streamClosed) return false
+          try {
+            controller.enqueue(encoder.encode(buildSseEvent(payload)))
+            return true
+          } catch (error) {
+            if (isClosedStreamControllerError(error)) {
+              streamClosed = true
+              return false
+            }
+            throw error
+          }
         }
         const sendProgressEvent = (event: WriterProgressEvent) => {
-          sendEvent({
+          return sendEvent({
             event: "progress",
             task_id: taskId,
             conversation_id: pending.conversationId,
@@ -254,12 +282,13 @@ export async function POST(req: NextRequest) {
 
           const chunks = splitAnswerIntoChunks(turnResult.answer)
           for (const chunk of chunks) {
-            sendEvent({
+            const delivered = sendEvent({
               event: "message",
               task_id: taskId,
               conversation_id: pending.conversationId,
               answer: chunk,
             })
+            if (!delivered) break
             await sleep(WRITER_STREAM_CHUNK_DELAY_MS)
           }
 
@@ -272,7 +301,7 @@ export async function POST(req: NextRequest) {
             outcome: turnResult.outcome,
             diagnostics: turnResult.diagnostics,
           })
-          controller.close()
+          closeStream()
         } catch (error) {
           console.error("writer.chat.stream.error", error)
           if (!writerCreditFinalized) {
@@ -301,7 +330,7 @@ export async function POST(req: NextRequest) {
             conversation_id: pending.conversationId,
             error: error instanceof Error ? error.message : "writer_stream_failed",
           })
-          controller.close()
+          closeStream()
         }
       },
     })

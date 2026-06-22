@@ -1,6 +1,6 @@
 import { getUserAuthPayload } from "@/modules/billing-kit/host/enterprise"
 
-import { ensureDefaultFreeBillingForUser } from "./default-free-plan"
+import { ensureDemoBillingCreditFloor } from "./default-free-plan"
 
 export async function provisionDefaultBillingForUserId(userId: number) {
   const user = await getUserAuthPayload(userId)
@@ -8,5 +8,5 @@ export async function provisionDefaultBillingForUserId(userId: number) {
     throw new Error("billing_user_not_found")
   }
 
-  return ensureDefaultFreeBillingForUser(user)
+  return ensureDemoBillingCreditFloor(user)
 }

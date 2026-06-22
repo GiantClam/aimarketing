@@ -16,6 +16,15 @@ const CRAZYROUTE_API_KEY =
   process.env.AI_ENTRY_CRAZYROUTE_API_KEY ||
   process.env.AI_ENTRY_CRAZYROUTER_API_KEY ||
   ""
+const PPTOKEN_API_BASE = (
+  process.env.PPTOKEN_BASE_URL ||
+  process.env.AI_ENTRY_PPTOKEN_BASE_URL ||
+  "https://cn.pptoken.cc/v1"
+).replace(/\/$/, "")
+const PPTOKEN_API_KEY =
+  process.env.PPTOKEN_API_KEY ||
+  process.env.AI_ENTRY_PPTOKEN_API_KEY ||
+  ""
 
 type OpenAICompatibleMessage = {
   role: "system" | "user" | "assistant"
@@ -72,6 +81,17 @@ function buildCrazyrouteHeaders() {
   }
 }
 
+function buildPptokenHeaders() {
+  if (!PPTOKEN_API_KEY) {
+    throw new Error("pptoken_api_key_missing")
+  }
+
+  return {
+    Authorization: `Bearer ${PPTOKEN_API_KEY}`,
+    "Content-Type": "application/json",
+  }
+}
+
 export function hasAibermApiKey() {
   return Boolean(AIBERM_API_KEY)
 }
@@ -80,8 +100,12 @@ export function hasCrazyrouteApiKey() {
   return Boolean(CRAZYROUTE_API_KEY)
 }
 
+export function hasPptokenApiKey() {
+  return Boolean(PPTOKEN_API_KEY)
+}
+
 export function hasWriterTextProvider() {
-  return hasAibermApiKey() || hasCrazyrouteApiKey()
+  return hasAibermApiKey() || hasCrazyrouteApiKey() || hasPptokenApiKey()
 }
 
 export function extractTextFromOpenAICompatibleResponse(data: any) {
@@ -292,6 +316,23 @@ export async function generateTextWithCrazyroute(
   })
 }
 
+export async function generateTextWithPptoken(
+  systemPrompt: string,
+  userPrompt: string,
+  model: string,
+  options: AibermTextGenerationOptions = {},
+) {
+  return generateTextWithProvider({
+    baseUrl: PPTOKEN_API_BASE,
+    headers: buildPptokenHeaders(),
+    systemPrompt,
+    userPrompt,
+    model,
+    options,
+    errorPrefix: "pptoken_text",
+  })
+}
+
 export async function generateTextWithWriterModel(
   systemPrompt: string,
   userPrompt: string,
@@ -349,7 +390,7 @@ export async function generateTextWithWriterModel(
       lastError = error
       console.warn("writer.text.aiberm_fallback", {
         message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : null,
+        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : hasPptokenApiKey() ? "pptoken" : null,
       })
     }
   }
@@ -359,6 +400,21 @@ export async function generateTextWithWriterModel(
       return await runTextCallWithBudget((scoped) =>
         generateTextWithCrazyroute(systemPrompt, userPrompt, model, scoped),
       )
+    } catch (error) {
+      if (options.signal?.aborted && isAbortLikeError(error)) {
+        throw error
+      }
+      lastError = error
+      console.warn("writer.text.crazyroute_fallback", {
+        message: error instanceof Error ? error.message : String(error),
+        fallbackProvider: hasPptokenApiKey() ? "pptoken" : null,
+      })
+    }
+  }
+
+  if (hasPptokenApiKey()) {
+    try {
+      return await runTextCallWithBudget((scoped) => generateTextWithPptoken(systemPrompt, userPrompt, model, scoped))
     } catch (error) {
       if (options.signal?.aborted && isAbortLikeError(error)) {
         throw error
@@ -437,6 +493,15 @@ async function generateStructuredObjectWithCrazyroute(params: WriterStructuredOb
   })
 }
 
+async function generateStructuredObjectWithPptoken(params: WriterStructuredObjectParams) {
+  return generateStructuredObjectWithProvider({
+    ...params,
+    baseUrl: PPTOKEN_API_BASE,
+    headers: buildPptokenHeaders(),
+    errorPrefix: "pptoken_structured",
+  })
+}
+
 export async function generateStructuredObjectWithWriterModel(params: WriterStructuredObjectParams) {
   const deadlineAt = (() => {
     const timeoutMs = toPositiveTimeoutMs(params.options?.totalTimeoutMs ?? params.options?.timeoutMs)
@@ -492,7 +557,7 @@ export async function generateStructuredObjectWithWriterModel(params: WriterStru
       lastError = error
       console.warn("writer.structured.aiberm_fallback", {
         message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : null,
+        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : hasPptokenApiKey() ? "pptoken" : null,
       })
     }
   }
@@ -500,6 +565,21 @@ export async function generateStructuredObjectWithWriterModel(params: WriterStru
   if (hasCrazyrouteApiKey()) {
     try {
       return await runStructuredCallWithBudget(generateStructuredObjectWithCrazyroute)
+    } catch (error) {
+      if (params.options?.signal?.aborted && isAbortLikeError(error)) {
+        throw error
+      }
+      lastError = error
+      console.warn("writer.structured.crazyroute_fallback", {
+        message: error instanceof Error ? error.message : String(error),
+        fallbackProvider: hasPptokenApiKey() ? "pptoken" : null,
+      })
+    }
+  }
+
+  if (hasPptokenApiKey()) {
+    try {
+      return await runStructuredCallWithBudget(generateStructuredObjectWithPptoken)
     } catch (error) {
       if (params.options?.signal?.aborted && isAbortLikeError(error)) {
         throw error
