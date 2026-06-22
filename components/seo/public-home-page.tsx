@@ -28,6 +28,7 @@ import { PublicSiteFooter } from "@/components/seo/public-site-footer"
 import { PublicSiteHeader } from "@/components/seo/public-site-header"
 import { TrackedCtaLink } from "@/components/seo/tracked-cta-link"
 import { Button } from "@/components/ui/button"
+import { shouldShowDemoEntry } from "@/lib/auth/demo-entry-visibility"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
 import { localizePublicPath } from "@/lib/i18n/routing"
 import { getLocalizedPlatformHubLinks } from "@/lib/platform/catalog"
@@ -85,10 +86,7 @@ export function PublicHomePageContent({
     })),
   }
 
-  const isDevelopment =
-    process.env.NODE_ENV === "development" ||
-    process.env.VERCEL_ENV === "preview" ||
-    (typeof window !== "undefined" && window.location.hostname.includes("vercel.app"))
+  const isDevelopment = shouldShowDemoEntry(typeof window !== "undefined" ? window.location.hostname : null)
 
   const handleDemoLogin = async () => {
     try {

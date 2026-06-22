@@ -34,7 +34,12 @@ import { withTaskTimeout } from "@/lib/task-timeout"
 import type { WriterLanguage, WriterMode, WriterPlatform } from "@/lib/writer/config"
 import type { WriterConversationStatus, WriterHistoryEntry, WriterPreloadedBrief } from "@/lib/writer/types"
 import type { WriterAgentType } from "@/lib/writer/memory/types"
-import type { ImageAssistantBrief, ImageAssistantGuidedSelection, ImageAssistantTaskType } from "@/lib/image-assistant/types"
+import type {
+  ImageAssistantBrief,
+  ImageAssistantGuidedSelection,
+  ImageAssistantInvocationMode,
+  ImageAssistantTaskType,
+} from "@/lib/image-assistant/types"
 import type {
   GptImage2Background,
   GptImage2OutputFormat,
@@ -85,6 +90,7 @@ type ImageTurnTaskPayload = {
   prompt: string
   brief?: Partial<ImageAssistantBrief> | null
   taskType: ImageAssistantTaskType
+  invocationMode?: ImageAssistantInvocationMode | null
   referenceAssetIds?: string[]
   referenceUrls?: string[]
   modelOptionId?: string | null
@@ -728,6 +734,7 @@ async function handleImageTurn(taskId: number, payload: ImageTurnTaskPayload) {
       prompt: payload.prompt,
       brief: payload.brief,
       taskType: payload.taskType,
+      invocationMode: payload.invocationMode,
       referenceAssetIds: payload.referenceAssetIds,
       referenceUrls: payload.referenceUrls,
       modelOptionId: payload.modelOptionId || null,

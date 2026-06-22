@@ -77,9 +77,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 }
 
 let planImageAssistantTurn: (...args: any[]) => Promise<any>
+let buildWorkflowImageRuntimeTurn: (...args: any[]) => Promise<any>
 
 test.before(async () => {
-  ;({ planImageAssistantTurn } = await import("./tools"))
+  ;({ planImageAssistantTurn, buildWorkflowImageRuntimeTurn } = await import("./tools"))
 })
 
 test.beforeEach(() => {
@@ -148,6 +149,25 @@ test("planner can promote a complete brief into execution", async () => {
   assert.equal(result.orchestration.prompt_version, "image_assistant_prompt_compose.v1")
   assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
   assert.ok(result.orchestration.generated_prompt?.includes("Design objective:"))
+})
+
+test("workflow runtime turn bypasses clarification and composes a generation prompt from defaults", async () => {
+  const result = await buildWorkflowImageRuntimeTurn({
+    prompt: "生成一张适合广告投放的沙滩日落主视觉海报，人物站在海边，氛围高级自然",
+    currentBrief: {
+      subject: "沙滩日落场景中的人物主视觉",
+    },
+    taskType: "generate",
+    sizePreset: "4:3",
+    resolution: "2K",
+    referenceCount: 0,
+  })
+
+  assert.equal(result.orchestration.ready_for_generation, true)
+  assert.deepEqual(result.orchestration.missing_fields, [])
+  assert.equal(result.orchestration.brief.size_preset, "4:3")
+  assert.equal(result.orchestration.brief.usage_preset, "ad_poster")
+  assert.ok(typeof result.orchestration.generated_prompt === "string" && result.orchestration.generated_prompt.length > 0)
 })
 
 test("falls back to text JSON extraction when structured tool-call is unsupported", async () => {

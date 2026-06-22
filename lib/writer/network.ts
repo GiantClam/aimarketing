@@ -41,7 +41,7 @@ export async function writerRequest(
       })
       if (hasWriterProxyTransport() && isProxyTransportError(error)) {
         try {
-          return await proxyAwareNodeRequest(url, { ...init }, { timeoutMs }, undefined)
+          return await proxyAwareNodeRequest(url, { ...init }, { timeoutMs }, null)
         } catch (directError) {
           lastError = directError
         }
@@ -63,7 +63,7 @@ export async function writerFetch(input: string | URL | Request, init: RequestIn
     if (!hasWriterProxyTransport() || !isProxyTransportError(error)) {
       throw error
     }
-    return proxyAwareFetch(input, init, {}, undefined)
+    return proxyAwareFetch(input, init, {}, null)
   }
 }
 

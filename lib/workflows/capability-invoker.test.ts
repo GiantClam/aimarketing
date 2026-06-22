@@ -316,10 +316,14 @@ test("image capability request injects a complete default brief for workflow exe
   assert.equal(body.imageOutputFormat, "png")
   assert.equal(body.imageModeration, "auto")
   assert.equal(body.imageResponseFormat, "url")
+  assert.equal(body.invocationMode, "workflow_runtime")
   assert.deepEqual(body.referenceAssetIds, ["asset-2", "789"])
   assert.deepEqual(body.referenceUrls, [])
   assert.equal(body.prompt, "将第一张输入图 中人物替换第二张输入图中的人物")
-  assert.equal(body.brief.size_preset, "")
+  assert.equal(body.sizePreset, "4:3")
+  assert.equal(body.resolution, "2K")
+  assert.equal(body.brief.size_preset, "4:3")
+  assert.equal(body.brief.usage_preset, "ad_poster")
   assert.equal(body.brief.ratio_confirmed, true)
   assert.equal(typeof body.brief.style, "string")
   assert.equal(body.brief.style.length > 0, true)
@@ -398,7 +402,7 @@ test("image capability request honors explicit workflow image provider selection
 
 test.before(async () => {
   const module = await import("./capability-invoker")
-  const resolvedModule = "default" in module ? module.default : module
+  const resolvedModule = ("default" in module ? module.default : module) as typeof import("./capability-invoker")
   createWorkflowCapabilityInvoker = resolvedModule.createWorkflowCapabilityInvoker
   resolveWorkflowCapabilityCallTimeoutMs = resolvedModule.resolveWorkflowCapabilityCallTimeoutMs
 })
@@ -560,7 +564,7 @@ test("workflow image capability waits for terminal task state and surfaces node 
 
 test("workflow capability invoker enforces call timeout for stuck ai chat calls", async () => {
   const module = await import("./capability-invoker")
-  const resolvedModule = "default" in module ? module.default : module
+  const resolvedModule = ("default" in module ? module.default : module) as typeof import("./capability-invoker")
 
   await assert.rejects(
     () => resolvedModule.withTimeout(new Promise<string>(() => {}), 10, "workflow_ai_chat_timeout"),
@@ -575,7 +579,7 @@ test("workflow image capability timeout defaults above image provider total budg
 
   assert.equal(chatTimeoutMs, 120_000)
   assert.equal(pptTimeoutMs, 300_000)
-  assert.equal(imageTimeoutMs, 270_000)
+  assert.equal(imageTimeoutMs, 300_000)
   assert.equal(pptTimeoutMs > chatTimeoutMs, true)
   assert.equal(imageTimeoutMs > chatTimeoutMs, true)
 })

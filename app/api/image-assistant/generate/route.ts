@@ -8,7 +8,7 @@ import { resolveImageAssistantRequestOptions } from "@/lib/image-assistant/reque
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import { getFallbackReferenceAssetIdsFromVersions, shouldUseImplicitEditMode } from "@/lib/image-assistant/turn-routing"
 import { resolveGovernedImageAssistantSelectionForUser } from "@/lib/platform/model-governance"
-import type { ImageAssistantGuidedSelection } from "@/lib/image-assistant/types"
+import type { ImageAssistantGuidedSelection, ImageAssistantInvocationMode } from "@/lib/image-assistant/types"
 import { createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
 
 export const runtime = "nodejs"
@@ -74,6 +74,10 @@ function normalizeProviderLock(input: unknown) {
   return null
 }
 
+function normalizeInvocationMode(input: unknown): ImageAssistantInvocationMode {
+  return input === "workflow_runtime" ? "workflow_runtime" : "assistant"
+}
+
 function normalizeSessionCurrentVersionId(session: unknown): string | null {
   if (!session || typeof session !== "object") return null
   const candidate = session as { currentVersionId?: unknown; current_version_id?: unknown }
@@ -128,6 +132,7 @@ export async function POST(req: NextRequest) {
     const parentVersionId = typeof body?.parentVersionId === "string" ? body.parentVersionId : null
     const explicitReferenceAssetIds = normalizeReferenceAssetIds(body?.referenceAssetIds)
     const explicitReferenceUrls = normalizeReferenceUrls(body?.referenceUrls)
+    const invocationMode = normalizeInvocationMode(body?.invocationMode)
     const requestedModelOptionId = typeof body?.modelOptionId === "string" ? body.modelOptionId.trim() : null
     const requestedProviderLock = normalizeProviderLock(body?.providerLock)
     const requestedModel = typeof body?.model === "string" ? body.model.trim() : null
@@ -217,6 +222,7 @@ export async function POST(req: NextRequest) {
         imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
         parentVersionId,
         guidedSelection,
+        invocationMode,
       })
 
       const directDetailMode = directResult.outcome === "needs_clarification" ? "summary" : "content"
@@ -282,6 +288,7 @@ export async function POST(req: NextRequest) {
         imageModeration: typeof body?.imageModeration === "string" ? body.imageModeration : null,
         imageResponseFormat: typeof body?.imageResponseFormat === "string" ? body.imageResponseFormat : null,
         parentVersionId,
+        invocationMode,
         guidedSelection,
       },
     })

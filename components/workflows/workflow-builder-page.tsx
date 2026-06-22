@@ -25,6 +25,7 @@ import {
   reconcileWorkflowImagePromptReferences,
   replaceWorkflowImagePromptAliasTokensBatch,
 } from "@/lib/workflows/image-prompt-references"
+import { resolveWorkflowResumeNodeExecution } from "@/lib/workflows/manual-resume"
 import { isWorkflowResumeCompatible } from "@/lib/workflows/resume-compatibility"
 import { buildWorkflowRunStatusPath } from "@/lib/workflows/run-status-path"
 import { isWorkflowRunActiveStatus, isWorkflowRunResumableStatus } from "@/lib/workflows/run-status"
@@ -245,29 +246,6 @@ function collapseNodeExecutionsToLatest(detail: WorkflowRunResultsDetail | null)
   return [...latestByNodeKey.values()]
 }
 
-function resolveWorkflowResumeNodeKeyFromDetail(detail: WorkflowRunResultsDetail) {
-  const latestByNodeKey = new Map<string, WorkflowRunResultsDetail["nodeExecutions"][number]>()
-
-  for (const execution of detail.nodeExecutions) {
-    const current = latestByNodeKey.get(execution.nodeKey)
-    if (!current || execution.id >= current.id) {
-      latestByNodeKey.set(execution.nodeKey, execution)
-    }
-  }
-
-  for (const node of detail.workflow.nodes) {
-    const execution = latestByNodeKey.get(node.nodeKey)
-    if (execution?.status === "failed") return node.nodeKey
-  }
-
-  for (const node of detail.workflow.nodes) {
-    const execution = latestByNodeKey.get(node.nodeKey)
-    if (execution?.status === "cancelled") return node.nodeKey
-  }
-
-  return null
-}
-
 function collectWorkflowBranchNodeKeysFromDefinition(input: {
   nodeKey: string
   nodes: WorkflowDefinitionNode[]
@@ -300,7 +278,7 @@ function collectWorkflowBranchNodeKeysFromDefinition(input: {
 }
 
 function buildOptimisticResumeDetail(detail: WorkflowRunResultsDetail) {
-  const resumeNodeKey = resolveWorkflowResumeNodeKeyFromDetail(detail)
+  const resumeNodeKey = resolveWorkflowResumeNodeExecution(detail)?.nodeKey ?? null
   if (!resumeNodeKey) return null
 
   const rerunNodeKeys = new Set(
@@ -538,9 +516,14 @@ export function WorkflowBuilderPage({
   )
   const effectiveLatestRunDetail = latestRunMatchesWorkflow ? latestRunDetail : null
   const latestNodeExecutions = useMemo(() => collapseNodeExecutionsToLatest(effectiveLatestRunDetail), [effectiveLatestRunDetail])
+  const resumeTargetExecution = useMemo(
+    () => (effectiveLatestRunDetail ? resolveWorkflowResumeNodeExecution(effectiveLatestRunDetail) : null),
+    [effectiveLatestRunDetail],
+  )
+  const resumeTargetNodeKey = resumeTargetExecution?.nodeKey ?? null
   const latestRunStatus = effectiveLatestRunDetail?.run.status ?? null
   const hasActiveRun = isWorkflowRunActiveStatus(latestRunStatus)
-  const canResumeRun = isWorkflowRunResumableStatus(latestRunStatus)
+  const canResumeRun = isWorkflowRunResumableStatus(latestRunStatus) && Boolean(resumeTargetNodeKey)
   const hasOutdatedFailedRun =
     Boolean(latestRunDetail) &&
     !latestRunMatchesWorkflow &&
@@ -550,6 +533,12 @@ export function WorkflowBuilderPage({
     () => workflow.nodes.find((node) => node.nodeKey === selectedNodeKey) ?? null,
     [selectedNodeKey, workflow.nodes],
   )
+  const resumeTargetTitle = useMemo(() => {
+    if (!resumeTargetNodeKey) return null
+    const resumeNode = workflow.nodes.find((node) => node.nodeKey === resumeTargetNodeKey)
+    if (!resumeNode) return resumeTargetNodeKey
+    return resolveWorkflowNodeTitle(resumeNode.type, resumeNode.title, locale)
+  }, [locale, resumeTargetNodeKey, workflow.nodes])
 
   useEffect(() => {
     if (assetCandidates.length > 0) return
@@ -881,6 +870,8 @@ export function WorkflowBuilderPage({
           activeRunAttached: "已连接到当前运行中的工作流，节点状态会在画布中实时刷新。",
           latestRunReady: "运行结果已在当前编排页更新。",
           resumeOutdated: "上一轮失败运行对应的是旧版工作流，当前画布已变更，请重新运行。",
+          resumeTargetHint: "继续运行会从上次失败的节点分支开始。",
+          resumeTargetHintWithNode: "继续运行会从上次失败的“{node}”节点分支开始，其他失败节点保留上次结果，直到该分支重新触达。",
         }
       : {
           title: "Workflow builder",
@@ -911,6 +902,9 @@ export function WorkflowBuilderPage({
           activeRunAttached: "Attached to the current active run. Node states will refresh directly on the canvas.",
           latestRunReady: "Run results were updated in the current builder.",
           resumeOutdated: "The last failed run belongs to an older workflow version. The current canvas has changed, so start a fresh run.",
+          resumeTargetHint: "Resume will continue from the last failed branch.",
+          resumeTargetHintWithNode:
+            "Resume will continue from the last failed “{node}” branch. Other failed nodes keep their previous result until that branch reaches them again.",
         }
 
   useEffect(() => {
@@ -1371,6 +1365,11 @@ export function WorkflowBuilderPage({
           {hasOutdatedFailedRun ? (
             <div className="rounded-[10px] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
               {copy.resumeOutdated}
+            </div>
+          ) : null}
+          {canResumeRun && !hasActiveRun ? (
+            <div className="rounded-[10px] border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+              {(resumeTargetTitle ? copy.resumeTargetHintWithNode.replace("{node}", resumeTargetTitle) : copy.resumeTargetHint)}
             </div>
           ) : null}
 

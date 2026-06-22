@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import http from "node:http"
 import test from "node:test"
 
-import { proxyAwareFetch } from "./local-dev-proxy"
+import { isProxyTransportError, proxyAwareFetch } from "./local-dev-proxy"
 
 test("proxyAwareFetch serializes FormData bodies with multipart headers", async () => {
   let receivedContentType = ""
@@ -47,5 +47,27 @@ test("proxyAwareFetch serializes FormData bodies with multipart headers", async 
     assert.match(receivedBody, /reference-image/)
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+  }
+})
+
+test("isProxyTransportError recognizes ECONNREFUSED against configured proxy host", () => {
+  const previousProxy = process.env.LOCAL_DEV_HTTP_PROXY
+  process.env.LOCAL_DEV_HTTP_PROXY = "http://127.0.0.1:7890"
+
+  try {
+    assert.equal(
+      isProxyTransportError(new Error("connect ECONNREFUSED 127.0.0.1:7890")),
+      true,
+    )
+    assert.equal(
+      isProxyTransportError(new Error("connect ECONNREFUSED 203.0.113.8:443")),
+      false,
+    )
+  } finally {
+    if (typeof previousProxy === "string") {
+      process.env.LOCAL_DEV_HTTP_PROXY = previousProxy
+    } else {
+      delete process.env.LOCAL_DEV_HTTP_PROXY
+    }
   }
 })

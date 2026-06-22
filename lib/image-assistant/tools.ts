@@ -345,6 +345,13 @@ function inferUsagePresetFromSizePreset(sizePreset: ImageAssistantSizePreset | "
   return ""
 }
 
+function inferWorkflowUsagePresetFromSizePreset(sizePreset: ImageAssistantSizePreset | ""): ImageAssistantUsagePresetId {
+  if (sizePreset === "16:9") return "website_banner"
+  if (sizePreset === "4:5" || sizePreset === "3:4" || sizePreset === "9:16") return "social_cover"
+  if (sizePreset === "1:1") return "avatar"
+  return "ad_poster"
+}
+
 function getUsageLabelForPreset(usagePreset: ImageAssistantUsagePresetId, isZh: boolean) {
   const preset = USAGE_PRESET_DEFINITIONS[usagePreset]
   return isZh ? preset.zhLabel : preset.enLabel
@@ -1748,5 +1755,129 @@ export async function planImageAssistantTurn(input: {
   return {
     orchestration,
     assistantReply: replyToUser,
+  }
+}
+
+export async function buildWorkflowImageRuntimeTurn(input: {
+  prompt: string
+  currentBrief?: Partial<ImageAssistantBrief> | null
+  taskType: ImageAssistantTaskType
+  sizePreset: ImageAssistantSizePreset
+  resolution: string
+  referenceCount: number
+  extraInstructions?: string | null
+}) {
+  const inferred = inferBriefFromPrompt({
+    prompt: input.prompt,
+    taskType: input.taskType,
+    sizePreset: input.sizePreset,
+    referenceCount: input.referenceCount,
+  })
+  const baseBrief = mergeBrief(
+    inferred,
+    input.currentBrief,
+    {
+      goal: normalizeText(input.currentBrief?.goal) || truncate(input.prompt, 120),
+      subject: normalizeText(input.currentBrief?.subject) || truncate(input.prompt, 140),
+      size_preset: normalizeSizePreset(input.sizePreset),
+      resolution: normalizeResolution(input.resolution),
+      ratio_confirmed: true,
+      orientation: inferOrientationFromSizePreset(input.sizePreset) || inferOrientationFromPrompt(input.prompt),
+    } satisfies Partial<ImageAssistantBrief>,
+  )
+  const semanticValidation = applyBriefSemanticValidation({
+    brief: applyBriefProgressionFallbacks({
+      brief: baseBrief,
+      userPrompt: input.prompt,
+      turnCount: 1,
+      maxTurns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
+    }),
+    fallbackSizePreset: input.sizePreset,
+    userPrompt: input.prompt,
+  })
+  const chinese = looksLikeChinese(
+    `${input.prompt} ${semanticValidation.brief.goal} ${semanticValidation.brief.subject} ${semanticValidation.brief.style}`,
+  )
+  const usagePreset =
+    semanticValidation.brief.usage_preset ||
+    inferUsagePresetFromPrompt(input.prompt) ||
+    inferWorkflowUsagePresetFromSizePreset(semanticValidation.brief.size_preset || input.sizePreset)
+  const usageLabel =
+    getUsagePresetLabel(usagePreset, chinese) || (chinese ? "工作流图片生成" : "Workflow image generation")
+  const normalizedSizePreset = semanticValidation.brief.size_preset || input.sizePreset
+  const normalizedResolution = semanticValidation.brief.resolution || normalizeResolution(input.resolution)
+  const normalizedOrientation =
+    semanticValidation.brief.orientation ||
+    inferOrientationFromSizePreset(normalizedSizePreset) ||
+    inferOrientationFromPrompt(input.prompt) ||
+    "landscape"
+  const finalizedBrief = mergeBrief(semanticValidation.brief, {
+    usage_preset: usagePreset,
+    usage_label: usageLabel,
+    size_preset: normalizedSizePreset,
+    resolution: normalizedResolution,
+    orientation: normalizedOrientation,
+    ratio_confirmed: true,
+    goal: semanticValidation.brief.goal || truncate(input.prompt, 120),
+    subject: semanticValidation.brief.subject || truncate(input.prompt, 140),
+    style:
+      semanticValidation.brief.style ||
+      (chinese
+        ? "商业级视觉质感，突出主体识别，色彩与光影统一，整体适合直接生成正式成品图。"
+        : "Use a polished commercial visual style with clear subject identity, cohesive lighting, and production-ready quality."),
+    composition:
+      semanticValidation.brief.composition ||
+      (chinese
+        ? `按 ${normalizedSizePreset} 画幅组织画面，主体明确，保留标题与卖点文案的安全留白。`
+        : `Use a ${normalizedSizePreset} layout with a clear focal subject and safe whitespace for headline overlays.`),
+  } satisfies Partial<ImageAssistantBrief>)
+  const selectedSkill = await resolveSelectedSkillMetadata(
+    selectImageAssistantSkill({
+      taskType: input.taskType,
+      readyForGeneration: true,
+      prompt: input.prompt,
+      usagePreset: finalizedBrief.usage_preset,
+      goal: finalizedBrief.goal,
+    }),
+  )
+  const generatedPrompt = await composePromptFromApprovedBrief({
+    brief: finalizedBrief,
+    taskType: input.taskType,
+    sizePreset: normalizedSizePreset,
+    resolution: normalizedResolution,
+    referenceCount: input.referenceCount,
+    executionSkillId: selectedSkill.id,
+    extraInstructions: input.extraInstructions,
+  })
+  const orchestration: ImageAssistantOrchestrationState = {
+    brief: finalizedBrief,
+    missing_fields: [],
+    turn_count: 1,
+    max_turns: IMAGE_ASSISTANT_MAX_BRIEF_TURNS,
+    ready_for_generation: true,
+    planner_strategy: "heuristic",
+    schema_version: BRIEF_EXTRACT_SCHEMA_VERSION,
+    prompt_version: BRIEF_PROMPT_VERSION,
+    extraction_confidence: 1,
+    extraction_conflicts: semanticValidation.conflicts,
+    selected_skill: selectedSkill,
+    tool_traces: buildToolTraces({
+      brief: finalizedBrief,
+      missingFields: [],
+      selectedSkill,
+      referenceCount: input.referenceCount,
+      generatedPrompt,
+      turnCount: 1,
+    }),
+    reference_count: input.referenceCount,
+    recommended_mode: input.taskType === "generate" ? "generate" : "edit",
+    follow_up_question: null,
+    prompt_questions: [],
+    generated_prompt: generatedPrompt,
+  }
+
+  return {
+    orchestration,
+    assistantReply: null,
   }
 }

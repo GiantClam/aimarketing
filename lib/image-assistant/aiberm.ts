@@ -68,7 +68,7 @@ const AIBERM_API_KEY =
 const DEFAULT_IMAGE_RESOLUTION: ImageAssistantResolution = "2K"
 const IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS = Math.max(
   30_000,
-  Number.parseInt(process.env.IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS || "", 10) || 240_000,
+  Number.parseInt(process.env.IMAGE_ASSISTANT_PROVIDER_TOTAL_TIMEOUT_MS || "", 10) || 300_000,
 )
 const IMAGE_ASSISTANT_PROVIDER_TIMEOUT_MS = Math.max(
   5_000,

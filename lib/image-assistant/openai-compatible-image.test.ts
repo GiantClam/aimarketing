@@ -222,7 +222,7 @@ test("gpt-image-2 provider request retries transient fetch failures before succe
   }
 })
 
-test("gpt-image-2 provider request prefers proxied curl for pptoken local-dev generations", async () => {
+test("gpt-image-2 provider request uses direct curl for pptoken generations", async () => {
   const originalFetch = globalThis.fetch
   const originalProxy = process.env.LOCAL_DEV_HTTP_PROXY
   let attempts = 0
@@ -264,7 +264,8 @@ test("gpt-image-2 provider request prefers proxied curl for pptoken local-dev ge
 
     assert.equal(attempts, 0)
     assert.ok(curlArgs)
-    assert.deepEqual(curlArgs.slice(0, 4), ["-sS", "--proxy", "http://127.0.0.1:7890", "--connect-timeout"])
+    assert.deepEqual(curlArgs.slice(0, 3), ["-sS", "--connect-timeout", "5"])
+    assert.equal(curlArgs.includes("--proxy"), false)
     assert.equal(result.images.length, 1)
     assert.match(result.images[0], /^data:image\/png;base64,/)
   } finally {

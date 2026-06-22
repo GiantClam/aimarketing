@@ -213,12 +213,44 @@ export function isProxyTransportError(error: unknown) {
     return false
   }
 
+  const cause = error.cause as { code?: string } | undefined
+  const proxyUrl = getLocalDevProxyUrl()
+  let proxyHost = ""
+  let proxyPort = ""
+
+  if (proxyUrl) {
+    try {
+      const parsedProxyUrl = new URL(proxyUrl)
+      proxyHost = parsedProxyUrl.hostname
+      proxyPort = parsedProxyUrl.port || (parsedProxyUrl.protocol === "https:" ? "443" : "80")
+    } catch {
+      proxyHost = ""
+      proxyPort = ""
+    }
+  }
+
+  const message = error.message || ""
+  const referencesConfiguredProxy =
+    Boolean(proxyHost) &&
+    (message.includes(proxyHost) ||
+      (proxyPort ? message.includes(`${proxyHost}:${proxyPort}`) : false) ||
+      message.includes(proxyUrl))
+
   return (
-    error.message.includes("writer_proxy_connect_timeout") ||
-    error.message.includes("writer_proxy_connect_failed") ||
-    error.message.includes("proxy") ||
-    error.message.includes("tunneling") ||
-    error.message.includes("socket hang up")
+    message.includes("writer_proxy_connect_timeout") ||
+    message.includes("writer_proxy_connect_failed") ||
+    message.includes("proxy") ||
+    message.includes("tunneling") ||
+    message.includes("socket hang up") ||
+    (referencesConfiguredProxy &&
+      (message.includes("ECONNREFUSED") ||
+        message.includes("EHOSTUNREACH") ||
+        message.includes("ENETUNREACH") ||
+        message.includes("ETIMEDOUT") ||
+        cause?.code === "ECONNREFUSED" ||
+        cause?.code === "EHOSTUNREACH" ||
+        cause?.code === "ENETUNREACH" ||
+        cause?.code === "ETIMEDOUT"))
   )
 }
 
@@ -306,13 +338,13 @@ export async function proxyAwareNodeRequest(
   url: string,
   init: RequestInit = {},
   options: ProxyAwareRequestOptions = {},
-  overrideAgent?: http.Agent | https.Agent,
+  overrideAgent?: http.Agent | https.Agent | null,
 ) {
   const timeoutMs = options.timeoutMs ?? 120_000
   const target = new URL(url)
   const isHttps = target.protocol === "https:"
   const transport = isHttps ? https : http
-  const agent = overrideAgent ?? getProxyAgentForUrl(url)
+  const agent = overrideAgent === null ? undefined : overrideAgent ?? getProxyAgentForUrl(url)
 
   return await new Promise<{ status: number; bodyText: string }>((resolve, reject) => {
     if (init.signal?.aborted) {
@@ -360,10 +392,14 @@ export async function proxyAwareFetch(
   input: string | URL | Request,
   init: RequestInit = {},
   options: ProxyAwareRequestOptions = {},
-  overrideAgent?: http.Agent | https.Agent,
+  overrideAgent?: http.Agent | https.Agent | null,
 ): Promise<Response> {
   const url = normalizeFetchUrl(input)
   const target = new URL(url)
+
+  if (overrideAgent === null) {
+    return nativeFetch(input, init)
+  }
 
   if (!overrideAgent && (!hasLocalDevProxyTransport() || shouldBypassLocalDevProxy(url))) {
     return nativeFetch(input, init)

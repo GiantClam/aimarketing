@@ -1,5 +1,10 @@
 import type { WorkflowCapabilityInvokeParams } from "@/lib/workflows/node-executors"
 import { normalizeWorkflowImageConfig } from "@/lib/image-assistant/model-options"
+import type {
+  ImageAssistantResolution,
+  ImageAssistantSizePreset,
+  ImageAssistantUsagePresetId,
+} from "@/lib/image-assistant/types"
 import { buildGovernedImageAssistantModelOptionId } from "@/lib/platform/governed-image-model-option-id"
 import {
   isEmbeddableWorkflowImagePromptUrl,
@@ -28,6 +33,74 @@ function inferOrientationFromImageSize(size: string) {
   if (!Number.isFinite(width) || !Number.isFinite(height)) return "landscape"
   if (width === height) return ""
   return width > height ? "landscape" : "portrait"
+}
+
+function inferSizePresetFromImageSize(size: string): ImageAssistantSizePreset | "" {
+  const normalized = size.trim().toLowerCase()
+  const matched = normalized.match(/^(\d{2,4})x(\d{2,4})$/u)
+  if (!matched) return ""
+
+  const width = Number.parseInt(matched[1], 10)
+  const height = Number.parseInt(matched[2], 10)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return ""
+
+  if (width === height) return "1:1"
+  const ratio = width / height
+  const candidates: Array<{ preset: ImageAssistantSizePreset; ratio: number }> = [
+    { preset: "16:9", ratio: 16 / 9 },
+    { preset: "9:16", ratio: 9 / 16 },
+    { preset: "4:5", ratio: 4 / 5 },
+    { preset: "3:4", ratio: 3 / 4 },
+    { preset: "4:3", ratio: 4 / 3 },
+  ]
+
+  let best: ImageAssistantSizePreset | "" = ""
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const candidate of candidates) {
+    const distance = Math.abs(candidate.ratio - ratio)
+    if (distance < bestDistance) {
+      best = candidate.preset
+      bestDistance = distance
+    }
+  }
+
+  return best
+}
+
+function inferResolutionFromImageSize(size: string): ImageAssistantResolution | "" {
+  const normalized = size.trim().toLowerCase()
+  const matched = normalized.match(/^(\d{2,4})x(\d{2,4})$/u)
+  if (!matched) return ""
+  const width = Number.parseInt(matched[1], 10)
+  const height = Number.parseInt(matched[2], 10)
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return ""
+
+  const longestEdge = Math.max(width, height)
+  if (longestEdge >= 3000) return "4K"
+  if (longestEdge >= 1500) return "2K"
+  if (longestEdge >= 1024) return "1K"
+  return "512"
+}
+
+function inferWorkflowUsagePreset(sizePreset: ImageAssistantSizePreset): ImageAssistantUsagePresetId {
+  if (sizePreset === "16:9") return "website_banner"
+  if (sizePreset === "4:5" || sizePreset === "3:4" || sizePreset === "9:16") return "social_cover"
+  if (sizePreset === "1:1") return "avatar"
+  return "ad_poster"
+}
+
+function getWorkflowUsageLabel(usagePreset: ImageAssistantUsagePresetId, locale: "zh" | "en") {
+  if (locale === "zh") {
+    if (usagePreset === "website_banner") return "官网横幅 16:9"
+    if (usagePreset === "social_cover") return "社媒封面"
+    if (usagePreset === "avatar") return "头像图片 1:1"
+    return "广告海报"
+  }
+
+  if (usagePreset === "website_banner") return "Website banner 16:9"
+  if (usagePreset === "social_cover") return "Social cover"
+  if (usagePreset === "avatar") return "Avatar image 1:1"
+  return "Ad poster"
 }
 
 function buildDefaultImageComposition(size: string, locale: "zh" | "en") {
@@ -111,16 +184,20 @@ export function buildWorkflowImageGenerateRequestBody(
     inputImages: params.input.image,
     locale,
   })
+  const inferredSizePreset = normalizedConfig.sizePreset || inferSizePresetFromImageSize(normalizedConfig.imageSize) || "1:1"
+  const inferredResolution = normalizedConfig.resolution || inferResolutionFromImageSize(normalizedConfig.imageSize) || "2K"
+  const usagePreset = inferWorkflowUsagePreset(inferredSizePreset)
 
   return {
     prompt: resolvedReferences.prompt,
     preferAsync: true,
+    invocationMode: "workflow_runtime",
     modelOptionId: selectedModelOptionId,
     providerLock: normalizedConfig.providerLock,
     model: normalizedConfig.modelId,
     candidateCount: 1,
-    sizePreset: normalizedConfig.sizePreset,
-    resolution: normalizedConfig.resolution,
+    sizePreset: inferredSizePreset,
+    resolution: inferredResolution,
     imageSize: normalizedConfig.imageSize,
     imageQuality: normalizedConfig.imageQuality,
     imageBackground: normalizedConfig.imageBackground,
@@ -140,10 +217,10 @@ export function buildWorkflowImageGenerateRequestBody(
       composition: buildDefaultImageComposition(normalizedConfig.imageSize, locale),
       constraints: "",
       orientation: inferOrientationFromImageSize(normalizedConfig.imageSize),
-      size_preset: normalizedConfig.sizePreset || "",
-      resolution: normalizedConfig.resolution || "",
-      usage_preset: "workflow_node",
-      usage_label: locale === "zh" ? "工作流节点生成" : "Workflow node generation",
+      size_preset: inferredSizePreset,
+      resolution: inferredResolution,
+      usage_preset: usagePreset,
+      usage_label: getWorkflowUsageLabel(usagePreset, locale),
       ratio_confirmed: true,
     },
   }

@@ -17,6 +17,7 @@ type ConversationTurnParams = {
   sessionId?: string | null
   prompt: string
   taskType: "generate" | "edit"
+  invocationMode?: "assistant" | "workflow_runtime" | null
   referenceAssetIds?: string[]
   modelOptionId?: string | null
   providerLock?: "pptoken" | "aiberm" | "crazyroute" | null
@@ -194,6 +195,21 @@ test("generate route syncs explicit prompt resolution and ratio into async paylo
   assert.equal(enqueueCalls.length, 1)
   assert.equal(enqueueCalls[0].payload.sizePreset, "16:9")
   assert.equal(enqueueCalls[0].payload.resolution, "1K")
+})
+
+test("generate route forwards workflow runtime invocation mode into async payload", async () => {
+  const response = await POST({
+    json: async () => ({
+      prompt: "生成一张沙滩日落海报",
+      sessionId: "s-1",
+      candidateCount: 1,
+      invocationMode: "workflow_runtime",
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(enqueueCalls.length, 1)
+  assert.equal(enqueueCalls[0].payload.invocationMode, "workflow_runtime")
 })
 
 test("generate route promotes explicit reference upscale prompt to edit mode", async () => {

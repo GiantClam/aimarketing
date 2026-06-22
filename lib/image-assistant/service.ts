@@ -44,6 +44,7 @@ import {
 import { hasCustomImageModelSelection } from "@/lib/platform/shared-credits-policy"
 import { IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS } from "@/lib/image-assistant/skills"
 import {
+  buildWorkflowImageRuntimeTurn,
   buildImageAssistantTurnContent,
   extractLatestImageAssistantOrchestration,
   planImageAssistantTurn,
@@ -58,6 +59,7 @@ import type {
   ImageAssistantBrief,
   ImageAssistantGenerateResult,
   ImageAssistantGuidedSelection,
+  ImageAssistantInvocationMode,
   ImageAssistantMessage,
   ImageAssistantResolution,
   ImageAssistantSizePreset,
@@ -967,6 +969,7 @@ export async function runImageAssistantConversationTurn(params: {
   maskAssetId?: string | null
   versionMeta?: Record<string, unknown> | null
   guidedSelection?: ImageAssistantGuidedSelection | null
+  invocationMode?: ImageAssistantInvocationMode | null
   memoryBridge?: ImageAssistantMemoryBridgeResult | null
   signal?: AbortSignal
 }) {
@@ -1060,6 +1063,7 @@ export async function runImageAssistantConversationTurn(params: {
   const previousState = extractLatestImageAssistantOrchestration(messages)
   const latestPromptQuestionContext = getLatestPromptQuestionContext(messages)
   const guidedSelection = normalizeGuidedSelection(params.guidedSelection)
+  const invocationMode = params.invocationMode === "workflow_runtime" ? "workflow_runtime" : "assistant"
   if (guidedSelection && previousState && latestPromptQuestionContext) {
     const staleMessageSelection =
       guidedSelection.source_message_id &&
@@ -1103,16 +1107,29 @@ export async function runImageAssistantConversationTurn(params: {
     }
   }
 
-  const plan = await planImageAssistantTurn({
-    prompt: params.prompt,
-    currentBrief: params.brief,
-    previousState,
-    taskType: params.taskType,
-    sizePreset: normalizedImageConfig.sizePreset || normalizeSizePreset(params.sizePreset),
-    resolution: normalizedImageConfig.resolution || normalizeResolution(params.resolution),
-    referenceCount: referencedAssets.length + referenceUrls.length,
-    extraInstructions: effectiveExtraInstructions,
-  })
+  const effectiveSizePreset = normalizedImageConfig.sizePreset || normalizeSizePreset(params.sizePreset)
+  const effectiveResolution = normalizedImageConfig.resolution || normalizeResolution(params.resolution)
+  const plan =
+    invocationMode === "workflow_runtime"
+      ? await buildWorkflowImageRuntimeTurn({
+          prompt: params.prompt,
+          currentBrief: params.brief,
+          taskType: params.taskType,
+          sizePreset: effectiveSizePreset,
+          resolution: effectiveResolution,
+          referenceCount: referencedAssets.length + referenceUrls.length,
+          extraInstructions: effectiveExtraInstructions,
+        })
+      : await planImageAssistantTurn({
+          prompt: params.prompt,
+          currentBrief: params.brief,
+          previousState,
+          taskType: params.taskType,
+          sizePreset: effectiveSizePreset,
+          resolution: effectiveResolution,
+          referenceCount: referencedAssets.length + referenceUrls.length,
+          extraInstructions: effectiveExtraInstructions,
+        })
   throwIfAborted(params.signal)
   logImageAssistantStage("conversation.plan.completed", {
     sessionId,
@@ -1125,7 +1142,7 @@ export async function runImageAssistantConversationTurn(params: {
   const firstTurnTitle = plan.orchestration.brief.goal?.trim() || params.prompt.trim() || ""
 
   const requestPayload = {
-    workflow: "skills_tools",
+    workflow: invocationMode === "workflow_runtime" ? "workflow_runtime" : "skills_tools",
     modelOptionId: governedSelection.modelOptionId,
     providerId: governedSelection.providerId,
     referenceAssetIds: (params.referenceAssetIds || []).slice(-IMAGE_ASSISTANT_MAX_REFERENCE_ATTACHMENTS),
@@ -1169,7 +1186,7 @@ export async function runImageAssistantConversationTurn(params: {
       content: plan.assistantReply || "Please clarify the remaining design requirements.",
       taskType: params.taskType,
       responsePayload: {
-        workflow: "skills_tools",
+        workflow: invocationMode === "workflow_runtime" ? "workflow_runtime" : "skills_tools",
         orchestration: plan.orchestration,
       },
     })
@@ -1217,8 +1234,8 @@ export async function runImageAssistantConversationTurn(params: {
     providerLock: normalizedImageConfig.providerLock,
     model: normalizedImageConfig.modelId,
     candidateCount: normalizedImageConfig.candidateCount,
-    sizePreset: normalizedImageConfig.sizePreset || normalizeSizePreset(params.sizePreset),
-    resolution: normalizedImageConfig.resolution || normalizeResolution(params.resolution),
+    sizePreset: effectiveSizePreset,
+    resolution: effectiveResolution,
     imageSize: normalizedImageConfig.imageSize,
     imageQuality: normalizedImageConfig.imageQuality,
     imageBackground: normalizedImageConfig.imageBackground,
@@ -1232,7 +1249,7 @@ export async function runImageAssistantConversationTurn(params: {
     requestMessageId: requestMessage.id,
     requestPayload,
     responsePayload: {
-      workflow: "skills_tools",
+      workflow: invocationMode === "workflow_runtime" ? "workflow_runtime" : "skills_tools",
       orchestration: plan.orchestration,
     },
     versionMeta: params.versionMeta || null,

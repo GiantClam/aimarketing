@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { shouldShowDemoEntry } from "@/lib/auth/demo-entry-visibility"
 
 export default function LoginPage() {
   const { login, devLogin, loading } = useAuth()
@@ -23,9 +24,7 @@ export default function LoginPage() {
   const isZh = locale === "zh"
   const t = (zh: string, en: string) => (isZh ? zh : en)
 
-  const allowDemoLogin =
-    process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true" ||
-    process.env.NODE_ENV === "development"
+  const allowDemoLogin = shouldShowDemoEntry(typeof window !== "undefined" ? window.location.hostname : null)
 
   const getNextPath = () => {
     if (typeof window === "undefined") return "/dashboard"

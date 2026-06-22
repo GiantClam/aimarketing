@@ -20,7 +20,6 @@ import {
   type GptImage2Moderation,
   type GptImage2ResponseFormat,
 } from "@/lib/image-assistant/model-options"
-import { getLocalDevProxyUrl, shouldBypassLocalDevProxy } from "@/lib/server/local-dev-proxy"
 import { withTaskTimeout } from "@/lib/task-timeout"
 import { hasWriterProxyTransport, writerFetch } from "@/lib/writer/network"
 
@@ -76,15 +75,6 @@ function normalizeText(raw: unknown) {
 
 function trimBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/u, "")
-}
-
-function buildCurlProxyArgs(endpoint: string) {
-  const proxyUrl = getLocalDevProxyUrl()
-  if (!proxyUrl || shouldBypassLocalDevProxy(endpoint)) {
-    return []
-  }
-
-  return ["--proxy", proxyUrl]
 }
 
 export function setOpenAiCompatibleImageCurlRunnerForTests(runner: CurlRunner | null) {
@@ -360,10 +350,8 @@ async function requestOpenAiCompatibleImageGenerationWithCurl(params: {
     n: params.count,
   })
 
-  const proxyArgs = buildCurlProxyArgs(params.endpoint)
   const args = [
     "-sS",
-    ...proxyArgs,
     "--connect-timeout",
     String(Math.max(5, Math.ceil(params.timeoutMs / 3000))),
     "--max-time",

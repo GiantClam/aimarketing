@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { findLatestWorkflowRunRecordForWorkflow, resolveWorkflowIdFromTaskRunRecord, resolveWorkflowResumeNodeKey } from "@/lib/workflows/manual-resume"
+import {
+  findLatestWorkflowRunRecordForWorkflow,
+  resolveWorkflowIdFromTaskRunRecord,
+  resolveWorkflowResumeNodeExecution,
+  resolveWorkflowResumeNodeKey,
+} from "@/lib/workflows/manual-resume"
 import {
   normalizeWorkflowNodeStatusesForRunningRun,
   normalizeWorkflowRunStatusFromNodeExecutions,
@@ -251,6 +256,74 @@ test("resolveWorkflowResumeNodeKey falls back to the first cancelled node when t
   } satisfies WorkflowRunDetail
 
   assert.equal(resolveWorkflowResumeNodeKey(detail), "img-1")
+})
+
+test("resolveWorkflowResumeNodeExecution returns the latest execution record for the chosen resume node", () => {
+  const detail = {
+    run: {} as WorkflowRunDetail["run"],
+    workflow: {
+      id: 1,
+      enterpriseId: 1,
+      ownerUserId: 1,
+      title: "Test",
+      slug: "test",
+      status: "draft",
+      triggerType: "manual",
+      description: null,
+      metadata: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      nodes: [
+        { nodeKey: "image-1", type: "image_generate", title: "Image 1", positionX: 0, positionY: 0, config: {} },
+        { nodeKey: "image-2", type: "image_generate", title: "Image 2", positionX: 0, positionY: 0, config: {} },
+      ],
+      edges: [],
+    },
+    nodeExecutions: [
+      {
+        id: 1,
+        runId: 5,
+        workflowId: 1,
+        nodeKey: "image-1",
+        nodeType: "image_generate",
+        status: "failed",
+        providerId: null,
+        modelId: null,
+        taskRunId: null,
+        inputPayload: null,
+        outputPayload: null,
+        creditsConsumed: 0,
+        startedAt: null,
+        finishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 2,
+        runId: 5,
+        workflowId: 1,
+        nodeKey: "image-1",
+        nodeType: "image_generate",
+        status: "failed",
+        providerId: "pptoken",
+        modelId: "gpt-image-2",
+        taskRunId: null,
+        inputPayload: null,
+        outputPayload: null,
+        creditsConsumed: 0,
+        startedAt: null,
+        finishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+  } satisfies WorkflowRunDetail
+
+  const execution = resolveWorkflowResumeNodeExecution(detail)
+  assert.equal(execution?.nodeKey, "image-1")
+  assert.equal(execution?.id, 2)
+  assert.equal(execution?.providerId, "pptoken")
+  assert.equal(execution?.modelId, "gpt-image-2")
 })
 
 test("resolveWorkflowResumeNodeKey returns null when there is nothing resumable", () => {
