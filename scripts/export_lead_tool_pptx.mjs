@@ -33,7 +33,7 @@ async function getVersionedArtifactToolUtilsCandidates() {
           entry.name,
           "skills",
           "presentations",
-          "scripts",
+          "container_tools",
           "artifact_tool_utils.mjs",
         ),
       );
@@ -56,7 +56,7 @@ async function resolveArtifactToolUtilsPath() {
       "presentations",
       "skills",
       "presentations",
-      "scripts",
+      "container_tools",
       "artifact_tool_utils.mjs",
     ),
     ...(await getVersionedArtifactToolUtilsCandidates()),

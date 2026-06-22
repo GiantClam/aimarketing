@@ -13,6 +13,7 @@ import type { LeadToolPptPreviewRuntime } from "@/lib/lead-tools/ppt-engines/pre
 import { pptMasterPreviewRuntime } from "@/lib/lead-tools/ppt-engines/ppt-master-preview-runtime"
 import { frontendSlidesPreviewRuntime } from "@/lib/lead-tools/ppt-engines/frontend-slides-preview-runtime"
 import { exportPptMasterSessionVariant, getPptMasterSessionVariant } from "@/lib/lead-tools/ppt-master-runtime"
+import { exportPptVariantToPptx } from "@/lib/lead-tools/pptx-export"
 import { getLeadToolPptExportRuntime, getLeadToolPptPreviewRuntime } from "@/lib/lead-tools/config"
 import { generateLeadToolPptStoryDeck } from "@/lib/lead-tools/generation-ppt-fixed"
 
@@ -42,6 +43,10 @@ function getPreviewEngineMeta(runtime: LeadToolPptPreviewRuntime) {
     previewEngine: "ppt-master" as const,
     mode: "ppt-master-project-preview" as const,
   }
+}
+
+function shouldExportFrontendSlidesAsPptx() {
+  return getLeadToolPptExportRuntime("ai-ppt-preview") === "ppt-master-agent"
 }
 
 const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
@@ -88,6 +93,22 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
     if (action.deck.previewEngine === "frontend-slides-html") {
       const htmlDocument = action.selectedVariant.preview?.htmlDocument
       if (htmlDocument) {
+        if (shouldExportFrontendSlidesAsPptx()) {
+          return {
+            jobId: randomUUID(),
+            status: "ready",
+            message: "frontend-slides 预览已就绪，可直接导出为 PPTX。",
+            requestedBy: options.user?.email,
+            exportPlan: {
+              title: action.deck.title,
+              selectedVariant: action.selectedVariant.name,
+              slideCount: action.selectedVariant.slides.length,
+              output: "editable-pptx",
+              finalModel: options.resolvedModels.finalModel,
+            },
+          } satisfies LeadToolPptFinalizeResponse
+        }
+
         return {
           jobId: randomUUID(),
           status: "ready",
@@ -129,6 +150,19 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
     if (action.deck.previewEngine === "frontend-slides-html") {
       const htmlDocument = action.selectedVariant.preview?.htmlDocument
       if (htmlDocument) {
+        if (shouldExportFrontendSlidesAsPptx()) {
+          const artifact = await exportPptVariantToPptx({
+            deck: action.deck,
+            variant: action.selectedVariant,
+          })
+
+          return {
+            artifact,
+            deck: action.deck,
+            variant: action.selectedVariant,
+          } satisfies LeadToolPptDownloadResponse
+        }
+
         return {
           artifact: {
             buffer: Buffer.from(htmlDocument.html, "utf8"),
