@@ -47,6 +47,7 @@ import {
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
+import { buildPptToolResultMessage } from "@/lib/ai-entry/ppt-tool-result-message"
 import type { KnowledgeScope } from "@/lib/knowledge/types"
 import { cn } from "@/lib/utils"
 
@@ -1686,6 +1687,7 @@ export function AiEntryWorkspace({
         let sseBuffer = ""
         let streamedText = ""
         let streamError: string | null = null
+        let streamedToolAppendix = ""
 
         const processEvent = (event: ChatStreamApiResponse) => {
           const now = Date.now()
@@ -1786,12 +1788,33 @@ export function AiEntryWorkspace({
             const toolName = event.data?.toolName || "tool"
             const toolId = event.data?.toolCallId || toolName
             const isWebSearch = toolName === "web_search"
+            const toolMessage = buildPptToolResultMessage({
+              toolName,
+              result: event.data?.result ?? null,
+              origin: typeof window !== "undefined" ? window.location.origin : null,
+              isZh,
+            })
             const sources = Array.isArray(event.data?.result?.results)
               ? event.data.result.results.filter((source) => typeof source?.url === "string" && source.url.trim())
               : []
             const sourceDetail = sources.length
               ? `${sources.length} ${isZh ? "\u4e2a\u6765\u6e90" : "sources"}: ${sources.slice(0, 2).map((source) => source.title || source.url).filter(Boolean).join(" / ")}`
               : undefined
+
+            if (toolMessage && !streamedToolAppendix.includes(toolMessage)) {
+              streamedToolAppendix = `${streamedToolAppendix}${toolMessage}`
+              const nextContent = `${streamedText}${streamedToolAppendix}`
+              setMessages((previous) => {
+                const next = previous.map((item) =>
+                  item.id === assistantMessageId
+                    ? { ...item, content: nextContent }
+                    : item,
+                )
+                savePendingConversationMessages(latestConversationIdRef.current, next)
+                return next
+              })
+            }
+
             upsertTaskEvent({
               type: `tool:${toolId}`,
               label: isWebSearch ? (isZh ? "\u7f51\u9875\u641c\u7d22\u5b8c\u6210" : "Web search completed") : `Tool: ${toolName}`,
@@ -1824,6 +1847,7 @@ export function AiEntryWorkspace({
             const finalText = typeof event.answer === "string" && event.answer.trim()
               ? event.answer.trim()
               : streamedText.trim()
+            const resolvedTextWithTools = `${finalText}${streamedToolAppendix}`.trim()
 
             const resolvedProviderModelId = resolveDisplayModelIdForProvider({
               rawModelId: typeof event.provider_model === "string" ? event.provider_model : null,
@@ -1856,7 +1880,7 @@ export function AiEntryWorkspace({
               {
                 const next = previous.map((item) =>
                   item.id === assistantMessageId
-                    ? { ...item, content: finalText || copy.unknownError }
+                    ? { ...item, content: resolvedTextWithTools || copy.unknownError }
                     : item,
                 )
                 savePendingConversationMessages(latestConversationIdRef.current, next)
