@@ -129,7 +129,7 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
       providerId: "runninghub",
       providerLabel: "RunningHub",
       integrationLabel: "RunningHub API",
-      models: ["RunningHub 文生图工作流", "RunningHub 图生图工作流"],
+      models: ["seedream-v5-text-to-image", "seedream-v5-image-to-image"],
     },
   ],
   video_generation: [
@@ -170,12 +170,27 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
 
 const DEFAULT_PROVIDER_BY_CATEGORY: Record<EnterpriseModelCategory, EnterpriseModelProviderId> = {
   text_generation: "openai_compatible",
-  image_generation: "openai_official",
+  image_generation: "runninghub",
   video_generation: "runninghub",
   audio_generation: "minimax_official",
 }
 
 const RUNNINGHUB_IMAGE_ROUTE_MODES: EnterpriseRunningHubImageRouteMode[] = ["txt2img", "img2img"]
+const RUNNINGHUB_DEFAULT_IMAGE_ROUTE_PRESETS: Record<
+  EnterpriseRunningHubImageRouteMode,
+  { label: string; endpoint: string; modelId: string }
+> = {
+  txt2img: {
+    label: "RunningHub Seedream V5 Text to Image",
+    endpoint: "/openapi/v2/seedream-v5-lite/text-to-image",
+    modelId: "seedream-v5-text-to-image",
+  },
+  img2img: {
+    label: "RunningHub Seedream V5 Image to Image",
+    endpoint: "/openapi/v2/seedream-v5-lite/image-to-image",
+    modelId: "seedream-v5-image-to-image",
+  },
+}
 
 function normalizeOptionalText(value: unknown, maxLength: number) {
   if (typeof value !== "string") return null
@@ -232,7 +247,7 @@ export function buildRunningHubImageRouteId(mode: EnterpriseRunningHubImageRoute
 }
 
 export function getRunningHubImageRouteDefaultLabel(mode: EnterpriseRunningHubImageRouteMode) {
-  return mode === "txt2img" ? "RunningHub Text to Image" : "RunningHub Image to Image"
+  return RUNNINGHUB_DEFAULT_IMAGE_ROUTE_PRESETS[mode].label
 }
 
 function inferRunningHubImageRouteMode(record: Record<string, unknown>) {
@@ -248,12 +263,13 @@ function buildDefaultRunningHubImageRoute(
   mode: EnterpriseRunningHubImageRouteMode,
   fallbackModelId?: string | null,
 ): EnterpriseProviderRouteConfig {
+  const preset = RUNNINGHUB_DEFAULT_IMAGE_ROUTE_PRESETS[mode]
   return {
     routeId: buildRunningHubImageRouteId(mode),
-    label: getRunningHubImageRouteDefaultLabel(mode),
+    label: preset.label,
     mode,
-    endpoint: null,
-    modelId: fallbackModelId || null,
+    endpoint: preset.endpoint,
+    modelId: fallbackModelId || preset.modelId,
     enabled: true,
     assignedUserIds: [],
   }

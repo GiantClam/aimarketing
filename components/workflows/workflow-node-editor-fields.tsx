@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  getWorkflowImageDefaultSize,
+  getWorkflowImageSizeOptions,
+  normalizeGptImage2Size,
+  normalizeRunningHubSeedreamSize,
   resolveWorkflowImageModelKind,
 } from "@/lib/image-assistant/model-options"
 import type { WorkflowDefinitionNode } from "@/lib/workflows/schema"
@@ -480,13 +484,6 @@ export function WorkflowNodeEditorFields({
           { value: "es", label: "Spanish" },
         ]
   const workflowImageProviders = workflowImageProviderOptions
-  const imageModelSizeOptions: OptionItem[] = [
-    { value: "auto", label: copy.autoSize },
-    { value: "1024x1024", label: "1024x1024" },
-    { value: "1536x1024", label: "1536x1024" },
-    { value: "1024x1536", label: "1024x1536" },
-    { value: "custom", label: copy.customSize },
-  ]
   const imageQualityOptions: OptionItem[] = ["auto", "low", "medium", "high"].map((value) => ({ value, label: value }))
   const imageBackgroundOptions: OptionItem[] = ["auto", "opaque", "transparent"].map((value) => ({ value, label: value }))
   const imageFormatOptions: OptionItem[] = ["png", "jpeg", "webp"].map((value) => ({ value, label: value }))
@@ -690,12 +687,21 @@ export function WorkflowNodeEditorFields({
     )
   }
   const currentImageModelKind = resolveWorkflowImageModelKind(currentImageModelId)
+  const imageModelSizeOptions: OptionItem[] = getWorkflowImageSizeOptions(currentImageModelKind).map((option) => ({
+    value: option.value,
+    label:
+      option.value === "auto"
+        ? copy.autoSize
+        : option.value === "custom"
+          ? copy.customSize
+          : option.label,
+  }))
   const currentImageSize = asString(node.config.imageSize)
   const imageSizeSelection = imageModelSizeOptions.some((option) => option.value === currentImageSize)
     ? currentImageSize
     : currentImageSize
       ? "custom"
-      : "1024x1024"
+      : getWorkflowImageDefaultSize(currentImageModelKind)
 
   const textPromptAutocompleteState = useMemo(
     () => getTextPromptAutocompleteState(asString(node.config.text), textSelectionStart),
@@ -1009,10 +1015,20 @@ export function WorkflowNodeEditorFields({
                   imageModelSelectOptions.find((option) => option.value === event.target.value) || null
                 const parsed = selectedOption || parseWorkflowModelSelectionValue(event.target.value)
                 if (!parsed) return
+                const nextModelKind = resolveWorkflowImageModelKind(parsed.modelId)
+                const nextDefaultImageSize = getWorkflowImageDefaultSize(nextModelKind)
+                const currentSizeValue = asString(node.config.imageSize)
+                const nextImageSize =
+                  nextModelKind === "runninghub-seedream"
+                    ? normalizeRunningHubSeedreamSize(currentSizeValue || nextDefaultImageSize)
+                    : nextModelKind === "gpt-image-2"
+                      ? normalizeGptImage2Size(currentSizeValue || nextDefaultImageSize)
+                      : currentSizeValue || nextDefaultImageSize
                 updateConfig({
                   selectedProviderId: parsed.providerId || null,
                   selectedModelId: parsed.modelId || null,
                   selectedModelOptionId: event.target.value || null,
+                  imageSize: nextImageSize,
                 })
               }}
               disabled={imageModelSelectOptions.length === 0}
@@ -1025,7 +1041,7 @@ export function WorkflowNodeEditorFields({
               ))}
             </select>
           </div>
-          {currentImageModelKind === "gpt-image-2" ? (
+          {currentImageModelKind === "gpt-image-2" || currentImageModelKind === "runninghub-seedream" ? (
             <>
               <div className="space-y-2">
                 <SectionLabel>{copy.size}</SectionLabel>
@@ -1034,7 +1050,10 @@ export function WorkflowNodeEditorFields({
                   value={imageSizeSelection}
                   onChange={(value) =>
                     updateConfig({
-                      imageSize: value === "custom" ? asString(node.config.imageSize) || "1536x864" : value,
+                      imageSize:
+                        value === "custom"
+                          ? asString(node.config.imageSize) || getWorkflowImageDefaultSize(currentImageModelKind)
+                          : value,
                     })
                   }
                 />
@@ -1050,6 +1069,10 @@ export function WorkflowNodeEditorFields({
                   />
                 </div>
               ) : null}
+            </>
+          ) : null}
+          {currentImageModelKind === "gpt-image-2" ? (
+            <>
               <div className="space-y-2">
                 <SectionLabel>{copy.quality}</SectionLabel>
                 <OptionChips

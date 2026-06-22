@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { hasFeatureAccess, hasFeatureAccessWithFallback } from "@/lib/auth/guards"
+import type { OpenAiCompatibleImageProviderId } from "@/lib/image-assistant/openai-compatible-image"
 import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
 import {
-  resolveEnterpriseImageRuntimeForEnterprise,
-  resolveEnterpriseAudioRuntimeForEnterprise,
-  resolveEnterpriseVideoRuntimeForEnterprise,
+  resolveEnterpriseAudioRuntimeForUser,
+  resolveEnterpriseVideoRuntimeForUser,
 } from "@/lib/platform/enterprise-runtime-config"
-import { canUserAccessGovernedMediaRoute } from "@/lib/platform/model-governance"
+import {
+  canUserAccessGovernedMediaRoute,
+  resolveGovernedImageAssistantSelectionForUser,
+} from "@/lib/platform/model-governance"
 import {
   executeMiniMaxAudioFeature,
   isMiniMaxAudioConfigured,
@@ -60,6 +63,14 @@ function resolveRunningHubImageRouteMode(action: string) {
     return "img2img" as const
   }
   return "txt2img" as const
+}
+
+function normalizeOptionalText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function hasReferenceLikeInput(value: unknown) {
+  return Array.isArray(value) && value.some((item) => typeof item === "string" && item.trim().length > 0)
 }
 
 function buildMediaExecutionResponse(input: {
@@ -125,23 +136,33 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>
-  const enterpriseImageRuntime =
+  const imageRouteMode = resolveRunningHubImageRouteMode(action)
+  const governedImageSelection =
     target === "ai-image"
-      ? await resolveEnterpriseImageRuntimeForEnterprise({
-          enterpriseId: currentUser.enterpriseId,
-          routeMode: resolveRunningHubImageRouteMode(action),
+      ? await resolveGovernedImageAssistantSelectionForUser({
+          user: currentUser,
+          modelOptionId: normalizeOptionalText(payload.modelOptionId),
+          providerLock: normalizeOptionalText(payload.providerLock) as OpenAiCompatibleImageProviderId | null,
+          model: normalizeOptionalText(payload.model),
+          taskType: imageRouteMode === "img2img" ? "edit" : "generate",
+          hasReferenceInput:
+            hasReferenceLikeInput(payload.referenceAssetIds) ||
+            hasReferenceLikeInput(payload.referenceUrls),
         })
+          .catch(() => null)
       : null
+  const enterpriseImageRuntime =
+    target === "ai-image" ? governedImageSelection?.enterpriseRuntime ?? null : null
   const enterpriseAudioRuntime =
     target === "ai-music"
-      ? await resolveEnterpriseAudioRuntimeForEnterprise({
-          enterpriseId: currentUser.enterpriseId,
+      ? await resolveEnterpriseAudioRuntimeForUser({
+          user: currentUser,
         })
       : null
   const enterpriseVideoRuntime =
     target === "ai-video"
-      ? await resolveEnterpriseVideoRuntimeForEnterprise({
-          enterpriseId: currentUser.enterpriseId,
+      ? await resolveEnterpriseVideoRuntimeForUser({
+          user: currentUser,
         })
       : null
 

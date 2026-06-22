@@ -28,7 +28,7 @@ type RunningHubConfigLike = {
   }
 }
 
-let enterpriseImageRuntimeCalls: Array<{ enterpriseId?: number | null; routeMode?: string | null }> = []
+let governedImageSelectionCalls: Array<Record<string, unknown>> = []
 let submitRunningHubTaskCalls: Array<{ mediaTarget: string; payload: Record<string, unknown>; config?: RunningHubConfigLike }> = []
 
 const baseRunningHubConfig: RunningHubConfigLike = {
@@ -97,35 +97,50 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/platform/enterprise-runtime-config") {
     return {
-      resolveEnterpriseImageRuntimeForEnterprise: async (input: { enterpriseId?: number | null; routeMode?: string | null }) => {
-        enterpriseImageRuntimeCalls.push(input)
-        const endpoint = input.routeMode === "img2img" ? "/enterprise-img2img" : "/enterprise-txt2img"
-        return {
-          kind: "runninghub",
-          providerId: "runninghub",
-          providerLabel: "RunningHub",
-          label: input.routeMode === "img2img" ? "Enterprise IMG2IMG" : "Enterprise TXT2IMG",
-          model: input.routeMode === "img2img" ? "wf-img2img" : "wf-txt2img",
-          routeId: input.routeMode === "img2img" ? "runninghub:img2img:main" : "runninghub:txt2img:main",
-          routeMode: input.routeMode === "img2img" ? "img2img" : "txt2img",
-          endpoint,
-          config: {
-            ...baseRunningHubConfig,
-            image: {
-              configured: true,
-              endpoint,
-            },
-          },
-        }
-      },
-      resolveEnterpriseVideoRuntimeForEnterprise: async () => null,
-      resolveEnterpriseAudioRuntimeForEnterprise: async () => null,
+      resolveEnterpriseVideoRuntimeForUser: async () => null,
+      resolveEnterpriseAudioRuntimeForUser: async () => null,
     }
   }
 
   if (request === "@/lib/platform/model-governance") {
     return {
       canUserAccessGovernedMediaRoute: async () => true,
+      resolveGovernedImageAssistantSelectionForUser: async (input: Record<string, unknown>) => {
+        governedImageSelectionCalls.push(input)
+        const routeMode = input.taskType === "edit" ? "img2img" : "txt2img"
+        const endpoint = routeMode === "img2img" ? "/enterprise-img2img" : "/enterprise-txt2img"
+        return {
+          source: "enterprise",
+          modelOptionId:
+            routeMode === "img2img"
+              ? "enterprise:runninghub:runninghub%3Aimg2img%3Amain"
+              : "enterprise:runninghub:runninghub%3Atxt2img%3Amain",
+          model: routeMode === "img2img" ? "wf-img2img" : "wf-txt2img",
+          providerId: "runninghub",
+          providerLabel: "RunningHub",
+          providerLock: null,
+          modelOptions: [],
+          providerOptions: [],
+          enterpriseRuntime: {
+            kind: "runninghub",
+            providerId: "runninghub",
+            providerLabel: "RunningHub",
+            label: routeMode === "img2img" ? "Enterprise IMG2IMG" : "Enterprise TXT2IMG",
+            model: routeMode === "img2img" ? "wf-img2img" : "wf-txt2img",
+            routeId:
+              routeMode === "img2img" ? "runninghub:img2img:main" : "runninghub:txt2img:main",
+            routeMode,
+            endpoint,
+            config: {
+              ...baseRunningHubConfig,
+              image: {
+                configured: true,
+                endpoint,
+              },
+            },
+          },
+        }
+      },
     }
   }
 
@@ -191,7 +206,7 @@ test.before(async () => {
 })
 
 test.beforeEach(() => {
-  enterpriseImageRuntimeCalls = []
+  governedImageSelectionCalls = []
   submitRunningHubTaskCalls = []
 })
 
@@ -208,7 +223,20 @@ test("platform media image generate uses enterprise txt2img runtime config", asy
   })
 
   assert.equal(response.status, 200)
-  assert.deepEqual(enterpriseImageRuntimeCalls, [{ enterpriseId: 11, routeMode: "txt2img" }])
+  assert.deepEqual(governedImageSelectionCalls, [
+    {
+      user: {
+        id: 7,
+        enterpriseId: 11,
+        enterpriseStatus: "active",
+      },
+      modelOptionId: null,
+      providerLock: null,
+      model: null,
+      taskType: "generate",
+      hasReferenceInput: false,
+    },
+  ])
   assert.equal(submitRunningHubTaskCalls.length, 1)
   assert.equal(submitRunningHubTaskCalls[0]?.config?.image.endpoint, "/enterprise-txt2img")
   assert.equal(response.body?.data?.endpoint, "/enterprise-txt2img")
@@ -223,8 +251,51 @@ test("platform media image edit uses enterprise img2img runtime config", async (
   })
 
   assert.equal(response.status, 200)
-  assert.deepEqual(enterpriseImageRuntimeCalls, [{ enterpriseId: 11, routeMode: "img2img" }])
+  assert.deepEqual(governedImageSelectionCalls, [
+    {
+      user: {
+        id: 7,
+        enterpriseId: 11,
+        enterpriseStatus: "active",
+      },
+      modelOptionId: null,
+      providerLock: null,
+      model: null,
+      taskType: "edit",
+      hasReferenceInput: false,
+    },
+  ])
   assert.equal(submitRunningHubTaskCalls.length, 1)
   assert.equal(submitRunningHubTaskCalls[0]?.config?.image.endpoint, "/enterprise-img2img")
   assert.equal(response.body?.data?.endpoint, "/enterprise-img2img")
+})
+
+test("platform media image generate honors explicit model selection and reference context", async () => {
+  const response = await POST({
+    url: "http://localhost:3000/api/platform/media/run?target=ai-image&action=generate",
+    json: async () => ({
+      prompt: "Generate a branded poster",
+      modelOptionId: "enterprise:runninghub:runninghub%3Aimg2img%3Amain",
+      providerLock: "pptoken",
+      model: "seedream-v5-image-to-image",
+      referenceUrls: ["https://example.com/reference.png"],
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(governedImageSelectionCalls, [
+    {
+      user: {
+        id: 7,
+        enterpriseId: 11,
+        enterpriseStatus: "active",
+      },
+      modelOptionId: "enterprise:runninghub:runninghub%3Aimg2img%3Amain",
+      providerLock: "pptoken",
+      model: "seedream-v5-image-to-image",
+      taskType: "generate",
+      hasReferenceInput: true,
+    },
+  ])
+  assert.equal(submitRunningHubTaskCalls[0]?.payload?.modelOptionId, "enterprise:runninghub:runninghub%3Aimg2img%3Amain")
 })

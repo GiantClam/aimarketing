@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSessionUser } from "@/lib/auth/session"
 import { hasFeatureAccess, hasFeatureAccessWithFallback } from "@/lib/auth/guards"
 import {
-  resolveEnterpriseAudioRuntimeForEnterprise,
-  resolveEnterpriseVideoRuntimeForEnterprise,
+  resolveEnterpriseAudioRuntimeForUser,
+  resolveEnterpriseVideoRuntimeForUser,
 } from "@/lib/platform/enterprise-runtime-config"
 import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
 import { queryMiniMaxAudioTask } from "@/lib/platform/minimax-audio"
+import { resolveGovernedImageAssistantSelectionForUser } from "@/lib/platform/model-governance"
 import {
   hasRunningHubMediaTarget,
   isRunningHubConfiguredForTarget,
@@ -71,9 +72,19 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
+  const governedImageSelection =
+    target === "ai-image"
+      ? await resolveGovernedImageAssistantSelectionForUser({
+          user: currentUser,
+          taskType: "generate",
+        }).catch(() => null)
+      : null
+  const enterpriseImageRuntime =
+    target === "ai-image" ? governedImageSelection?.enterpriseRuntime ?? null : null
+
   if (target === "ai-music") {
-    const enterpriseAudioRuntime = await resolveEnterpriseAudioRuntimeForEnterprise({
-      enterpriseId: currentUser.enterpriseId,
+    const enterpriseAudioRuntime = await resolveEnterpriseAudioRuntimeForUser({
+      user: currentUser,
     })
     if (
       currentUser.enterpriseStatus === "active" &&
@@ -113,10 +124,19 @@ export async function GET(
 
   const enterpriseVideoRuntime =
     target === "ai-video"
-      ? await resolveEnterpriseVideoRuntimeForEnterprise({
-          enterpriseId: currentUser.enterpriseId,
+      ? await resolveEnterpriseVideoRuntimeForUser({
+          user: currentUser,
         })
       : null
+
+  if (
+    target === "ai-image" &&
+    currentUser.enterpriseStatus === "active" &&
+    typeof currentUser.enterpriseId === "number" &&
+    !enterpriseImageRuntime
+  ) {
+    return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
+  }
 
   if (
     target === "ai-video" &&
@@ -127,7 +147,14 @@ export async function GET(
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
   }
 
-  if (!isRunningHubConfiguredForTarget(target, enterpriseVideoRuntime?.config)) {
+  const runningHubConfig =
+    target === "ai-image"
+      ? enterpriseImageRuntime?.kind === "runninghub"
+        ? enterpriseImageRuntime.config
+        : undefined
+      : enterpriseVideoRuntime?.config
+
+  if (!isRunningHubConfiguredForTarget(target, runningHubConfig)) {
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
   }
 
@@ -147,7 +174,7 @@ export async function GET(
             return NextResponse.json({ error: message || "runninghub_video_query_failed" }, { status: 502 })
           })
         })()
-      : await queryRunningHubTask(taskId).catch((error) => {
+      : await queryRunningHubTask(taskId, runningHubConfig).catch((error) => {
           const message = error instanceof Error ? error.message : String(error)
           return NextResponse.json({ error: message || "runninghub_query_failed" }, { status: 502 })
         })

@@ -245,6 +245,117 @@ test("runninghub task submit/query helpers honor an explicit config override", a
   }
 })
 
+test("runninghub seedream text-to-image submit normalizes image payload for standard model api", async () => {
+  const previousFetch = globalThis.fetch
+  let capturedBody: Record<string, unknown> | null = null
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url === "https://enterprise.runninghub.local/openapi/v2/seedream-v5-lite/text-to-image") {
+      capturedBody = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          data: {
+            taskId: "enterprise-seedream-task-1",
+            status: "RUNNING",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }
+
+    return new Response("not found", { status: 404 })
+  }
+
+  try {
+    await submitRunningHubTask({
+      mediaTarget: "ai-image",
+      payload: {
+        prompt: "Enterprise image task",
+        imageSize: "2048x1152",
+        candidateCount: 2,
+        model: "seedream-v5-text-to-image",
+        providerLock: "runninghub",
+      },
+      config: {
+        ...baseConfig,
+        baseUrl: "https://enterprise.runninghub.local",
+        image: {
+          configured: true,
+          endpoint: "/openapi/v2/seedream-v5-lite/text-to-image",
+        },
+      },
+    })
+
+    assert.deepEqual(capturedBody, {
+      prompt: "Enterprise image task",
+      width: 2048,
+      height: 1152,
+      maxImages: 2,
+      sequentialImageGeneration: "auto",
+    })
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test("runninghub seedream image-to-image submit maps reference urls into imageUrls", async () => {
+  const previousFetch = globalThis.fetch
+  let capturedBody: Record<string, unknown> | null = null
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url === "https://enterprise.runninghub.local/openapi/v2/seedream-v5-lite/image-to-image") {
+      capturedBody = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          data: {
+            taskId: "enterprise-seedream-task-2",
+            status: "RUNNING",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }
+
+    return new Response("not found", { status: 404 })
+  }
+
+  try {
+    await submitRunningHubTask({
+      mediaTarget: "ai-image",
+      payload: {
+        prompt: "Blend the references into a new poster",
+        imageSize: "2048x2048",
+        referenceImageUrls: ["https://example.com/ref-a.png", "https://example.com/ref-b.png"],
+        inputImageUrl: "https://example.com/ref-a.png",
+        candidateCount: 1,
+      },
+      config: {
+        ...baseConfig,
+        baseUrl: "https://enterprise.runninghub.local",
+        image: {
+          configured: true,
+          endpoint: "/openapi/v2/seedream-v5-lite/image-to-image",
+        },
+      },
+    })
+
+    assert.deepEqual(capturedBody, {
+      prompt: "Blend the references into a new poster",
+      width: 2048,
+      height: 2048,
+      maxImages: 1,
+      sequentialImageGeneration: "disabled",
+      imageUrls: ["https://example.com/ref-a.png", "https://example.com/ref-b.png"],
+    })
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
 test("runninghub raw submit keeps generic missing-task error when envelope is success-shaped but empty", async () => {
   const previousFetch = globalThis.fetch
 

@@ -120,20 +120,6 @@ test("image assistant runninghub runtime supports image-to-image generation with
     const bodyText = typeof init?.body === "string" ? init.body : null
     fetchCalls.push({ url, method, bodyText })
 
-    if (url === "https://enterprise.runninghub.local/openapi/v2/media/upload/binary") {
-      return new Response(
-        JSON.stringify({
-          code: 0,
-          data: {
-            type: "image/png",
-            fileName: "uploaded-reference.png",
-            download_url: "https://enterprise.example.com/uploaded-reference.png",
-          },
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      )
-    }
-
     if (url === "https://enterprise.runninghub.local/image") {
       return new Response(
         JSON.stringify({
@@ -210,8 +196,9 @@ test("image assistant runninghub runtime supports image-to-image generation with
     assert.equal(Boolean(submitCall), true)
     const submitPayload = JSON.parse(String(submitCall?.bodyText || "{}")) as Record<string, unknown>
     assert.equal(submitPayload.mode, "img2img")
-    assert.equal(submitPayload.inputImageUrl, "https://enterprise.example.com/uploaded-reference.png")
-    assert.deepEqual(submitPayload.referenceImageUrls, ["https://enterprise.example.com/uploaded-reference.png"])
+    assert.equal(typeof submitPayload.inputImageUrl, "string")
+    assert.equal(String(submitPayload.inputImageUrl).startsWith("data:image/png;base64,"), true)
+    assert.deepEqual(submitPayload.referenceImageUrls, [String(submitPayload.inputImageUrl)])
   } finally {
     globalThis.fetch = previousFetch
   }

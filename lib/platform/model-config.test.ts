@@ -15,7 +15,7 @@ import {
 test("default enterprise model configuration covers text image video and audio categories", () => {
   const config = buildDefaultEnterpriseModelConfiguration()
   assert.equal(config.text_generation.selectedProviderId, "openai_compatible")
-  assert.equal(config.image_generation.selectedProviderId, "openai_official")
+  assert.equal(config.image_generation.selectedProviderId, "runninghub")
   assert.equal(config.video_generation.selectedProviderId, "runninghub")
   assert.equal(config.audio_generation.selectedProviderId, "minimax_official")
   assert.equal(config.text_generation.providers.length > 0, true)
@@ -30,6 +30,13 @@ test("default enterprise model configuration covers text image video and audio c
     config.image_generation.providers.find((item) => item.providerId === "runninghub")?.routes?.length,
     2,
   )
+  const runningHubProvider = config.image_generation.providers.find((item) => item.providerId === "runninghub")
+  const txt2img = runningHubProvider?.routes?.find((route) => route.mode === "txt2img")
+  const img2img = runningHubProvider?.routes?.find((route) => route.mode === "img2img")
+  assert.equal(txt2img?.modelId, "seedream-v5-text-to-image")
+  assert.equal(txt2img?.endpoint, "/openapi/v2/seedream-v5-lite/text-to-image")
+  assert.equal(img2img?.modelId, "seedream-v5-image-to-image")
+  assert.equal(img2img?.endpoint, "/openapi/v2/seedream-v5-lite/image-to-image")
 })
 
 test("normalizeEnterpriseModelConfiguration trims values and falls back to allowed providers", () => {
@@ -56,7 +63,7 @@ test("normalizeEnterpriseModelConfiguration trims values and falls back to allow
   assert.equal(normalized.text_generation.providers.find((item) => item.providerId === "qwen_official")?.apiKey, "secret")
   assert.deepEqual(normalized.text_generation.providers.find((item) => item.providerId === "qwen_official")?.assignedUserIds, [])
   assert.deepEqual(normalized.text_generation.routeAssignments, [])
-  assert.equal(normalized.image_generation.selectedProviderId, "openai_official")
+  assert.equal(normalized.image_generation.selectedProviderId, "runninghub")
   assert.equal(normalized.audio_generation.selectedProviderId, "minimax_official")
 })
 
@@ -179,7 +186,7 @@ test("supported model cards expose requested provider families", () => {
   assert.equal(imageCards.some((item) => item.models.includes("Nanobanana2")), true)
   assert.equal(imageCards.some((item) => item.models.includes("gpt-image-2")), true)
   assert.equal(imageCards.some((item) => item.providerId === "runninghub"), true)
-  assert.equal(imageCards.some((item) => item.models.includes("RunningHub 图生图工作流")), true)
+  assert.equal(imageCards.some((item) => item.models.includes("seedream-v5-image-to-image")), true)
   assert.equal(videoCards.some((item) => item.models.includes("Veo 3.1")), true)
   assert.equal(videoCards.some((item) => item.providerId === "runninghub"), true)
   assert.equal(audioCards.some((item) => item.models.includes("speech-2.8")), true)

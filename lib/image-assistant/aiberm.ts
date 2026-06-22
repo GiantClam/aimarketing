@@ -20,7 +20,6 @@ import {
   isRunningHubConfiguredForTarget,
   queryRunningHubTask,
   submitRunningHubTask,
-  uploadRunningHubBinary,
   type RunningHubConfig,
 } from "@/lib/platform/runninghub"
 import type {
@@ -402,34 +401,11 @@ function sleepWithSignal(ms: number, signal?: AbortSignal) {
   })
 }
 
-function inlineReferenceToBlob(reference: InlineReferenceImage) {
-  return new Blob([Buffer.from(reference.base64Data, "base64")], {
-    type: reference.mimeType || "image/png",
-  })
-}
-
-async function uploadRunningHubReferenceImage(params: {
-  config: RunningHubConfig
-  reference: InlineReferenceImage
-  index: number
-}) {
-  const extension = params.reference.mimeType === "image/jpeg"
-    ? "jpg"
-    : params.reference.mimeType === "image/webp"
-      ? "webp"
-      : "png"
-
-  const uploaded = await uploadRunningHubBinary({
-    config: params.config,
-    file: inlineReferenceToBlob(params.reference),
-    fileName: `image-assistant-reference-${params.index + 1}.${extension}`,
-  })
-
+function inlineReferenceToDataUri(reference: InlineReferenceImage) {
   return {
-    assetId: params.reference.assetId || null,
-    mimeType: params.reference.mimeType,
-    fileName: uploaded.fileName,
-    downloadUrl: uploaded.downloadUrl,
+    assetId: reference.assetId || null,
+    mimeType: reference.mimeType,
+    dataUri: `data:${reference.mimeType || "image/png"};base64,${reference.base64Data}`,
   }
 }
 
@@ -496,25 +472,16 @@ async function generateOrEditImagesWithRunningHub(params: {
   config: RunningHubConfig
   signal?: AbortSignal
 }) {
-  const uploadedReferences = await Promise.all(
-    (params.referenceImages || []).map((reference, index) =>
-      uploadRunningHubReferenceImage({
-        config: params.config,
-        reference,
-        index,
-      }),
-    ),
-  )
-
+  const preparedReferences = (params.referenceImages || []).map((reference) => inlineReferenceToDataUri(reference))
   const maskImage =
     (params.maskAssetId
-      ? uploadedReferences.find((reference) => reference.assetId === params.maskAssetId) || null
+      ? preparedReferences.find((reference) => reference.assetId === params.maskAssetId) || null
       : null)
   const snapshotImage =
     (params.snapshotAssetId
-      ? uploadedReferences.find((reference) => reference.assetId === params.snapshotAssetId) || null
+      ? preparedReferences.find((reference) => reference.assetId === params.snapshotAssetId) || null
       : null)
-  const contentReferences = uploadedReferences.filter((reference) => reference.assetId !== params.maskAssetId)
+  const contentReferences = preparedReferences.filter((reference) => reference.assetId !== params.maskAssetId)
   const primaryImage = snapshotImage || contentReferences[0] || null
   const mode =
     params.taskType === "generate" && contentReferences.length === 0 && !snapshotImage ? "txt2img" : "img2img"
@@ -541,17 +508,16 @@ async function generateOrEditImagesWithRunningHub(params: {
       inputMode: mode,
       referenceImages: contentReferences.map((reference) => ({
         assetId: reference.assetId,
-        fileName: reference.fileName,
         mimeType: reference.mimeType,
-        url: reference.downloadUrl,
+        url: reference.dataUri,
       })),
-      referenceImageUrls: contentReferences.map((reference) => reference.downloadUrl),
-      inputImageUrl: primaryImage?.downloadUrl || null,
-      inputImageUrls: contentReferences.map((reference) => reference.downloadUrl),
-      imageUrl: primaryImage?.downloadUrl || null,
-      sourceImageUrl: primaryImage?.downloadUrl || null,
-      snapshotImageUrl: snapshotImage?.downloadUrl || primaryImage?.downloadUrl || null,
-      maskImageUrl: maskImage?.downloadUrl || null,
+      referenceImageUrls: contentReferences.map((reference) => reference.dataUri),
+      inputImageUrl: primaryImage?.dataUri || null,
+      inputImageUrls: contentReferences.map((reference) => reference.dataUri),
+      imageUrl: primaryImage?.dataUri || null,
+      sourceImageUrl: primaryImage?.dataUri || null,
+      snapshotImageUrl: snapshotImage?.dataUri || primaryImage?.dataUri || null,
+      maskImageUrl: maskImage?.dataUri || null,
     },
   })
 

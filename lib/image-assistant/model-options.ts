@@ -1,7 +1,7 @@
 import type { ImageAssistantResolution, ImageAssistantSizePreset } from "@/lib/image-assistant/types"
 
 export type WorkflowImageProviderId = "pptoken" | "aiberm" | "crazyroute"
-export type WorkflowImageModelKind = "gpt-image-2" | "unknown"
+export type WorkflowImageModelKind = "gpt-image-2" | "runninghub-seedream" | "unknown"
 export type GptImage2Quality = "auto" | "low" | "medium" | "high"
 export type GptImage2Background = "auto" | "transparent" | "opaque"
 export type GptImage2OutputFormat = "png" | "jpeg" | "webp"
@@ -37,6 +37,7 @@ export type WorkflowImageProviderOption = {
 
 const DEFAULT_GPT_IMAGE_2_MODEL = "gpt-image-2"
 const DEFAULT_GPT_IMAGE_2_SIZE = "1024x1024"
+const DEFAULT_RUNNINGHUB_SEEDREAM_SIZE = "2048x2048"
 const DEFAULT_GPT_IMAGE_2_QUALITY: GptImage2Quality = "auto"
 const DEFAULT_GPT_IMAGE_2_BACKGROUND: GptImage2Background = "auto"
 const DEFAULT_GPT_IMAGE_2_OUTPUT_FORMAT: GptImage2OutputFormat = "png"
@@ -45,6 +46,11 @@ const DEFAULT_GPT_IMAGE_2_RESPONSE_FORMAT: GptImage2ResponseFormat = "url"
 const MAX_GPT_IMAGE_2_CANDIDATES = 10
 const SIZE_PRESETS = new Set<ImageAssistantSizePreset>(["1:1", "4:5", "3:4", "4:3", "16:9", "9:16"])
 const GPT_IMAGE_2_STANDARD_SIZES = new Set(["auto", "1024x1024", "1536x1024", "1024x1536"])
+const RUNNINGHUB_SEEDREAM_STANDARD_SIZES = new Set(["2048x2048", "2016x1344", "1600x2400"])
+const RUNNINGHUB_SEEDREAM_MIN_WIDTH = 1600
+const RUNNINGHUB_SEEDREAM_MIN_HEIGHT = 1344
+const RUNNINGHUB_SEEDREAM_MAX_WIDTH = 4704
+const RUNNINGHUB_SEEDREAM_MAX_HEIGHT = 4096
 
 const WORKFLOW_IMAGE_PROVIDER_OPTIONS: WorkflowImageProviderOption[] = [
   {
@@ -96,7 +102,34 @@ export function resolveWorkflowImageModelKind(value: unknown): WorkflowImageMode
   if (normalized === "gpt-image-2" || normalized.endsWith("/gpt-image-2")) {
     return "gpt-image-2"
   }
+  if (normalized.startsWith("seedream-v5-")) {
+    return "runninghub-seedream"
+  }
   return "unknown"
+}
+
+export function getWorkflowImageDefaultSize(modelKind: WorkflowImageModelKind) {
+  if (modelKind === "runninghub-seedream") return DEFAULT_RUNNINGHUB_SEEDREAM_SIZE
+  return DEFAULT_GPT_IMAGE_2_SIZE
+}
+
+export function getWorkflowImageSizeOptions(modelKind: WorkflowImageModelKind) {
+  if (modelKind === "runninghub-seedream") {
+    return [
+      { value: DEFAULT_RUNNINGHUB_SEEDREAM_SIZE, label: DEFAULT_RUNNINGHUB_SEEDREAM_SIZE },
+      { value: "2016x1344", label: "2016x1344" },
+      { value: "1600x2400", label: "1600x2400" },
+      { value: "custom", label: "custom" },
+    ]
+  }
+
+  return [
+    { value: "auto", label: "auto" },
+    { value: "1024x1024", label: "1024x1024" },
+    { value: "1536x1024", label: "1536x1024" },
+    { value: "1024x1536", label: "1024x1536" },
+    { value: "custom", label: "custom" },
+  ]
 }
 
 export function normalizeWorkflowImageCandidateCount(value: unknown) {
@@ -157,6 +190,52 @@ function normalizeCustomGptImage2Size(value: string) {
   return `${width}x${height}`
 }
 
+function parseImageSize(value: string) {
+  const normalized = value.toLowerCase()
+  if (!/^\d{2,4}x\d{2,4}$/u.test(normalized)) return null
+  const [widthRaw, heightRaw] = normalized.split("x")
+  const width = Number.parseInt(widthRaw, 10)
+  const height = Number.parseInt(heightRaw, 10)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+  return { width, height }
+}
+
+function roundToNearestMultipleOf16(value: number) {
+  return Math.max(16, Math.round(value / 16) * 16)
+}
+
+function normalizeRunningHubSeedreamCustomSize(value: string) {
+  const parsed = parseImageSize(value)
+  if (!parsed) return null
+
+  let width = parsed.width
+  let height = parsed.height
+
+  const upscaleRatio = Math.max(
+    RUNNINGHUB_SEEDREAM_MIN_WIDTH / width,
+    RUNNINGHUB_SEEDREAM_MIN_HEIGHT / height,
+    1,
+  )
+  width *= upscaleRatio
+  height *= upscaleRatio
+
+  const downscaleRatio = Math.max(
+    width / RUNNINGHUB_SEEDREAM_MAX_WIDTH,
+    height / RUNNINGHUB_SEEDREAM_MAX_HEIGHT,
+    1,
+  )
+  width /= downscaleRatio
+  height /= downscaleRatio
+
+  width = roundToNearestMultipleOf16(width)
+  height = roundToNearestMultipleOf16(height)
+
+  width = Math.max(RUNNINGHUB_SEEDREAM_MIN_WIDTH, Math.min(RUNNINGHUB_SEEDREAM_MAX_WIDTH, width))
+  height = Math.max(RUNNINGHUB_SEEDREAM_MIN_HEIGHT, Math.min(RUNNINGHUB_SEEDREAM_MAX_HEIGHT, height))
+
+  return `${width}x${height}`
+}
+
 export function normalizeGptImage2Size(
   value: unknown,
 ) {
@@ -165,6 +244,14 @@ export function normalizeGptImage2Size(
   const custom = normalizeCustomGptImage2Size(normalized)
   if (custom) return custom
   return DEFAULT_GPT_IMAGE_2_SIZE
+}
+
+export function normalizeRunningHubSeedreamSize(value: unknown) {
+  const normalized = normalizeOptionalText(value)?.toLowerCase() || ""
+  if (RUNNINGHUB_SEEDREAM_STANDARD_SIZES.has(normalized)) return normalized
+  const custom = normalizeRunningHubSeedreamCustomSize(normalized)
+  if (custom) return custom
+  return DEFAULT_RUNNINGHUB_SEEDREAM_SIZE
 }
 
 export function normalizeGptImage2Quality(
@@ -223,7 +310,9 @@ export function normalizeWorkflowImageConfig(input: Record<string, unknown>): No
     imageSize:
       modelKind === "gpt-image-2"
         ? normalizeGptImage2Size(input.imageSize)
-        : DEFAULT_GPT_IMAGE_2_SIZE,
+        : modelKind === "runninghub-seedream"
+          ? normalizeRunningHubSeedreamSize(input.imageSize)
+          : DEFAULT_GPT_IMAGE_2_SIZE,
     imageQuality:
       modelKind === "gpt-image-2"
         ? hasExplicitImageQuality

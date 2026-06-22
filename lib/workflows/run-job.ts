@@ -11,6 +11,7 @@ import {
   syncWorkflowNodeExecutions,
 } from "@/lib/workflows/run-persistence"
 import {
+  ensureWorkflowNodeExecutionRecords,
   updateWorkflowDefinition,
   updateWorkflowNodeExecution,
   type WorkflowDefinition,
@@ -142,6 +143,12 @@ function createJobCapabilityInvoker(context: WorkflowRunJobContext) {
 
 export async function executeWorkflowRunJob(context: WorkflowRunJobContext) {
   try {
+    await ensureWorkflowNodeExecutionRecords({
+      runId: context.runId,
+      workflowId: context.workflow.id,
+      nodes: context.workflow.nodes,
+    })
+
     const result = await runWorkflowDefinition({
       enterpriseId: context.workflow.enterpriseId,
       ownerUserId: context.workflow.ownerUserId,
@@ -180,6 +187,12 @@ export async function executeWorkflowRunJob(context: WorkflowRunJobContext) {
 
 export async function executeWorkflowRetryJob(context: WorkflowRetryJobContext) {
   try {
+    await ensureWorkflowNodeExecutionRecords({
+      runId: context.runId,
+      workflowId: context.workflow.id,
+      nodes: context.workflow.nodes,
+    })
+
     const result = await retryWorkflowNodeExecution({
       enterpriseId: context.workflow.enterpriseId,
       ownerUserId: context.workflow.ownerUserId,

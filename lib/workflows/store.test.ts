@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  buildMissingWorkflowNodeExecutionSeeds,
   createInMemoryWorkflowStore,
   createWorkflowDefinition,
   getWorkflowDefinition,
@@ -235,4 +236,51 @@ test("workflow store clears legacy image sizing fields on load", async () => {
     imageQuality: "auto",
     previewImageUrl: "https://example.com/preview.png",
   })
+})
+
+test("workflow store seeds missing node executions when a retried run predates new nodes", () => {
+  const seeds = buildMissingWorkflowNodeExecutionSeeds({
+    runId: 106,
+    workflowId: 2,
+    existingNodeKeys: [
+      "text-input-1",
+      "image-2",
+      "image-3",
+      "image-4",
+      "product-store-1",
+      "ppt-1",
+      "product-store-2",
+    ],
+    nodes: [
+      { nodeKey: "text-input-1", type: "text_input", title: "文本输入", positionX: 0, positionY: 0, config: {} },
+      { nodeKey: "image-2", type: "image_generate", title: "图片生成", positionX: 0, positionY: 0, config: {} },
+      { nodeKey: "video-1", type: "video_generate", title: "视频生成", positionX: 0, positionY: 0, config: {} },
+      { nodeKey: "text-input-5", type: "text_input", title: "文本输入", positionX: 0, positionY: 0, config: {} },
+      { nodeKey: "product-store-3", type: "product_store", title: "作品库存储", positionX: 0, positionY: 0, config: {} },
+    ],
+  })
+
+  assert.deepEqual(seeds, [
+    {
+      runId: 106,
+      workflowId: 2,
+      nodeKey: "video-1",
+      nodeType: "video_generate",
+      status: "queued",
+    },
+    {
+      runId: 106,
+      workflowId: 2,
+      nodeKey: "text-input-5",
+      nodeType: "text_input",
+      status: "queued",
+    },
+    {
+      runId: 106,
+      workflowId: 2,
+      nodeKey: "product-store-3",
+      nodeType: "product_store",
+      status: "queued",
+    },
+  ])
 })

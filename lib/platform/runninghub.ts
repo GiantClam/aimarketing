@@ -207,6 +207,108 @@ function resolveRunningHubUrl(pathOrUrl: string, config: RunningHubConfig) {
   return `${config.baseUrl}${pathOrUrl}`
 }
 
+function normalizeRunningHubImageCandidateCount(value: unknown) {
+  if (value == null || value === "") return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return Math.max(1, Math.min(15, Math.trunc(parsed)))
+}
+
+function normalizeRunningHubImageResolution(value: unknown) {
+  if (typeof value !== "string") return null
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "2k" || normalized === "3k") return normalized
+  return null
+}
+
+function normalizeRunningHubImageSize(value: unknown) {
+  if (typeof value !== "string") return null
+  const normalized = value.trim().toLowerCase()
+  const matched = normalized.match(/^(\d{2,4})x(\d{2,4})$/u)
+  if (!matched) return null
+  const width = Number.parseInt(matched[1], 10)
+  const height = Number.parseInt(matched[2], 10)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null
+  }
+  return { width, height }
+}
+
+function collectRunningHubImageUrls(payload: Record<string, unknown>) {
+  const collected = new Set<string>()
+  const candidates = [
+    payload.imageUrls,
+    payload.inputImageUrls,
+    payload.referenceImageUrls,
+  ]
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue
+    for (const item of candidate) {
+      if (typeof item !== "string") continue
+      const normalized = item.trim()
+      if (normalized) collected.add(normalized)
+    }
+  }
+
+  const singletonCandidates = [
+    payload.inputImageUrl,
+    payload.imageUrl,
+    payload.sourceImageUrl,
+    payload.snapshotImageUrl,
+  ]
+  for (const candidate of singletonCandidates) {
+    if (typeof candidate !== "string") continue
+    const normalized = candidate.trim()
+    if (normalized) collected.add(normalized)
+  }
+
+  return [...collected]
+}
+
+function normalizeSeedreamImagePayload(
+  endpoint: string,
+  payload: Record<string, unknown>,
+) {
+  const normalizedEndpoint = endpoint.toLowerCase()
+  const isSeedreamTextToImage = normalizedEndpoint.includes("/seedream-v5-lite/text-to-image")
+  const isSeedreamImageToImage = normalizedEndpoint.includes("/seedream-v5-lite/image-to-image")
+  if (!isSeedreamTextToImage && !isSeedreamImageToImage) {
+    return payload
+  }
+
+  const size = normalizeRunningHubImageSize(payload.imageSize)
+  const maxImages = normalizeRunningHubImageCandidateCount(payload.maxImages) ??
+    normalizeRunningHubImageCandidateCount(payload.candidateCount) ??
+    1
+  const normalized: Record<string, unknown> = {
+    prompt: typeof payload.prompt === "string" ? payload.prompt : "",
+    maxImages,
+    sequentialImageGeneration: maxImages > 1 ? "auto" : "disabled",
+  }
+
+  const resolution = normalizeRunningHubImageResolution(payload.resolution)
+  if (resolution) {
+    normalized.resolution = resolution
+  } else if (size) {
+    normalized.width = size.width
+    normalized.height = size.height
+  }
+
+  if (typeof payload.toolsType === "string" && payload.toolsType.trim()) {
+    normalized.toolsType = payload.toolsType.trim()
+  }
+  if (typeof payload.webhookUrl === "string" && payload.webhookUrl.trim()) {
+    normalized.webhookUrl = payload.webhookUrl.trim()
+  }
+
+  if (isSeedreamImageToImage) {
+    normalized.imageUrls = collectRunningHubImageUrls(payload)
+  }
+
+  return normalized
+}
+
 function normalizeRunningHubResponsePayload(payload: unknown): RunningHubTaskResponse | null {
   if (!payload || typeof payload !== "object") return null
   if ("taskId" in payload) return payload as RunningHubTaskResponse
@@ -290,13 +392,18 @@ export async function submitRunningHubTask(input: {
     throw new Error("runninghub_not_configured")
   }
 
+  const normalizedPayload =
+    target.providerTarget === "ai-image"
+      ? normalizeSeedreamImagePayload(target.endpoint, input.payload)
+      : input.payload
+
   const response = await fetch(resolveRunningHubUrl(target.endpoint, config), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(input.payload),
+    body: JSON.stringify(normalizedPayload),
     cache: "no-store",
   })
 

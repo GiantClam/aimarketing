@@ -603,17 +603,21 @@ test("workflow capability timeout defaults use capability-level execution budget
   const chatTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-chat")
   const pptTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-ppt")
   const imageTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-image")
+  const videoTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs("ai-video")
 
   assert.equal(chatTimeoutMs, 120_000)
   assert.equal(pptTimeoutMs, 300_000)
   assert.equal(imageTimeoutMs, 300_000)
+  assert.equal(videoTimeoutMs, 300_000)
   assert.equal(pptTimeoutMs > chatTimeoutMs, true)
   assert.equal(imageTimeoutMs > chatTimeoutMs, true)
+  assert.equal(videoTimeoutMs > chatTimeoutMs, true)
 })
 
 test("workflow capability timeout override still wins over capability defaults", () => {
   assert.equal(resolveWorkflowCapabilityCallTimeoutMs("ai-image", 15_000), 15_000)
   assert.equal(resolveWorkflowCapabilityCallTimeoutMs("ai-ppt", 18_000), 18_000)
+  assert.equal(resolveWorkflowCapabilityCallTimeoutMs("ai-video", 21_000), 21_000)
   assert.equal(resolveWorkflowCapabilityCallTimeoutMs("ai-chat", 9_000), 9_000)
 })
 

@@ -41,6 +41,7 @@ type WorkflowCapabilityInvokerOptions = {
 
 const DEFAULT_WORKFLOW_CAPABILITY_TIMEOUT_MS = 120_000
 const DEFAULT_WORKFLOW_IMAGE_TIMEOUT_MS = 300_000
+const DEFAULT_WORKFLOW_VIDEO_TIMEOUT_MS = 300_000
 const DEFAULT_WORKFLOW_PPT_TIMEOUT_MS = 300_000
 
 function normalizeOrigin(value: string | undefined) {
@@ -104,6 +105,14 @@ export function resolveWorkflowCapabilityCallTimeoutMs(
       DEFAULT_WORKFLOW_PPT_TIMEOUT_MS
 
     return Math.max(defaultTimeoutMs, pptSpecificTimeoutMs)
+  }
+
+  if (capabilitySlug === "ai-video") {
+    const videoSpecificTimeoutMs =
+      parsePositiveIntegerEnv("WORKFLOW_VIDEO_CAPABILITY_TIMEOUT_MS") ||
+      DEFAULT_WORKFLOW_VIDEO_TIMEOUT_MS
+
+    return Math.max(defaultTimeoutMs, videoSpecificTimeoutMs)
   }
 
   if (capabilitySlug !== "ai-image") {

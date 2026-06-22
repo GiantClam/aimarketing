@@ -14,7 +14,10 @@ import {
   getCustomerGovernanceSettings,
   type CustomerGovernanceSettings,
 } from "@/lib/platform/customer-governance"
-import type { ModelGovernanceUser } from "@/lib/platform/model-governance-core"
+import {
+  canUserAccessAssignedRoute,
+  type ModelGovernanceUser,
+} from "@/lib/platform/model-governance-core"
 import {
   getDefaultRunningHubImageRoute,
   listRunningHubImageRoutes,
@@ -82,10 +85,21 @@ export type EnterpriseImageRuntimeOption = {
   runtime: EnterpriseImageRuntimeConfig
 }
 
+export type EnterpriseVideoRuntimeOption = {
+  active: boolean
+  runtime: EnterpriseVideoRuntimeConfig
+}
+
+export type EnterpriseAudioRuntimeOption = {
+  active: boolean
+  runtime: EnterpriseAudioRuntimeConfig
+}
+
 const DEFAULT_TEXT_MODEL = "gpt-5.4-mini"
 const DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
 const DEFAULT_GOOGLE_IMAGE_MODEL = "gemini-2.5-flash-image"
-const DEFAULT_RUNNINGHUB_IMAGE_MODEL = "runninghub-image-workflow"
+const DEFAULT_RUNNINGHUB_TXT2IMG_MODEL = "seedream-v5-text-to-image"
+const DEFAULT_RUNNINGHUB_IMG2IMG_MODEL = "seedream-v5-image-to-image"
 const DEFAULT_QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 const DEFAULT_MINIMAX_BASE_URL = "https://api.minimaxi.com/v1"
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
@@ -180,6 +194,12 @@ function getEnterpriseAudioBaseUrl(provider: EnterpriseModelProviderConfig) {
   return DEFAULT_MINIMAX_BASE_URL
 }
 
+function getEnterpriseRunningHubApiKey(provider: EnterpriseModelProviderConfig) {
+  const explicit = normalizeText(provider.apiKey)
+  if (explicit) return explicit
+  return normalizeText(getRunningHubConfig().apiKey)
+}
+
 export function buildEnterpriseImageRuntimeSelectionId(input: {
   providerId: EnterpriseImageModelProviderId
   model?: string
@@ -203,6 +223,35 @@ function canUserAccessConfiguredImageRoute(params: {
     return true
   }
   return scopedAssignedUserIds.includes(params.user.id)
+}
+
+function findCategoryRouteAssignment(
+  settings: CustomerGovernanceSettings,
+  category: EnterpriseModelCategory,
+  routeId: string,
+) {
+  return (
+    settings.modelConfig[category].routeAssignments.find(
+      (assignment) => normalizeText(assignment.routeId) === normalizeText(routeId),
+    ) || null
+  )
+}
+
+function canUserAccessCategoryRoute(params: {
+  user: ModelGovernanceUser
+  settings: CustomerGovernanceSettings
+  category: EnterpriseModelCategory
+  routeId: string
+}) {
+  const assignment = findCategoryRouteAssignment(
+    params.settings,
+    params.category,
+    params.routeId,
+  )
+  return canUserAccessAssignedRoute({
+    user: params.user,
+    assignedUserIds: assignment?.assignedUserIds,
+  })
 }
 
 function buildEnterpriseTextProviderConfig(provider: EnterpriseModelProviderConfig) {
@@ -244,11 +293,9 @@ function buildEnterpriseImageRuntime(
   const label = normalizeText(provider.label) || provider.providerId
   const model =
     normalizeText(provider.modelId) ||
-    (provider.providerId === "runninghub"
-      ? DEFAULT_RUNNINGHUB_IMAGE_MODEL
-      : provider.providerId === "google_official"
-        ? DEFAULT_GOOGLE_IMAGE_MODEL
-        : DEFAULT_OPENAI_IMAGE_MODEL)
+    (provider.providerId === "google_official"
+      ? DEFAULT_GOOGLE_IMAGE_MODEL
+      : DEFAULT_OPENAI_IMAGE_MODEL)
   if (!provider.enabled || !apiKey) {
     return null
   }
@@ -290,18 +337,20 @@ function buildEnterpriseRunningHubImageRouteRuntime(params: {
   provider: EnterpriseModelProviderConfig
   route: EnterpriseProviderRouteConfig
 }): EnterpriseImageRuntimeConfig | null {
-  const apiKey = normalizeText(params.provider.apiKey)
+  const fallback = getRunningHubConfig()
+  const apiKey = getEnterpriseRunningHubApiKey(params.provider)
   const providerLabel = normalizeText(params.provider.label) || params.provider.providerId
   const routeLabel = normalizeText(params.route.label) || providerLabel
   const model =
     normalizeText(params.route.modelId) ||
     normalizeText(params.provider.modelId) ||
-    DEFAULT_RUNNINGHUB_IMAGE_MODEL
+    (params.route.mode === "img2img"
+      ? DEFAULT_RUNNINGHUB_IMG2IMG_MODEL
+      : DEFAULT_RUNNINGHUB_TXT2IMG_MODEL)
   if (!params.provider.enabled || !params.route.enabled || !apiKey) {
     return null
   }
 
-  const fallback = getRunningHubConfig()
   const baseUrl = getEnterpriseImageBaseUrl(params.provider)
   const endpoint = normalizeText(params.route.endpoint) || fallback.image.endpoint || ""
   if (!baseUrl || !endpoint) {
@@ -341,13 +390,13 @@ function buildEnterpriseVideoRuntime(
     return null
   }
 
-  const apiKey = normalizeText(provider.apiKey)
+  const fallback = getRunningHubConfig()
+  const apiKey = getEnterpriseRunningHubApiKey(provider)
   const baseUrl = getEnterpriseVideoBaseUrl(provider)
   if (!provider.enabled || !apiKey || !baseUrl) {
     return null
   }
 
-  const fallback = getRunningHubConfig()
   return {
     providerId: "runninghub",
     label: normalizeText(provider.label) || provider.providerId,
@@ -581,6 +630,7 @@ export async function resolveEnterpriseImageRuntimeForUser(params: {
   user: ModelGovernanceUser | null | undefined
   selectionId?: string | null
   model?: string | null
+  routeMode?: EnterpriseRunningHubImageRouteMode | null
 }) {
   const options = await listEnterpriseImageRuntimeOptionsForUser(params.user)
   if (options.length === 0) {
@@ -589,6 +639,7 @@ export async function resolveEnterpriseImageRuntimeForUser(params: {
 
   const requestedSelectionId = normalizeText(params.selectionId)
   const requestedModel = normalizeText(params.model)
+  const preferredRouteMode = params.routeMode === "img2img" ? "img2img" : "txt2img"
   return (
     (requestedSelectionId
       ? options.find((item) => item.selectionId === requestedSelectionId) || null
@@ -596,9 +647,140 @@ export async function resolveEnterpriseImageRuntimeForUser(params: {
     (requestedModel
       ? options.find((item) => item.runtime.model === requestedModel) || null
       : null) ||
+    (options.some((item) => item.runtime.kind === "runninghub")
+      ? options.find(
+          (item) =>
+            item.runtime.kind === "runninghub" &&
+            item.runtime.routeMode === preferredRouteMode,
+        ) || null
+      : null) ||
     options[0] ||
     null
   )
+}
+
+export async function listEnterpriseVideoRuntimeOptionsForUser(
+  user: ModelGovernanceUser | null | undefined,
+) {
+  if (!hasActiveEnterpriseContext(user)) {
+    return [] as EnterpriseVideoRuntimeOption[]
+  }
+
+  const activeUser = user as ModelGovernanceUser
+  const settings = await getCustomerGovernanceSettings(activeUser.enterpriseId!, {
+    includeSecrets: true,
+  }).catch(() => null)
+  if (!settings) {
+    return [] as EnterpriseVideoRuntimeOption[]
+  }
+
+  const { categoryConfig, selectedProvider } = getCategoryProviderConfigs(
+    settings,
+    "video_generation",
+  )
+
+  const configuredProviders: EnterpriseVideoRuntimeOption[] = []
+  for (const provider of categoryConfig.providers) {
+    if (!canUserAccessConfiguredProvider({ user: activeUser, provider })) {
+      continue
+    }
+    if (
+      !canUserAccessCategoryRoute({
+        user: activeUser,
+        settings,
+        category: "video_generation",
+        routeId: "runninghub-video",
+      })
+    ) {
+      continue
+    }
+    const runtime = buildEnterpriseVideoRuntime(provider)
+    if (!runtime) {
+      continue
+    }
+    configuredProviders.push({
+      active: runtime.providerId === selectedProvider?.providerId,
+      runtime,
+    })
+  }
+
+  if (configuredProviders.length === 0) {
+    return [] as EnterpriseVideoRuntimeOption[]
+  }
+
+  return [
+    ...configuredProviders.filter((item) => item.active),
+    ...configuredProviders.filter((item) => !item.active),
+  ]
+}
+
+export async function resolveEnterpriseVideoRuntimeForUser(params: {
+  user: ModelGovernanceUser | null | undefined
+}) {
+  const options = await listEnterpriseVideoRuntimeOptionsForUser(params.user)
+  return options[0]?.runtime || null
+}
+
+export async function listEnterpriseAudioRuntimeOptionsForUser(
+  user: ModelGovernanceUser | null | undefined,
+) {
+  if (!hasActiveEnterpriseContext(user)) {
+    return [] as EnterpriseAudioRuntimeOption[]
+  }
+
+  const activeUser = user as ModelGovernanceUser
+  const settings = await getCustomerGovernanceSettings(activeUser.enterpriseId!, {
+    includeSecrets: true,
+  }).catch(() => null)
+  if (!settings) {
+    return [] as EnterpriseAudioRuntimeOption[]
+  }
+
+  const { categoryConfig, selectedProvider } = getCategoryProviderConfigs(
+    settings,
+    "audio_generation",
+  )
+
+  const configuredProviders: EnterpriseAudioRuntimeOption[] = []
+  for (const provider of categoryConfig.providers) {
+    if (!canUserAccessConfiguredProvider({ user: activeUser, provider })) {
+      continue
+    }
+    if (
+      !canUserAccessCategoryRoute({
+        user: activeUser,
+        settings,
+        category: "audio_generation",
+        routeId: "minimax-audio",
+      })
+    ) {
+      continue
+    }
+    const runtime = buildEnterpriseAudioRuntime(provider)
+    if (!runtime) {
+      continue
+    }
+    configuredProviders.push({
+      active: runtime.providerId === selectedProvider?.providerId,
+      runtime,
+    })
+  }
+
+  if (configuredProviders.length === 0) {
+    return [] as EnterpriseAudioRuntimeOption[]
+  }
+
+  return [
+    ...configuredProviders.filter((item) => item.active),
+    ...configuredProviders.filter((item) => !item.active),
+  ]
+}
+
+export async function resolveEnterpriseAudioRuntimeForUser(params: {
+  user: ModelGovernanceUser | null | undefined
+}) {
+  const options = await listEnterpriseAudioRuntimeOptionsForUser(params.user)
+  return options[0]?.runtime || null
 }
 
 export async function resolveEnterpriseImageRuntimeForEnterprise(params: {

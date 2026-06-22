@@ -10,6 +10,7 @@ import { WorkflowCanvas } from "@/components/workflows/workflow-canvas"
 import { WorkflowNodeConfigPanel } from "@/components/workflows/workflow-node-config-panel"
 import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palette"
 import { type WorkflowRunResultsDetail } from "@/components/workflows/workflow-run-results-page"
+import { getWorkflowImageDefaultSize, resolveWorkflowImageModelKind } from "@/lib/image-assistant/model-options"
 import { buildGovernedImageAssistantModelOptionId } from "@/lib/platform/governed-image-model-option-id"
 import {
   canWorkflowNodeConnectValueKind,
@@ -364,7 +365,9 @@ function buildNode(
                       modelId: workflowImageProviderOptions[0]?.models[0]?.modelId || "gpt-image-2",
                     }),
                   candidateCount: 1,
-                  imageSize: "1024x1024",
+                  imageSize: getWorkflowImageDefaultSize(
+                    resolveWorkflowImageModelKind(workflowImageProviderOptions[0]?.models[0]?.modelId || "gpt-image-2"),
+                  ),
                   imageQuality: "auto",
                   imageBackground: "auto",
                   imageOutputFormat: "png",

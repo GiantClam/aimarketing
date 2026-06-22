@@ -8,7 +8,7 @@ import {
   setOpenAiCompatibleImageCurlRunnerForTests,
   type OpenAiCompatibleInlineImage,
 } from "./openai-compatible-image"
-import { mapGptImage2Quality, mapGptImage2Size, normalizeWorkflowImageConfig } from "./model-options"
+import { getWorkflowImageDefaultSize, mapGptImage2Quality, mapGptImage2Size, normalizeWorkflowImageConfig } from "./model-options"
 
 const image = (assetId: string, base64Data = "aW1hZ2U="): OpenAiCompatibleInlineImage => ({
   kind: "inline",
@@ -111,6 +111,26 @@ test("workflow image config derives gpt-image-2 quality from resolution when uns
   })
 
   assert.equal(normalized.imageQuality, "low")
+})
+
+test("workflow image config upgrades legacy square size when switching to seedream", () => {
+  const normalized = normalizeWorkflowImageConfig({
+    selectedProviderId: "runninghub",
+    selectedModelId: "seedream-v5-text-to-image",
+    imageSize: "1024x1024",
+  })
+
+  assert.equal(normalized.imageSize, "1600x1600")
+})
+
+test("workflow image config defaults seedream nodes to a valid runninghub size", () => {
+  const normalized = normalizeWorkflowImageConfig({
+    selectedProviderId: "runninghub",
+    selectedModelId: "seedream-v5-image-to-image",
+  })
+
+  assert.equal(normalized.imageSize, "2048x2048")
+  assert.equal(getWorkflowImageDefaultSize("runninghub-seedream"), "2048x2048")
 })
 
 test("gpt-image-2 mask edit requires a mask asset", () => {

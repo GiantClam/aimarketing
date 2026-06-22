@@ -164,6 +164,25 @@ export type UpdateWorkflowNodeExecutionInput = {
   finishedAt?: Date | null
 }
 
+export function buildMissingWorkflowNodeExecutionSeeds(input: {
+  runId: number
+  workflowId: number
+  nodes: WorkflowDefinitionNode[]
+  existingNodeKeys: string[]
+}) {
+  const existingNodeKeys = new Set(input.existingNodeKeys.map((nodeKey) => normalizeNodeKey(nodeKey, 0)))
+
+  return input.nodes
+    .filter((node) => !existingNodeKeys.has(normalizeNodeKey(node.nodeKey, 0)))
+    .map((node) => ({
+      runId: input.runId,
+      workflowId: input.workflowId,
+      nodeKey: node.nodeKey,
+      nodeType: node.type,
+      status: "queued" as const,
+    }))
+}
+
 const WORKFLOW_DB_RETRY_DELAYS_MS = [250, 750] as const
 const isRetryableWorkflowDbError = createRetryableDbErrorMatcher(["timeout exceeded"])
 
@@ -992,6 +1011,34 @@ export async function createWorkflowNodeExecutionRecords(
       .values(inputs.map((input) => buildWorkflowNodeExecutionInsert(input)))
       .returning(),
   )
+}
+
+export async function ensureWorkflowNodeExecutionRecords(input: {
+  runId: number
+  workflowId: number
+  nodes: WorkflowDefinitionNode[]
+}) {
+  await ensureWorkflowTables()
+
+  const existing = await listWorkflowNodeExecutions(input.runId)
+  const missingSeeds = buildMissingWorkflowNodeExecutionSeeds({
+    runId: input.runId,
+    workflowId: input.workflowId,
+    nodes: input.nodes,
+    existingNodeKeys: existing.map((execution) => execution.nodeKey),
+  })
+
+  if (missingSeeds.length > 0) {
+    await withWorkflowDbRetry("workflow-store.ensure-node-executions", () =>
+      db
+        .insert(platformWorkflowNodeExecutions)
+        .values(missingSeeds.map((seed) => buildWorkflowNodeExecutionInsert(seed)))
+        .onConflictDoNothing()
+        .returning(),
+    )
+  }
+
+  return listWorkflowNodeExecutions(input.runId)
 }
 
 export async function updateWorkflowNodeExecution(input: UpdateWorkflowNodeExecutionInput) {
