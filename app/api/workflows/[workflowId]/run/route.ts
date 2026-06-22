@@ -7,7 +7,7 @@ import {
   serializePlatformWorkflowRun,
   updatePlatformWorkflowRun,
 } from "@/lib/platform/workflow-runner"
-import { collectWorkflowRetryNodeKeys } from "@/lib/workflows/execution"
+import { collectWorkflowRetryNodeKeys, type WorkflowNodeRunStatus } from "@/lib/workflows/execution"
 import { findLatestWorkflowRunRecordForWorkflow, resolveWorkflowResumeNodeKey } from "@/lib/workflows/manual-resume"
 import {
   createWorkflowNodeExecutionRecords,
@@ -15,6 +15,7 @@ import {
   getWorkflowRunDetail,
   resetWorkflowNodeExecutions,
 } from "@/lib/workflows/store"
+import { isWorkflowResumeCompatible } from "@/lib/workflows/resume-compatibility"
 import { runWorkflowTaskRecoveryPass } from "@/lib/workflows/task-runner"
 
 export const runtime = "nodejs"
@@ -27,11 +28,11 @@ function parseWorkflowId(value: string) {
 function buildLatestWorkflowNodeStatuses(
   nodeExecutions: NonNullable<Awaited<ReturnType<typeof getWorkflowRunDetail>>>["nodeExecutions"],
 ) {
-  const latestStatuses: Record<string, { status: string }> = {}
+  const latestStatuses: Record<string, { status: WorkflowNodeRunStatus }> = {}
 
   for (const execution of nodeExecutions) {
     latestStatuses[execution.nodeKey] = {
-      status: execution.status,
+      status: execution.status as WorkflowNodeRunStatus,
     }
   }
 
@@ -67,9 +68,11 @@ export async function POST(
       workflow.id,
     )
     const latestRunDetail = latestRunRecord ? await getWorkflowRunDetail(latestRunRecord.id, currentUser.enterpriseId) : null
+    const latestRunMatchesWorkflow =
+      latestRunDetail ? isWorkflowResumeCompatible(workflow, latestRunDetail.workflow) : false
     const latestRunStatus = latestRunDetail?.run.status ?? latestRunRecord?.status ?? null
 
-    if (latestRunStatus === "running" && latestRunRecord && latestRunDetail) {
+    if (latestRunStatus === "running" && latestRunRecord && latestRunDetail && latestRunMatchesWorkflow) {
       void runWorkflowTaskRecoveryPass({
         runId: latestRunRecord.id,
         requestOrigin: new URL(request.url).origin,
@@ -97,7 +100,7 @@ export async function POST(
       )
     }
 
-    if (latestRunStatus === "failed" && latestRunRecord && latestRunDetail) {
+    if (latestRunStatus === "failed" && latestRunRecord && latestRunDetail && latestRunMatchesWorkflow) {
       const retryNodeKey = latestRunDetail ? resolveWorkflowResumeNodeKey(latestRunDetail) : null
 
       if (latestRunDetail && retryNodeKey) {

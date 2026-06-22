@@ -25,6 +25,7 @@ import {
   reconcileWorkflowImagePromptReferences,
   replaceWorkflowImagePromptAliasTokensBatch,
 } from "@/lib/workflows/image-prompt-references"
+import { isWorkflowResumeCompatible } from "@/lib/workflows/resume-compatibility"
 import { buildWorkflowRunStatusPath } from "@/lib/workflows/run-status-path"
 import { isWorkflowRunActiveStatus, isWorkflowRunResumableStatus } from "@/lib/workflows/run-status"
 import type { WorkflowDefinition } from "@/lib/workflows/store"
@@ -531,10 +532,19 @@ export function WorkflowBuilderPage({
   const latestRunInitialFetchRequestedRef = useRef(false)
 
   const dirty = useMemo(() => buildSnapshot(workflow) !== savedSnapshot, [savedSnapshot, workflow])
-  const latestNodeExecutions = useMemo(() => collapseNodeExecutionsToLatest(latestRunDetail), [latestRunDetail])
-  const latestRunStatus = latestRunDetail?.run.status ?? null
+  const latestRunMatchesWorkflow = useMemo(
+    () => (latestRunDetail ? isWorkflowResumeCompatible(workflow, latestRunDetail.workflow) : true),
+    [latestRunDetail, workflow],
+  )
+  const effectiveLatestRunDetail = latestRunMatchesWorkflow ? latestRunDetail : null
+  const latestNodeExecutions = useMemo(() => collapseNodeExecutionsToLatest(effectiveLatestRunDetail), [effectiveLatestRunDetail])
+  const latestRunStatus = effectiveLatestRunDetail?.run.status ?? null
   const hasActiveRun = isWorkflowRunActiveStatus(latestRunStatus)
   const canResumeRun = isWorkflowRunResumableStatus(latestRunStatus)
+  const hasOutdatedFailedRun =
+    Boolean(latestRunDetail) &&
+    !latestRunMatchesWorkflow &&
+    isWorkflowRunResumableStatus(latestRunDetail?.run.status)
   const controlsLocked = saving || runActionPending || hasActiveRun
   const selectedNode = useMemo(
     () => workflow.nodes.find((node) => node.nodeKey === selectedNodeKey) ?? null,
@@ -870,6 +880,7 @@ export function WorkflowBuilderPage({
           resumeStarted: "工作流已从失败节点继续运行，节点状态会在画布中实时刷新。",
           activeRunAttached: "已连接到当前运行中的工作流，节点状态会在画布中实时刷新。",
           latestRunReady: "运行结果已在当前编排页更新。",
+          resumeOutdated: "上一轮失败运行对应的是旧版工作流，当前画布已变更，请重新运行。",
         }
       : {
           title: "Workflow builder",
@@ -899,10 +910,11 @@ export function WorkflowBuilderPage({
           resumeStarted: "Workflow resumed from the failed node. Node states will refresh directly on the canvas.",
           activeRunAttached: "Attached to the current active run. Node states will refresh directly on the canvas.",
           latestRunReady: "Run results were updated in the current builder.",
+          resumeOutdated: "The last failed run belongs to an older workflow version. The current canvas has changed, so start a fresh run.",
         }
 
   useEffect(() => {
-    if (!isWorkflowRunActiveStatus(latestRunDetail?.run.status)) return
+    if (!isWorkflowRunActiveStatus(effectiveLatestRunDetail?.run.status)) return
 
     let cancelled = false
     latestRunRequestInFlightRef.current = false
@@ -911,7 +923,7 @@ export function WorkflowBuilderPage({
       if (latestRunRequestInFlightRef.current) return
       latestRunRequestInFlightRef.current = true
       try {
-        const response = await fetch(buildWorkflowRunStatusPath(latestRunDetail.detailPath), {
+        const response = await fetch(buildWorkflowRunStatusPath(effectiveLatestRunDetail.detailPath), {
           credentials: "same-origin",
           cache: "no-store",
         }).catch(() => null)
@@ -936,7 +948,7 @@ export function WorkflowBuilderPage({
         )
 
         if (!isWorkflowRunActiveStatus(nextStatus)) {
-          const fullResponse = await fetch(latestRunDetail.detailPath, {
+          const fullResponse = await fetch(effectiveLatestRunDetail.detailPath, {
             credentials: "same-origin",
             cache: "no-store",
           }).catch(() => null)
@@ -968,7 +980,7 @@ export function WorkflowBuilderPage({
       latestRunRequestInFlightRef.current = false
       window.clearInterval(timer)
     }
-  }, [copy.latestRunReady, dirty, latestRunDetail?.detailPath, latestRunDetail?.run.status])
+  }, [copy.latestRunReady, dirty, effectiveLatestRunDetail?.detailPath, effectiveLatestRunDetail?.run.status])
 
   const updateWorkflow = (patch: Partial<SerializedWorkflowDefinition>) => {
     setWorkflow((current) => ({
@@ -1354,6 +1366,11 @@ export function WorkflowBuilderPage({
           {errorMessage ? (
             <div className="rounded-[10px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
               {errorMessage}
+            </div>
+          ) : null}
+          {hasOutdatedFailedRun ? (
+            <div className="rounded-[10px] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              {copy.resumeOutdated}
             </div>
           ) : null}
 

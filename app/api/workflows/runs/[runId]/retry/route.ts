@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { serializePlatformWorkflowRun, updatePlatformWorkflowRun } from "@/lib/platform/workflow-runner"
-import { collectWorkflowRetryNodeKeys } from "@/lib/workflows/execution"
+import { collectWorkflowRetryNodeKeys, type WorkflowNodeRunStatus } from "@/lib/workflows/execution"
 import {
   getWorkflowRunDetail,
   resetWorkflowNodeExecutions,
@@ -24,11 +24,11 @@ function parseRunId(value: string) {
 function buildLatestWorkflowNodeStatuses(
   nodeExecutions: NonNullable<Awaited<ReturnType<typeof getWorkflowRunDetail>>>["nodeExecutions"],
 ) {
-  const latestStatuses: Record<string, { status: string }> = {}
+  const latestStatuses: Record<string, { status: WorkflowNodeRunStatus }> = {}
 
   for (const execution of nodeExecutions) {
     latestStatuses[execution.nodeKey] = {
-      status: execution.status,
+      status: execution.status as WorkflowNodeRunStatus,
     }
   }
 
