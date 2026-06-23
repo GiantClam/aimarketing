@@ -4,7 +4,6 @@ import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 
 import { listBusinessAgentConfigs } from "@/lib/platform/business-agents"
-import { getImportedAgencyAgentSkillSourceMap } from "@/lib/platform/imported-agency-agents"
 
 const EXECUTIVE_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "executive-consulting-suite")
 const BUSINESS_AGENT_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "business-agents")
@@ -88,11 +87,8 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
 const BUSINESS_AGENT_SKILL_MAP = Object.fromEntries(
   listBusinessAgentConfigs().map((agent) => [agent.agentId, [agent.promptDocumentPath]]),
 )
-const IMPORTED_AGENCY_AGENT_SKILL_MAP = Object.fromEntries(
-  Object.entries(getImportedAgencyAgentSkillSourceMap()).map(([agentId, sourcePath]) => [agentId, [sourcePath]]),
-)
 
-function getAgentSkillSource(agentId: string) {
+function getStaticAgentSkillSource(agentId: string) {
   if (AGENT_SKILL_MAP[agentId]?.length) {
     return {
       baseDir: EXECUTIVE_SKILL_BASE_DIR,
@@ -107,21 +103,35 @@ function getAgentSkillSource(agentId: string) {
     }
   }
 
-  if (IMPORTED_AGENCY_AGENT_SKILL_MAP[agentId]?.length) {
+  return null
+}
+
+async function getImportedAgencyAgentSkillSource(agentId: string) {
+  if (!agentId.startsWith("agency-")) return null
+
+  try {
+    const { getImportedAgencyAgentSkillSourceMap } = await import("@/lib/platform/imported-agency-agents")
+    const sourcePath = getImportedAgencyAgentSkillSourceMap()[agentId]
+    if (!sourcePath) return null
+
     return {
       baseDir: IMPORTED_AGENCY_AGENT_SKILL_BASE_DIR,
-      files: IMPORTED_AGENCY_AGENT_SKILL_MAP[agentId],
+      files: [sourcePath],
     }
+  } catch (error) {
+    console.warn("executive-skill.imported-agency-map-failed", {
+      agentId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return null
   }
-
-  return null
 }
 
 /**
  * 根据 agent ID 加载对应的 skill 文档内容
  */
 export async function loadExecutiveSkillForAgent(agentId: string): Promise<string> {
-  const source = getAgentSkillSource(agentId)
+  const source = getStaticAgentSkillSource(agentId) || (await getImportedAgencyAgentSkillSource(agentId))
   if (!source) {
     return ""
   }
@@ -158,7 +168,7 @@ export async function loadExecutiveSkillForAgent(agentId: string): Promise<strin
  */
 export function isExecutiveConsultingAgent(agentId: string | null | undefined): boolean {
   if (!agentId) return false
-  return Boolean(getAgentSkillSource(agentId))
+  return Boolean(getStaticAgentSkillSource(agentId) || agentId.startsWith("agency-"))
 }
 
 /**

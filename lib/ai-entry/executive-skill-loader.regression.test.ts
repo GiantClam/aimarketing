@@ -28,6 +28,18 @@ test("default executive diagnostic loads compact runtime brief", async () => {
   )
 })
 
+test("brand and growth executive skills load from the self-hosted consulting suite", async () => {
+  const { loadExecutiveSkillForAgent } = await import("./executive-skill-loader")
+
+  const brandContent = await loadExecutiveSkillForAgent("executive-brand")
+  const growthContent = await loadExecutiveSkillForAgent("executive-growth")
+
+  assert.match(brandContent, /executive-level diagnosis of brand positioning/)
+  assert.match(brandContent, /diagnostic thinking style/)
+  assert.match(growthContent, /executive-level diagnosis of growth logic/)
+  assert.match(growthContent, /diagnostic thinking style/)
+})
+
 test("business agent prompt documents are loadable through the shared agent loader", async () => {
   const { loadExecutiveSkillForAgent } = await import("./executive-skill-loader")
 

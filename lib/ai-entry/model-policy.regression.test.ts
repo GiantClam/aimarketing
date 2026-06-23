@@ -35,26 +35,26 @@ test("pickSonnet46ModelId returns null when sonnet-4.6 model does not exist", ()
   assert.equal(selected, null)
 })
 
-test("pickConsultingModelId defaults consulting advisor to quality sonnet 4.6", () => {
+test("pickConsultingModelId defaults consulting advisor to pptoken GPT 5.4", () => {
   const selected = pickConsultingModelId([
-    { id: "claude-opus-4.7", name: "Claude Opus 4.7" },
-    { id: "claude-sonnet-4.6-thinking", name: "Claude Sonnet 4.6 Thinking" },
-    { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
+    { id: "aiberm::gpt-5.4", name: "AIBERM / GPT 5.4", providerId: "aiberm", modelId: "gpt-5.4" },
+    { id: "crazyroute::gpt-5.4", name: "Crazyroute / GPT 5.4", providerId: "crazyroute", modelId: "gpt-5.4" },
+    { id: "pptoken::gpt-5.4", name: "PPToken / GPT 5.4", providerId: "pptoken", modelId: "gpt-5.4" },
   ])
 
-  assert.equal(selected, "claude-sonnet-4.6")
+  assert.equal(selected, "pptoken::gpt-5.4")
 })
 
-test("pickConsultingModelId quality mode targets sonnet 4.6", () => {
+test("pickConsultingModelId quality mode targets GPT 5.4", () => {
   const selected = pickConsultingModelId(
     [
-      { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
       { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
+      { id: "pptoken::gpt-5.4", name: "PPToken / GPT 5.4", providerId: "pptoken", modelId: "gpt-5.4" },
     ],
     "quality",
   )
 
-  assert.equal(selected, "claude-sonnet-4.6")
+  assert.equal(selected, "pptoken::gpt-5.4")
 })
 
 test("pickPptAssistantDefaultModelId defaults PPT assistant to GPT 5.4", () => {
@@ -102,7 +102,7 @@ test("consulting entry mode detection and lock flag", () => {
     false,
   )
   assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.6")
-  assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "claude-sonnet-4.6")
-  assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT)
+  assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "gpt-5.4")
+  assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT, "gpt-5.4")
 })

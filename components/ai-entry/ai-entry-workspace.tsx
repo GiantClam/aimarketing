@@ -1218,9 +1218,7 @@ export function AiEntryWorkspace({
       return
     }
     const params = new URLSearchParams(search)
-    if (shouldLockModel) {
-      params.delete("agent")
-    } else if (selectedAgentId) {
+    if (selectedAgentId) {
       params.set("agent", selectedAgentId)
     } else {
       params.delete("agent")
@@ -1534,7 +1532,7 @@ export function AiEntryWorkspace({
       try {
         const params = new URLSearchParams({ conversation_id: initialConversationId, limit: "200" })
         if (effectiveEntryMode) params.set("entryMode", effectiveEntryMode)
-        if (routeAgentId && !shouldLockModel) params.set("agent", routeAgentId)
+        if (routeAgentId) params.set("agent", routeAgentId)
         const response = await fetch(`/api/ai/messages?${params.toString()}`, { cache: "no-store", credentials: "same-origin" })
         const payload = (await response.json().catch(() => null)) as MessageApiResponse | null
         if (cancelled) return

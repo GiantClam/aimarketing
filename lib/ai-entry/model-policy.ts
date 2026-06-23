@@ -1,7 +1,7 @@
 export const AI_ENTRY_CONSULTING_ENTRY_MODE = "consulting-advisor"
 export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.6"
-export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "claude-sonnet-4.6"
-export const AI_ENTRY_SONNET_46_MODEL_HINT = AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
+export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "gpt-5.4"
+export const AI_ENTRY_SONNET_46_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT = "gpt-5.4"
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"
 export const AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS = ["executive-ppt"] as const
@@ -58,13 +58,24 @@ function isModelHintMatch(item: ModelCandidate, modelHint: string) {
 }
 
 function pickModelByHint(models: ModelCandidate[], modelHint: string) {
+  const getProviderScore = (providerId: string) => {
+    if (providerId === "pptoken") return 0
+    if (providerId === "aiberm") return 1
+    if (providerId === "crazyroute") return 2
+    if (providerId === "openrouter") return 3
+    return 4
+  }
+
   const candidates = models
     .map((item) => {
       const id = normalizeText(item.id)
       if (!id || !isModelHintMatch(item, modelHint)) return null
       const fingerprint = normalizeModelFingerprint(buildModelCandidateText(item))
+      const providerId = normalizeText(item.providerId).toLowerCase()
       return {
         id,
+        providerId,
+        providerScore: getProviderScore(providerId),
         hasProviderPrefix: id.includes("/"),
         hasDotSeparator: id.includes("."),
         prefersBaseVariant: !isThinkingModelFingerprint(fingerprint),
@@ -73,6 +84,8 @@ function pickModelByHint(models: ModelCandidate[], modelHint: string) {
     .filter(
       (item): item is {
         id: string
+        providerId: string
+        providerScore: number
         hasProviderPrefix: boolean
         hasDotSeparator: boolean
         prefersBaseVariant: boolean
@@ -85,6 +98,7 @@ function pickModelByHint(models: ModelCandidate[], modelHint: string) {
     if (a.prefersBaseVariant !== b.prefersBaseVariant) {
       return a.prefersBaseVariant ? -1 : 1
     }
+    if (a.providerScore !== b.providerScore) return a.providerScore - b.providerScore
     if (a.hasProviderPrefix !== b.hasProviderPrefix) {
       return a.hasProviderPrefix ? 1 : -1
     }
@@ -122,7 +136,7 @@ export function pickConsultingModelId(
 }
 
 export function pickSonnet46ModelId(models: ModelCandidate[]) {
-  return pickModelByHint(models, AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT)
+  return pickModelByHint(models, AI_ENTRY_SONNET_46_MODEL_HINT)
 }
 
 export function getPptAssistantDefaultModelHint() {

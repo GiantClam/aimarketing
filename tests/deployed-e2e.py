@@ -620,7 +620,7 @@ def wait_for_member_status(page, member_email: str, expected_status: str, timeou
 
 def approve_member_request(page, config: Config, member_email: str) -> None:
     response = page.goto(
-        f"{config.base_url}/dashboard/settings",
+        f"{config.base_url}/dashboard/platform-settings",
         wait_until="domcontentloaded",
         timeout=30000,
     )
@@ -656,7 +656,7 @@ def approve_member_request(page, config: Config, member_email: str) -> None:
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(3000)
     wait_for_member_status(page, member_email, "active", config.timeout_ms)
-    page.goto(f"{config.base_url}/dashboard/settings", wait_until="domcontentloaded")
+    page.goto(f"{config.base_url}/dashboard/platform-settings", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(2000)
     find_member_permission_card(page, member_email)
@@ -664,7 +664,7 @@ def approve_member_request(page, config: Config, member_email: str) -> None:
 
 def enable_member_permissions(page, config: Config, member_email: str) -> None:
     response = page.goto(
-        f"{config.base_url}/dashboard/settings",
+        f"{config.base_url}/dashboard/platform-settings",
         wait_until="domcontentloaded",
         timeout=30000,
     )
