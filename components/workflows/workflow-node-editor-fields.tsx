@@ -114,10 +114,6 @@ function asNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
-function resolveWorkflowVideoCapability(featureId: "text-to-video" | "image-to-video") {
-  return featureId === "image-to-video" ? "video.image_to_video" : "video.text_to_video"
-}
-
 function buildWorkflowModelSelectionValue(input: {
   providerId: string
   modelId: string
@@ -318,6 +314,7 @@ export function WorkflowNodeEditorFields({
           autoSize: "自动",
           unsupportedModelParams: "当前模型暂未配置参数面板。",
           mode: "模式",
+          autoVideoMode: "自动：输入图片时图生视频，无图片时文生视频。",
           duration: "时长",
           ratio: "画幅",
           sound: "音频",
@@ -384,6 +381,7 @@ export function WorkflowNodeEditorFields({
           autoSize: "Auto",
           unsupportedModelParams: "This model does not have a configured parameter panel yet.",
           mode: "Mode",
+          autoVideoMode: "Auto: image input creates image-to-video; otherwise text-to-video.",
           duration: "Duration",
           ratio: "Ratio",
           sound: "Sound",
@@ -509,28 +507,25 @@ export function WorkflowNodeEditorFields({
   const imageBackgroundOptions: OptionItem[] = ["auto", "opaque", "transparent"].map((value) => ({ value, label: value }))
   const imageFormatOptions: OptionItem[] = ["png", "jpeg", "webp"].map((value) => ({ value, label: value }))
   const imageModerationOptions: OptionItem[] = ["auto", "low"].map((value) => ({ value, label: value }))
-  const videoModeOptions: OptionItem[] =
-    locale === "zh"
-      ? [
-          { value: "text-to-video", label: "文生视频" },
-          { value: "image-to-video", label: "图生视频" },
-        ]
-      : [
-          { value: "text-to-video", label: "Text to video" },
-          { value: "image-to-video", label: "Image to video" },
-        ]
-  const videoFeatureId = asString(node.config.featureId) === "image-to-video" ? "image-to-video" : "text-to-video"
-  const videoCapability = resolveWorkflowVideoCapability(videoFeatureId)
+  const videoModelDefinitions = (() => {
+    const seen = new Set<string>()
+    return [
+      ...listModels({ capability: "video.text_to_video" }),
+      ...listModels({ capability: "video.image_to_video" }),
+    ].filter((model) => {
+      if (seen.has(model.id)) return false
+      seen.add(model.id)
+      return true
+    })
+  })()
   const resolvedVideoModel =
-    findModelByCapabilityAndAlias({
-      capability: videoCapability,
-      value: asString(node.config.model),
-    }) ||
-    getModelDefinition(getDefaultModelId(videoCapability) || "") ||
-    listModels({ capability: videoCapability })[0] ||
+    videoModelDefinitions.find((model) => model.id === asString(node.config.model)) ||
+    videoModelDefinitions.find((model) => model.providerMetadata?.nativeModel === asString(node.config.model)) ||
+    getModelDefinition(getDefaultModelId("video.text_to_video") || "") ||
+    videoModelDefinitions[0] ||
     null
-  const currentVideoModelId = resolvedVideoModel?.id || getDefaultModelId(videoCapability) || ""
-  const videoModelOptions: OptionItem[] = buildModelSelectOptions(listModels({ capability: videoCapability })).map((option) => ({
+  const currentVideoModelId = resolvedVideoModel?.id || getDefaultModelId("video.text_to_video") || ""
+  const videoModelOptions: OptionItem[] = buildModelSelectOptions(videoModelDefinitions).map((option) => ({
     value: option.value,
     label: option.label,
   }))
@@ -1177,26 +1172,8 @@ export function WorkflowNodeEditorFields({
 
       {node.type === "video_generate" ? (
         <div className="space-y-3">
-          <div className="space-y-2">
-            <SectionLabel>{copy.mode}</SectionLabel>
-            <OptionChips
-              options={videoModeOptions}
-              value={asString(node.config.featureId) || "text-to-video"}
-              onChange={(value) => {
-                const nextFeatureId = value === "image-to-video" ? "image-to-video" : "text-to-video"
-                const currentModel = asString(node.config.model)
-                const modelStillSupported = Boolean(
-                  findModelByCapabilityAndAlias({
-                    capability: resolveWorkflowVideoCapability(nextFeatureId),
-                    value: currentModel,
-                  }),
-                )
-                updateConfig({
-                  featureId: value,
-                  ...(modelStillSupported ? {} : { model: getDefaultModelId(resolveWorkflowVideoCapability(nextFeatureId)) || "" }),
-                })
-              }}
-            />
+          <div className="rounded-[12px] border border-border/50 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+            {copy.autoVideoMode}
           </div>
           <div className="space-y-2">
             <SectionLabel>{copy.model}</SectionLabel>

@@ -61,3 +61,16 @@ test("validateAndNormalizeModelInput drops unsupported parameters", () => {
   assert.equal("unknownField" in normalized, false)
   assert.equal(normalized.resolution, "1080P")
 })
+
+test("model registry exposes RunningHub seedance mini video models", () => {
+  const textModel = getModelDefinition("runninghub:video:seedance-mini-text-to-video")
+  const imageModel = getModelDefinition("runninghub:video:seedance-mini-image-to-video")
+
+  assert.equal(textModel?.provider, "runninghub")
+  assert.equal(textModel?.capability, "video.text_to_video")
+  assert.equal(textModel?.providerMetadata?.nativeModel, "seedance-mini-text-to-video")
+
+  assert.equal(imageModel?.provider, "runninghub")
+  assert.equal(imageModel?.capability, "video.image_to_video")
+  assert.equal(imageModel?.providerMetadata?.nativeModel, "seedance-mini-image-to-video")
+})

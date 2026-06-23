@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { difyConnections, enterpriseDifyAdvisorConfigs, enterprises, users } from "@/lib/db/schema"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
+import { normalizeExecutiveAdvisorType } from "@/lib/skills/runtime/executive-advisor-types"
 
 type DifyLookupOptions = {
   userId?: number | null
@@ -23,7 +24,7 @@ type DifyConfig = {
   baseUrl: string
   apiKey: string
 }
-type LeadHunterExecutionMode = "dify" | "skill"
+type AdvisorExecutionMode = "dify" | "skill"
 
 type AdvisorType =
   | "brand-strategy"
@@ -52,7 +53,7 @@ function normalizeBaseUrl(baseUrl?: string | null) {
   return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed.replace(/\/+$/, "")}/v1`
 }
 
-function normalizeLeadHunterExecutionMode(raw: string | null | undefined): LeadHunterExecutionMode {
+function normalizeAdvisorExecutionMode(raw: string | null | undefined): AdvisorExecutionMode {
   return (raw || "").trim().toLowerCase() === "skill" ? "skill" : "dify"
 }
 
@@ -96,18 +97,15 @@ function getSystemDefaultAdvisorConfig(advisorType: AdvisorType): DifyConfig | n
 }
 
 export function getSystemDefaultAdvisorSummary() {
-  const brand = getSystemDefaultAdvisorConfig("brand-strategy")
-  const growth = getSystemDefaultAdvisorConfig("growth")
-
   return {
     baseUrl: normalizeBaseUrl(process.env.DIFY_DEFAULT_BASE_URL),
     brandStrategy: {
-      configured: Boolean(brand),
-      baseUrl: brand?.baseUrl || null,
+      configured: true,
+      baseUrl: "skill://executive-consulting",
     },
     growth: {
-      configured: Boolean(growth),
-      baseUrl: growth?.baseUrl || null,
+      configured: true,
+      baseUrl: "skill://executive-consulting",
     },
     leadHunter: {
       configured: false,
@@ -413,7 +411,7 @@ export async function getEnterpriseAdvisorOverride(
     id: row.id,
     enterpriseId: row.enterpriseId,
     advisorType: row.advisorType,
-    executionMode: normalizeLeadHunterExecutionMode(row.executionMode),
+    executionMode: normalizeAdvisorExecutionMode(row.executionMode),
     baseUrl: row.baseUrl,
     apiKey: row.apiKey || "",
     enabled: Boolean(row.enabled),
@@ -437,7 +435,7 @@ export async function listEnterpriseAdvisorOverrides(enterpriseId: number | null
     id: row.id,
     enterpriseId: row.enterpriseId,
     advisorType: row.advisorType,
-    executionMode: normalizeLeadHunterExecutionMode(row.executionMode),
+    executionMode: normalizeAdvisorExecutionMode(row.executionMode),
     baseUrl: row.baseUrl,
     apiKey: row.apiKey || "",
     enabled: Boolean(row.enabled),
@@ -450,7 +448,7 @@ export async function upsertEnterpriseAdvisorOverride(
   input: {
     useDefault: boolean
     enabled: boolean
-    executionMode?: LeadHunterExecutionMode
+    executionMode?: AdvisorExecutionMode
     baseUrl?: string
     apiKey?: string
   },
@@ -465,12 +463,14 @@ export async function upsertEnterpriseAdvisorOverride(
   }
 
   const existing = await getEnterpriseAdvisorOverride(enterpriseId, advisorType)
-  const canUseSkillMode = advisorType === "lead-hunter"
-  const executionMode = canUseSkillMode ? normalizeLeadHunterExecutionMode(input.executionMode) : "dify"
+  const normalizedExecutiveAdvisorType = normalizeExecutiveAdvisorType(advisorType)
+  const canUseSkillMode = advisorType === "lead-hunter" || Boolean(normalizedExecutiveAdvisorType)
+  const executionMode = canUseSkillMode ? normalizeAdvisorExecutionMode(input.executionMode) : "dify"
   const requiresDifyConfig = !(canUseSkillMode && executionMode === "skill")
   const sourceBaseUrl = normalizeOptional(input.baseUrl ?? existing?.baseUrl ?? null)
   const sourceApiKey = normalizeOptional(input.apiKey ?? existing?.apiKey ?? null)
-  const baseUrl = requiresDifyConfig ? normalizeBaseUrl(sourceBaseUrl) : "skill://lead-hunter"
+  const skillBaseUrl = normalizedExecutiveAdvisorType ? "skill://executive-consulting" : "skill://lead-hunter"
+  const baseUrl = requiresDifyConfig ? normalizeBaseUrl(sourceBaseUrl) : skillBaseUrl
   const apiKey = requiresDifyConfig ? normalizeOptional(sourceApiKey) : "managed"
   const invalidPlaceholderConfig =
     requiresDifyConfig &&
@@ -520,6 +520,16 @@ async function getAdvisorConfig(
   config?: { includeSystemDefault?: boolean },
 ) {
   const resolvedContext = context || (await resolveUserContext(options))
+
+  if (normalizeExecutiveAdvisorType(advisorType)) {
+    return {
+      source: "skill" as const,
+      baseUrl: "skill://executive-consulting",
+      apiKey: "managed",
+      enterpriseId: resolvedContext.enterpriseId,
+    }
+  }
+
   let enterpriseOverride = null
   try {
     enterpriseOverride = await getEnterpriseAdvisorOverride(resolvedContext.enterpriseId, advisorType)

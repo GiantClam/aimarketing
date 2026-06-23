@@ -39,6 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
 import type { EnterpriseUnifiedAssetLibraryItem } from "@/lib/platform/assets"
 import { cn } from "@/lib/utils"
 
@@ -1092,21 +1093,22 @@ export function WorkspaceAssetLibrary({
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div className="min-w-0 flex-1 xl:max-w-[460px]">
-                  <label className="relative block min-w-0">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
-                    <input
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder={copy.searchPlaceholder}
-                      className="h-11 w-full rounded-[10px] border border-[#deded6] bg-white pl-10 pr-4 text-sm text-[#111] outline-none transition focus:border-[#111]"
-                    />
-                  </label>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
+            <DashboardFilterToolbar
+              className="mt-5"
+              searchClassName="xl:max-w-[460px]"
+              search={
+                <label className="relative block min-w-0">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder={copy.searchPlaceholder}
+                    className="h-11 w-full rounded-[10px] border border-[#deded6] bg-white pl-10 pr-4 text-sm text-[#111] outline-none transition focus:border-[#111]"
+                  />
+                </label>
+              }
+              filters={
+                <>
                   <select
                     value={typeFilter}
                     onChange={(event) => setTypeFilter(event.target.value)}
@@ -1152,38 +1154,39 @@ export function WorkspaceAssetLibrary({
                     <option value="7d">{copy.last7d}</option>
                     <option value="30d">{copy.last30d}</option>
                   </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("grid")}
-                  aria-label={copy.grid}
-                  className={cn(
-                    "inline-flex h-10 w-10 items-center justify-center rounded-[8px] border",
-                    viewMode === "grid"
-                      ? "border-[#ded735] bg-[#f5ef3d] text-[#111]"
-                      : "border-[#deded6] bg-white text-[#111]",
-                  )}
-                >
-                  <Grid2X2 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("table")}
-                  aria-label={copy.table}
-                  className={cn(
-                    "inline-flex h-10 w-10 items-center justify-center rounded-[8px] border",
-                    viewMode === "table"
-                      ? "border-[#ded735] bg-[#f5ef3d] text-[#111]"
-                      : "border-[#deded6] bg-white text-[#111]",
-                  )}
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+                </>
+              }
+              actions={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("grid")}
+                    aria-label={copy.grid}
+                    className={cn(
+                      "inline-flex h-10 w-10 items-center justify-center rounded-[8px] border",
+                      viewMode === "grid"
+                        ? "border-[#ded735] bg-[#f5ef3d] text-[#111]"
+                        : "border-[#deded6] bg-white text-[#111]",
+                    )}
+                  >
+                    <Grid2X2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("table")}
+                    aria-label={copy.table}
+                    className={cn(
+                      "inline-flex h-10 w-10 items-center justify-center rounded-[8px] border",
+                      viewMode === "table"
+                        ? "border-[#ded735] bg-[#f5ef3d] text-[#111]"
+                        : "border-[#deded6] bg-white text-[#111]",
+                    )}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </>
+              }
+            />
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm text-[#666]">

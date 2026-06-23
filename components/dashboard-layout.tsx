@@ -162,6 +162,10 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const aiEntryLabel = locale === "zh" ? "AI \u5bf9\u8bdd" : "AI Chat"
   const consultingAdvisorLabel = locale === "zh" ? "\u54a8\u8be2\u4e13\u5bb6" : "Consulting Advisor"
   const consultingAdvisorHref = "/dashboard/ai?entry=consulting-advisor"
+  // Brand/Growth advisors are served by the AI Entry skill chain (claude-sonnet-4.6),
+  // not the Dify workflow. Lock the model via entry=consulting-advisor.
+  const brandAdvisorHref = "/dashboard/ai?agent=executive-brand&entry=consulting-advisor"
+  const growthAdvisorHref = "/dashboard/ai?agent=executive-growth&entry=consulting-advisor"
   const pptAssistantHref = "/dashboard/ai?agent=executive-ppt"
   const businessSectionLabel = locale === "zh" ? "业务入口" : "Business"
   const currentBusinessAgentId = (searchParams.get("agent") || "").trim()
@@ -296,12 +300,12 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside
-        className={`dashboard-panel !fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:!static ${
+        className={`dashboard-panel !fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border/50 bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:!static ${
           sidebarCollapsed ? "w-[88px]" : "w-[240px] lg:w-[260px]"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-full flex-col">
-          <div className={sidebarCollapsed ? "border-b border-sidebar-border p-3" : "border-b border-sidebar-border p-4"}>
+          <div className={sidebarCollapsed ? "border-b border-sidebar-border/55 p-3" : "border-b border-sidebar-border/55 p-4"}>
             <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex items-start justify-between gap-3"}>
               <div className={sidebarCollapsed ? "flex flex-col items-center gap-3" : "flex min-w-0 items-center gap-3"}>
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/40 bg-primary">
@@ -390,24 +394,24 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                       ))}
                     {hasAdvisorFeature && advisor.brandStrategy && userEmail && (
                       sidebarCollapsed ? (
-                        <Link href="/dashboard/advisor/brand-strategy/new">
+                        <Link href={brandAdvisorHref}>
                           <Button variant="ghost" className="w-full justify-center" size="sm" title={messages.dashboardLayout.brandAdvisor}>
                             <Target className="h-4 w-4" />
                           </Button>
                         </Link>
                       ) : (
-                        <AdvisorSidebarItem title={messages.dashboardLayout.brandAdvisor} advisorType="brand-strategy" userEmail={userEmail} icon={Target} />
+                        <AiEntrySidebarItem title={messages.dashboardLayout.brandAdvisor} icon={Target} entryHref={brandAdvisorHref} activeAgentId="executive-brand" />
                       )
                     )}
                     {hasAdvisorFeature && advisor.growth && userEmail && (
                       sidebarCollapsed ? (
-                        <Link href="/dashboard/advisor/growth/new">
+                        <Link href={growthAdvisorHref}>
                           <Button variant="ghost" className="mt-1 w-full justify-center" size="sm" title={messages.dashboardLayout.growthAdvisor}>
                             <TrendingUp className="h-4 w-4" />
                           </Button>
                         </Link>
                       ) : (
-                        <AdvisorSidebarItem title={messages.dashboardLayout.growthAdvisor} advisorType="growth" userEmail={userEmail} icon={TrendingUp} />
+                        <AiEntrySidebarItem title={messages.dashboardLayout.growthAdvisor} icon={TrendingUp} entryHref={growthAdvisorHref} activeAgentId="executive-growth" />
                       )
                     )}
                   </div>
@@ -550,7 +554,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                             highlighted={sidebarItem.highlighted}
                           />
                           {!sidebarCollapsed && sidebarItem.visibleAgents.length > 0 ? (
-                            <div className="ml-3 space-y-1 border-l border-sidebar-border/70 pl-3">
+                            <div className="ml-3 space-y-1 border-l border-sidebar-border/35 pl-3">
                               {sidebarItem.visibleAgents.map((agent) => {
                                 return (
                                   <DashboardSubMenuLink
@@ -606,7 +610,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
             </ScrollArea>
           </div>
 
-          <div className={sidebarCollapsed ? "space-y-2 border-t border-sidebar-border/80 p-3" : "space-y-2 border-t border-sidebar-border/80 p-4"}>
+          <div className={sidebarCollapsed ? "space-y-2 border-t border-sidebar-border/45 p-3" : "space-y-2 border-t border-sidebar-border/45 p-4"}>
             {hasVideoFeature && !enterprisePending && !enterpriseRejected && (
               <Link href="/dashboard/video">
                 <Button
@@ -765,10 +769,10 @@ function DashboardMenuLink({
         variant="ghost"
         className={cn(
           collapsed
-            ? "box-border h-11 w-full min-w-0 justify-center rounded-[8px] border border-sidebar-border bg-card px-3 text-sidebar-foreground shadow-none transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
-            : "box-border h-11 w-full min-w-0 justify-start rounded-[8px] border border-sidebar-border bg-card px-3 text-sidebar-foreground shadow-none transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
-          active && "border-[#111] bg-[#111] text-primary hover:border-[#111] hover:bg-[#111] hover:text-primary",
-          highlighted && !active && "border-primary/70 bg-primary/15",
+            ? "box-border h-11 w-full min-w-0 justify-center rounded-[8px] border border-sidebar-border/35 bg-card/75 px-3 text-sidebar-foreground shadow-none transition hover:border-primary/40 hover:bg-primary hover:text-primary-foreground"
+            : "box-border h-11 w-full min-w-0 justify-start rounded-[8px] border border-sidebar-border/35 bg-card/75 px-3 text-sidebar-foreground shadow-none transition hover:border-primary/40 hover:bg-primary hover:text-primary-foreground",
+          active && "border-foreground/10 bg-foreground text-primary hover:border-foreground/10 hover:bg-foreground hover:text-primary",
+          highlighted && !active && "border-primary/35 bg-primary/10",
         )}
         size="sm"
         title={label}
@@ -796,9 +800,9 @@ function DashboardSubMenuLink({
     <Link
       href={href}
       className={cn(
-        "block rounded-[8px] border border-transparent px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:border-primary/40 hover:bg-primary/10 hover:text-sidebar-foreground",
-        active && "border-[#111] bg-[#111] text-primary",
-        highlighted && !active && "border-primary/40 bg-primary/10 text-sidebar-foreground",
+        "block rounded-[8px] border border-transparent px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:border-primary/30 hover:bg-primary/10 hover:text-sidebar-foreground",
+        active && "border-foreground/10 bg-foreground text-primary",
+        highlighted && !active && "border-primary/30 bg-primary/10 text-sidebar-foreground",
       )}
     >
       {label}

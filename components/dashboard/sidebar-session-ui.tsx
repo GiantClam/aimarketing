@@ -25,8 +25,8 @@ export function SidebarSectionToggle({
     <Button
       variant="ghost"
       className={cn(
-        "box-border h-11 w-full min-w-0 justify-between rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
-        expanded && "bg-primary text-primary-foreground",
+        "box-border h-11 w-full min-w-0 justify-between rounded-[6px] border border-sidebar-border/35 bg-card/75 px-3 text-sidebar-foreground transition hover:border-primary/40 hover:bg-primary hover:text-primary-foreground",
+        expanded && "border-primary/35 bg-primary text-primary-foreground",
       )}
       size="sm"
       onClick={onToggle}
@@ -57,7 +57,7 @@ export function SidebarCreateLink({ href, label, testId, loading, disabled, onCl
   const button = (
     <Button
       variant="ghost"
-      className="box-border h-9 w-full min-w-0 justify-start overflow-hidden rounded-[6px] border border-transparent bg-sidebar-accent px-3 text-xs font-medium text-sidebar-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground"
+      className="box-border h-9 w-full min-w-0 justify-start overflow-hidden rounded-[6px] border border-transparent bg-sidebar-accent px-3 text-xs font-medium text-sidebar-foreground hover:border-primary/35 hover:bg-primary hover:text-primary-foreground"
       data-testid={testId}
       onClick={onClick}
       disabled={disabled}
@@ -110,8 +110,8 @@ export function SidebarSessionLink({
         className={cn(
           "group relative box-border w-full min-w-0 max-w-full overflow-hidden rounded-[6px] border border-transparent px-3 py-2.5 text-xs transition-colors",
           active
-            ? "border-primary bg-primary text-primary-foreground"
-            : "bg-sidebar-accent text-sidebar-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground",
+            ? "border-primary/35 bg-primary text-primary-foreground"
+            : "bg-sidebar-accent text-sidebar-foreground hover:border-primary/35 hover:bg-primary hover:text-primary-foreground",
         )}
       >
         {children}

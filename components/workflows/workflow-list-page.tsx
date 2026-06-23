@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
 import { cn } from "@/lib/utils"
 import type { WorkflowDefinition } from "@/lib/workflows/store"
 import { resolveWorkflowNodeTitle, type WorkflowDefinitionNode, type WorkflowNodeType } from "@/lib/workflows/schema"
@@ -802,21 +803,21 @@ export function WorkflowListPage({
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div className="min-w-0 flex-1 xl:max-w-[440px]">
-                  <label className="relative block min-w-0">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
-                    <input
-                      value={runSearch}
-                      onChange={(event) => setRunSearch(event.target.value)}
-                      placeholder={copy.searchPlaceholder}
-                      className="h-[42px] w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-4 text-sm text-[#111] outline-none transition focus:border-[#111]"
-                    />
-                  </label>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
+            <DashboardFilterToolbar
+              className="mt-5"
+              search={
+                <label className="relative block min-w-0">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
+                  <input
+                    value={runSearch}
+                    onChange={(event) => setRunSearch(event.target.value)}
+                    placeholder={copy.searchPlaceholder}
+                    className="h-[42px] w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-4 text-sm text-[#111] outline-none transition focus:border-[#111]"
+                  />
+                </label>
+              }
+              filters={
+                <>
                   <select
                     value={runStatusFilter}
                     onChange={(event) => setRunStatusFilter(event.target.value)}
@@ -847,19 +848,20 @@ export function WorkflowListPage({
                     <option value="all">{copy.filterTriggerAll}</option>
                     <option value="manual">{copy.filterTriggerManual}</option>
                   </select>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="h-[42px] rounded-[9px] border-[#deded6] bg-white px-4 text-sm font-extrabold text-[#111]"
-                onClick={() => router.refresh()}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {copy.refresh}
-              </Button>
-            </div>
+                </>
+              }
+              actions={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-[42px] rounded-[9px] border-[#deded6] bg-white px-4 text-sm font-extrabold text-[#111]"
+                  onClick={() => router.refresh()}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  {copy.refresh}
+                </Button>
+              }
+            />
 
             <div className="mt-5 overflow-hidden rounded-xl border border-[#ededE7] bg-white">
               <table className="w-full border-collapse text-left">

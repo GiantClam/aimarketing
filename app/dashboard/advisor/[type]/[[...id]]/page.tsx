@@ -29,6 +29,14 @@ export default function AdvisorPage({ params }: { params: Promise<{ type: string
       return
     }
 
+    // Brand/Growth advisors are served by the AI Entry skill chain, not Dify.
+    // Redirect to the AI workspace with the matching executive agent preselected.
+    if (advisorType === "brand-strategy" || advisorType === "growth") {
+      const agentId = advisorType === "brand-strategy" ? "executive-brand" : "executive-growth"
+      router.replace(`/dashboard/ai?agent=${agentId}&entry=consulting-advisor`)
+      return
+    }
+
     let cancelled = false
 
     const checkAvailability = async () => {

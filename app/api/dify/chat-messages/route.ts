@@ -9,7 +9,8 @@ import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
 import { appendLeadHunterMessage, ensureLeadHunterConversation, saveLeadHunterEvidenceForMessage } from "@/lib/lead-hunter/repository"
 import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/lead-hunter/chat"
 import { normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
-import { loadLeadHunterSkillRunner } from "@/lib/skills/runtime/registry"
+import { loadExecutiveAdvisorSkillRunner, loadLeadHunterSkillRunner } from "@/lib/skills/runtime/registry"
+import { normalizeExecutiveAdvisorType } from "@/lib/skills/runtime/executive-advisor-types"
 import { LOCALE_COOKIE_NAME, resolveRequestLocale } from "@/lib/i18n/config"
 import { logAuditEvent } from "@/lib/server/audit"
 import { checkRateLimit, createRateLimitResponse, getRequestIp } from "@/lib/server/rate-limit"
@@ -68,6 +69,79 @@ function extractAdvisorQuery(body: unknown) {
   }
   const inputs = getObjectRecord(candidate.inputs)
   return typeof inputs?.contents === "string" ? inputs.contents : ""
+}
+
+function createSkillSseStream(answerPromise: Promise<{ answer: string; agentName?: string | null }>) {
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        const result = await answerPromise
+        const answer = sanitizeAssistantContent(result.answer || "")
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              event: "message",
+              answer,
+            })}\n\n`,
+          ),
+        )
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              event: "message_end",
+              metadata: {
+                agent_name: result.agentName || undefined,
+              },
+            })}\n\n`,
+          ),
+        )
+      } catch (error) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              event: "error",
+              message: error instanceof Error ? error.message : String(error),
+            })}\n\n`,
+          ),
+        )
+      } finally {
+        controller.close()
+      }
+    },
+  })
+}
+
+async function runExecutiveAdvisorSkill(input: {
+  advisorType: string
+  query: string
+  preferredLanguage: "zh" | "en" | "auto"
+  conversationId?: string | null
+  enterpriseId?: number | null
+  enterpriseCode?: string | null
+  memoryContext?: string | null
+  soulCard?: string | null
+}) {
+  const normalizedAdvisorType = normalizeExecutiveAdvisorType(input.advisorType)
+  if (!normalizedAdvisorType) {
+    throw new Error("invalid_executive_advisor_type")
+  }
+
+  const runner = await loadExecutiveAdvisorSkillRunner(normalizedAdvisorType)
+  const result = await runner.runBlocking({
+    query: input.query,
+    preferredLanguage: input.preferredLanguage,
+    conversationId: input.conversationId || null,
+    enterpriseId: input.enterpriseId,
+    enterpriseCode: input.enterpriseCode,
+    memoryContext: input.memoryContext || null,
+    soulCard: input.soulCard || null,
+  })
+
+  return {
+    answer: result.answer,
+    agentName: result.agentName,
+  }
 }
 
 async function persistLeadHunterStreamingMessage(input: {
@@ -193,6 +267,9 @@ export async function POST(req: NextRequest) {
       enterpriseCode: auth.user.enterpriseCode,
     })
     const useLeadHunterSkillEngine = Boolean(normalizedLeadHunterType && config?.baseUrl === "skill://lead-hunter")
+    const useExecutiveAdvisorSkillEngine = Boolean(
+      normalizeExecutiveAdvisorType(resolvedAdvisorType) && config?.baseUrl === "skill://executive-consulting",
+    )
     if (!config) {
       logAuditEvent(req, "advisor.chat.config_missing", { userId: auth.user.id, advisorType: resolvedAdvisorType })
       return NextResponse.json({ error: "No advisor engine configured" }, { status: 500 })
@@ -203,6 +280,11 @@ export async function POST(req: NextRequest) {
       if (!query.trim()) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
       }
+      const executiveSkillConversationId = useExecutiveAdvisorSkillEngine
+        ? typeof body?.conversation_id === "string" && body.conversation_id.trim()
+          ? body.conversation_id.trim()
+          : `skill-${resolvedAdvisorType}-${Date.now()}`
+        : null
       const memoryBridge = await buildDifyMemoryBridge({
         userId: auth.user.id,
         advisorType: resolvedAdvisorType,
@@ -231,6 +313,8 @@ export async function POST(req: NextRequest) {
           conversationId:
             normalizedLeadHunterType
               ? String(conversation?.id || "")
+              : executiveSkillConversationId
+                ? executiveSkillConversationId
               : typeof body?.conversation_id === "string"
                 ? body.conversation_id
                 : null,
@@ -249,6 +333,8 @@ export async function POST(req: NextRequest) {
         conversation_id:
           normalizedLeadHunterType
             ? String(conversation?.id || "")
+            : executiveSkillConversationId
+              ? executiveSkillConversationId
             : typeof body?.conversation_id === "string"
               ? body.conversation_id
               : null,
@@ -256,7 +342,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (normalizedLeadHunterType) {
-      const leadHunterSkillRunner = loadLeadHunterSkillRunner(normalizedLeadHunterType)
+      const leadHunterSkillRunner = await loadLeadHunterSkillRunner(normalizedLeadHunterType)
       const query = extractAdvisorQuery(body)
       if (!query.trim()) {
         return NextResponse.json({ error: "query is required" }, { status: 400 })
@@ -400,6 +486,52 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         answer,
+      })
+    }
+
+    if (useExecutiveAdvisorSkillEngine) {
+      const query = extractAdvisorQuery(body)
+      if (!query.trim()) {
+        return NextResponse.json({ error: "query is required" }, { status: 400 })
+      }
+      const memoryBridge = await buildDifyMemoryBridge({
+        userId: auth.user.id,
+        advisorType: resolvedAdvisorType,
+        query,
+      })
+      const conversationId =
+        typeof body?.conversation_id === "string" && body.conversation_id.trim()
+          ? body.conversation_id.trim()
+          : `skill-${resolvedAdvisorType}-${Date.now()}`
+      const answerPromise = runExecutiveAdvisorSkill({
+        advisorType: resolvedAdvisorType,
+        query,
+        preferredLanguage: preferredLeadHunterLanguage,
+        conversationId,
+        enterpriseId: auth.user.enterpriseId,
+        enterpriseCode: auth.user.enterpriseCode,
+        memoryContext: memoryBridge.memoryContext,
+        soulCard: memoryBridge.soulCard,
+      })
+
+      if (body.response_mode === "streaming") {
+        return new Response(createSkillSseStream(answerPromise), {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+            ...(conversationId ? { "X-Conversation-Id": conversationId } : {}),
+          },
+        })
+      }
+
+      const result = await answerPromise
+      return NextResponse.json({
+        answer: result.answer,
+        conversation_id: conversationId,
+        metadata: {
+          agent_name: result.agentName,
+        },
       })
     }
 

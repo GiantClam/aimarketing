@@ -14,6 +14,7 @@ import {
 export type ProviderOptions = {
   preferredProviderId?: AiEntryProviderId | null
   preferredModel?: string
+  forcePreferredProvider?: boolean
   forceModelAcrossProviders?: boolean
   disableSameProviderModelFallback?: boolean
   directProviderFailoverOnError?: boolean

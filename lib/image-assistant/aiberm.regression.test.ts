@@ -90,6 +90,8 @@ test("image assistant availability honors an enterprise runninghub runtime overr
         workflowCreatePath: "/task/openapi/create",
         seedanceTextToVideoEndpoint: null,
         seedanceImageToVideoEndpoint: null,
+        seedanceMiniTextToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video",
+        seedanceMiniImageToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video",
         digitalHumanWorkflowId: null,
         videoEnhanceWorkflowId: null,
         image: {
@@ -173,6 +175,8 @@ test("image assistant runninghub runtime supports image-to-image generation with
           workflowCreatePath: "/task/openapi/create",
           seedanceTextToVideoEndpoint: null,
           seedanceImageToVideoEndpoint: null,
+          seedanceMiniTextToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video",
+          seedanceMiniImageToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video",
           digitalHumanWorkflowId: null,
           videoEnhanceWorkflowId: null,
           image: {

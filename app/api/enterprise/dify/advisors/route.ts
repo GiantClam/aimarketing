@@ -115,7 +115,9 @@ export async function PUT(request: NextRequest) {
     if (!advisorType) {
       return NextResponse.json({ error: "advisor_type_required" }, { status: 400 })
     }
-    const executionMode = advisorType === "lead-hunter" && body?.executionMode === "skill" ? "skill" : "dify"
+    const canUseSkillMode =
+      advisorType === "lead-hunter" || advisorType === "brand-strategy" || advisorType === "growth"
+    const executionMode = canUseSkillMode && body?.executionMode === "skill" ? "skill" : "dify"
 
     await upsertEnterpriseAdvisorOverride(enterpriseId, advisorType, {
       useDefault: Boolean(body?.useDefault),

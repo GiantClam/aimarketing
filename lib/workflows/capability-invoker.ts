@@ -12,6 +12,13 @@ import { POST as videoWorkflowPost } from "@/app/api/video-agent/workflow/route"
 import { POST as writerChatStreamPost } from "@/app/api/writer/chat/stream/route"
 import { applyInternalServiceAuthHeader, type AuthUser } from "@/lib/auth/session"
 import {
+  findModelByCapabilityAndAlias,
+  getDefaultModelId,
+  getModelDefinition,
+  listModels,
+} from "@/lib/ai-runtime/model-registry"
+import type { ModelCapability } from "@/lib/ai-runtime/capabilities"
+import {
   evaluatePlatformExecutionGate,
   resolvePlatformBindingExecutionProxyTarget,
   resolvePlatformCapabilityExecutionProxyTarget,
@@ -661,8 +668,38 @@ function resolveWorkflowSharedCreditsRequired(params: {
   return usesSharedCredits
 }
 
-function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, prompt: string) {
-  const featureId = normalizeOptionalText(params.node.config.featureId) || "text-to-video"
+function resolveWorkflowVideoFeatureId(params: WorkflowCapabilityInvokeParams) {
+  if (params.nodeType === "digital_human" || normalizeOptionalText(params.node.config.featureId) === "digital-human") {
+    return "digital-human"
+  }
+
+  return normalizeOptionalText(params.node.config.firstFrameUrl) || findPrimaryImageUrl(params.input)
+    ? "image-to-video"
+    : "text-to-video"
+}
+
+function resolveWorkflowVideoCapability(featureId: "text-to-video" | "image-to-video"): ModelCapability {
+  return featureId === "image-to-video" ? "video.image_to_video" : "video.text_to_video"
+}
+
+function resolveWorkflowVideoModelId(params: WorkflowCapabilityInvokeParams, featureId: "text-to-video" | "image-to-video") {
+  const configuredModel = normalizeOptionalText(params.node.config.model)
+  const capability = resolveWorkflowVideoCapability(featureId)
+  const matchingModel = findModelByCapabilityAndAlias({
+    capability,
+    value: configuredModel,
+  })
+
+  return (
+    matchingModel?.id ||
+    getModelDefinition(getDefaultModelId(capability) || "")?.id ||
+    listModels({ capability })[0]?.id ||
+    undefined
+  )
+}
+
+export function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, prompt: string) {
+  const featureId = resolveWorkflowVideoFeatureId(params)
 
   if (params.nodeType === "digital_human" || featureId === "digital-human") {
     const audioUrl = normalizeOptionalText(params.node.config.audioUrl) || findPrimaryAudioUrl(params.input)
@@ -684,7 +721,7 @@ function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, p
   }
 
   if (featureId === "image-to-video") {
-    const selectedModel = normalizeOptionalText(params.node.config.model) || undefined
+    const selectedModel = resolveWorkflowVideoModelId(params, "image-to-video")
     return {
       featureId,
       params: {
@@ -703,7 +740,7 @@ function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, p
     }
   }
 
-  const selectedModel = normalizeOptionalText(params.node.config.model) || undefined
+  const selectedModel = resolveWorkflowVideoModelId(params, "text-to-video")
   return {
     featureId: "text-to-video",
     params: {

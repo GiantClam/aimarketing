@@ -12,13 +12,15 @@ import {
 } from "@/lib/platform/runninghub"
 
 const baseConfig: RunningHubConfig = {
-  baseUrl: "https://www.runninghub.ai",
+  baseUrl: "https://www.runninghub.cn",
   apiKey: "test-key",
   queryPath: "/openapi/v2/query",
   uploadPath: "/openapi/v2/media/upload/binary",
   workflowCreatePath: "/task/openapi/create",
   seedanceTextToVideoEndpoint: null,
   seedanceImageToVideoEndpoint: null,
+  seedanceMiniTextToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video",
+  seedanceMiniImageToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video",
   digitalHumanWorkflowId: null,
   videoEnhanceWorkflowId: null,
   image: {

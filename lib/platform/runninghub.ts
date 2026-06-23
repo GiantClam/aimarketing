@@ -62,6 +62,8 @@ export type RunningHubConfig = {
   workflowCreatePath: string
   seedanceTextToVideoEndpoint: string | null
   seedanceImageToVideoEndpoint: string | null
+  seedanceMiniTextToVideoEndpoint: string | null
+  seedanceMiniImageToVideoEndpoint: string | null
   digitalHumanWorkflowId: string | null
   videoEnhanceWorkflowId: string | null
   image: RunningHubTargetConfig
@@ -69,7 +71,7 @@ export type RunningHubConfig = {
 }
 
 function normalizeBaseUrl(value: string | undefined) {
-  return (value?.trim() || "https://www.runninghub.ai").replace(/\/+$/, "")
+  return (value?.trim() || "https://www.runninghub.cn").replace(/\/+$/, "")
 }
 
 function normalizeApiPath(value: string | undefined, fallback: string) {
@@ -89,8 +91,18 @@ function normalizeEndpoint(value: string | undefined) {
 export function getRunningHubConfig(): RunningHubConfig {
   const apiKey = process.env.RUNNINGHUB_API_KEY?.trim() || ""
   const baseUrl = normalizeBaseUrl(process.env.RUNNINGHUB_BASE_URL)
-  const seedanceTextToVideoEndpoint = normalizeEndpoint(process.env.RUNNINGHUB_SEEDANCE_TEXT_TO_VIDEO_ENDPOINT)
-  const seedanceImageToVideoEndpoint = normalizeEndpoint(process.env.RUNNINGHUB_SEEDANCE_IMAGE_TO_VIDEO_ENDPOINT)
+  const seedanceTextToVideoEndpoint =
+    normalizeEndpoint(process.env.RUNNINGHUB_SEEDANCE_TEXT_TO_VIDEO_ENDPOINT) ||
+    "/openapi/v2/rhart-video/sparkvideo-2.0-fast/text-to-video"
+  const seedanceImageToVideoEndpoint =
+    normalizeEndpoint(process.env.RUNNINGHUB_SEEDANCE_IMAGE_TO_VIDEO_ENDPOINT) ||
+    "/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video"
+  const seedanceMiniTextToVideoEndpoint = normalizeEndpoint(
+    process.env.RUNNINGHUB_SEEDANCE_MINI_TEXT_TO_VIDEO_ENDPOINT,
+  ) || "/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video"
+  const seedanceMiniImageToVideoEndpoint = normalizeEndpoint(
+    process.env.RUNNINGHUB_SEEDANCE_MINI_IMAGE_TO_VIDEO_ENDPOINT,
+  ) || "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video"
   const workflowCreatePath = normalizeApiPath(process.env.RUNNINGHUB_WORKFLOW_CREATE_PATH, "/task/openapi/create")
   const digitalHumanWorkflowId = process.env.RUNNINGHUB_DIGITAL_HUMAN_WORKFLOW_ID?.trim() || null
   const videoEnhanceWorkflowId = process.env.RUNNINGHUB_VIDEO_ENHANCE_WORKFLOW_ID?.trim() || null
@@ -98,6 +110,8 @@ export function getRunningHubConfig(): RunningHubConfig {
   const hasScopedVideoConfig = Boolean(
     seedanceTextToVideoEndpoint ||
       seedanceImageToVideoEndpoint ||
+      seedanceMiniTextToVideoEndpoint ||
+      seedanceMiniImageToVideoEndpoint ||
       (workflowCreatePath && digitalHumanWorkflowId) ||
       (workflowCreatePath && videoEnhanceWorkflowId),
   )
@@ -110,6 +124,8 @@ export function getRunningHubConfig(): RunningHubConfig {
     workflowCreatePath,
     seedanceTextToVideoEndpoint,
     seedanceImageToVideoEndpoint,
+    seedanceMiniTextToVideoEndpoint,
+    seedanceMiniImageToVideoEndpoint,
     digitalHumanWorkflowId,
     videoEnhanceWorkflowId,
     image: {
@@ -122,6 +138,8 @@ export function getRunningHubConfig(): RunningHubConfig {
         legacyVideoEndpoint ||
         seedanceTextToVideoEndpoint ||
         seedanceImageToVideoEndpoint ||
+        seedanceMiniTextToVideoEndpoint ||
+        seedanceMiniImageToVideoEndpoint ||
         workflowCreatePath,
     },
   }

@@ -377,7 +377,6 @@ function buildNode(
                 }
               : type === "video_generate"
                 ? {
-                    featureId: "text-to-video",
                     resolution: "720p",
                     duration: "5",
                     ratio: "adaptive",

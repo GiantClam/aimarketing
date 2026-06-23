@@ -40,6 +40,8 @@ type RunningHubVideoResult = {
   title?: string | null
 }
 
+type RunningHubSeedanceVideoFeatureId = Extract<RunningHubVideoFeatureId, "text-to-video" | "image-to-video">
+
 export type RunningHubVideoTask = {
   taskId: string
   mediaTarget: "ai-video"
@@ -89,6 +91,27 @@ function normalizeBoolean(value: unknown, fallback = false) {
     if (normalized === "false") return false
   }
   return fallback
+}
+
+function isSeedanceMiniVideoModel(params: Record<string, unknown>) {
+  const candidates = [params.modelId, params.model, params.nativeModel]
+  return candidates.some((value) => {
+    if (typeof value !== "string") return false
+    const normalized = value.trim().toLowerCase()
+    return normalized.includes("seedance-mini") || normalized.includes("sparkvideo-2.0-mini")
+  })
+}
+
+export function resolveSeedanceVideoEndpoint(input: {
+  featureId: RunningHubSeedanceVideoFeatureId
+  params: Record<string, unknown>
+  config: ReturnType<typeof getRunningHubConfig>
+}) {
+  const useMini = isSeedanceMiniVideoModel(input.params)
+  if (input.featureId === "image-to-video") {
+    return useMini ? input.config.seedanceMiniImageToVideoEndpoint : input.config.seedanceImageToVideoEndpoint
+  }
+  return useMini ? input.config.seedanceMiniTextToVideoEndpoint : input.config.seedanceTextToVideoEndpoint
 }
 
 function buildRunningHubFileNameFieldId(fieldId: string) {
@@ -393,7 +416,12 @@ async function submitTextToVideoTask(
   config?: ReturnType<typeof getRunningHubConfig>,
 ) {
   const resolvedConfig = config ?? getRunningHubConfig()
-  if (!resolvedConfig.seedanceTextToVideoEndpoint) {
+  const endpoint = resolveSeedanceVideoEndpoint({
+    featureId: "text-to-video",
+    params,
+    config: resolvedConfig,
+  })
+  if (!endpoint) {
     throw new Error("runninghub_not_configured")
   }
 
@@ -403,7 +431,7 @@ async function submitTextToVideoTask(
   }
 
   return submitRunningHubRawTask({
-    endpoint: resolvedConfig.seedanceTextToVideoEndpoint,
+    endpoint,
     config: resolvedConfig,
     payload: {
       prompt,
@@ -423,7 +451,12 @@ async function submitImageToVideoTask(
   config?: ReturnType<typeof getRunningHubConfig>,
 ) {
   const resolvedConfig = config ?? getRunningHubConfig()
-  if (!resolvedConfig.seedanceImageToVideoEndpoint) {
+  const endpoint = resolveSeedanceVideoEndpoint({
+    featureId: "image-to-video",
+    params,
+    config: resolvedConfig,
+  })
+  if (!endpoint) {
     throw new Error("runninghub_not_configured")
   }
 
@@ -434,7 +467,7 @@ async function submitImageToVideoTask(
 
   const lastFrameUrl = normalizeOptionalText(params.lastFrameUrl)
   return submitRunningHubRawTask({
-    endpoint: resolvedConfig.seedanceImageToVideoEndpoint,
+    endpoint,
     config: resolvedConfig,
     payload: {
       prompt: normalizeOptionalText(params.prompt),

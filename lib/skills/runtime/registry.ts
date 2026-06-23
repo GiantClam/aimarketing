@@ -1,10 +1,11 @@
-import {
-  createLeadHunterSkillSseStream,
-  runLeadHunterSkillConversation,
-  type LeadHunterSkillEventPayload,
-} from "@/lib/lead-hunter/skill-engine"
 import type { LeadHunterAdvisorType } from "@/lib/lead-hunter/types"
+import type { ExecutiveAdvisorType } from "@/lib/skills/runtime/executive-advisor-types"
 import { runWriterSkillsTurn } from "@/lib/writer/skills"
+
+type LeadHunterSkillEventPayload = {
+  event: string
+  data?: unknown
+}
 
 type LeadHunterSkillInput = {
   query: string
@@ -33,12 +34,13 @@ type WriterSkillInput = {
   onProgress?: (event: { type: string; label: string; detail?: string; status: string; at?: number }) => void | Promise<void>
 }
 
-export function loadLeadHunterSkillRunner(advisorType: LeadHunterAdvisorType) {
+export async function loadLeadHunterSkillRunner(advisorType: LeadHunterAdvisorType) {
+  const runtime = await import("@/lib/lead-hunter/skill-engine")
   return {
     kind: "lead-hunter" as const,
     advisorType,
     runBlocking: (input: LeadHunterSkillInput) =>
-      runLeadHunterSkillConversation({
+      runtime.runLeadHunterSkillConversation({
         advisorType,
         query: input.query,
         preferredLanguage: input.preferredLanguage,
@@ -51,7 +53,7 @@ export function loadLeadHunterSkillRunner(advisorType: LeadHunterAdvisorType) {
         onSseEvent: input.onSseEvent,
       }),
     runStreaming: (input: LeadHunterSkillInput) =>
-      createLeadHunterSkillSseStream({
+      runtime.createLeadHunterSkillSseStream({
         advisorType,
         query: input.query,
         preferredLanguage: input.preferredLanguage,
@@ -65,6 +67,13 @@ export function loadLeadHunterSkillRunner(advisorType: LeadHunterAdvisorType) {
       }),
   }
 }
+
+export async function loadExecutiveAdvisorSkillRunner(advisorType: ExecutiveAdvisorType) {
+  const runtime = await import("@/lib/skills/runtime/executive-advisor")
+  return runtime.loadExecutiveAdvisorSkillRunner(advisorType)
+}
+
+export type { ExecutiveAdvisorType }
 
 export function loadWriterSkillRunner() {
   return {

@@ -16,6 +16,8 @@ type RunningHubConfigLike = {
   workflowCreatePath: string
   seedanceTextToVideoEndpoint: string | null
   seedanceImageToVideoEndpoint: string | null
+  seedanceMiniTextToVideoEndpoint: string | null
+  seedanceMiniImageToVideoEndpoint: string | null
   digitalHumanWorkflowId: string | null
   videoEnhanceWorkflowId: string | null
   image: {
@@ -40,6 +42,8 @@ const baseRunningHubConfig: RunningHubConfigLike = {
   workflowCreatePath: "/task/openapi/create",
   seedanceTextToVideoEndpoint: null,
   seedanceImageToVideoEndpoint: null,
+  seedanceMiniTextToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/text-to-video",
+  seedanceMiniImageToVideoEndpoint: "/openapi/v2/rhart-video/sparkvideo-2.0-mini/image-to-video",
   digitalHumanWorkflowId: null,
   videoEnhanceWorkflowId: null,
   image: {

@@ -23,6 +23,16 @@ function selectParameter(
 const VIDEO_RATIO_OPTIONS = [
   { label: "Adaptive", value: "adaptive" },
   { label: "16:9", value: "16:9" },
+  { label: "4:3", value: "4:3" },
+  { label: "1:1", value: "1:1" },
+  { label: "3:4", value: "3:4" },
+  { label: "9:16", value: "9:16" },
+  { label: "21:9", value: "21:9" },
+]
+
+const SEEDANCE_FAST_RATIO_OPTIONS = [
+  { label: "Adaptive", value: "adaptive" },
+  { label: "16:9", value: "16:9" },
   { label: "9:16", value: "9:16" },
   { label: "1:1", value: "1:1" },
 ]
@@ -30,6 +40,39 @@ const VIDEO_RATIO_OPTIONS = [
 const VIDEO_BOOL_OPTIONS = [
   { label: "On", value: "true" },
   { label: "Off", value: "false" },
+]
+
+const SEEDANCE_FAST_DURATION_OPTIONS = [
+  { label: "5s", value: "5" },
+  { label: "10s", value: "10" },
+]
+
+const SEEDANCE_FAST_RESOLUTION_OPTIONS = [
+  { label: "720p", value: "720p" },
+  { label: "1080p", value: "1080p" },
+]
+
+const SEEDANCE_VIDEO_DURATION_OPTIONS = [
+  { label: "4s", value: "4" },
+  { label: "5s", value: "5" },
+  { label: "6s", value: "6" },
+  { label: "7s", value: "7" },
+  { label: "8s", value: "8" },
+  { label: "9s", value: "9" },
+  { label: "10s", value: "10" },
+  { label: "11s", value: "11" },
+  { label: "12s", value: "12" },
+  { label: "13s", value: "13" },
+  { label: "14s", value: "14" },
+  { label: "15s", value: "15" },
+]
+
+const SEEDANCE_VIDEO_RESOLUTION_OPTIONS = [
+  { label: "480p", value: "480p" },
+  { label: "720p", value: "720p" },
+  { label: "1080p", value: "1080p" },
+  { label: "2k", value: "2k" },
+  { label: "4k", value: "4k" },
 ]
 
 const models: ModelDefinition[] = [
@@ -163,21 +206,15 @@ const models: ModelDefinition[] = [
     id: "runninghub:video:seedance-text-to-video",
     provider: "runninghub",
     capability: "video.text_to_video",
-    label: "Seedance Text to Video",
+    label: "Seedance Fast Text to Video",
     async: true,
     outputKind: "video",
     defaultTimeoutMs: 30 * 60_000,
     parameterSchema: [
       { id: "prompt", label: "Prompt", type: "textarea", required: true },
-      selectParameter("duration", "Duration", "5", [
-        { label: "5s", value: "5" },
-        { label: "10s", value: "10" },
-      ]),
-      selectParameter("resolution", "Resolution", "720p", [
-        { label: "720p", value: "720p" },
-        { label: "1080p", value: "1080p" },
-      ]),
-      selectParameter("ratio", "Aspect ratio", "adaptive", VIDEO_RATIO_OPTIONS),
+      selectParameter("duration", "Duration", "5", SEEDANCE_FAST_DURATION_OPTIONS),
+      selectParameter("resolution", "Resolution", "720p", SEEDANCE_FAST_RESOLUTION_OPTIONS),
+      selectParameter("ratio", "Aspect ratio", "adaptive", SEEDANCE_FAST_RATIO_OPTIONS),
       selectParameter("generateAudio", "Generate audio", "true", VIDEO_BOOL_OPTIONS),
       {
         id: "seed",
@@ -192,10 +229,52 @@ const models: ModelDefinition[] = [
     },
   },
   {
+    id: "runninghub:video:seedance-mini-text-to-video",
+    provider: "runninghub",
+    capability: "video.text_to_video",
+    label: "Seedance Mini Text to Video",
+    async: true,
+    outputKind: "video",
+    defaultTimeoutMs: 30 * 60_000,
+    parameterSchema: [
+      { id: "prompt", label: "Prompt", type: "textarea", required: true },
+      selectParameter("duration", "Duration", "5", SEEDANCE_VIDEO_DURATION_OPTIONS),
+      selectParameter("resolution", "Resolution", "720p", SEEDANCE_VIDEO_RESOLUTION_OPTIONS),
+      selectParameter("ratio", "Aspect ratio", "adaptive", VIDEO_RATIO_OPTIONS),
+      selectParameter("generateAudio", "Generate audio", "true", VIDEO_BOOL_OPTIONS),
+      {
+        id: "webSearch",
+        label: "Web search",
+        type: "select",
+        defaultValue: "false",
+        options: VIDEO_BOOL_OPTIONS,
+      },
+      {
+        id: "returnLastFrame",
+        label: "Return last frame",
+        type: "select",
+        defaultValue: "false",
+        options: VIDEO_BOOL_OPTIONS,
+      },
+      {
+        id: "seed",
+        label: "Seed",
+        type: "number",
+        defaultValue: -1,
+        min: -1,
+        max: 2147483647,
+      },
+    ],
+    providerMetadata: {
+      nativeModel: "seedance-mini-text-to-video",
+      featureId: "text-to-video",
+    },
+  },
+  {
     id: "runninghub:video:seedance-image-to-video",
     provider: "runninghub",
     capability: "video.image_to_video",
-    label: "Seedance Image to Video",
+    label: "Seedance Fast Image to Video",
     async: true,
     outputKind: "video",
     defaultTimeoutMs: 30 * 60_000,
@@ -203,15 +282,9 @@ const models: ModelDefinition[] = [
       { id: "firstFrameUrl", label: "First frame URL", type: "url", required: true },
       { id: "lastFrameUrl", label: "Last frame URL", type: "url" },
       { id: "prompt", label: "Prompt", type: "textarea" },
-      selectParameter("duration", "Duration", "5", [
-        { label: "5s", value: "5" },
-        { label: "10s", value: "10" },
-      ]),
-      selectParameter("resolution", "Resolution", "720p", [
-        { label: "720p", value: "720p" },
-        { label: "1080p", value: "1080p" },
-      ]),
-      selectParameter("ratio", "Aspect ratio", "adaptive", VIDEO_RATIO_OPTIONS),
+      selectParameter("duration", "Duration", "5", SEEDANCE_FAST_DURATION_OPTIONS),
+      selectParameter("resolution", "Resolution", "720p", SEEDANCE_FAST_RESOLUTION_OPTIONS),
+      selectParameter("ratio", "Aspect ratio", "adaptive", SEEDANCE_FAST_RATIO_OPTIONS),
       selectParameter("generateAudio", "Generate audio", "true", VIDEO_BOOL_OPTIONS),
       selectParameter("realPersonMode", "Real person mode", "true", VIDEO_BOOL_OPTIONS),
       {
@@ -223,6 +296,44 @@ const models: ModelDefinition[] = [
     ],
     providerMetadata: {
       nativeModel: "seedance-image-to-video",
+      featureId: "image-to-video",
+    },
+  },
+  {
+    id: "runninghub:video:seedance-mini-image-to-video",
+    provider: "runninghub",
+    capability: "video.image_to_video",
+    label: "Seedance Mini Image to Video",
+    async: true,
+    outputKind: "video",
+    defaultTimeoutMs: 30 * 60_000,
+    parameterSchema: [
+      { id: "firstFrameUrl", label: "First frame URL", type: "url", required: true },
+      { id: "lastFrameUrl", label: "Last frame URL", type: "url" },
+      { id: "prompt", label: "Prompt", type: "textarea" },
+      selectParameter("duration", "Duration", "5", SEEDANCE_VIDEO_DURATION_OPTIONS),
+      selectParameter("resolution", "Resolution", "720p", SEEDANCE_VIDEO_RESOLUTION_OPTIONS),
+      selectParameter("ratio", "Aspect ratio", "adaptive", VIDEO_RATIO_OPTIONS),
+      selectParameter("generateAudio", "Generate audio", "true", VIDEO_BOOL_OPTIONS),
+      selectParameter("realPersonMode", "Real person mode", "true", VIDEO_BOOL_OPTIONS),
+      {
+        id: "returnLastFrame",
+        label: "Return last frame",
+        type: "select",
+        defaultValue: "false",
+        options: VIDEO_BOOL_OPTIONS,
+      },
+      {
+        id: "seed",
+        label: "Seed",
+        type: "number",
+        defaultValue: -1,
+        min: -1,
+        max: 2147483647,
+      },
+    ],
+    providerMetadata: {
+      nativeModel: "seedance-mini-image-to-video",
       featureId: "image-to-video",
     },
   },

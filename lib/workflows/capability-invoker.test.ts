@@ -224,6 +224,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
 let createWorkflowCapabilityInvoker: typeof import("./capability-invoker").createWorkflowCapabilityInvoker
 let resolveWorkflowCapabilityCallTimeoutMs: typeof import("./capability-invoker").resolveWorkflowCapabilityCallTimeoutMs
+let buildVideoGenerateRequestBody: typeof import("./capability-invoker").buildVideoGenerateRequestBody
 
 function createImageParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): WorkflowCapabilityInvokeParams {
   return {
@@ -316,6 +317,35 @@ function createDigitalHumanParams(overrides?: Partial<WorkflowCapabilityInvokePa
       image: [{ url: "https://example.com/avatar.png", title: "Avatar" }],
       video: [],
       audio: [{ url: "https://example.com/audio.mp3", title: "Voice" }],
+      ppt: [],
+    },
+    ...overrides,
+  }
+}
+
+function createVideoParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): WorkflowCapabilityInvokeParams {
+  return {
+    nodeType: "video_generate",
+    capabilitySlug: "ai-video",
+    action: "workflow-plan",
+    node: {
+      nodeKey: "video-1",
+      type: "video_generate",
+      title: "视频生成",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        model: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+        featureId: "image-to-video",
+        duration: "6",
+      },
+    },
+    input: {
+      text: ["生成品牌宣传短片"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
       ppt: [],
     },
     ...overrides,
@@ -428,11 +458,52 @@ test("image capability request honors explicit workflow image provider selection
   assert.equal(body.providerLock, "crazyroute")
 })
 
+test("video capability request automatically uses text-to-video when there is no image input", () => {
+  const body = buildVideoGenerateRequestBody(createVideoParams(), "生成品牌宣传短片")
+
+  assert.equal(body.featureId, "text-to-video")
+  assert.equal(body.params.prompt, "生成品牌宣传短片")
+  assert.equal(body.params.firstFrameUrl, undefined)
+  assert.equal(body.params.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-2.3")
+})
+
+test("video capability request automatically uses image-to-video when image input exists", () => {
+  const body = buildVideoGenerateRequestBody(
+    createVideoParams({
+      node: {
+        nodeKey: "video-1",
+        type: "video_generate",
+        title: "视频生成",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          model: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+          featureId: "text-to-video",
+        },
+      },
+      input: {
+        text: ["让这张图动起来"],
+        asset: [],
+        image: [{ url: "https://example.com/frame.png", title: "首帧" }],
+        video: [],
+        audio: [],
+        ppt: [],
+      },
+    }),
+    "让这张图动起来",
+  )
+
+  assert.equal(body.featureId, "image-to-video")
+  assert.equal(body.params.firstFrameUrl, "https://example.com/frame.png")
+  assert.equal(body.params.modelId, "minimax:video:image-to-video:MiniMax-Hailuo-2.3")
+})
+
 test.before(async () => {
   const module = await import("./capability-invoker")
   const resolvedModule = ("default" in module ? module.default : module) as typeof import("./capability-invoker")
   createWorkflowCapabilityInvoker = resolvedModule.createWorkflowCapabilityInvoker
   resolveWorkflowCapabilityCallTimeoutMs = resolvedModule.resolveWorkflowCapabilityCallTimeoutMs
+  buildVideoGenerateRequestBody = resolvedModule.buildVideoGenerateRequestBody
 })
 
 test.beforeEach(() => {

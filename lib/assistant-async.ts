@@ -27,7 +27,12 @@ import { buildLeadHunterChatPayload, formatLeadHunterChatOutput } from "@/lib/le
 import { getLeadHunterAgentName, normalizeLeadHunterAdvisorType } from "@/lib/lead-hunter/types"
 import { runImageAssistantConversationTurn } from "@/lib/image-assistant/service"
 import { resolveImageAssistantMemoryBridge } from "@/lib/image-assistant/memory-bridge"
-import { loadLeadHunterSkillRunner, loadWriterSkillRunner } from "@/lib/skills/runtime/registry"
+import {
+  loadExecutiveAdvisorSkillRunner,
+  loadLeadHunterSkillRunner,
+  loadWriterSkillRunner,
+} from "@/lib/skills/runtime/registry"
+import { normalizeExecutiveAdvisorType } from "@/lib/skills/runtime/executive-advisor-types"
 import { appendWriterConversation, updateWriterLatestAssistantMessage } from "@/lib/writer/repository"
 import { persistWriterImplicitMemoryFromTurn } from "@/lib/writer/memory/extractor"
 import { withTaskTimeout } from "@/lib/task-timeout"
@@ -805,7 +810,7 @@ async function handleLeadHunterTurn(
   let skillResultPromise: Promise<{ answer: string; evidence: LeadHunterEvidenceItem[] }> | null = null
 
   if (useSkillEngine) {
-    const leadHunterSkillRunner = loadLeadHunterSkillRunner(normalizedAdvisorType)
+    const leadHunterSkillRunner = await loadLeadHunterSkillRunner(normalizedAdvisorType)
     const skillStream = leadHunterSkillRunner.runStreaming({
       query: payload.query,
       preferredLanguage: payload.preferredLanguage,
@@ -1029,9 +1034,47 @@ async function handleLeadHunterTurn(
   })
 }
 
+async function handleExecutiveAdvisorSkillTurn(
+  taskId: number,
+  payload: AdvisorTurnTaskPayload,
+) {
+  const normalizedAdvisorType = normalizeExecutiveAdvisorType(payload.advisorType)
+  if (!normalizedAdvisorType) {
+    throw new Error("invalid_executive_advisor_type")
+  }
+
+  const runner = await loadExecutiveAdvisorSkillRunner(normalizedAdvisorType)
+  const result = await runner.runBlocking({
+    query: payload.query,
+    preferredLanguage: payload.preferredLanguage,
+    conversationId: payload.conversationId || null,
+    enterpriseId: payload.enterpriseId,
+    enterpriseCode: payload.enterpriseCode,
+    memoryContext: payload.memoryContext || null,
+    soulCard: payload.soulCard || null,
+  })
+
+  const answer = sanitizeAssistantContent(result.answer)
+  if (!answer) {
+    throw new Error("advisor_empty_response")
+  }
+
+  await updateTaskStatus(taskId, {
+    status: "success",
+    result: {
+      conversation_id: payload.conversationId || null,
+      answer,
+      agent_name: result.agentName,
+      provider: result.providerId,
+      model: result.model,
+    },
+  })
+}
+
 async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload) {
   const difyUser = buildDifyUserIdentity(payload.userEmail, payload.advisorType)
   const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(payload.advisorType)
+  const normalizedExecutiveAdvisorType = normalizeExecutiveAdvisorType(payload.advisorType)
   const config = await getDifyConfigByAdvisorType(payload.advisorType, {
     userId: payload.userId,
     userEmail: payload.userEmail,
@@ -1040,6 +1083,11 @@ async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload
   })
   if (!config) {
     throw new Error("advisor_config_missing")
+  }
+
+  if (normalizedExecutiveAdvisorType && config.baseUrl === "skill://executive-consulting") {
+    await handleExecutiveAdvisorSkillTurn(taskId, payload)
+    return
   }
 
   const fallbackBridge = await buildDifyMemoryBridge({

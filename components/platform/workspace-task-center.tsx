@@ -24,6 +24,8 @@ import {
   XCircle,
 } from "lucide-react"
 
+import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
+
 type TaskSource = "tool" | "workflow" | "agent" | "media"
 type TaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
 type StatusFilter = "all" | "running" | "succeeded" | "failed" | "queued"
@@ -398,48 +400,54 @@ function TaskFilterToolbar({
   onSortChange: (value: SortFilter) => void
 }) {
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-[#e7e7df] bg-white p-4 shadow-[0_10px_28px_rgba(0,0,0,0.045)] 2xl:flex-row 2xl:items-center 2xl:justify-between">
-      <div className="min-w-0 flex-1 2xl:max-w-[440px]">
-        <label className="relative block min-w-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
-          <span className="sr-only">Search task name or run ID</span>
-          <input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search task name, run ID..."
-            className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#c8c22b] focus:ring-4 focus:ring-[#f5ef3d]/25"
-          />
-        </label>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap 2xl:justify-end">
-        <select value={status} onChange={(event) => onStatusChange(event.target.value as StatusFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
-          <option value="all">All status</option>
-          <option value="running">Running</option>
-          <option value="succeeded">Succeeded</option>
-          <option value="failed">Failed</option>
-          <option value="queued">Queued</option>
-        </select>
-        <select value={source} onChange={(event) => onSourceChange(event.target.value as SourceFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
-          <option value="all">All sources</option>
-          <option value="tool">Tool</option>
-          <option value="workflow">Workflow</option>
-          <option value="agent">Agent</option>
-          <option value="media">Media</option>
-        </select>
-        <select value={dateRange} onChange={(event) => onDateRangeChange(event.target.value as DateRangeFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[160px] sm:w-auto">
-          <option value="today">Today</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-          <option value="custom">Custom</option>
-        </select>
-        <select value={sort} onChange={(event) => onSortChange(event.target.value as SortFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[170px] sm:w-auto">
-          <option value="newest">Created: Newest</option>
-          <option value="duration">Duration</option>
-          <option value="status">Status</option>
-          <option value="source">Source</option>
-        </select>
-      </div>
+    <section className="rounded-2xl border border-[#e7e7df] bg-white p-4 shadow-[0_10px_28px_rgba(0,0,0,0.045)]">
+      <DashboardFilterToolbar
+        className="2xl:items-center 2xl:justify-between"
+        searchClassName="2xl:max-w-[440px]"
+        filtersClassName="2xl:justify-end"
+        search={
+          <label className="relative block min-w-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
+            <span className="sr-only">Search task name or run ID</span>
+            <input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Search task name, run ID..."
+              className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#c8c22b] focus:ring-4 focus:ring-[#f5ef3d]/25"
+            />
+          </label>
+        }
+        filters={
+          <>
+            <select value={status} onChange={(event) => onStatusChange(event.target.value as StatusFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
+              <option value="all">All status</option>
+              <option value="running">Running</option>
+              <option value="succeeded">Succeeded</option>
+              <option value="failed">Failed</option>
+              <option value="queued">Queued</option>
+            </select>
+            <select value={source} onChange={(event) => onSourceChange(event.target.value as SourceFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[140px] sm:w-auto">
+              <option value="all">All sources</option>
+              <option value="tool">Tool</option>
+              <option value="workflow">Workflow</option>
+              <option value="agent">Agent</option>
+              <option value="media">Media</option>
+            </select>
+            <select value={dateRange} onChange={(event) => onDateRangeChange(event.target.value as DateRangeFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[160px] sm:w-auto">
+              <option value="today">Today</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="custom">Custom</option>
+            </select>
+            <select value={sort} onChange={(event) => onSortChange(event.target.value as SortFilter)} className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white px-3 text-sm font-bold text-[#111] outline-none sm:min-w-[170px] sm:w-auto">
+              <option value="newest">Created: Newest</option>
+              <option value="duration">Duration</option>
+              <option value="status">Status</option>
+              <option value="source">Source</option>
+            </select>
+          </>
+        }
+      />
     </section>
   )
 }
