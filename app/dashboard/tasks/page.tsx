@@ -18,9 +18,13 @@ export default async function TasksPage() {
       runs={runs.map((run) => ({
         id: run.id,
         kind: run.kind,
+        itemType: run.itemType,
         itemSlug: run.itemSlug,
         status: run.status,
         externalSystem: run.externalSystem,
+        externalRunId: run.externalRunId,
+        startedAt: run.startedAt instanceof Date ? run.startedAt.toISOString() : null,
+        finishedAt: run.finishedAt instanceof Date ? run.finishedAt.toISOString() : null,
         createdAt: run.createdAt instanceof Date ? run.createdAt.toISOString() : null,
         updatedAt: run.updatedAt instanceof Date ? run.updatedAt.toISOString() : null,
       }))}

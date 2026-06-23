@@ -3,6 +3,17 @@ import test from "node:test"
 
 import { copyTextToClipboard } from "@/lib/browser/clipboard"
 
+type MockClipboardInput = {
+  removed: boolean
+  value: string
+  style: Record<string, unknown>
+  setAttribute(): void
+  focus(): void
+  select(): void
+  setSelectionRange(): void
+  remove(): void
+}
+
 test("copyTextToClipboard uses navigator clipboard when available", async () => {
   const originalNavigator = globalThis.navigator
   const calls: string[] = []
@@ -33,7 +44,7 @@ test("copyTextToClipboard falls back to document.execCommand", async () => {
   const originalNavigator = globalThis.navigator
   const originalDocument = globalThis.document
 
-  const appended: Array<{ removed: boolean; value: string }> = []
+  const appended: MockClipboardInput[] = []
   let execCommandCalls = 0
   let focused = false
   let selected = false
@@ -47,12 +58,13 @@ test("copyTextToClipboard falls back to document.execCommand", async () => {
     configurable: true,
     value: {
       body: {
-        appendChild(node: { removed: boolean; value: string }) {
+        appendChild(node: MockClipboardInput) {
           appended.push(node)
         },
       },
-      createElement() {
+      createElement(): MockClipboardInput {
         return {
+          removed: false,
           value: "",
           style: {},
           setAttribute() {},
@@ -99,7 +111,7 @@ test("copyTextToClipboard falls back when navigator clipboard rejects", async ()
   const originalNavigator = globalThis.navigator
   const originalDocument = globalThis.document
 
-  const appended: Array<{ removed: boolean; value: string }> = []
+  const appended: MockClipboardInput[] = []
   let execCommandCalls = 0
 
   Object.defineProperty(globalThis, "navigator", {
@@ -117,12 +129,13 @@ test("copyTextToClipboard falls back when navigator clipboard rejects", async ()
     configurable: true,
     value: {
       body: {
-        appendChild(node: { removed: boolean; value: string }) {
+        appendChild(node: MockClipboardInput) {
           appended.push(node)
         },
       },
-      createElement() {
+      createElement(): MockClipboardInput {
         return {
+          removed: false,
           value: "",
           style: {},
           setAttribute() {},

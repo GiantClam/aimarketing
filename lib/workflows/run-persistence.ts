@@ -1,22 +1,12 @@
 import {
-  createPlatformWorkItem,
   deletePlatformArtifactPermanently,
-  listPlatformWorkLibraryItemsForEnterprise,
+  listPlatformArtifactsForEnterprise,
   savePlatformArtifact,
-  type PlatformWorkLibraryItemRecord,
+  type PlatformArtifactRecord,
 } from "@/lib/platform/task-run-store"
 import type { WorkflowNodeRunState } from "@/lib/workflows/execution"
 import type { WorkflowDefinitionEdge, WorkflowDefinitionNode } from "@/lib/workflows/schema"
 import { updateWorkflowNodeExecution } from "@/lib/workflows/store"
-
-function mapOutputKindToWorkType(kind: "text" | "asset" | "image" | "video" | "audio" | "ppt") {
-  if (kind === "image") return "image_set" as const
-  if (kind === "video") return "video" as const
-  if (kind === "audio") return "audio" as const
-  if (kind === "ppt") return "deck" as const
-  if (kind === "text") return "article" as const
-  return "document" as const
-}
 
 function normalizeCollectionItem(item: unknown) {
   if (!item || typeof item !== "object") return null
@@ -38,7 +28,7 @@ function normalizeCollectionItem(item: unknown) {
 
 function buildWorkflowGeneratedArtifactPayload(payload: Record<string, unknown>) {
   return {
-    source: "generated" as const,
+    source: "workflow" as const,
     ...payload,
   }
 }
@@ -97,19 +87,19 @@ export function ensureUniqueWorkflowStoredTitle(title: string, reservedTitleKeys
   return `${trimmed}-${Date.now()}`
 }
 
-function buildWorkflowStoredTitleState(items: PlatformWorkLibraryItemRecord[]) {
+function buildWorkflowStoredTitleState(items: PlatformArtifactRecord[]) {
   const reservedTitleKeys = new Set<string>()
   const artifactIdsByTitleKey = new Map<string, number[]>()
 
   for (const item of items) {
-    const rawTitle = item.workItem.title || item.artifact.title
+    const rawTitle = item.title
     const normalizedTitle = normalizeWorkflowStoredTitle(rawTitle)
     if (!normalizedTitle) continue
     const key = toWorkflowStoredTitleKey(normalizedTitle)
     reservedTitleKeys.add(key)
     artifactIdsByTitleKey.set(key, [
       ...(artifactIdsByTitleKey.get(key) ?? []),
-      item.artifact.id,
+      item.id,
     ])
   }
 
@@ -129,29 +119,28 @@ export async function persistFinalWorkflowOutputs(input: {
   persistenceTargets: WorkflowPersistenceTarget[]
 }) {
   const createdArtifacts: number[] = []
-  const createdWorkItems: number[] = []
   const workflowNodeByKey = new Map(input.workflowNodes.map((node) => [node.nodeKey, node] as const))
 
-  let workLibraryTitleState = buildWorkflowStoredTitleState(
-    await listPlatformWorkLibraryItemsForEnterprise(input.enterpriseId),
+  let assetLibraryTitleState = buildWorkflowStoredTitleState(
+    await listPlatformArtifactsForEnterprise(input.enterpriseId),
   )
 
-  const reloadWorkLibraryTitleState = async () => {
-    workLibraryTitleState = buildWorkflowStoredTitleState(
-      await listPlatformWorkLibraryItemsForEnterprise(input.enterpriseId),
+  const reloadAssetLibraryTitleState = async () => {
+    assetLibraryTitleState = buildWorkflowStoredTitleState(
+      await listPlatformArtifactsForEnterprise(input.enterpriseId),
     )
   }
 
-  const overwriteWorkLibraryTitleIfNeeded = async (title: string) => {
+  const overwriteAssetLibraryTitleIfNeeded = async (title: string) => {
     const key = toWorkflowStoredTitleKey(title)
-    const matchedArtifactIds = [...new Set(workLibraryTitleState.artifactIdsByTitleKey.get(key) ?? [])]
+    const matchedArtifactIds = [...new Set(assetLibraryTitleState.artifactIdsByTitleKey.get(key) ?? [])]
     if (matchedArtifactIds.length === 0) return
 
     for (const artifactId of matchedArtifactIds) {
       await deletePlatformArtifactPermanently(artifactId, input.enterpriseId)
     }
 
-    await reloadWorkLibraryTitleState()
+    await reloadAssetLibraryTitleState()
   }
 
   const resolveStoredOutputTitle = (inputTitle: {
@@ -167,11 +156,11 @@ export async function persistFinalWorkflowOutputs(input: {
       return configuredCandidate
     }
 
-    return ensureUniqueWorkflowStoredTitle(inputTitle.fallbackTitle, workLibraryTitleState.reservedTitleKeys)
+    return ensureUniqueWorkflowStoredTitle(inputTitle.fallbackTitle, assetLibraryTitleState.reservedTitleKeys)
   }
 
   const reserveStoredTitle = (title: string) => {
-    workLibraryTitleState.reservedTitleKeys.add(toWorkflowStoredTitleKey(title))
+    assetLibraryTitleState.reservedTitleKeys.add(toWorkflowStoredTitleKey(title))
   }
 
   for (const target of input.persistenceTargets) {
@@ -189,7 +178,7 @@ export async function persistFinalWorkflowOutputs(input: {
       })
 
       if (configuredStoredTitle) {
-        await overwriteWorkLibraryTitleIfNeeded(title)
+        await overwriteAssetLibraryTitleIfNeeded(title)
       }
 
       const artifact = await savePlatformArtifact({
@@ -199,7 +188,7 @@ export async function persistFinalWorkflowOutputs(input: {
         kind: "text",
         title,
         mimeType: "text/plain",
-        source: "generated",
+        source: "workflow",
         payload: buildWorkflowGeneratedArtifactPayload({
           text: value,
           workflowNodeKey: target.sourceNodeKey,
@@ -208,22 +197,6 @@ export async function persistFinalWorkflowOutputs(input: {
       })
       createdArtifacts.push(artifact.id)
       reserveStoredTitle(title)
-
-      const workItem = await createPlatformWorkItem({
-        enterpriseId: input.enterpriseId,
-        ownerUserId: input.ownerUserId,
-        sourceArtifactId: artifact.id,
-        type: mapOutputKindToWorkType("text"),
-        title: artifact.title,
-        metadata: {
-          source: "generated",
-          mimeType: "text/plain",
-          workflowRunId: input.runId,
-          workflowNodeKey: target.sourceNodeKey,
-          workflowStoreNodeKey: target.targetNodeKey,
-        },
-      })
-      createdWorkItems.push(workItem.id)
     }
 
     const collections: Array<["asset" | "image" | "video" | "audio" | "ppt", unknown[]]> = [
@@ -245,7 +218,7 @@ export async function persistFinalWorkflowOutputs(input: {
         })
 
         if (configuredStoredTitle) {
-          await overwriteWorkLibraryTitleIfNeeded(title)
+          await overwriteAssetLibraryTitleIfNeeded(title)
         }
 
         const artifact = await savePlatformArtifact({
@@ -257,7 +230,7 @@ export async function persistFinalWorkflowOutputs(input: {
           mimeType: item.mimeType || "application/octet-stream",
           externalUrl: item.url || null,
           storageKey: item.storageKey || null,
-          source: "generated",
+          source: "workflow",
           payload: buildWorkflowGeneratedArtifactPayload({
             artifactId: item.artifactId ?? null,
             workflowNodeKey: target.sourceNodeKey,
@@ -267,30 +240,13 @@ export async function persistFinalWorkflowOutputs(input: {
         })
         createdArtifacts.push(artifact.id)
         reserveStoredTitle(title)
-
-        const workItem = await createPlatformWorkItem({
-          enterpriseId: input.enterpriseId,
-          ownerUserId: input.ownerUserId,
-          sourceArtifactId: artifact.id,
-          type: mapOutputKindToWorkType(kind),
-          title: artifact.title,
-          metadata: {
-            source: "generated",
-            mimeType: item.mimeType || "application/octet-stream",
-            workflowRunId: input.runId,
-            workflowNodeKey: target.sourceNodeKey,
-            workflowStoreNodeKey: target.targetNodeKey,
-            outputKind: kind,
-          },
-        })
-        createdWorkItems.push(workItem.id)
       }
     }
   }
 
   return {
     artifactIds: createdArtifacts,
-    workItemIds: createdWorkItems,
+    workItemIds: [],
   }
 }
 

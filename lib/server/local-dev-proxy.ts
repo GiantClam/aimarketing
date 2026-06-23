@@ -454,12 +454,8 @@ export async function proxyAwareFetch(
     request.on("error", reject)
     request.setTimeout(timeoutMs, () => request.destroy(new Error("writer_proxy_connect_timeout")))
 
-    if (typeof body === "string" || Buffer.isBuffer(body)) {
+    if (Buffer.isBuffer(body)) {
       request.write(body)
-    } else if (body instanceof ArrayBuffer) {
-      request.write(Buffer.from(body))
-    } else if (ArrayBuffer.isView(body)) {
-      request.write(Buffer.from(body.buffer, body.byteOffset, body.byteLength))
     }
 
     request.end()

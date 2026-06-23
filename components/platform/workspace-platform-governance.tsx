@@ -1,48 +1,40 @@
+"use client"
+
 import Link from "next/link"
-import { CreditCard, Database, LayoutGrid, Network, Settings, Sparkles, Users2, Workflow } from "lucide-react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import {
+  Activity,
+  BookOpen,
+  CheckCircle2,
+  Circle,
+  Clock3,
+  CreditCard,
+  Database,
+  Eye,
+  KeyRound,
+  LayoutGrid,
+  Network,
+  Route,
+  Save,
+  Settings,
+  ShieldCheck,
+  TestTube2,
+  Users2,
+  Zap,
+} from "lucide-react"
 
 import { EnterpriseKnowledgeGovernancePanel } from "@/components/platform/enterprise-knowledge-governance-panel"
 import { EnterpriseMemberGovernancePanel } from "@/components/platform/enterprise-member-governance-panel"
 import { PlatformGovernanceSettingsPanel } from "@/components/platform/platform-governance-settings-panel"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AppLocale } from "@/lib/i18n/config"
 import type { CustomerGovernanceSnapshot } from "@/lib/platform/customer-governance"
 import type { PlatformGovernanceSnapshot } from "@/lib/platform/governance"
 import { getLocalizedWorkspaceEnterpriseSettingEntries } from "@/lib/platform/workspace-enterprise-settings"
 
-const registryIcons = {
-  capability: LayoutGrid,
-  agent: Users2,
-  plugin: Sparkles,
-  mcp_service: Network,
-  workflow: Workflow,
-} as const
-
 function formatNumber(value: number | null) {
   if (typeof value !== "number" || Number.isNaN(value)) return "—"
   return new Intl.NumberFormat("en-US").format(value)
-}
-
-function formatNumberOrFallback(value: number | null, fallback: string) {
-  if (typeof value !== "number" || Number.isNaN(value)) return fallback
-  return new Intl.NumberFormat("en-US").format(value)
-}
-
-function getRegistryLabel(itemType: keyof typeof registryIcons, locale: "zh" | "en") {
-  if (locale === "zh") {
-    if (itemType === "capability") return "能力"
-    if (itemType === "agent") return "智能体"
-    if (itemType === "plugin") return "插件"
-    if (itemType === "mcp_service") return "MCP 服务"
-    return "工作流"
-  }
-
-  if (itemType === "capability") return "Capabilities"
-  if (itemType === "agent") return "Agents"
-  if (itemType === "plugin") return "Plugins"
-  if (itemType === "mcp_service") return "MCP Services"
-  return "Workflows"
 }
 
 function getCustomerRuntimeStatusLabel(
@@ -58,6 +50,161 @@ function getCustomerRuntimeStatusLabel(
   if (status === "ready") return "Ready"
   if (status === "deferred") return "Deferred"
   return "Disabled"
+}
+
+function getRuntimeProviderLabel(provider: PlatformGovernanceSnapshot["runtime"]["providers"][number]) {
+  if (provider.id === "pptoken") return "PPToken"
+  if (provider.id === "openrouter") return "OpenRouter"
+  if (provider.id === "aiberm") return "AIBERM"
+  if (provider.id === "crazyroute") return "Crazyroute"
+  if (provider.id === "runninghub-image") return "RunningHub Image"
+  if (provider.id === "runninghub-video") return "RunningHub Video"
+  if (provider.id === "minimax-video") return "MiniMax Hailuo Video"
+  if (provider.id === "minimax-audio") return "MiniMax Audio"
+  if (provider.id === "fixture") return "Fixture"
+  return provider.id
+}
+
+function SettingsMetricCard({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  tone = "neutral",
+}: {
+  icon: typeof Activity
+  label: string
+  value: string
+  helper: string
+  tone?: "neutral" | "success" | "warning"
+}) {
+  return (
+    <article className="dashboard-panel relative overflow-hidden rounded-[14px] border border-[#e7e7df] bg-white p-4 shadow-[0_10px_28px_rgba(0,0,0,0.045)]">
+      <div className="flex items-start gap-3">
+        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] bg-[#f5ef3d] text-[#111] [clip-path:polygon(0_0,88%_0,100%_14%,100%_100%,0_100%)]">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="font-display text-[11px] font-black uppercase tracking-[0.12em] text-[#6f6f6f]">
+            {label}
+          </div>
+          <div className="mt-2 truncate font-display text-2xl font-black uppercase leading-none text-[#111]">
+            {value}
+          </div>
+          <div
+            className={
+              tone === "success"
+                ? "mt-2 text-xs font-semibold text-[#25a85a]"
+                : tone === "warning"
+                  ? "mt-2 text-xs font-semibold text-[#8a7500]"
+                  : "mt-2 text-xs text-[#6f6f6f]"
+            }
+          >
+            {helper}
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function SettingsSideCard({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <aside className="rounded-2xl border border-[#e7e7df] bg-white p-4 shadow-[0_10px_26px_rgba(0,0,0,0.04)]">
+      <div className="font-display text-[11px] font-black uppercase tracking-[0.14em] text-[#777]">{label}</div>
+      <div className="mt-3">{children}</div>
+    </aside>
+  )
+}
+
+function StatusBadge({
+  label,
+  tone = "neutral",
+}: {
+  label: string
+  tone?: "success" | "warning" | "danger" | "neutral"
+}) {
+  const className =
+    tone === "success"
+      ? "border-[#ccefd7] bg-[#eefaf2] text-[#168449]"
+      : tone === "danger"
+        ? "border-[#ffd6d6] bg-[#fff0f0] text-[#d93025]"
+        : tone === "warning"
+          ? "border-[#efe6a8] bg-[#fffbe5] text-[#8a7500]"
+          : "border-[#e5e5dc] bg-[#f5f5ef] text-[#555]"
+  return (
+    <span className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-extrabold uppercase ${className}`}>
+      <span className={tone === "success" ? "h-1.5 w-1.5 rounded-full bg-[#25a85a]" : "h-1.5 w-1.5 rounded-full bg-current"} />
+      {label}
+    </span>
+  )
+}
+
+function SettingsSectionCard({
+  id,
+  eyebrow,
+  title,
+  description,
+  children,
+}: {
+  id: string
+  eyebrow: string
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <section id={id} className="settings-section-card scroll-mt-6 rounded-2xl border border-[#e7e7df] bg-white p-5 shadow-[0_14px_34px_rgba(0,0,0,0.045)] lg:p-6">
+      <div className="font-display text-[11px] font-black uppercase tracking-[0.14em] text-[#777]">{eyebrow}</div>
+      <h2 className="mt-2 font-display text-3xl font-black uppercase leading-none text-[#111]">{title}</h2>
+      <p className="mt-3 max-w-3xl text-sm leading-6 text-[#666]">{description}</p>
+      <div className="mt-5">{children}</div>
+    </section>
+  )
+}
+
+function HashNavLink({
+  href,
+  active = false,
+  className,
+  activeClassName,
+  inactiveClassName,
+  onActivate,
+  children,
+}: {
+  href: string
+  active?: boolean
+  className?: string
+  activeClassName: string
+  inactiveClassName: string
+  onActivate?: (hash: string) => void
+  children: ReactNode
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "location" : undefined}
+      onClick={() => {
+        const nextHash = href.replace(/^.*#/, "").trim()
+        if (nextHash) onActivate?.(nextHash)
+      }}
+      className={[
+        className,
+        active ? activeClassName : inactiveClassName,
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f5ef3d] focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
+    </Link>
+  )
 }
 
 export function WorkspacePlatformGovernance({
@@ -228,8 +375,6 @@ export function WorkspacePlatformGovernance({
           settingsUnavailable: "Governance settings are temporarily unavailable. Try again later.",
         }
 
-  const customerDataAvailable = Boolean(customerSnapshot)
-  const customerNotConfigured = copy.notConfigured
   const governanceLinks = [
     {
       slug: "billing",
@@ -257,331 +402,577 @@ export function WorkspacePlatformGovernance({
     },
   ]
   const enterpriseSettings = getLocalizedWorkspaceEnterpriseSettingEntries(locale)
+  const configuredProviderCount = snapshot.runtime.providers.filter((provider) => provider.configured).length
+  const activeProviderCount = snapshot.runtime.providers.filter((provider) => provider.active).length
+  const readyRuntimeCount = customerSnapshot?.runtimes.filter((runtime) => runtime.status === "ready").length ?? 0
+  const degradedRuntimeCount = customerSnapshot?.runtimes.filter((runtime) => runtime.status === "deferred").length ?? 0
+  const disabledRuntimeCount = customerSnapshot?.runtimes.filter((runtime) => runtime.status === "runtime_disabled").length ?? 0
+  const defaultRouteRows = customerSnapshot
+    ? ([
+        ["Text generation", "text_generation"],
+        ["Image generation", "image_generation"],
+        ["Video generation", "video_generation"],
+        ["Audio generation", "audio_generation"],
+      ] as const).map(([label, category]) => {
+        const config = customerSnapshot.settings.modelConfig[category]
+        const providerId = config.selectedProviderId || config.providers[0]?.providerId || "—"
+        const provider = config.providers.find((item) => item.providerId === providerId) || config.providers[0]
+        return {
+          label,
+          provider: provider?.label || providerId,
+          model: config.selectedModelId || provider?.modelId || "—",
+          fallback: config.providers.find((item) => item.providerId !== providerId && item.enabled)?.label || "—",
+          active: Boolean(provider?.enabled || config.selectedProviderId),
+        }
+      })
+    : []
+  const providerRows = snapshot.runtime.providers.slice(0, 9)
+  const updatedAt = customerSnapshot?.settings.updatedAt
+    ? new Date(customerSnapshot.settings.updatedAt).toLocaleString(displayLocale === "zh" ? "zh-CN" : "en-US", {
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null
+  const settingsAreas = useMemo(
+    () =>
+      displayLocale === "zh"
+        ? [
+            ["governance", "治理设置", ShieldCheck],
+            ["model-routing", "模型路由", Route],
+            ["runtime-availability", "运行时可用性", Activity],
+            ["enterprise-admin", "企业管理员", Users2],
+          ]
+        : [
+            ["governance", "Governance", ShieldCheck],
+            ["model-routing", "Model Routing", Route],
+            ["runtime-availability", "Runtime Availability", Activity],
+            ["enterprise-admin", "Enterprise admin", Users2],
+          ],
+    [displayLocale],
+  )
+  const onThisPage = useMemo(
+    () =>
+      displayLocale === "zh"
+        ? [
+            ["overview", "配置概览"],
+            ["model-routing", "模型路由"],
+            ["default-routes", "默认路由"],
+            ["providers", "Provider 配置"],
+            ["runtime-availability", "运行时可用性"],
+            ["admin-controls", "企业治理"],
+          ]
+        : [
+            ["overview", "Settings overview"],
+            ["model-routing", "Model routing"],
+            ["default-routes", "Default routes"],
+            ["providers", "Provider configuration"],
+            ["runtime-availability", "Runtime availability"],
+            ["admin-controls", "Enterprise controls"],
+          ],
+    [displayLocale],
+  )
+  const validHashTargets = useMemo(
+    () =>
+      new Set([
+        ...settingsAreas.map(([id]) => String(id)),
+        ...onThisPage.map(([id]) => String(id)),
+      ]),
+    [onThisPage, settingsAreas],
+  )
+  const [activeHash, setActiveHash] = useState("overview")
+
+  useEffect(() => {
+    const syncHash = () => {
+      const nextHash = window.location.hash.replace(/^#/, "").trim()
+      setActiveHash(nextHash && validHashTargets.has(nextHash) ? nextHash : "overview")
+    }
+
+    syncHash()
+    window.addEventListener("hashchange", syncHash)
+    return () => window.removeEventListener("hashchange", syncHash)
+  }, [validHashTargets])
+
+  const activeTopLevelSection = useMemo(() => {
+    if (settingsAreas.some(([id]) => String(id) === activeHash)) {
+      return activeHash
+    }
+    if (activeHash === "default-routes" || activeHash === "providers" || activeHash === "routing-rules" || activeHash === "provider-editor") {
+      return "model-routing"
+    }
+    if (activeHash === "admin-controls") {
+      return "enterprise-admin"
+    }
+    return "overview"
+  }, [activeHash, settingsAreas])
+  const ui =
+    displayLocale === "zh"
+      ? {
+          policyAudit: "策略审计日志",
+          saveAll: "保存全部变更",
+          metricCredits: "Credits & Billing",
+          metricRuntime: "Runtime Health",
+          metricAdmin: "Admin Access",
+          metricVisibility: "Visibility Rules",
+          metricProviders: "Active Providers",
+          metricByok: "BYOK Enabled",
+          availableCredits: "可用共享额度",
+          readyRuntimes: "Ready runtimes",
+          adminMode: "管理员控制",
+          registryVisible: "目录可见规则",
+          providerHelper: "可用 provider",
+          byokHelper: "API Key 配置状态",
+          settingsAreas: "Settings Areas",
+          onThisPage: "On This Page",
+          currentScope: "Current Scope",
+          saveStatus: "Save Status",
+          scopeName: "Enterprise workspace",
+          scopeMeta: "Global HQ · Platform governance",
+          changeScope: "Change scope",
+          saved: "All changes saved",
+          unsaved: "等待首次保存",
+          viewHistory: "View change history",
+          overviewTitle: "Enterprise Settings",
+          overviewBody: "查看企业配置状态、切换配置域，并在同一控制台内验证模型、运行时、权限和计费治理。",
+          routingTitle: "Model Routing",
+          routingBody: "配置模型供应商、设置不同任务默认路由，并用模拟器验证当前路由是否符合企业策略。",
+          enabledProviders: "Enabled Providers",
+          defaultRoutes: "Default Routes",
+          routingMode: "Routing Mode",
+          totalModels: "Total Models",
+          lastUpdated: "Last Updated",
+          smartRouting: "Smart cost + quality",
+          defaultRoutesTab: "Default routes",
+          providersTab: "Providers",
+          rulesTab: "Routing rules",
+          insightsTab: "Usage insights",
+          taskType: "Task Type",
+          primary: "Primary Provider / Model",
+          fallback: "Fallback",
+          status: "Status",
+          actions: "Actions",
+          edit: "Edit",
+          provider: "Provider",
+          baseUrl: "Base URL",
+          models: "Models",
+          lastSync: "Last Sync",
+          routingRules: "Routing Rules",
+          simulator: "Routing Simulator",
+          simulate: "Simulate",
+          simulatorBody: "选择任务类型后，可在右侧验证默认路由、fallback 路径和预估风险。",
+          runtimeTitle: "Runtime Availability",
+          runtimeBody: "Runtime Availability 只回答产品能力是否可用；Model Routing 负责模型供应商和默认模型。",
+          capability: "Capability",
+          runtime: "Runtime",
+          availability: "Availability",
+          lastCheck: "Last Check",
+          adminTitle: "Enterprise Admin Controls",
+          adminBody: "成员、知识、席位和治理偏好保留真实管理入口，避免管理员在个人设置和平台设置之间跳转。",
+        }
+      : {
+          policyAudit: "Policy audit log",
+          saveAll: "Save all changes",
+          metricCredits: "Credits & Billing",
+          metricRuntime: "Runtime Health",
+          metricAdmin: "Admin Access",
+          metricVisibility: "Visibility Rules",
+          metricProviders: "Active Providers",
+          metricByok: "BYOK Enabled",
+          availableCredits: "Available shared credits",
+          readyRuntimes: "Ready runtimes",
+          adminMode: "Admin control",
+          registryVisible: "Directory visibility rules",
+          providerHelper: "Configured providers",
+          byokHelper: "API key posture",
+          settingsAreas: "Settings Areas",
+          onThisPage: "On This Page",
+          currentScope: "Current Scope",
+          saveStatus: "Save Status",
+          scopeName: "Enterprise workspace",
+          scopeMeta: "Global HQ · Platform governance",
+          changeScope: "Change scope",
+          saved: "All changes saved",
+          unsaved: "Waiting for first save",
+          viewHistory: "View change history",
+          overviewTitle: "Enterprise Settings",
+          overviewBody: "Review enterprise configuration state, switch configuration domains, and validate model, runtime, permission, and billing governance from one control surface.",
+          routingTitle: "Model Routing",
+          routingBody: "Configure model providers, set default routes for task types, and verify routing behavior before admins rely on it.",
+          enabledProviders: "Enabled Providers",
+          defaultRoutes: "Default Routes",
+          routingMode: "Routing Mode",
+          totalModels: "Total Models",
+          lastUpdated: "Last Updated",
+          smartRouting: "Smart cost + quality",
+          defaultRoutesTab: "Default routes",
+          providersTab: "Providers",
+          rulesTab: "Routing rules",
+          insightsTab: "Usage insights",
+          taskType: "Task Type",
+          primary: "Primary Provider / Model",
+          fallback: "Fallback",
+          status: "Status",
+          actions: "Actions",
+          edit: "Edit",
+          provider: "Provider",
+          baseUrl: "Base URL",
+          models: "Models",
+          lastSync: "Last Sync",
+          routingRules: "Routing Rules",
+          simulator: "Routing Simulator",
+          simulate: "Simulate",
+          simulatorBody: "Pick a task type to validate the primary route, fallback path, and operational risk before changes go live.",
+          runtimeTitle: "Runtime Availability",
+          runtimeBody: "Runtime Availability answers whether a product capability is usable. Model Routing controls provider and model choice.",
+          capability: "Capability",
+          runtime: "Runtime",
+          availability: "Availability",
+          lastCheck: "Last Check",
+          adminTitle: "Enterprise Admin Controls",
+          adminBody: "Member, knowledge, seat, and governance controls stay directly manageable here instead of scattering admin work across personal settings.",
+        }
 
   return (
     <div className="h-full overflow-auto bg-transparent">
-      <section className="public-grid-bg workspace-page-shell mx-auto max-w-7xl">
-        <div className="workspace-stack">
-          <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
-            <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
-            <h1 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[0.02em] text-foreground lg:text-5xl">
-              {copy.title}
-            </h1>
-            <p className="mt-4 max-w-4xl text-sm leading-7 text-muted-foreground lg:text-base">{copy.description}</p>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <span className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                {copy.runtimeReady}: {snapshot.runtime.activeTextProvider || "—"}
-              </span>
-              <span className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                {copy.credits}: {formatNumber(snapshot.billing.availableCredits)}
-              </span>
-              <span className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                {copy.controlSurface}: {snapshot.canManageRegistry ? copy.canManage : copy.readOnly}
-              </span>
+      <section className="public-grid-bg mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="space-y-6">
+          <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between" id="overview">
+            <div>
+              <div className="font-display text-[11px] font-black uppercase tracking-[0.14em] text-[#6f6f6f]">
+                {copy.eyebrow}
+              </div>
+              <h1 className="mt-2 font-display text-5xl font-black uppercase leading-none text-[#111] lg:text-6xl">
+                {ui.overviewTitle}
+              </h1>
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-[#666] lg:text-base">{ui.overviewBody}</p>
             </div>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" className="h-10 rounded-lg border-[#deded6] bg-white px-4 font-display text-xs font-black uppercase text-[#111]" asChild>
+                <Link href="/dashboard/platform-settings/usage">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  {ui.policyAudit}
+                </Link>
+              </Button>
+              <Button className="public-button-primary h-10 px-4" asChild>
+                <Link href="#model-routing">
+                  <Save className="mr-2 h-4 w-4" />
+                  {ui.saveAll}
+                </Link>
+              </Button>
+            </div>
+          </header>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <SettingsMetricCard icon={CreditCard} label={ui.metricCredits} value={formatNumber(snapshot.billing.availableCredits)} helper={ui.availableCredits} />
+            <SettingsMetricCard icon={Activity} label={ui.metricRuntime} value={`${readyRuntimeCount}/${customerSnapshot?.runtimes.length ?? snapshot.runtime.tasks.length}`} helper={ui.readyRuntimes} tone={readyRuntimeCount > 0 ? "success" : "warning"} />
+            <SettingsMetricCard icon={ShieldCheck} label={ui.metricAdmin} value={canManageEnterpriseGovernance ? "Active" : "Read only"} helper={ui.adminMode} tone={canManageEnterpriseGovernance ? "success" : "neutral"} />
+            <SettingsMetricCard icon={Eye} label={ui.metricVisibility} value={formatNumber(snapshot.registry.reduce((total, item) => total + item.counts.workspaceVisible, 0))} helper={ui.registryVisible} />
+            <SettingsMetricCard icon={Network} label={ui.metricProviders} value={`${activeProviderCount}/${configuredProviderCount}`} helper={ui.providerHelper} tone={activeProviderCount > 0 ? "success" : "warning"} />
+            <SettingsMetricCard icon={KeyRound} label={ui.metricByok} value={configuredProviderCount > 0 ? "On" : "Off"} helper={ui.byokHelper} tone={configuredProviderCount > 0 ? "success" : "warning"} />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.runtimeTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {snapshot.runtime.activeTextProvider || "Unconfigured"}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.runtimeBody}</p>
-              <div className="mt-4 space-y-2">
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {snapshot.runtime.providers.length} providers
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {snapshot.runtime.tasks.length} task runtimes
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {snapshot.runtime.entitlements.length} entitlement hooks
-                </div>
-              </div>
-            </article>
+          <div className="grid gap-6 xl:grid-cols-[250px_minmax(0,1fr)]">
+            <div className="space-y-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-48px)] xl:overflow-y-auto">
+              <SettingsSideCard label={ui.settingsAreas}>
+                <nav className="space-y-1">
+                  {settingsAreas.map(([id, label, Icon]) => (
+                    <HashNavLink
+                      key={String(id)}
+                      href={`#${id}`}
+                      active={activeTopLevelSection === id}
+                      onActivate={setActiveHash}
+                      className="flex h-10 items-center gap-2 rounded-lg px-3 text-sm transition"
+                      activeClassName="bg-[#111] font-extrabold text-[#f5ef3d]"
+                      inactiveClassName="font-bold text-[#111] hover:bg-[#f5ef3d]/35"
+                    >
+                      <Icon className="h-4 w-4" />
+                      {String(label)}
+                    </HashNavLink>
+                  ))}
+                </nav>
+              </SettingsSideCard>
 
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.billingTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {snapshot.billing.planName || snapshot.billing.planCode || "—"}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.billingBody}</p>
-              <div className="mt-4 space-y-2">
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.credits}: {formatNumber(snapshot.billing.availableCredits)}
+              <SettingsSideCard label={ui.onThisPage}>
+                <nav className="space-y-1">
+                  {onThisPage.map(([id, label]) => (
+                    <HashNavLink
+                      key={id}
+                      href={`#${id}`}
+                      active={activeHash === id}
+                      onActivate={setActiveHash}
+                      className="flex h-8 items-center gap-2 text-xs transition"
+                      activeClassName="font-bold text-[#111]"
+                      inactiveClassName="text-[#666] hover:text-[#111]"
+                    >
+                      <span
+                        className={
+                          activeHash === id
+                            ? "h-2 w-2 rounded-full bg-[#f5ef3d]"
+                            : "h-2 w-2 rounded-full border border-[#d8d8d0]"
+                        }
+                      />
+                      {label}
+                    </HashNavLink>
+                  ))}
+                </nav>
+              </SettingsSideCard>
+
+              <SettingsSideCard label={ui.currentScope}>
+                <div className="space-y-2">
+                  <div className="text-sm font-black text-[#111]">{ui.scopeName}</div>
+                  <div className="text-xs leading-5 text-[#666]">{customerSnapshot?.sso.domain || ui.scopeMeta}</div>
+                  <Button variant="outline" className="mt-2 h-9 w-full rounded-lg border-[#deded6] bg-white text-xs font-extrabold uppercase" asChild>
+                    <Link href="/dashboard/platform-settings/sso">{ui.changeScope}</Link>
+                  </Button>
                 </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.reserved}: {formatNumber(snapshot.billing.reservedCredits)}
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.totalBalance}: {formatNumber(snapshot.billing.balanceCredits)}
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.status}: {snapshot.billing.subscriptionStatus || "—"}
-                </div>
-                {snapshot.billing.nextPlanCode ? (
-                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                    {copy.nextPlan}: {snapshot.billing.nextPlanCode}
+              </SettingsSideCard>
+
+              <SettingsSideCard label={ui.saveStatus}>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-black text-[#25a85a]">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {updatedAt ? ui.saved : ui.unsaved}
                   </div>
-                ) : null}
-                {snapshot.billing.seatLimit != null ? (
-                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                    {copy.seats}: {formatNumber(snapshot.billing.activeMemberCount)} / {formatNumber(snapshot.billing.seatLimit)}
-                  </div>
-                ) : null}
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.canSpend}: {snapshot.billing.canSpendCredits ? copy.yes : copy.no}
+                  <div className="text-xs text-[#666]">{updatedAt || copy.notConfigured}</div>
+                  <Button variant="outline" className="mt-2 h-9 w-full rounded-lg border-[#deded6] bg-white text-xs font-extrabold uppercase" asChild>
+                    <Link href="/dashboard/platform-settings/usage">{ui.viewHistory}</Link>
+                  </Button>
                 </div>
-                {snapshot.billing.note ? (
-                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                    {copy.unavailable}: {snapshot.billing.note}
-                  </div>
-                ) : null}
-              </div>
-            </article>
+              </SettingsSideCard>
+            </div>
 
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.registryTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {snapshot.canManageRegistry ? copy.canManage : copy.readOnly}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.registryBody}</p>
-              <div className="mt-4 space-y-3">
-                {snapshot.registry.map((item) => {
-                  const Icon = registryIcons[item.itemType]
-                  return (
-                    <div key={item.itemType} className="dashboard-chip rounded-[4px] px-3 py-3 text-sm text-foreground/85">
-                      <div className="flex items-center gap-2 font-medium text-foreground">
-                        <Icon className="h-4 w-4" />
-                        {getRegistryLabel(item.itemType, displayLocale)}
-                      </div>
-                      <div className="mt-2 text-xs leading-6 text-muted-foreground">
-                        {item.counts.total} total · {item.counts.enabled} {copy.enabled} · {item.counts.publicVisible} {copy.publicVisible} · {item.counts.workspaceVisible} {copy.workspaceVisible} · {item.counts.deferred} {copy.deferred}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </article>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-4">
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.membersTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {customerSnapshot ? formatNumber(customerSnapshot.members.active) : customerNotConfigured}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.membersBody}</p>
-              <div className="mt-4 space-y-2">
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.totalMembers}: {customerSnapshot ? formatNumber(customerSnapshot.members.total) : customerNotConfigured}
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.activeMembers}: {customerSnapshot ? formatNumber(customerSnapshot.members.active) : customerNotConfigured}
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.seatLimit}: {customerSnapshot ? formatNumberOrFallback(customerSnapshot.members.seatLimit, customerNotConfigured) : customerNotConfigured}
-                </div>
-                {!customerDataAvailable ? (
-                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                    {copy.customerSnapshotUnavailable}
-                  </div>
-                ) : null}
-              </div>
-            </article>
-
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.usageTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {customerSnapshot ? formatNumberOrFallback(customerSnapshot.usage.sharedCredits, customerNotConfigured) : customerNotConfigured}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.usageBody}</p>
-              <div className="mt-4 space-y-2">
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.plan}: {customerSnapshot ? customerSnapshot.usage.currentPlan || customerNotConfigured : customerNotConfigured}
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.recentLedger}: {customerSnapshot ? formatNumberOrFallback(customerSnapshot.usage.recentLedgerEntries, customerNotConfigured) : customerNotConfigured}
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.recentNetCredits}: {customerSnapshot ? formatNumberOrFallback(customerSnapshot.usage.recentLedgerNetCredits, customerNotConfigured) : customerNotConfigured}
-                </div>
-              </div>
-            </article>
-
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.ssoTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {customerSnapshot ? (customerSnapshot.sso.status === "configured" ? copy.ssoConfigured : copy.ssoMissing) : customerNotConfigured}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.ssoBody}</p>
-              <div className="mt-4 space-y-2">
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.domain}: {customerSnapshot ? customerSnapshot.sso.domain || customerNotConfigured : customerNotConfigured}
-                </div>
-                <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                  {copy.status}: {customerSnapshot ? (customerSnapshot.sso.status === "configured" ? copy.ssoConfigured : copy.ssoMissing) : customerNotConfigured}
-                </div>
-              </div>
-            </article>
-
-            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-              <div className="dashboard-kicker text-muted-foreground">{copy.runtimeStatusTitle}</div>
-              <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                {customerSnapshot ? String(customerSnapshot.runtimes.length) : customerNotConfigured}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.runtimeStatusBody}</p>
-              <div className="mt-4 space-y-2">
-                {customerSnapshot ? customerSnapshot.runtimes.map((item) => (
-                  <div key={item.slug} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                    {item.slug}: {getCustomerRuntimeStatusLabel(item.status, displayLocale)}
-                  </div>
-                )) : (
-                  <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                    {copy.customerSnapshotUnavailable}
-                  </div>
-                )}
-              </div>
-            </article>
-          </div>
-
-          <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 p-5">
-            <div className="dashboard-kicker text-muted-foreground">{copy.tabsTitle}</div>
-            <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-              {copy.tabsTitle}
-            </h2>
-            <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.tabsBody}</p>
-
-            <Tabs defaultValue="governance" className="mt-6 space-y-5">
-              <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-[10px] bg-muted/60 p-1">
-                <TabsTrigger value="governance" className="h-10 min-w-[120px] rounded-[8px] px-4">
-                  {copy.governanceTab}
-                </TabsTrigger>
-                <TabsTrigger value="models" className="h-10 min-w-[120px] rounded-[8px] px-4">
-                  {copy.modelTab}
-                </TabsTrigger>
-                <TabsTrigger value="admin" className="h-10 min-w-[120px] rounded-[8px] px-4">
-                  {copy.adminTab}
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="governance" className="space-y-5">
-                <div className="dashboard-panel rounded-[10px] border border-border bg-background/70 p-4">
-                  <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
-                  <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.settingsBody}</p>
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    {governanceLinks.map((item) => {
-                      const Icon = item.icon
-                      return (
-                        <Button key={item.slug} className="public-button-primary h-10 px-4" asChild>
-                          <Link href={item.href}>
-                            <Icon className="mr-2 h-4 w-4" />
-                            {item.title}
-                          </Link>
-                        </Button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {customerSnapshot ? (
-                  <PlatformGovernanceSettingsPanel
-                    locale={locale}
-                    snapshot={customerSnapshot}
-                    visibleSections={["governance"]}
-                  />
-                ) : (
-                  <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-                    <div className="dashboard-kicker text-muted-foreground">{copy.settingsTitle}</div>
-                    <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                      {customerNotConfigured}
-                    </h2>
-                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.settingsUnavailable}</p>
-                  </article>
-                )}
-              </TabsContent>
-
-              <TabsContent value="models" className="space-y-5">
-                {customerSnapshot ? (
-                  <PlatformGovernanceSettingsPanel
-                    locale={locale}
-                    snapshot={customerSnapshot}
-                    runtimeProviders={snapshot.runtime.providers}
-                    visibleSections={["models"]}
-                    initialCategory="text_generation"
-                  />
-                ) : (
-                  <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-                    <div className="dashboard-kicker text-muted-foreground">{copy.modelTab}</div>
-                    <h2 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                      {customerNotConfigured}
-                    </h2>
-                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.settingsUnavailable}</p>
-                  </article>
-                )}
-              </TabsContent>
-
-              <TabsContent value="admin" className="space-y-5">
-                <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 p-5">
-                  <div className="dashboard-kicker text-muted-foreground">{copy.adminMovedTag}</div>
-                  <h3 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                    {copy.adminTitle}
-                  </h3>
-                  <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.adminBody}</p>
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <Button className="public-button-primary h-10 px-4" asChild>
-                      <Link href="/dashboard/settings">
-                        <Settings className="mr-2 h-4 w-4" />
-                        {copy.personalSettingsLink}
-                      </Link>
-                    </Button>
-                  </div>
-                </article>
-
-                <EnterpriseMemberGovernancePanel
-                  locale={locale}
-                  currentUserId={currentUserId}
-                  canManage={canManageEnterpriseGovernance}
-                />
-
-                <EnterpriseKnowledgeGovernancePanel
-                  locale={locale}
-                  currentUserId={currentUserId}
-                  canView={canViewEnterpriseGovernance}
-                  canManage={canManageEnterpriseGovernance}
-                />
-
-                <div className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85 p-5">
-                  <div className="dashboard-kicker text-muted-foreground">{copy.enterpriseIaTitle}</div>
-                  <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">{copy.enterpriseIaBody}</p>
-                  <div className="mt-5 grid gap-4 xl:grid-cols-2">
-                    {enterpriseSettings.map((item) => (
-                      <article key={item.slug} className="rounded-[10px] border border-border bg-background p-4">
-                        <div className="dashboard-kicker text-muted-foreground">ENTERPRISE SETTINGS</div>
-                        <h3 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                          {item.title}
-                        </h3>
-                        <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.summary}</p>
-                        <div className="mt-4 space-y-2">
-                          {item.bullets.slice(0, 2).map((point) => (
-                            <div key={point} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
-                              {point}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-5">
-                          <Button className="public-button-primary h-10 px-4" asChild>
-                            <Link href={item.href}>{item.title}</Link>
+            <main className="space-y-6">
+              <SettingsSectionCard id="governance" eyebrow="GOVERNANCE" title={copy.governanceTab} description={copy.settingsBody}>
+                <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+                  <div className="rounded-xl border border-[#e7e7df] bg-[#fafaf7] p-4">
+                    <div className="font-display text-xl font-black uppercase text-[#111]">{copy.settingsTitle}</div>
+                    <p className="mt-2 text-sm leading-6 text-[#666]">{copy.settingsBody}</p>
+                    <div className="mt-4 grid gap-2">
+                      {governanceLinks.map((item) => {
+                        const Icon = item.icon
+                        return (
+                          <Button key={item.slug} variant="outline" className="h-10 justify-start rounded-lg border-[#deded6] bg-white font-bold" asChild>
+                            <Link href={item.href}>
+                              <Icon className="mr-2 h-4 w-4" />
+                              {item.title}
+                            </Link>
                           </Button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  {customerSnapshot ? (
+                    <PlatformGovernanceSettingsPanel locale={locale} snapshot={customerSnapshot} visibleSections={["governance"]} />
+                  ) : (
+                    <div className="rounded-xl border border-[#e7e7df] bg-white p-5 text-sm leading-6 text-[#666]">
+                      {copy.settingsUnavailable}
+                    </div>
+                  )}
+                </div>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard id="model-routing" eyebrow="MODEL ROUTING" title={ui.routingTitle} description={ui.routingBody}>
+                <div className="grid overflow-hidden rounded-[14px] border border-[#e7e7df] bg-white sm:grid-cols-2 xl:grid-cols-5">
+                  {[
+                    [ui.enabledProviders, `${configuredProviderCount} of ${snapshot.runtime.providers.length}`],
+                    [ui.defaultRoutes, `${defaultRouteRows.filter((row) => row.active).length} tasks`],
+                    [ui.routingMode, ui.smartRouting],
+                    [ui.totalModels, String(snapshot.runtime.providers.filter((provider) => provider.model).length)],
+                    [ui.lastUpdated, updatedAt || "—"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="border-b border-r border-[#ededE7] p-4 last:border-r-0 xl:border-b-0">
+                      <div className="font-display text-[10px] font-black uppercase tracking-[0.12em] text-[#777]">{label}</div>
+                      <div className="mt-2 text-sm font-black text-[#111]">{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex gap-6 border-b border-[#e7e7df]">
+                  {[ui.defaultRoutesTab, ui.providersTab, ui.rulesTab, ui.insightsTab].map((tab, index) => (
+                    <HashNavLink
+                      key={tab}
+                      href={index === 0 ? "#default-routes" : index === 1 ? "#providers" : "#routing-rules"}
+                      active={
+                        (index === 0 && (activeHash === "model-routing" || activeHash === "default-routes")) ||
+                        (index === 1 && activeHash === "providers") ||
+                        (index >= 2 && (activeHash === "routing-rules" || activeHash === "provider-editor"))
+                      }
+                      onActivate={setActiveHash}
+                      className="py-3 text-sm"
+                      activeClassName="border-b-2 border-[#f5ef3d] font-black text-[#111]"
+                      inactiveClassName="font-extrabold text-[#666]"
+                    >
+                      {tab}
+                    </HashNavLink>
+                  ))}
+                </div>
+
+                <div id="default-routes" className="mt-5 overflow-hidden rounded-xl border border-[#ededE7]">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="bg-[#fafaf7] text-xs font-black uppercase text-[#555]">
+                      <tr>
+                        <th className="px-4 py-3">{ui.taskType}</th>
+                        <th className="px-4 py-3">{ui.primary}</th>
+                        <th className="px-4 py-3">{ui.fallback}</th>
+                        <th className="px-4 py-3">{ui.status}</th>
+                        <th className="px-4 py-3">{ui.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {defaultRouteRows.map((row) => (
+                        <tr key={row.label} className="border-t border-[#ededE7]">
+                          <td className="px-4 py-4 font-bold text-[#111]">{row.label}</td>
+                          <td className="px-4 py-4 text-[#333]">{row.provider} / {row.model}</td>
+                          <td className="px-4 py-4 text-[#666]">{row.fallback}</td>
+                          <td className="px-4 py-4"><StatusBadge label={row.active ? "Active" : "Disabled"} tone={row.active ? "success" : "neutral"} /></td>
+                          <td className="px-4 py-4"><a href="#provider-editor" className="font-black uppercase text-[#111] underline decoration-[#d6d64a] underline-offset-4">{ui.edit}</a></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div id="providers" className="mt-5 overflow-hidden rounded-xl border border-[#ededE7]">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="bg-[#fafaf7] text-xs font-black uppercase text-[#555]">
+                      <tr>
+                        <th className="px-4 py-3">{ui.provider}</th>
+                        <th className="px-4 py-3">{ui.status}</th>
+                        <th className="px-4 py-3">{ui.baseUrl}</th>
+                        <th className="px-4 py-3">{ui.models}</th>
+                        <th className="px-4 py-3">{ui.lastSync}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {providerRows.map((provider) => (
+                        <tr key={provider.id} className="border-t border-[#ededE7]">
+                          <td className="px-4 py-4 font-bold text-[#111]">{getRuntimeProviderLabel(provider)}</td>
+                          <td className="px-4 py-4"><StatusBadge label={provider.configured ? "Active" : "Disabled"} tone={provider.configured ? "success" : "neutral"} /></td>
+                          <td className="max-w-[220px] truncate px-4 py-4 text-[#666]">{provider.baseURL || "••••••••••••••"}</td>
+                          <td className="px-4 py-4 text-[#333]">{provider.model || "—"}</td>
+                          <td className="px-4 py-4 text-[#666]">{provider.active ? "Live route" : "On demand"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div id="routing-rules" className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+                  <div className="rounded-xl border border-[#e7e7df] bg-[#fafaf7] p-4">
+                    <div className="font-display text-xl font-black uppercase text-[#111]">{ui.routingRules}</div>
+                    <div className="mt-4 space-y-3">
+                      {enterpriseSettings.map((item, index) => (
+                        <div key={item.slug} className="rounded-lg border border-[#e7e7df] bg-white p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-bold text-[#111]">{item.title}</div>
+                            <StatusBadge label={index === 2 ? "Active" : "Ready"} tone="success" />
+                          </div>
+                          <div className="mt-1 text-xs leading-5 text-[#666]">{item.summary}</div>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-[#111] bg-[#111] p-4 text-white">
+                    <div className="font-display text-xl font-black uppercase">{ui.simulator}</div>
+                    <p className="mt-2 text-sm leading-6 text-white/70">{ui.simulatorBody}</p>
+                    <div className="mt-4 space-y-3">
+                      <div className="rounded-lg border border-white/15 bg-white/8 p-3 text-sm">Workspace: {ui.scopeName}</div>
+                      <div className="rounded-lg border border-white/15 bg-white/8 p-3 text-sm">Task type: Video generation</div>
+                      <div className="rounded-lg border border-[#f5ef3d]/40 bg-[#f5ef3d] p-3 text-sm font-black text-[#111]">
+                        Primary: {defaultRouteRows.find((row) => row.label === "Video generation")?.provider || "MiniMax"} / {defaultRouteRows.find((row) => row.label === "Video generation")?.model || "Hailuo"}
+                      </div>
+                      <Button className="h-10 w-full rounded-lg border border-[#ded735] bg-[#f5ef3d] font-black uppercase text-[#111]">
+                        <TestTube2 className="mr-2 h-4 w-4" />
+                        {ui.simulate}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="provider-editor" className="mt-5">
+                  {customerSnapshot ? (
+                    <PlatformGovernanceSettingsPanel
+                      locale={locale}
+                      snapshot={customerSnapshot}
+                      runtimeProviders={snapshot.runtime.providers}
+                      visibleSections={["models"]}
+                      initialCategory="text_generation"
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-[#e7e7df] bg-white p-5 text-sm leading-6 text-[#666]">
+                      {copy.settingsUnavailable}
+                    </div>
+                  )}
+                </div>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard id="runtime-availability" eyebrow="RUNTIME AVAILABILITY" title={ui.runtimeTitle} description={ui.runtimeBody}>
+                <div className="grid gap-4 md:grid-cols-4">
+                  <SettingsMetricCard icon={CheckCircle2} label="Ready" value={String(readyRuntimeCount)} helper="Available now" tone="success" />
+                  <SettingsMetricCard icon={Clock3} label="Degraded" value={String(degradedRuntimeCount)} helper="Deferred runtime" tone="warning" />
+                  <SettingsMetricCard icon={Circle} label="Disabled" value={String(disabledRuntimeCount)} helper="Runtime disabled" />
+                  <SettingsMetricCard icon={Zap} label="Maintenance" value="0" helper="No windows" tone="success" />
+                </div>
+                <div className="mt-5 overflow-hidden rounded-xl border border-[#ededE7]">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="bg-[#fafaf7] text-xs font-black uppercase text-[#555]">
+                      <tr>
+                        <th className="px-4 py-3">{ui.capability}</th>
+                        <th className="px-4 py-3">{ui.status}</th>
+                        <th className="px-4 py-3">{ui.runtime}</th>
+                        <th className="px-4 py-3">{ui.availability}</th>
+                        <th className="px-4 py-3">{ui.lastCheck}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(customerSnapshot?.runtimes || []).map((item) => (
+                        <tr key={item.slug} className="border-t border-[#ededE7]">
+                          <td className="px-4 py-4 font-bold text-[#111]">{item.slug}</td>
+                          <td className="px-4 py-4">
+                            <StatusBadge
+                              label={getCustomerRuntimeStatusLabel(item.status, displayLocale)}
+                              tone={item.status === "ready" ? "success" : item.status === "deferred" ? "warning" : "neutral"}
+                            />
+                          </td>
+                          <td className="px-4 py-4 text-[#333]">{snapshot.runtime.tasks.find((task) => task.capabilitySlug === item.slug)?.mode || "platform"}</td>
+                          <td className="px-4 py-4 text-[#666]">{item.status === "ready" ? "Available" : item.status}</td>
+                          <td className="px-4 py-4 text-[#666]">{updatedAt || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard id="enterprise-admin" eyebrow="ENTERPRISE ADMIN" title={ui.adminTitle} description={ui.adminBody}>
+                <div id="admin-controls" className="space-y-5">
+                  <EnterpriseMemberGovernancePanel
+                    locale={locale}
+                    currentUserId={currentUserId}
+                    canManage={canManageEnterpriseGovernance}
+                  />
+                  <EnterpriseKnowledgeGovernancePanel
+                    locale={locale}
+                    currentUserId={currentUserId}
+                    canView={canViewEnterpriseGovernance}
+                    canManage={canManageEnterpriseGovernance}
+                  />
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {enterpriseSettings.map((item) => (
+                      <article key={item.slug} className="rounded-xl border border-[#e7e7df] bg-[#fafaf7] p-4">
+                        <div className="font-display text-[11px] font-black uppercase tracking-[0.14em] text-[#777]">ENTERPRISE SETTINGS</div>
+                        <h3 className="mt-2 font-display text-2xl font-black uppercase leading-none text-[#111]">{item.title}</h3>
+                        <p className="mt-3 text-sm leading-6 text-[#666]">{item.summary}</p>
+                        <Button className="public-button-primary mt-4 h-10 px-4" asChild>
+                          <Link href={item.href}>{item.title}</Link>
+                        </Button>
                       </article>
                     ))}
                   </div>
                 </div>
-              </TabsContent>
-            </Tabs>
+              </SettingsSectionCard>
+            </main>
           </div>
         </div>
       </section>

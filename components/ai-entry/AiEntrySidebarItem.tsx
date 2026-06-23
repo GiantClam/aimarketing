@@ -39,7 +39,7 @@ type AiEntryConversationSummary = {
   updated_at: number
 }
 
-const AI_ENTRY_CONVERSATION_LIST_CACHE_KEY = "ai-entry-conversations-cache-v1"
+const AI_ENTRY_CONVERSATION_LIST_CACHE_KEY = "ai-entry-conversations-cache-v2"
 const AI_ENTRY_CONVERSATION_CACHE_TTL_MS = 60_000
 
 function mergeConversations(

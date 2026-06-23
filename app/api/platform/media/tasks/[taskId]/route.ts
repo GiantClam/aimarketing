@@ -7,7 +7,11 @@ import {
   resolveEnterpriseVideoRuntimeForUser,
 } from "@/lib/platform/enterprise-runtime-config"
 import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
-import { queryMiniMaxAudioTask } from "@/lib/platform/minimax-audio"
+import { isMiniMaxVideoConfigured } from "@/lib/platform/minimax-video"
+import {
+  queryMediaCapabilityTask,
+  resolveModelIdFromRun,
+} from "@/lib/platform/model-runtime"
 import { resolveGovernedImageAssistantSelectionForUser } from "@/lib/platform/model-governance"
 import {
   hasRunningHubMediaTarget,
@@ -16,6 +20,7 @@ import {
   type RunningHubMediaTarget,
 } from "@/lib/platform/runninghub"
 import { queryRunningHubVideoTask } from "@/lib/platform/runninghub-video"
+import { getPlatformTaskRun } from "@/lib/platform/task-run-store"
 
 export const runtime = "nodejs"
 
@@ -99,13 +104,27 @@ export async function GET(
       return NextResponse.json({ error: "invalid_media_task_id" }, { status: 400 })
     }
 
-    const result = await queryMiniMaxAudioTask({
+    const run = await getPlatformTaskRun(runId)
+    if (!run) {
+      return NextResponse.json({ error: "platform_media_task_not_found" }, { status: 404 })
+    }
+
+    const modelId = resolveModelIdFromRun({
+      run,
+      audioRuntime: enterpriseAudioRuntime,
+    })
+    if (!modelId) {
+      return NextResponse.json({ error: "capability_model_not_found" }, { status: 404 })
+    }
+
+    const result = await queryMediaCapabilityTask({
       currentUser,
       runId,
-      config: enterpriseAudioRuntime?.config,
+      modelId,
+      audioRuntime: enterpriseAudioRuntime,
     }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error)
-      return NextResponse.json({ error: message || "minimax_audio_query_failed" }, { status: 502 })
+      return NextResponse.json({ error: message || "capability_query_failed" }, { status: 502 })
     })
 
     if (result instanceof NextResponse) {
@@ -115,9 +134,9 @@ export async function GET(
     return NextResponse.json(
       buildMediaTaskResponse({
         capabilitySlug: target,
-        featureId: typeof result.requestedTarget === "string" ? result.requestedTarget : null,
-        taskId: result.taskId,
-        data: result as Record<string, unknown>,
+        featureId: typeof result.payload.requestedTarget === "string" ? result.payload.requestedTarget : null,
+        taskId: typeof result.payload.taskId === "string" ? result.payload.taskId : String(runId),
+        data: result.payload,
       }),
     )
   }
@@ -142,9 +161,48 @@ export async function GET(
     target === "ai-video" &&
     currentUser.enterpriseStatus === "active" &&
     typeof currentUser.enterpriseId === "number" &&
-    !enterpriseVideoRuntime
+    !enterpriseVideoRuntime &&
+    !isMiniMaxVideoConfigured()
   ) {
-    return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
+    return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
+  }
+
+  const numericVideoRunId = target === "ai-video" ? Number(taskId) : NaN
+  const videoRun =
+    Number.isFinite(numericVideoRunId) && numericVideoRunId > 0
+      ? await getPlatformTaskRun(numericVideoRunId)
+      : null
+
+  if (target === "ai-video" && videoRun) {
+    const modelId = resolveModelIdFromRun({
+      run: videoRun,
+      videoRuntime: enterpriseVideoRuntime,
+    })
+
+    if (modelId) {
+      const result = await queryMediaCapabilityTask({
+        currentUser,
+        runId: videoRun.id,
+        modelId,
+        videoRuntime: enterpriseVideoRuntime,
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        return NextResponse.json({ error: message || "capability_query_failed" }, { status: 502 })
+      })
+
+      if (result instanceof NextResponse) {
+        return result
+      }
+
+      return NextResponse.json(
+        buildMediaTaskResponse({
+          capabilitySlug: target,
+          featureId: typeof result.payload.requestedTarget === "string" ? result.payload.requestedTarget : null,
+          taskId: typeof result.payload.taskId === "string" ? result.payload.taskId : taskId,
+          data: result.payload,
+        }),
+      )
+    }
   }
 
   const runningHubConfig =
@@ -152,7 +210,9 @@ export async function GET(
       ? enterpriseImageRuntime?.kind === "runninghub"
         ? enterpriseImageRuntime.config
         : undefined
-      : enterpriseVideoRuntime?.config
+      : enterpriseVideoRuntime?.kind === "runninghub"
+        ? enterpriseVideoRuntime.config
+        : undefined
 
   if (!isRunningHubConfiguredForTarget(target, runningHubConfig)) {
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
@@ -168,7 +228,7 @@ export async function GET(
           return queryRunningHubVideoTask({
             currentUser,
             runId,
-            config: enterpriseVideoRuntime?.config,
+            config: runningHubConfig,
           }).catch((error) => {
             const message = error instanceof Error ? error.message : String(error)
             return NextResponse.json({ error: message || "runninghub_video_query_failed" }, { status: 502 })

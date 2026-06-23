@@ -1181,7 +1181,7 @@ export function buildMockPptPreview(request: PptPreviewRequest): PptPreviewDeck 
     selectedTemplateId: templateMode === "single-template" ? request.templateId ?? null : null,
     pageCount: requestedPageCount,
     resolvedPageCount: pageCount,
-    variants: variantDescriptors.map((variantDescriptor) => {
+    variants: variantDescriptors.map<PptPreviewVariant>((variantDescriptor) => {
       const mockSlides = buildMockVariantSlides(variantDescriptor.style, title, request.scenario, request.language)
       const slideByLayout = new Map(mockSlides.map((slide) => [slide.layout, slide]))
       const layoutOccurrences = new Map<PptPreviewLayout, number>()
@@ -1317,7 +1317,7 @@ export function buildPptPreviewDeckFromPlans(
             })),
           requestImages,
         ),
-      }
+      } satisfies PptPreviewVariant
     }),
   }
 }
@@ -1326,12 +1326,11 @@ function normalizePptPreviewRequestImages(images: PptPreviewRequest["images"]): 
   if (!Array.isArray(images)) return []
 
   const seenUrls = new Set<string>()
-  return images
-    .map((image) => {
+  return images.reduce<PptPreviewInputImage[]>((collected, image) => {
       const url = typeof image?.url === "string" ? image.url.trim() : ""
-      if (!url || seenUrls.has(url)) return null
+      if (!url || seenUrls.has(url)) return collected
       seenUrls.add(url)
-      return {
+      collected.push({
         url,
         title: typeof image?.title === "string" && image.title.trim() ? image.title.trim() : null,
         mimeType: typeof image?.mimeType === "string" && image.mimeType.trim() ? image.mimeType.trim() : null,
@@ -1340,28 +1339,28 @@ function normalizePptPreviewRequestImages(images: PptPreviewRequest["images"]): 
         role: image?.role === "cover" || image?.role === "content" || image?.role === "logo" || image?.role === "reference"
           ? image.role
           : undefined,
-      } satisfies PptPreviewInputImage
-    })
-    .filter((image): image is PptPreviewInputImage => Boolean(image))
+      })
+      return collected
+    }, [])
 }
 
 function supportsInlineRequestImage(layout: PptPreviewLayout) {
   return layout === "cover" || layout === "insight" || layout === "comparison" || layout === "evidence"
 }
 
-function assignRequestImagesToSlides(slides: PptPreviewSlide[], images: PptPreviewInputImage[]) {
+function assignRequestImagesToSlides(slides: PptPreviewSlide[], images: PptPreviewInputImage[]): PptPreviewSlide[] {
   if (images.length === 0) return slides
 
   const coverImage = images[0]
   const contentImages = images.slice(1)
   let contentIndex = 0
 
-  return slides.map((slide) => {
+  return slides.map<PptPreviewSlide>((slide) => {
     if (slide.layout === "cover") {
       return {
         ...slide,
         image: coverImage ? { ...coverImage, role: "cover" } : undefined,
-      }
+      } satisfies PptPreviewSlide
     }
 
     if (!supportsInlineRequestImage(slide.layout) || contentIndex >= contentImages.length) {
@@ -1373,6 +1372,6 @@ function assignRequestImagesToSlides(slides: PptPreviewSlide[], images: PptPrevi
     return {
       ...slide,
       image: image ? { ...image, role: "content" } : undefined,
-    }
+    } satisfies PptPreviewSlide
   })
 }

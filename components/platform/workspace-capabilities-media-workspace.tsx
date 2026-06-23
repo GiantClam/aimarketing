@@ -16,9 +16,7 @@ import {
 } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -35,7 +33,7 @@ import type {
   CapabilityMediaWorkspaceFieldView,
   CapabilityMediaWorkspaceGroup,
 } from "@/lib/platform/capabilities-media-workspace"
-import { cn } from "@/lib/utils"
+import { resolveCapabilityMediaWorkspaceVideoFields } from "@/lib/platform/capabilities-media-workspace"
 
 type WorkspaceCapabilityState = {
   runtimeStatus: "ready" | "deferred" | "runtime_disabled"
@@ -229,12 +227,6 @@ function isAudioLikeResult(url: string | null | undefined, outputType: string | 
   return /\.(mp3|wav|m4a|ogg)(\?|$)/i.test(url || "")
 }
 
-function getFeatureIconTone(opened: boolean) {
-  return opened
-    ? "border-primary/20 bg-primary/10 text-primary"
-    : "border-border/70 bg-muted/40 text-foreground/80"
-}
-
 function isFeatureAvailable(state: WorkspaceCapabilityState | null | undefined) {
   if (!state) return false
   if (state.runtimeStatus !== "ready") return false
@@ -242,19 +234,11 @@ function isFeatureAvailable(state: WorkspaceCapabilityState | null | undefined) 
   return true
 }
 
-function getGroupFeatureGridClass(groupId: CapabilityMediaWorkspaceGroup["id"]) {
-  if (groupId === "video-processing") {
-    return "grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4"
-  }
-
-  return "grid-cols-1 sm:grid-cols-2"
-}
-
 function getCopy(locale: "zh" | "en"): Copy {
   if (locale === "zh") {
     return {
       eyebrow: "Media Workspace",
-      title: "能力中心",
+      title: "Capabilities",
       description: "按子能力打开独立 tab：左侧填写结构化信息板，右侧查看真实任务状态、产物预览和下载。",
       launchers: "能力入口",
       workspace: "多 tab 工作区",
@@ -424,7 +408,7 @@ function renderField(
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={field.placeholder}
-        className="min-h-28 resize-y"
+        className="capability-textarea"
       />
     )
   }
@@ -432,7 +416,7 @@ function renderField(
   if (field.type === "select") {
     return (
       <Select value={value || field.defaultValue || field.options[0]?.value} onValueChange={onChange}>
-        <SelectTrigger id={inputId} className="w-full">
+        <SelectTrigger id={inputId} className="capability-form-control">
           <SelectValue placeholder={field.placeholder || field.label} />
         </SelectTrigger>
         <SelectContent>
@@ -454,6 +438,7 @@ function renderField(
       onChange={(event) => onChange(event.target.value)}
       placeholder={field.placeholder}
       step={field.type === "number" ? "0.1" : undefined}
+      className="capability-form-control"
     />
   )
 }
@@ -762,6 +747,13 @@ export function WorkspaceCapabilitiesMediaWorkspace({
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null
   const activeFeature = activeTab ? featureMap[activeTab.featureId] : null
+  const activeFields = useMemo(() => {
+    if (!activeFeature || !activeTab) return []
+    if (activeFeature.id === "text-to-video" || activeFeature.id === "image-to-video") {
+      return resolveCapabilityMediaWorkspaceVideoFields(locale, activeFeature.id, activeTab.values.model || null)
+    }
+    return activeFeature.fields
+  }, [activeFeature, activeTab, locale])
 
   const ensureVoicesLoaded = useCallback(
     async (force = false) => {
@@ -1140,7 +1132,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
     return (
       <div className="space-y-2">
         <Select value={value} onValueChange={(nextValue) => updateTabValue(tab.id, field.id, nextValue)}>
-          <SelectTrigger id={`${tab.id}-${field.id}`} className="w-full">
+          <SelectTrigger id={`${tab.id}-${field.id}`} className="capability-form-control">
             <SelectValue placeholder={field.placeholder || field.label} />
           </SelectTrigger>
           <SelectContent>
@@ -1161,7 +1153,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
   }
 
   return (
-    <section className="public-grid-bg w-full px-2 py-3 lg:px-3 lg:py-4">
+    <section className="capabilities-page w-full px-4 py-6 lg:px-8 lg:py-8">
       <input
         ref={sourceFileInputRef}
         type="file"
@@ -1202,30 +1194,29 @@ export function WorkspaceCapabilitiesMediaWorkspace({
         }}
       />
 
-      <div className="space-y-3">
+      <div className="mx-auto max-w-[1440px] space-y-6">
         {showHero ? (
-          <div className="rounded-[18px] border border-border/60 bg-background/90 p-3 shadow-sm lg:p-4">
-            <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
-            <h2 className="mt-2 font-display text-3xl font-extrabold tracking-[0.01em] text-foreground lg:text-4xl">
-              {copy.title}
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.description}</p>
-          </div>
+          <header className="capabilities-header">
+            <div className="capabilities-eyebrow">{copy.eyebrow}</div>
+            <h1 className="capabilities-title">{copy.title}</h1>
+            <div className="header-accent" />
+            <p className="capabilities-subtitle">{copy.description}</p>
+          </header>
         ) : null}
 
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-2">
           {groupedFeatures.map((group) => (
-            <article key={group.id} className="rounded-[18px] border border-border/60 bg-background/90 p-3 shadow-sm lg:p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <article key={group.id} className="capability-group-card">
+              <div className="flex items-start gap-4">
+                <div className="category-icon">
                   {group.id === "audio-processing" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-display text-xl font-extrabold tracking-[0.01em] text-foreground">{group.title}</div>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{group.description}</p>
+                  <div className="category-title">{group.title}</div>
+                  <p className="category-description mt-1">{group.description}</p>
                 </div>
               </div>
-              <div className={cn("mt-3 grid gap-3", getGroupFeatureGridClass(group.id))}>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 {group.features.map((feature) => {
                   const opened = tabs.some((tab) => tab.id === feature.id)
                   const state = capabilityStates[feature.capabilitySlug]
@@ -1235,18 +1226,14 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                       key={feature.id}
                       type="button"
                       onClick={() => openFeatureTab(feature.id)}
-                      className={cn(
-                        "flex min-h-[84px] w-full items-center gap-3 rounded-[14px] border px-4 py-4 text-left transition",
-                        getFeatureIconTone(opened),
-                        !available && "opacity-70",
-                      )}
+                      className={`capability-tile ${opened ? "active" : ""} ${!available ? "is-muted" : ""}`}
                     >
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-background/80">
+                      <div className="capability-tile-icon">
                         {feature.previewKind === "audio" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-medium text-foreground">{feature.title}</div>
-                        <div className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{feature.summary}</div>
+                        <div className="capability-tile-title">{feature.title}</div>
+                        <div className="capability-tile-description">{feature.summary}</div>
                       </div>
                     </button>
                   )
@@ -1256,94 +1243,82 @@ export function WorkspaceCapabilitiesMediaWorkspace({
           ))}
         </div>
 
-        <article ref={workspaceRef} className="rounded-[18px] border border-border/60 bg-background/90 shadow-sm">
-          <div className="border-b border-border/60 px-3 py-3 lg:px-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-1">
-                <div className="public-kicker text-muted-foreground">{copy.workspace}</div>
-                <div className="font-display text-2xl font-extrabold tracking-[0.01em] text-foreground">{copy.launchers}</div>
-              </div>
-              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1">
-                <div className="flex min-w-0 items-center gap-2">
-                  {tabs.map((tab) => {
-                    const feature = featureMap[tab.featureId]
-                    const active = tab.id === activeTabId
-                    return (
-                      <div
-                        key={tab.id}
-                        className={cn(
-                          "flex items-center rounded-[12px] border transition",
-                          active
-                            ? "border-primary/35 bg-background text-primary shadow-sm"
-                            : "border-border/70 bg-card text-foreground hover:border-primary/20 hover:bg-accent/20",
-                        )}
+        <article ref={workspaceRef} className="launcher-workspace">
+          <div className="launcher-bar">
+            <div className="flex flex-col gap-1">
+              <div className="launcher-label">{copy.workspace} / {copy.launchers}</div>
+              <div className="text-sm font-medium text-[#777]">{tabs.length === 0 ? copy.openFirst : `${tabs.length} ${copy.tabsOpen}`}</div>
+            </div>
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+              <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+                {tabs.map((tab) => {
+                  const feature = featureMap[tab.featureId]
+                  const active = tab.id === activeTabId
+                  return (
+                    <div
+                      key={tab.id}
+                      className={`launcher-tab ${active ? "active" : ""}`}
+                    >
+                      <button
+                        ref={active ? activeTabRef : null}
+                        type="button"
+                        onClick={() => {
+                          setActiveTabId(tab.id)
+                          syncFeatureQuery(tab.id)
+                        }}
+                        className="flex min-w-0 items-center gap-2 text-left"
                       >
-                        <button
-                          ref={active ? activeTabRef : null}
-                          type="button"
-                          onClick={() => {
-                            setActiveTabId(tab.id)
-                            syncFeatureQuery(tab.id)
-                          }}
-                          className="flex min-w-0 items-center gap-3 px-4 py-3 text-left"
-                        >
-                          {feature.previewKind === "audio" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
-                          <span className="whitespace-nowrap font-medium">{feature.title}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            closeFeatureTab(tab.id)
-                          }}
-                          className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                          aria-label={`close-${tab.id}`}
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
+                        {feature.previewKind === "audio" ? <AudioLines className="size-4" /> : <Video className="size-4" />}
+                        <span className="whitespace-nowrap">{feature.title}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          closeFeatureTab(tab.id)
+                        }}
+                        className="inline-flex size-5 items-center justify-center rounded-full text-[#777] hover:bg-[#efefea] hover:text-[#111]"
+                        aria-label={`close-${tab.id}`}
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
-              <div className="hidden shrink-0 items-center gap-2 lg:flex">
-                <div className="text-sm text-muted-foreground">{tabs.length === 0 ? copy.openFirst : `${tabs.length} ${copy.tabsOpen}`}</div>
-                <Button type="button" variant="outline" className="rounded-[10px] bg-background">
-                  {copy.allTasks}
-                  <ChevronRight className="ml-2 size-4" />
-                </Button>
-              </div>
+              <Button type="button" className="secondary-btn shrink-0">
+                {copy.allTasks}
+                <ChevronRight className="size-4" />
+              </Button>
             </div>
           </div>
 
           {activeTab && activeFeature ? (
-            <div className="grid gap-4 p-3 xl:grid-cols-[420px_minmax(0,1fr)] 2xl:grid-cols-[460px_minmax(0,1fr)] lg:p-5">
-              <Card className="border-border/70 bg-card shadow-none">
-                <CardHeader className="space-y-3">
-                  <CardTitle className="text-xl">{copy.config}</CardTitle>
-                  <p className="text-sm leading-6 text-muted-foreground">{activeFeature.summary}</p>
-                </CardHeader>
-                <CardContent className="space-y-4">
+            <div className="task-workbench">
+              <article className="configuration-panel">
+                <div className="panel-title">{copy.config}</div>
+                <p className="panel-helper">{activeFeature.summary}</p>
+                <div className="mt-5 space-y-4">
                   {activeFeature.id === "voice-synthesis" ? (
-                    <div className="space-y-3 rounded-[12px] border border-border/70 bg-background/70 p-3">
+                    <div className="voice-library-box">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="dashboard-kicker text-muted-foreground">{copy.voiceLibrary}</div>
-                        <Button type="button" size="sm" variant="outline" className="rounded-[8px]" onClick={() => void ensureVoicesLoaded(true)} disabled={isLoadingVoices}>
+                        <div className="field-label">{copy.voiceLibrary}</div>
+                        <Button type="button" size="sm" className="reload-btn" onClick={() => void ensureVoicesLoaded(true)} disabled={isLoadingVoices}>
                           {isLoadingVoices ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
                           {copy.reloadVoices}
                         </Button>
                       </div>
-                      {isLoadingVoices ? <div className="text-sm text-muted-foreground">{copy.loadingVoices}</div> : null}
-                      {voicesError ? <div className="text-sm text-destructive">{voicesError}</div> : null}
+                      {isLoadingVoices ? <div className="mt-3 text-sm text-[#777]">{copy.loadingVoices}</div> : null}
+                      {voicesError ? <div className="mt-3 text-sm text-[#d93025]">{voicesError}</div> : null}
                       {!isLoadingVoices && !voicesError && voiceOptions.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">{copy.noVoices}</div>
+                        <div className="mt-3 text-sm text-[#777]">{copy.noVoices}</div>
                       ) : null}
                       {voiceOptions.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="mt-3 flex flex-wrap gap-2">
                           {voiceOptions.slice(0, 6).map((voice) => (
-                            <Badge key={`${voice.category}-${voice.voiceId}`} variant="outline" className="rounded-[4px]">
+                            <span key={`${voice.category}-${voice.voiceId}`} className="voice-chip">
                               {voice.voiceName} · {getVoiceCategoryLabel(locale, voice.category)}
-                            </Badge>
+                            </span>
                           ))}
                         </div>
                       ) : null}
@@ -1351,37 +1326,37 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                   ) : null}
 
                   {activeFeature.id === "voice-clone" ? (
-                    <div className="space-y-3 rounded-[12px] border border-border/70 bg-background/70 p-3">
-                      <div className="dashboard-kicker text-muted-foreground">{copy.uploadReference}</div>
+                    <div className="voice-library-box">
+                      <div className="field-label">{copy.uploadReference}</div>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" className="rounded-[8px]" onClick={() => sourceFileInputRef.current?.click()} disabled={activeTab.sourceUploading || activeTab.isRecording}>
+                        <Button type="button" className="reload-btn" onClick={() => sourceFileInputRef.current?.click()} disabled={activeTab.sourceUploading || activeTab.isRecording}>
                           {activeTab.sourceUploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
                           {activeTab.sourceUploading ? copy.uploading : copy.uploadReference}
                         </Button>
-                        <Button type="button" variant="outline" className="rounded-[8px]" onClick={() => void (activeTab.isRecording ? stopReferenceRecording() : startReferenceRecording())}>
+                        <Button type="button" className="reload-btn" onClick={() => void (activeTab.isRecording ? stopReferenceRecording() : startReferenceRecording())}>
                           {activeTab.isRecording ? <Square className="mr-2 size-4" /> : <Mic className="mr-2 size-4" />}
                           {activeTab.isRecording ? copy.stopRecording : copy.recordReference}
                         </Button>
                       </div>
-                      {activeTab.isRecording ? <div className="text-sm text-primary">{copy.recording}</div> : null}
+                      {activeTab.isRecording ? <div className="mt-3 text-sm font-bold text-[#111]">{copy.recording}</div> : null}
                       {activeTab.sourceFileName ? (
-                        <div className="space-y-2 rounded-[8px] border border-border/60 bg-muted/20 p-3">
-                          <div className="text-sm text-foreground/85">
+                        <div className="mt-3 space-y-2 rounded-lg border border-[#e7e7df] bg-white p-3">
+                          <div className="text-sm text-[#222]">
                             {copy.referenceReady}: {activeTab.sourceFileName}
                           </div>
                           {activeTab.sourcePreviewUrl ? <audio src={activeTab.sourcePreviewUrl} controls className="w-full" /> : null}
                         </div>
                       ) : null}
 
-                      <div className="dashboard-kicker text-muted-foreground">{copy.uploadPromptAudio}</div>
-                      <Button type="button" variant="outline" className="rounded-[8px]" onClick={() => promptAudioFileInputRef.current?.click()} disabled={activeTab.promptAudioUploading}>
+                      <div className="field-label mt-4">{copy.uploadPromptAudio}</div>
+                      <Button type="button" className="reload-btn" onClick={() => promptAudioFileInputRef.current?.click()} disabled={activeTab.promptAudioUploading}>
                         {activeTab.promptAudioUploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
                         {activeTab.promptAudioUploading ? copy.uploading : copy.uploadPromptAudio}
                       </Button>
-                      <div className="text-sm leading-6 text-muted-foreground">{copy.uploadOptionalHint}</div>
+                      <div className="mt-2 text-sm leading-6 text-[#666]">{copy.uploadOptionalHint}</div>
                       {activeTab.promptAudioFileName ? (
-                        <div className="space-y-2 rounded-[8px] border border-border/60 bg-muted/20 p-3">
-                          <div className="text-sm text-foreground/85">
+                        <div className="mt-3 space-y-2 rounded-lg border border-[#e7e7df] bg-white p-3">
+                          <div className="text-sm text-[#222]">
                             {copy.promptReady}: {activeTab.promptAudioFileName}
                           </div>
                           {activeTab.promptAudioPreviewUrl ? <audio src={activeTab.promptAudioPreviewUrl} controls className="w-full" /> : null}
@@ -1390,22 +1365,21 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                     </div>
                   ) : null}
 
-                  {activeFeature.fields.map((field) => (
+                  {activeFields.map((field) => (
                     <div key={field.id} className="space-y-2">
-                      <Label htmlFor={`${activeTab.id}-${field.id}`}>{field.label}</Label>
+                      <Label htmlFor={`${activeTab.id}-${field.id}`} className="field-label">{field.label}</Label>
                       {activeFeature.id === "voice-synthesis" && field.id === "voiceId"
                         ? renderVoiceSelect(activeTab, field)
-                        : renderField(`${activeTab.id}-${field.id}`, field, activeTab.values[field.id] || "", (nextValue) =>
+                        : renderField(`${activeTab.id}-${field.id}`, field, activeTab.values[field.id] || field.defaultValue || "", (nextValue) =>
                             updateTabValue(activeTab.id, field.id, nextValue),
                           )}
                       {field.type === "url" && activeFeature.capabilitySlug === "ai-video" && getAssetPreviewKindForField(field.id) ? (
-                        <div className="space-y-2 rounded-[10px] border border-border/60 bg-background/70 p-3">
+                        <div className="space-y-2 rounded-xl border border-[#e7e7df] bg-[#fafaf7] p-3">
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="button"
-                              variant="outline"
                               size="sm"
-                              className="rounded-[8px]"
+                              className="reload-btn"
                               onClick={() => {
                                 assetUploadTabIdRef.current = activeTab.id
                                 assetUploadFieldIdRef.current = field.id
@@ -1423,7 +1397,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
 
                           {getMatchingAssetOptions(field.id).length > 0 ? (
                             <div className="space-y-2">
-                              <div className="dashboard-kicker text-muted-foreground">{copy.assetLibrary}</div>
+                              <div className="field-label">{copy.assetLibrary}</div>
                               <Select
                                 value=""
                                 onValueChange={(nextValue) => {
@@ -1431,7 +1405,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                                   updateTabValue(activeTab.id, buildRunningHubFileNameFieldId(field.id), "")
                                 }}
                               >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger className="capability-form-control">
                                   <SelectValue placeholder={copy.selectAsset} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1444,11 +1418,11 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                               </Select>
                             </div>
                           ) : (
-                            <div className="text-xs text-muted-foreground">{copy.noMatchingAssets}</div>
+                            <div className="text-xs text-[#777]">{copy.noMatchingAssets}</div>
                           )}
 
                           {activeTab.fieldUploads[field.id]?.fileName ? (
-                            <div className="text-xs text-foreground/80">{activeTab.fieldUploads[field.id]?.fileName}</div>
+                            <div className="text-xs text-[#222]">{activeTab.fieldUploads[field.id]?.fileName}</div>
                           ) : null}
                         </div>
                       ) : null}
@@ -1456,68 +1430,70 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                   ))}
 
                   <div className="pt-2">
-                    <Button type="button" className="w-full rounded-[8px]" onClick={() => void submitActiveTab()} disabled={activeTab.isSubmitting}>
+                    <Button type="button" className="execute-btn" onClick={() => void submitActiveTab()} disabled={activeTab.isSubmitting}>
                       {activeTab.isSubmitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
                       {activeTab.isSubmitting ? copy.generating : activeFeature.submitLabel}
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </article>
 
-              <Card className="min-w-0 border-border/70 bg-card shadow-none">
-                <CardHeader className="space-y-3">
+              <article className="result-panel">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <CardTitle className="text-xl">{copy.result}</CardTitle>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{activeFeature.summary}</p>
+                      <div className="panel-title">{copy.result}</div>
+                      <p className="panel-helper">{activeFeature.summary}</p>
                     </div>
-                    <div className="flex gap-2">
-                      <Badge variant="outline" className="rounded-[4px]">
-                        {copy.status}: {activeTab.task?.status || activeTab.submission?.status || copy.ready}
-                      </Badge>
+                    <div className="capability-status-ready">
+                      <span className="capability-status-dot" />
+                      {activeTab.task?.status || activeTab.submission?.status || copy.ready}
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                <div className="mt-5 space-y-4">
                   {activeTab.message ? (
-                    <div className="rounded-[8px] border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground/85">
+                    <div className="rounded-lg border border-[#e6dc58] bg-[#fffde8] px-4 py-3 text-sm text-[#222]">
                       {activeTab.message}
                     </div>
                   ) : null}
                   {activeTab.error ? (
-                    <div className="rounded-[8px] border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                    <div className="rounded-lg border border-[#ffd6d6] bg-[#fff0f0] px-4 py-3 text-sm text-[#d93025]">
                       {activeTab.error}
                     </div>
                   ) : null}
 
-                  <div className="rounded-[12px] border border-border/70 bg-card/70 p-3">
+                  <div className="result-preview-box">
                     {latestResultUrl && latestIsVideo ? (
-                      <video src={latestResultUrl} controls className="aspect-video w-full rounded-[8px] bg-black/85" />
+                      <video src={latestResultUrl} controls className="aspect-video w-full rounded-xl bg-black/85" />
                     ) : null}
                     {latestResultUrl && !latestIsVideo && latestIsAudio ? (
-                      <div className="space-y-3 rounded-[8px] border border-border/60 bg-muted/20 p-4">
+                      <div className="space-y-3 rounded-xl border border-[#e7e7df] bg-[#fafaf7] p-4">
                         <audio src={latestResultUrl} controls className="w-full" />
                       </div>
                     ) : null}
                     {!latestResultUrl ? (
-                      <div className="flex min-h-56 items-center justify-center rounded-[8px] border border-dashed border-border/70 bg-muted/10 px-6 text-center text-sm leading-6 text-muted-foreground">
-                        {copy.latestEmpty}
+                      <div className="preview-empty">
+                        <div>
+                          <div className="preview-icon mx-auto mb-3">
+                            {activeFeature.previewKind === "audio" ? <AudioLines className="size-6" /> : <Video className="size-6" />}
+                          </div>
+                          <div>{copy.latestEmpty}</div>
+                        </div>
                       </div>
                     ) : null}
                   </div>
 
                   {activeVoiceId || activeLyrics ? (
-                    <div className="space-y-3 rounded-[12px] border border-border/70 bg-background/70 p-3">
-                      <div className="dashboard-kicker text-muted-foreground">{copy.resultDetails}</div>
+                    <div className="result-output-box">
+                      <div className="result-label">{copy.resultDetails}</div>
                       {activeVoiceId ? (
-                        <div className="text-sm text-foreground/85">
+                        <div className="mt-2 text-sm text-[#222]">
                           <span className="font-medium">voice_id:</span> {activeVoiceId}
                         </div>
                       ) : null}
                       {activeLyrics ? (
-                        <div className="space-y-2">
-                          <div className="text-sm font-medium text-foreground">{copy.lyrics}</div>
-                          <pre className="whitespace-pre-wrap rounded-[8px] border border-border/60 bg-muted/20 p-3 text-sm leading-6 text-foreground/85">
+                        <div className="mt-3 space-y-2">
+                          <div className="text-sm font-bold text-[#111]">{copy.lyrics}</div>
+                          <pre className="whitespace-pre-wrap rounded-lg border border-[#e7e7df] bg-white p-3 text-sm leading-6 text-[#222]">
                             {activeLyrics}
                           </pre>
                         </div>
@@ -1528,8 +1504,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                   <div className="flex flex-wrap gap-3">
                     <Button
                       type="button"
-                      variant="outline"
-                      className="rounded-[8px]"
+                      className="secondary-btn"
                       onClick={() => {
                         if (!activeFeature || !activeTab.task?.taskId) return
                         void refreshTask(
@@ -1546,7 +1521,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                     </Button>
 
                     {latestResultUrl ? (
-                      <Button asChild type="button" className="rounded-[8px]">
+                      <Button asChild type="button" className="execute-btn w-auto px-5">
                         <a href={latestResultUrl} target="_blank" rel="noreferrer">
                           <Download className="mr-2 size-4" />
                           {copy.download}
@@ -1555,20 +1530,20 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                     ) : null}
                   </div>
 
-                  <div className="space-y-3 rounded-[12px] border border-border/70 bg-background/70 p-3">
-                    <div className="dashboard-kicker text-muted-foreground">{copy.history}</div>
+                  <div className="result-output-box">
+                    <div className="result-label">{copy.history}</div>
                     {activeTab.task?.results?.length ? (
-                      <div className="space-y-2">
+                      <div className="mt-3 space-y-2">
                         {activeTab.task.results.map((result, index) => (
                           <div
                             key={`${activeTab.id}-result-${index}`}
-                            className="dashboard-chip flex items-center justify-between gap-3 rounded-[4px] px-3 py-3 text-sm text-foreground/85"
+                            className="flex items-center justify-between gap-3 rounded-lg border border-[#e7e7df] bg-white px-3 py-3 text-sm text-[#222]"
                           >
                             <span className="truncate">
                               {result.title || result.outputType || (result.url ? "file" : "text")} · {result.text || result.url || "—"}
                             </span>
                             {result.url ? (
-                              <a href={result.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                              <a href={result.url} target="_blank" rel="noreferrer" className="font-bold text-[#111] underline decoration-[#d6d64a] underline-offset-4">
                                 {copy.download}
                               </a>
                             ) : null}
@@ -1576,14 +1551,14 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                         ))}
                       </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">{copy.latestEmpty}</div>
+                      <div className="mt-3 text-sm text-[#777]">{copy.latestEmpty}</div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </article>
             </div>
           ) : (
-            <div className="mt-5 flex min-h-72 items-center justify-center rounded-[12px] border border-dashed border-border/70 bg-muted/10 px-6 text-center text-sm leading-7 text-muted-foreground">
+            <div className="preview-empty m-6">
               {copy.openFirst}
             </div>
           )}

@@ -3,12 +3,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, Bot, Check, Copy, Database, ImageIcon, Loader2, Paperclip, Plus, Send, Sparkles, X } from "lucide-react"
+import {
+  ArrowRight,
+  Check,
+  Copy,
+  Database,
+  Download,
+  ExternalLink,
+  FileText,
+  ImageIcon,
+  LibraryBig,
+  LinkIcon,
+  Loader2,
+  MoreHorizontal,
+  Paperclip,
+  Plus,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react"
 
 import {
   Message,
   MessageAction,
-  MessageActions,
   MessageAvatar,
   MessageContent,
 } from "@/components/ai-entry/prompt-kit/message"
@@ -139,6 +156,18 @@ type ModelOption = {
 type ModelGroupOption = { family: string; label: string; models: ModelOption[] }
 type AgentOption = { id: string; category: string; name: string; description: string }
 type AgentGroupOption = { id: string; label: string; agents: AgentOption[] }
+type ParsedArtifactRow = {
+  label: string
+  value: string
+  href: string | null
+}
+type ParsedArtifactResult = {
+  body: string
+  title: string
+  rows: ParsedArtifactRow[]
+  workHref: string | null
+  downloadHref: string | null
+}
 
 type MessageApiResponse = {
   data?: Array<{ id?: string; role?: "user" | "assistant"; content?: string; created_at?: number }>
@@ -176,6 +205,114 @@ type ChatStreamApiResponse = {
       results?: Array<{ title?: string; url?: string; snippet?: string; provider?: string }>
     }
   } | null
+}
+
+function formatMessageTime(timestamp: number | undefined, locale: "zh" | "en") {
+  if (!timestamp) return locale === "zh" ? "刚刚" : "Just now"
+  const date = new Date(timestamp * 1000)
+  if (Number.isNaN(date.getTime())) return locale === "zh" ? "刚刚" : "Just now"
+  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function parseMarkdownLink(value: string) {
+  const match = value.match(/^\[([^\]]+)]\(([^)]+)\)$/)
+  if (!match) return { label: value, href: null }
+  return { label: match[1] || value, href: match[2] || null }
+}
+
+function parseArtifactResult(content: string): ParsedArtifactResult | null {
+  const lines = content.split(/\r?\n/)
+  let headingIndex = -1
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]
+    const trimmed = line.trim()
+    const isArtifactHeading =
+      /^已生成.+[:：]$/.test(trimmed) ||
+      /^(HTML|PPT|Deliverable).+generated:?$/i.test(trimmed)
+    if (isArtifactHeading) {
+      headingIndex = index
+      break
+    }
+  }
+  if (headingIndex < 0) return null
+
+  const rows: ParsedArtifactRow[] = []
+  for (const line of lines.slice(headingIndex + 1)) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (!trimmed.startsWith("- ")) break
+    const rowText = trimmed.slice(2)
+    const separatorIndex = rowText.indexOf(":")
+    const label = separatorIndex >= 0 ? rowText.slice(0, separatorIndex).trim() : rowText.trim()
+    const rawValue = separatorIndex >= 0 ? rowText.slice(separatorIndex + 1).trim() : ""
+    const parsed = parseMarkdownLink(rawValue)
+    rows.push({ label, value: parsed.label, href: parsed.href })
+  }
+
+  if (rows.length === 0) return null
+
+  const workHref = rows.find((row) => /作品库|work library/i.test(row.label))?.href ?? null
+  const downloadHref = rows.find((row) => /下载|download/i.test(row.label))?.href ?? null
+  const body = lines.slice(0, headingIndex).join("\n").trim()
+  const title = lines[headingIndex]?.trim().replace(/[:：]$/, "") || "Artifact"
+
+  return { body, title, rows, workHref, downloadHref }
+}
+
+function getArtifactRowIcon(label: string) {
+  if (/文件|file/i.test(label)) return FileText
+  if (/状态|status/i.test(label)) return Check
+  if (/下载|download/i.test(label)) return Download
+  if (/作品库|work library/i.test(label)) return LibraryBig
+  if (/链接|link|preview|open/i.test(label)) return LinkIcon
+  return FileText
+}
+
+function ArtifactResultBlock({ artifact }: { artifact: ParsedArtifactResult }) {
+  return (
+    <div className="artifact-block">
+      <div className="artifact-title">
+        <FileText className="h-5 w-5" />
+        {artifact.title}
+      </div>
+      <div>
+        {artifact.rows.map((row) => {
+          const Icon = getArtifactRowIcon(row.label)
+          const isFile = /文件|file/i.test(row.label)
+          const isStatus = /状态|status/i.test(row.label)
+
+          return (
+            <div key={`${row.label}:${row.value}`} className="artifact-row">
+              <div className="artifact-label">
+                <Icon className="h-4 w-4" />
+                {row.label}
+              </div>
+              <div className="artifact-value">
+                {row.href ? (
+                  <a className="artifact-link" href={row.href} target="_blank" rel="noreferrer">
+                    {row.value || row.href}
+                    <ExternalLink className="ml-1 inline h-3.5 w-3.5" />
+                  </a>
+                ) : isStatus ? (
+                  <span className="status-badge">
+                    <span className="status-dot" />
+                    {row.value}
+                  </span>
+                ) : isFile ? (
+                  <span className="file-name">{row.value}</span>
+                ) : (
+                  row.value
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 type KnowledgeDatasetOption = {
@@ -642,6 +779,7 @@ export function AiEntryWorkspace({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const isZh = locale === "zh"
+  const displayLocale = isZh ? "zh" : "en"
 
   const copy = useMemo(
     () =>
@@ -774,6 +912,7 @@ export function AiEntryWorkspace({
   const [initialDraftFromQuery] = useState<string>(() => readInitialDraftFromLocation())
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
+  const previousMessageCountRef = useRef(initialMessages.length)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
   const isLoadingRef = useRef(false)
@@ -886,8 +1025,12 @@ export function AiEntryWorkspace({
   }, [conversationId])
 
   useEffect(() => {
-    scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, [messages])
+    const previousCount = previousMessageCountRef.current
+    previousMessageCountRef.current = messages.length
+    if (messages.length <= previousCount) return
+
+    scrollAnchorRef.current?.scrollIntoView({ behavior: "auto", block: "end" })
+  }, [messages.length])
 
   useEffect(() => {
     if (embedded) return
@@ -1109,6 +1252,9 @@ export function AiEntryWorkspace({
           item: {
             id?: string
             name?: string
+            modelId?: string
+            providerId?: string
+            providerLabel?: string
             runtimeId?: string
             canonicalId?: string
             aliases?: string[]
@@ -2005,7 +2151,7 @@ export function AiEntryWorkspace({
     <div className="flex min-w-0 items-center gap-2 px-1">
       {shouldLockModel ? (
         <div
-          className={`dashboard-chip inline-flex min-w-0 max-w-[44vw] items-center rounded-[4px] px-3 text-xs text-foreground sm:max-w-[260px] ${buttonHeight}`}
+          className={`model-select inline-flex min-w-0 max-w-[44vw] items-center text-xs text-foreground sm:max-w-[260px] ${buttonHeight}`}
           title={selectedModel?.name || lockedConsultingModelId}
         >
           <span className="truncate">
@@ -2023,7 +2169,7 @@ export function AiEntryWorkspace({
           }}
           disabled={isLoading || modelsLoading || models.length === 0}
         >
-          <SelectTrigger className={`dashboard-chip min-w-0 w-[140px] max-w-[44vw] rounded-[4px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
+          <SelectTrigger className={`model-select min-w-0 w-[140px] max-w-[44vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
             <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
           </SelectTrigger>
           <SelectContent>{renderModelSelectContent()}</SelectContent>
@@ -2172,10 +2318,10 @@ export function AiEntryWorkspace({
             type="button"
             size="sm"
             variant="outline"
-            className="dashboard-button-secondary h-9 px-3"
+            className="composer-add"
             disabled={isLoading || isConversationLoading || isPreparingAttachments}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-5 w-5" />
           </Button>
         </PopoverTrigger>
       </PromptInputAction>
@@ -2261,64 +2407,72 @@ export function AiEntryWorkspace({
   if (showLanding) {
     return (
       <TooltipProvider>
-        <div className="dashboard-shell flex h-full min-h-0 justify-center overflow-y-auto bg-background">
-          <section className="w-full max-w-6xl px-4 py-10 lg:px-8">
-            <div className="mx-auto max-w-4xl text-center">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
-                <span className="public-signal" aria-hidden="true" />
-                <span className="dashboard-kicker text-muted-foreground">AI Workspace</span>
+        <div className="dashboard-shell flex h-full min-h-0 justify-center overflow-hidden bg-background">
+          <section className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden px-4 pt-10 lg:px-8">
+            <div className="min-h-0 flex-1">
+              <ScrollArea className="h-full">
+                <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col pb-6">
+                  <div className="mx-auto max-w-4xl text-center">
+                    <div className="mb-3 inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
+                      <span className="public-signal" aria-hidden="true" />
+                      <span className="dashboard-kicker text-muted-foreground">AI Workspace</span>
+                    </div>
+                    <h1 className="dashboard-title text-5xl tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
+                    <p className="mt-4 text-lg text-muted-foreground">{copy.landingHint}</p>
+                  </div>
+
+                  {!embedded && !shouldLockModel ? renderRecommendedAgents("landing") : null}
+
+                  <div className="mx-auto mt-10 grid max-w-5xl gap-3 lg:grid-cols-3">
+                    {quickPrompts.map((prompt) => (
+                      <button key={prompt} type="button" className="dashboard-panel rounded-[10px] p-4 text-left transition hover:border-primary/60 hover:bg-primary/5" onClick={() => setInput(prompt)}>
+                        <div className="dashboard-kicker mb-2 inline-flex items-center gap-1 text-muted-foreground">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {copy.quickStart}
+                        </div>
+                        <div className="text-sm leading-6 text-foreground">{prompt}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </ScrollArea>
+            </div>
+
+            <div className="sticky bottom-0 z-20 shrink-0 bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:px-0">
+              <div className="dashboard-panel mx-auto max-w-5xl rounded-[12px] p-4 shadow-sm">
+                <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
+                  {isAgentSelectionExplicit && selectedAgent ? (
+                    <div className="px-1 pb-2 text-xs text-muted-foreground">
+                      {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
+                    </div>
+                  ) : null}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.txt,.md,.docx,.pdf,.csv,.json,text/*,application/json,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="hidden"
+                    onChange={(event) => void handleAttachmentFiles(event.target.files)}
+                  />
+                  {renderSelectedAttachments()}
+                  <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
+                  <PromptInputActions>
+                    <div className="flex items-center gap-2">
+                      {renderAttachmentPicker()}
+                      {renderKnowledgeControl()}
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      {renderSelectors("h-10")}
+                      <PromptInputAction tooltip={copy.send}>
+                        <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
+                          {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
+                          {copy.send}
+                        </Button>
+                      </PromptInputAction>
+                    </div>
+                  </PromptInputActions>
+                </PromptInput>
               </div>
-              <h1 className="dashboard-title text-5xl tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
-              <p className="mt-4 text-lg text-muted-foreground">{copy.landingHint}</p>
-            </div>
-
-            <div className="dashboard-panel mx-auto mt-10 max-w-5xl rounded-[12px] p-4 shadow-sm">
-              <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
-                {isAgentSelectionExplicit && selectedAgent ? (
-                  <div className="px-1 pb-2 text-xs text-muted-foreground">
-                    {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
-                  </div>
-                ) : null}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.txt,.md,.docx,.pdf,.csv,.json,text/*,application/json,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  className="hidden"
-                onChange={(event) => void handleAttachmentFiles(event.target.files)}
-              />
-              {renderSelectedAttachments()}
-              <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
-                <PromptInputActions>
-                  <div className="flex items-center gap-2">
-                    {renderAttachmentPicker()}
-                    {renderKnowledgeControl()}
-                  </div>
-                  <div className="flex min-w-0 items-center gap-2">
-                    {renderSelectors("h-10")}
-                    <PromptInputAction tooltip={copy.send}>
-                      <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
-                        {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
-                        {copy.send}
-                      </Button>
-                    </PromptInputAction>
-                  </div>
-                </PromptInputActions>
-              </PromptInput>
-            </div>
-
-            {!embedded && !shouldLockModel ? renderRecommendedAgents("landing") : null}
-
-            <div className="mx-auto mt-10 grid max-w-5xl gap-3 lg:grid-cols-3">
-              {quickPrompts.map((prompt) => (
-                <button key={prompt} type="button" className="dashboard-panel rounded-[10px] p-4 text-left transition hover:border-primary/60 hover:bg-primary/5" onClick={() => setInput(prompt)}>
-                  <div className="dashboard-kicker mb-2 inline-flex items-center gap-1 text-muted-foreground">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {copy.quickStart}
-                  </div>
-                  <div className="text-sm leading-6 text-foreground">{prompt}</div>
-                </button>
-              ))}
             </div>
           </section>
         </div>
@@ -2328,12 +2482,29 @@ export function AiEntryWorkspace({
 
   return (
     <TooltipProvider>
-      <div className="dashboard-shell flex h-full min-h-0 justify-center">
-        <section className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-b-[12px] border-x border-b border-border/70 bg-background">
+      <div className="chat-canvas flex h-full min-h-0 justify-center">
+        <section className="flex h-full min-h-0 w-full max-w-[1320px] flex-col overflow-hidden">
           {!embedded || !compactEmbedded ? (
-            <header className="dashboard-panel border-b border-border/70 bg-card/60 px-4 py-3 backdrop-blur">
-              <h1 className="dashboard-title flex items-center gap-2 text-base text-foreground"><Bot className="h-4 w-4" />{workspaceTitle}</h1>
-              <p className="text-xs text-muted-foreground">{workspaceSubtitle}</p>
+            <header className="chat-page-header px-4 pt-6 lg:px-8">
+              <div>
+                <div className="dashboard-kicker text-muted-foreground">AI CHAT</div>
+                <h1 className="chat-page-title mt-2 text-foreground">{workspaceTitle}</h1>
+                <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">{workspaceSubtitle}</p>
+              </div>
+              <div className="grid shrink-0 gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                <div className="chat-status-card">
+                  <div className="chat-status-label">{isZh ? "作品库" : "Work Library"}</div>
+                  <div className="chat-status-value">247</div>
+                </div>
+                <div className="chat-status-card">
+                  <div className="chat-status-label">{isZh ? "今日会话" : "Active Conversations"}</div>
+                  <div className="chat-status-value">12</div>
+                </div>
+                <div className="chat-status-card">
+                  <div className="chat-status-label">{copy.modelLabel}</div>
+                  <div className="chat-status-value truncate text-[1.15rem]">{selectedModel?.name || "Active"}</div>
+                </div>
+              </div>
             </header>
           ) : null}
 
@@ -2341,19 +2512,24 @@ export function AiEntryWorkspace({
           <ScrollArea className="h-full">
             <div
               className={cn(
-                "mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 lg:px-4",
+                "mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 pb-6 lg:px-6",
                 embedded && compactEmbedded ? "min-h-[280px] sm:min-h-[320px]" : undefined,
               )}
             >
               {isConversationLoading && messages.length === 0 ? <div className="dashboard-panel rounded-[10px] p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
 
               {shouldShowEmbeddedGuide && embeddedGuideContent ? (
-                <Message className="justify-start">
-                  <MessageAvatar alt="AI" fallback="AI" />
-                  <div className="flex max-w-[min(80ch,92%)] flex-col gap-1.5 items-start">
-                    <MessageContent markdown role="assistant">{embeddedGuideContent}</MessageContent>
+                <article className="message-card">
+                  <div className="message-header">
+                    <div className="ai-avatar">AI</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="dashboard-kicker text-foreground">AI WORKSPACE</div>
+                      <div className="message-time">{formatMessageTime(undefined, displayLocale)}</div>
+                    </div>
+                    <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
                   </div>
-                </Message>
+                  <MessageContent bare markdown role="assistant" className="message-body p-0">{embeddedGuideContent}</MessageContent>
+                </article>
               ) : null}
 
               {messages.map((message, index) => {
@@ -2365,56 +2541,89 @@ export function AiEntryWorkspace({
                   index === messages.length - 1 &&
                   !message.content.trim()
                 const shouldShowLoadingDetails = isPendingAssistant
-                return (
-                  <Message key={message.id} className={cn(isAssistant ? "justify-start" : "justify-end")}>
-                    {isAssistant ? <MessageAvatar alt="AI" fallback="AI" /> : null}
-                    <div className={cn("flex max-w-[min(80ch,88%)] flex-col gap-1.5", isAssistant ? "items-start" : "items-end")}>
-                      {isPendingAssistant ? (
-                        <div className="dashboard-panel w-full min-w-[220px] rounded-[10px] border border-border/70 bg-card/90 p-3">
-                          <div className="flex items-center gap-2 text-sm text-foreground">
-                            <TypingIndicator />
-                            <span>{copy.loading}</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <MessageContent markdown={isAssistant} role={isAssistant ? "assistant" : "user"}>{message.content}</MessageContent>
-                      )}
-                      {!isAssistant ? renderMessageAttachments(message.attachments) : null}
-                      {shouldShowLoadingDetails ? (
-                        <div className="dashboard-panel w-full rounded-[10px] p-3">
-                          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                            <TypingIndicator />
-                            <span className="truncate">{loadingEventSummary.currentLabel}</span>
-                          </div>
-                          {loadingEventSummary.totalCount > 0 ? (
-                            <div className="mb-2 rounded-[8px] border border-border/70 bg-background/70 px-2.5 py-2">
-                              <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                                <span className="truncate">{isZh ? "处理中" : "Processing"}</span>
-                                <span>{`${loadingEventSummary.completedCount}/${loadingEventSummary.totalCount}`}</span>
-                              </div>
-                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full bg-primary transition-all duration-300"
-                                  style={{ width: `${loadingEventSummary.progressPercent}%` }}
-                                />
-                              </div>
-                            </div>
-                          ) : null}
-                          <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} className="pl-0" />
-                        </div>
-                      ) : null}
-                      {isAssistant && message.content.trim() ? (
-                        <MessageActions>
-                          <MessageAction tooltip={copied ? copy.copiedReply : copy.copyReply}>
-                            <button type="button" className="dashboard-chip inline-flex items-center gap-1 rounded-[4px] px-2 py-1 transition hover:bg-accent/10 hover:text-foreground" onClick={() => void handleCopyMessage(message.id, message.content)}>
-                              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                              <TextMorph text={copied ? copy.copied : copy.copy} />
-                            </button>
-                          </MessageAction>
-                        </MessageActions>
-                      ) : null}
+                const artifact = isAssistant ? parseArtifactResult(message.content) : null
+                const bodyContent = artifact?.body ?? message.content
+                return isAssistant ? (
+                  <article key={message.id} className="message-card">
+                    <div className="message-header">
+                      <div className="ai-avatar">AI</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="dashboard-kicker text-foreground">AI RESPONSE</div>
+                        <div className="message-time">{formatMessageTime(message.createdAt, displayLocale)}</div>
+                      </div>
+                      <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    {!isAssistant ? <MessageAvatar alt="User" fallback="U" /> : null}
+                    {isPendingAssistant ? (
+                      <div className="flex items-center gap-2 text-sm text-foreground">
+                        <TypingIndicator />
+                        <span>{copy.loading}</span>
+                      </div>
+                    ) : bodyContent ? (
+                      <MessageContent bare markdown role="assistant" className="message-body p-0">{bodyContent}</MessageContent>
+                    ) : null}
+                    {artifact ? (
+                      <>
+                        <div className="message-divider" />
+                        <ArtifactResultBlock artifact={artifact} />
+                      </>
+                    ) : null}
+                    {shouldShowLoadingDetails ? (
+                      <div className="mt-5 rounded-[12px] border border-[#e7e7df] bg-[#fafaf7] p-4">
+                        <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <TypingIndicator />
+                          <span className="truncate">{loadingEventSummary.currentLabel}</span>
+                        </div>
+                        {loadingEventSummary.totalCount > 0 ? (
+                          <div className="mb-2 rounded-[8px] border border-border/70 bg-background/70 px-2.5 py-2">
+                            <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span className="truncate">{isZh ? "处理中" : "Processing"}</span>
+                              <span>{`${loadingEventSummary.completedCount}/${loadingEventSummary.totalCount}`}</span>
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full bg-primary transition-all duration-300"
+                                style={{ width: `${loadingEventSummary.progressPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                        <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} className="pl-0" />
+                      </div>
+                    ) : null}
+                    {message.content.trim() ? (
+                      <div className="message-actions">
+                        <MessageAction tooltip={copied ? copy.copiedReply : copy.copyReply}>
+                          <button type="button" className="action-primary" onClick={() => void handleCopyMessage(message.id, message.content)}>
+                            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                            <TextMorph text={copied ? copy.copied : copy.copy} />
+                          </button>
+                        </MessageAction>
+                        {artifact?.workHref ? (
+                          <a className="action-secondary" href={artifact.workHref}>
+                            <LibraryBig className="h-4 w-4" />
+                            {isZh ? "打开作品库" : "Open in Works"}
+                          </a>
+                        ) : null}
+                        {artifact?.downloadHref ? (
+                          <a className="action-secondary" href={artifact.downloadHref} target="_blank" rel="noreferrer">
+                            <Download className="h-4 w-4" />
+                            {isZh ? "导出" : "Export"}
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                ) : (
+                  <Message key={message.id} className="justify-end">
+                    <div className="message-card-user">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="dashboard-kicker text-primary">{isZh ? "你的指令" : "Your Command"}</div>
+                        <div className="text-xs text-white/55">{formatMessageTime(message.createdAt, displayLocale)}</div>
+                      </div>
+                      <MessageContent bare role="user" className="p-0 text-sm leading-7 text-white">{message.content}</MessageContent>
+                      {renderMessageAttachments(message.attachments)}
+                    </div>
+                    <MessageAvatar alt="User" fallback="U" />
                   </Message>
                 )
               })}
@@ -2425,8 +2634,8 @@ export function AiEntryWorkspace({
           </ScrollArea>
         </div>
 
-        <div className="shrink-0 border-t border-border/70 bg-transparent px-3 py-3 lg:px-4">
-          <div className="dashboard-panel mx-auto w-full max-w-5xl rounded-[10px] bg-background/90 p-2 supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur">
+        <div className="sticky bottom-0 z-20 shrink-0 bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:px-6">
+          <div className="chat-composer mx-auto">
             {!isConversationLoading && messages.length === 0 ? (
               <div className="mb-2">
                 <div className="flex flex-wrap gap-2">
@@ -2471,7 +2680,7 @@ export function AiEntryWorkspace({
               onSubmit={handleSend}
               isLoading={isLoading}
               maxHeight={220}
-              className={compactEmbedded ? "border border-border/70 shadow-none" : "border-2"}
+              className="border-0 bg-transparent p-0 shadow-none"
             >
               {isAgentSelectionExplicit && selectedAgent ? (
                 <div className="px-1 pb-2 text-xs text-muted-foreground">
@@ -2487,8 +2696,8 @@ export function AiEntryWorkspace({
                 onChange={(event) => void handleAttachmentFiles(event.target.files)}
               />
               {renderSelectedAttachments()}
-              <PromptInputTextarea placeholder={copy.placeholder} className={compactEmbedded ? "min-h-[88px]" : undefined} />
-              <PromptInputActions>
+              <PromptInputTextarea placeholder={copy.placeholder} className={cn("composer-input", compactEmbedded ? "min-h-[88px]" : undefined)} />
+              <PromptInputActions className="items-end gap-3 p-0">
                 <div className="flex items-center gap-2">
                   {renderAttachmentPicker()}
                   {renderKnowledgeControl()}
@@ -2496,7 +2705,7 @@ export function AiEntryWorkspace({
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="dashboard-button-primary h-9 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
+                    <Button type="button" size="sm" className="send-button shrink-0 px-5" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
                       {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>

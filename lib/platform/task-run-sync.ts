@@ -3,6 +3,11 @@ import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { platformTaskRuns } from "@/lib/db/schema"
 import { queryMiniMaxAudioTask, type MiniMaxNormalizedTask } from "@/lib/platform/minimax-audio"
+import { queryMiniMaxVideoTask, type MiniMaxVideoTask } from "@/lib/platform/minimax-video"
+import {
+  queryMediaCapabilityTask,
+  resolveModelIdFromRun,
+} from "@/lib/platform/model-runtime"
 import { queryRunningHubTask, type RunningHubTaskResponse } from "@/lib/platform/runninghub"
 import { queryRunningHubVideoTask, type RunningHubVideoTask } from "@/lib/platform/runninghub-video"
 import { appendPlatformRunEvent, type PlatformTaskRunRecord, type PlatformTaskRunStatus } from "@/lib/platform/task-run-store"
@@ -18,6 +23,7 @@ type SyncablePlatformRun = Pick<
   | "externalSystem"
   | "externalRunId"
   | "createdAt"
+  | "inputPayload"
   | "normalizedResult"
 >
 
@@ -48,9 +54,19 @@ type PlatformRunSyncDeps = {
   appendEvent?: typeof appendPlatformRunEvent
   patchRun?: (runId: number, patch: PlatformRunSyncPatch) => Promise<void>
   queryMiniMaxAudioTask?: typeof queryMiniMaxAudioTask
+  queryMiniMaxVideoTask?: typeof queryMiniMaxVideoTask
   queryRunningHubVideoTask?: typeof queryRunningHubVideoTask
   queryRunningHubTask?: typeof queryRunningHubTask
 }
+
+const MINIMAX_VIDEO_ITEM_SLUGS = new Set(["text-to-video", "image-to-video"])
+const RUNNINGHUB_VIDEO_ITEM_SLUGS = new Set([
+  "ai-video",
+  "text-to-video",
+  "image-to-video",
+  "digital-human",
+  "video-enhance",
+])
 
 function normalizeTaskRunStatus(value: string | null | undefined): PlatformRunSyncResult["status"] {
   const normalized = String(value || "").trim().toUpperCase()
@@ -110,6 +126,7 @@ async function listRecentPlatformRuns(limit: number) {
       externalSystem: platformTaskRuns.externalSystem,
       externalRunId: platformTaskRuns.externalRunId,
       createdAt: platformTaskRuns.createdAt,
+      inputPayload: platformTaskRuns.inputPayload,
       normalizedResult: platformTaskRuns.normalizedResult,
     })
     .from(platformTaskRuns)
@@ -186,6 +203,7 @@ export async function syncPlatformTaskRuns(
   const patchRun = deps.patchRun ?? patchPlatformRunRecord
   const appendEvent = deps.appendEvent ?? appendPlatformRunEvent
   const minimaxQuery = deps.queryMiniMaxAudioTask ?? queryMiniMaxAudioTask
+  const minimaxVideoQuery = deps.queryMiniMaxVideoTask ?? queryMiniMaxVideoTask
   const runningHubVideoQuery = deps.queryRunningHubVideoTask ?? queryRunningHubVideoTask
   const runningHubQuery = deps.queryRunningHubTask ?? queryRunningHubTask
   const now = deps.now ?? Date.now
@@ -216,31 +234,103 @@ export async function syncPlatformTaskRuns(
 
     try {
       if (run.externalSystem === "minimax" && (run.itemSlug === "ai-music" || run.itemSlug === "voice-clone" || run.itemSlug === "voice-synthesis")) {
-        const result = await minimaxQuery({
+        const modelId =
+          resolveModelIdFromRun({
+            run,
+          }) || "minimax:audio:music-2.6"
+        const result = await queryMediaCapabilityTask({
           currentUser: {
             id: run.userId,
             enterpriseId: run.enterpriseId,
           },
           runId: run.id,
-        })
+          modelId,
+        }).catch(async () =>
+          minimaxQuery({
+            currentUser: {
+              id: run.userId,
+              enterpriseId: run.enterpriseId,
+            },
+            runId: run.id,
+          }),
+        )
 
-        const normalized = normalizeTaskLikeResult(result as MiniMaxNormalizedTask)
+        const normalized =
+          "payload" in result
+            ? normalizeTaskLikeResult(result.payload as MiniMaxNormalizedTask)
+            : normalizeTaskLikeResult(result as MiniMaxNormalizedTask)
         if (normalized.providerStatus) {
           updated += 1
         }
         continue
       }
 
-      if (run.externalSystem === "runninghub" && run.itemSlug === "ai-video") {
-        const result = await runningHubVideoQuery({
+      if (run.externalSystem === "minimax" && MINIMAX_VIDEO_ITEM_SLUGS.has(run.itemSlug)) {
+        const modelId =
+          resolveModelIdFromRun({
+            run,
+          }) || "minimax:video:text-to-video:MiniMax-Hailuo-2.3"
+        const result = await queryMediaCapabilityTask({
           currentUser: {
             id: run.userId,
             enterpriseId: run.enterpriseId,
           },
           runId: run.id,
-        })
+          modelId,
+        }).catch(async () =>
+          minimaxVideoQuery({
+            currentUser: {
+              id: run.userId,
+              enterpriseId: run.enterpriseId,
+            },
+            runId: run.id,
+          }),
+        )
 
-        const normalized = normalizeTaskLikeResult(result as RunningHubVideoTask)
+        const normalized =
+          "payload" in result
+            ? normalizeTaskLikeResult(result.payload as MiniMaxVideoTask)
+            : normalizeTaskLikeResult(result as MiniMaxVideoTask)
+        if (normalized.providerStatus) {
+          updated += 1
+        }
+        continue
+      }
+
+      if (run.externalSystem === "runninghub" && RUNNINGHUB_VIDEO_ITEM_SLUGS.has(run.itemSlug)) {
+        const modelId = resolveModelIdFromRun({
+          run,
+        })
+        const result =
+          modelId
+            ? await queryMediaCapabilityTask({
+                currentUser: {
+                  id: run.userId,
+                  enterpriseId: run.enterpriseId,
+                },
+                runId: run.id,
+                modelId,
+              }).catch(async () =>
+                runningHubVideoQuery({
+                  currentUser: {
+                    id: run.userId,
+                    enterpriseId: run.enterpriseId,
+                  },
+                  runId: run.id,
+                }),
+              )
+            : await runningHubVideoQuery({
+                currentUser: {
+                  id: run.userId,
+                  enterpriseId: run.enterpriseId,
+                },
+                runId: run.id,
+              })
+
+        const normalized =
+          "payload" in result
+            ? normalizeTaskLikeResult(result.payload as RunningHubVideoTask)
+            : normalizeTaskLikeResult(result as RunningHubVideoTask)
         if (normalized.providerStatus) {
           updated += 1
         }

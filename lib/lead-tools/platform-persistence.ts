@@ -261,18 +261,20 @@ export async function saveLeadToolSelectedArtifact(
 ): Promise<PlatformArtifactRecord | null> {
   const actor = getEnterpriseLeadToolUser(input.currentUser)
   if (!actor || !input.run) return null
+  const run = input.run
 
   const store = input.store ?? platformTaskRunStore
   const savedResultArtifact = input.downloadResult?.artifact
     ? await saveLeadToolDownloadFileArtifact({
         ...input,
         actor,
+        run,
         artifact: input.downloadResult.artifact,
       })
     : null
 
   const metadataArtifact = await store.savePlatformArtifact({
-    runId: input.run.id,
+    runId: run.id,
     enterpriseId: actor.enterpriseId,
     ownerUserId: actor.id,
     kind: "json",

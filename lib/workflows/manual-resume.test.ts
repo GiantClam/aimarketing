@@ -13,6 +13,20 @@ import {
   type WorkflowRunDetail,
 } from "@/lib/workflows/store"
 
+type WorkflowNodeExecutionFixture = WorkflowRunDetail["nodeExecutions"][number]
+
+function nodeExecution(
+  input: Omit<WorkflowNodeExecutionFixture, "errorMessage" | "inputPayload" | "outputPayload"> &
+    Partial<Pick<WorkflowNodeExecutionFixture, "errorMessage" | "inputPayload" | "outputPayload">>,
+): WorkflowNodeExecutionFixture {
+  return {
+    errorMessage: null,
+    inputPayload: null,
+    outputPayload: null,
+    ...input,
+  }
+}
+
 test("resolveWorkflowIdFromTaskRunRecord prefers input payload workflow id", () => {
   assert.equal(
     resolveWorkflowIdFromTaskRunRecord({
@@ -134,7 +148,7 @@ test("resolveWorkflowResumeNodeKey picks the first failed node in workflow order
       edges: [],
     },
     nodeExecutions: [
-      {
+      nodeExecution({
         id: 1,
         runId: 5,
         workflowId: 1,
@@ -151,8 +165,8 @@ test("resolveWorkflowResumeNodeKey picks the first failed node in workflow order
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
-      {
+      }),
+      nodeExecution({
         id: 2,
         runId: 5,
         workflowId: 1,
@@ -169,8 +183,8 @@ test("resolveWorkflowResumeNodeKey picks the first failed node in workflow order
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
-      {
+      }),
+      nodeExecution({
         id: 3,
         runId: 5,
         workflowId: 1,
@@ -187,7 +201,7 @@ test("resolveWorkflowResumeNodeKey picks the first failed node in workflow order
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
+      }),
     ],
   } satisfies WorkflowRunDetail
 
@@ -216,7 +230,7 @@ test("resolveWorkflowResumeNodeKey falls back to the first cancelled node when t
       edges: [],
     },
     nodeExecutions: [
-      {
+      nodeExecution({
         id: 1,
         runId: 5,
         workflowId: 1,
@@ -233,8 +247,8 @@ test("resolveWorkflowResumeNodeKey falls back to the first cancelled node when t
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
-      {
+      }),
+      nodeExecution({
         id: 2,
         runId: 5,
         workflowId: 1,
@@ -251,7 +265,7 @@ test("resolveWorkflowResumeNodeKey falls back to the first cancelled node when t
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
+      }),
     ],
   } satisfies WorkflowRunDetail
 
@@ -280,7 +294,7 @@ test("resolveWorkflowResumeNodeExecution returns the latest execution record for
       edges: [],
     },
     nodeExecutions: [
-      {
+      nodeExecution({
         id: 1,
         runId: 5,
         workflowId: 1,
@@ -297,8 +311,8 @@ test("resolveWorkflowResumeNodeExecution returns the latest execution record for
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
-      {
+      }),
+      nodeExecution({
         id: 2,
         runId: 5,
         workflowId: 1,
@@ -315,7 +329,7 @@ test("resolveWorkflowResumeNodeExecution returns the latest execution record for
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
+      }),
     ],
   } satisfies WorkflowRunDetail
 
@@ -345,7 +359,7 @@ test("resolveWorkflowResumeNodeKey returns null when there is nothing resumable"
       edges: [],
     },
     nodeExecutions: [
-      {
+      nodeExecution({
         id: 1,
         runId: 5,
         workflowId: 1,
@@ -362,7 +376,7 @@ test("resolveWorkflowResumeNodeKey returns null when there is nothing resumable"
         finishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
+      }),
     ],
   } satisfies WorkflowRunDetail
 
@@ -395,7 +409,7 @@ test("normalizeWorkflowRunStatusFromNodeExecutions marks zombie running runs as 
   } satisfies WorkflowRunDetail["run"]
 
   const nodeExecutions = [
-    {
+    nodeExecution({
       id: 124,
       runId: 88,
       workflowId: 2,
@@ -410,8 +424,8 @@ test("normalizeWorkflowRunStatusFromNodeExecutions marks zombie running runs as 
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 127,
       runId: 88,
       workflowId: 2,
@@ -426,8 +440,8 @@ test("normalizeWorkflowRunStatusFromNodeExecutions marks zombie running runs as 
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 129,
       runId: 88,
       workflowId: 2,
@@ -442,7 +456,7 @@ test("normalizeWorkflowRunStatusFromNodeExecutions marks zombie running runs as 
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
+    }),
   ] satisfies WorkflowRunDetail["nodeExecutions"]
 
   const normalized = normalizeWorkflowRunStatusFromNodeExecutions(run, nodeExecutions)
@@ -476,7 +490,7 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives running from mixed no
   } satisfies WorkflowRunDetail["run"]
 
   const nodeExecutions = [
-    {
+    nodeExecution({
       id: 200,
       runId: 91,
       workflowId: 2,
@@ -491,8 +505,8 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives running from mixed no
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 201,
       runId: 91,
       workflowId: 2,
@@ -507,7 +521,7 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives running from mixed no
       finishedAt: null,
       createdAt: now,
       updatedAt: now,
-    },
+    }),
   ] satisfies WorkflowRunDetail["nodeExecutions"]
 
   const normalized = normalizeWorkflowRunStatusFromNodeExecutions(run, nodeExecutions)
@@ -541,7 +555,7 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives success once every no
   } satisfies WorkflowRunDetail["run"]
 
   const nodeExecutions = [
-    {
+    nodeExecution({
       id: 202,
       runId: 92,
       workflowId: 2,
@@ -556,8 +570,8 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives success once every no
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 203,
       runId: 92,
       workflowId: 2,
@@ -572,7 +586,7 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives success once every no
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
+    }),
   ] satisfies WorkflowRunDetail["nodeExecutions"]
 
   const normalized = normalizeWorkflowRunStatusFromNodeExecutions(run, nodeExecutions)
@@ -584,7 +598,7 @@ test("normalizeWorkflowRunStatusFromNodeExecutions derives success once every no
 test("normalizeWorkflowNodeStatusesForRunningRun exposes the next ready queued node as running", () => {
   const now = new Date()
   const nodeExecutions = [
-    {
+    nodeExecution({
       id: 1,
       runId: 88,
       workflowId: 2,
@@ -599,8 +613,8 @@ test("normalizeWorkflowNodeStatusesForRunningRun exposes the next ready queued n
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 2,
       runId: 88,
       workflowId: 2,
@@ -615,8 +629,8 @@ test("normalizeWorkflowNodeStatusesForRunningRun exposes the next ready queued n
       finishedAt: null,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 3,
       runId: 88,
       workflowId: 2,
@@ -631,7 +645,7 @@ test("normalizeWorkflowNodeStatusesForRunningRun exposes the next ready queued n
       finishedAt: null,
       createdAt: now,
       updatedAt: now,
-    },
+    }),
   ] satisfies WorkflowRunDetail["nodeExecutions"]
 
   const normalized = normalizeWorkflowNodeStatusesForRunningRun(
@@ -650,7 +664,7 @@ test("normalizeWorkflowNodeStatusesForRunningRun exposes the next ready queued n
 test("normalizeWorkflowNodeStatusesForRunningRun promotes ready queued branches even when another branch is already running", () => {
   const now = new Date()
   const nodeExecutions = [
-    {
+    nodeExecution({
       id: 1,
       runId: 88,
       workflowId: 2,
@@ -665,8 +679,8 @@ test("normalizeWorkflowNodeStatusesForRunningRun promotes ready queued branches 
       finishedAt: now,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 2,
       runId: 88,
       workflowId: 2,
@@ -681,8 +695,8 @@ test("normalizeWorkflowNodeStatusesForRunningRun promotes ready queued branches 
       finishedAt: null,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }),
+    nodeExecution({
       id: 3,
       runId: 88,
       workflowId: 2,
@@ -697,7 +711,7 @@ test("normalizeWorkflowNodeStatusesForRunningRun promotes ready queued branches 
       finishedAt: null,
       createdAt: now,
       updatedAt: now,
-    },
+    }),
   ] satisfies WorkflowRunDetail["nodeExecutions"]
 
   const normalized = normalizeWorkflowNodeStatusesForRunningRun(

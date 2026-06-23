@@ -171,7 +171,7 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
 const DEFAULT_PROVIDER_BY_CATEGORY: Record<EnterpriseModelCategory, EnterpriseModelProviderId> = {
   text_generation: "openai_compatible",
   image_generation: "runninghub",
-  video_generation: "runninghub",
+  video_generation: "minimax_official",
   audio_generation: "minimax_official",
 }
 

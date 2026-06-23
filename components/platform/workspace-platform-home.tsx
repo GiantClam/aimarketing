@@ -1,5 +1,7 @@
 import Link from "next/link"
 import {
+  ArrowRight,
+  Bookmark,
   Bot,
   CreditCard,
   GraduationCap,
@@ -22,7 +24,6 @@ import {
   PenSquare,
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import type { AppLocale } from "@/lib/i18n/config"
 import { localizePublicPath } from "@/lib/i18n/routing"
 import { listLocalizedBusinessAgentConfigsBySlug } from "@/lib/platform/business-agents"
@@ -111,6 +112,85 @@ const operations = {
   ],
 } as const
 
+type MetricSnapshot = {
+  label: string
+  value: string
+  growth: string
+  bars: [number, number, number, number]
+}
+
+const businessMetrics: Record<string, MetricSnapshot> = {
+  "content-growth": { label: "Content pieces", value: "128", growth: "+24%", bars: [42, 64, 51, 82] },
+  "brand-creative": { label: "Assets created", value: "342", growth: "+31%", bars: [36, 58, 74, 88] },
+  "lead-conversion": { label: "Leads qualified", value: "76", growth: "+17%", bars: [34, 48, 67, 72] },
+  "sales-close": { label: "Deals in progress", value: "23", growth: "+15%", bars: [38, 54, 49, 71] },
+  "enterprise-operations": { label: "Active tasks", value: "183", growth: "+9%", bars: [48, 55, 62, 68] },
+  "knowledge-assets": { label: "Assets total", value: "1,248", growth: "+22%", bars: [44, 56, 78, 84] },
+  "compliance-risk": { label: "Reviews cleared", value: "64", growth: "+12%", bars: [46, 52, 59, 70] },
+  "training-enablement": { label: "Enablement kits", value: "41", growth: "+18%", bars: [32, 50, 63, 76] },
+  "talent-recruiting": { label: "Candidates staged", value: "58", growth: "+14%", bars: [35, 44, 61, 69] },
+  "legal-ops": { label: "Contracts reviewed", value: "37", growth: "+11%", bars: [30, 43, 55, 66] },
+}
+
+const directoryMetrics: Record<string, MetricSnapshot> = {
+  capabilities: { label: "Bound providers", value: "12", growth: "+6%", bars: [38, 45, 62, 66] },
+  agents: { label: "Agent cards", value: "28", growth: "+13%", bars: [36, 58, 63, 79] },
+  plugins: { label: "Plugin slots", value: "19", growth: "+8%", bars: [32, 42, 57, 65] },
+  "mcp-services": { label: "MCP services", value: "14", growth: "+10%", bars: [40, 46, 61, 73] },
+  workflows: { label: "Workflow runs", value: "96", growth: "+21%", bars: [34, 53, 69, 86] },
+}
+
+const capabilityMetrics: Record<string, MetricSnapshot> = {
+  "ai-chat": { label: "Model sessions", value: "212", growth: "+19%", bars: [45, 59, 66, 81] },
+  "ai-ppt": { label: "Decks shipped", value: "47", growth: "+16%", bars: [37, 52, 61, 76] },
+  "ai-image": { label: "Visual variants", value: "384", growth: "+28%", bars: [44, 58, 77, 90] },
+  "ai-video": { label: "Storyboard jobs", value: "31", growth: "+12%", bars: [30, 44, 58, 68] },
+  "agent-platform": { label: "Agent routes", value: "22", growth: "+15%", bars: [36, 50, 64, 74] },
+}
+
+const operationMetrics: Record<string, MetricSnapshot> = {
+  "knowledge-base": { label: "Indexed sources", value: "164", growth: "+22%", bars: [42, 51, 69, 83] },
+  billing: { label: "Credits tracked", value: "8.4k", growth: "+9%", bars: [39, 48, 57, 65] },
+  settings: { label: "Policies live", value: "18", growth: "+7%", bars: [34, 43, 52, 61] },
+}
+
+const fallbackMetric: MetricSnapshot = {
+  label: "Workspace signals",
+  value: "64",
+  growth: "+12%",
+  bars: [34, 48, 58, 70],
+}
+
+function MetricModule({ metric }: { metric: MetricSnapshot }) {
+  return (
+    <div className="workspace-metric-module">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase leading-4 text-muted-foreground">{metric.label}</div>
+          <div className="mt-1 font-display text-3xl font-extrabold leading-none text-foreground">{metric.value}</div>
+        </div>
+        <div className="workspace-growth font-display text-sm font-extrabold">{metric.growth}</div>
+      </div>
+      <div className="workspace-mini-bars mt-3" aria-hidden="true">
+        {metric.bars.map((height, index) => (
+          <span key={`${metric.label}-${index}`} style={{ height: `${height}%` }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WorkspaceCardAction({ href, label }: { href: string; label: string }) {
+  return (
+    <div className="workspace-card-cta-base">
+      <Link href={href} className="workspace-card-cta">
+        {label}
+        <ArrowRight className="h-4 w-4" />
+      </Link>
+    </div>
+  )
+}
+
 function getProviderStatusLabel(status: "active" | "fallback" | "planned", locale: "zh" | "en") {
   if (status === "active") return locale === "zh" ? "已接入" : "Active"
   if (status === "fallback") return locale === "zh" ? "兼容链路" : "Fallback"
@@ -131,8 +211,8 @@ export function WorkspacePlatformHome({
   const copy =
     displayLocale === "zh"
       ? {
-          eyebrow: "Workspace Hub",
-          title: "企业工作台平台入口",
+          eyebrow: "WORKSPACE HUB",
+          title: "ENTERPRISE WORKSPACE FRONT DOOR",
           description:
             "把 AI、PPT、图片、视频、智能体、插件、MCP 和工作流放回同一个工作台首页，避免继续从单页功能入口开始跳转。",
           businessTitle: "业务视角入口",
@@ -146,16 +226,16 @@ export function WorkspacePlatformHome({
           operationsDescription: "把知识、计费和设置放进同一平台入口层，避免企业管理员再靠记忆寻找后台位置。",
           expertTitle: "专家工作台示例",
           expertDescription: "用一个成交专家工作台示例页，统一角色说明、示例问题、输入区、历史占位和输出动作结构。",
-          openWorkspace: "打开工作台",
+          openWorkspace: "OPEN VIEW",
           viewPublic: "查看公共入口",
-          openBusiness: "打开业务入口",
+          openBusiness: "OPEN VIEW",
           openExpert: "查看专家工作台",
         }
       : {
-          eyebrow: "Workspace Hub",
-          title: "Enterprise workspace front door",
+          eyebrow: "WORKSPACE HUB",
+          title: "ENTERPRISE WORKSPACE FRONT DOOR",
           description:
-            "Put AI, PPT, image, video, agents, plugins, MCP, and workflows back onto one workspace homepage instead of dropping users into a single-function screen first.",
+            "Put AI, PPT, image, video, agents, plugins, MCP, and workflows back onto one workspace homepage.",
           businessTitle: "Business entry layer",
           businessDescription:
             "Start from a business objective first, then land into AI, Writer, Image, Video, Knowledge, Billing, or governance routes as needed.",
@@ -168,9 +248,9 @@ export function WorkspacePlatformHome({
           expertTitle: "Expert workbench example",
           expertDescription:
             "Use one closing-expert example page to standardize role framing, sample prompts, input, history placeholders, and output actions.",
-          openWorkspace: "Open Workspace",
+          openWorkspace: "OPEN VIEW",
           viewPublic: "View Public Entry",
-          openBusiness: "Open business view",
+          openBusiness: "OPEN VIEW",
           openExpert: "View expert workbench",
         }
   const operationItems = operations[displayLocale]
@@ -179,55 +259,75 @@ export function WorkspacePlatformHome({
     <div className="h-full overflow-auto bg-transparent">
       <section className="public-grid-bg workspace-page-shell mx-auto max-w-7xl">
         <div className="workspace-stack">
-          <div className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/80">
-            <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
-            <h1 className="mt-3 font-display text-4xl font-extrabold uppercase tracking-[0.02em] text-foreground lg:text-5xl">
-              {copy.title}
-            </h1>
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-muted-foreground lg:text-base">{copy.description}</p>
+          <div className="workspace-command-hero workspace-hero-panel">
+            <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
+              <div>
+                <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
+                <h1 className="workspace-command-title mt-3 text-foreground">{copy.title}</h1>
+                <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">{copy.description}</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                <div className="workspace-status-card">
+                  <div className="dashboard-kicker text-muted-foreground">ACTIVE ROUTES</div>
+                  <div className="mt-2 font-display text-3xl font-extrabold text-foreground">42</div>
+                </div>
+                <div className="workspace-status-card">
+                  <div className="dashboard-kicker text-muted-foreground">MODEL LANES</div>
+                  <div className="mt-2 font-display text-3xl font-extrabold text-foreground">8</div>
+                </div>
+                <div className="workspace-status-card">
+                  <div className="dashboard-kicker text-muted-foreground">TASK HEALTH</div>
+                  <div className="mt-2 font-display text-3xl font-extrabold text-foreground">96%</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-4">
-            <div className="grid gap-4 xl:grid-cols-3">
+            <div className="grid gap-6 xl:grid-cols-3">
               {businessEntries.map((entry) => {
                 const Icon = businessIcons[entry.iconKey]
                 const defaultBusinessAgent = listLocalizedBusinessAgentConfigsBySlug(displayLocale, entry.slug)[0] || null
                 const businessHref = buildDashboardBusinessHref(entry.slug, {
                   agentId: defaultBusinessAgent?.agentId || null,
                 })
+                const metric = businessMetrics[entry.slug] ?? fallbackMetric
 
                 return (
-                  <article key={entry.slug} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+                  <article key={entry.slug} className="workspace-command-card">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-3">
-                        <div className="dashboard-kicker text-muted-foreground">BUSINESS VIEW</div>
-                        <h2 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                          {entry.title}
-                        </h2>
+                      <div className="workspace-icon-block">
+                        <Icon className="h-7 w-7 stroke-[2]" />
                       </div>
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
-                        <Icon className="h-5 w-5 text-primary-foreground" />
+                      <div className="flex items-center gap-2">
+                        <div className="dashboard-kicker text-muted-foreground">BUSINESS VIEW</div>
+                        <div className="h-2 w-2 rounded-full bg-primary" />
+                      </div>
+                      <div className="workspace-card-pin" aria-hidden="true">
+                        <Bookmark className="h-4 w-4" />
                       </div>
                     </div>
 
-                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{entry.summary}</p>
+                    <h2 className="mt-5 font-display text-3xl font-extrabold uppercase leading-none text-foreground">
+                      {entry.title}
+                    </h2>
+                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{entry.summary}</p>
 
-                    <div className="mt-4 space-y-2">
+                    <div className="mt-4 flex flex-wrap gap-2">
                       {entry.outcomes.slice(0, 2).map((item) => (
-                        <div key={item} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                        <div key={item} className="workspace-card-chip">
                           {item}
                         </div>
                       ))}
                     </div>
 
-                    <div className="mt-5 flex flex-wrap gap-3">
-                      <Button className="public-button-primary h-10 px-4" asChild>
-                        <Link href={businessHref}>{copy.openBusiness}</Link>
-                      </Button>
+                    <div className="mt-auto flex flex-col gap-4 pt-6 sm:flex-row sm:items-end sm:justify-between">
+                      <WorkspaceCardAction href={businessHref} label={copy.openBusiness} />
+                      <MetricModule metric={metric} />
                       {entry.expertWorkbenchHref ? (
-                        <Button className="public-button-secondary h-10 px-4" asChild>
-                          <Link href={entry.expertWorkbenchHref}>{copy.openExpert}</Link>
-                        </Button>
+                        <Link className="text-xs font-semibold uppercase text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href={entry.expertWorkbenchHref}>
+                          {copy.openExpert}
+                        </Link>
                       ) : null}
                     </div>
                   </article>
@@ -247,28 +347,27 @@ export function WorkspacePlatformHome({
                 {hubs.map((hub) => {
                   const Icon = hubIcons[hub.slug as keyof typeof hubIcons] ?? LayoutGrid
                   const workspaceHref = `/dashboard/${hub.slug}`
+                  const metric = directoryMetrics[hub.slug] ?? fallbackMetric
 
                   return (
-                    <article key={hub.slug} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
-                          <Icon className="h-5 w-5 text-primary-foreground" />
+                    <article key={hub.slug} className="workspace-command-card min-h-[230px]">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="workspace-icon-block h-14 w-14">
+                          <Icon className="h-6 w-6 stroke-[2]" />
                         </div>
-                        <div className="min-w-0">
-                          <h2 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                            {hub.title}
-                          </h2>
-                          <p className="mt-2 text-sm leading-7 text-muted-foreground">{hub.summary}</p>
-                          <div className="mt-4 flex flex-wrap gap-3">
-                            <Button className="public-button-primary h-10 px-4" asChild>
-                              <Link href={workspaceHref}>{copy.openWorkspace}</Link>
-                            </Button>
-                            <Button className="public-button-secondary h-10 px-4" asChild>
-                              <Link href={localizePublicPath(hub.href, locale)}>{copy.viewPublic}</Link>
-                            </Button>
-                          </div>
-                        </div>
+                        <div className="dashboard-kicker text-muted-foreground">DIRECTORY</div>
                       </div>
+                      <h2 className="mt-5 font-display text-3xl font-extrabold uppercase leading-none text-foreground">
+                        {hub.title}
+                      </h2>
+                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{hub.summary}</p>
+                      <div className="mt-auto flex flex-col gap-4 pt-6 sm:flex-row sm:items-end sm:justify-between">
+                        <WorkspaceCardAction href={workspaceHref} label={copy.openWorkspace} />
+                        <MetricModule metric={metric} />
+                      </div>
+                      <Link className="mt-3 inline-flex text-xs font-semibold uppercase text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href={localizePublicPath(hub.href, locale)}>
+                        {copy.viewPublic}
+                      </Link>
                     </article>
                   )
                 })}
@@ -285,43 +384,43 @@ export function WorkspacePlatformHome({
                 {capabilities.map((item) => {
                   const Icon = capabilityIcons[item.slug as keyof typeof capabilityIcons] ?? Sparkles
                   const targetHref = item.workspaceHref ?? (item.publicHref ? localizePublicPath(item.publicHref, locale) : "/dashboard/capabilities")
+                  const metric = capabilityMetrics[item.slug] ?? fallbackMetric
 
                   return (
-                    <article key={item.slug} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+                    <article key={item.slug} className="workspace-command-card">
                       <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-3">
-                          <div className="dashboard-kicker text-muted-foreground">{item.capabilityKind?.toUpperCase() || "CAPABILITY"}</div>
-                          <h3 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                            {item.title}
-                          </h3>
+                        <div className="workspace-icon-block h-14 w-14">
+                          <Icon className="h-6 w-6 stroke-[2]" />
                         </div>
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
-                          <Icon className="h-5 w-5 text-primary-foreground" />
+                        <div className="flex items-center gap-2">
+                          <div className="dashboard-kicker text-muted-foreground">{item.capabilityKind?.toUpperCase() || "CAPABILITY"}</div>
+                          <div className="h-2 w-2 rounded-full bg-primary" />
                         </div>
                       </div>
-
-                      <p className="mt-4 text-sm leading-7 text-muted-foreground">{item.summary}</p>
+                      <h3 className="mt-5 font-display text-3xl font-extrabold uppercase leading-none text-foreground">
+                        {item.title}
+                      </h3>
+                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{item.summary}</p>
 
                       <div className="mt-4 flex flex-wrap gap-2">
-                        {(item.bindings ?? []).map((binding) => (
-                          <span key={`${item.slug}-${binding.provider}`} className="dashboard-chip rounded-[4px] px-3 py-2 text-xs leading-5 text-muted-foreground">
+                        {(item.bindings ?? []).slice(0, 2).map((binding) => (
+                          <span key={`${item.slug}-${binding.provider}`} className="workspace-card-chip text-xs text-muted-foreground">
                             {binding.provider} · {getProviderStatusLabel(binding.status, displayLocale)}
                           </span>
                         ))}
                       </div>
 
-                      <div className="mt-4 space-y-2">
+                      <div className="mt-3 flex flex-wrap gap-2">
                         {item.proofPoints.slice(0, 2).map((point) => (
-                          <div key={point} className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                          <div key={point} className="workspace-card-chip">
                             {point}
                           </div>
                         ))}
                       </div>
 
-                      <div className="mt-5">
-                        <Button className="public-button-primary h-10 px-4" asChild>
-                          <Link href={targetHref}>{copy.openWorkspace}</Link>
-                        </Button>
+                      <div className="mt-auto flex flex-col gap-4 pt-6 sm:flex-row sm:items-end sm:justify-between">
+                        <WorkspaceCardAction href={targetHref} label={copy.openWorkspace} />
+                        <MetricModule metric={metric} />
                       </div>
                     </article>
                   )
@@ -333,45 +432,45 @@ export function WorkspacePlatformHome({
                 <p className="mt-2 text-sm leading-7 text-muted-foreground">{copy.operationsDescription}</p>
               </div>
 
-              <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
-                <div className="dashboard-kicker text-muted-foreground">{copy.expertTitle}</div>
-                <h3 className="mt-3 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+              <article className="workspace-command-card min-h-[230px]">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="workspace-icon-block h-14 w-14">
+                    <Target className="h-6 w-6 stroke-[2]" />
+                  </div>
+                  <div className="dashboard-kicker text-muted-foreground">{copy.expertTitle}</div>
+                </div>
+                <h3 className="mt-5 font-display text-3xl font-extrabold uppercase leading-none text-foreground">
                   {displayLocale === "zh" ? "成交专家工作台" : "Closing expert workbench"}
                 </h3>
-                <p className="mt-4 text-sm leading-7 text-muted-foreground">{copy.expertDescription}</p>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Button className="public-button-primary h-10 px-4" asChild>
-                    <Link href="/dashboard/agent-platform/sales-close-expert">{copy.openExpert}</Link>
-                  </Button>
-                  <Button className="public-button-secondary h-10 px-4" asChild>
-                    <Link href={buildDashboardBusinessHref("sales-close")}>{copy.openBusiness}</Link>
-                  </Button>
+                <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{copy.expertDescription}</p>
+                <div className="mt-auto flex flex-col gap-4 pt-6 sm:flex-row sm:items-end sm:justify-between">
+                  <WorkspaceCardAction href="/dashboard/agent-platform/sales-close-expert" label={copy.openExpert} />
+                  <MetricModule metric={businessMetrics["sales-close"]} />
                 </div>
+                <Link className="mt-3 inline-flex text-xs font-semibold uppercase text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href={buildDashboardBusinessHref("sales-close")}>
+                  {copy.openBusiness}
+                </Link>
               </article>
 
               <div className="grid gap-4 xl:grid-cols-3">
                 {operationItems.map((item) => {
                   const Icon = item.icon
+                  const metric = operationMetrics[item.slug] ?? fallbackMetric
                   return (
-                    <article key={item.slug} className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+                    <article key={item.slug} className="workspace-command-card min-h-[240px]">
                       <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-3">
-                          <div className="dashboard-kicker text-muted-foreground">OPERATIONS</div>
-                          <h3 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                            {item.title}
-                          </h3>
+                        <div className="workspace-icon-block h-14 w-14">
+                          <Icon className="h-6 w-6 stroke-[2]" />
                         </div>
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
-                          <Icon className="h-5 w-5 text-primary-foreground" />
-                        </div>
+                        <div className="dashboard-kicker text-muted-foreground">OPERATIONS</div>
                       </div>
-
-                      <p className="mt-4 text-sm leading-7 text-muted-foreground">{item.summary}</p>
-
-                      <div className="mt-5">
-                        <Button className="public-button-primary h-10 px-4" asChild>
-                          <Link href={item.href}>{copy.openWorkspace}</Link>
-                        </Button>
+                      <h3 className="mt-5 font-display text-2xl font-extrabold uppercase leading-none text-foreground">
+                        {item.title}
+                      </h3>
+                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{item.summary}</p>
+                      <div className="mt-auto flex flex-col gap-4 pt-6">
+                        <MetricModule metric={metric} />
+                        <WorkspaceCardAction href={item.href} label={copy.openWorkspace} />
                       </div>
                     </article>
                   )

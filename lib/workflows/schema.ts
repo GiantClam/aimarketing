@@ -5,6 +5,7 @@ export const WORKFLOW_NODE_TYPES = [
   "llm_generate",
   "image_generate",
   "video_generate",
+  "digital_human",
   "music_generate",
   "voice_synthesis",
   "audio_generate",
@@ -67,6 +68,10 @@ const WORKFLOW_NODE_TITLE_CATALOG: Record<WorkflowNodeType, Record<WorkflowLocal
     zh: "视频生成",
     en: "Video Generate",
   },
+  digital_human: {
+    zh: "口播数字人",
+    en: "Digital Human",
+  },
   music_generate: {
     zh: "音乐生成",
     en: "Music Generate",
@@ -84,13 +89,14 @@ const WORKFLOW_NODE_TITLE_CATALOG: Record<WorkflowNodeType, Record<WorkflowLocal
     en: "PPT Generate",
   },
   product_store: {
-    zh: "作品库存储",
-    en: "Work Library",
+    zh: "素材库存储",
+    en: "Asset Library",
   },
 }
 
 const WORKFLOW_NODE_LEGACY_TITLES: Partial<Record<WorkflowNodeType, string[]>> = {
   llm_generate: ["文案生成"],
+  product_store: ["作品库存储", "Work Library"],
 }
 
 export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDefinition> = {
@@ -130,6 +136,12 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
     outputKinds: ["video"],
     acceptedInputKinds: ["text", "image", "video"],
   },
+  digital_human: {
+    type: "digital_human",
+    title: "Digital Human",
+    outputKinds: ["video"],
+    acceptedInputKinds: ["text", "image", "audio"],
+  },
   music_generate: {
     type: "music_generate",
     title: "Music Generate",
@@ -156,7 +168,7 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
   },
   product_store: {
     type: "product_store",
-    title: "Work Library",
+    title: "Asset Library",
     outputKinds: [],
     acceptedInputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
   },

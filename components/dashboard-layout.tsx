@@ -284,8 +284,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const platformSettingsLabel = locale === "zh" ? "\u4f01\u4e1a\u8bbe\u7f6e" : "Enterprise Settings"
   const resourcesSectionLabel = locale === "zh" ? "资源入口" : "Resources"
   const taskCenterLabel = locale === "zh" ? "任务中心" : "Task Center"
-  const assetLibraryLabel = locale === "zh" ? "素材库" : "Asset Library"
-  const workLibraryLabel = locale === "zh" ? "作品库" : "Work Library"
+  const assetLibraryLabel = locale === "zh" ? "资产库" : "Asset Library"
   const knowledgeBaseLabel = locale === "zh" ? "知识库" : "Knowledge Base"
   const billingLabel = locale === "zh" ? "计费与用量" : "Billing and usage"
 
@@ -298,7 +297,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
       <aside
         className={`dashboard-panel !fixed inset-y-0 left-0 z-50 overflow-hidden border-r border-sidebar-border bg-sidebar shadow-none transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:!static ${
-          sidebarCollapsed ? "w-[88px]" : "w-[216px] lg:w-[225px]"
+          sidebarCollapsed ? "w-[88px]" : "w-[240px] lg:w-[260px]"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-full flex-col">
@@ -599,7 +598,6 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   <div className="space-y-1">
                     <DashboardMenuLink href="/dashboard/tasks" label={taskCenterLabel} icon={Workflow} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/tasks")} />
                     <DashboardMenuLink href="/dashboard/assets" label={assetLibraryLabel} icon={ImageIcon} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/assets")} />
-                    <DashboardMenuLink href="/dashboard/works" label={workLibraryLabel} icon={LayoutGrid} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/works")} />
                     <DashboardMenuLink href="/dashboard/knowledge-base" label={knowledgeBaseLabel} icon={Database} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/knowledge-base")} />
                     <DashboardMenuLink href="/dashboard/billing" label={billingLabel} icon={CreditCard} collapsed={sidebarCollapsed} active={isSidebarLinkActive("/dashboard/billing")} />
                   </div>
@@ -767,10 +765,10 @@ function DashboardMenuLink({
         variant="ghost"
         className={cn(
           collapsed
-            ? "box-border h-11 w-full min-w-0 justify-center rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
-            : "box-border h-11 w-full min-w-0 justify-start rounded-[6px] border border-sidebar-border bg-card px-3 text-sidebar-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
-          active && "border-primary bg-primary text-primary-foreground",
-          highlighted && !active && "border-primary/45 bg-primary/6",
+            ? "box-border h-11 w-full min-w-0 justify-center rounded-[8px] border border-sidebar-border bg-card px-3 text-sidebar-foreground shadow-none transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
+            : "box-border h-11 w-full min-w-0 justify-start rounded-[8px] border border-sidebar-border bg-card px-3 text-sidebar-foreground shadow-none transition hover:border-primary hover:bg-primary hover:text-primary-foreground",
+          active && "border-[#111] bg-[#111] text-primary hover:border-[#111] hover:bg-[#111] hover:text-primary",
+          highlighted && !active && "border-primary/70 bg-primary/15",
         )}
         size="sm"
         title={label}
@@ -798,9 +796,9 @@ function DashboardSubMenuLink({
     <Link
       href={href}
       className={cn(
-        "block rounded-[6px] px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:bg-primary/10 hover:text-sidebar-foreground",
-        active && "bg-primary/10 text-sidebar-foreground",
-        highlighted && !active && "border border-primary/30 bg-primary/5 text-sidebar-foreground",
+        "block rounded-[8px] border border-transparent px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:border-primary/40 hover:bg-primary/10 hover:text-sidebar-foreground",
+        active && "border-[#111] bg-[#111] text-primary",
+        highlighted && !active && "border-primary/40 bg-primary/10 text-sidebar-foreground",
       )}
     >
       {label}

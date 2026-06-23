@@ -14,7 +14,7 @@ test("collectWorkflowPersistedSourceNodeKeys only persists nodes explicitly conn
     { nodeKey: "text-1", type: "text_input", title: "Prompt", positionX: 0, positionY: 0, config: {} },
     { nodeKey: "img-1", type: "image_generate", title: "Image", positionX: 0, positionY: 0, config: {} },
     { nodeKey: "video-1", type: "video_generate", title: "Video", positionX: 0, positionY: 0, config: {} },
-    { nodeKey: "store-1", type: "product_store", title: "Work Library", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "store-1", type: "product_store", title: "Asset Library", positionX: 0, positionY: 0, config: {} },
   ]
   const edges: WorkflowDefinitionEdge[] = [
     { sourceNodeKey: "text-1", targetNodeKey: "img-1", inputName: "text" },
@@ -29,8 +29,8 @@ test("collectWorkflowPersistedSourceNodeKeys dedupes multiple edges into one sto
   const nodes: WorkflowDefinitionNode[] = [
     { nodeKey: "llm-1", type: "llm_generate", title: "LLM", positionX: 0, positionY: 0, config: {} },
     { nodeKey: "img-1", type: "image_generate", title: "Image", positionX: 0, positionY: 0, config: {} },
-    { nodeKey: "store-1", type: "product_store", title: "Work Library", positionX: 0, positionY: 0, config: {} },
-    { nodeKey: "store-2", type: "product_store", title: "Work Library 2", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "store-1", type: "product_store", title: "Asset Library", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "store-2", type: "product_store", title: "Asset Library 2", positionX: 0, positionY: 0, config: {} },
   ]
   const edges: WorkflowDefinitionEdge[] = [
     { sourceNodeKey: "img-1", targetNodeKey: "store-1", inputName: "image" },
@@ -43,8 +43,8 @@ test("collectWorkflowPersistedSourceNodeKeys dedupes multiple edges into one sto
 test("collectWorkflowPersistenceTargets keeps one target per product store node", () => {
   const nodes: WorkflowDefinitionNode[] = [
     { nodeKey: "img-1", type: "image_generate", title: "Image", positionX: 0, positionY: 0, config: {} },
-    { nodeKey: "store-1", type: "product_store", title: "Work Library", positionX: 0, positionY: 0, config: {} },
-    { nodeKey: "store-2", type: "product_store", title: "Work Library 2", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "store-1", type: "product_store", title: "Asset Library", positionX: 0, positionY: 0, config: {} },
+    { nodeKey: "store-2", type: "product_store", title: "Asset Library 2", positionX: 0, positionY: 0, config: {} },
   ]
   const edges: WorkflowDefinitionEdge[] = [
     { sourceNodeKey: "img-1", targetNodeKey: "store-1", inputName: "image" },

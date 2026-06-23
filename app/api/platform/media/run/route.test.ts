@@ -30,6 +30,7 @@ type RunningHubConfigLike = {
 
 let governedImageSelectionCalls: Array<Record<string, unknown>> = []
 let submitRunningHubTaskCalls: Array<{ mediaTarget: string; payload: Record<string, unknown>; config?: RunningHubConfigLike }> = []
+let executeMediaCapabilityCalls: Array<Record<string, unknown>> = []
 
 const baseRunningHubConfig: RunningHubConfigLike = {
   baseUrl: "https://www.runninghub.cn",
@@ -97,7 +98,15 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/platform/enterprise-runtime-config") {
     return {
-      resolveEnterpriseVideoRuntimeForUser: async () => null,
+      resolveEnterpriseVideoRuntimeForUser: async () => ({
+        kind: "minimax",
+        providerId: "minimax_official",
+        label: "MiniMax",
+        model: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+        config: {
+          ...baseRunningHubConfig,
+        },
+      }),
       resolveEnterpriseAudioRuntimeForUser: async () => null,
     }
   }
@@ -149,6 +158,46 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       executeMiniMaxAudioFeature: async () => ({ ok: true }),
       isMiniMaxAudioConfigured: () => false,
       resolveMiniMaxFeatureId: () => null,
+    }
+  }
+
+  if (request === "@/lib/platform/minimax-video") {
+    return {
+      isMiniMaxVideoConfigured: () => false,
+    }
+  }
+
+  if (request === "@/lib/platform/model-runtime") {
+    return {
+      resolveMediaFeatureId: (_target: string, value: unknown) =>
+        value === "image-to-video" ? "image-to-video" : value === "voice-synthesis" ? "voice-synthesis" : "text-to-video",
+      resolveMediaModelId: ({ requestedModelId, requestedModel }: { requestedModelId?: unknown; requestedModel?: unknown }) =>
+        (typeof requestedModelId === "string" && requestedModelId) ||
+        (typeof requestedModel === "string" && requestedModel) ||
+        "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+      executeMediaCapability: async (input: Record<string, unknown>) => {
+        executeMediaCapabilityCalls.push(input)
+        return {
+          mode: "async",
+          status: "queued",
+          provider: "minimax",
+          modelId: typeof input.modelId === "string" ? input.modelId : "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+          outputs: [],
+          payload: {
+            taskId: "runtime-task-1",
+            provider: "minimax",
+            requestedTarget: input.featureId,
+            status: "QUEUED",
+            results: [],
+          },
+          task: {
+            localRunId: 1,
+            provider: "minimax",
+            providerTaskId: "provider-task-1",
+            detailPath: "/api/platform/media/tasks/1?target=ai-video",
+          },
+        }
+      },
     }
   }
 
@@ -208,6 +257,7 @@ test.before(async () => {
 test.beforeEach(() => {
   governedImageSelectionCalls = []
   submitRunningHubTaskCalls = []
+  executeMediaCapabilityCalls = []
 })
 
 test.after(() => {
@@ -298,4 +348,41 @@ test("platform media image generate honors explicit model selection and referenc
     },
   ])
   assert.equal(submitRunningHubTaskCalls[0]?.payload?.modelOptionId, "enterprise:runninghub:runninghub%3Aimg2img%3Amain")
+})
+
+test("platform media text-to-video submits through the unified runtime facade", async () => {
+  const response = await POST({
+    url: "http://localhost:3000/api/platform/media/run?target=ai-video&action=generate",
+    json: async () => ({
+      featureId: "text-to-video",
+      params: {
+        prompt: "Launch film",
+        model: "minimax:video:text-to-video:MiniMax-Hailuo-02-Pro",
+      },
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(executeMediaCapabilityCalls.length, 1)
+  assert.equal(executeMediaCapabilityCalls[0]?.featureId, "text-to-video")
+  assert.equal(executeMediaCapabilityCalls[0]?.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-02-Pro")
+  assert.equal(response.body?.data?.taskId, "runtime-task-1")
+})
+
+test("platform media image-to-video submits through the unified runtime facade", async () => {
+  const response = await POST({
+    url: "http://localhost:3000/api/platform/media/run?target=ai-video&action=generate",
+    json: async () => ({
+      featureId: "image-to-video",
+      params: {
+        firstFrameUrl: "https://example.com/frame.png",
+        model: "minimax:video:image-to-video:MiniMax-Hailuo-2.3-Fast",
+      },
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(executeMediaCapabilityCalls.length, 1)
+  assert.equal(executeMediaCapabilityCalls[0]?.featureId, "image-to-video")
+  assert.equal(executeMediaCapabilityCalls[0]?.modelId, "minimax:video:image-to-video:MiniMax-Hailuo-2.3-Fast")
 })

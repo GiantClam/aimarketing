@@ -183,6 +183,12 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
     action: "workflow-plan",
     outputKinds: ["video"],
   }),
+  digital_human: createCapabilityBackedExecutor({
+    nodeType: "digital_human",
+    capabilitySlug: "ai-video",
+    action: "generate",
+    outputKinds: ["video"],
+  }),
   music_generate: createCapabilityBackedExecutor({
     nodeType: "music_generate",
     capabilitySlug: "ai-music",
@@ -222,7 +228,7 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
           ppt: [...context.input.ppt],
         },
         metadata: {
-          persistenceTarget: "work_library",
+          persistenceTarget: "asset_library",
         },
       }
     },

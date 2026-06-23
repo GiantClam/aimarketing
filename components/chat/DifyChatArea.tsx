@@ -1297,7 +1297,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
           </div>
         </div>
 
-        <div className="border-t border-border/70 bg-[#f7f7f7] px-3 py-2.5 lg:px-4 lg:py-3">
+        <div className="sticky bottom-0 z-20 shrink-0 border-t border-border/70 bg-[#f7f7f7]/95 px-3 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-[#f7f7f7]/85 lg:px-4 lg:py-3">
           <div className="mx-auto w-full max-w-5xl">
             <WorkspaceComposerPanel
               className="rounded-[24px] border-2 border-border bg-card p-2"

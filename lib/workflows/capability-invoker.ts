@@ -41,8 +41,10 @@ type WorkflowCapabilityInvokerOptions = {
 
 const DEFAULT_WORKFLOW_CAPABILITY_TIMEOUT_MS = 120_000
 const DEFAULT_WORKFLOW_IMAGE_TIMEOUT_MS = 300_000
-const DEFAULT_WORKFLOW_VIDEO_TIMEOUT_MS = 300_000
+const DEFAULT_WORKFLOW_VIDEO_TIMEOUT_MS = 30 * 60_000
 const DEFAULT_WORKFLOW_PPT_TIMEOUT_MS = 300_000
+const DEFAULT_DIGITAL_HUMAN_DURATION_SECONDS = 10
+const DEFAULT_DIGITAL_HUMAN_TIMEOUT_MS_PER_VIDEO_SECOND = 60_000
 
 function normalizeOrigin(value: string | undefined) {
   const trimmed = value?.trim()
@@ -90,6 +92,7 @@ function extractUrlLikeItems(input: WorkflowCapabilityInvokeParams["input"]): st
 export function resolveWorkflowCapabilityCallTimeoutMs(
   capabilitySlug: WorkflowCapabilityInvokeParams["capabilitySlug"],
   overrideTimeoutMs?: number,
+  invokeParams?: WorkflowCapabilityInvokeParams,
 ) {
   if (Number.isFinite(overrideTimeoutMs) && (overrideTimeoutMs as number) > 0) {
     return overrideTimeoutMs as number
@@ -108,6 +111,11 @@ export function resolveWorkflowCapabilityCallTimeoutMs(
   }
 
   if (capabilitySlug === "ai-video") {
+    if (isDigitalHumanWorkflowInvoke(invokeParams)) {
+      const estimatedTimeoutMs = resolveDigitalHumanWorkflowTimeoutMs(invokeParams)
+      return Math.max(defaultTimeoutMs, estimatedTimeoutMs)
+    }
+
     const videoSpecificTimeoutMs =
       parsePositiveIntegerEnv("WORKFLOW_VIDEO_CAPABILITY_TIMEOUT_MS") ||
       DEFAULT_WORKFLOW_VIDEO_TIMEOUT_MS
@@ -124,6 +132,38 @@ export function resolveWorkflowCapabilityCallTimeoutMs(
     DEFAULT_WORKFLOW_IMAGE_TIMEOUT_MS
 
   return Math.max(defaultTimeoutMs, imageSpecificTimeoutMs)
+}
+
+function isDigitalHumanWorkflowInvoke(params: WorkflowCapabilityInvokeParams | undefined) {
+  if (!params) return false
+  return params.nodeType === "digital_human" || normalizeOptionalText(params.node.config.featureId) === "digital-human"
+}
+
+function resolveDigitalHumanDurationSeconds(params: WorkflowCapabilityInvokeParams | undefined) {
+  if (!params) return DEFAULT_DIGITAL_HUMAN_DURATION_SECONDS
+
+  const configuredDuration =
+    normalizeOptionalNumber(params.node.config.durationSeconds) ??
+    normalizeOptionalNumber(params.node.config.duration)
+  if (configuredDuration && configuredDuration > 0) {
+    return configuredDuration
+  }
+
+  const trimStart = normalizeOptionalNumber(params.node.config.audioTrimStart) ?? 0
+  const trimEnd = normalizeOptionalNumber(params.node.config.audioTrimEnd)
+  if (trimEnd && trimEnd > trimStart) {
+    return trimEnd - trimStart
+  }
+
+  return DEFAULT_DIGITAL_HUMAN_DURATION_SECONDS
+}
+
+function resolveDigitalHumanWorkflowTimeoutMs(params: WorkflowCapabilityInvokeParams | undefined) {
+  const timeoutMsPerVideoSecond =
+    parsePositiveIntegerEnv("WORKFLOW_DIGITAL_HUMAN_TIMEOUT_MS_PER_VIDEO_SECOND") ||
+    DEFAULT_DIGITAL_HUMAN_TIMEOUT_MS_PER_VIDEO_SECOND
+  const durationSeconds = resolveDigitalHumanDurationSeconds(params)
+  return Math.ceil(durationSeconds * timeoutMsPerVideoSecond)
 }
 
 function resolveWorkflowCapabilityTimeoutError(
@@ -188,6 +228,10 @@ function findSecondaryImageUrl(input: WorkflowCapabilityInvokeParams["input"]) {
 
 function findPrimaryAudioUrl(input: WorkflowCapabilityInvokeParams["input"]) {
   return input.audio[0]?.url || findFirstAssetUrlByMimePrefix(input, "audio/")
+}
+
+function findPrimaryImageUrlFromAnyInput(input: WorkflowCapabilityInvokeParams["input"]) {
+  return findPrimaryImageUrl(input) || findFirstAssetUrlByMimePrefix(input, "image/")
 }
 
 function extractWorkflowPptInputImages(input: WorkflowCapabilityInvokeParams["input"]) {
@@ -453,13 +497,13 @@ async function pollMediaTaskUntilComplete(input: {
       payload?.data && typeof payload.data === "object"
         ? (payload.data as Record<string, unknown>)
         : payload
-    const status = typeof data?.status === "string" ? data.status : ""
+    const status = typeof data?.status === "string" ? data.status.trim().toLowerCase() : ""
 
-    if (status === "succeeded") {
+    if (status === "succeeded" || status === "success") {
       return payload
     }
 
-    if (status === "failed") {
+    if (status === "failed" || status === "fail" || status === "cancelled" || status === "canceled") {
       throw new Error("workflow_media_task_failed")
     }
   }
@@ -541,7 +585,7 @@ async function fetchImageAssistantSessionDetail(input: {
     params: Promise.resolve({ sessionId: input.sessionId }),
   })
 
-  if (!response.ok) {
+  if (!response || !response.ok) {
     throw new Error(await parseErrorResponse(response))
   }
 
@@ -620,15 +664,37 @@ function resolveWorkflowSharedCreditsRequired(params: {
 function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, prompt: string) {
   const featureId = normalizeOptionalText(params.node.config.featureId) || "text-to-video"
 
+  if (params.nodeType === "digital_human" || featureId === "digital-human") {
+    const audioUrl = normalizeOptionalText(params.node.config.audioUrl) || findPrimaryAudioUrl(params.input)
+    const script = normalizeOptionalText(params.node.config.script) || (!audioUrl ? prompt : undefined)
+
+    return {
+      featureId: "digital-human",
+      params: {
+        prompt: normalizeOptionalText(params.node.config.scenePrompt) || undefined,
+        script,
+        audioUrl: audioUrl || undefined,
+        avatarImageUrl: normalizeOptionalText(params.node.config.avatarImageUrl) || findPrimaryImageUrlFromAnyInput(params.input),
+        durationSeconds: resolveDigitalHumanDurationSeconds(params),
+        seed: normalizeOptionalNumber(params.node.config.seed) ?? -1,
+        audioTrimStart: normalizeOptionalNumber(params.node.config.audioTrimStart) ?? undefined,
+        audioTrimEnd: normalizeOptionalNumber(params.node.config.audioTrimEnd) ?? undefined,
+      },
+    }
+  }
+
   if (featureId === "image-to-video") {
+    const selectedModel = normalizeOptionalText(params.node.config.model) || undefined
     return {
       featureId,
       params: {
         prompt,
+        model: selectedModel,
+        modelId: selectedModel,
         firstFrameUrl: normalizeOptionalText(params.node.config.firstFrameUrl) || findPrimaryImageUrl(params.input),
         lastFrameUrl: normalizeOptionalText(params.node.config.lastFrameUrl) || findSecondaryImageUrl(params.input) || undefined,
-        resolution: normalizeOptionalText(params.node.config.resolution) || "720p",
-        duration: normalizeOptionalText(params.node.config.duration) || "5",
+        resolution: normalizeOptionalText(params.node.config.resolution) || "768p",
+        duration: normalizeOptionalText(params.node.config.duration) || "6",
         ratio: normalizeOptionalText(params.node.config.ratio) || "adaptive",
         generateAudio: normalizeBooleanString(params.node.config.generateAudio, true),
         realPersonMode: normalizeBooleanString(params.node.config.realPersonMode, true),
@@ -637,12 +703,15 @@ function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, p
     }
   }
 
+  const selectedModel = normalizeOptionalText(params.node.config.model) || undefined
   return {
     featureId: "text-to-video",
     params: {
       prompt,
-      resolution: normalizeOptionalText(params.node.config.resolution) || "720p",
-      duration: normalizeOptionalText(params.node.config.duration) || "5",
+      model: selectedModel,
+      modelId: selectedModel,
+      resolution: normalizeOptionalText(params.node.config.resolution) || "768p",
+      duration: normalizeOptionalText(params.node.config.duration) || "6",
       ratio: normalizeOptionalText(params.node.config.ratio) || "adaptive",
       generateAudio: normalizeBooleanString(params.node.config.generateAudio, true),
       seed: normalizeOptionalNumber(params.node.config.seed) ?? -1,
@@ -782,6 +851,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
     const callTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs(
       params.capabilitySlug,
       options.callTimeoutMs,
+      params,
     )
 
     return withTimeout(
@@ -848,6 +918,10 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               currentUser: options.currentUser,
             }),
           )
+
+          if (!response) {
+            throw new Error(await parseErrorResponse(response))
+          }
 
           const message = await parseWriterStreamResponse(response)
           return {

@@ -155,17 +155,37 @@ function normalizeAgentId(agentId: string | null | undefined) {
   return normalized || null
 }
 
+function getScopeTitlePrefix(scope: AiEntryConversationScope) {
+  return scope === "consulting"
+    ? AI_ENTRY_CONSULTING_TITLE_PREFIX
+    : AI_ENTRY_CHAT_TITLE_PREFIX
+}
+
+export function getAiEntryConversationTitleFilters(
+  scope: AiEntryConversationScope,
+  agentId?: string | null,
+) {
+  const scopePrefix = getScopeTitlePrefix(scope)
+  const normalizedAgentId = normalizeAgentId(agentId)
+
+  if (!normalizedAgentId) {
+    return {
+      titlePrefix: scopePrefix,
+      excludeAgentPrefix: `${scopePrefix}${AI_ENTRY_AGENT_PREFIX}`,
+    }
+  }
+
+  return {
+    titlePrefix: `${scopePrefix}${AI_ENTRY_AGENT_PREFIX}${normalizedAgentId}] `,
+    excludeAgentPrefix: null,
+  }
+}
+
 function getTitlePrefix(
   scope: AiEntryConversationScope,
   agentId?: string | null,
 ) {
-  const scopePrefix =
-    scope === "consulting"
-      ? AI_ENTRY_CONSULTING_TITLE_PREFIX
-      : AI_ENTRY_CHAT_TITLE_PREFIX
-  const normalizedAgentId = normalizeAgentId(agentId)
-  if (!normalizedAgentId) return scopePrefix
-  return `${scopePrefix}${AI_ENTRY_AGENT_PREFIX}${normalizedAgentId}] `
+  return getAiEntryConversationTitleFilters(scope, agentId).titlePrefix
 }
 
 function buildConversationTitle(
@@ -247,7 +267,7 @@ export async function getAiEntryConversation(
 ) {
   const parsedConversationId = parsePositiveInt(conversationId)
   if (!parsedConversationId) return null
-  const titlePrefix = getTitlePrefix(scope, agentId)
+  const { titlePrefix, excludeAgentPrefix } = getAiEntryConversationTitleFilters(scope, agentId)
 
   const rows = await withAiEntryDbRetry("get-ai-entry-conversation", () =>
     db
@@ -263,6 +283,9 @@ export async function getAiEntryConversation(
           eq(conversations.id, parsedConversationId),
           eq(conversations.userId, userId),
           sql`${conversations.title} LIKE ${`${titlePrefix}%`}`,
+          excludeAgentPrefix
+            ? sql`${conversations.title} NOT LIKE ${`${excludeAgentPrefix}%`}`
+            : undefined,
         ),
       )
       .limit(1),
@@ -318,7 +341,7 @@ export async function getLatestAiEntryConversationModelId(
   scope: AiEntryConversationScope = "chat",
   agentId?: string | null,
 ) {
-  const titlePrefix = getTitlePrefix(scope, agentId)
+  const { titlePrefix, excludeAgentPrefix } = getAiEntryConversationTitleFilters(scope, agentId)
   const rows = await withAiEntryDbRetry("get-latest-ai-entry-conversation-model", () =>
     db
       .select({
@@ -329,6 +352,9 @@ export async function getLatestAiEntryConversationModelId(
         and(
           eq(conversations.userId, userId),
           sql`${conversations.title} LIKE ${`${titlePrefix}%`}`,
+          excludeAgentPrefix
+            ? sql`${conversations.title} NOT LIKE ${`${excludeAgentPrefix}%`}`
+            : undefined,
           sql`${conversations.currentModelId} IS NOT NULL`,
           sql`length(trim(${conversations.currentModelId})) > 0`,
         ),
@@ -387,7 +413,7 @@ export async function listAiEntryConversations(
 ): Promise<AiEntryConversationPage> {
   const safeLimit = Math.max(1, Math.min(limit, 50))
   const parsedCursor = parseCursor(cursor)
-  const titlePrefix = getTitlePrefix(scope, agentId)
+  const { titlePrefix, excludeAgentPrefix } = getAiEntryConversationTitleFilters(scope, agentId)
 
   const rows = await withAiEntryDbRetry("list-ai-entry-conversations", () =>
     db
@@ -404,6 +430,9 @@ export async function listAiEntryConversations(
         and(
           eq(conversations.userId, userId),
           sql`${conversations.title} LIKE ${`${titlePrefix}%`}`,
+          excludeAgentPrefix
+            ? sql`${conversations.title} NOT LIKE ${`${excludeAgentPrefix}%`}`
+            : undefined,
           parsedCursor ? lt(conversations.id, parsedCursor) : undefined,
         ),
       )

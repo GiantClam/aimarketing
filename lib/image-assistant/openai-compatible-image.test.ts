@@ -186,14 +186,15 @@ test("gpt-image-2 provider request forwards n=9 for text-to-image generation", a
     })
 
     assert.ok(requestBody)
-    assert.equal(requestBody.n, 9)
-    assert.equal(requestBody.size, "1536x1024")
-    assert.equal(requestBody.quality, "high")
-    assert.equal(requestBody.background, "opaque")
-    assert.equal(requestBody.output_format, "webp")
-    assert.equal(requestBody.output_compression, 85)
-    assert.equal(requestBody.moderation, "low")
-    assert.equal(requestBody.response_format, "url")
+    const body = requestBody as Record<string, unknown>
+    assert.equal(body.n, 9)
+    assert.equal(body.size, "1536x1024")
+    assert.equal(body.quality, "high")
+    assert.equal(body.background, "opaque")
+    assert.equal(body.output_format, "webp")
+    assert.equal(body.output_compression, 85)
+    assert.equal(body.moderation, "low")
+    assert.equal(body.response_format, "url")
     assert.equal(result.images.length, 9)
   } finally {
     globalThis.fetch = originalFetch
@@ -284,8 +285,9 @@ test("gpt-image-2 provider request uses direct curl for pptoken generations", as
 
     assert.equal(attempts, 0)
     assert.ok(curlArgs)
-    assert.deepEqual(curlArgs.slice(0, 3), ["-sS", "--connect-timeout", "5"])
-    assert.equal(curlArgs.includes("--proxy"), false)
+    const args = curlArgs as string[]
+    assert.deepEqual(args.slice(0, 3), ["-sS", "--connect-timeout", "5"])
+    assert.equal(args.includes("--proxy"), false)
     assert.equal(result.images.length, 1)
     assert.match(result.images[0], /^data:image\/png;base64,/)
   } finally {

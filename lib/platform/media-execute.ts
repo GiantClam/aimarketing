@@ -1,4 +1,5 @@
 import type { PlatformExecutionProxyTarget } from "@/lib/platform/execute"
+import { isMiniMaxVideoConfigured } from "@/lib/platform/minimax-video"
 import { getRunningHubConfig, isRunningHubConfiguredForTarget } from "@/lib/platform/runninghub"
 
 type PlatformMediaExecutionAction =
@@ -68,6 +69,10 @@ export function resolvePlatformMediaExecutionProxyTarget(
   }
 
   if (mediaTarget === "ai-video") {
+    if (isMiniMaxVideoConfigured() && (action === "execute" || action === "generate")) {
+      return buildRunningHubProxyTarget("ai-video", "generate")
+    }
+
     if (isRunningHubConfiguredForTarget("ai-video", runningHubConfig)) {
       if (action === "execute" || action === "generate" || action === "workflow" || action === "workflow-plan") {
         return buildRunningHubProxyTarget("ai-video", action === "generate" ? "generate" : "workflow-plan")

@@ -14,8 +14,8 @@ export function WorkspaceBusinessPage({
   agents: LocalizedBusinessAgentConfig[]
 }) {
   return (
-    <div className="h-full overflow-auto overflow-x-hidden bg-transparent">
-      <section className="public-grid-bg mx-auto max-w-7xl px-1 py-1 sm:px-1.5 sm:py-2">
+    <div className="h-full min-h-0 overflow-hidden bg-transparent">
+      <section className="public-grid-bg mx-auto flex h-full min-h-0 max-w-7xl flex-col px-1 py-1 sm:px-1.5 sm:py-2">
         {agents.length > 0 ? (
           <WorkspaceBusinessAgentWorkbench locale={locale} currentSlug={currentSlug} entries={entries} agents={agents} />
         ) : null}

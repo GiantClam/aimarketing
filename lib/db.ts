@@ -244,12 +244,13 @@ async function runWithPoolFallback<T>(reason: string, operation: (pool: Pool) =>
 void warmupActivePool("startup")
 
 export const pool = {
-  query: (...args: Parameters<Pool["query"]>) => runWithPoolFallback("query", (targetPool) => targetPool.query(...args)),
+  query: (...args: Parameters<Pool["query"]>) =>
+    runWithPoolFallback("query", (targetPool) => Promise.resolve(targetPool.query(...args) as never)),
   connect: () => runWithPoolFallback("connect", (targetPool) => targetPool.connect()),
   end: () => activePool.end(),
   on: (...args: Parameters<Pool["on"]>) => {
     activePool.on(...args)
-    return pool
+    return Promise.resolve(pool)
   },
 } as unknown as Pool
 

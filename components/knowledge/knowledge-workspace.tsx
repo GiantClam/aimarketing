@@ -7,9 +7,7 @@ import { useRouter } from "next/navigation"
 import { AlertCircle, CheckCircle2, Clock3, Database, FileText, Link2, RefreshCcw, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CompactBusinessCard } from "@/components/workspace/compact-business-card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
@@ -26,14 +24,9 @@ import type {
   KnowledgeOverview,
   KnowledgeRecentActivity,
   KnowledgeScope,
-  KnowledgeSourceStatus,
   KnowledgeSourceClientState,
   KnowledgeSourceTestResult,
 } from "@/lib/knowledge/types"
-import {
-  buildCompactCardSummary,
-  pickPrimaryStatusBadge,
-} from "@/lib/workspace/compact-business-card"
 
 type Copy = {
   eyebrow: string
@@ -190,19 +183,6 @@ function getSourceBadgeLabel(params: {
   return params.locale === "zh" ? "RAGFlow 不可用" : "RAGFlow unavailable"
 }
 
-function getSourceBadgeTone(status: KnowledgeSourceStatus | null, pending: boolean) {
-  if (pending) {
-    return "rounded-[6px] border border-amber-300 bg-amber-50 text-amber-700"
-  }
-  if (status === "healthy") {
-    return "rounded-[6px] border border-primary/30 bg-primary text-primary-foreground"
-  }
-  if (status === "degraded") {
-    return "rounded-[6px] border border-amber-300 bg-amber-50 text-amber-700"
-  }
-  return "rounded-[6px] border border-red-200 bg-red-50 text-red-700"
-}
-
 function getDatasetDocumentSummary(locale: AppLocale, count: number) {
   return locale === "zh"
     ? `${count} 个文档`
@@ -235,7 +215,7 @@ function getCopy(locale: AppLocale): Copy {
   if (locale === "zh") {
     return {
       eyebrow: "Enterprise Knowledge",
-      title: "知识库",
+      title: "Knowledge Base",
       description: "统一管理企业资料、网页内容与检索状态，让 AI 对话、Writer 和顾问能力复用同一套知识底座。",
       upload: "上传文件",
       addLink: "添加链接",
@@ -384,11 +364,11 @@ function getCategoryLabel(copy: Copy, category: KnowledgeScope) {
   }
 }
 
-function getStatusTone(status: KnowledgeDocument["status"]) {
-  if (status === "ready") return "bg-emerald-50 text-emerald-700 border-emerald-200"
-  if (status === "failed") return "bg-red-50 text-red-700 border-red-200"
-  if (status === "disabled") return "bg-neutral-100 text-neutral-600 border-neutral-200"
-  return "bg-amber-50 text-amber-700 border-amber-200"
+function getStatusClass(status: KnowledgeDocument["status"]) {
+  if (status === "ready") return "status-ready"
+  if (status === "failed") return "status-failed"
+  if (status === "disabled") return "status-disabled"
+  return "status-processing"
 }
 
 function getStatusLabel(locale: AppLocale, status: KnowledgeDocument["status"]) {
@@ -948,362 +928,367 @@ export function KnowledgeWorkspace({
   }
 
   return (
-    <div className="h-full overflow-auto bg-transparent">
-      <section className="public-grid-bg workspace-page-shell-tight mx-auto max-w-7xl">
-        <div className="workspace-stack">
-          <article className="public-panel workspace-hero-panel rounded-[12px] border border-border bg-card/90">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="max-w-4xl">
-                <div className="public-kicker text-muted-foreground">{copy.eyebrow}</div>
-                <h1 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                  {copy.title}
-                </h1>
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-muted-foreground">{copy.description}</p>
-              </div>
+    <div className="knowledge-page h-full overflow-auto">
+      <section className="mx-auto max-w-[1440px] px-4 py-6 lg:px-8 lg:py-8">
+        <header className="knowledge-page-header">
+          <div className="max-w-[760px]">
+            <div className="knowledge-eyebrow">{copy.eyebrow}</div>
+            <h1 className="knowledge-title">{copy.title}</h1>
+            <p className="mt-4 max-w-[680px] text-[15px] leading-7 text-[#666]">{copy.description}</p>
+          </div>
+        </header>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge className={getSourceBadgeTone(sourceState?.status || null, sourceCheckPending)}>
-                  {getSourceBadgeLabel({ locale, pending: sourceCheckPending, source: sourceState })}
-                </Badge>
-                {canManage ? (
-                  <Button
-                    type="button"
-                    className="public-button-secondary h-10 px-4"
-                    onClick={() => {
-                      setShowCreateDatasetForm((current) => !current)
-                      setMessage(null)
-                      setCreateDatasetMessage(null)
-                    }}
-                  >
-                    <Database className="mr-2 h-4 w-4" />
-                    {copy.createDataset}
-                  </Button>
-                ) : null}
+        <div className="connection-action-row">
+          <div className="connection-pill">
+            <span className="h-2 w-2 rounded-full bg-[#111]" />
+            {getSourceBadgeLabel({ locale, pending: sourceCheckPending, source: sourceState })}
+          </div>
+          {canManage ? (
+            <Button
+              type="button"
+              className="primary-black-btn"
+              onClick={() => {
+                setShowCreateDatasetForm((current) => !current)
+                setMessage(null)
+                setCreateDatasetMessage(null)
+              }}
+            >
+              <Database className="h-4 w-4" />
+              {copy.createDataset}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            className="secondary-btn"
+            onClick={handleConnectionTest}
+            disabled={busy === "test"}
+          >
+            <RefreshCcw className="h-4 w-4" />
+            {copy.testConnection}
+          </Button>
+          <Button type="button" className="secondary-btn" asChild>
+            <Link href="/dashboard/platform-settings/knowledge">
+              <Link2 className="h-4 w-4" />
+              {copy.manageConnection}
+            </Link>
+          </Button>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: copy.docs, value: String(scopedOverviewStats.documentCount), icon: FileText },
+            { label: copy.processing, value: String(scopedOverviewStats.processingCount), icon: Clock3 },
+            { label: copy.chunks, value: String(scopedOverviewStats.chunkCount), icon: Database },
+            { label: copy.updated, value: formatTimestamp(locale, scopedOverviewStats.lastUpdatedAt), icon: CheckCircle2 },
+          ].map((item) => {
+            const Icon = item.icon
+            return (
+              <article key={item.label} className="knowledge-metric-card">
+                <div className="knowledge-metric-icon">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="knowledge-card-label">{item.label}</div>
+                  <div className="knowledge-metric-value">{item.value}</div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+
+        <main className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-6">
+            <article className="ingest-panel">
+              <div className="knowledge-card-label text-[#111]">
+                {locale === "zh" ? "添加内容到知识库" : "Add content to your knowledge base"}
+              </div>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <div className="mt-5 grid gap-3 lg:grid-cols-[auto_minmax(210px,260px)_minmax(260px,1fr)]">
                 <Button
                   type="button"
-                  className="public-button-secondary h-10 px-4"
-                  onClick={handleConnectionTest}
-                  disabled={busy === "test"}
+                  className="upload-btn"
+                  onClick={() => uploadInputRef.current?.click()}
+                  disabled={busy === "upload" || datasets.length === 0}
                 >
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  {copy.testConnection}
+                  <UploadCloud className="h-4 w-4" />
+                  {copy.upload}
                 </Button>
-                <Button type="button" className="public-button-secondary h-10 px-4" asChild>
-                  <Link href="/dashboard/platform-settings/knowledge">
-                    <Link2 className="mr-2 h-4 w-4" />
-                    {copy.manageConnection}
-                  </Link>
+                <Select value={selectedDatasetId || undefined} onValueChange={handleDatasetSelectionChange}>
+                  <SelectTrigger className="kb-select">
+                    <SelectValue placeholder={copy.targetDatasetPlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {datasets.map((dataset) => (
+                      <SelectItem key={dataset.id} value={String(dataset.id)}>
+                        {dataset.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <form className="flex min-w-0 gap-3" onSubmit={handleLinkSubmit}>
+                  <Input
+                    value={linkUrl}
+                    onChange={(event) => setLinkUrl(event.target.value)}
+                    placeholder={copy.linkPlaceholder}
+                    className="web-link-input min-w-0 flex-1"
+                  />
+                  <Button
+                    type="submit"
+                    className="add-link-btn"
+                    disabled={busy === "link" || datasets.length === 0}
+                  >
+                    <Link2 className="h-4 w-4" />
+                    {copy.addLink}
+                  </Button>
+                </form>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-medium text-[#777]">
+                <span>{copy.targetDataset}:</span>
+                <span className="rounded-md border border-[#e6e6df] bg-[#f7f7f3] px-2 py-1 font-mono text-[#111]">
+                  {selectedDatasetId
+                    ? (datasetNameById.get(Number.parseInt(selectedDatasetId, 10)) || copy.targetDatasetPlaceholder)
+                    : copy.targetDatasetPlaceholder}
+                </span>
+              </div>
+              <p className="mt-3 text-xs leading-6 text-[#777]">{copy.helper}</p>
+              {datasets.length === 0 ? (
+                <div className="mt-3 rounded-lg border border-dashed border-[#e7e7df] bg-[#fafaf7] px-3 py-2 text-xs text-[#777]">
+                  {copy.datasetEmpty}
+                </div>
+              ) : null}
+              {message ? (
+                <div className="mt-3 rounded-lg border border-[#e7e7df] bg-[#fafaf7] px-3 py-2 text-xs text-[#555]">
+                  {message}
+                </div>
+              ) : null}
+            </article>
+
+            <article className="documents-panel">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="knowledge-card-label">{copy.documents}</div>
+                  <h2 className="mt-2 font-display text-[34px] font-black uppercase leading-none text-[#111]">
+                    {copy.documents}
+                  </h2>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    className={`filter-tab ${datasetViewMode === "all" ? "active" : ""}`}
+                    onClick={() => setDatasetViewMode("all")}
+                  >
+                    {copy.viewAllDatasets}
+                  </Button>
+                  <Button
+                    type="button"
+                    className={`filter-tab ${datasetViewMode === "current" ? "active" : ""}`}
+                    onClick={() => setDatasetViewMode("current")}
+                    disabled={!selectedDatasetId}
+                  >
+                    {copy.viewCurrentDataset}
+                  </Button>
+                  {[
+                    { key: "all" as const, label: copy.all },
+                    { key: "processing" as const, label: copy.filterProcessing },
+                    { key: "ready" as const, label: copy.filterReady },
+                    { key: "failed" as const, label: copy.filterFailed },
+                  ].map((filter) => (
+                    <Button
+                      key={filter.key}
+                      type="button"
+                      className={`filter-tab ${statusFilter === filter.key ? "active" : ""}`}
+                      onClick={() => setStatusFilter(filter.key)}
+                    >
+                      {filter.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5 flex gap-3">
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder={copy.search}
+                  className="document-search"
+                />
+                <Button type="button" className="filter-btn">
+                  {locale === "zh" ? "筛选" : "Filters"}
                 </Button>
               </div>
-            </div>
 
-              <div className="mt-6 grid gap-4 lg:grid-cols-4">
-              {[
-                { label: copy.docs, value: String(scopedOverviewStats.documentCount), icon: FileText },
-                { label: copy.processing, value: String(scopedOverviewStats.processingCount), icon: Clock3 },
-                { label: copy.chunks, value: String(scopedOverviewStats.chunkCount), icon: Database },
-                { label: copy.updated, value: formatTimestamp(locale, scopedOverviewStats.lastUpdatedAt), icon: CheckCircle2 },
-              ].map((item) => {
-                const Icon = item.icon
-                return (
-                  <div key={item.label} className="dashboard-panel rounded-[12px] border border-border bg-background/80 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="dashboard-kicker text-muted-foreground">{item.label}</div>
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="mt-3 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                      {item.value}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </article>
-
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_320px]">
-            <div className="space-y-6">
-              <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/90">
-                <div>
-                  <div className="rounded-[10px] border border-dashed border-border bg-background/70 p-4">
-                    <input
-                      ref={uploadInputRef}
-                      type="file"
-                      className="hidden"
-                      onChange={handleFileChange}
-                    />
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        type="button"
-                        className="public-button-primary h-11 px-5"
-                        onClick={() => uploadInputRef.current?.click()}
-                        disabled={busy === "upload" || datasets.length === 0}
-                      >
-                        <UploadCloud className="mr-2 h-4 w-4" />
-                        {copy.upload}
-                      </Button>
-                      <div className="min-w-[220px] flex-1">
-                        <Select value={selectedDatasetId || undefined} onValueChange={handleDatasetSelectionChange}>
-                          <SelectTrigger className="h-11 bg-background">
-                            <SelectValue placeholder={copy.targetDatasetPlaceholder} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {datasets.map((dataset) => (
-                              <SelectItem key={dataset.id} value={String(dataset.id)}>
-                                {dataset.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <form className="flex min-w-0 flex-1 gap-3" onSubmit={handleLinkSubmit}>
-                        <Input
-                          value={linkUrl}
-                          onChange={(event) => setLinkUrl(event.target.value)}
-                          placeholder={copy.linkPlaceholder}
-                          className="h-11 bg-background"
-                        />
-                        <Button
-                          type="submit"
-                          className="public-button-secondary h-11 px-4"
-                          disabled={busy === "link" || datasets.length === 0}
-                        >
-                          <Link2 className="mr-2 h-4 w-4" />
-                          {copy.addLink}
-                        </Button>
-                      </form>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>{copy.targetDataset}:</span>
-                      <span className="font-medium text-foreground">
-                        {selectedDatasetId
-                          ? (datasetNameById.get(Number.parseInt(selectedDatasetId, 10)) || copy.targetDatasetPlaceholder)
-                          : copy.targetDatasetPlaceholder}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs leading-6 text-muted-foreground">{copy.helper}</p>
-                    {datasets.length === 0 ? (
-                      <div className="mt-3 rounded-[8px] border border-dashed border-border bg-background/80 px-3 py-2 text-xs text-muted-foreground">
-                        {copy.datasetEmpty}
-                      </div>
-                    ) : null}
-                    {message ? (
-                      <div className="mt-3 rounded-[8px] border border-border bg-background/80 px-3 py-2 text-xs text-muted-foreground">
-                        {message}
-                      </div>
-                    ) : null}
-                  </div>
+              {filteredDocuments.length === 0 ? (
+                <div className="mt-5 rounded-xl border border-dashed border-[#e7e7df] bg-[#fafaf7] p-5 text-sm leading-7 text-[#777]">
+                  {scopedDocuments.length === 0
+                    ? copy.noDocuments
+                    : locale === "zh"
+                      ? "没有符合当前筛选条件的文档。"
+                      : "No documents match the current filters."}
                 </div>
-              </article>
-
-              <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/90">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="dashboard-kicker text-muted-foreground">{copy.documents}</div>
-                    <h2 className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                      {copy.documents}
-                    </h2>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      className={
-                        datasetViewMode === "all"
-                          ? "public-button-secondary h-9 px-3"
-                          : "h-9 border border-border bg-background/70 px-3 text-sm text-muted-foreground hover:bg-background"
-                      }
-                      onClick={() => setDatasetViewMode("all")}
-                    >
-                      {copy.viewAllDatasets}
-                    </Button>
-                    <Button
-                      type="button"
-                      className={
-                        datasetViewMode === "current"
-                          ? "public-button-secondary h-9 px-3"
-                          : "h-9 border border-border bg-background/70 px-3 text-sm text-muted-foreground hover:bg-background"
-                      }
-                      onClick={() => setDatasetViewMode("current")}
-                      disabled={!selectedDatasetId}
-                    >
-                      {copy.viewCurrentDataset}
-                    </Button>
-                    {[
-                      { key: "all" as const, label: copy.all },
-                      { key: "processing" as const, label: copy.filterProcessing },
-                      { key: "ready" as const, label: copy.filterReady },
-                      { key: "failed" as const, label: copy.filterFailed },
-                    ].map((filter) => (
-                      <Button
-                        key={filter.key}
-                        type="button"
-                        className={
-                          statusFilter === filter.key
-                            ? "public-button-secondary h-9 px-3"
-                            : "h-9 border border-border bg-background/70 px-3 text-sm text-muted-foreground hover:bg-background"
-                        }
-                        onClick={() => setStatusFilter(filter.key)}
-                      >
-                        {filter.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={copy.search}
-                    className="h-11 bg-background"
-                  />
-                </div>
-
-                {filteredDocuments.length === 0 ? (
-                  <div className="mt-5 rounded-[10px] border border-dashed border-border bg-background/60 p-5 text-sm leading-7 text-muted-foreground">
-                    {scopedDocuments.length === 0
-                      ? copy.noDocuments
-                      : locale === "zh"
-                        ? "没有符合当前筛选条件的文档。"
-                        : "No documents match the current filters."}
-                  </div>
-                ) : (
-                  <div className="mt-5 overflow-hidden rounded-[10px] border border-border">
-                    <table className="w-full border-collapse text-left text-sm">
-                      <thead className="bg-background/70 text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">{locale === "zh" ? "名称" : "Name"}</th>
-                          <th className="px-4 py-3 font-medium">{copy.datasetColumn}</th>
-                          <th className="px-4 py-3 font-medium">{locale === "zh" ? "分类" : "Category"}</th>
-                          <th className="px-4 py-3 font-medium">{locale === "zh" ? "类型" : "Type"}</th>
-                          <th className="px-4 py-3 font-medium">{locale === "zh" ? "状态" : "Status"}</th>
-                          <th className="px-4 py-3 font-medium">{locale === "zh" ? "更新时间" : "Updated"}</th>
-                          <th className="px-4 py-3 font-medium">{locale === "zh" ? "操作" : "Actions"}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredDocuments.map((document) => (
-                          <tr key={document.id} className="border-t border-border">
-                            <td className="px-4 py-4">
-                              <div className="font-medium text-foreground">{document.name}</div>
-                              {document.errorMessage ? (
-                                <div className="mt-1 text-xs text-red-600">{document.errorMessage}</div>
-                              ) : null}
-                            </td>
-                            <td className="px-4 py-4 text-muted-foreground">
-                              {typeof document.datasetId === "number"
-                                ? (datasetNameById.get(document.datasetId) || `#${document.datasetId}`)
-                                : copy.datasetUnassigned}
-                            </td>
-                            <td className="px-4 py-4">{getCategoryLabel(copy, document.category)}</td>
-                            <td className="px-4 py-4">{document.sourceType === "url" ? copy.typeUrl : copy.typeFile}</td>
-                            <td className="px-4 py-4">
-                              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusTone(document.status)}`}>
-                                {getStatusLabel(locale, document.status)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 text-muted-foreground">{formatTimestamp(locale, document.updatedAt)}</td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-wrap gap-2">
-                                <Button className="public-button-secondary h-9 px-3" asChild>
-                                  <Link href={`/dashboard/knowledge-base/documents/${document.id}`}>{copy.detail}</Link>
-                                </Button>
-                                {(document.status === "failed" || document.status === "ready") && canManage ? (
-                                  <Button
-                                    type="button"
-                                    className="public-button-secondary h-9 px-3"
-                                    onClick={() => handleRetry(document.id)}
-                                    disabled={busy === `reparse-${document.id}`}
-                                  >
-                                    {copy.retry}
-                                  </Button>
-                                ) : null}
-                                {canManage ? (
-                                  <Button
-                                    type="button"
-                                    className="h-9 border border-red-200 bg-red-50 px-3 text-sm text-red-700 hover:bg-red-100"
-                                    onClick={() => handleDelete(document)}
-                                    disabled={busy === `delete-${document.id}`}
-                                  >
-                                    {copy.deleteLabel}
-                                  </Button>
+              ) : (
+                <div className="mt-5 overflow-x-auto">
+                  <table className="documents-table">
+                    <thead className="table-header">
+                      <tr>
+                        <th className="px-4 py-3 text-left">{locale === "zh" ? "名称" : "Name"}</th>
+                        <th className="px-4 py-3 text-left">{copy.datasetColumn}</th>
+                        <th className="px-4 py-3 text-left">{locale === "zh" ? "分类" : "Category"}</th>
+                        <th className="px-4 py-3 text-left">{locale === "zh" ? "类型" : "Type"}</th>
+                        <th className="px-4 py-3 text-left">{locale === "zh" ? "状态" : "Status"}</th>
+                        <th className="px-4 py-3 text-left">{locale === "zh" ? "更新时间" : "Updated"}</th>
+                        <th className="px-4 py-3 text-left">{locale === "zh" ? "操作" : "Actions"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDocuments.map((document) => (
+                        <tr key={document.id}>
+                          <td className="table-cell min-w-[260px]">
+                            <div className="flex gap-3">
+                              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e4e4dc] bg-[#fafaf7]">
+                                {document.sourceType === "url" ? (
+                                  <Link2 className="h-4 w-4 text-[#111]" />
+                                ) : (
+                                  <FileText className="h-4 w-4 text-[#111]" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="document-name">{document.name}</div>
+                                {document.errorMessage ? (
+                                  <div className="document-log">{document.errorMessage}</div>
                                 ) : null}
                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </article>
-            </div>
-
-            <aside className="space-y-6">
-              <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/90">
-                <div className="dashboard-kicker text-muted-foreground">{copy.datasetOverview}</div>
-                <div className="mt-4 space-y-3">
-                  {datasetOverviewItems.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">{copy.datasetEmpty}</div>
-                  ) : (
-                    datasetOverviewItems.map((dataset) => (
-                      <CompactBusinessCard
-                        key={dataset.id}
-                        title={dataset.name}
-                        summary={
-                          buildCompactCardSummary([
-                            `${getCategoryLabel(copy, dataset.category)} · ${getDatasetDocumentSummary(locale, dataset.documentCount)}`,
-                          ]) || dataset.name
-                        }
-                        status={pickPrimaryStatusBadge([
-                          {
-                            label: getCategoryLabel(copy, dataset.category),
-                            tone: "neutral",
-                          },
-                        ])}
-                        actionLabel={locale === "zh" ? "查看" : "View"}
-                        onClick={() => {
-                          if (dataset.id > 0) {
-                            setSelectedDatasetId(String(dataset.id))
-                            setDatasetViewMode("current")
-                            return
-                          }
-
-                          setSelectedDatasetId("")
-                          setDatasetViewMode("all")
-                        }}
-                        className="bg-background/70 p-3"
-                      />
-                    ))
-                  )}
+                            </div>
+                          </td>
+                          <td className="table-cell text-[#666]">
+                            {typeof document.datasetId === "number"
+                              ? (datasetNameById.get(document.datasetId) || `#${document.datasetId}`)
+                              : copy.datasetUnassigned}
+                          </td>
+                          <td className="table-cell">{getCategoryLabel(copy, document.category)}</td>
+                          <td className="table-cell">{document.sourceType === "url" ? copy.typeUrl : copy.typeFile}</td>
+                          <td className="table-cell">
+                            <span className={getStatusClass(document.status)}>
+                              {getStatusLabel(locale, document.status)}
+                            </span>
+                          </td>
+                          <td className="table-cell text-[#666]">{formatTimestamp(locale, document.updatedAt)}</td>
+                          <td className="table-cell">
+                            <div className="flex min-w-[116px] flex-col gap-2">
+                              <Button className="row-action" asChild>
+                                <Link href={`/dashboard/knowledge-base/documents/${document.id}`}>{copy.detail}</Link>
+                              </Button>
+                              {(document.status === "failed" || document.status === "ready") && canManage ? (
+                                <Button
+                                  type="button"
+                                  className="row-action"
+                                  onClick={() => handleRetry(document.id)}
+                                  disabled={busy === `reparse-${document.id}`}
+                                >
+                                  {copy.retry}
+                                </Button>
+                              ) : null}
+                              {canManage ? (
+                                <Button
+                                  type="button"
+                                  className="row-action delete"
+                                  onClick={() => handleDelete(document)}
+                                  disabled={busy === `delete-${document.id}`}
+                                >
+                                  {copy.deleteLabel}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </article>
+              )}
+            </article>
+          </div>
 
-              <article className="dashboard-panel rounded-[12px] border border-border bg-card/90 p-5">
-                <div className="dashboard-kicker text-muted-foreground">{copy.recent}</div>
-                <div className="mt-4 space-y-3">
-                  {scopedRecentActivity.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">{locale === "zh" ? "暂无处理记录" : "No recent activity yet."}</div>
-                  ) : (
-                    scopedRecentActivity.map((activity) => (
-                      <div key={activity.id} className="rounded-[10px] border border-border bg-background/70 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-medium text-foreground">{activity.title}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">{formatTimestamp(locale, activity.at)}</div>
-                          </div>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            {activity.status === "failed" ? <AlertCircle className="h-3.5 w-3.5 text-red-600" /> : null}
-                            {getStatusLabel(locale, activity.status)}
-                          </div>
+          <aside className="space-y-6">
+            <article className="side-card">
+              <div className="knowledge-card-label">{copy.datasetOverview}</div>
+              <div className="mt-5 space-y-3">
+                {datasetOverviewItems.length === 0 ? (
+                  <div className="text-sm leading-6 text-[#777]">{copy.datasetEmpty}</div>
+                ) : (
+                  datasetOverviewItems.map((dataset) => (
+                    <button
+                      key={dataset.id}
+                      type="button"
+                      className="knowledge-map-item"
+                      onClick={() => {
+                        if (dataset.id > 0) {
+                          setSelectedDatasetId(String(dataset.id))
+                          setDatasetViewMode("current")
+                          return
+                        }
+
+                        setSelectedDatasetId("")
+                        setDatasetViewMode("all")
+                      }}
+                    >
+                      <span className="knowledge-metric-icon h-12 w-12">
+                        <Database className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-display text-xl font-black uppercase leading-none text-[#111]">
+                          {dataset.name}
+                        </span>
+                        <span className="mt-2 block text-left text-xs font-medium text-[#777]">
+                          {getCategoryLabel(copy, dataset.category)} · {getDatasetDocumentSummary(locale, dataset.documentCount)}
+                        </span>
+                      </span>
+                      <span className="rounded-full border border-[#e7e7df] px-2 py-1 text-[10px] font-black uppercase text-[#111]">
+                        {locale === "zh" ? "查看" : "View"}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </article>
+
+            <article className="side-card">
+              <div className="knowledge-card-label">{copy.recent}</div>
+              <div className="mt-5 space-y-3">
+                {scopedRecentActivity.length === 0 ? (
+                  <div className="text-sm leading-6 text-[#777]">{locale === "zh" ? "暂无处理记录" : "No recent activity yet."}</div>
+                ) : (
+                  scopedRecentActivity.map((activity) => (
+                    <div key={activity.id} className="recent-activity-item">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e4e4dc] bg-[#fafaf7]">
+                          {activity.status === "failed" ? (
+                            <AlertCircle className="h-4 w-4 text-[#d93025]" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-[#111]" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold text-[#111]">{activity.title}</div>
+                          <div className="mt-1 text-xs text-[#777]">{formatTimestamp(locale, activity.at)}</div>
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-              </article>
-            </aside>
-          </div>
-        </div>
+                      <div className="mt-3">
+                        <span className={getStatusClass(activity.status)}>
+                          {getStatusLabel(locale, activity.status)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </article>
+          </aside>
+        </main>
       </section>
 
       <Dialog

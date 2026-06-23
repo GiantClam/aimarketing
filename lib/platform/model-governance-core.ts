@@ -117,6 +117,7 @@ export function getRuntimeProviderLabel(providerId: string) {
   if (providerId === "enterprise-glm-official") return "GLM Official"
   if (providerId === "runninghub-image") return "RunningHub Image"
   if (providerId === "runninghub-video") return "RunningHub Video"
+  if (providerId === "minimax-video") return "MiniMax Hailuo Video"
   if (providerId === "minimax-audio") return "MiniMax Audio"
   return providerId
 }

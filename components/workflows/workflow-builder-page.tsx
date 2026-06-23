@@ -11,6 +11,7 @@ import { WorkflowNodeConfigPanel } from "@/components/workflows/workflow-node-co
 import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palette"
 import { type WorkflowRunResultsDetail } from "@/components/workflows/workflow-run-results-page"
 import { getWorkflowImageDefaultSize, resolveWorkflowImageModelKind } from "@/lib/image-assistant/model-options"
+import { getDefaultModelId } from "@/lib/ai-runtime/model-registry"
 import { buildGovernedImageAssistantModelOptionId } from "@/lib/platform/governed-image-model-option-id"
 import {
   canWorkflowNodeConnectValueKind,
@@ -382,6 +383,13 @@ function buildNode(
                     ratio: "adaptive",
                     generateAudio: "true",
                   }
+                : type === "digital_human"
+                  ? {
+                      featureId: "digital-human",
+                      model: getDefaultModelId("video.digital_human") || "runninghub:video:digital-human",
+                      durationSeconds: "10",
+                      seed: "-1",
+                    }
                 : type === "music_generate"
                   ? {
                       genre: "electronic-pop",
@@ -415,7 +423,7 @@ function buildNode(
                       }
                     : type === "product_store"
                       ? {
-                          libraryTarget: "work_library",
+                          libraryTarget: "asset_library",
                         }
           : {},
   } satisfies WorkflowDefinitionNode

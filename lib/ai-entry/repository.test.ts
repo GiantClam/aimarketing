@@ -56,6 +56,30 @@ test.after(() => {
   nodeModule._load = originalLoad
 })
 
+test("generic AI entry title filters exclude agent-scoped conversations", async () => {
+  const { getAiEntryConversationTitleFilters } = await import("./repository")
+
+  assert.deepEqual(
+    getAiEntryConversationTitleFilters("chat", null),
+    {
+      titlePrefix: "[ai-entry] ",
+      excludeAgentPrefix: "[ai-entry] [agent:",
+    },
+  )
+})
+
+test("agent AI entry title filters only include the requested agent scope", async () => {
+  const { getAiEntryConversationTitleFilters } = await import("./repository")
+
+  assert.deepEqual(
+    getAiEntryConversationTitleFilters("chat", "executive-ppt"),
+    {
+      titlePrefix: "[ai-entry] [agent:executive-ppt] ",
+      excludeAgentPrefix: null,
+    },
+  )
+})
+
 test("AI entry message history preserves database timestamps", async () => {
   const { listAiEntryMessages } = await import("./repository")
   const conversationCreatedAt = new Date("2024-01-01T00:00:00.000Z")

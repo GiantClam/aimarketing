@@ -428,6 +428,7 @@ function getRuntimeProviderLabel(provider: PlatformProviderRuntime) {
   if (provider.id === "crazyroute") return "Crazyroute"
   if (provider.id === "runninghub-image") return "RunningHub Image"
   if (provider.id === "runninghub-video") return "RunningHub Video"
+  if (provider.id === "minimax-video") return "MiniMax Hailuo Video"
   if (provider.id === "minimax-audio") return "MiniMax Audio"
   if (provider.id === "fixture") return "Fixture"
   return provider.id

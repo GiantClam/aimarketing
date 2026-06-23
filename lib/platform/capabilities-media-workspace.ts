@@ -1,4 +1,11 @@
 import type { AppLocale } from "@/lib/i18n/config"
+import { buildModelSelectOptions, buildRuntimeFieldsForModel } from "@/lib/ai-runtime/ui"
+import {
+  getDefaultModelId,
+  getModelDefinition,
+  listModels,
+} from "@/lib/ai-runtime/model-registry"
+import type { ModelCapability } from "@/lib/ai-runtime/capabilities"
 
 export type CapabilityMediaWorkspaceFeatureId =
   | "ai-music"
@@ -109,26 +116,19 @@ const GROUPS: CapabilityMediaWorkspaceGroupDefinition[] = [
   },
 ]
 
-const DURATION_OPTIONS: LocalizedOption[] = [
-  { value: "5", label: { zh: "5 秒", en: "5 sec" } },
-  { value: "10", label: { zh: "10 秒", en: "10 sec" } },
-  { value: "15", label: { zh: "15 秒", en: "15 sec" } },
-]
+function resolveVideoCapability(featureId: "text-to-video" | "image-to-video"): ModelCapability {
+  return featureId === "image-to-video" ? "video.image_to_video" : "video.text_to_video"
+}
 
-const VIDEO_RESOLUTION_OPTIONS: LocalizedOption[] = [
-  { value: "480p", label: { zh: "480p", en: "480p" } },
-  { value: "720p", label: { zh: "720p", en: "720p" } },
-  { value: "1080p", label: { zh: "1080p", en: "1080p" } },
-  { value: "2k", label: { zh: "2K", en: "2K" } },
-  { value: "4k", label: { zh: "4K", en: "4K" } },
-]
-
-const VIDEO_RATIO_OPTIONS: LocalizedOption[] = [
-  { value: "adaptive", label: { zh: "自适应", en: "Adaptive" } },
-  { value: "16:9", label: { zh: "横版 16:9", en: "Landscape 16:9" } },
-  { value: "9:16", label: { zh: "竖版 9:16", en: "Portrait 9:16" } },
-  { value: "1:1", label: { zh: "方形 1:1", en: "Square 1:1" } },
-]
+function buildVideoModelOptions(featureId: "text-to-video" | "image-to-video"): LocalizedOption[] {
+  return buildModelSelectOptions(listModels({ capability: resolveVideoCapability(featureId) })).map((option) => ({
+    value: option.value,
+    label: {
+      zh: option.label,
+      en: option.label,
+    },
+  }))
+}
 
 const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
   {
@@ -299,54 +299,18 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     previewKind: "video",
     title: { zh: "文生视频", en: "Text to Video" },
     summary: {
-      zh: "直接输入提示词生成视频，走 RunningHub seedance2.0 文生视频链路。",
-      en: "Generate video from prompt text through the RunningHub seedance2.0 text-to-video flow.",
+      zh: "直接输入提示词生成视频，默认走 MiniMax 海螺官方文生视频链路。",
+      en: "Generate video from prompt text through the official MiniMax Hailuo text-to-video flow by default.",
     },
     submitLabel: { zh: "生成视频", en: "Generate video" },
     action: "generate",
     fields: [
       {
-        id: "prompt",
-        type: "textarea",
-        label: { zh: "提示词", en: "Prompt" },
-        placeholder: { zh: "例如：一支 15 秒 AI 产品预热视频，强调增长感、科技质感和电影镜头。", en: "Example: A 15-second AI product teaser with cinematic camera moves, premium tech visuals, and a growth-focused story." },
-      },
-      {
-        id: "resolution",
+        id: "model",
         type: "select",
-        label: { zh: "分辨率", en: "Resolution" },
-        defaultValue: "720p",
-        options: VIDEO_RESOLUTION_OPTIONS,
-      },
-      {
-        id: "duration",
-        type: "select",
-        label: { zh: "时长", en: "Duration" },
-        defaultValue: "5",
-        options: DURATION_OPTIONS,
-      },
-      {
-        id: "ratio",
-        type: "select",
-        label: { zh: "画幅比例", en: "Aspect ratio" },
-        defaultValue: "adaptive",
-        options: VIDEO_RATIO_OPTIONS,
-      },
-      {
-        id: "generateAudio",
-        type: "select",
-        label: { zh: "生成音频", en: "Generate audio" },
-        defaultValue: "true",
-        options: [
-          { value: "true", label: { zh: "开启", en: "On" } },
-          { value: "false", label: { zh: "关闭", en: "Off" } },
-        ],
-      },
-      {
-        id: "seed",
-        type: "number",
-        label: { zh: "Seed", en: "Seed" },
-        defaultValue: "-1",
+        label: { zh: "模型", en: "Model" },
+        defaultValue: getDefaultModelId("video.text_to_video") || "",
+        options: buildVideoModelOptions("text-to-video"),
       },
     ],
   },
@@ -357,76 +321,18 @@ const FEATURES: CapabilityMediaWorkspaceFeatureDefinition[] = [
     previewKind: "video",
     title: { zh: "图生视频", en: "Image to Video" },
     summary: {
-      zh: "上传或选择首帧图片，必要时补尾帧图，走 RunningHub seedance2.0 图生视频链路。",
-      en: "Upload or select a first frame image, optionally add an end frame, and generate video through the RunningHub seedance2.0 image-to-video flow.",
+      zh: "上传或选择首帧图片，默认走 MiniMax 海螺官方图生视频链路。",
+      en: "Upload or select a first frame image and generate video through the official MiniMax Hailuo image-to-video flow by default.",
     },
     submitLabel: { zh: "生成视频", en: "Generate video" },
     action: "generate",
     fields: [
       {
-        id: "firstFrameUrl",
-        type: "url",
-        label: { zh: "首帧图片 URL", en: "First frame URL" },
-        placeholder: { zh: "上传图片后会自动填入，也可以粘贴素材库图片地址", en: "Uploading an image fills this automatically, or paste an existing asset URL." },
-      },
-      {
-        id: "lastFrameUrl",
-        type: "url",
-        label: { zh: "尾帧图片 URL", en: "Last frame URL" },
-        placeholder: { zh: "可选，适合首尾帧控制", en: "Optional. Use this for first/last-frame control." },
-      },
-      {
-        id: "prompt",
-        type: "textarea",
-        label: { zh: "补充提示词", en: "Prompt" },
-        placeholder: { zh: "可选。补充镜头、动作、风格和节奏要求。", en: "Optional. Add direction for motion, camera, style, and pacing." },
-      },
-      {
-        id: "resolution",
+        id: "model",
         type: "select",
-        label: { zh: "分辨率", en: "Resolution" },
-        defaultValue: "720p",
-        options: VIDEO_RESOLUTION_OPTIONS,
-      },
-      {
-        id: "duration",
-        type: "select",
-        label: { zh: "时长", en: "Duration" },
-        defaultValue: "5",
-        options: DURATION_OPTIONS,
-      },
-      {
-        id: "ratio",
-        type: "select",
-        label: { zh: "画幅比例", en: "Aspect ratio" },
-        defaultValue: "adaptive",
-        options: VIDEO_RATIO_OPTIONS,
-      },
-      {
-        id: "generateAudio",
-        type: "select",
-        label: { zh: "生成音频", en: "Generate audio" },
-        defaultValue: "true",
-        options: [
-          { value: "true", label: { zh: "开启", en: "On" } },
-          { value: "false", label: { zh: "关闭", en: "Off" } },
-        ],
-      },
-      {
-        id: "realPersonMode",
-        type: "select",
-        label: { zh: "真人模式", en: "Real person mode" },
-        defaultValue: "true",
-        options: [
-          { value: "true", label: { zh: "开启", en: "On" } },
-          { value: "false", label: { zh: "关闭", en: "Off" } },
-        ],
-      },
-      {
-        id: "seed",
-        type: "number",
-        label: { zh: "Seed", en: "Seed" },
-        defaultValue: "-1",
+        label: { zh: "模型", en: "Model" },
+        defaultValue: getDefaultModelId("video.image_to_video") || "",
+        options: buildVideoModelOptions("image-to-video"),
       },
     ],
   },
@@ -556,4 +462,53 @@ export function getCapabilityMediaWorkspaceFeatures(locale: AppLocale): Capabili
       }),
     })),
   }
+}
+
+export function resolveCapabilityMediaWorkspaceVideoFields(
+  locale: AppLocale,
+  featureId: "text-to-video" | "image-to-video",
+  selectedModelId?: string | null,
+): CapabilityMediaWorkspaceFieldView[] {
+  const capability = resolveVideoCapability(featureId)
+  const modelOptions = buildModelSelectOptions(listModels({ capability }))
+  const modelId = selectedModelId || getDefaultModelId(capability) || modelOptions[0]?.value || ""
+  const model = getModelDefinition(modelId) || getModelDefinition(getDefaultModelId(capability) || "")
+
+  const modelField: CapabilityMediaWorkspaceFieldView = {
+    id: "model",
+    type: "select",
+    label: locale === "zh" ? "模型" : "Model",
+    defaultValue: modelId,
+    options: modelOptions,
+  }
+
+  if (!model) {
+    return [modelField]
+  }
+
+  return [
+    modelField,
+    ...buildRuntimeFieldsForModel(model, locale)
+      .filter((field) => field.id !== "model")
+      .map((field) => {
+        if (field.type === "select") {
+          return {
+            id: field.id,
+            type: "select",
+            label: field.label,
+            placeholder: field.placeholder,
+            defaultValue: field.defaultValue,
+            options: field.options || [],
+          } satisfies CapabilityMediaWorkspaceFieldView
+        }
+
+        return {
+          id: field.id,
+          type: field.type,
+          label: field.label,
+          placeholder: field.placeholder,
+          defaultValue: field.defaultValue,
+        } satisfies CapabilityMediaWorkspaceFieldView
+      }),
+  ]
 }

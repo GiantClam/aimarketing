@@ -1,4 +1,4 @@
-# Design System Master File
+# AI Marketing Design System
 
 > **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
 > If that file exists, its rules **override** this Master file.
@@ -6,197 +6,389 @@
 
 ---
 
-**Project:** AI Marketing
-**Generated:** 2026-03-02 15:53:02
-**Category:** Micro SaaS
+**Project:** AI Marketing  
+**Generated:** 2026-03-02 15:53:02  
+**Updated:** 2026-06-23  
+**Category:** Sharp SaaS command center
 
 ---
 
-## Global Rules
+## Design Positioning
 
-### Color Palette
+Core direction:
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#EC4899` | `--color-primary` |
-| Secondary | `#F472B6` | `--color-secondary` |
-| CTA/Accent | `#06B6D4` | `--color-cta` |
-| Background | `#FDF2F8` | `--color-background` |
-| Text | `#831843` | `--color-text` |
-
-**Color Notes:** Bold pink + creative cyan
-
-### Typography
-
-- **Heading Font:** Fira Code
-- **Body Font:** Fira Sans
-- **Mood:** dashboard, data, analytics, code, technical, precise
-- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.google.com/share?selection.family=Fira+Code:wght@400;500;600;700|Fira+Sans:wght@300;400;500;600;700)
-
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+```text
+Sharp SaaS + Editorial Typography + Yellow/Black Command Center + Modular Workspace Cards
 ```
 
-### Spacing Variables
+The product should feel like an enterprise AI control plane, not a soft generic SaaS page. Use bold condensed typography, black headlines, yellow action accents, white modular dashboard cards, light grid backgrounds, clipped-corner details, and product-like metric modules.
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
-| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
-| `--space-md` | `16px` / `1rem` | Standard padding |
-| `--space-lg` | `24px` / `1.5rem` | Section padding |
-| `--space-xl` | `32px` / `2rem` | Large gaps |
-| `--space-2xl` | `48px` / `3rem` | Section margins |
-| `--space-3xl` | `64px` / `4rem` | Hero padding |
+Best for:
 
-### Shadow Depths
+```text
+AI Marketing Site
+AI Workspace
+Agent Control Panel
+Workspace Hub
+Prompt / Workflow / Asset Management
+Multi-model AI Platform
+```
 
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+## Color Palette
 
----
+| Role | Hex | CSS Variable | Usage |
+|------|-----|--------------|-------|
+| Brand Yellow | `#F4F254` | `--color-primary` | CTA, active details, icon blocks, key highlights |
+| Brand Yellow Alt | `#F5EE39` / `#FFE500` | n/a | Marketing art direction and campaign graphics |
+| Core Black | `#111111` / `#161616` / `#1A1A1A` | `--color-foreground`, `--color-accent` | Hero titles, active sidebar, important numbers |
+| Background White | `#FFFFFF` | `--color-card` | Cards, panels, inputs |
+| Soft Background | `#FAFAF7` / `#F7F7F2` | `--color-background` | App canvas |
+| Border Gray | `#E5E5E0` / `#EFEFEA` | `--color-border` | Cards, dividers, inputs |
+| Muted Text | `#777777` / `#8A8A8A` | `--color-muted-foreground` | Descriptions, metadata |
+| Success Green | `#22A35A` / `#28A745` | `--color-secondary` | Positive growth only |
 
-## Component Specs
+Rules:
 
-### Buttons
+- Yellow is for action and memory points, not full-page fills.
+- Black carries brand impact and active state.
+- Green is only for positive growth data.
+- Avoid purple/blue AI gradients and soft pastel SaaS palettes.
+
+## Background
+
+Use a white or off-white base with a low-opacity grid:
 
 ```css
-/* Primary Button */
-.btn-primary {
-  background: #06B6D4;
-  color: white;
-  padding: 12px 24px;
+background-color: #fafaf7;
+background-image:
+  linear-gradient(rgba(0,0,0,0.035) 1px, transparent 1px),
+  linear-gradient(90deg, rgba(0,0,0,0.035) 1px, transparent 1px);
+background-size: 48px 48px;
+```
+
+The grid should imply control-room / engineering structure without competing with cards.
+
+## Typography
+
+### Display Font
+
+Use strong condensed editorial typography:
+
+```text
+Barlow Condensed
+Anton
+Bebas Neue
+Oswald ExtraBold
+Archivo Black
+Teko
+```
+
+Current app implementation uses `Barlow Condensed` through `--font-display`.
+
+### Body Font
+
+Use a neutral product sans:
+
+```text
+IBM Plex Sans
+Geist
+Inter
+DM Sans
+```
+
+Current app implementation uses `IBM Plex Sans` through `--font-body`.
+
+### Scale
+
+| Token | Size / Treatment |
+|-------|------------------|
+| Hero Title | `64-88px`, condensed, `800-900`, uppercase |
+| Page Title | `44-56px`, condensed, `800-900`, uppercase |
+| Card Title | `22-28px`, condensed, `800`, uppercase |
+| Section Label | `10-12px`, uppercase, `letter-spacing: 0.16-0.18em` |
+| Body | `15-17px`, `400-500` |
+| Small Text | `12-13px` |
+| Button | `13-14px`, `700-800`, uppercase |
+
+Large headlines should use `letter-spacing: 0`, not negative viewport-scaled type.
+
+## Shell
+
+Shared workspace shell:
+
+```text
+Left Sidebar
+Top / Page Header
+Main Canvas
+Card Grid
+Floating Utility
+User Profile Area
+```
+
+Sidebar:
+
+- Width: `240px-280px`.
+- Background: `#FFFFFF` or `#FAFAF7`.
+- Right border: `1px solid #E5E5E0`.
+- Default nav item: white card, light gray border, black text, line icon, optional chevron.
+- Active nav item: black background, yellow text/icon/dot.
+
+Recommended nav item shape:
+
+```css
+.sidebar-item {
+  height: 44px;
+  border: 1px solid #e8e8e3;
   border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
+  padding: 0 14px;
 }
 
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #EC4899;
-  border: 2px solid #EC4899;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
+.sidebar-item.active {
+  background: #111;
+  color: #f4f254;
+  border-color: #111;
 }
 ```
 
-### Cards
+## Workspace Header
+
+Structure:
+
+```text
+Small label: WORKSPACE HUB
+Hero title: ENTERPRISE WORKSPACE FRONT DOOR /
+Subtitle: one short product sentence
+Right side: compact status cards or Customize action
+```
+
+Keep the title left-aligned, heavy, black, and editorial. Add a yellow slash or clipped accent at the end.
+
+## Workspace Cards
+
+Cards are business workbench entries, not plain text feature cards.
+
+Recommended grid:
+
+```text
+3 columns desktop
+Card width: 380-430px
+Card height: 240-280px
+Gap: 24px
+```
+
+Required card anatomy:
+
+```text
+1. Yellow icon block
+2. Uppercase label
+3. Bold condensed title
+4. Short two-line description
+5. One or two chips
+6. Yellow clipped CTA base + black CTA button
+7. Metric / mini chart / preview module
+8. Pin or bookmark affordance when useful
+```
+
+Card CSS direction:
 
 ```css
-.card {
-  background: #FDF2F8;
+.workspace-card {
+  background: #fff;
+  border: 1px solid #e9e9e3;
   border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.06);
   padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
+  position: relative;
 }
 ```
 
-### Inputs
+### Yellow Icon Block
 
 ```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
+.icon-block {
+  width: 64px;
+  height: 64px;
+  background: #f4f254;
+  color: #111;
   border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #EC4899;
-  outline: none;
-  box-shadow: 0 0 0 3px #EC489920;
+  clip-path: polygon(0 0, 88% 0, 100% 14%, 100% 100%, 0 100%);
 }
 ```
 
-### Modals
+Use one consistent linear icon set, currently Lucide at `2px` stroke.
+
+### CTA
+
+Use a yellow clipped base with a black button:
 
 ```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+.cta-base {
+  background: #f4f254;
+  clip-path: polygon(0 0, 78% 0, 100% 100%, 0 100%);
 }
 
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
+.cta-button {
+  background: #111;
+  color: #fff;
+  border-radius: 7px;
+  font-weight: 800;
 }
 ```
 
----
+Primary labels:
 
-## Style Guidelines
+```text
+START FREE ->
+OPEN VIEW ->
+SEE EXAMPLE WORKSPACE
+```
 
-**Style:** Flat Design
+## Card Content
 
-**Keywords:** 2D, minimalist, bold colors, no shadows, clean lines, simple shapes, typography-focused, modern, icon-heavy
+Use short, strong titles:
 
-**Best For:** Web apps, mobile apps, cross-platform, startup MVPs, user-friendly, SaaS, dashboards, corporate
+```text
+CONTENT GROWTH
+BRAND CREATIVE
+LEAD CONVERSION
+SALES CLOSE
+ENTERPRISE OPERATIONS
+KNOWLEDGE AND ASSETS
+COMPLIANCE AND RISK
+TRAINING ENABLEMENT
+TALENT AND RECRUITING
+```
 
-**Key Effects:** No gradients/shadows, simple hover (color/opacity shift), fast loading, clean transitions (150-200ms ease), minimal icons
+Descriptions must fit in two lines. Prefer result-oriented copy:
 
-### Page Pattern
+```text
+Connect AI chat, SEO, and workflows into one content engine.
+```
 
-**Pattern Name:** Minimal & Direct + Demo
+Chips:
 
-- **CTA Placement:** Above fold
-- **Section Order:** Hero > Features > CTA
+- 1-2 chips per card.
+- Border `#E6E6E0`.
+- Background `#FAFAFA`.
+- Radius `7px`.
+- Height about `34-36px`.
 
----
+## Data Modules
 
-## Anti-Patterns (Do NOT Use)
+Every major card should include one concrete product-data signal:
 
-- ❌ Complex onboarding flow
-- ❌ Cluttered layout
+```text
+mini bar chart
+sparkline
+progress ring
+avatar stack
+asset thumbnails
+metric number
+growth percentage
+status badge
+```
 
-### Additional Forbidden Patterns
+Examples:
 
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
+```text
+Content pieces 128 +24%
+Assets created 342 +31%
+Leads qualified 76 +17%
+Deals in progress 23 +15%
+Active tasks 183 +9%
+Assets total 1,248 +22%
+```
 
----
+Use yellow for chart marks and green only for positive percentages.
+
+## Landing Hero
+
+Landing pages should use:
+
+```text
+Top Nav
+Hero Section
+Product Mockup
+Trust Row
+3 Value Cards
+Capability Cards
+Workflow Section
+Pricing / BYOK / Private Deploy
+Final CTA
+```
+
+Hero left:
+
+```text
+Pill label
+Huge headline
+One short subtitle
+Two CTAs
+Three trust hints
+```
+
+Hero right must show a realistic product mockup, not a pure text list:
+
+```text
+Campaign Workspace
+Model Tabs: ChatGPT / Claude / Gemini
+Brand Brief
+Task
+Output Preview
+Performance Snapshot
+Workflow Steps
+```
+
+## Trust Modules
+
+If customer logos are not real, do not write "Trusted by". Use:
+
+```text
+Works with tools modern marketing teams already use
+```
+
+Trust hints:
+
+```text
+No credit card required
+BYOK supported
+Private workspace ready
+```
+
+Use small yellow dots or check icons with muted text.
+
+## Layout Principles
+
+```text
+Less explanation, more product surface
+Fewer lists, more modules
+Less plain text, more dashboard evidence
+Fewer generic cards, more business entries
+Fewer decorative illustrations, more realistic UI
+```
+
+Each card should feel enterable. Each module should carry real product data. Yellow serves focus and action; black provides impact; white provides trust; the grid provides system feeling; clipped corners provide brand recognition.
+
+## Anti-Patterns
+
+- Soft pastel SaaS with rounded pill overload.
+- Purple/blue AI gradients.
+- Large yellow page fills.
+- Cards with only title, paragraph, and generic CTA.
+- More than two chips per card.
+- Decorative illustrations that do not show product value.
+- Fake perfect data such as `99.99%`.
+- Missing hover, focus, or active states.
 
 ## Pre-Delivery Checklist
 
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- [ ] Workspace uses white/off-white grid background.
+- [ ] Primary actions use yellow/black clipped-corner styling.
+- [ ] Major cards include yellow icon blocks.
+- [ ] Cards include one or two chips only.
+- [ ] Cards include metric/preview modules with concrete numbers.
+- [ ] Sidebar active state is black with yellow text/icon.
+- [ ] Icons are linear and consistent.
+- [ ] Text fits at 375px, 768px, 1024px, and 1440px.
+- [ ] Contrast is WCAG AA for normal text.
+- [ ] Focus states remain visible.

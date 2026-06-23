@@ -20,6 +20,7 @@ test("workflow schema exposes the fixed V1 node types", () => {
     "llm_generate",
     "image_generate",
     "video_generate",
+    "digital_human",
     "music_generate",
     "voice_synthesis",
     "audio_generate",
@@ -38,11 +39,20 @@ test("video_generate accepts text image and video inputs", () => {
   ])
 })
 
+test("digital_human accepts script image and audio inputs", () => {
+  assert.deepEqual(getAllowedWorkflowTargetInputKinds("digital_human"), [
+    "text",
+    "image",
+    "audio",
+  ])
+})
+
 test("workflow schema exposes strong output kinds for fixed nodes", () => {
   assert.deepEqual(getWorkflowNodeOutputKinds("upload"), ["asset"])
   assert.deepEqual(getWorkflowNodeOutputKinds("text_input"), ["text"])
   assert.deepEqual(getWorkflowNodeOutputKinds("writer"), ["text"])
   assert.deepEqual(getWorkflowNodeOutputKinds("image_generate"), ["image"])
+  assert.deepEqual(getWorkflowNodeOutputKinds("digital_human"), ["video"])
   assert.deepEqual(getWorkflowNodeOutputKinds("music_generate"), ["audio"])
   assert.deepEqual(getWorkflowNodeOutputKinds("voice_synthesis"), ["audio"])
   assert.deepEqual(getWorkflowNodeOutputKinds("audio_generate"), ["audio"])
@@ -56,6 +66,9 @@ test("input type helpers reject incompatible node connections", () => {
   assert.equal(canWorkflowNodeAcceptValueKind("image_generate", "asset"), false)
   assert.equal(canWorkflowNodeAcceptValueKind("ppt_generate", "video"), false)
   assert.equal(canWorkflowNodeAcceptValueKind("music_generate", "audio"), true)
+  assert.equal(canWorkflowNodeAcceptValueKind("digital_human", "audio"), true)
+  assert.equal(canWorkflowNodeAcceptValueKind("digital_human", "image"), true)
+  assert.equal(canWorkflowNodeAcceptValueKind("digital_human", "video"), false)
   assert.equal(canWorkflowNodeAcceptValueKind("voice_synthesis", "audio"), false)
   assert.equal(canWorkflowNodeAcceptValueKind("audio_generate", "audio"), true)
   assert.equal(canWorkflowNodeAcceptValueKind("product_store", "video"), true)
@@ -65,6 +78,7 @@ test("input type helpers reject incompatible node connections", () => {
 test("connection helpers allow upload asset outputs to connect into typed file inputs", () => {
   assert.equal(canWorkflowNodeConnectValueKind("image_generate", "asset"), true)
   assert.equal(canWorkflowNodeConnectValueKind("video_generate", "asset"), true)
+  assert.equal(canWorkflowNodeConnectValueKind("digital_human", "asset"), true)
   assert.equal(canWorkflowNodeConnectValueKind("music_generate", "asset"), true)
   assert.equal(canWorkflowNodeConnectValueKind("ppt_generate", "asset"), true)
   assert.equal(canWorkflowNodeConnectValueKind("voice_synthesis", "asset"), false)
@@ -76,10 +90,13 @@ test("default workflow node titles resolve to the active locale while preserving
   assert.equal(resolveWorkflowNodeTitle("text_input", "Text Input", "zh"), "文本输入")
   assert.equal(getDefaultWorkflowNodeTitle("writer", "zh"), "文章写作")
   assert.equal(getDefaultWorkflowNodeTitle("llm_generate", "zh"), "大模型")
+  assert.equal(getDefaultWorkflowNodeTitle("digital_human", "zh"), "口播数字人")
   assert.equal(getDefaultWorkflowNodeTitle("music_generate", "zh"), "音乐生成")
   assert.equal(getDefaultWorkflowNodeTitle("voice_synthesis", "zh"), "语音合成")
-  assert.equal(getDefaultWorkflowNodeTitle("product_store", "zh"), "作品库存储")
-  assert.equal(getDefaultWorkflowNodeTitle("product_store", "en"), "Work Library")
+  assert.equal(getDefaultWorkflowNodeTitle("product_store", "zh"), "素材库存储")
+  assert.equal(getDefaultWorkflowNodeTitle("product_store", "en"), "Asset Library")
+  assert.equal(resolveWorkflowNodeTitle("product_store", "作品库存储", "zh"), "素材库存储")
+  assert.equal(resolveWorkflowNodeTitle("product_store", "Work Library", "en"), "Asset Library")
   assert.equal(resolveWorkflowNodeTitle("llm_generate", "文案生成", "zh"), "大模型")
   assert.equal(resolveWorkflowNodeTitle("llm_generate", "文案生成", "en"), "LLM Generate")
   assert.equal(resolveWorkflowNodeTitle("image_generate", "Hero Visual", "zh"), "Hero Visual")

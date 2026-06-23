@@ -19,6 +19,7 @@ import {
   Sparkles,
   Trash2,
   Type,
+  UserRound,
   X,
 } from "lucide-react"
 
@@ -87,6 +88,11 @@ const NODE_VISUALS: Record<
     icon: Film,
     accentClassName: "border-rose-300/80 bg-rose-100 text-rose-800",
     glowClassName: "from-rose-200/80 via-rose-100/20 to-transparent",
+  },
+  digital_human: {
+    icon: UserRound,
+    accentClassName: "border-orange-300/80 bg-orange-100 text-orange-800",
+    glowClassName: "from-orange-200/80 via-orange-100/20 to-transparent",
   },
   music_generate: {
     icon: Music,

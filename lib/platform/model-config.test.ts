@@ -16,7 +16,7 @@ test("default enterprise model configuration covers text image video and audio c
   const config = buildDefaultEnterpriseModelConfiguration()
   assert.equal(config.text_generation.selectedProviderId, "openai_compatible")
   assert.equal(config.image_generation.selectedProviderId, "runninghub")
-  assert.equal(config.video_generation.selectedProviderId, "runninghub")
+  assert.equal(config.video_generation.selectedProviderId, "minimax_official")
   assert.equal(config.audio_generation.selectedProviderId, "minimax_official")
   assert.equal(config.text_generation.providers.length > 0, true)
   assert.equal(config.image_generation.providers.length > 0, true)

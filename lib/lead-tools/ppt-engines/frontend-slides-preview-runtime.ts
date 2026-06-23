@@ -394,10 +394,11 @@ function renderWorkflowImageFigure(
 ) {
   const imageUrl = slide?.image?.url?.trim()
   if (!imageUrl) return ""
+  const resolvedSlide = slide!
 
-  const title = slide.image?.title?.trim() || slide?.title?.trim() || "Workflow image"
-  const sourceNodeKey = slide.image?.sourceNodeKey?.trim() || ""
-  const caption = slide.image?.title?.trim() || ""
+  const title = resolvedSlide.image?.title?.trim() || resolvedSlide.title?.trim() || "Workflow image"
+  const sourceNodeKey = resolvedSlide.image?.sourceNodeKey?.trim() || ""
+  const caption = resolvedSlide.image?.title?.trim() || ""
 
   return `
     <figure class="workflow-image-figure workflow-image-${placement}">

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { getDefaultWorkflowNodeTitle, type WorkflowLocale, type WorkflowNodeType } from "@/lib/workflows/schema"
-import { Archive, AudioLines, FileUp, Film, ImageIcon, Mic, Music, PanelsTopLeft, PenSquare, Sparkles, Type } from "lucide-react"
+import { Archive, AudioLines, FileUp, Film, ImageIcon, Mic, Music, PanelsTopLeft, PenSquare, Sparkles, Type, UserRound } from "lucide-react"
 
 const NODE_ORDER: WorkflowNodeType[] = [
   "upload",
@@ -11,6 +11,7 @@ const NODE_ORDER: WorkflowNodeType[] = [
   "llm_generate",
   "image_generate",
   "video_generate",
+  "digital_human",
   "music_generate",
   "voice_synthesis",
   "ppt_generate",
@@ -47,6 +48,10 @@ const NODE_VISUALS: Record<
   video_generate: {
     icon: Film,
     accentClassName: "border-rose-300/80 bg-rose-100 text-rose-800",
+  },
+  digital_human: {
+    icon: UserRound,
+    accentClassName: "border-orange-300/80 bg-orange-100 text-orange-800",
   },
   music_generate: {
     icon: Music,

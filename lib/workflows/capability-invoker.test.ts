@@ -294,6 +294,34 @@ function createPptParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): W
   }
 }
 
+function createDigitalHumanParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): WorkflowCapabilityInvokeParams {
+  return {
+    nodeType: "digital_human",
+    capabilitySlug: "ai-video",
+    action: "generate",
+    node: {
+      nodeKey: "digital-human-1",
+      type: "digital_human",
+      title: "口播数字人",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        featureId: "digital-human",
+        durationSeconds: "10",
+      },
+    },
+    input: {
+      text: ["介绍新品卖点"],
+      asset: [],
+      image: [{ url: "https://example.com/avatar.png", title: "Avatar" }],
+      video: [],
+      audio: [{ url: "https://example.com/audio.mp3", title: "Voice" }],
+      ppt: [],
+    },
+    ...overrides,
+  }
+}
+
 test("image capability request derives reference asset ids from upstream image outputs", () => {
   const ids = buildWorkflowImageAssistantReferenceAssetIds(createImageParams().input)
   assert.deepEqual(ids, ["asset-2", "789"])
@@ -608,10 +636,38 @@ test("workflow capability timeout defaults use capability-level execution budget
   assert.equal(chatTimeoutMs, 120_000)
   assert.equal(pptTimeoutMs, 300_000)
   assert.equal(imageTimeoutMs, 300_000)
-  assert.equal(videoTimeoutMs, 300_000)
+  assert.equal(videoTimeoutMs, 1_800_000)
   assert.equal(pptTimeoutMs > chatTimeoutMs, true)
   assert.equal(imageTimeoutMs > chatTimeoutMs, true)
   assert.equal(videoTimeoutMs > chatTimeoutMs, true)
+})
+
+test("workflow digital human timeout follows the configured video-duration ratio", () => {
+  const tenSecondTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs(
+    "ai-video",
+    undefined,
+    createDigitalHumanParams(),
+  )
+  const twentySecondTimeoutMs = resolveWorkflowCapabilityCallTimeoutMs(
+    "ai-video",
+    undefined,
+    createDigitalHumanParams({
+      node: {
+        nodeKey: "digital-human-2",
+        type: "digital_human",
+        title: "口播数字人",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          featureId: "digital-human",
+          durationSeconds: "20",
+        },
+      },
+    }),
+  )
+
+  assert.equal(tenSecondTimeoutMs, 600_000)
+  assert.equal(twentySecondTimeoutMs, 1_200_000)
 })
 
 test("workflow capability timeout override still wins over capability defaults", () => {

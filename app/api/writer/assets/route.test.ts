@@ -192,6 +192,7 @@ test("writer assets marks conversation failed when non-stream credit reservation
     conversationId: "conv-1",
   }))
 
+  assert.ok(response)
   assert.equal(response.status, 402)
   assert.deepEqual(response.body, { error: "insufficient_credits" })
   assert.deepEqual(updateCalls, [
@@ -210,6 +211,7 @@ test("writer assets stream reports insufficient credits and marks conversation f
     body: ReadableStream<Uint8Array>
   }
 
+  assert.ok(response)
   assert.equal(response.status, 200)
   const streamBody = await readStreamBody(response.body)
 

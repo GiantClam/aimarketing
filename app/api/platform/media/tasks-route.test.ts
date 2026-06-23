@@ -30,6 +30,7 @@ type RunningHubConfigLike = {
 
 let governedImageSelectionCalls: Array<Record<string, unknown>> = []
 let queryRunningHubTaskCalls: Array<{ taskId: string; config?: RunningHubConfigLike }> = []
+let queryMediaCapabilityTaskCalls: Array<Record<string, unknown>> = []
 
 const baseRunningHubConfig: RunningHubConfigLike = {
   baseUrl: "https://www.runninghub.cn",
@@ -98,7 +99,16 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/platform/enterprise-runtime-config") {
     return {
-      resolveEnterpriseVideoRuntimeForUser: async () => null,
+      resolveEnterpriseVideoRuntimeForUser: async () => ({
+        kind: "minimax",
+        providerId: "minimax_official",
+        label: "MiniMax",
+        model: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+        config: {
+          baseUrl: "https://api.minimaxi.com/v1",
+          apiKey: "minimax-key",
+        },
+      }),
       resolveEnterpriseAudioRuntimeForUser: async () => null,
     }
   }
@@ -141,6 +151,51 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/platform/minimax-audio") {
     return {
       queryMiniMaxAudioTask: async () => ({ taskId: "1", status: "SUCCESS", results: [] }),
+    }
+  }
+
+  if (request === "@/lib/platform/minimax-video") {
+    return {
+      isMiniMaxVideoConfigured: () => false,
+    }
+  }
+
+  if (request === "@/lib/platform/model-runtime") {
+    return {
+      resolveModelIdFromRun: () => "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+      queryMediaCapabilityTask: async (input: Record<string, unknown>) => {
+        queryMediaCapabilityTaskCalls.push(input)
+        return {
+          status: "succeeded",
+          provider: "minimax",
+          modelId: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+          outputs: [],
+          payload: {
+            taskId: "7",
+            provider: "minimax",
+            requestedTarget: "text-to-video",
+            status: "SUCCESS",
+            results: [],
+          },
+        }
+      },
+    }
+  }
+
+  if (request === "@/lib/platform/task-run-store") {
+    return {
+      getPlatformTaskRun: async (runId: number) =>
+        runId === 7
+          ? ({
+              id: 7,
+              itemSlug: "text-to-video",
+              externalSystem: "minimax",
+              inputPayload: {
+                model: "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+              },
+              normalizedResult: null,
+            })
+          : null,
     }
   }
 
@@ -194,6 +249,7 @@ test.before(async () => {
 test.beforeEach(() => {
   governedImageSelectionCalls = []
   queryRunningHubTaskCalls = []
+  queryMediaCapabilityTaskCalls = []
 })
 
 test.after(() => {
@@ -225,4 +281,21 @@ test("platform media image task query uses enterprise governed runninghub config
   assert.equal(queryRunningHubTaskCalls.length, 1)
   assert.equal(queryRunningHubTaskCalls[0]?.taskId, "mock-task-1")
   assert.equal(queryRunningHubTaskCalls[0]?.config?.image.endpoint, "/enterprise-txt2img")
+})
+
+test("platform media video task query uses the unified runtime facade", async () => {
+  const response = await GET(
+    {
+      url: "http://localhost:3000/api/platform/media/tasks/7?target=ai-video",
+    },
+    {
+      params: Promise.resolve({ taskId: "7" }),
+    },
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(queryMediaCapabilityTaskCalls.length, 1)
+  assert.equal(queryMediaCapabilityTaskCalls[0]?.runId, 7)
+  assert.equal(queryMediaCapabilityTaskCalls[0]?.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-2.3")
+  assert.equal(response.body?.data?.taskId, "7")
 })

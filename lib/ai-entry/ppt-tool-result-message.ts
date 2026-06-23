@@ -39,9 +39,10 @@ export function stripPptArtifactRelativeLinks(content: string) {
   if (!content.trim()) return content
 
   return content
-    .replace(/(?:^|\n)\s*(?:下载链接|工作库入口)\s*[:：]?\s*`?\/(?:downloads\/)?api\/platform\/artifacts\/\d+\/download(?:\?download=1)?`?\s*(?=\n|$)/g, "\n")
-    .replace(/(?:^|\n)\s*`?\/(?:downloads\/)?api\/platform\/artifacts\/\d+\/download(?:\?download=1)?`?\s*(?=\n|$)/g, "\n")
-    .replace(/(?:^|\n)\s*(?:工作库入口)\s*[:：]?\s*`?\/dashboard\/works`?\s*(?=\n|$)/g, "\n")
+    .replace(/(?:^|\n)[^\n]*\/(?:downloads\/)?api\/platform\/artifacts\/\d+\/download(?:\?download=1)?[^\n]*(?=\n|$)/g, "\n")
+    .replace(/(?:^|\n)[^\n]*\/downloads[^\n]*(?:完整下载链接|download link)[^\n]*(?=\n|$)/gi, "\n")
+    .replace(/(?:^|\n)[^\n]*`\/dashboard\/works`[^\n]*(?=\n|$)/g, "\n")
+    .replace(/(?:^|\n)[^\n]*\/dashboard\/works[^\n]*(?=\n|$)/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
 }

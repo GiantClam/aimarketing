@@ -25,6 +25,13 @@ test("music_generate resolves to the music capability executor", () => {
   assert.equal(executor.action, "generate")
 })
 
+test("digital_human resolves to the video capability executor", () => {
+  const executor = resolveWorkflowNodeExecutor("digital_human")
+  assert.equal(executor.capabilitySlug, "ai-video")
+  assert.equal(executor.action, "generate")
+  assert.deepEqual(executor.outputKinds, ["video"])
+})
+
 test("voice_synthesis resolves to the speech synthesis capability executor", () => {
   const executor = resolveWorkflowNodeExecutor("voice_synthesis")
   assert.equal(executor.capabilitySlug, "ai-music")
@@ -37,7 +44,7 @@ test("audio_generate stays available as the legacy audio capability executor", (
   assert.equal(executor.action, "generate")
 })
 
-test("product_store echoes upstream output for preview and marks work library persistence", async () => {
+test("product_store echoes upstream output for preview and marks asset library persistence", async () => {
   const executor = resolveWorkflowNodeExecutor("product_store")
   assert.equal(executor.action, "store-output")
 
@@ -47,7 +54,7 @@ test("product_store echoes upstream output for preview and marks work library pe
     node: {
       nodeKey: "product-store-1",
       type: "product_store",
-      title: "Work Library",
+      title: "Asset Library",
       positionX: 0,
       positionY: 0,
       config: {},
@@ -70,7 +77,7 @@ test("product_store echoes upstream output for preview and marks work library pe
     audio: [],
     ppt: [],
   })
-  assert.equal(result.metadata?.persistenceTarget, "work_library")
+  assert.equal(result.metadata?.persistenceTarget, "asset_library")
 })
 
 test("upload executor returns canonical asset output", async () => {

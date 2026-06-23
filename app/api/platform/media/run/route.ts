@@ -12,11 +12,12 @@ import {
   canUserAccessGovernedMediaRoute,
   resolveGovernedImageAssistantSelectionForUser,
 } from "@/lib/platform/model-governance"
+import { isMiniMaxVideoConfigured } from "@/lib/platform/minimax-video"
 import {
-  executeMiniMaxAudioFeature,
-  isMiniMaxAudioConfigured,
-  resolveMiniMaxFeatureId,
-} from "@/lib/platform/minimax-audio"
+  executeMediaCapability,
+  resolveMediaFeatureId,
+  resolveMediaModelId,
+} from "@/lib/platform/model-runtime"
 import {
   hasRunningHubMediaTarget,
   isRunningHubConfiguredForTarget,
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
+  const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>
   const routeAccessAllowed =
     target === "ai-image"
       ? await canUserAccessGovernedMediaRoute({
@@ -120,11 +122,16 @@ export async function POST(request: NextRequest) {
           category: "image_generation",
         })
       : target === "ai-video"
-        ? await canUserAccessGovernedMediaRoute({
+        ? (await canUserAccessGovernedMediaRoute({
+            user: currentUser,
+            routeId: "minimax-video",
+            category: "video_generation",
+          })) ||
+          (await canUserAccessGovernedMediaRoute({
             user: currentUser,
             routeId: "runninghub-video",
             category: "video_generation",
-          })
+          }))
         : await canUserAccessGovernedMediaRoute({
             user: currentUser,
             routeId: "minimax-audio",
@@ -135,7 +142,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "model_access_denied" }, { status: 403 })
   }
 
-  const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>
   const imageRouteMode = resolveRunningHubImageRouteMode(action)
   const governedImageSelection =
     target === "ai-image"
@@ -166,51 +172,6 @@ export async function POST(request: NextRequest) {
         })
       : null
 
-  if (target === "ai-music") {
-    if (
-      currentUser.enterpriseStatus === "active" &&
-      typeof currentUser.enterpriseId === "number" &&
-      !enterpriseAudioRuntime
-    ) {
-      return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
-    }
-
-    if (!isMiniMaxAudioConfigured(enterpriseAudioRuntime?.config)) {
-      return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
-    }
-
-    const featureId =
-      resolveMiniMaxFeatureId(payload.featureId) ||
-      (action === "voice-synthesis"
-        ? "voice-synthesis"
-        : action === "voice-clone"
-          ? "voice-clone"
-          : "ai-music")
-
-    const result = await executeMiniMaxAudioFeature({
-      currentUser,
-      featureId,
-      params: payload.params && typeof payload.params === "object" ? (payload.params as Record<string, unknown>) : payload,
-      config: enterpriseAudioRuntime?.config,
-      defaultModel: enterpriseAudioRuntime?.model || null,
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      return NextResponse.json({ error: message || "minimax_audio_execute_failed" }, { status: 502 })
-    })
-
-    if (result instanceof NextResponse) {
-      return result
-    }
-
-    return NextResponse.json(
-      buildMediaExecutionResponse({
-        capabilitySlug: target,
-        featureId,
-        data: result as Record<string, unknown>,
-      }),
-    )
-  }
-
   if (
     target === "ai-image" &&
     currentUser.enterpriseStatus === "active" &&
@@ -224,9 +185,10 @@ export async function POST(request: NextRequest) {
     target === "ai-video" &&
     currentUser.enterpriseStatus === "active" &&
     typeof currentUser.enterpriseId === "number" &&
-    !enterpriseVideoRuntime
+    !enterpriseVideoRuntime &&
+    !isMiniMaxVideoConfigured()
   ) {
-    return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
+    return NextResponse.json({ error: "minimax_not_configured" }, { status: 503 })
   }
 
   const runningHubConfig =
@@ -234,34 +196,139 @@ export async function POST(request: NextRequest) {
       ? enterpriseImageRuntime?.kind === "runninghub"
         ? enterpriseImageRuntime.config
         : undefined
-      : enterpriseVideoRuntime?.config
+      : enterpriseVideoRuntime?.kind === "runninghub"
+        ? enterpriseVideoRuntime.config
+        : undefined
+
+  const params =
+    payload.params && typeof payload.params === "object" ? (payload.params as Record<string, unknown>) : payload
+
+  if (target === "ai-music") {
+    const featureId = resolveMediaFeatureId(target, payload.featureId || action)
+    const modelId = resolveMediaModelId({
+      target,
+      featureId,
+      requestedModelId: payload.modelId,
+      requestedModel: params.model ?? payload.model,
+      audioRuntime: enterpriseAudioRuntime,
+    })
+
+    const result = await executeMediaCapability({
+      currentUser,
+      target,
+      featureId,
+      modelId,
+      source: "api",
+      params: {
+        ...params,
+        platformAction: action,
+      },
+      audioRuntime: enterpriseAudioRuntime,
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      return NextResponse.json({ error: message || "capability_execute_failed" }, { status: 502 })
+    })
+
+    if (result instanceof NextResponse) {
+      return result
+    }
+
+    return NextResponse.json(
+      buildMediaExecutionResponse({
+        capabilitySlug: target,
+        featureId,
+        data: result.payload,
+      }),
+    )
+  }
+
+  if (target === "ai-video") {
+    const legacyRunningHubFeatureId = resolveRunningHubVideoFeatureId(payload.featureId)
+    if (legacyRunningHubFeatureId === "video-enhance") {
+      const runningHubVideoConfig = enterpriseVideoRuntime?.kind === "runninghub" ? enterpriseVideoRuntime.config : undefined
+      if (!isRunningHubConfiguredForTarget(target, runningHubVideoConfig)) {
+        return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
+      }
+
+      const legacyResult = await executeRunningHubVideoFeature({
+        currentUser,
+        featureId: legacyRunningHubFeatureId,
+        params: {
+          ...params,
+          prompt:
+            (typeof params.prompt === "string" && params.prompt.trim()) ||
+            (typeof payload.prompt === "string" && payload.prompt.trim()) ||
+            "",
+          platformAction: action,
+        },
+        config: runningHubVideoConfig,
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        return NextResponse.json({ error: message || "runninghub_video_execute_failed" }, { status: 502 })
+      })
+
+      if (legacyResult instanceof NextResponse) {
+        return legacyResult
+      }
+
+      return NextResponse.json(
+        buildMediaExecutionResponse({
+          capabilitySlug: target,
+          featureId: legacyRunningHubFeatureId,
+          data: legacyResult as Record<string, unknown>,
+        }),
+      )
+    }
+
+    const featureId = resolveMediaFeatureId(target, payload.featureId)
+    const modelId = resolveMediaModelId({
+      target,
+      featureId,
+      requestedModelId: payload.modelId,
+      requestedModel: params.model ?? payload.model,
+      videoRuntime: enterpriseVideoRuntime,
+    })
+
+    const result = await executeMediaCapability({
+      currentUser,
+      target,
+      featureId,
+      modelId,
+      source: "api",
+      params: {
+        ...params,
+        prompt:
+          (typeof params.prompt === "string" && params.prompt.trim()) ||
+          (typeof payload.prompt === "string" && payload.prompt.trim()) ||
+          "",
+        platformAction: action,
+      },
+      videoRuntime: enterpriseVideoRuntime,
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      return NextResponse.json({ error: message || "capability_execute_failed" }, { status: 502 })
+    })
+
+    if (result instanceof NextResponse) {
+      return result
+    }
+
+    return NextResponse.json(
+      buildMediaExecutionResponse({
+        capabilitySlug: target,
+        featureId,
+        data: result.payload,
+      }),
+    )
+  }
 
   if (!isRunningHubConfiguredForTarget(target, runningHubConfig)) {
     return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
   }
 
-  const params =
-    payload.params && typeof payload.params === "object" ? (payload.params as Record<string, unknown>) : payload
-
   const result =
-    target === "ai-video"
-      ? await executeRunningHubVideoFeature({
-          currentUser,
-          featureId: resolveRunningHubVideoFeatureId(payload.featureId) || "text-to-video",
-          params: {
-            ...params,
-            prompt:
-              (typeof params.prompt === "string" && params.prompt.trim()) ||
-              (typeof payload.prompt === "string" && payload.prompt.trim()) ||
-              "",
-            platformAction: action,
-          },
-          config: enterpriseVideoRuntime?.config,
-        }).catch((error) => {
-          const message = error instanceof Error ? error.message : String(error)
-          return NextResponse.json({ error: message || "runninghub_video_execute_failed" }, { status: 502 })
-        })
-      : await submitRunningHubTask({
+    target === "ai-image"
+      ? await submitRunningHubTask({
           mediaTarget: target,
           payload: {
             ...payload,
@@ -273,6 +340,22 @@ export async function POST(request: NextRequest) {
         }).catch((error) => {
           const message = error instanceof Error ? error.message : String(error)
           return NextResponse.json({ error: message || "runninghub_submit_failed" }, { status: 502 })
+        })
+      : await executeRunningHubVideoFeature({
+          currentUser,
+          featureId: resolveRunningHubVideoFeatureId(payload.featureId) || "text-to-video",
+          params: {
+            ...params,
+            prompt:
+              (typeof params.prompt === "string" && params.prompt.trim()) ||
+              (typeof payload.prompt === "string" && payload.prompt.trim()) ||
+              "",
+            platformAction: action,
+          },
+          config: runningHubConfig,
+        }).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          return NextResponse.json({ error: message || "runninghub_video_execute_failed" }, { status: 502 })
         })
 
   if (result instanceof NextResponse) {

@@ -8,6 +8,9 @@ import type {
 } from "@/lib/image-assistant/openai-compatible-image"
 import type { MiniMaxAudioConfig } from "@/lib/platform/minimax-audio"
 import { getMiniMaxAudioConfig } from "@/lib/platform/minimax-audio"
+import type { MiniMaxVideoConfig } from "@/lib/platform/minimax-video"
+import { getMiniMaxVideoConfig } from "@/lib/platform/minimax-video"
+import { DEFAULT_MINIMAX_VIDEO_MODEL } from "@/lib/platform/minimax-video-options"
 import type { RunningHubConfig } from "@/lib/platform/runninghub"
 import { getRunningHubConfig } from "@/lib/platform/runninghub"
 import {
@@ -69,8 +72,16 @@ export type EnterpriseVideoRuntimeConfig = {
   providerId: EnterpriseVideoModelProviderId
   label: string
   model: string | null
-  config: RunningHubConfig
-}
+} & (
+  | {
+      kind: "minimax"
+      config: MiniMaxVideoConfig
+    }
+  | {
+      kind: "runninghub"
+      config: RunningHubConfig
+    }
+)
 
 export type EnterpriseAudioRuntimeConfig = {
   providerId: "minimax_official"
@@ -182,6 +193,9 @@ function getEnterpriseImageBaseUrl(provider: EnterpriseModelProviderConfig) {
 function getEnterpriseVideoBaseUrl(provider: EnterpriseModelProviderConfig) {
   const explicit = normalizeText(provider.baseUrl)
   if (explicit) return explicit
+  if (provider.providerId === "minimax_official") {
+    return getMiniMaxVideoConfig().baseUrl
+  }
   if (provider.providerId === "runninghub") {
     return getRunningHubConfig().baseUrl
   }
@@ -198,6 +212,12 @@ function getEnterpriseRunningHubApiKey(provider: EnterpriseModelProviderConfig) 
   const explicit = normalizeText(provider.apiKey)
   if (explicit) return explicit
   return normalizeText(getRunningHubConfig().apiKey)
+}
+
+function getEnterpriseMiniMaxApiKey(provider: EnterpriseModelProviderConfig) {
+  const explicit = normalizeText(provider.apiKey)
+  if (explicit) return explicit
+  return normalizeText(getMiniMaxVideoConfig().apiKey)
 }
 
 export function buildEnterpriseImageRuntimeSelectionId(input: {
@@ -386,18 +406,43 @@ function buildEnterpriseRunningHubImageRouteRuntime(params: {
 function buildEnterpriseVideoRuntime(
   provider: EnterpriseModelProviderConfig,
 ): EnterpriseVideoRuntimeConfig | null {
+  const baseUrl = getEnterpriseVideoBaseUrl(provider)
+  if (!provider.enabled || !baseUrl) {
+    return null
+  }
+
+  if (provider.providerId === "minimax_official") {
+    const fallback = getMiniMaxVideoConfig()
+    const apiKey = getEnterpriseMiniMaxApiKey(provider)
+    if (!apiKey) {
+      return null
+    }
+
+    return {
+      kind: "minimax",
+      providerId: "minimax_official",
+      label: normalizeText(provider.label) || provider.providerId,
+      model: normalizeText(provider.modelId) || DEFAULT_MINIMAX_VIDEO_MODEL,
+      config: {
+        ...fallback,
+        baseUrl,
+        apiKey,
+      },
+    }
+  }
+
   if (provider.providerId !== "runninghub") {
     return null
   }
 
   const fallback = getRunningHubConfig()
   const apiKey = getEnterpriseRunningHubApiKey(provider)
-  const baseUrl = getEnterpriseVideoBaseUrl(provider)
-  if (!provider.enabled || !apiKey || !baseUrl) {
+  if (!apiKey) {
     return null
   }
 
   return {
+    kind: "runninghub",
     providerId: "runninghub",
     label: normalizeText(provider.label) || provider.providerId,
     model: normalizeText(provider.modelId) || null,
@@ -684,14 +729,13 @@ export async function listEnterpriseVideoRuntimeOptionsForUser(
     if (!canUserAccessConfiguredProvider({ user: activeUser, provider })) {
       continue
     }
-    if (
-      !canUserAccessCategoryRoute({
-        user: activeUser,
-        settings,
-        category: "video_generation",
-        routeId: "runninghub-video",
-      })
-    ) {
+    const routeId = provider.providerId === "minimax_official" ? "minimax-video" : "runninghub-video"
+    if (!canUserAccessCategoryRoute({
+      user: activeUser,
+      settings,
+      category: "video_generation",
+      routeId,
+    })) {
       continue
     }
     const runtime = buildEnterpriseVideoRuntime(provider)

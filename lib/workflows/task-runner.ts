@@ -41,9 +41,18 @@ const WORKFLOW_RUN_HEARTBEAT_MS = Math.max(
   5_000,
   Math.min(60_000, Number.parseInt(process.env.WORKFLOW_RUN_HEARTBEAT_MS || "", 10) || 10_000),
 )
+const DEFAULT_WORKFLOW_STALE_RUNNING_MS = 30 * 60_000
+const MAX_WORKFLOW_STALE_RUNNING_MS = 12 * 60 * 60_000
+const configuredWorkflowStaleMs = Number.parseInt(process.env.WORKFLOW_STALE_RUNNING_MS || "", 10)
+const configuredCapabilityTimeoutMs = Number.parseInt(process.env.WORKFLOW_CAPABILITY_TIMEOUT_MS || "", 10)
+const configuredVideoTimeoutMs = Number.parseInt(process.env.WORKFLOW_VIDEO_CAPABILITY_TIMEOUT_MS || "", 10)
 const WORKFLOW_STALE_RUNNING_MS = Math.max(
   WORKFLOW_RUN_HEARTBEAT_MS * 2,
-  Math.min(30 * 60_000, Number.parseInt(process.env.WORKFLOW_STALE_RUNNING_MS || "", 10) || 45_000),
+  Math.min(
+    MAX_WORKFLOW_STALE_RUNNING_MS,
+    configuredWorkflowStaleMs ||
+      Math.max(configuredCapabilityTimeoutMs || 0, configuredVideoTimeoutMs || 0, DEFAULT_WORKFLOW_STALE_RUNNING_MS),
+  ),
 )
 
 function buildExistingNodeStates(detail: WorkflowRunDetail) {

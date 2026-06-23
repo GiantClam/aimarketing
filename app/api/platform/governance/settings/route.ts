@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { updateCustomerGovernanceSettings } from "@/lib/platform/customer-governance"
+import type { EnterpriseModelConfiguration } from "@/lib/platform/model-config"
 
 export const runtime = "nodejs"
 
@@ -19,7 +20,10 @@ export async function PATCH(request: NextRequest) {
         ssoDomain: typeof body.ssoDomain === "string" ? body.ssoDomain : null,
         seatRequestNote: typeof body.seatRequestNote === "string" ? body.seatRequestNote : null,
         runtimeIntakeMode: body.runtimeIntakeMode === "admin_review" ? "admin_review" : "workspace_default",
-        modelConfig: body.modelConfig,
+        modelConfig:
+          body.modelConfig && typeof body.modelConfig === "object"
+            ? (body.modelConfig as EnterpriseModelConfiguration)
+            : undefined,
       },
     })
 

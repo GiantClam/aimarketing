@@ -41,6 +41,7 @@ type MessageContentProps = {
   markdown?: boolean
   role?: "assistant" | "user"
   className?: string
+  bare?: boolean
 }
 
 function MessageContent({
@@ -48,6 +49,7 @@ function MessageContent({
   markdown = false,
   role = "assistant",
   className,
+  bare = false,
 }: MessageContentProps) {
   const bubbleClassName =
     role === "assistant"
@@ -58,8 +60,8 @@ function MessageContent({
     return (
       <Markdown
         className={cn(
-          "px-4 py-3 leading-7",
-          bubbleClassName,
+          bare ? "leading-7" : "px-4 py-3 leading-7",
+          !bare && bubbleClassName,
           role === "assistant"
             ? "prose-a:text-foreground"
             : "prose-a:text-primary-foreground",
@@ -74,8 +76,8 @@ function MessageContent({
   return (
     <div
       className={cn(
-        "px-4 py-3 text-sm leading-7",
-        bubbleClassName,
+        bare ? "text-sm leading-7" : "px-4 py-3 text-sm leading-7",
+        !bare && bubbleClassName,
         className,
       )}
     >

@@ -90,13 +90,17 @@ export async function PATCH(
     if (!numericWorkflowId) {
       return NextResponse.json({ error: "invalid_workflow_id" }, { status: 400 })
     }
+    if (typeof currentUser.enterpriseId !== "number") {
+      return NextResponse.json({ error: "enterprise_context_required" }, { status: 403 })
+    }
+    const enterpriseId = currentUser.enterpriseId
 
     const body = (await measureWorkflowRouteStep("patch.request-json", () => request.json().catch(() => ({})))) as WorkflowUpdateBody
 
     const data = await measureWorkflowRouteStep("patch.update-workflow-definition", () =>
       updateWorkflowDefinition({
         workflowId: numericWorkflowId,
-        enterpriseId: currentUser.enterpriseId,
+        enterpriseId,
         title: typeof body.title === "string" ? body.title : undefined,
         description: body.description,
         status: body.status ?? undefined,

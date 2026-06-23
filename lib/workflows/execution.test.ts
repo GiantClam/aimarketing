@@ -540,5 +540,5 @@ test("product_store echoes upstream outputs for preview rendering", async () => 
     audio: [],
     ppt: [],
   })
-  assert.equal(result.nodeStates["store-1"]?.metadata?.persistenceTarget, "work_library")
+  assert.equal(result.nodeStates["store-1"]?.metadata?.persistenceTarget, "asset_library")
 })

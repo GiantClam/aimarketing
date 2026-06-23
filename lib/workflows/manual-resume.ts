@@ -8,6 +8,8 @@ type WorkflowResumeComparableDetail = {
     id: number
     nodeKey: string
     status: string
+    providerId?: string | null
+    modelId?: string | null
   }>
 }
 

@@ -94,3 +94,22 @@ test("stripPptArtifactRelativeLinks removes raw artifact and work library relati
     ].join("\n\n"),
   )
 })
+
+test("stripPptArtifactRelativeLinks removes inline helper hints around download and work links", () => {
+  const cleaned = stripPptArtifactRelativeLinks(`
+我会优先选 Neo-Grid Bold，因为它更适合管理层汇报。/downloads 不可见时可直接使用这个完整下载链接：
+
+\`/api/platform/artifacts/130/download?download=1\`
+
+该文件也已保存到工作库：\`/dashboard/works\`
+
+如果你要，我下一步可以继续补一版销售提案文案。
+`)
+
+  assert.equal(
+    cleaned,
+    [
+      "如果你要，我下一步可以继续补一版销售提案文案。",
+    ].join("\n\n"),
+  )
+})

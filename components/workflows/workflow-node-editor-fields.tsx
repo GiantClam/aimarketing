@@ -7,6 +7,13 @@ import { AudioLines, ExternalLink, FileUp, ImageIcon, Trash2, Video } from "luci
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { buildModelSelectOptions, buildRuntimeFieldsForModel } from "@/lib/ai-runtime/ui"
+import {
+  findModelByCapabilityAndAlias,
+  getDefaultModelId,
+  getModelDefinition,
+  listModels,
+} from "@/lib/ai-runtime/model-registry"
 import {
   getWorkflowImageDefaultSize,
   getWorkflowImageSizeOptions,
@@ -107,8 +114,8 @@ function asNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
-function asBooleanString(value: unknown, fallback: "true" | "false" = "true") {
-  return value === "false" ? "false" : value === "true" ? "true" : fallback
+function resolveWorkflowVideoCapability(featureId: "text-to-video" | "image-to-video") {
+  return featureId === "image-to-video" ? "video.image_to_video" : "video.text_to_video"
 }
 
 function buildWorkflowModelSelectionValue(input: {
@@ -315,6 +322,13 @@ export function WorkflowNodeEditorFields({
           ratio: "画幅",
           sound: "音频",
           realPerson: "真人模式",
+          avatarImageUrl: "人物图片 URL",
+          audioUrl: "音频 URL",
+          script: "口播文案",
+          scenePrompt: "场景提示词",
+          estimatedVideoSeconds: "视频秒数",
+          audioTrimStart: "音频起点",
+          audioTrimEnd: "音频终点",
           genre: "类型",
           mood: "情绪",
           vocals: "演唱",
@@ -331,7 +345,7 @@ export function WorkflowNodeEditorFields({
           language: "语言",
           fileName: "文件名称",
           fileNamePlaceholder: "留空时自动生成不重复名称",
-          fileNameHint: "如果作品库中存在同名文件，将使用新结果覆盖旧文件。",
+          fileNameHint: "如果素材库中存在同名文件，将使用新结果覆盖旧文件。",
           latestPreview: "最近预览",
           auto: "自动",
           modelAuto: "自动路由",
@@ -374,6 +388,13 @@ export function WorkflowNodeEditorFields({
           ratio: "Ratio",
           sound: "Sound",
           realPerson: "Real-person",
+          avatarImageUrl: "Avatar image URL",
+          audioUrl: "Audio URL",
+          script: "Script",
+          scenePrompt: "Scene prompt",
+          estimatedVideoSeconds: "Video seconds",
+          audioTrimStart: "Audio start",
+          audioTrimEnd: "Audio end",
           genre: "Genre",
           mood: "Mood",
           vocals: "Vocals",
@@ -390,7 +411,7 @@ export function WorkflowNodeEditorFields({
           language: "Language",
           fileName: "File name",
           fileNamePlaceholder: "Leave empty to auto-generate a unique name",
-          fileNameHint: "If the work library already contains the same file name, the new result replaces it.",
+          fileNameHint: "If the asset library already contains the same file name, the new result replaces it.",
           latestPreview: "Latest preview",
           auto: "Auto",
           modelAuto: "Auto routing",
@@ -498,18 +519,37 @@ export function WorkflowNodeEditorFields({
           { value: "text-to-video", label: "Text to video" },
           { value: "image-to-video", label: "Image to video" },
         ]
-  const videoResolutionOptions: OptionItem[] = ["720p", "1080p"].map((value) => ({ value, label: value }))
-  const videoDurationOptions: OptionItem[] = ["5", "10", "15"].map((value) => ({ value, label: locale === "zh" ? `${value}秒` : `${value}s` }))
-  const videoRatioOptions: OptionItem[] = [
-    { value: "adaptive", label: copy.auto },
-    { value: "16:9", label: "16:9" },
-    { value: "9:16", label: "9:16" },
-    { value: "1:1", label: "1:1" },
-  ]
-  const toggleOptions: OptionItem[] = [
-    { value: "true", label: copy.on },
-    { value: "false", label: copy.off },
-  ]
+  const videoFeatureId = asString(node.config.featureId) === "image-to-video" ? "image-to-video" : "text-to-video"
+  const videoCapability = resolveWorkflowVideoCapability(videoFeatureId)
+  const resolvedVideoModel =
+    findModelByCapabilityAndAlias({
+      capability: videoCapability,
+      value: asString(node.config.model),
+    }) ||
+    getModelDefinition(getDefaultModelId(videoCapability) || "") ||
+    listModels({ capability: videoCapability })[0] ||
+    null
+  const currentVideoModelId = resolvedVideoModel?.id || getDefaultModelId(videoCapability) || ""
+  const videoModelOptions: OptionItem[] = buildModelSelectOptions(listModels({ capability: videoCapability })).map((option) => ({
+    value: option.value,
+    label: option.label,
+  }))
+  const videoParameterFields =
+    resolvedVideoModel
+      ? buildRuntimeFieldsForModel(resolvedVideoModel, locale).filter((field) => field.id !== "model")
+      : []
+  const digitalHumanModelOptions: OptionItem[] = buildModelSelectOptions(listModels({ capability: "video.digital_human" })).map((option) => ({
+    value: option.value,
+    label: option.label,
+  }))
+  const currentDigitalHumanModelId =
+    findModelByCapabilityAndAlias({
+      capability: "video.digital_human",
+      value: asString(node.config.model),
+    })?.id ||
+    getDefaultModelId("video.digital_human") ||
+    digitalHumanModelOptions[0]?.value ||
+    ""
   const audioGenreOptions: OptionItem[] =
     locale === "zh"
       ? [
@@ -1142,51 +1182,160 @@ export function WorkflowNodeEditorFields({
             <OptionChips
               options={videoModeOptions}
               value={asString(node.config.featureId) || "text-to-video"}
-              onChange={(value) => updateConfig({ featureId: value })}
+              onChange={(value) => {
+                const nextFeatureId = value === "image-to-video" ? "image-to-video" : "text-to-video"
+                const currentModel = asString(node.config.model)
+                const modelStillSupported = Boolean(
+                  findModelByCapabilityAndAlias({
+                    capability: resolveWorkflowVideoCapability(nextFeatureId),
+                    value: currentModel,
+                  }),
+                )
+                updateConfig({
+                  featureId: value,
+                  ...(modelStillSupported ? {} : { model: getDefaultModelId(resolveWorkflowVideoCapability(nextFeatureId)) || "" }),
+                })
+              }}
             />
           </div>
           <div className="space-y-2">
-            <SectionLabel>{copy.resolution}</SectionLabel>
-            <OptionChips
-              options={videoResolutionOptions}
-              value={asString(node.config.resolution) || "720p"}
-              onChange={(value) => updateConfig({ resolution: value })}
+            <SectionLabel>{copy.model}</SectionLabel>
+            <select
+              value={currentVideoModelId}
+              onChange={(event) => updateConfig({ model: event.target.value })}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {videoModelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {videoParameterFields.map((field) => (
+            <div key={field.id} className="space-y-2">
+              <SectionLabel>{field.label}</SectionLabel>
+              {field.type === "textarea" ? (
+                <Textarea
+                  value={asString(node.config[field.id]) || field.defaultValue || ""}
+                  onChange={(event) => updateConfig({ [field.id]: event.target.value })}
+                  className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+                />
+              ) : field.type === "select" ? (
+                <select
+                  value={asString(node.config[field.id]) || field.defaultValue || ""}
+                  onChange={(event) => updateConfig({ [field.id]: event.target.value })}
+                  className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+                >
+                  {(field.options || []).map((option) => (
+                    <option key={`${field.id}-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  type={field.type === "number" ? "number" : "text"}
+                  value={asString(node.config[field.id]) || field.defaultValue || ""}
+                  onChange={(event) => updateConfig({ [field.id]: event.target.value })}
+                  placeholder={field.placeholder}
+                  className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {node.type === "digital_human" ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <SectionLabel>{copy.model}</SectionLabel>
+            <select
+              value={currentDigitalHumanModelId}
+              onChange={(event) => updateConfig({ model: event.target.value })}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {digitalHumanModelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <SectionLabel>{copy.avatarImageUrl}</SectionLabel>
+            <Input
+              value={asString(node.config.avatarImageUrl)}
+              onChange={(event) => updateConfig({ avatarImageUrl: event.target.value })}
+              className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
             />
           </div>
           <div className="space-y-2">
-            <SectionLabel>{copy.duration}</SectionLabel>
-            <OptionChips
-              options={videoDurationOptions}
-              value={asString(node.config.duration) || "5"}
-              onChange={(value) => updateConfig({ duration: value })}
+            <SectionLabel>{copy.audioUrl}</SectionLabel>
+            <Input
+              value={asString(node.config.audioUrl)}
+              onChange={(event) => updateConfig({ audioUrl: event.target.value })}
+              className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
             />
           </div>
           <div className="space-y-2">
-            <SectionLabel>{copy.ratio}</SectionLabel>
-            <OptionChips
-              options={videoRatioOptions}
-              value={asString(node.config.ratio) || "adaptive"}
-              onChange={(value) => updateConfig({ ratio: value })}
+            <SectionLabel>{copy.script}</SectionLabel>
+            <Textarea
+              value={asString(node.config.script)}
+              onChange={(event) => updateConfig({ script: event.target.value })}
+              className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
             />
           </div>
           <div className="space-y-2">
-            <SectionLabel>{copy.sound}</SectionLabel>
-            <OptionChips
-              options={toggleOptions}
-              value={asBooleanString(node.config.generateAudio)}
-              onChange={(value) => updateConfig({ generateAudio: value })}
+            <SectionLabel>{copy.scenePrompt}</SectionLabel>
+            <Textarea
+              value={asString(node.config.scenePrompt)}
+              onChange={(event) => updateConfig({ scenePrompt: event.target.value })}
+              className="min-h-20 rounded-[10px] border-border/80 bg-background/80 text-sm"
             />
           </div>
-          {(asString(node.config.featureId) || "text-to-video") === "image-to-video" ? (
+          <div className="grid grid-cols-3 gap-2">
             <div className="space-y-2">
-              <SectionLabel>{copy.realPerson}</SectionLabel>
-              <OptionChips
-                options={toggleOptions}
-                value={asBooleanString(node.config.realPersonMode)}
-                onChange={(value) => updateConfig({ realPersonMode: value })}
+              <SectionLabel>{copy.estimatedVideoSeconds}</SectionLabel>
+              <Input
+                type="number"
+                min={1}
+                value={asString(node.config.durationSeconds) || "10"}
+                onChange={(event) => updateConfig({ durationSeconds: event.target.value })}
+                className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
               />
             </div>
-          ) : null}
+            <div className="space-y-2">
+              <SectionLabel>{copy.audioTrimStart}</SectionLabel>
+              <Input
+                type="number"
+                min={0}
+                value={asString(node.config.audioTrimStart)}
+                onChange={(event) => updateConfig({ audioTrimStart: event.target.value })}
+                className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <SectionLabel>{copy.audioTrimEnd}</SectionLabel>
+              <Input
+                type="number"
+                min={0}
+                value={asString(node.config.audioTrimEnd)}
+                onChange={(event) => updateConfig({ audioTrimEnd: event.target.value })}
+                className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <SectionLabel>Seed</SectionLabel>
+            <Input
+              type="number"
+              value={asString(node.config.seed) || "-1"}
+              onChange={(event) => updateConfig({ seed: event.target.value })}
+              className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+            />
+          </div>
         </div>
       ) : null}
 

@@ -516,8 +516,8 @@ export function WorkspaceBusinessAgentWorkbench({
   }
 
   return (
-    <section className="space-y-3 overflow-x-hidden sm:space-y-4">
-      <div className="overflow-x-hidden rounded-[12px] border border-border bg-card/75">
+    <section className="flex h-full min-h-0 flex-col space-y-3 overflow-x-hidden sm:space-y-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden rounded-[12px] border border-border bg-card/75">
         <div className="border-b border-border bg-muted/20 px-2 py-1 sm:px-3 sm:py-1.5">
           <div className="flex items-center gap-2 overflow-hidden">
             <div
@@ -604,7 +604,7 @@ export function WorkspaceBusinessAgentWorkbench({
           </div>
         </div>
 
-        <div className="p-1 sm:p-1.5">
+        <div className="min-h-0 flex-1 p-1 sm:p-1.5">
           <AiEntryWorkspace
             key={`${activeTab.id}:${activeTab.workspaceVersion}`}
             initialConversationId={activeTab.conversationId}

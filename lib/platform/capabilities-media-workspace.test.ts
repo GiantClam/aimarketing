@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { getCapabilityMediaWorkspaceFeatures } from "@/lib/platform/capabilities-media-workspace"
+import {
+  getCapabilityMediaWorkspaceFeatures,
+  resolveCapabilityMediaWorkspaceVideoFields,
+} from "@/lib/platform/capabilities-media-workspace"
 
 test("media workspace exposes grouped audio and video features", () => {
   const zh = getCapabilityMediaWorkspaceFeatures("zh")
@@ -46,4 +49,22 @@ test("video workspace copy and feature set stay scoped to the four shipped video
     videoFeatures.map((item) => item.id),
     ["text-to-video", "image-to-video", "digital-human", "video-enhance"],
   )
+})
+
+test("video workspace model schema switches with the selected registry model", () => {
+  const minimaxFields = resolveCapabilityMediaWorkspaceVideoFields(
+    "en",
+    "text-to-video",
+    "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
+  )
+  const runningHubFields = resolveCapabilityMediaWorkspaceVideoFields(
+    "en",
+    "text-to-video",
+    "runninghub:video:seedance-text-to-video",
+  )
+
+  assert.equal(minimaxFields[0]?.id, "model")
+  assert.equal(minimaxFields.some((field) => field.id === "ratio"), false)
+  assert.equal(runningHubFields.some((field) => field.id === "ratio"), true)
+  assert.equal(runningHubFields.some((field) => field.id === "generateAudio"), true)
 })

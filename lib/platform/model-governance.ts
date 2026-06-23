@@ -26,7 +26,7 @@ import { getPlatformRuntimeSnapshot } from "@/lib/platform/runtime"
 export { buildGovernedAiEntryModelCatalog, buildGovernedWorkflowImageProviderOptions, canUserAccessAssignedRoute }
 export type { ModelGovernanceUser }
 
-type GovernedMediaRouteId = "runninghub-image" | "runninghub-video" | "minimax-audio"
+type GovernedMediaRouteId = "runninghub-image" | "runninghub-video" | "minimax-video" | "minimax-audio"
 type ImageAssistantOptionSource = "workspace" | "enterprise"
 
 export type GovernedImageAssistantModelOption = {

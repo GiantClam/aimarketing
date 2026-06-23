@@ -4,6 +4,19 @@ import test from "node:test"
 
 import { writerFetch } from "./network"
 
+function setEnv(
+  name: "NODE_ENV" | "LOCAL_DEV_HTTP_PROXY" | "NODE_TLS_REJECT_UNAUTHORIZED",
+  value: string | undefined,
+) {
+  const env = process.env as Record<string, string | undefined>
+  if (typeof value === "string") {
+    env[name] = value
+    return
+  }
+
+  delete env[name]
+}
+
 const TEST_KEY = `-----BEGIN PRIVATE KEY-----
 MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDJGpOWAhgJnR7E
 ZYu424fbjM+lAiUKQTtvgcJRMVQZO1ld7R5nVK0R3WXfmgPIgaT0C/nAhGga8UZw
@@ -57,9 +70,9 @@ test("writerFetch falls back to direct connection when configured proxy is refus
   const previousProxy = process.env.LOCAL_DEV_HTTP_PROXY
   const previousNodeEnv = process.env.NODE_ENV
   const previousTlsReject = process.env.NODE_TLS_REJECT_UNAUTHORIZED
-  process.env.NODE_ENV = "development"
-  process.env.LOCAL_DEV_HTTP_PROXY = "http://127.0.0.1:7890"
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+  setEnv("NODE_ENV", "development")
+  setEnv("LOCAL_DEV_HTTP_PROXY", "http://127.0.0.1:7890")
+  setEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0")
 
   let hitCount = 0
   const server = https.createServer({ key: TEST_KEY, cert: TEST_CERT }, (req, res) => {
@@ -79,20 +92,8 @@ test("writerFetch falls back to direct connection when configured proxy is refus
     assert.equal(hitCount, 1)
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
-    if (typeof previousProxy === "string") {
-      process.env.LOCAL_DEV_HTTP_PROXY = previousProxy
-    } else {
-      delete process.env.LOCAL_DEV_HTTP_PROXY
-    }
-    if (typeof previousNodeEnv === "string") {
-      process.env.NODE_ENV = previousNodeEnv
-    } else {
-      delete process.env.NODE_ENV
-    }
-    if (typeof previousTlsReject === "string") {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsReject
-    } else {
-      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED
-    }
+    setEnv("LOCAL_DEV_HTTP_PROXY", previousProxy)
+    setEnv("NODE_ENV", previousNodeEnv)
+    setEnv("NODE_TLS_REJECT_UNAUTHORIZED", previousTlsReject)
   }
 })

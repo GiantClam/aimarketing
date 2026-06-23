@@ -92,6 +92,7 @@ test("syncPlatformTaskRuns patches generic runninghub runs with normalized resul
           externalSystem: "runninghub",
           externalRunId: "rh-1",
           createdAt: new Date(),
+          inputPayload: null,
           normalizedResult: null,
         },
       ],
@@ -152,6 +153,7 @@ test("syncPlatformTaskRuns uses minimax query helper and warns on unsupported up
           externalSystem: "minimax",
           externalRunId: "mm-1",
           createdAt: new Date(),
+          inputPayload: null,
           normalizedResult: null,
         },
         {
@@ -164,6 +166,7 @@ test("syncPlatformTaskRuns uses minimax query helper and warns on unsupported up
           externalSystem: "writer",
           externalRunId: "writer-1",
           createdAt: new Date(),
+          inputPayload: null,
           normalizedResult: null,
         },
       ],
@@ -203,4 +206,87 @@ test("syncPlatformTaskRuns uses minimax query helper and warns on unsupported up
   assert.equal(minimaxCalls, 1)
   assert.equal(events[0]?.runId, 22)
   assert.equal(events[0]?.message, "platform_task_sync_unsupported_upstream")
+})
+
+test("syncPlatformTaskRuns routes minimax and runninghub video runs through video query helpers", async () => {
+  let minimaxVideoCalls = 0
+  let runningHubVideoCalls = 0
+
+  const result = await syncPlatformTaskRuns(
+    { limit: 10 },
+    {
+      listRuns: async () => [
+        {
+          id: 31,
+          enterpriseId: 5,
+          userId: 9,
+          kind: "media",
+          itemSlug: "text-to-video",
+          status: "running",
+          externalSystem: "minimax",
+          externalRunId: "hailuo-1",
+          createdAt: new Date(),
+          inputPayload: null,
+          normalizedResult: null,
+        },
+        {
+          id: 32,
+          enterpriseId: 5,
+          userId: 9,
+          kind: "media",
+          itemSlug: "image-to-video",
+          status: "running",
+          externalSystem: "runninghub",
+          externalRunId: "seedance-1",
+          createdAt: new Date(),
+          inputPayload: null,
+          normalizedResult: null,
+        },
+      ],
+      appendEvent: async (runId, input) => ({
+        id: 1,
+        runId,
+        level: input.level,
+        message: input.message,
+        payload: input.payload ?? null,
+        createdAt: new Date(),
+      }),
+      queryMiniMaxVideoTask: async () => {
+        minimaxVideoCalls += 1
+        return {
+          taskId: "31",
+          mediaTarget: "ai-video",
+          requestedTarget: "text-to-video",
+          provider: "minimax",
+          status: "RUNNING",
+          results: [],
+          raw: {
+            task_id: "hailuo-1",
+          },
+        }
+      },
+      queryRunningHubVideoTask: async () => {
+        runningHubVideoCalls += 1
+        return {
+          taskId: "32",
+          mediaTarget: "ai-video",
+          requestedTarget: "image-to-video",
+          provider: "runninghub",
+          status: "RUNNING",
+          results: [],
+          raw: {
+            taskId: "seedance-1",
+          },
+        }
+      },
+    },
+  )
+
+  assert.deepEqual(result, {
+    scanned: 2,
+    updated: 2,
+    failed: 0,
+  })
+  assert.equal(minimaxVideoCalls, 1)
+  assert.equal(runningHubVideoCalls, 1)
 })

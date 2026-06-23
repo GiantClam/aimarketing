@@ -1,5 +1,7 @@
 import { getImageAssistantAvailability } from "@/lib/image-assistant/aiberm"
 import { getMiniMaxAudioConfig, isMiniMaxAudioConfigured } from "@/lib/platform/minimax-audio"
+import { getMiniMaxVideoConfig, isMiniMaxVideoConfigured } from "@/lib/platform/minimax-video"
+import { DEFAULT_MINIMAX_VIDEO_MODEL } from "@/lib/platform/minimax-video-options"
 import { getRunningHubConfig, hasRunningHubMediaExecution, isRunningHubConfiguredForTarget } from "@/lib/platform/runninghub"
 import { isVideoGenerationEnabled } from "@/lib/runtime-features"
 import type {
@@ -22,6 +24,7 @@ type PlatformMediaRuntimeBuildInput = {
   videoRuntimeEnabled: boolean
   runningHubConfig: ReturnType<typeof getRunningHubConfig>
   minimaxConfig: ReturnType<typeof getMiniMaxAudioConfig>
+  minimaxVideoConfig?: ReturnType<typeof getMiniMaxVideoConfig>
 }
 
 function uniqueNotes(values: string[]) {
@@ -44,15 +47,18 @@ export function buildPlatformMediaRuntimeEntries() {
     videoRuntimeEnabled: isVideoGenerationEnabled(),
     runningHubConfig: getRunningHubConfig(),
     minimaxConfig: getMiniMaxAudioConfig(),
+    minimaxVideoConfig: getMiniMaxVideoConfig(),
   })
 }
 
 export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRuntimeBuildInput) {
   const { imageAvailability, videoRuntimeEnabled, runningHubConfig, minimaxConfig } = input
+  const minimaxVideoConfig = input.minimaxVideoConfig ?? getMiniMaxVideoConfig()
   const runningHubImageConfigured = isRunningHubConfiguredForTarget("ai-image", runningHubConfig)
   const runningHubVideoConfigured = isRunningHubConfiguredForTarget("ai-video", runningHubConfig)
   const minimaxAudioConfigured = isMiniMaxAudioConfigured(minimaxConfig)
-  const mediaRuntimeEnabled = hasRunningHubMediaExecution(runningHubConfig)
+  const minimaxVideoConfigured = isMiniMaxVideoConfigured(minimaxVideoConfig)
+  const mediaRuntimeEnabled = hasRunningHubMediaExecution(runningHubConfig) || minimaxVideoConfigured || minimaxAudioConfigured
 
   const providers: PlatformProviderRuntime[] = [
     {
@@ -86,20 +92,36 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
       ],
     },
     {
+      id: "minimax-video",
+      scope: "video",
+      configured: minimaxVideoConfigured,
+      active: minimaxVideoConfigured,
+      model: DEFAULT_MINIMAX_VIDEO_MODEL,
+      baseURL: minimaxVideoConfig.baseUrl,
+      role: minimaxVideoConfigured ? "primary" : "planned",
+      capabilitySlugs: ["ai-video"],
+      notes: [
+        minimaxVideoConfigured
+          ? "Configured as the default MiniMax Hailuo video provider for text-to-video and image-to-video."
+          : "Reserved as the default video provider until LEAD_TOOLS_MINIMAX_API_KEY is configured.",
+        "Video generation uses the official MiniMax video_generation, query/video_generation, and files/retrieve APIs.",
+      ],
+    },
+    {
       id: "runninghub-video",
       scope: "video",
       configured: runningHubVideoConfigured,
-      active: runningHubVideoConfigured,
+      active: !minimaxVideoConfigured && runningHubVideoConfigured,
       model: null,
       baseURL: runningHubConfig.baseUrl,
-      role: runningHubVideoConfigured ? "primary" : "planned",
+      role: runningHubVideoConfigured ? (minimaxVideoConfigured ? "fallback" : "primary") : "planned",
       capabilitySlugs: ["ai-video", "runninghub-media"],
       notes: [
         runningHubVideoConfigured
-          ? "Configured as the shared video provider in the unified media runtime."
+          ? "Configured as the shared RunningHub video workflow provider."
           : "Reserved as the target video provider in the shared media runtime.",
         runningHubVideoConfigured
-          ? "Video capability can execute through the platform media adapter."
+          ? "RunningHub remains available for workflow-backed video tasks such as digital human and video enhancement."
           : "Current video entry still relies on the existing dashboard/video workflow.",
       ],
     },
@@ -141,16 +163,20 @@ export function buildPlatformMediaRuntimeEntriesFromState(input: PlatformMediaRu
       id: "ai-video-runtime",
       capabilitySlug: "ai-video",
       title: "AI video workspace",
-      mode: runningHubVideoConfigured || videoRuntimeEnabled ? "async" : "deferred",
-      enabled: runningHubVideoConfigured || videoRuntimeEnabled,
-      runtimeId: runningHubVideoConfigured ? "runninghub-video" : "dashboard-video",
+      mode: minimaxVideoConfigured || runningHubVideoConfigured || videoRuntimeEnabled ? "async" : "deferred",
+      enabled: minimaxVideoConfigured || runningHubVideoConfigured || videoRuntimeEnabled,
+      runtimeId: minimaxVideoConfigured ? "minimax-video" : runningHubVideoConfigured ? "runninghub-video" : "dashboard-video",
       statuses: ["queued", "running", "succeeded", "failed", "cancelled"],
       notes: [
-        runningHubVideoConfigured
-          ? "Video routes can execute through the shared RunningHub media adapter."
+        minimaxVideoConfigured
+          ? "Text-to-video and image-to-video execute through the official MiniMax Hailuo video API."
+          : runningHubVideoConfigured
+            ? "Video routes can execute through the shared RunningHub media adapter."
           : "Video routes are protected by workspace permission checks.",
-        runningHubVideoConfigured
-          ? "Platform media execution is configured for video tasks."
+        minimaxVideoConfigured
+          ? "MiniMax is the default video model; RunningHub remains a workflow fallback when configured."
+          : runningHubVideoConfigured
+            ? "Platform media execution is configured for video tasks."
           : videoRuntimeEnabled
             ? "Video runtime is enabled in the current environment."
             : "Video runtime is currently disabled by runtime flags.",

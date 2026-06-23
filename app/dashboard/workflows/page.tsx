@@ -24,7 +24,7 @@ export default async function DashboardWorkflowsPage() {
 
   const workflows = await listWorkflowDefinitionsForEnterprise(enterpriseId)
 
-  const recentRuns = (await listRecentWorkflowTaskRunsForEnterprise(enterpriseId, 10))
+  const recentRuns = (await listRecentWorkflowTaskRunsForEnterprise(enterpriseId, 60))
     .map((run) => ({
       id: run.id,
       workflowId: getWorkflowIdFromNormalizedResult(run.normalizedResult),
@@ -45,6 +45,7 @@ export default async function DashboardWorkflowsPage() {
       locale={displayLocale}
       initialWorkflows={serializedWorkflows}
       recentRuns={recentRuns}
+      currentUserName={currentUser.name}
     />
   )
 }
