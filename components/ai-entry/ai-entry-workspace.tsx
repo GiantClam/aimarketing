@@ -29,6 +29,9 @@ import {
   MessageAvatar,
   MessageContent,
 } from "@/components/ai-entry/prompt-kit/message"
+import { MessagePartViewList } from "@/components/ai-entry/message-parts/message-part-view"
+import { applySseEvent } from "@/lib/ai-entry/message-parts/reducer"
+import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
 import {
   PromptInput,
   PromptInputAction,
@@ -140,6 +143,7 @@ type ChatMessage = {
   id: string
   role: "user" | "assistant"
   content: string
+  parts?: MessagePart[]
   attachments?: ChatAttachment[]
   createdAt?: number
 }
@@ -1856,6 +1860,18 @@ export function AiEntryWorkspace({
 
         const processEvent = (event: ChatStreamApiResponse) => {
           const now = Date.now()
+          setMessages((previous) => {
+            const target = previous.find((item) => item.id === assistantMessageId)
+            if (!target) return previous
+            const currentParts = target.parts ?? []
+            const nextParts = applySseEvent(currentParts, event)
+            if (nextParts === currentParts) return previous
+            const next = previous.map((item) =>
+              item.id === assistantMessageId ? { ...item, parts: nextParts } : item,
+            )
+            savePendingConversationMessages(latestConversationIdRef.current, next)
+            return next
+          })
           const streamConversationId =
             typeof event.conversation_id === "string" && event.conversation_id.trim()
               ? event.conversation_id.trim()
@@ -2590,10 +2606,16 @@ export function AiEntryWorkspace({
                   isAssistant &&
                   isLoading &&
                   index === messages.length - 1 &&
-                  !message.content.trim()
+                  !message.content.trim() &&
+                  !message.parts?.length
                 const shouldShowLoadingDetails = isPendingAssistant
-                const artifact = isAssistant ? parseArtifactResult(message.content) : null
-                const bodyContent = artifact?.body ?? message.content
+                const parsedArtifact = isAssistant ? parseArtifactResult(message.content) : null
+                const bodyContent = parsedArtifact?.body ?? message.content
+                const hasParts = Boolean(message.parts?.length)
+                const nonTextParts = hasParts ? message.parts ?? [] : []
+                const artifactPart = hasParts
+                  ? (message.parts ?? []).find((part): part is ArtifactPart => part.type === "artifact")
+                  : null
                 return isAssistant ? (
                   <article key={message.id} className="message-card">
                     <div className="message-header">
@@ -2612,11 +2634,14 @@ export function AiEntryWorkspace({
                     ) : bodyContent ? (
                       <MessageContent bare markdown role="assistant" className="message-body p-0">{bodyContent}</MessageContent>
                     ) : null}
-                    {artifact ? (
+                    {parsedArtifact && !hasParts ? (
                       <>
                         <div className="message-divider" />
-                        <ArtifactResultBlock artifact={artifact} />
+                        <ArtifactResultBlock artifact={parsedArtifact} />
                       </>
+                    ) : null}
+                    {nonTextParts.length ? (
+                      <MessagePartViewList parts={nonTextParts} isZh={isZh} />
                     ) : null}
                     {shouldShowLoadingDetails ? (
                       <div className="mt-5 rounded-[12px] border border-[#e7e7df] bg-[#fafaf7] p-4">
@@ -2649,18 +2674,26 @@ export function AiEntryWorkspace({
                             <TextMorph text={copied ? copy.copied : copy.copy} />
                           </button>
                         </MessageAction>
-                        {artifact?.workHref ? (
-                          <a className="action-secondary" href={artifact.workHref}>
-                            <LibraryBig className="h-4 w-4" />
-                            {isZh ? "打开作品库" : "Open in Works"}
-                          </a>
-                        ) : null}
-                        {artifact?.downloadHref ? (
-                          <a className="action-secondary" href={artifact.downloadHref} target="_blank" rel="noreferrer">
-                            <Download className="h-4 w-4" />
-                            {isZh ? "导出" : "Export"}
-                          </a>
-                        ) : null}
+                        {(() => {
+                          const workHref = artifactPart?.workHref ?? parsedArtifact?.workHref ?? null
+                          const downloadHref = artifactPart?.downloadUrl ?? parsedArtifact?.downloadHref ?? null
+                          return (
+                            <>
+                              {workHref ? (
+                                <a className="action-secondary" href={workHref}>
+                                  <LibraryBig className="h-4 w-4" />
+                                  {isZh ? "打开作品库" : "Open in Works"}
+                                </a>
+                              ) : null}
+                              {downloadHref ? (
+                                <a className="action-secondary" href={downloadHref} target="_blank" rel="noreferrer">
+                                  <Download className="h-4 w-4" />
+                                  {isZh ? "导出" : "Export"}
+                                </a>
+                              ) : null}
+                            </>
+                          )
+                        })()}
                       </div>
                     ) : null}
                   </article>
