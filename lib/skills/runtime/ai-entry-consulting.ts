@@ -1,32 +1,28 @@
-import type { ToolSet } from "ai"
-
-import {
-  getAiEntryMcpServerUrls,
-  loadAiEntryMcpTools,
-  selectAiEntryTools,
-} from "@/lib/ai-entry/mcp-tools"
+import { filterAllowedAiEntrySkillIds, resolveAiEntryAgentRuntimePolicy, type AiEntryAgentRuntimePolicy } from "@/lib/ai-entry/agent-runtime-policy"
+import { buildAiEntrySkillInstruction, getAiEntrySkillsByIds, type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import {
   isExecutiveConsultingAgent,
   loadExecutiveSkillForAgent,
 } from "@/lib/ai-entry/executive-skill-loader"
 import { routeExecutiveAgentByPrompt } from "@/lib/ai-entry/executive-agent-router"
+import { routeAiEntrySkills, type AiEntrySkillRouteDecision } from "@/lib/ai-entry/skill-router"
 
 type AiEntryConsultingPreparationInput = {
   latestUserPrompt: string
   requestedAgentId: string | null
   lockModelToConsultingModel: boolean
   skillsEnabled: boolean
-  enabledToolNames: string[]
+  enabledSkillIds: string[]
 }
 
 export type AiEntryConsultingPreparationResult = {
   effectiveAgentId: string | null
   routeDecision: ReturnType<typeof routeExecutiveAgentByPrompt> | null
+  skillRouteDecision: AiEntrySkillRouteDecision | null
+  selectedSkills: AiEntrySkillDefinition[]
+  selectedSkillIds: string[]
+  runtimePolicy: AiEntryAgentRuntimePolicy
   resolvedInstruction: string
-  selectedTools: ToolSet
-  selectedToolIds: string[]
-  closeTools: (() => Promise<void>) | null
-  toolLoadWarning: string | null
 }
 
 export async function prepareAiEntryConsultingRuntime(
@@ -47,41 +43,34 @@ export async function prepareAiEntryConsultingRuntime(
     }
   }
 
-  let selectedTools = {} as ToolSet
-  let selectedToolIds: string[] = []
-  let closeTools: (() => Promise<void>) | null = null
-  let toolLoadWarning: string | null = null
-
-  if (input.skillsEnabled) {
-    const urls = getAiEntryMcpServerUrls()
-    if (urls.length > 0) {
-      try {
-        const loaded = await loadAiEntryMcpTools(urls)
-        closeTools = loaded.close
-        const loadedTools =
-          loaded.tools && typeof loaded.tools === "object"
-            ? loaded.tools
-            : ({} as ToolSet)
-        selectedTools =
-          input.enabledToolNames.length > 0
-            ? selectAiEntryTools(loadedTools, input.enabledToolNames)
-            : loadedTools
-        selectedToolIds = Object.keys((selectedTools || {}) as Record<string, unknown>)
-      } catch (error) {
-        selectedTools = {} as ToolSet
-        selectedToolIds = []
-        toolLoadWarning = error instanceof Error ? error.message : String(error)
-      }
-    }
-  }
+  const runtimePolicy = resolveAiEntryAgentRuntimePolicy({
+    agentId: effectiveAgentId,
+  })
+  const skillRouteDecision = input.skillsEnabled
+    ? routeAiEntrySkills({
+        latestUserPrompt: input.latestUserPrompt,
+        requestedAgentId: effectiveAgentId,
+        requestedSkillIds: input.enabledSkillIds,
+      })
+    : null
+  const selectedSkillIds = filterAllowedAiEntrySkillIds(
+    skillRouteDecision?.selectedSkillIds ?? [],
+    runtimePolicy,
+  )
+  const selectedSkills = getAiEntrySkillsByIds(selectedSkillIds)
+  const skillInstruction = buildAiEntrySkillInstruction(selectedSkillIds)
+  const mergedInstruction = [resolvedInstruction, skillInstruction]
+    .map((section) => section.trim())
+    .filter(Boolean)
+    .join("\n\n")
 
   return {
     effectiveAgentId,
     routeDecision,
-    resolvedInstruction,
-    selectedTools,
-    selectedToolIds,
-    closeTools,
-    toolLoadWarning,
+    skillRouteDecision,
+    selectedSkills,
+    selectedSkillIds,
+    runtimePolicy,
+    resolvedInstruction: mergedInstruction,
   }
 }

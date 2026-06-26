@@ -25,18 +25,21 @@ Only ask for missing essentials such as:
 
 ## Tool usage rules
 
-Two PPT tools are available in chat:
+Three tools are available in chat for research-backed PPT generation:
 
+- `web_search`
 - `preview_ppt_deck`
 - `export_ppt_deck`
 
 When the user clearly wants a PPT file, follow this sequence:
 
 1. Clarify only missing essentials.
-2. Call `preview_ppt_deck`.
-3. Review the returned variants.
-4. Choose the variant that best matches the user's goal and tone.
-5. Call `export_ppt_deck` in the same turn unless the user explicitly asked to compare options first.
+2. If the deck depends on external facts, current events, market context, companies, policies, or time-sensitive claims, call `web_search` first.
+3. Turn search findings into a concise research brief before generating slides.
+4. Call `preview_ppt_deck` with the research-backed brief instead of relying on the raw user prompt alone.
+5. Review the returned variants.
+6. Choose the variant that best matches the user's goal and tone.
+7. Call `export_ppt_deck` in the same turn unless the user explicitly asked to compare options first.
 
 ## Response rules after export
 

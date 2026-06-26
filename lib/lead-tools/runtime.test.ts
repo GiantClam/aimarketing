@@ -325,6 +325,52 @@ test("ppt preview delegates to the configured preview engine and preserves respo
   assert.equal(result.meta.exportRuntime, "ppt-master-agent")
 })
 
+test("ppt preview forwards researchBrief to the preview engine", async () => {
+  await buildLeadToolPreview("ai-ppt-preview", {
+    prompt: "做一份霍尔木兹海峡现状汇报",
+    researchBrief: "关键事实：保费上升、航线风险扩大、库存前移。",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+  })
+
+  assert.equal(previewCalls.length, 1)
+  assert.deepEqual(previewCalls[0]?.[0], {
+    prompt: "做一份霍尔木兹海峡现状汇报",
+    researchBrief: "关键事实：保费上升、航线风险扩大、库存前移。",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    templateMode: "auto-4",
+  })
+})
+
+test("ppt preview forwards structured researchBrief objects to the preview engine", async () => {
+  await buildLeadToolPreview("ai-ppt-preview", {
+    prompt: "做一份霍尔木兹海峡现状汇报",
+    researchBrief: {
+      topic: "霍尔木兹海峡现状",
+      keyFacts: ["保费上升", "航线风险扩大"],
+      implications: ["库存前移"],
+      rawSummary: "关键事实：保费上升、航线风险扩大、库存前移。",
+    },
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+  })
+
+  assert.equal(previewCalls.length, 1)
+  assert.deepEqual(previewCalls[0]?.[0], {
+    prompt: "做一份霍尔木兹海峡现状汇报",
+    researchBrief: {
+      topic: "霍尔木兹海峡现状",
+      keyFacts: ["保费上升", "航线风险扩大"],
+      implications: ["库存前移"],
+      rawSummary: "关键事实：保费上升、航线风险扩大、库存前移。",
+    },
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    templateMode: "auto-4",
+  })
+})
+
 test("ppt preview persists platform run metadata when an enterprise user is available", async () => {
   const user = {
     id: 7,

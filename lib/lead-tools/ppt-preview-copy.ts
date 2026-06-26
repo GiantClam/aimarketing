@@ -1,4 +1,9 @@
-import type { PptPreviewRequest, PptPreviewSlide, PptPreviewStyleKey } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import type {
+  PptPreviewRequest,
+  PptPreviewResearchBrief,
+  PptPreviewSlide,
+  PptPreviewStyleKey,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 export function trimPreviewTerminalPunctuation(value: string) {
   return value.trim().replace(/[。！？.!?]+$/u, "")
@@ -24,6 +29,24 @@ function appendPreviewTerminalPunctuation(value: string, language: PptPreviewReq
 export function isPreviewPlaceholder(value: string) {
   const normalized = value.trim().toLowerCase()
   return !normalized || normalized.includes("待确认") || normalized.includes("placeholder") || normalized.includes("tbd")
+}
+
+function formatResearchBrief(value: PptPreviewRequest["researchBrief"]) {
+  if (!value) return null
+  if (typeof value === "string") return value
+
+  const brief = value as PptPreviewResearchBrief
+  return [
+    `Topic: ${brief.topic}`,
+    brief.keyFacts?.length ? `Key facts:\n- ${brief.keyFacts.join("\n- ")}` : null,
+    brief.numericEvidence?.length ? `Numeric evidence:\n- ${brief.numericEvidence.join("\n- ")}` : null,
+    brief.risks?.length ? `Risks:\n- ${brief.risks.join("\n- ")}` : null,
+    brief.implications?.length ? `Implications:\n- ${brief.implications.join("\n- ")}` : null,
+    brief.sourceNotes?.length ? `Source notes:\n- ${brief.sourceNotes.join("\n- ")}` : null,
+    brief.rawSummary ? `Raw summary:\n${brief.rawSummary}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n")
 }
 
 type PreviewPromptOptions = {
@@ -95,8 +118,10 @@ export function buildPreviewSystemPrompt(request: PptPreviewRequest, options: Pr
 
 export function buildPreviewUserPrompt(request: PptPreviewRequest, options: PreviewPromptOptions) {
   const pageCount = request.pageCount ?? 9
+  const researchBrief = formatResearchBrief(request.researchBrief)
   return [
     `Topic: ${request.prompt}`,
+    researchBrief ? `Research brief:\n${researchBrief}` : null,
     `Scenario: ${request.scenario}`,
     `Language: ${request.language}`,
     `Page count: ${pageCount}`,
@@ -105,7 +130,9 @@ export function buildPreviewUserPrompt(request: PptPreviewRequest, options: Prev
     options.templateLabel ? `Template: ${options.templateLabel}` : null,
     options.narrativeAngleLabel ? `Narrative angle: ${options.narrativeAngleLabel}` : null,
     "Generate one concrete PPT preview plan that feels ready for a real customer-facing deck.",
-    "Assume the model must synthesize the content directly without web research or citations.",
+    researchBrief
+      ? "Use the research brief as the factual basis for the deck. Prefer concrete facts, current signals, and evidence from the brief over generic filler."
+      : "Assume the model must synthesize the content directly without web research or citations.",
     "Avoid placeholders and generic wording.",
     'The topic is already known and must appear explicitly. Do not write placeholders like "待确认主题", "TBD", or "placeholder".',
     "Treat this version as one independent deck, not a neutral base layer shared with other variants.",

@@ -11,7 +11,12 @@ function parseProviderId(value: string | null): AiEntryProviderId | null {
     normalized === "pptoken" ||
     normalized === "openrouter" ||
     normalized === "aiberm" ||
-    normalized === "crazyroute"
+    normalized === "crazyroute" ||
+    normalized === "enterprise-openai-compatible" ||
+    normalized === "enterprise-qwen-official" ||
+    normalized === "enterprise-minimax-official" ||
+    normalized === "enterprise-glm-official" ||
+    normalized === "enterprise-volcengine-official"
   ) {
     return normalized
   }

@@ -13,8 +13,24 @@ import type { LeadToolPptPreviewRuntime } from "@/lib/lead-tools/ppt-engines/pre
 import { pptMasterPreviewRuntime } from "@/lib/lead-tools/ppt-engines/ppt-master-preview-runtime"
 import { frontendSlidesPreviewRuntime } from "@/lib/lead-tools/ppt-engines/frontend-slides-preview-runtime"
 import { exportPptMasterSessionVariant, getPptMasterSessionVariant } from "@/lib/lead-tools/ppt-master-runtime"
-import { getLeadToolPptExportRuntime, getLeadToolPptPreviewRuntime } from "@/lib/lead-tools/config"
+import {
+  getLeadToolPptExecutionTransport,
+  getLeadToolPptExportRuntime,
+  getLeadToolPptPreviewRuntime,
+} from "@/lib/lead-tools/config"
 import { generateLeadToolPptStoryDeck } from "@/lib/lead-tools/generation-ppt-fixed"
+import { requestPptWorkerExport, requestPptWorkerPreview } from "@/lib/lead-tools/ppt-worker-client"
+
+let requestPptWorkerPreviewImpl = requestPptWorkerPreview
+let requestPptWorkerExportImpl = requestPptWorkerExport
+let getPptMasterSessionVariantImpl = getPptMasterSessionVariant
+let exportPptMasterSessionVariantImpl = exportPptMasterSessionVariant
+let generateLeadToolPptStoryDeckImpl = generateLeadToolPptStoryDeck
+let getPreviewRuntimeImpl = getPreviewRuntime
+
+function useRemoteWorkerTransport() {
+  return getLeadToolPptExecutionTransport() === "remote-worker"
+}
 
 function getPreviewRuntime(): LeadToolPptPreviewRuntime {
   const runtimeId = getLeadToolPptPreviewRuntime("ai-ppt-preview")
@@ -46,11 +62,44 @@ function getPreviewEngineMeta(runtime: LeadToolPptPreviewRuntime) {
 
 const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
   async buildPreview(request, options) {
-    const runtime = getPreviewRuntime()
+    const runtime = getPreviewRuntimeImpl()
+    const previewMeta = getPreviewEngineMeta(runtime)
+
+    if (runtime.id === "ppt-master-agent" && useRemoteWorkerTransport()) {
+      const remote = await requestPptWorkerPreviewImpl({
+        requestId: randomUUID(),
+        prompt: request.prompt,
+        researchBrief: request.researchBrief,
+        scenario: request.scenario,
+        language: request.language,
+        model: request.model,
+        templateMode: request.templateMode ?? "auto-4",
+        templateId: request.templateId,
+        narrativeAngle: request.narrativeAngle,
+        pageCount: request.pageCount ?? null,
+        images: request.images,
+        allowMockFallback: options.allowMockFallback,
+      })
+
+      return {
+        previewSessionId: remote.previewSessionId,
+        generatedAt: remote.generatedAt,
+        deck: remote.deck as LeadToolPptPreviewResponse["deck"],
+        meta: {
+          previewEngine: "ppt-master",
+          exportEngine: "ppt-master",
+          previewRuntime: "ppt-master-agent",
+          exportRuntime: getLeadToolPptExportRuntime("ai-ppt-preview") as "ppt-master-agent",
+          mode: "ppt-master-project-preview",
+          mockFallback: false,
+        },
+      } satisfies LeadToolPptPreviewResponse
+    }
+
     let deck
 
     try {
-      const storyDeck = await generateLeadToolPptStoryDeck(request)
+      const storyDeck = await generateLeadToolPptStoryDeckImpl(request)
       deck = await runtime.materializeStoryDeck(storyDeck)
     } catch (error) {
       if (!options.allowMockFallback) {
@@ -59,8 +108,6 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
 
       deck = renderPptPreviewDeckAssets(buildMockPptPreview(request))
     }
-
-    const previewMeta = getPreviewEngineMeta(runtime)
 
     return {
       previewSessionId: deck.previewSessionId ?? randomUUID(),
@@ -104,8 +151,24 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
       }
     }
 
+    if (useRemoteWorkerTransport() && action.previewSessionId) {
+      return {
+        jobId: randomUUID(),
+        status: "ready",
+        message: "远程 ppt-master worker 已生成可导出的项目，可直接导出为 PPTX。",
+        requestedBy: options.user?.email,
+        exportPlan: {
+          title: action.deck.title,
+          selectedVariant: action.selectedVariant.name,
+          slideCount: action.selectedVariant.slides.length,
+          output: "editable-pptx",
+          finalModel: options.resolvedModels.finalModel,
+        },
+      } satisfies LeadToolPptFinalizeResponse
+    }
+
     if (action.previewSessionId) {
-      const { variant } = await getPptMasterSessionVariant(action.previewSessionId, action.selectedVariant.key)
+      const { variant } = await getPptMasterSessionVariantImpl(action.previewSessionId, action.selectedVariant.key)
 
       return {
         jobId: randomUUID(),
@@ -141,8 +204,26 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
       }
     }
 
+    if (useRemoteWorkerTransport() && action.previewSessionId) {
+      const artifact = await requestPptWorkerExportImpl({
+        requestId: randomUUID(),
+        previewSessionId: action.previewSessionId,
+        selectedVariantKey: action.selectedVariant.key,
+      })
+
+      return {
+        artifact: {
+          buffer: Buffer.from(artifact.bufferBase64, "base64"),
+          contentType: artifact.contentType,
+          fileName: artifact.fileName,
+        },
+        deck: action.deck,
+        variant: action.selectedVariant,
+      } satisfies LeadToolPptDownloadResponse
+    }
+
     if (action.previewSessionId) {
-      const artifact = await exportPptMasterSessionVariant(action.previewSessionId, action.selectedVariant.key)
+      const artifact = await exportPptMasterSessionVariantImpl(action.previewSessionId, action.selectedVariant.key)
 
       return {
         artifact,
@@ -160,4 +241,32 @@ export function getPptMasterEngines() {
     preview: pptMasterPreviewEngine,
     export: pptMasterExportEngine,
   }
+}
+
+export function setPptWorkerTransportForTests(
+  transport:
+    | {
+        preview?: typeof requestPptWorkerPreview
+        export?: typeof requestPptWorkerExport
+      }
+    | null,
+) {
+  requestPptWorkerPreviewImpl = transport?.preview ?? requestPptWorkerPreview
+  requestPptWorkerExportImpl = transport?.export ?? requestPptWorkerExport
+}
+
+export function setPptMasterEngineLocalDepsForTests(
+  deps:
+    | {
+        getPreviewRuntime?: typeof getPreviewRuntime
+        getSessionVariant?: typeof getPptMasterSessionVariant
+        exportSessionVariant?: typeof exportPptMasterSessionVariant
+        generateStoryDeck?: typeof generateLeadToolPptStoryDeck
+      }
+    | null,
+) {
+  getPreviewRuntimeImpl = deps?.getPreviewRuntime ?? getPreviewRuntime
+  getPptMasterSessionVariantImpl = deps?.getSessionVariant ?? getPptMasterSessionVariant
+  exportPptMasterSessionVariantImpl = deps?.exportSessionVariant ?? exportPptMasterSessionVariant
+  generateLeadToolPptStoryDeckImpl = deps?.generateStoryDeck ?? generateLeadToolPptStoryDeck
 }

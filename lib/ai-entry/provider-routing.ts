@@ -9,6 +9,7 @@ export type AiEntryProviderId =
   | "enterprise-qwen-official"
   | "enterprise-minimax-official"
   | "enterprise-glm-official"
+  | "enterprise-volcengine-official"
 
 export type AiEntryProviderConfig = {
   id: AiEntryProviderId

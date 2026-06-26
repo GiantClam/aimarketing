@@ -34,6 +34,11 @@ import {
 import {
   normalizeAiEntryIdentity,
 } from "@/lib/ai-entry/identity"
+import {
+  extractAiEntryArtifactsFromToolResult,
+  getAiEntryValidationResult,
+  isAiEntryToolErrorResult,
+} from "@/lib/ai-entry/artifact-runtime"
 import { loadEnterpriseKnowledgeContext } from "@/lib/knowledge/service"
 import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
 import { hasCustomAiChatModelSelection } from "@/lib/platform/shared-credits-policy"
@@ -43,8 +48,8 @@ import {
   type IncomingAttachment,
   type IncomingMessage,
 } from "@/lib/ai-entry/chat-attachments"
+import { buildAiEntryToolRegistry } from "@/lib/ai-entry/tool-registry"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
-import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
 import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "@/lib/ai-entry/ppt-tool-result-message"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
@@ -52,7 +57,6 @@ import {
   runAiEntryConsultingBlocking,
   runAiEntryConsultingStreaming,
 } from "@/lib/skills/runtime/ai-entry-executor"
-import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { estimateTextCredits } from "@/lib/billing/costing"
 import {
   finalizeReservedCredits,
@@ -89,6 +93,7 @@ type ChatRequestBody = {
   skillConfig?: {
     enabled?: boolean
     enabledToolNames?: string[]
+    enabledSkillIds?: string[]
   }
 }
 
@@ -129,6 +134,13 @@ function modelSupportsImageInput(modelId: string | null | undefined) {
 }
 
 function parseEnabledToolNames(input: unknown) {
+  if (!Array.isArray(input)) return []
+  return input
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+}
+
+function parseEnabledSkillIds(input: unknown) {
   if (!Array.isArray(input)) return []
   return input
     .map((item) => (typeof item === "string" ? item.trim() : ""))
@@ -334,7 +346,8 @@ function parseModelConfig(input: ChatRequestBody["modelConfig"]) {
     rawProviderId === "enterprise-openai-compatible" ||
     rawProviderId === "enterprise-qwen-official" ||
     rawProviderId === "enterprise-minimax-official" ||
-    rawProviderId === "enterprise-glm-official"
+    rawProviderId === "enterprise-glm-official" ||
+    rawProviderId === "enterprise-volcengine-official"
   ) {
     providerId = rawProviderId
   }
@@ -725,45 +738,52 @@ export async function POST(request: NextRequest) {
 
     const skillsEnabled = body.skillConfig?.enabled !== false
     const enabledToolNames = parseEnabledToolNames(body.skillConfig?.enabledToolNames)
+    const enabledSkillIds = parseEnabledSkillIds(body.skillConfig?.enabledSkillIds)
     const consultingRuntime = await prepareAiEntryConsultingRuntime({
       latestUserPrompt,
       requestedAgentId: agentConfig.agentId,
       lockModelToConsultingModel: agentConfig.lockModelToConsultingModel,
       skillsEnabled,
-      enabledToolNames,
+      enabledSkillIds,
     })
     const {
       effectiveAgentId,
       routeDecision,
+      skillRouteDecision,
+      selectedSkills,
+      selectedSkillIds,
+      runtimePolicy,
       resolvedInstruction,
-      selectedTools,
-      closeTools: loadedCloseTools,
-      toolLoadWarning,
     } = consultingRuntime
     shouldQueryEnterpriseKnowledgeForRequest = shouldQueryAiEntryEnterpriseKnowledge({
       canQueryEnterpriseKnowledge,
       effectiveAgentId,
     })
+    const toolRegistry = await buildAiEntryToolRegistry({
+      currentUser,
+      policy: runtimePolicy,
+      selectedSkills,
+      skillsEnabled,
+      enabledToolNames,
+      auditContext: {
+        traceId,
+        conversationId,
+        agentId: effectiveAgentId,
+      },
+    })
+    const {
+      selectedTools: effectiveSelectedTools,
+      selectedToolIds: effectiveSelectedToolIds,
+      closeTools: loadedCloseTools,
+      toolLoadWarnings,
+      selectedMcpServerIds,
+    } = toolRegistry
     if (loadedCloseTools) {
       closeTools = loadedCloseTools
     }
-    const pptTools =
-      effectiveAgentId === "executive-ppt"
-        ? buildAiEntryPptTools({
-            currentUser,
-          })
-        : {}
-    const webSearchTools = buildAiEntryWebSearchTools()
-    const effectiveSelectedTools = {
-      ...(selectedTools || {}),
-      ...pptTools,
-      ...webSearchTools,
-    }
-    const effectiveSelectedToolIds = Object.keys(effectiveSelectedTools)
-
-    if (toolLoadWarning) {
+    for (const warning of toolLoadWarnings) {
       console.warn("ai-entry.chat.mcp-tools.load.failed", {
-        message: toolLoadWarning,
+        message: warning,
       })
     }
 
@@ -778,7 +798,16 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const maxStepCount = effectiveSelectedToolIds.length > 0 ? 8 : 1
+    if (skillRouteDecision) {
+      console.info("ai-entry.chat.skill-routed", {
+        traceId,
+        conversationId,
+        selectedSkillIds,
+        reasons: skillRouteDecision.reasons,
+      })
+    }
+
+    const maxStepCount = effectiveSelectedToolIds.length > 0 ? Math.max(1, runtimePolicy.maxToolCalls) : 1
     const stopWhen = stepCountIs(maxStepCount)
     const enterpriseTextRuntime = await getEnterpriseTextRuntimeProviderConfigsForUser(
       currentUser,
@@ -819,6 +848,8 @@ export async function POST(request: NextRequest) {
       lockModel: agentConfig.lockModelToConsultingModel,
       consultingModelMode: agentConfig.consultingModelMode,
       selectedAgentId: effectiveAgentId,
+      selectedSkillIds,
+      selectedMcpServerIds,
       modelProviderId: modelConfig?.providerId || null,
       modelId: modelConfig?.modelId || null,
       providerModelId: modelConfig?.providerModelId || null,
@@ -870,7 +901,7 @@ export async function POST(request: NextRequest) {
         latestUserPrompt,
         forcedReplyLanguage,
         {
-          available: Boolean(webSearchTools.web_search),
+          available: Boolean(effectiveSelectedTools.web_search),
           conversationScope,
           consultingModelMode: agentConfig.consultingModelMode,
         },
@@ -1005,10 +1036,18 @@ export async function POST(request: NextRequest) {
             conversation_id: conversationId,
             enabled_tools: effectiveSelectedToolIds,
             skills_enabled: skillsEnabled,
+            selected_skills: selectedSkillIds,
             persisted: persistenceEnabled,
             agent_id: effectiveAgentId,
             agent_route: routeDecision,
           })
+          for (const skillId of selectedSkillIds) {
+            sendEvent({
+              event: "skill_selected",
+              conversation_id: conversationId,
+              skill_id: skillId,
+            })
+          }
           const enterpriseKnowledge = await loadEnterpriseKnowledge((progress) => {
             if (progress.event === "knowledge_query_start") {
               knowledgeQueryStartedAtMs = Date.now()
@@ -1028,7 +1067,7 @@ export async function POST(request: NextRequest) {
             latestUserPrompt,
             forcedReplyLanguage,
             {
-              available: Boolean(webSearchTools.web_search),
+              available: Boolean(effectiveSelectedTools.web_search),
               conversationScope,
               consultingModelMode: agentConfig.consultingModelMode,
             },
@@ -1110,9 +1149,25 @@ export async function POST(request: NextRequest) {
                 answer: delta,
               })
             },
+            onReasoning: (delta) => {
+              sendEvent({
+                event: "reasoning",
+                conversation_id: conversationId,
+                answer: delta,
+              })
+            },
             onToolCall: (payload) => {
               sendEvent({
                 event: "tool_call",
+                conversation_id: conversationId,
+                data: {
+                  toolName: payload.toolName,
+                  toolCallId: payload.toolCallId,
+                  args: payload.args,
+                },
+              })
+              sendEvent({
+                event: "tool_call_start",
                 conversation_id: conversationId,
                 data: {
                   toolName: payload.toolName,
@@ -1131,6 +1186,12 @@ export async function POST(request: NextRequest) {
                   isZh,
                 }),
               )
+              const isErrorResult = isAiEntryToolErrorResult(payload.result)
+              const validation = getAiEntryValidationResult(payload.result)
+              const artifacts = extractAiEntryArtifactsFromToolResult({
+                toolName: payload.toolName,
+                result: payload.result,
+              })
               sendEvent({
                 event: "tool_result",
                 conversation_id: conversationId,
@@ -1140,6 +1201,33 @@ export async function POST(request: NextRequest) {
                   result: payload.result,
                 },
               })
+              sendEvent({
+                event: isErrorResult ? "tool_call_error" : "tool_call_done",
+                conversation_id: conversationId,
+                data: {
+                  toolName: payload.toolName,
+                  toolCallId: payload.toolCallId,
+                  result: payload.result,
+                },
+              })
+              if (validation) {
+                sendEvent({
+                  event: "validation_result",
+                  conversation_id: conversationId,
+                  data: {
+                    toolName: payload.toolName,
+                    toolCallId: payload.toolCallId,
+                    validation,
+                  },
+                })
+              }
+              for (const artifact of artifacts) {
+                sendEvent({
+                  event: "artifact_created",
+                  conversation_id: conversationId,
+                  artifact,
+                })
+              }
             },
             onEmptyResponseRetry: ({ retryAttempt, retryLimit }) => {
               console.warn("ai-entry.chat.empty_response.retry", {
@@ -1161,6 +1249,10 @@ export async function POST(request: NextRequest) {
             ? stripPptArtifactRelativeLinks(normalizedStreamedAnswer)
             : normalizedStreamedAnswer
           const resolvedStreamedAnswerWithTools = `${sanitizedStreamedAnswer}${streamedToolAppendix}`.trim()
+          sendEvent({
+            event: "reasoning_end",
+            conversation_id: conversationId,
+          })
           sendEvent({
             event: "message_end",
             conversation_id: conversationId,

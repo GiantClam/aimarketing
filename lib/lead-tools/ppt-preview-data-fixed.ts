@@ -52,13 +52,25 @@ export const MIN_PPT_PREVIEW_PAGE_COUNT = 4
 export const MAX_PPT_PREVIEW_PAGE_COUNT = 20
 export const DEFAULT_PPT_PREVIEW_PAGE_COUNT = 9
 
+export type PptPreviewResearchBrief = {
+  topic: string
+  keyFacts: string[]
+  numericEvidence?: string[]
+  risks?: string[]
+  implications?: string[]
+  sourceNotes?: string[]
+  rawSummary?: string
+}
+
 export type PptPreviewRequest = {
   prompt: string
+  researchBrief?: string | PptPreviewResearchBrief
   scenario: PptScenario
   language: PptLanguage
   model?: PptPreviewModelValue
   templateMode?: PptPreviewTemplateMode
   templateId?: PptFrontendTemplateId
+  narrativeAngle?: PptPreviewNarrativeAngle
   pageCount?: PptPreviewPageCount | null
   images?: PptPreviewInputImage[]
 }
@@ -627,9 +639,13 @@ export function buildPptPreviewVariantDescriptors(request: PptPreviewRequest): P
     const styleKey = getPptPreviewStyleKeyByTemplateId(request.templateId)
     const style = styleKey ? getPptPreviewStyleByKey(styleKey) : null
     if (style) {
-      return pptPreviewNarrativeAngles.map((angle) => ({
+      const narrativeAngles = request.narrativeAngle
+        ? pptPreviewNarrativeAngles.filter((angle) => angle.id === request.narrativeAngle)
+        : pptPreviewNarrativeAngles
+
+      return narrativeAngles.map((angle, index) => ({
         key: `${request.templateId}-${angle.id}`,
-        slotLabel: angle.slotLabel,
+        slotLabel: (["A", "B", "C", "D"][index] ?? angle.slotLabel) as "A" | "B" | "C" | "D",
         style,
         templateId: request.templateId as PptFrontendTemplateId,
         narrativeAngle: angle.id,

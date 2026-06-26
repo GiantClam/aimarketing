@@ -9,6 +9,7 @@ import {
   FileUp,
   Film,
   ImageIcon,
+  Link2,
   Mic,
   Minus,
   Music,
@@ -28,6 +29,7 @@ import { WorkflowNodeEditorFields } from "@/components/workflows/workflow-node-e
 import { WorkflowNodeOutputPreview } from "@/components/workflows/workflow-node-output-preview"
 import { cn } from "@/lib/utils"
 import { buildWorkflowImagePromptReferenceEntries, buildWorkflowImagePromptReferenceTokens } from "@/lib/workflows/image-prompt-references"
+import { resolveClickConnectInputName } from "@/lib/workflows/connect"
 import {
   canWorkflowNodeConnectValueKind,
   getAllowedWorkflowTargetInputKinds,
@@ -400,6 +402,9 @@ export function WorkflowCanvas({
           addFirstBody: "从左侧节点库拖入固定节点，或直接点击添加。节点会保持确定性连线，并可直接在卡片内编辑。",
           cancelLink: "取消连线",
           dragOutput: "从此节点拖出连接",
+          connectNode: "连接到",
+          cancelConnect: "取消连接",
+          selectTarget: "选为目标",
         }
       : {
           empty: "Empty canvas",
@@ -407,6 +412,9 @@ export function WorkflowCanvas({
           addFirstBody: "Drag a fixed node from the library or click add. Nodes stay deterministic and editable directly in each card.",
           cancelLink: "Cancel link",
           dragOutput: "Drag a connection from this node",
+          connectNode: "Connect to",
+          cancelConnect: "Cancel connect",
+          selectTarget: "Select as target",
         }
 
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -950,6 +958,11 @@ export function WorkflowCanvas({
             const incomingEdges = nodeConnections.get(node.nodeKey) ?? []
             const selected = selectedNodeKey === node.nodeKey
             const isConnectionSource = pendingConnectionSourceKey === node.nodeKey
+            const clickConnectMode = Boolean(pendingConnectionSourceKey) && !activeConnectionDrag
+            const isClickConnectTarget =
+              clickConnectMode &&
+              !isConnectionSource &&
+              connectionOutputKinds.some((outputKind) => canWorkflowNodeConnectValueKind(node.type, outputKind))
             const visual = NODE_VISUALS[node.type]
             const displayTitle = resolveWorkflowNodeTitle(node.type, node.title, locale)
             const NodeIcon = visual.icon
@@ -1012,8 +1025,10 @@ export function WorkflowCanvas({
                   selected ? "border-primary/70 ring-2 ring-primary/20" : "border-border/80",
                   executionTone.container,
                   isConnectionSource ? "border-blue-500 ring-2 ring-blue-300/30" : "",
+                  isClickConnectTarget ? "border-emerald-500 ring-2 ring-emerald-300/40" : "",
                 )}
                 style={{ left: node.positionX, top: node.positionY, width: NODE_WIDTH }}
+                data-agent-node={node.nodeKey}
                 onPointerDown={(event) => {
                   if (editingTitleNodeKey === node.nodeKey) return
                   if (shouldIgnoreNodeDragTarget(event.target)) {
@@ -1038,6 +1053,7 @@ export function WorkflowCanvas({
                     <div
                       key={`${node.nodeKey}-${kind}-port`}
                       data-node-no-drag="true"
+                      data-agent-input-port={`${node.nodeKey}:${kind}`}
                       className={cn(
                         "absolute z-20 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-background shadow-sm transition",
                         active ? "border-primary bg-primary/95" : "border-border/90",
@@ -1076,6 +1092,7 @@ export function WorkflowCanvas({
                     style={{ left: OUTPUT_PORT_CENTER_X, top: PORT_PANEL_TOP + PORT_ITEM_START_Y }}
                     onPointerDown={(event) => startConnectionDrag(event, node)}
                     aria-label={`${copy.dragOutput}: ${displayTitle}`}
+                    data-agent-output-port={node.nodeKey}
                   />
                 ) : null}
 
@@ -1148,6 +1165,38 @@ export function WorkflowCanvas({
                       </div>
                     </div>
                     <div className="flex shrink-0 items-start gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "h-7 w-7 rounded-[8px] border-border bg-background/80 p-0 text-[11px] uppercase tracking-[0.08em]",
+                          isConnectionSource ? "border-blue-500 bg-blue-500/15" : "",
+                          isClickConnectTarget ? "border-emerald-500 bg-emerald-500 text-primary-foreground" : "",
+                        )}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          if (isConnectionSource) {
+                            onCancelConnection()
+                            return
+                          }
+                          if (isClickConnectTarget && pendingConnectionSourceKey && connectionSourceNode) {
+                            const inputName = resolveClickConnectInputName(connectionSourceNode.type, node.type)
+                            if (inputName) {
+                              onConnect(pendingConnectionSourceKey, node.nodeKey, inputName)
+                              return
+                            }
+                          }
+                          onStartConnection(node.nodeKey)
+                        }}
+                        aria-label={isConnectionSource ? copy.cancelConnect : isClickConnectTarget ? copy.selectTarget : copy.connectNode}
+                        title={isConnectionSource ? copy.cancelConnect : isClickConnectTarget ? copy.selectTarget : copy.connectNode}
+                        data-agent-node-connect={node.nodeKey}
+                        data-agent-node-connect-source={isConnectionSource ? "true" : undefined}
+                        data-agent-node-connect-target={isClickConnectTarget ? "true" : undefined}
+                      >
+                        <Link2 className="size-3.5" />
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"

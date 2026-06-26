@@ -39,6 +39,7 @@ export type EnterpriseTextRuntimeProviderId = Extract<
   | "enterprise-qwen-official"
   | "enterprise-minimax-official"
   | "enterprise-glm-official"
+  | "enterprise-volcengine-official"
 >
 
 export type EnterpriseImageRuntimeConfig =
@@ -114,6 +115,7 @@ const DEFAULT_RUNNINGHUB_IMG2IMG_MODEL = "seedream-v5-image-to-image"
 const DEFAULT_QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 const DEFAULT_MINIMAX_BASE_URL = "https://api.minimaxi.com/v1"
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+const DEFAULT_VOLCENGINE_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 function normalizeText(value: unknown) {
@@ -168,6 +170,7 @@ function mapEnterpriseTextProviderId(
   if (providerId === "openai_compatible") return "enterprise-openai-compatible"
   if (providerId === "qwen_official") return "enterprise-qwen-official"
   if (providerId === "minimax_official") return "enterprise-minimax-official"
+  if (providerId === "volcengine_official") return "enterprise-volcengine-official"
   return "enterprise-glm-official"
 }
 
@@ -177,6 +180,7 @@ function getEnterpriseTextBaseUrl(provider: EnterpriseModelProviderConfig) {
   if (provider.providerId === "qwen_official") return DEFAULT_QWEN_BASE_URL
   if (provider.providerId === "minimax_official") return DEFAULT_MINIMAX_BASE_URL
   if (provider.providerId === "glm_official") return DEFAULT_GLM_BASE_URL
+  if (provider.providerId === "volcengine_official") return DEFAULT_VOLCENGINE_BASE_URL
   return ""
 }
 

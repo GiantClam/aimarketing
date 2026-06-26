@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   buildPptPreviewDeckFromPlans,
+  buildPptPreviewVariantDescriptors,
   getPptPreviewLayoutSequence,
   getPptPreviewStyleSummary,
   resolveOptionalPptPreviewPageCount,
@@ -37,6 +38,22 @@ test("layout sequence expands beyond nine slides while keeping a closing slide",
     "comparison",
     "timeline",
   ])
+})
+
+test("single-template variants can be narrowed to one narrative angle", () => {
+  const variants = buildPptPreviewVariantDescriptors({
+    prompt: "Hormuz deck",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "broadside",
+    narrativeAngle: "executive-brief",
+  })
+
+  assert.equal(variants.length, 1)
+  assert.equal(variants[0]?.key, "broadside-executive-brief")
+  assert.equal(variants[0]?.narrativeAngle, "executive-brief")
+  assert.equal(variants[0]?.slotLabel, "A")
 })
 
 test("ppt preview deck assigns structured request images to cover and supported content layouts", () => {

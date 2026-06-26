@@ -1,4 +1,5 @@
 type ExportPptDeckResult = {
+  ok?: unknown
   title?: unknown
   fileName?: unknown
   artifactId?: unknown
@@ -90,6 +91,7 @@ export function buildPptToolResultMessage(input: {
   }
 
   const result = input.result as ExportPptDeckResult
+  if (result.ok === false) return null
   const isZh = input.isZh !== false
   const origin = input.origin ?? null
   const previewUrl = toAbsoluteUrl(origin, result.previewUrl)

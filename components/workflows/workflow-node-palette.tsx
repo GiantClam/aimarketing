@@ -14,6 +14,7 @@ const NODE_ORDER: WorkflowNodeType[] = [
   "digital_human",
   "music_generate",
   "voice_synthesis",
+  "audio_generate",
   "ppt_generate",
   "product_store",
 ]
@@ -130,6 +131,7 @@ export function WorkflowNodePalette({ className, locale, onAddNode }: WorkflowNo
               draggable
               onClick={() => onAddNode(type)}
               onDragStart={(event) => handleDragStart(event, type)}
+              data-agent-add-node={type}
               className={cn(
                 "group flex w-full items-center gap-2 rounded-[10px] border border-border/80 bg-background/78 px-2.5 py-2 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background active:cursor-grabbing",
               )}

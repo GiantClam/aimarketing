@@ -45,6 +45,7 @@ const AI_ENTRY_PROVIDER_IDS = new Set<AiEntryProviderId>([
   "enterprise-qwen-official",
   "enterprise-minimax-official",
   "enterprise-glm-official",
+  "enterprise-volcengine-official",
 ])
 
 function normalizeText(value: unknown) {
@@ -115,6 +116,7 @@ export function getRuntimeProviderLabel(providerId: string) {
   if (providerId === "enterprise-qwen-official") return "Qwen Official"
   if (providerId === "enterprise-minimax-official") return "MiniMax Official"
   if (providerId === "enterprise-glm-official") return "GLM Official"
+  if (providerId === "enterprise-volcengine-official") return "火山引擎"
   if (providerId === "runninghub-image") return "RunningHub Image"
   if (providerId === "runninghub-video") return "RunningHub Video"
   if (providerId === "minimax-video") return "MiniMax Hailuo Video"

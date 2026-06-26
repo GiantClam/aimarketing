@@ -9,6 +9,8 @@ import type {
   LeadToolPptPreviewRuntimeId,
 } from "@/lib/lead-tools/ppt-engines/preview-runtime-types"
 
+// Remote worker transport types live in `ppt-worker-types.ts`.
+// Keep these engine response types stable because they are consumed by the app runtime.
 export type LeadToolPptPreviewEngineId = "ppt-master" | "frontend-slides"
 export type LeadToolPptExportEngineId = "ppt-master"
 

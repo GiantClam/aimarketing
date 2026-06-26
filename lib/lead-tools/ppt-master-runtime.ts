@@ -5,6 +5,15 @@ import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
+import { allowPptMasterEmergencyFallback } from "@/lib/lead-tools/config"
+import {
+  createPptMasterSessionArchive,
+  getConfiguredPptMasterSessionStore,
+  getPptMasterSessionDir,
+  getPptMasterSessionManifestPath,
+  getPptMasterSessionRootDir,
+  restorePptMasterSessionArchive,
+} from "@/lib/lead-tools/ppt-master-session-store"
 import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
 import type { PptPreviewAsset, PptPreviewDeck, PptPreviewSlide, PptPreviewVariant } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
@@ -19,7 +28,21 @@ type StoredVariant = {
   name: string
   projectDir: string
   slideCount: number
+  runtimeDiagnostics?: {
+    materializeMs: number
+    slideRuns: Array<{
+      slideId: string
+      layout: PptPreviewSlide["layout"]
+      fileBaseName: string
+      durationMs: number
+      provider?: string
+      model?: string
+      fallbackReason?: string | null
+    }>
+  }
 }
+
+type StoredVariantSlideRun = NonNullable<StoredVariant["runtimeDiagnostics"]>["slideRuns"][number]
 
 type StoredSession = {
   sessionId: string
@@ -94,15 +117,15 @@ async function resolvePptMasterRepoDir() {
 }
 
 function getSessionRootDir() {
-  return path.join(os.tmpdir(), "aimarketing-ppt-master-sessions")
+  return getPptMasterSessionRootDir()
 }
 
 function getSessionDir(sessionId: string) {
-  return path.join(getSessionRootDir(), sessionId)
+  return getPptMasterSessionDir(sessionId)
 }
 
 function getManifestPath(sessionId: string) {
-  return path.join(getSessionDir(sessionId), "manifest.json")
+  return getPptMasterSessionManifestPath(sessionId)
 }
 
 async function cleanupExpiredSessions() {
@@ -138,9 +161,46 @@ async function writeManifest(session: StoredSession) {
   await fs.writeFile(manifestPath, JSON.stringify(session, null, 2), "utf8")
 }
 
+async function persistStoredSession(session: StoredSession) {
+  const archive = await createPptMasterSessionArchive(getSessionDir(session.sessionId))
+  const store = await getConfiguredPptMasterSessionStore()
+  await store.saveSession({
+    sessionId: session.sessionId,
+    createdAt: session.createdAt,
+    manifest: session,
+    archive,
+  })
+}
+
+async function restoreStoredSession(sessionId: string) {
+  const store = await getConfiguredPptMasterSessionStore()
+  const persisted = await store.getSession(sessionId)
+  if (!persisted) {
+    return null
+  }
+
+  await restorePptMasterSessionArchive(getSessionDir(sessionId), persisted.archive)
+  return persisted.manifest as StoredSession
+}
+
 async function readManifest(sessionId: string) {
-  const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
-  return JSON.parse(manifest) as StoredSession
+  try {
+    const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
+    return JSON.parse(manifest) as StoredSession
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : null
+    if (code !== "ENOENT") {
+      throw error
+    }
+
+    const restored = await restoreStoredSession(sessionId)
+    if (!restored) {
+      throw error
+    }
+
+    const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
+    return JSON.parse(manifest) as StoredSession
+  }
 }
 
 function encodeSvgAsset(svg: string): PptPreviewAsset {
@@ -152,19 +212,39 @@ function encodeSvgAsset(svg: string): PptPreviewAsset {
   }
 }
 
+function getPptMasterPythonCandidates() {
+  return [process.env.PPT_MASTER_PYTHON_BIN, "python", "python3"].filter(
+    (value): value is string => Boolean(value?.trim()),
+  )
+}
+
 async function runPythonScript(repoDir: string, scriptRelativePath: string, args: string[]) {
   const scriptPath = path.join(repoDir, "skills", "ppt-master", "scripts", scriptRelativePath)
-  try {
-    await execFileAsync("python", [scriptPath, ...args], {
-      cwd: repoDir,
-      maxBuffer: 1024 * 1024 * 20,
-      encoding: "utf8",
-    })
-  } catch (error) {
-    const stderr = error && typeof error === "object" && "stderr" in error ? String(error.stderr || "") : ""
-    const stdout = error && typeof error === "object" && "stdout" in error ? String(error.stdout || "") : ""
-    const detail = stderr.trim() || stdout.trim()
-    throw new Error(detail || `ppt_master_script_failed:${scriptRelativePath}`)
+  let commandNotFound = false
+
+  for (const pythonCommand of getPptMasterPythonCandidates()) {
+    try {
+      await execFileAsync(pythonCommand, [scriptPath, ...args], {
+        cwd: repoDir,
+        maxBuffer: 1024 * 1024 * 20,
+        encoding: "utf8",
+      })
+      return
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        commandNotFound = true
+        continue
+      }
+
+      const stderr = error && typeof error === "object" && "stderr" in error ? String(error.stderr || "") : ""
+      const stdout = error && typeof error === "object" && "stdout" in error ? String(error.stdout || "") : ""
+      const detail = stderr.trim() || stdout.trim()
+      throw new Error(detail || `ppt_master_script_failed:${scriptRelativePath}`)
+    }
+  }
+
+  if (commandNotFound) {
+    throw new Error("ppt_master_python_missing")
   }
 }
 
@@ -184,6 +264,68 @@ function buildNoteMarkdown(title: string, body: string, bullets: string[]) {
 
 function toSpecLockKey(index: number) {
   return `P${String(index + 1).padStart(2, "0")}`
+}
+
+function getRuntimeSlideTextLimits(
+  layout: PptPreviewSlide["layout"],
+  language: PptPreviewDeck["language"],
+  templateId?: string,
+) {
+  const zh = language === "zh-CN"
+  void templateId
+
+  switch (layout) {
+    case "cover":
+      return {
+        title: zh ? 22 : 42,
+        body: zh ? 42 : 96,
+        bullet: zh ? 14 : 28,
+      }
+    case "agenda":
+      return {
+        title: zh ? 22 : 42,
+        body: zh ? 40 : 90,
+        bullet: zh ? 18 : 34,
+      }
+    case "comparison":
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 36 : 84,
+        bullet: zh ? 16 : 30,
+      }
+    case "insight":
+      return {
+        title: zh ? 16 : 30,
+        body: zh ? 26 : 60,
+        bullet: zh ? 12 : 24,
+      }
+    case "timeline":
+      return {
+        title: zh ? 14 : 28,
+        body: zh ? 24 : 56,
+        bullet: zh ? 12 : 24,
+      }
+    case "stats":
+    case "chart":
+    case "process":
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 34 : 80,
+        bullet: zh ? 14 : 28,
+      }
+    case "evidence":
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 34 : 80,
+        bullet: zh ? 15 : 30,
+      }
+    default:
+      return {
+        title: zh ? 20 : 38,
+        body: zh ? 34 : 80,
+        bullet: zh ? 15 : 30,
+      }
+  }
 }
 
 function getRuntimeTypography(variantKey: PptPreviewVariant["styleKey"]): RuntimeTypography {
@@ -418,6 +560,22 @@ function buildSlideFileBaseName(index: number, layout: PptPreviewSlide["layout"]
   return `${String(index + 1).padStart(2, "0")}_${layout}`
 }
 
+function isRecoverableRuntimeSlideFailure(detail: string) {
+  return (
+    detail === "ppt_master_runtime_slide_timeout" ||
+    detail === "lead_tool_preview_empty_response" ||
+    detail === "ppt_master_runtime_slide_svg_invalid"
+  )
+}
+
+function shouldFallbackForGeneratedSvg(_context: PptMasterPreviewRuntimeSlideContext, _svg: string) {
+  return null
+}
+
+function shouldUseDeterministicRuntimeSvg(_context: PptMasterPreviewRuntimeSlideContext) {
+  return false
+}
+
 function normalizeNamedEntities(svg: string) {
   return svg
     .replace(/&nbsp;/g, " ")
@@ -437,13 +595,13 @@ function escapeUnknownAmpersands(svg: string) {
 
 function extractSvgDocument(raw: string) {
   const withoutCodeFence = raw.replace(/```svg|```xml|```/gi, "").trim()
-  const match = withoutCodeFence.match(/<svg[\s\S]*<\/svg>/i)
+  const matches = Array.from(withoutCodeFence.matchAll(/<svg[\s\S]*?<\/svg>/gi), (match) => match[0].trim()).filter(Boolean)
 
-  if (!match?.[0]) {
+  if (!matches.length) {
     throw new Error("ppt_master_runtime_svg_missing")
   }
 
-  return match[0].trim()
+  return matches.sort((left, right) => right.length - left.length)[0] ?? matches[0]
 }
 
 function ensureCanvasAttributes(svg: string) {
@@ -472,6 +630,10 @@ function ensureCanvasAttributes(svg: string) {
 
 function prepareGeneratedSvg(raw: string) {
   return ensureCanvasAttributes(escapeUnknownAmpersands(normalizeNamedEntities(extractSvgDocument(raw))))
+}
+
+function postprocessGeneratedSvg(_context: PptMasterPreviewRuntimeSlideContext, svg: string) {
+  return svg
 }
 
 function escapeXml(value: string) {
@@ -524,6 +686,101 @@ function splitTextSmart(value: string, maxCharsPerLine: number) {
   }
 
   return splitTextIntoLines(value, maxCharsPerLine)
+}
+
+function compactRuntimeText(value: string, maxUnits: number, language: PptPreviewDeck["language"]) {
+  const normalized = value.replace(/\s+/g, language === "zh-CN" ? "" : " ").trim()
+  if (!normalized || maxUnits <= 0) return normalized
+
+  const symbols = Array.from(normalized)
+  if (symbols.length <= maxUnits) {
+    return normalized
+  }
+
+  if (language === "zh-CN") {
+    return `${symbols.slice(0, Math.max(1, maxUnits - 1)).join("")}…`
+  }
+
+  const words = normalized.split(/\s+/).filter(Boolean)
+  let current = ""
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (candidate.length > maxUnits - 1) {
+      break
+    }
+    current = candidate
+  }
+
+  if (current) {
+    return `${current}…`
+  }
+
+  return `${normalized.slice(0, Math.max(1, maxUnits - 1)).trimEnd()}…`
+}
+
+function normalizeRuntimeCopyText(value: string, language: PptPreviewDeck["language"]) {
+  return value.replace(/\s+/g, language === "zh-CN" ? "" : " ").trim()
+}
+
+function normalizeRuntimeSlideCopy(
+  slide: PptPreviewSlide,
+  language: PptPreviewDeck["language"],
+  templateId?: string,
+): PptPreviewSlide {
+  void templateId
+
+  return {
+    ...slide,
+    kicker: normalizeRuntimeCopyText(slide.kicker, language),
+    title: normalizeRuntimeCopyText(slide.title, language),
+    body: normalizeRuntimeCopyText(slide.body, language),
+    bullets: slide.bullets.map((item) => normalizeRuntimeCopyText(item, language)).filter(Boolean),
+    contentsItems: slide.contentsItems?.map((item) => ({
+      ...item,
+      title: normalizeRuntimeCopyText(item.title, language),
+      detail: normalizeRuntimeCopyText(item.detail, language),
+    })),
+    comparisonItems: slide.comparisonItems?.map((item) => ({
+      ...item,
+      title: normalizeRuntimeCopyText(item.title, language),
+      detail: normalizeRuntimeCopyText(item.detail, language),
+    })),
+    spotlightItems: slide.spotlightItems?.map((item) => ({
+      ...item,
+      title: normalizeRuntimeCopyText(item.title, language),
+      detail: normalizeRuntimeCopyText(item.detail, language),
+    })),
+    metricItems: slide.metricItems?.map((item) => ({
+      ...item,
+      label: normalizeRuntimeCopyText(item.label, language),
+      note: item.note ? normalizeRuntimeCopyText(item.note, language) : item.note,
+    })),
+    chartItems: slide.chartItems?.map((item) => ({
+      ...item,
+      label: normalizeRuntimeCopyText(item.label, language),
+      detail: normalizeRuntimeCopyText(item.detail, language),
+    })),
+    processItems: slide.processItems?.map((item) => ({
+      ...item,
+      title: normalizeRuntimeCopyText(item.title, language),
+      detail: normalizeRuntimeCopyText(item.detail, language),
+    })),
+    closingItems: slide.closingItems?.map((item) => ({
+      ...item,
+      detail: normalizeRuntimeCopyText(item.detail, language),
+    })),
+  }
+}
+
+function normalizeRuntimeDeckCopy(deck: PptPreviewDeck): PptPreviewDeck {
+  return {
+    ...deck,
+    variants: deck.variants.map((variant) => ({
+      ...variant,
+      slides: variant.slides.map((slide) => normalizeRuntimeSlideCopy(slide, deck.language, variant.templateId)),
+    })),
+  }
 }
 
 function getKickerText(context: PptMasterPreviewRuntimeSlideContext) {
@@ -607,7 +864,7 @@ function renderBulletItems(params: {
     .join("")
 }
 
-function _buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext) {
+function buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext) {
   const { slide, variant } = context
   const titleLines = splitTextSmart(slide.title, slide.layout === "cover" ? 12 : 18).slice(0, slide.layout === "cover" ? 2 : 3)
   const bodyLines = splitTextSmart(slide.body, slide.layout === "comparison" ? 18 : 26).slice(0, 4)
@@ -651,7 +908,7 @@ function _buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext)
     ].join(""),
   }
 
-  return _buildEmergencyRuntimeSvgDocument({
+  return buildEmergencyRuntimeSvgDocument({
     context,
     innerBackground: backgroundBlockByStyle[variant.styleKey],
     titleLines,
@@ -665,7 +922,7 @@ function _buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext)
   })
 }
 
-function _buildEmergencyRuntimeSvgDocument(params: {
+function buildEmergencyRuntimeSvgDocument(params: {
   context: PptMasterPreviewRuntimeSlideContext
   innerBackground: string
   titleLines: string[]
@@ -677,7 +934,7 @@ function _buildEmergencyRuntimeSvgDocument(params: {
   foreground: string
   background: string
 }) {
-  const { context, innerBackground, titleLines, bodyLines, kicker, accent, border, panel, foreground } = params
+  const { context, innerBackground, titleLines, bodyLines, kicker, accent, border, panel, foreground, background } = params
   const titleFont =
     context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026"
       ? 52
@@ -691,6 +948,23 @@ function _buildEmergencyRuntimeSvgDocument(params: {
   const coverBulletY = coverBodyY + bodyLines.length * 28 + 46
   const insightBodyY = 286 + titleLines.length * 34
   const insightBulletY = insightBodyY + bodyLines.length * 34 + 36
+  const insightHeadlineLines = splitTextSmart(context.slide.title, 6).slice(0, 3)
+  const insightHeadlineY = 226
+  const insightHeadlineLineHeight = 58
+  const insightHeadlineBottomY = insightHeadlineY + (insightHeadlineLines.length - 1) * insightHeadlineLineHeight
+  const insightBodyLines = splitTextSmart(context.slide.body, 14).slice(0, 2)
+  const insightBodyLineHeight = 28
+  const insightBodyStartY = insightHeadlineBottomY + 42
+  const insightBodyBottomY = insightBodyStartY + (insightBodyLines.length - 1) * insightBodyLineHeight
+  const insightVerdictHeight = 72
+  const insightVerdictY = 500
+  const insightBannerHeight = 62
+  const insightBannerY = Math.min(insightBodyBottomY + 34, insightVerdictY - insightBannerHeight - 24)
+  const insightBannerLines = splitTextSmart(context.slide.bullets[0] ?? context.slide.title, 10).slice(0, 1)
+  const insightVerdictLines = splitTextSmart(context.slide.bullets[1] ?? context.slide.body, 16).slice(0, 2)
+  const insightMetricLines = splitTextSmart(context.slide.bullets[0] ?? context.slide.title, 6).slice(0, 2)
+  const insightSupportLines = splitTextSmart(context.slide.bullets[1] ?? context.slide.body, 14).slice(0, 2)
+  const insightRiskLines = splitTextSmart(context.slide.bullets[2] ?? context.slide.body, 12).slice(0, 3)
 
   const contentByLayout: Record<PptPreviewSlide["layout"], string> = {
     cover: [
@@ -797,36 +1071,111 @@ function _buildEmergencyRuntimeSvgDocument(params: {
         x: 136,
         y: 112,
       }),
-      `<rect x="136" y="154" width="1008" height="378" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 28}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="136" y="154" width="1008" height="430" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 28}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="782" y="154" width="362" height="430" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 28}" fill="${background}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="180" y="${insightBannerY}" width="420" height="${insightBannerHeight}" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 8}" fill="${accent}"/>`,
       renderTextBlock({
         color: foreground,
         family: context.variant.styleKey === "ppt169_pritzker_2026" ? "Georgia, \"Microsoft YaHei\", serif" : "Arial, \"Microsoft YaHei\", sans-serif",
-        fontSize: 34,
+        fontSize: 56,
         fontWeight: 800,
-        lineHeight: 42,
-        lines: titleLines,
+        lineHeight: insightHeadlineLineHeight,
+        lines: insightHeadlineLines,
         x: 180,
-        y: 232,
+        y: insightHeadlineY,
       }),
       renderTextBlock({
         color: foreground,
         family: "Arial, \"Microsoft YaHei\", sans-serif",
         fontSize: 24,
-        fontWeight: 500,
-        lineHeight: 34,
-        lines: bodyLines,
+        fontWeight: 600,
+        lineHeight: insightBodyLineHeight,
+        lines: insightBodyLines,
         x: 180,
-        y: insightBodyY,
+        y: insightBodyStartY,
       }),
-      renderBulletItems({
+      renderTextBlock({
+        color: background,
+        family: "Arial Black, Arial, \"Microsoft YaHei\", sans-serif",
+        fontSize: 30,
+        fontWeight: 900,
+        lineHeight: 34,
+        lines: insightBannerLines,
+        x: 204,
+        y: insightBannerY + 40,
+      }),
+      `<rect x="180" y="${insightVerdictY}" width="520" height="${insightVerdictHeight}" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 12}" fill="none" stroke="${foreground}" stroke-width="2"/>`,
+      renderTextBlock({
+        color: accent,
+        family: "Arial, \"Microsoft YaHei\", sans-serif",
+        fontSize: 18,
+        fontWeight: 800,
+        lineHeight: 22,
+        lines: ["一句话判断"],
+        x: 208,
+        y: insightVerdictY + 32,
+      }),
+      renderTextBlock({
+        color: foreground,
+        family: "Arial, \"Microsoft YaHei\", sans-serif",
+        fontSize: 20,
+        fontWeight: 700,
+        lineHeight: 24,
+        lines: insightVerdictLines,
+        x: 340,
+        y: insightVerdictY + 30,
+      }),
+      renderTextBlock({
+        color: accent,
+        family: "Arial, \"Microsoft YaHei\", sans-serif",
+        fontSize: 18,
+        fontWeight: 800,
+        lineHeight: 22,
+        lines: ["支撑列"],
+        x: 826,
+        y: 212,
+      }),
+      `<line x1="826" y1="226" x2="1106" y2="226" stroke="${border}" stroke-width="2"/>`,
+      renderTextBlock({
+        color: foreground,
+        family: "Arial Black, Arial, \"Microsoft YaHei\", sans-serif",
+        fontSize: 42,
+        fontWeight: 900,
+        lineHeight: 44,
+        lines: insightMetricLines,
+        x: 826,
+        y: 296,
+      }),
+      renderTextBlock({
         color: foreground,
         family: "Arial, \"Microsoft YaHei\", sans-serif",
         fontSize: 18,
-        items: context.slide.bullets.slice(0, 3),
-        x: 184,
-        y: Math.min(insightBulletY, 500),
+        fontWeight: 600,
         lineHeight: 24,
-        maxCharsPerLine: 26,
+        lines: insightSupportLines,
+        x: 826,
+        y: 390,
+      }),
+      `<rect x="826" y="444" width="260" height="108" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 12}" fill="${accent}" fill-opacity="0.14" stroke="${accent}" stroke-width="2"/>`,
+      renderTextBlock({
+        color: accent,
+        family: "Arial, \"Microsoft YaHei\", sans-serif",
+        fontSize: 18,
+        fontWeight: 800,
+        lineHeight: 22,
+        lines: ["风险未退"],
+        x: 850,
+        y: 478,
+      }),
+      renderTextBlock({
+        color: foreground,
+        family: "Arial, \"Microsoft YaHei\", sans-serif",
+        fontSize: 18,
+        fontWeight: 700,
+        lineHeight: 24,
+        lines: insightRiskLines,
+        x: 850,
+        y: 514,
       }),
     ].join(""),
     comparison: [
@@ -1181,6 +1530,9 @@ async function materializeVariantProject(params: {
 }) {
   const { deck, options, repoDir, sessionDir, variant } = params
   const projectDir = path.join(sessionDir, variant.key)
+  const materializeStartedAt = Date.now()
+  const slideRuns: StoredVariantSlideRun[] = []
+  const allowEmergencyFallback = allowPptMasterEmergencyFallback()
 
   await fs.rm(projectDir, { recursive: true, force: true })
   await createProjectStructure(projectDir)
@@ -1198,32 +1550,81 @@ async function materializeVariantProject(params: {
       body: item.body,
       bullets: item.bullets,
     }))
+    const slideContext = {
+      deck,
+      variant,
+      slide,
+      slideIndex: index,
+      projectDir,
+      slideFileBaseName,
+      designSpecPath: projectArtifacts.designSpecPath,
+      specLockPath: projectArtifacts.specLockPath,
+      sourceBriefPath: projectArtifacts.sourceBriefPath,
+      previousSlides,
+    } satisfies PptMasterPreviewRuntimeSlideContext
 
+    const slideStartedAt = Date.now()
     let result: PptMasterPreviewRuntimeSlideResult
-    try {
-      result = await options.generateSlideSvg({
-        deck,
-        variant,
-        slide,
-        slideIndex: index,
-        projectDir,
-        slideFileBaseName,
-        designSpecPath: projectArtifacts.designSpecPath,
-        specLockPath: projectArtifacts.specLockPath,
-        sourceBriefPath: projectArtifacts.sourceBriefPath,
-        previousSlides,
-      })
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "unknown_error"
-      throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+    let fallbackReason: string | null = null
+    if (shouldUseDeterministicRuntimeSvg(slideContext)) {
+      fallbackReason = "deterministic_runtime_svg"
+      result = {
+        provider: "ppt-master-emergency-svg",
+        model: deck.previewModel ?? "emergency-svg",
+        svg: buildEmergencyRuntimeSvg(slideContext),
+      }
+    } else {
+      try {
+        result = await options.generateSlideSvg(slideContext)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "unknown_error"
+        if (!isRecoverableRuntimeSlideFailure(detail)) {
+          throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+        }
+        if (!allowEmergencyFallback) {
+          throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+        }
+
+        fallbackReason = detail
+        result = {
+          provider: "ppt-master-emergency-svg",
+          model: deck.previewModel ?? "emergency-svg",
+          svg: buildEmergencyRuntimeSvg(slideContext),
+        }
+      }
     }
 
     let normalizedSvg: string
     try {
-      normalizedSvg = prepareGeneratedSvg(result.svg)
+      normalizedSvg = postprocessGeneratedSvg(slideContext, prepareGeneratedSvg(result.svg))
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "unknown_error"
-      throw new Error(`ppt_master_runtime_slide_svg_invalid:${variant.key}:${slideFileBaseName}:${detail}`)
+      const detail = error instanceof Error ? error.message : "svg_postprocess_failed"
+      if (!allowEmergencyFallback) {
+        throw new Error(`ppt_master_runtime_slide_postprocess_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+      }
+
+      fallbackReason = fallbackReason ?? detail
+      result = {
+        provider: "ppt-master-emergency-svg",
+        model: deck.previewModel ?? "emergency-svg",
+        svg: buildEmergencyRuntimeSvg(slideContext),
+      }
+      normalizedSvg = prepareGeneratedSvg(result.svg)
+    }
+
+    const svgFallbackReason = shouldFallbackForGeneratedSvg(slideContext, normalizedSvg)
+    if (svgFallbackReason) {
+      if (!allowEmergencyFallback) {
+        throw new Error(`ppt_master_runtime_slide_validation_failed:${variant.key}:${slideFileBaseName}:${svgFallbackReason}`)
+      }
+
+      fallbackReason = fallbackReason ?? svgFallbackReason
+      result = {
+        provider: "ppt-master-emergency-svg",
+        model: deck.previewModel ?? "emergency-svg",
+        svg: buildEmergencyRuntimeSvg(slideContext),
+      }
+      normalizedSvg = prepareGeneratedSvg(result.svg)
     }
 
     await fs.writeFile(path.join(projectDir, "svg_output", `${slideFileBaseName}.svg`), normalizedSvg, "utf8")
@@ -1232,6 +1633,15 @@ async function materializeVariantProject(params: {
     normalizedSlides.push(slide)
     runtimeProvider = result.provider ?? runtimeProvider
     runtimeModel = result.model ?? runtimeModel
+    slideRuns.push({
+      slideId: slide.id,
+      layout: slide.layout,
+      fileBaseName: slideFileBaseName,
+      durationMs: Date.now() - slideStartedAt,
+      provider: result.provider,
+      model: result.model,
+      fallbackReason,
+    })
   }
 
   await runPythonScript(repoDir, "finalize_svg.py", [projectDir])
@@ -1259,6 +1669,10 @@ async function materializeVariantProject(params: {
       name: variant.name,
       projectDir,
       slideCount: slideAssets.length,
+      runtimeDiagnostics: {
+        materializeMs: Date.now() - materializeStartedAt,
+        slideRuns,
+      },
     } satisfies StoredVariant,
     variant: {
       ...variant,
@@ -1282,33 +1696,38 @@ function toAsciiFileName(value: string) {
   return normalized || "ppt-master-export"
 }
 
+// Local subprocess adapter retained for dev fallback and rollback.
+// Remote worker execution is selected in the engine layer.
 export async function materializePptMasterPreviewDeck(deck: PptPreviewDeck, options: PptMasterPreviewRuntimeOptions) {
   await cleanupExpiredSessions()
 
   const repoDir = await resolvePptMasterRepoDir()
   const sessionId = randomUUID()
   const sessionDir = getSessionDir(sessionId)
+  const runtimeDeck = normalizeRuntimeDeckCopy(deck)
 
   const variantResults = await Promise.all(
-    deck.variants.map((variant) => materializeVariantProject({ deck, options, repoDir, sessionDir, variant })),
+    runtimeDeck.variants.map((variant) => materializeVariantProject({ deck: runtimeDeck, options, repoDir, sessionDir, variant })),
   )
 
   const materializedDeck = {
-    ...deck,
+    ...runtimeDeck,
     previewEngine: "ppt-master-project" as const,
-    previewModel: variantResults[0]?.runtimeModel ?? deck.previewModel,
+    previewModel: variantResults[0]?.runtimeModel ?? runtimeDeck.previewModel,
     previewSessionId: sessionId,
-    provider: variantResults[0]?.runtimeProvider ?? deck.provider,
+    provider: variantResults[0]?.runtimeProvider ?? runtimeDeck.provider,
     variants: variantResults.map((item) => item.variant),
   }
-
-  await writeManifest({
+  const storedSession = {
     sessionId,
     createdAt: new Date().toISOString(),
     title: deck.title,
     deck: materializedDeck,
     variants: variantResults.map((item) => item.stored),
-  })
+  } satisfies StoredSession
+
+  await writeManifest(storedSession)
+  await persistStoredSession(storedSession)
 
   return materializedDeck
 }
@@ -1367,4 +1786,17 @@ export async function exportPptMasterSessionVariant(sessionId: string, variantKe
     slideCount: variant.slideCount,
     variantName: variant.name,
   }
+}
+
+export const __testables__ = {
+  getPptMasterPythonCandidates,
+  readManifest,
+  compactRuntimeText,
+  normalizeRuntimeDeckCopy,
+  prepareGeneratedSvg,
+  postprocessGeneratedSvg,
+  buildEmergencyRuntimeSvg,
+  shouldFallbackForGeneratedSvg,
+  shouldUseDeterministicRuntimeSvg,
+  isRecoverableRuntimeSlideFailure,
 }

@@ -896,6 +896,7 @@ export function WorkflowNodeEditorFields({
           <div className="relative">
             <Textarea
               ref={textInputRef}
+              data-agent-config={`${node.nodeKey}:text`}
               value={asString(node.config.text)}
               onChange={(event) => {
                 updateConfig({ text: event.target.value })
@@ -1031,6 +1032,7 @@ export function WorkflowNodeEditorFields({
           <div className="space-y-2">
             <SectionLabel>{copy.systemPrompt}</SectionLabel>
             <Textarea
+              data-agent-config={`${node.nodeKey}:systemPrompt`}
               value={asString(node.config.systemPrompt)}
               onChange={(event) => updateConfig({ systemPrompt: event.target.value })}
               className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
@@ -1259,6 +1261,7 @@ export function WorkflowNodeEditorFields({
           <div className="space-y-2">
             <SectionLabel>{copy.script}</SectionLabel>
             <Textarea
+              data-agent-config={`${node.nodeKey}:script`}
               value={asString(node.config.script)}
               onChange={(event) => updateConfig({ script: event.target.value })}
               className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
@@ -1267,6 +1270,7 @@ export function WorkflowNodeEditorFields({
           <div className="space-y-2">
             <SectionLabel>{copy.scenePrompt}</SectionLabel>
             <Textarea
+              data-agent-config={`${node.nodeKey}:scenePrompt`}
               value={asString(node.config.scenePrompt)}
               onChange={(event) => updateConfig({ scenePrompt: event.target.value })}
               className="min-h-20 rounded-[10px] border-border/80 bg-background/80 text-sm"
