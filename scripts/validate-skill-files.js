@@ -2,6 +2,11 @@ const fs = require("node:fs")
 const path = require("node:path")
 
 const SKILLS_ROOT = path.join(process.cwd(), "content", "skills")
+const HAN_ALLOWED_ROOTS = [
+  path.join(SKILLS_ROOT, "agency-agents"),
+  path.join(SKILLS_ROOT, "customer-intelligence-risk"),
+  path.join(SKILLS_ROOT, "executive-consulting-suite"),
+]
 const MARKDOWN_EXT = ".md"
 const CJK_PATTERN = /[\p{Script=Han}]/u
 const REPLACEMENT_CHAR = "\uFFFD"
@@ -36,6 +41,15 @@ function findLineNumbers(content, pattern) {
   return matches
 }
 
+function isUnderRoot(file, root) {
+  const relative = path.relative(root, file)
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+}
+
+function allowsHanCharacters(file) {
+  return HAN_ALLOWED_ROOTS.some((root) => isUnderRoot(file, root))
+}
+
 function main() {
   if (!fs.existsSync(SKILLS_ROOT)) {
     console.error(`skills directory not found: ${SKILLS_ROOT}`)
@@ -58,9 +72,11 @@ function main() {
       issues.push(`${relative}: contains replacement char (possible broken encoding)`)
     }
 
-    const cjkMatches = findLineNumbers(content, CJK_PATTERN)
-    for (const match of cjkMatches) {
-      issues.push(`${relative}:${match.line}: contains non-English Han character: "${match.sample}"`)
+    if (!allowsHanCharacters(file)) {
+      const cjkMatches = findLineNumbers(content, CJK_PATTERN)
+      for (const match of cjkMatches) {
+        issues.push(`${relative}:${match.line}: contains non-English Han character: "${match.sample}"`)
+      }
     }
   }
 

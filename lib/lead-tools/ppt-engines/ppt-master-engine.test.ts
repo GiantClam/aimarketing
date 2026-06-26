@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { getPptMasterEngines } from "./ppt-master-engine"
+import {
+  getPptMasterEngines,
+  setPptMasterEngineLocalDepsForTests,
+  setPptWorkerTransportForTests,
+} from "./ppt-master-engine"
 
 const htmlDocument = {
   fileName: "ai-growth-deck-5p-long-table.html",
@@ -65,6 +69,14 @@ const htmlDeck = {
   ],
 }
 
+test.afterEach(() => {
+  setPptWorkerTransportForTests(null)
+  setPptMasterEngineLocalDepsForTests(null)
+  delete process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
+  delete process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME
+  delete process.env.PPT_WORKER_BASE_URL
+})
+
 test("frontend-slides finalize returns html export plan", async () => {
   const engines = getPptMasterEngines()
   const variant = htmlDeck.variants[0]
@@ -112,4 +124,237 @@ test("frontend-slides download returns html artifact", async () => {
   assert.equal(result.artifact.fileName, "ai-growth-deck-5p-long-table.html")
   const html = new TextDecoder().decode(result.artifact.buffer)
   assert.match(html, /<!doctype html>/i)
+})
+
+test("ppt-master engine uses remote worker for preview when configured", async () => {
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
+  process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "ppt-master-agent"
+  let seenAllowMockFallback: boolean | null = null
+  let seenResearchBrief: unknown = null
+  let seenImages: unknown = null
+  let seenModel: unknown = null
+
+  const remoteDeck = {
+    ...htmlDeck,
+    previewEngine: "ppt-master-project" as const,
+    previewSessionId: "session-remote-1",
+  }
+
+  setPptWorkerTransportForTests({
+    preview: async (request) => {
+      seenAllowMockFallback = request.allowMockFallback
+      seenResearchBrief = request.researchBrief
+      seenImages = request.images
+      seenModel = request.model
+      return {
+        previewSessionId: "session-remote-1",
+        generatedAt: "2026-06-24T00:00:00.000Z",
+        deck: remoteDeck,
+      }
+    },
+  })
+
+  const engines = getPptMasterEngines()
+  const result = await engines.preview.buildPreview(
+    {
+      prompt: "Build remote worker deck",
+      researchBrief: {
+        topic: "Hormuz Strait shipping risk 2026",
+        keyFacts: ["War-risk premiums rose"],
+      },
+      scenario: "sales-deck",
+      language: "zh-CN",
+      model: "gpt-5.4",
+      templateMode: "auto-4",
+      images: [{ url: "https://example.com/cover.png", role: "cover" }],
+    } as any,
+    {
+      allowMockFallback: false,
+      resolvedModels: {
+        previewModel: "gpt-5.4",
+        finalModel: "gpt-5.4",
+      },
+    },
+  )
+
+  assert.equal(result.previewSessionId, "session-remote-1")
+  assert.equal(result.meta.previewEngine, "ppt-master")
+  assert.equal(result.meta.mode, "ppt-master-project-preview")
+  assert.equal(seenAllowMockFallback, false)
+  assert.deepEqual(seenResearchBrief, {
+    topic: "Hormuz Strait shipping risk 2026",
+    keyFacts: ["War-risk premiums rose"],
+  })
+  assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
+  assert.equal(seenModel, "gpt-5.4")
+})
+
+test("ppt-master engine auto-selects remote worker preview when worker base url is configured", async () => {
+  process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com/"
+  let remoteCalled = false
+
+  const remoteDeck = {
+    ...htmlDeck,
+    previewEngine: "ppt-master-project" as const,
+    previewSessionId: "session-remote-auto-1",
+  }
+
+  setPptWorkerTransportForTests({
+    preview: async () => {
+      remoteCalled = true
+      return {
+        previewSessionId: "session-remote-auto-1",
+        generatedAt: "2026-06-25T00:00:00.000Z",
+        deck: remoteDeck,
+      }
+    },
+  })
+
+  const engines = getPptMasterEngines()
+  const result = await engines.preview.buildPreview(
+    {
+      prompt: "Build remote worker deck automatically",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      templateMode: "auto-4",
+    } as any,
+    {
+      allowMockFallback: false,
+      resolvedModels: {
+        previewModel: "gpt-5.4",
+        finalModel: "gpt-5.4",
+      },
+    },
+  )
+
+  assert.equal(remoteCalled, true)
+  assert.equal(result.previewSessionId, "session-remote-auto-1")
+  assert.equal(result.meta.previewRuntime, "ppt-master-agent")
+})
+
+test("ppt-master engine uses remote worker for download when configured", async () => {
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
+
+  setPptWorkerTransportForTests({
+    export: async () => ({
+      fileName: "deck.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      slideCount: 5,
+      variantName: "Long Table",
+      bufferBase64: Buffer.from("pptx-bytes").toString("base64"),
+    }),
+  })
+
+  const engines = getPptMasterEngines()
+  const variant = htmlDeck.variants[0]
+  assert.ok(variant)
+
+  const result = await engines.export.buildDownload(
+    {
+      deck: {
+        ...htmlDeck,
+        previewEngine: "ppt-master-project",
+      },
+      selectedVariant: variant,
+      previewSessionId: "session-remote-1",
+    },
+    {
+      user: null,
+    },
+  )
+
+  assert.ok(result.artifact)
+  assert.equal(result.artifact.fileName, "deck.pptx")
+  assert.equal(new TextDecoder().decode(result.artifact.buffer), "pptx-bytes")
+})
+
+test("ppt-master engine keeps local preview fallback when remote transport is disabled", async () => {
+  let remoteCalled = false
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
+
+  setPptWorkerTransportForTests({
+    preview: async () => {
+      remoteCalled = true
+      throw new Error("remote worker should not be called")
+    },
+  })
+
+  setPptMasterEngineLocalDepsForTests({
+    getPreviewRuntime: () =>
+      ({
+        id: "ppt-master-agent",
+        materializeStoryDeck: async () => ({
+          ...htmlDeck,
+          previewEngine: "ppt-master-project",
+          previewSessionId: "session-local-preview",
+        }),
+      }) as any,
+    generateStoryDeck: async () => ({ title: "Story Deck" }) as any,
+  })
+
+  const engines = getPptMasterEngines()
+  const result = await engines.preview.buildPreview(
+    {
+      prompt: "Build local fallback deck",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      templateMode: "auto-4",
+    } as any,
+    {
+      allowMockFallback: false,
+      resolvedModels: {
+        previewModel: "gpt-5.4",
+        finalModel: "gpt-5.4",
+      },
+    },
+  )
+
+  assert.equal(remoteCalled, false)
+  assert.equal(result.previewSessionId, "session-local-preview")
+  assert.equal(result.meta.previewEngine, "ppt-master")
+})
+
+test("ppt-master engine keeps local export fallback when remote transport is disabled", async () => {
+  let remoteCalled = false
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
+
+  setPptWorkerTransportForTests({
+    export: async () => {
+      remoteCalled = true
+      throw new Error("remote worker should not be called")
+    },
+  })
+
+  setPptMasterEngineLocalDepsForTests({
+    exportSessionVariant: async () => ({
+      buffer: Buffer.from("local-pptx"),
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      fileName: "local-deck.pptx",
+      slideCount: 5,
+      variantName: "Long Table",
+    }),
+  })
+
+  const engines = getPptMasterEngines()
+  const variant = htmlDeck.variants[0]
+  assert.ok(variant)
+
+  const result = await engines.export.buildDownload(
+    {
+      deck: {
+        ...htmlDeck,
+        previewEngine: "ppt-master-project",
+      },
+      selectedVariant: variant,
+      previewSessionId: "session-local-export",
+    },
+    {
+      user: null,
+    },
+  )
+
+  assert.equal(remoteCalled, false)
+  assert.ok(result.artifact)
+  assert.equal(result.artifact.fileName, "local-deck.pptx")
+  assert.equal(new TextDecoder().decode(result.artifact.buffer), "local-pptx")
 })

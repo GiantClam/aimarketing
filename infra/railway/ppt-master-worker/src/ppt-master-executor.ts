@@ -36,6 +36,7 @@ function toPreviewRequest(request: PreviewRequest): PptPreviewRequest {
     model: request.model,
     templateMode: request.templateMode,
     templateId: request.templateId,
+    narrativeAngle: request.narrativeAngle,
     pageCount: request.pageCount ?? null,
     images: request.images,
   }

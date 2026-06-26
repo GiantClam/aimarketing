@@ -45,17 +45,17 @@ export const CORE_WORKSPACE_BUSINESS_SLUGS = [
   "training-enablement",
   "talent-recruiting",
   "legal-ops",
+  "finance",
+  "paid-media",
 ] as const
 
 export const IMPORTED_WORKSPACE_BUSINESS_SLUGS = [
   "academic",
   "design",
   "engineering",
-  "finance",
   "game-development",
   "gis",
   "marketing",
-  "paid-media",
   "product",
   "project-management",
   "sales",
@@ -267,6 +267,40 @@ const zhEntries: LocalizedWorkspaceBusinessEntry[] = [
       { label: "Writer", href: "/dashboard/writer" },
       { label: "知识入口", href: "/dashboard/knowledge-base" },
       { label: "平台设置", href: "/dashboard/platform-settings" },
+    ],
+  },
+  {
+    slug: "finance",
+    iconKey: "operations",
+    title: "财务经营",
+    summary: "围绕预算、财务建模、定价、现金流和经营复盘组织财务工作台。",
+    description:
+      "面向财务、经营分析和商业化团队，把预算取舍、财务建模、定价策略和经营复盘放进同一条财务视角路线。",
+    outcomes: ["预算与预测", "财务建模与情景分析", "定价与毛利结构", "经营复盘与现金流"],
+    href: buildDashboardBusinessHref("finance"),
+    workflowSlugs: ["content-repurpose"],
+    relatedLinks: [
+      { label: "AI 对话", href: "/dashboard/ai" },
+      { label: "Writer", href: "/dashboard/writer" },
+      { label: "工作流", href: "/dashboard/workflows" },
+      { label: "平台设置", href: "/dashboard/platform-settings" },
+    ],
+  },
+  {
+    slug: "paid-media",
+    iconKey: "lead",
+    title: "付费投放",
+    summary: "围绕账户结构、出价预算、素材测试和归因治理组织付费投放工作台。",
+    description:
+      "面向投放、增长和市场团队，把 PPC、社媒广告、程序化投放和追踪归因收回到一条投放视角路线。",
+    outcomes: ["投放账户结构", "出价与预算策略", "创意与素材测试", "归因与增量评估"],
+    href: buildDashboardBusinessHref("paid-media"),
+    workflowSlugs: ["campaign-launch"],
+    relatedLinks: [
+      { label: "AI 对话", href: "/dashboard/ai" },
+      { label: "AI 图片", href: "/dashboard/image-assistant" },
+      { label: "工作流", href: "/dashboard/workflows" },
+      { label: "能力中心", href: "/dashboard/capabilities" },
     ],
   },
 ]

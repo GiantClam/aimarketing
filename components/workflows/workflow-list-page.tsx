@@ -656,6 +656,7 @@ export function WorkflowListPage({
                 className="h-11 rounded-[9px] border border-[#ded735] bg-[#f5ef3d] px-[22px] text-sm font-black text-[#111] hover:bg-[#f5ef3d]/90"
                 onClick={() => void handleCreate()}
                 disabled={submitting}
+                data-agent-new-workflow
               >
                 <Plus className="mr-2 h-4 w-4" />
                 {submitting ? copy.createPending : copy.createWorkflow}
@@ -703,6 +704,7 @@ export function WorkflowListPage({
                       className="h-[46px] w-full rounded-[9px] border border-[#ded735] bg-[#f5ef3d] text-sm font-black text-[#111] hover:bg-[#f5ef3d]/90"
                       onClick={() => void handleCreate()}
                       disabled={submitting}
+                      data-agent-new-workflow
                     >
                       {submitting ? copy.createPending : copy.createAction}
                     </Button>

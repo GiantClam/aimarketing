@@ -1353,10 +1353,10 @@ export function WorkflowBuilderPage({
               <Button type="button" variant="outline" className="h-9 rounded-[8px]" asChild>
                 <Link href="/dashboard/workflows">{copy.list}</Link>
               </Button>
-              <Button type="button" variant="outline" className="h-9 rounded-[8px]" onClick={() => void handleSave()} disabled={controlsLocked}>
+              <Button type="button" variant="outline" className="h-9 rounded-[8px]" onClick={() => void handleSave()} disabled={controlsLocked} data-agent-save>
                 {saving ? copy.savePending : copy.save}
               </Button>
-              <Button type="button" className="public-button-primary h-9 px-4" onClick={() => void handleRun()} disabled={controlsLocked}>
+              <Button type="button" className="public-button-primary h-9 px-4" onClick={() => void handleRun()} disabled={controlsLocked} data-agent-run>
                 {hasActiveRun || runActionPending ? copy.runPending : canResumeRun ? copy.resume : copy.run}
               </Button>
             </div>
@@ -1425,6 +1425,7 @@ export function WorkflowBuilderPage({
                   onClick={() => handleFloatingControlToggle("library", () => setLibraryCollapsed(false))}
                   aria-label={copy.expandLibrary}
                   title={copy.expandLibrary}
+                  data-agent-toggle-library
                 >
                   <PanelLeftOpen className="size-4 shrink-0" />
                   <span className="font-display text-[11px] font-extrabold uppercase tracking-[0.08em]">
@@ -1446,6 +1447,7 @@ export function WorkflowBuilderPage({
                       onClick={() => handleFloatingControlToggle("library", () => setLibraryCollapsed(true))}
                       aria-label={copy.collapseLibrary}
                       title={copy.collapseLibrary}
+                      data-agent-toggle-library
                     >
                       <PanelLeftClose className="size-4" />
                       <span className="sr-only">{copy.libraryPanel}</span>

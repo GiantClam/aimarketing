@@ -21,7 +21,7 @@ test("ppt master runtime prefers explicit python env and falls back to python3",
   }
 })
 
-test("runtime deck normalization trims long agenda copy before export", () => {
+test("runtime deck normalization preserves agenda copy for slide generation", () => {
   const normalized = __testables__.normalizeRuntimeDeckCopy({
     title: "霍尔木兹海峡风险如何改写全球油运成本",
     scenario: "marketing-campaign",
@@ -32,6 +32,7 @@ test("runtime deck normalization trims long agenda copy before export", () => {
     variants: [
       {
         key: "variant-a",
+        templateId: "broadside",
         styleKey: "ppt169_pritzker_2026",
         name: "Pritzker Editorial",
         summary: "summary",
@@ -62,8 +63,11 @@ test("runtime deck normalization trims long agenda copy before export", () => {
 
   const slide = normalized.variants[0]?.slides[0]
   assert.ok(slide)
-  assert.equal(slide?.title, "先看卡口现状，再看保费外溢、替代航线、买方…")
-  assert.equal(slide?.body.endsWith("…"), true)
+  assert.equal(slide?.title, "先看卡口现状，再看保费外溢、替代航线、买方暴露与行动顺序")
+  assert.equal(
+    slide?.body,
+    "这不是单纯的地缘事件复述，而是围绕运输成本、交付节奏与采购响应的结构化拆解，需要在一页内保持可读。",
+  )
   assert.equal(slide?.bullets[4], "行动顺序与处置节奏")
 })
 
@@ -121,7 +125,26 @@ test("emergency runtime svg renders agenda slide and marks timeout as recoverabl
   assert.match(svg, /agenda-row-1/u)
 })
 
-test("runtime deck normalization uses tighter limits for insight and timeline slides", () => {
+test("runtime svg preparation keeps the richest svg when the model returns multiple candidates", () => {
+  const normalized = __testables__.prepareGeneratedSvg(`
+<svg xmlns="http://www.w3.org/2000/svg"><g id="draft"></g></svg>
+
+For the Broadside style with agenda layout:
+- try a stronger second composition
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111"/>
+  <text x="60" y="80">栏目排版</text>
+</svg>
+  `)
+
+  assert.match(normalized, /viewBox="0 0 1280 720"/u)
+  assert.match(normalized, /栏目排版/u)
+  assert.doesNotMatch(normalized, /For the Broadside style/u)
+  assert.equal(normalized.match(/<svg/gu)?.length, 1)
+})
+
+test("runtime deck normalization preserves insight and timeline copy for slide generation", () => {
   const normalized = __testables__.normalizeRuntimeDeckCopy({
     title: "霍尔木兹海峡风险如何改写全球油运成本",
     scenario: "marketing-campaign",
@@ -132,6 +155,7 @@ test("runtime deck normalization uses tighter limits for insight and timeline sl
     variants: [
       {
         key: "variant-a",
+        templateId: "broadside",
         styleKey: "ppt169_pritzker_2026",
         name: "Pritzker Editorial",
         summary: "summary",
@@ -172,15 +196,27 @@ test("runtime deck normalization uses tighter limits for insight and timeline sl
 
   const insightSlide = normalized.variants[0]?.slides[0]
   const timelineSlide = normalized.variants[0]?.slides[1]
-  assert.equal(insightSlide?.title.endsWith("…"), true)
-  assert.equal(insightSlide?.body.endsWith("…"), true)
-  assert.equal(insightSlide?.bullets[0]?.endsWith("…"), true)
-  assert.equal(timelineSlide?.title.endsWith("…"), true)
-  assert.equal(timelineSlide?.body.endsWith("…"), true)
-  assert.equal(timelineSlide?.bullets[0]?.endsWith("…"), true)
+  assert.equal(
+    insightSlide?.title,
+    "航道在动，风险没有退；恢复通行，只是把焦虑从停摆改成高价与不确定",
+  )
+  assert.equal(
+    insightSlide?.body,
+    "恢复节奏并不线性，通行回升仍被安全预期、费用与等待时间反复拉扯，管理层不能把恢复误判为常态。",
+  )
+  assert.equal(insightSlide?.bullets[0], "约162艘油轮曾滞留，牵动约1.2亿桶原油")
+  assert.equal(
+    timelineSlide?.title,
+    "现在就要定案，先排顺序，再赌恢复；晚一天，成本与被动都会放大",
+  )
+  assert.equal(
+    timelineSlide?.body,
+    "把霍尔木兹风险当作常态情景，而不是一次性冲击，决策顺序必须前移。",
+  )
+  assert.equal(timelineSlide?.bullets[0], "锁定关键船期、保险额度与高优先货盘")
 })
 
-test("runtime svg validator falls back when timeline title is duplicated", () => {
+test("runtime svg validator does not replace generated slides for soft duplicate-title heuristics", () => {
   const reason = __testables__.shouldFallbackForGeneratedSvg(
     {
       deck: {
@@ -228,10 +264,10 @@ test("runtime svg validator falls back when timeline title is duplicated", () =>
     "<svg><text>现在就要定案</text><text>现在就要定案</text></svg>",
   )
 
-  assert.equal(reason, "ppt_master_runtime_svg_duplicate_title")
+  assert.equal(reason, null)
 })
 
-test("runtime prefers deterministic svg for zh insight and timeline slides", () => {
+test("runtime keeps original generated svg instead of deterministic replacement", () => {
   const makeContext = (layout: "insight" | "timeline" | "agenda", language: "zh-CN" | "en-US") =>
     ({
       deck: {
@@ -277,8 +313,53 @@ test("runtime prefers deterministic svg for zh insight and timeline slides", () 
       previousSlides: [],
     }) as any
 
-  assert.equal(__testables__.shouldUseDeterministicRuntimeSvg(makeContext("insight", "zh-CN")), true)
-  assert.equal(__testables__.shouldUseDeterministicRuntimeSvg(makeContext("timeline", "zh-CN")), true)
+  assert.equal(__testables__.shouldUseDeterministicRuntimeSvg(makeContext("insight", "zh-CN")), false)
+  assert.equal(__testables__.shouldUseDeterministicRuntimeSvg(makeContext("timeline", "zh-CN")), false)
   assert.equal(__testables__.shouldUseDeterministicRuntimeSvg(makeContext("agenda", "zh-CN")), false)
   assert.equal(__testables__.shouldUseDeterministicRuntimeSvg(makeContext("insight", "en-US")), false)
+})
+
+test("svg postprocess keeps generated svg unchanged", () => {
+  const context = {
+    deck: {
+      title: "deck",
+      scenario: "marketing-campaign",
+      language: "zh-CN",
+      generatedAt: "2026-06-24T00:00:00.000Z",
+      outline: [],
+      variants: [],
+    },
+    variant: {
+      key: "variant-a",
+      templateId: "broadside",
+      styleKey: "ppt169_pritzker_2026",
+      name: "Broadside",
+      summary: "summary",
+      stylePrompt: "poster",
+      palette: {
+        background: "#111111",
+        foreground: "#F0ECE5",
+        accent: "#E85D26",
+        panel: "#1A1A18",
+        border: "#282826",
+      },
+      strengths: ["poster"],
+      slides: [],
+    },
+    slide: {
+      id: "s1",
+      layout: "agenda",
+      intent: "contents",
+      kicker: "栏目排版",
+      title: "管理层先看这五件事",
+      body: "body",
+      bullets: [],
+      accent: "#E85D26",
+    },
+  } as any
+
+  const svg =
+    '<svg><text x="206" y="586" font-size="29" fill="#F0ECE5">海峡仍是全球能源物流最敏感的关键瓶颈</text><text x="1098" y="112" fill="#F0ECE5">霍尔木兹海峡现状与全球能源运输影响</text><text x="1112" y="638" fill="#F0ECE5">截至2026年6月24日</text></svg>'
+
+  assert.equal(__testables__.postprocessGeneratedSvg(context, svg), svg)
 })

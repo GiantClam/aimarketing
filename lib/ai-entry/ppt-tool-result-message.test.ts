@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { extractAiEntryArtifactsFromToolResult } from "./artifact-runtime"
 import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "./ppt-tool-result-message"
 
 test("ppt tool result message expands relative export links into absolute URLs", () => {
@@ -74,6 +75,57 @@ test("ppt tool result message returns null for unrelated tools", () => {
     }),
     null,
   )
+})
+
+test("preview_ppt_deck does not produce artifact metadata before export", () => {
+  const artifacts = extractAiEntryArtifactsFromToolResult({
+    toolName: "preview_ppt_deck",
+    result: {
+      ok: true,
+      previewSessionId: "preview-session-1",
+      nextStep: "Choose a variant key, then call export_ppt_deck.",
+      variants: [{ key: "variant-a", name: "Variant A" }],
+    },
+  })
+
+  assert.deepEqual(artifacts, [])
+})
+
+test("export_ppt_deck produces artifact metadata for downstream artifact_created events", () => {
+  const artifacts = extractAiEntryArtifactsFromToolResult({
+    toolName: "export_ppt_deck",
+    result: {
+      ok: true,
+      title: "企业 AI 营销工作台",
+      fileName: "enterprise-ai-marketing-workspace-4p.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      artifact: {
+        kind: "pptx",
+        title: "企业 AI 营销工作台",
+        fileName: "enterprise-ai-marketing-workspace-4p.pptx",
+        mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        artifactId: 118,
+        previewUrl: "/api/platform/artifacts/118/download",
+        downloadUrl: "/api/platform/artifacts/118/download?download=1",
+        workItemId: 9,
+        toolRunId: 17,
+      },
+    },
+  })
+
+  assert.deepEqual(artifacts, [
+    {
+      kind: "pptx",
+      title: "企业 AI 营销工作台",
+      fileName: "enterprise-ai-marketing-workspace-4p.pptx",
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      artifactId: 118,
+      previewUrl: "/api/platform/artifacts/118/download",
+      downloadUrl: "/api/platform/artifacts/118/download?download=1",
+      workItemId: 9,
+      toolRunId: 17,
+    },
+  ])
 })
 
 test("stripPptArtifactRelativeLinks removes raw artifact and work library relative paths", () => {

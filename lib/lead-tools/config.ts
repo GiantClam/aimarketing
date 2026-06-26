@@ -3,6 +3,10 @@ const DEFAULT_LEAD_TOOL_MODEL =
 const DEFAULT_PPT_PREVIEW_MODEL = "MiniMax-M2.7-highspeed"
 const DEFAULT_PPT_PREVIEW_RUNTIME = "frontend-slides-agent"
 const DEFAULT_PPT_EXPORT_RUNTIME = "ppt-master-agent"
+const DEFAULT_PPT_EXECUTION_TRANSPORT = "local"
+const DEFAULT_PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = 2000
+const DEFAULT_PPT_WORKER_PREVIEW_TIMEOUT_MS = 90 * 60 * 1000
+const DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS = 12 * 60 * 1000
 
 function pickFirstNonEmpty(values: Array<string | undefined>, fallback: string) {
   for (const value of values) {
@@ -51,10 +55,10 @@ export function getLeadToolFinalModel(slug: string) {
 
 export function getLeadToolPptPreviewRuntime(slug: string) {
   if (slug === "ai-ppt-preview") {
-    return pickFirstNonEmpty(
-      [process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME, process.env.LEAD_TOOLS_PREVIEW_RUNTIME],
-      DEFAULT_PPT_PREVIEW_RUNTIME,
-    )
+    const explicitRuntime = process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME?.trim() || process.env.LEAD_TOOLS_PREVIEW_RUNTIME?.trim()
+    if (explicitRuntime) return explicitRuntime
+    if (getPptWorkerBaseUrl()) return "ppt-master-agent"
+    return DEFAULT_PPT_PREVIEW_RUNTIME
   }
 
   return pickFirstNonEmpty([process.env.LEAD_TOOLS_PREVIEW_RUNTIME], DEFAULT_PPT_PREVIEW_RUNTIME)
@@ -71,7 +75,103 @@ export function getLeadToolPptExportRuntime(slug: string) {
   return pickFirstNonEmpty([process.env.LEAD_TOOLS_EXPORT_RUNTIME], DEFAULT_PPT_EXPORT_RUNTIME)
 }
 
+export function getLeadToolPptExecutionTransport() {
+  const explicitTransport = process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT?.trim()
+  if (explicitTransport) return explicitTransport
+  if (getPptWorkerBaseUrl()) return "remote-worker"
+  return DEFAULT_PPT_EXECUTION_TRANSPORT
+}
+
+export function getPptWorkerBaseUrl() {
+  return process.env.PPT_WORKER_BASE_URL?.trim() || ""
+}
+
+export function getPptWorkerInternalToken() {
+  return process.env.PPT_WORKER_INTERNAL_TOKEN?.trim() || ""
+}
+
+export function getPptWorkerRuntimeProfile() {
+  const runtimeProfile = process.env.PPT_WORKER_RUNTIME_PROFILE?.trim()
+
+  if (runtimeProfile === "railway-linux") {
+    return runtimeProfile
+  }
+
+  return "local-dev" as const
+}
+
+export function getPptWorkerPreviewPollIntervalMs() {
+  return pickPositiveInt(
+    [process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS],
+    DEFAULT_PPT_WORKER_PREVIEW_POLL_INTERVAL_MS,
+  )
+}
+
+export function getPptWorkerPreviewTimeoutMs() {
+  return pickPositiveInt(
+    [process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS],
+    DEFAULT_PPT_WORKER_PREVIEW_TIMEOUT_MS,
+  )
+}
+
+export function getPptMasterSlideTimeoutMs() {
+  return pickPositiveInt(
+    [process.env.PPT_MASTER_SLIDE_TIMEOUT_MS],
+    DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS,
+  )
+}
+
+export function allowPptMasterEmergencyFallback() {
+  return process.env.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK === "true"
+}
+
+export function getLeadToolPptRuntimeSlideModel() {
+  return pickFirstNonEmpty(
+    [process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL],
+    "gpt-5.4",
+  )
+}
+
+export function getLeadToolPptRuntimeSlideProvider() {
+  const provider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER?.trim().toLowerCase()
+
+  if (
+    provider === "pptoken" ||
+    provider === "minimax" ||
+    provider === "stepfun" ||
+    provider === "writer"
+  ) {
+    return provider
+  }
+
+  return ""
+}
+
+export function getLeadToolPptPreviewProvider() {
+  const provider = process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER?.trim().toLowerCase()
+
+  if (
+    provider === "pptoken" ||
+    provider === "minimax" ||
+    provider === "stepfun" ||
+    provider === "writer"
+  ) {
+    return provider
+  }
+
+  return ""
+}
+
 export function allowLeadToolMockFallback() {
   if (process.env.LEAD_TOOLS_ALLOW_MOCK_FALLBACK === "true") return true
   return process.env.NODE_ENV !== "production"
+}
+
+function pickPositiveInt(values: Array<string | undefined>, fallback: number) {
+  for (const value of values) {
+    const parsed = Number.parseInt(value?.trim() || "", 10)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+
+  return fallback
 }

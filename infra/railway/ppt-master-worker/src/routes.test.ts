@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { createInMemoryPptPreviewJobStore } from "./job-store.js"
 import { routeRequest, setWorkerRouteDepsForTests } from "./routes.js"
 
 test.afterEach(() => {
@@ -48,6 +49,7 @@ test("worker preview route validates payload and calls preview executor", async 
   let seenRequestId = ""
 
   setWorkerRouteDepsForTests({
+    previewJobStore: createInMemoryPptPreviewJobStore(),
     runPreviewJob: async (request) => {
       seenRequestId = request.requestId
       return {
@@ -82,17 +84,27 @@ test("worker preview route validates payload and calls preview executor", async 
   assert.equal(payload.status, "queued")
   assert.match(payload.jobId, /^[0-9a-f-]{36}$/u)
 
-  const statusResponse = await routeRequest(
-    new Request(`http://worker.local/preview-jobs/${payload.jobId}`, {
-      method: "GET",
-    }),
-  )
-
-  assert.equal(statusResponse.status, 200)
-  const statusPayload = await statusResponse.json()
   assert.equal(seenRequestId, "req_1")
-  assert.equal(statusPayload.status, "completed")
-  assert.equal(statusPayload.previewSessionId, "session_1")
+
+  let statusPayload: any = null
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const statusResponse = await routeRequest(
+      new Request(`http://worker.local/preview-jobs/${payload.jobId}`, {
+        method: "GET",
+      }),
+    )
+
+    assert.equal(statusResponse.status, 200)
+    statusPayload = await statusResponse.json()
+    if (statusPayload.status === "completed") {
+      break
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  assert.equal(statusPayload?.status, "completed")
+  assert.equal(statusPayload?.previewSessionId, "session_1")
 })
 
 test("worker export route validates payload and calls export executor", async () => {

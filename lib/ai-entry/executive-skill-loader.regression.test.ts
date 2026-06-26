@@ -67,6 +67,7 @@ test("ppt assistant skill documents are loadable through the shared agent loader
 
   assert.equal(isExecutiveConsultingAgent("executive-ppt"), true)
   assert.match(content, /PPT Generation Advisor/)
+  assert.match(content, /web_search/)
   assert.match(content, /preview_ppt_deck/)
   assert.match(content, /export_ppt_deck/)
 })

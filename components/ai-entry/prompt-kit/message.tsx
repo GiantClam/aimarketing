@@ -6,8 +6,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import type { MessagePart } from "@/lib/ai-entry/message-parts/types"
 import { cn } from "@/lib/utils"
 
+import { MessagePartViewList } from "../message-parts/message-part-view"
 import { Markdown } from "./markdown"
 
 type MessageProps = React.HTMLAttributes<HTMLDivElement>
@@ -42,6 +44,8 @@ type MessageContentProps = {
   role?: "assistant" | "user"
   className?: string
   bare?: boolean
+  isZh?: boolean
+  parts?: MessagePart[]
 }
 
 function MessageContent({
@@ -50,26 +54,42 @@ function MessageContent({
   role = "assistant",
   className,
   bare = false,
+  isZh = false,
+  parts,
 }: MessageContentProps) {
   const bubbleClassName =
     role === "assistant"
       ? "dashboard-panel rounded-[10px] border border-border bg-card text-foreground"
       : "rounded-[10px] border border-primary bg-primary text-primary-foreground"
+  const content = typeof children === "string" ? children : String(children)
 
   if (markdown) {
-    return (
+    const markdownNode = (
       <Markdown
         className={cn(
           bare ? "leading-7" : "px-4 py-3 leading-7",
-          !bare && bubbleClassName,
+          !parts?.length && !bare && bubbleClassName,
           role === "assistant"
             ? "prose-a:text-foreground"
             : "prose-a:text-primary-foreground",
           className,
         )}
       >
-        {typeof children === "string" ? children : String(children)}
+        {content}
       </Markdown>
+    )
+
+    if (!parts?.length) {
+      return markdownNode
+    }
+
+    return (
+      <div className={cn(!bare && bubbleClassName, className)}>
+        {markdownNode}
+        <div className={cn(bare ? "pt-3" : "px-4 pb-4")}>
+          <MessagePartViewList parts={parts} isZh={isZh} />
+        </div>
+      </div>
     )
   }
 

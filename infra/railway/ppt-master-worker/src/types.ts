@@ -22,6 +22,7 @@ export const previewRequestSchema = z.object({
   model: z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"]).optional(),
   templateMode: z.enum(["auto-4", "single-template"]),
   templateId: z.enum(["long-table", "playful", "broadside", "neo-grid-bold"]).optional(),
+  narrativeAngle: z.enum(["executive-brief", "campaign-story", "data-proof", "action-plan"]).optional(),
   pageCount: z.number().int().min(4).max(20).nullable().optional(),
   images: z
     .array(

@@ -1,5 +1,18 @@
 // lib/ai-entry/message-parts/types.ts
 
+export type AiEntryStreamSourceResult = {
+  title?: string
+  url?: string
+  snippet?: string
+  provider?: string
+}
+
+export type AiEntryStreamVariantResult = {
+  key?: string
+  name?: string
+  summary?: string | null
+}
+
 /** SSE 事件在 reducer 输入侧的宽松类型（镜像 ai-entry-workspace.tsx 的 ChatStreamApiResponse + PPT 防御字段）。 */
 export type AiEntryStreamEvent = {
   event?: string
@@ -14,6 +27,7 @@ export type AiEntryStreamEvent = {
     artifactId?: number | null
     previewUrl?: string | null
     downloadUrl?: string | null
+    workLibraryHref?: string | null
   } | null
   data?: {
     toolName?: string
@@ -26,7 +40,7 @@ export type AiEntryStreamEvent = {
     result?: {
       ok?: boolean
       query?: string
-      results?: Array<{ title?: string; url?: string; snippet?: string; provider?: string }>
+      results?: AiEntryStreamSourceResult[]
       error?: { code?: string; message?: string }
       previewSessionId?: string
       title?: string
@@ -35,7 +49,7 @@ export type AiEntryStreamEvent = {
       workLibraryHref?: string
       previewUrl?: string | null
       downloadUrl?: string | null
-      variants?: Array<{ key?: string; name?: string; summary?: string | null }>
+      variants?: AiEntryStreamVariantResult[]
     } | null
     validation?: {
       ok?: boolean
@@ -118,6 +132,7 @@ export type TaskProgressStep = {
 export type TaskProgressPart = {
   type: "task-progress"
   id: string
+  status: "running" | "done"
   steps: TaskProgressStep[]
 }
 

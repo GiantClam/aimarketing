@@ -1,13 +1,71 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { isLowInformationPptPlan, normalizeLeadToolPptPlan } from "./generation-ppt-fixed"
+import {
+  buildStyleAwarePrompt,
+  isLowInformationPptPlan,
+  normalizeLeadToolPptPlan,
+  normalizePptMasterRuntimeProviderError,
+  resolveLeadToolPreviewProviderPreference,
+} from "./generation-ppt-fixed"
 import {
   buildMockPptPreview,
   buildPptPreviewTemplateCapabilityLabel,
   getPptPreviewStyleSlots,
   pptPreviewStyles,
 } from "./ppt-preview-data-fixed"
+
+const yusuanAttachmentMarkdown = readFileSync(
+  new URL("../../tests/fixtures/ppt/yusuan-intelligence-ppt-info.md", import.meta.url),
+  "utf8",
+)
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")
+}
+
+function fromYusuanAttachment(snippet: string) {
+  assert.match(yusuanAttachmentMarkdown, new RegExp(escapeRegExp(snippet), "u"))
+  return snippet
+}
+
+function fromYusuanAttachmentPattern(pattern: RegExp, normalizedValue: string) {
+  assert.match(yusuanAttachmentMarkdown, pattern)
+  return normalizedValue
+}
+
+function buildYusuanResearchBrief() {
+  return {
+    topic: "屿算智能企业 AI 业务工具介绍",
+    keyFacts: [
+      fromYusuanAttachment("实用 AI 大于 AI 概念"),
+      fromYusuanAttachment("让 AI 进入企业的岗位、流程和结果"),
+      fromYusuanAttachment("企业需要的不是更多工具，而是一套能把问题变成流程的系统"),
+      fromYusuanAttachment("企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式"),
+    ],
+    numericEvidence: [
+      fromYusuanAttachment("配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色"),
+      fromYusuanAttachmentPattern(/\*\*40\+\*\*\s*国内外大模型与工具接入/u, "40+ 国内外大模型与工具接入"),
+      fromYusuanAttachmentPattern(/\*\*10\+\*\*\s*主流内容发布与客户承接触点/u, "10+ 主流内容发布与客户承接触点"),
+    ],
+    risks: [
+      fromYusuanAttachment("知道 AI 能写文案、做图片和视频，但接不进真实工作流程"),
+      fromYusuanAttachment("员工零散使用工具，结果留不进企业知识、项目和资产体系"),
+      fromYusuanAttachment("内容复刻、搬运、改写、数字人使用和客户互动过程中守住风险"),
+    ],
+    implications: [
+      fromYusuanAttachment("先帮企业问清楚，再进入立项和执行"),
+      fromYusuanAttachment("把想法变成方案、计划和每日执行"),
+      fromYusuanAttachment("让内容、获客和成交形成闭环"),
+      fromYusuanAttachment("把内容、方案、知识、流程、任务记录等沉淀到企业资产体系"),
+    ],
+    sourceNotes: ["Fixture - tests/fixtures/ppt/yusuan-intelligence-ppt-info.md"],
+    rawSummary: fromYusuanAttachment(
+      "屿算智脑是一套面向传统企业的 AI 业务工作台，通过 17 个 AI 智能体员工、40+ 模型工具接入和完整业务流程，把 AI 从单点工具升级为可执行、可管理、可沉淀的企业增长系统。",
+    ),
+  }
+}
 
 test("normalizeLeadToolPptPlan prefers intent over order and canonicalizes slots", () => {
   const style = pptPreviewStyles.find((item) => item.key === "ppt169_pritzker_2026")
@@ -261,4 +319,241 @@ test("isLowInformationPptPlan accepts a deck with style-specific concrete conten
   }
 
   assert.equal(isLowInformationPptPlan(richPlan, request), false)
+})
+
+test("normalizeLeadToolPptPlan maps structured researchBrief into fallback slides", () => {
+  const style = pptPreviewStyles.find((item) => item.key === "ppt169_pritzker_2026")
+  assert.ok(style)
+
+  const request = {
+    prompt: "做一份霍尔木兹海峡现状汇报 PPT",
+    scenario: "marketing-campaign" as const,
+    language: "zh-CN" as const,
+    model: "gpt-5.4" as const,
+    pageCount: 9,
+    researchBrief: {
+      topic: "霍尔木兹海峡现状",
+      keyFacts: ["保险成本上升", "航运风险溢价扩大", "绕航与备航预期同步抬升"],
+      numericEvidence: ["战争险保费升至船体价值的0.3%-0.5%", "部分船期延长7-10天"],
+      risks: ["运输成本抬升", "油运报价波动扩大"],
+      implications: ["买方库存前移", "先锁船期再调采购"],
+      sourceNotes: ["Source A - https://example.com/a"],
+      rawSummary: "保险和船期预期同步抬升，正在外溢到油运成本。",
+    },
+  }
+
+  const rawPlan = {
+    title: request.prompt,
+    slides: Array.from({ length: 9 }, (_, index) => ({
+      title: `${request.prompt} ${index + 1}`,
+      body: request.prompt,
+      bullets: index % 2 === 0 ? ["Step 1", "Section 2"] : [request.prompt],
+    })),
+  }
+
+  const normalized = normalizeLeadToolPptPlan(rawPlan, request, style)
+
+  assert.equal(normalized.title, "霍尔木兹海峡现状")
+  assert.equal(normalized.slides[0]?.title, "霍尔木兹海峡现状")
+  assert.deepEqual(
+    normalized.slides[1]?.contentsItems?.slice(0, 3),
+    [
+      { index: "01", title: "保险成本上升", detail: "保险成本上升" },
+      { index: "02", title: "航运风险溢价扩大", detail: "航运风险溢价扩大" },
+      { index: "03", title: "绕航与备航预期同步抬升", detail: "绕航与备航预期同步抬升" },
+    ],
+  )
+  assert.equal(normalized.slides[4]?.spotlightItems?.[0]?.detail, "保险成本上升")
+  assert.equal(normalized.slides[5]?.metricItems?.[0]?.value, "0.3%-0.5%")
+  assert.match(normalized.slides[5]?.metricItems?.[0]?.label ?? "", /^战争险保费升至船体价值/u)
+  assert.equal(normalized.slides[5]?.metricItems?.[0]?.note, "战争险保费升至船体价值的0.3%-0.5%")
+  assert.equal(normalized.slides[6]?.chartItems?.[0]?.detail, "运输成本抬升")
+  assert.deepEqual(normalized.slides[7]?.processItems?.[0], {
+    step: "01",
+    title: "买方库存前移",
+    detail: "买方库存前移",
+  })
+  assert.deepEqual(normalized.slides[8]?.closingItems?.[0], {
+    label: "01",
+    detail: "买方库存前移",
+  })
+})
+
+test("normalizeLeadToolPptPlan maps the yusuan attachment markdown string into business-workbench ppt structure", () => {
+  const style = pptPreviewStyles.find((item) => item.key === "ppt169_pritzker_2026")
+  assert.ok(style)
+
+  const request = {
+    prompt: "基于附件文档生成一份屿算智能企业 AI 业务工具介绍 PPT",
+    scenario: "marketing-campaign" as const,
+    language: "zh-CN" as const,
+    model: "gpt-5.4" as const,
+    pageCount: 9,
+    researchBrief: yusuanAttachmentMarkdown,
+  }
+
+  const rawPlan = {
+    title: request.prompt,
+    slides: Array.from({ length: 9 }, (_, index) => ({
+      title: `${request.prompt} ${index + 1}`,
+      body: request.prompt,
+      bullets: [request.prompt],
+    })),
+  }
+
+  const normalized = normalizeLeadToolPptPlan(rawPlan, request, style)
+
+  assert.equal(normalized.title, "屿算智能企业 AI 业务工具介绍")
+  assert.equal(normalized.slides[0]?.title, "屿算智能企业 AI 业务工具介绍")
+  assert.deepEqual(
+    normalized.slides[1]?.contentsItems?.slice(0, 3).map((item) => item.detail),
+    [
+      "实用 AI 大于 AI 概念",
+      "让 AI 进入企业的岗位、流程和结果",
+      "企业需要的不是更多工具，而是一套能把问题变成流程的系统",
+    ],
+  )
+  assert.ok(
+    [
+      "问题越来越多，工具越来越多，但真正能落到业务里的答案越来越少",
+      "知道 AI 能写文案、做图片和视频，但接不进真实工作流程",
+    ].includes(normalized.slides[3]?.comparisonItems?.[0]?.detail ?? ""),
+  )
+  assert.equal(
+    normalized.slides[4]?.spotlightItems?.[0]?.detail,
+    "实用 AI 大于 AI 概念",
+  )
+  assert.equal(normalized.slides[5]?.metricItems?.[0]?.value, "17")
+  assert.match(normalized.slides[5]?.metricItems?.[1]?.note ?? "", /40\+\s*模型与工具接入/u)
+  assert.ok(
+    [
+      {
+        step: "01",
+        title: "企业真正买到的是一套可执行",
+        detail: "企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。",
+      },
+      {
+        step: "01",
+        title: "先帮企业问清楚",
+        detail: "先帮企业问清楚，再进入立项和执行",
+      },
+    ].some((candidate) => JSON.stringify(candidate) === JSON.stringify(normalized.slides[7]?.processItems?.[0])),
+  )
+  assert.ok(
+    [
+      "企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。",
+      "先帮企业问清楚，再进入立项和执行",
+    ].includes(normalized.slides[8]?.closingItems?.[0]?.detail ?? ""),
+  )
+})
+
+test("normalizeLeadToolPptPlan maps the yusuan attachment into business-workbench ppt structure", () => {
+  const style = pptPreviewStyles.find((item) => item.key === "ppt169_pritzker_2026")
+  assert.ok(style)
+
+  const request = {
+    prompt: "基于附件文档生成一份屿算智能企业 AI 业务工具介绍 PPT",
+    scenario: "marketing-campaign" as const,
+    language: "zh-CN" as const,
+    model: "gpt-5.4" as const,
+    pageCount: 9,
+    researchBrief: buildYusuanResearchBrief(),
+  }
+
+  const rawPlan = {
+    title: request.prompt,
+    slides: Array.from({ length: 9 }, (_, index) => ({
+      title: `${request.prompt} ${index + 1}`,
+      body: request.prompt,
+      bullets: [request.prompt],
+    })),
+  }
+
+  const normalized = normalizeLeadToolPptPlan(rawPlan, request, style)
+
+  assert.equal(normalized.title, "屿算智能企业 AI 业务工具介绍")
+  assert.equal(normalized.slides[0]?.title, "屿算智能企业 AI 业务工具介绍")
+  assert.deepEqual(
+    normalized.slides[1]?.contentsItems?.slice(0, 3).map((item) => item.detail),
+    [
+      "实用 AI 大于 AI 概念",
+      "让 AI 进入企业的岗位、流程和结果",
+      "企业需要的不是更多工具，而是一套能把问题变成流程的系统",
+    ],
+  )
+  assert.equal(
+    normalized.slides[3]?.comparisonItems?.[0]?.detail,
+    "知道 AI 能写文案、做图片和视频，但接不进真实工作流程",
+  )
+  assert.equal(
+    normalized.slides[4]?.spotlightItems?.[0]?.detail,
+    "实用 AI 大于 AI 概念",
+  )
+  assert.equal(normalized.slides[5]?.metricItems?.[0]?.value, "17")
+  assert.equal(
+    normalized.slides[5]?.metricItems?.[0]?.note,
+    "配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色",
+  )
+  assert.deepEqual(
+    normalized.slides[7]?.processItems?.[0],
+    {
+      step: "01",
+      title: "先帮企业问清楚",
+      detail: "先帮企业问清楚，再进入立项和执行",
+    },
+  )
+  assert.deepEqual(normalized.slides[8]?.closingItems?.[0], {
+    label: "01",
+    detail: "先帮企业问清楚，再进入立项和执行",
+  })
+})
+
+test("buildStyleAwarePrompt explicitly instructs researchBrief field mapping", () => {
+  const style = pptPreviewStyles.find((item) => item.key === "ppt169_pritzker_2026")
+  assert.ok(style)
+
+  const prompt = buildStyleAwarePrompt(
+    {
+      prompt: "做一份霍尔木兹海峡现状汇报 PPT",
+      scenario: "marketing-campaign",
+      language: "zh-CN",
+      model: "gpt-5.4",
+      pageCount: 9,
+      researchBrief: {
+        topic: "霍尔木兹海峡现状",
+        keyFacts: ["保险成本上升"],
+        numericEvidence: ["战争险保费升至船体价值的0.3%-0.5%"],
+        risks: ["运输成本抬升"],
+        implications: ["买方库存前移"],
+      },
+    },
+    {
+      key: "ppt169_pritzker_2026",
+      slotLabel: "A",
+      style,
+      templateId: "broadside",
+      narrativeAngle: "executive-brief",
+    },
+  )
+
+  assert.match(prompt, /研究结构映射：keyFacts=1，numericEvidence=1，risks=1，implications=1/)
+  assert.match(prompt, /numericEvidence 必须优先进入 stats 或 chart 页/)
+  assert.match(prompt, /implications 必须进入 process 或 timeline 页/)
+})
+
+test("runtime slide provider preference honors explicit override", () => {
+  assert.equal(resolveLeadToolPreviewProviderPreference("gpt-5.4", "stepfun"), "stepfun")
+  assert.equal(resolveLeadToolPreviewProviderPreference("MiniMax-M3", ""), "minimax")
+  assert.equal(resolveLeadToolPreviewProviderPreference("unknown-model", "writer"), "writer")
+})
+
+test("runtime provider errors normalize headers timeout for Railway diagnostics", () => {
+  assert.equal(
+    normalizePptMasterRuntimeProviderError(
+      new Error("Failed after 3 attempts. Last error: Cannot connect to API: Headers Timeout Error"),
+      "pptoken",
+      "gpt-5.4",
+    ),
+    "ppt_master_runtime_provider_headers_timeout:pptoken:gpt-5.4",
+  )
 })

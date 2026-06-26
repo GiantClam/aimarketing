@@ -1,0 +1,10 @@
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!lib/
+!lib/**
+!infra/
+!infra/railway/
+!infra/railway/ppt-master-worker/
+!infra/railway/ppt-master-worker/**

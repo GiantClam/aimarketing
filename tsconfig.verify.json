@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "lib/ai-entry/message-parts/**/*.ts",
+    "components/ai-entry/message-parts/**/*.tsx",
+    "components/ai-entry/ai-entry-workspace.tsx",
+    "lib/skills/runtime/ai-entry-executor.ts"
+  ]
+}

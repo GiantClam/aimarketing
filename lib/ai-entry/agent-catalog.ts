@@ -74,10 +74,10 @@ const CORE_AGENTS: AiEntryAgentCatalogItem[] = [
   {
     id: "executive-ppt",
     category: "executive",
-    name: { zh: "PPT 助手", en: "PPT Assistant" },
+    name: { zh: "可编辑 PPT 助手", en: "Editable PPT Assistant" },
     description: {
-      zh: "通过对话梳理目标、结构与风格，并直接生成可下载的演示成品。",
-      en: "Use conversation to shape the goal, structure, and style, then generate a downloadable presentation deliverable.",
+      zh: "通过对话梳理目标、结构与风格，并直接生成可下载、可编辑的 PPTX 演示成品。",
+      en: "Use conversation to shape the goal, structure, and style, then generate a downloadable, editable PPTX presentation.",
     },
   },
   {

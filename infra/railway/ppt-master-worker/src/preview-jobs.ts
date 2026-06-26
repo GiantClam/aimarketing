@@ -1,103 +1,61 @@
 import { randomUUID } from "node:crypto"
 
+import {
+  getConfiguredPptPreviewJobStore,
+  setConfiguredPptPreviewJobStoreForTests,
+  type PptPreviewJobRecord,
+  type PptPreviewJobStatus,
+  type PptPreviewJobStore,
+} from "./job-store.js"
 import type { PreviewRequest } from "./types.js"
 import { runPreviewJob } from "./ppt-master-executor.js"
 
-type PreviewJobStatus = "queued" | "running" | "completed" | "failed"
-
-type PreviewJobState =
-  | {
-      jobId: string
-      requestId: string
-      status: "queued" | "running"
-      createdAt: number
-      updatedAt: number
-    }
-  | {
-      jobId: string
-      requestId: string
-      status: "completed"
-      createdAt: number
-      updatedAt: number
-      result: Awaited<ReturnType<typeof runPreviewJob>>
-    }
-  | {
-      jobId: string
-      requestId: string
-      status: "failed"
-      createdAt: number
-      updatedAt: number
-      message: string
-    }
-
-type GlobalWithPreviewJobs = typeof globalThis & {
-  __pptMasterWorkerPreviewJobsV1__?: Map<string, PreviewJobState>
-}
-
-const PREVIEW_JOB_TTL_MS = 1000 * 60 * 30
-
 let runPreviewJobImpl = runPreviewJob
 
-function getPreviewJobStore() {
-  const globalScope = globalThis as GlobalWithPreviewJobs
-  if (!globalScope.__pptMasterWorkerPreviewJobsV1__) {
-    globalScope.__pptMasterWorkerPreviewJobsV1__ = new Map()
+function mapPreviewJobStatus(job: PptPreviewJobRecord) {
+  if (job.status === "completed") {
+    const result = job.result as Awaited<ReturnType<typeof runPreviewJob>> | null
+
+    return {
+      jobId: job.jobId,
+      status: "completed" as const,
+      previewSessionId: result?.previewSessionId ?? "",
+      generatedAt: result?.generatedAt ?? "",
+      deck: result?.deck ?? null,
+    }
   }
 
-  return globalScope.__pptMasterWorkerPreviewJobsV1__
-}
-
-function pruneExpiredJobs() {
-  const now = Date.now()
-  const store = getPreviewJobStore()
-
-  for (const [jobId, job] of store.entries()) {
-    if (now - job.updatedAt > PREVIEW_JOB_TTL_MS) {
-      store.delete(jobId)
+  if (job.status === "failed") {
+    return {
+      jobId: job.jobId,
+      status: "failed" as const,
+      message: job.errorMessage || "worker_preview_job_failed",
     }
+  }
+
+  return {
+    jobId: job.jobId,
+    status: job.status as Extract<PptPreviewJobStatus, "queued" | "running">,
   }
 }
 
 export async function enqueuePreviewJob(request: PreviewRequest) {
-  pruneExpiredJobs()
   const jobId = randomUUID()
-  const now = Date.now()
-  const store = getPreviewJobStore()
+  const store = await getConfiguredPptPreviewJobStore()
 
-  store.set(jobId, {
+  await store.createJob({
     jobId,
     requestId: request.requestId,
-    status: "queued",
-    createdAt: now,
-    updatedAt: now,
   })
 
   void (async () => {
-    store.set(jobId, {
-      jobId,
-      requestId: request.requestId,
-      status: "running",
-      createdAt: now,
-      updatedAt: Date.now(),
-    })
-
     try {
+      await store.markRunning(jobId)
       const result = await runPreviewJobImpl(request)
-      store.set(jobId, {
-        jobId,
-        requestId: request.requestId,
-        status: "completed",
-        createdAt: now,
-        updatedAt: Date.now(),
-        result,
-      })
+      await store.completeJob(jobId, result)
     } catch (error) {
-      store.set(jobId, {
-        jobId,
-        requestId: request.requestId,
-        status: "failed",
-        createdAt: now,
-        updatedAt: Date.now(),
+      await store.failJob(jobId, {
+        code: "worker_preview_job_failed",
         message: error instanceof Error && error.message ? error.message : "worker_preview_job_failed",
       })
     }
@@ -109,42 +67,22 @@ export async function enqueuePreviewJob(request: PreviewRequest) {
   }
 }
 
-export function getPreviewJobStatus(jobId: string) {
-  pruneExpiredJobs()
-  const job = getPreviewJobStore().get(jobId)
+export async function getPreviewJobStatus(jobId: string) {
+  const store = await getConfiguredPptPreviewJobStore()
+  const job = await store.getJob(jobId)
   if (!job) return null
 
-  if (job.status === "completed") {
-    return {
-      jobId,
-      status: "completed" as const,
-      previewSessionId: job.result.previewSessionId,
-      generatedAt: job.result.generatedAt,
-      deck: job.result.deck,
-    }
-  }
-
-  if (job.status === "failed") {
-    return {
-      jobId,
-      status: "failed" as const,
-      message: job.message,
-    }
-  }
-
-  return {
-    jobId,
-    status: job.status as Extract<PreviewJobStatus, "queued" | "running">,
-  }
+  return mapPreviewJobStatus(job)
 }
 
 export function setPreviewJobDepsForTests(
   deps:
     | {
         runPreviewJob?: typeof runPreviewJob
+        previewJobStore?: PptPreviewJobStore
       }
     | null,
 ) {
   runPreviewJobImpl = deps?.runPreviewJob ?? runPreviewJob
-  getPreviewJobStore().clear()
+  setConfiguredPptPreviewJobStoreForTests(deps?.previewJobStore ?? null)
 }

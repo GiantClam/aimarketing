@@ -1,6 +1,7 @@
 import { ZodError } from "zod"
 
 import { checkFonts } from "./fonts.js"
+import type { PptPreviewJobStore } from "./job-store.js"
 import { enqueuePreviewJob, getPreviewJobStatus, setPreviewJobDepsForTests } from "./preview-jobs.js"
 import { runExportJob, runPreviewJob } from "./ppt-master-executor.js"
 import { exportRequestSchema, previewRequestSchema } from "./types.js"
@@ -54,7 +55,7 @@ export async function routeRequest(request: Request) {
         return json({ message: "bad_request" }, 400)
       }
 
-      const status = getPreviewJobStatus(jobId)
+      const status = await getPreviewJobStatus(jobId)
       if (!status) {
         return json({ message: "not_found" }, 404)
       }
@@ -90,6 +91,7 @@ export function setWorkerRouteDepsForTests(
         checkFonts?: typeof checkFonts
         runPreviewJob?: typeof runPreviewJob
         runExportJob?: typeof runExportJob
+        previewJobStore?: PptPreviewJobStore
       }
     | null,
 ) {
@@ -97,5 +99,6 @@ export function setWorkerRouteDepsForTests(
   runExportJobImpl = deps?.runExportJob ?? runExportJob
   setPreviewJobDepsForTests({
     runPreviewJob: deps?.runPreviewJob,
+    previewJobStore: deps?.previewJobStore,
   })
 }

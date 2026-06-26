@@ -9,6 +9,7 @@ export type EnterpriseTextModelProviderId =
   | "qwen_official"
   | "minimax_official"
   | "glm_official"
+  | "volcengine_official"
 
 export type EnterpriseImageModelProviderId =
   | "google_official"
@@ -104,6 +105,12 @@ const SUPPORTED_MODEL_CARDS: Record<EnterpriseModelCategory, SupportedModelDescr
       providerLabel: "GLM",
       integrationLabel: "Official API",
       models: ["GLM / ChatGLM 系列"],
+    },
+    {
+      providerId: "volcengine_official",
+      providerLabel: "火山引擎",
+      integrationLabel: "Volcengine Ark API",
+      models: ["Doubao 系列", "DeepSeek 系列"],
     },
   ],
   image_generation: [

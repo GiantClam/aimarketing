@@ -3,6 +3,7 @@
 import type React from "react"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu"
 import {
@@ -61,6 +62,12 @@ import {
   type LocalizedWorkspaceBusinessEntry,
 } from "@/lib/platform/workspace-business"
 import { cn } from "@/lib/utils"
+
+// Client-only: page-agent touches window/document, so never SSR it.
+const PageAgentWidget = dynamic(
+  () => import("@/components/page-agent/page-agent-widget").then((m) => m.PageAgentWidget),
+  { ssr: false },
+)
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -366,7 +373,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   )
                 )}
 
-                {showAdvisorSection && (
+                {(showAdvisorSection || showPptAssistantEntry) && (
                   <div>
                     {!sidebarCollapsed && (
                       <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
@@ -414,6 +421,28 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         <AiEntrySidebarItem title={messages.dashboardLayout.growthAdvisor} icon={TrendingUp} entryHref={growthAdvisorHref} activeAgentId="executive-growth" />
                       )
                     )}
+                    {showPptAssistantEntry ? (
+                      sidebarCollapsed ? (
+                        <Link href={pptAssistantHref}>
+                          <Button
+                            variant="ghost"
+                            className="mt-1 w-full justify-center"
+                            size="sm"
+                            title={messages.dashboardLayout.pptAssistant}
+                            aria-label={messages.dashboardLayout.pptAssistant}
+                          >
+                            <Presentation className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <AiEntrySidebarItem
+                          title={messages.dashboardLayout.pptAssistant}
+                          icon={Presentation}
+                          entryHref={pptAssistantHref}
+                          activeAgentId="executive-ppt"
+                        />
+                      )
+                    ) : null}
                   </div>
                 )}
 
@@ -474,7 +503,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                   </div>
                 )}
 
-                {(showWriterEntry || showPptAssistantEntry || showImageAssistantEntry) && (
+                {(showWriterEntry || showImageAssistantEntry) && (
                   <div>
                     {!sidebarCollapsed && (
                       <h3 className="dashboard-kicker mb-2 text-sidebar-foreground/65">
@@ -492,34 +521,12 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                         <WriterSidebarItem title={messages.dashboardLayout.writer} icon={PenSquare} />
                       )
                     ) : null}
-                    {showPptAssistantEntry ? (
-                      sidebarCollapsed ? (
-                        <Link href={pptAssistantHref}>
-                          <Button
-                            variant="ghost"
-                            className={showWriterEntry ? "mt-1 w-full justify-center" : "w-full justify-center"}
-                            size="sm"
-                            title={messages.dashboardLayout.pptAssistant}
-                            aria-label={messages.dashboardLayout.pptAssistant}
-                          >
-                            <Presentation className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      ) : (
-                        <AiEntrySidebarItem
-                          title={messages.dashboardLayout.pptAssistant}
-                          icon={Presentation}
-                          entryHref={pptAssistantHref}
-                          activeAgentId="executive-ppt"
-                        />
-                      )
-                    ) : null}
                     {showImageAssistantEntry ? (
                       sidebarCollapsed ? (
                         <Link href="/dashboard/image-assistant">
                           <Button
                             variant="ghost"
-                            className={showWriterEntry || showPptAssistantEntry ? "mt-1 w-full justify-center" : "w-full justify-center"}
+                            className={showWriterEntry ? "mt-1 w-full justify-center" : "w-full justify-center"}
                             size="sm"
                             title={messages.dashboardLayout.imageAssistant}
                             aria-label={messages.dashboardLayout.imageAssistant}
@@ -744,6 +751,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
           {children}
         </div>
       </main>
+
+      {user && !loading ? <PageAgentWidget /> : null}
     </div>
   )
 }
@@ -764,24 +773,28 @@ function DashboardMenuLink({
   highlighted?: boolean
 }) {
   return (
-    <Link href={href} className="block w-full">
-      <Button
-        variant="ghost"
-        className={cn(
-          collapsed
-            ? "box-border h-11 w-full min-w-0 justify-center rounded-[8px] border border-sidebar-border/35 bg-card/75 px-3 text-sidebar-foreground shadow-none transition hover:border-primary/40 hover:bg-primary hover:text-primary-foreground"
-            : "box-border h-11 w-full min-w-0 justify-start rounded-[8px] border border-sidebar-border/35 bg-card/75 px-3 text-sidebar-foreground shadow-none transition hover:border-primary/40 hover:bg-primary hover:text-primary-foreground",
-          active && "border-foreground/10 bg-foreground text-primary hover:border-foreground/10 hover:bg-foreground hover:text-primary",
-          highlighted && !active && "border-primary/35 bg-primary/10",
-        )}
-        size="sm"
-        title={label}
-        aria-label={label}
-      >
+    <Button
+      asChild
+      variant="ghost"
+      className={cn(
+        "box-border h-11 w-full min-w-0 rounded-[8px] border border-sidebar-border/35 bg-card/75 px-3 text-sidebar-foreground shadow-none transition hover:border-primary/40 hover:bg-primary hover:text-primary-foreground",
+        collapsed ? "justify-center" : "justify-start",
+        active &&
+          "border-foreground/10 bg-foreground text-primary hover:border-foreground/10 hover:bg-foreground hover:text-primary",
+        highlighted && !active && "border-primary/35 bg-primary/10",
+      )}
+      size="sm"
+      title={label}
+      aria-label={label}
+    >
+      {/* asChild merges the button styles onto the <a> so there is no nested
+          <button> inside the link — clicking the anchor navigates directly,
+          which is what page-agent (and real clicks) expect. */}
+      <Link href={href} data-agent-nav={label}>
         <Icon className={collapsed ? "h-4 w-4" : "mr-2 h-4 w-4"} />
         {!collapsed && label}
-      </Button>
-    </Link>
+      </Link>
+    </Button>
   )
 }
 
@@ -799,6 +812,7 @@ function DashboardSubMenuLink({
   return (
     <Link
       href={href}
+      data-agent-nav={label}
       className={cn(
         "block rounded-[8px] border border-transparent px-3 py-2 text-xs text-sidebar-foreground/80 transition hover:border-primary/30 hover:bg-primary/10 hover:text-sidebar-foreground",
         active && "border-foreground/10 bg-foreground text-primary",

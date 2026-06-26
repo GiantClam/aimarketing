@@ -2,7 +2,13 @@ import { generateText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 
 import { executeAiEntryWithProviderFailover, getConfiguredAiEntryProviders } from "@/lib/ai-entry/provider-routing"
-import { getLeadToolPreviewModel } from "@/lib/lead-tools/config"
+import {
+  getLeadToolPptRuntimeSlideModel,
+  getLeadToolPptPreviewProvider,
+  getLeadToolPptRuntimeSlideProvider,
+  getLeadToolPreviewModel,
+  getPptMasterSlideTimeoutMs,
+} from "@/lib/lead-tools/config"
 import {
   materializePptMasterPreviewDeck,
   type PptMasterPreviewRuntimeSlideContext,
@@ -27,6 +33,7 @@ import {
   resolveOptionalPptPreviewPageCount,
   type PptPreviewDeck,
   type PptPreviewVariantDescriptor,
+  type PptPreviewResearchBrief,
   type PptPreviewRequest,
   type PptPreviewSlide,
   resolvePptPreviewPageCount,
@@ -45,7 +52,7 @@ type LeadToolPptPlan = {
   slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
 }
 
-const RUNTIME_SLIDE_ATTEMPT_TIMEOUT_MS = 300_000
+type LeadToolPreviewProviderId = "pptoken" | "minimax" | "stepfun" | "writer"
 
 function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
@@ -84,6 +91,419 @@ function coerceStringList(value: unknown) {
       return ""
     })
     .filter(Boolean)
+}
+
+type NormalizedResearchBrief = {
+  topic: string
+  keyFacts: string[]
+  numericEvidence: string[]
+  risks: string[]
+  implications: string[]
+  sourceNotes: string[]
+  rawSummary: string
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const value of values.map((item) => stripMarkdownDecorations(item).trim()).filter(Boolean)) {
+    const key = value.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(value)
+  }
+
+  return result
+}
+
+function splitResearchString(value: string) {
+  return uniqueStrings(
+    value
+      .split(/\n+/u)
+      .flatMap((line) => line.split(/[;；]/u))
+      .map((item) => item.replace(/^[-*•\d.\s]+/u, "").trim())
+      .filter(Boolean),
+  )
+}
+
+const RESEARCH_NUMERIC_LINE_PATTERN =
+  /(?:[¥￥$€]\s*\d|\d+\s*[%％]|\d+\+|\d+\s*(?:个|层|页|版|家|种|项|步|天|年|万|亿|x|X))/u
+const RESEARCH_RISK_LINE_PATTERN =
+  /(?:问题|焦虑|卡点|风险|断点|不会|不能|不好用|难以|难|守住风险|复刻|搬运|改写|分散|跟不进|接不进)/u
+const RESEARCH_IMPLICATION_LINE_PATTERN =
+  /(?:结论|价值|判断|最终|共同变化|下一步|沉淀|闭环|进入岗位|进入流程|进入结果|帮助|推动|降低|扩大|买到|形成|先帮企业问清楚|把想法变成|看得见|持续推进|标准化|更精准|更完整)/u
+const RESEARCH_SKIP_LINE_PATTERN =
+  /^(?:第\s*\d+\s*页|说明|整体主题|核心主张|企业面临的问题包括|真实卡点|三层进入|对比关系|主要层级|输出内容|典型问题|系统能力|核心问题|两大能力|资产类型|岗位类别|能力底座|能力模块|覆盖功能|四类业务结果|典型场景|共同变化|产品定位|核心能力|对比|套餐|更高阶需求|合作入口)$/u
+const RESEARCH_LABEL_PREFIX_PATTERN =
+  /^(?:标题|核心观点|核心口号|核心逻辑|核心表达|最终判断|最终价值|结论|产品定义|现场核心句|核心句|系统能力|输出内容|典型问题|核心问题|两大能力|资产类型|岗位类别|能力底座|能力模块|覆盖功能|共同变化|产品定位|核心能力|合作入口|更高阶需求|套餐)[:：]\s*/u
+
+function sanitizeResearchLine(line: string) {
+  return stripMarkdownDecorations(line)
+    .replace(/^>\s*/u, "")
+    .replace(/^#{1,6}\s*/u, "")
+    .replace(/^[-*•]\s*/u, "")
+    .replace(/^\d+\s*[.)、]\s*/u, "")
+    .replace(RESEARCH_LABEL_PREFIX_PATTERN, "")
+    .replace(/[。！？.!?]+$/u, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function extractPreferredResearchLines(value: string, patterns: RegExp[]) {
+  const lines = value
+    .split(/\n/u)
+    .map((line) => sanitizeResearchLine(line))
+    .filter((line) => isMeaningfulResearchLine(line))
+
+  const matched: string[] = []
+  for (const pattern of patterns) {
+    const line = lines.find((item) => pattern.test(item))
+    if (line) {
+      matched.push(line)
+    }
+  }
+
+  return uniqueStrings(matched)
+}
+
+function canonicalizeResearchLine(line: string) {
+  if (/进入企业的岗位、流程和结果/u.test(line)) {
+    return "让 AI 进入企业的岗位、流程和结果"
+  }
+
+  return line
+}
+
+function isMeaningfulResearchLine(line: string) {
+  if (!line) return false
+  if (line.length < 4) return false
+  if (RESEARCH_SKIP_LINE_PATTERN.test(line)) return false
+  if (/^说明：/u.test(line)) return false
+  if (/^该 PPT 是/u.test(line)) return false
+  if (/^核心主张是[:：]?$/u.test(line)) return false
+  if (/^(?:封面|感谢聆听|期待合作|THANKS)$/iu.test(line)) return false
+  return true
+}
+
+function parseStructuredResearchBriefFromString(value: string, fallbackTopic: string) {
+  const rawLines = value.split(/\n/u)
+  const keyFacts: string[] = []
+  const numericEvidence: string[] = []
+  const risks: string[] = []
+  const implications: string[] = []
+  const sourceNotes: string[] = []
+  let topic = fallbackTopic
+  let summaryCandidate = ""
+  let currentSection = ""
+
+  const pushLine = (bucket: string[], line: string, limit: number) => {
+    if (!line || bucket.length >= limit) return
+    bucket.push(line)
+  }
+
+  for (const rawLine of rawLines) {
+    const headingMatch = rawLine.match(/^#{1,6}\s+(.+)$/u)
+    if (headingMatch?.[1]) {
+      currentSection = sanitizeResearchLine(headingMatch[1])
+      continue
+    }
+
+    const line = sanitizeResearchLine(rawLine)
+    if (!isMeaningfulResearchLine(line)) {
+      continue
+    }
+
+    if (!summaryCandidate && /可提炼的一句话定位/u.test(currentSection)) {
+      summaryCandidate = line
+      continue
+    }
+
+    if (
+      topic === fallbackTopic &&
+      /^(?:该 PPT 是|屿算智脑是一套|屿算智能企业 AI 业务工具介绍|企业专属 AI 业务工具)/u.test(line)
+    ) {
+      topic =
+        /屿算/u.test(value) || /屿算/u.test(line)
+          ? "屿算智能企业 AI 业务工具介绍"
+          : line
+    }
+
+    if (RESEARCH_NUMERIC_LINE_PATTERN.test(line)) {
+      pushLine(numericEvidence, line, 8)
+    }
+
+    if (
+      RESEARCH_RISK_LINE_PATTERN.test(line) ||
+      /(?:焦虑|卡点|风控|问题|断点)/u.test(currentSection)
+    ) {
+      pushLine(risks, line, 8)
+      continue
+    }
+
+    if (
+      RESEARCH_IMPLICATION_LINE_PATTERN.test(line) ||
+      /(?:价值|判断|结果|合作|交付逻辑|最终买到什么)/u.test(currentSection)
+    ) {
+      pushLine(implications, line, 8)
+      continue
+    }
+
+    pushLine(keyFacts, line, 12)
+  }
+
+  const fallbackFacts = splitResearchString(value).slice(0, 8)
+  const normalizedKeyFacts = uniqueStrings([
+    ...extractPreferredResearchLines(value, [
+      /实用 AI 大于 AI 概念/u,
+      /进入企业的岗位、流程和结果/u,
+      /企业需要的不是更多工具/u,
+      /企业真正买到的是一套可执行/u,
+      /七层业务闭环/u,
+    ]),
+    ...(keyFacts.length > 0 ? keyFacts : fallbackFacts),
+    ...fallbackFacts,
+  ])
+    .map((line) => canonicalizeResearchLine(line))
+    .slice(0, 8)
+  const normalizedNumericEvidence = uniqueStrings(numericEvidence).slice(0, 6)
+  const prioritizedNumericEvidence = uniqueStrings([
+    ...extractPreferredResearchLines(value, [
+      /17\s*个?\s*AI\s*智能体员工/u,
+      /40\+\s*(?:模型|国内外大模型与工具接入|模型与工具接入)/u,
+      /10\+\s*(?:主流内容发布与客户承接触点|主流内容发布)/u,
+    ]),
+    ...normalizedNumericEvidence,
+  ]).slice(0, 6)
+  const normalizedRisks = uniqueStrings([
+    ...extractPreferredResearchLines(value, [
+      /接不进真实工作流程/u,
+      /结果留不进企业知识、项目和资产体系/u,
+      /守住风险/u,
+    ]),
+    ...risks,
+  ]).slice(0, 6)
+  const normalizedImplications = uniqueStrings([
+    ...extractPreferredResearchLines(value, [
+      /先帮企业问清楚，再进入立项和执行/u,
+      /把想法变成方案、计划和每日执行/u,
+      /让内容、获客和成交形成闭环/u,
+      /沉淀到企业资产体系/u,
+    ]),
+    ...implications,
+  ]).slice(0, 6)
+  const rawSummary =
+    summaryCandidate ||
+    uniqueStrings([
+      normalizedKeyFacts[0] || "",
+      normalizedNumericEvidence[0] || "",
+      normalizedImplications[0] || "",
+    ])
+      .filter(Boolean)
+      .join("；")
+
+  return {
+    topic,
+    keyFacts: normalizedKeyFacts,
+    numericEvidence: prioritizedNumericEvidence,
+    risks: normalizedRisks,
+    implications: normalizedImplications,
+    sourceNotes,
+    rawSummary,
+  }
+}
+
+function normalizeResearchBrief(
+  value: PptPreviewRequest["researchBrief"],
+  fallbackTopic: string,
+): NormalizedResearchBrief {
+  if (!value) {
+    return {
+      topic: fallbackTopic,
+      keyFacts: [],
+      numericEvidence: [],
+      risks: [],
+      implications: [],
+      sourceNotes: [],
+      rawSummary: "",
+    }
+  }
+
+  if (typeof value === "string") {
+    const parsed = parseStructuredResearchBriefFromString(value, fallbackTopic)
+    return {
+      topic: parsed.topic || fallbackTopic,
+      keyFacts: parsed.keyFacts,
+      numericEvidence: parsed.numericEvidence,
+      risks: parsed.risks,
+      implications: parsed.implications,
+      sourceNotes: parsed.sourceNotes,
+      rawSummary: parsed.rawSummary || stripMarkdownDecorations(value).trim(),
+    }
+  }
+
+  const brief = value as PptPreviewResearchBrief
+  return {
+    topic: normalizeText(brief.topic) || fallbackTopic,
+    keyFacts: uniqueStrings(brief.keyFacts ?? []),
+    numericEvidence: uniqueStrings(brief.numericEvidence ?? []),
+    risks: uniqueStrings(brief.risks ?? []),
+    implications: uniqueStrings(brief.implications ?? []),
+    sourceNotes: uniqueStrings(brief.sourceNotes ?? []),
+    rawSummary: normalizeText(brief.rawSummary),
+  }
+}
+
+function buildResearchHeadline(text: string, language: PptPreviewRequest["language"]) {
+  const clean = stripMarkdownDecorations(text)
+    .replace(/^[-*•\d.\sA-Z]+[:：、.)\]]*\s*/u, "")
+    .trim()
+  const head = clean.split(/[，,；;。!?:：\n]/u)[0]?.trim() || clean
+  const maxLength = language === "zh-CN" ? 16 : 30
+
+  if (head.length <= maxLength) {
+    return head
+  }
+
+  return `${head.slice(0, maxLength).trim()}…`
+}
+
+function isMeaningfulDeckText(value: string, prompt: string) {
+  const normalized = normalizeText(value)
+  if (!normalized) return false
+  if (isPreviewPlaceholder(normalized)) return false
+  if (isGenericGeneratedLabel(normalized)) return false
+  if (looksLikePromptClone(normalized, prompt)) return false
+  return true
+}
+
+function mergeMeaningfulTextCandidates(primary: string[], fallback: string[], prompt: string, limit: number) {
+  const result: string[] = []
+  const seen = new Set<string>()
+
+  for (const candidate of [...primary, ...fallback]) {
+    const value = normalizeText(candidate)
+    if (!isMeaningfulDeckText(value, prompt)) continue
+    const key = value.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(value)
+    if (result.length >= limit) break
+  }
+
+  return result
+}
+
+function extractMetricValue(text: string, fallbackIndex: number) {
+  const clean = stripMarkdownDecorations(text)
+  const rangeMatch = clean.match(/\d+(?:\.\d+)?\s*%?\s*[-~]\s*\d+(?:\.\d+)?\s*%?/u)
+  if (rangeMatch?.[0]) {
+    return rangeMatch[0].replace(/\s+/gu, "")
+  }
+
+  const percentMatch = clean.match(/-?\d+(?:\.\d+)?\s*%/u)
+  if (percentMatch?.[0]) {
+    return percentMatch[0].replace(/\s+/gu, "")
+  }
+
+  const numericMatch = clean.match(/(?:\$|¥|￥|€)?\d+(?:\.\d+)?(?:万亿|亿|万|k|K|m|M|b|B)?(?:桶|艘|天|倍|x|X|bp|bps)?/u)
+  if (numericMatch?.[0]) {
+    return numericMatch[0]
+  }
+
+  return String(fallbackIndex + 1).padStart(2, "0")
+}
+
+function extractChartValue(text: string, fallbackIndex: number) {
+  const clean = stripMarkdownDecorations(text)
+  const percentMatch = clean.match(/(-?\d+(?:\.\d+)?)\s*%/u)
+  if (percentMatch?.[1]) {
+    return Math.max(20, Math.min(96, Math.round(Number(percentMatch[1]))))
+  }
+
+  return Math.max(28, 88 - fallbackIndex * 14)
+}
+
+function hasMeaningfulStructuredContent(values: string[], prompt: string) {
+  return values.some((value) => isMeaningfulDeckText(value, prompt))
+}
+
+function buildResearchBody(
+  layout: PptPreviewSlide["layout"],
+  research: NormalizedResearchBrief,
+  language: PptPreviewRequest["language"],
+) {
+  const firstFact = research.keyFacts[0]
+  const firstRisk = research.risks[0]
+  const firstImplication = research.implications[0]
+  const firstMetric = research.numericEvidence[0]
+
+  if (language === "zh-CN") {
+    switch (layout) {
+      case "cover":
+        return uniqueStrings([firstFact, firstRisk, firstImplication].filter(Boolean)).slice(0, 2).join("；")
+      case "agenda":
+        return firstFact || firstRisk || firstImplication || ""
+      case "insight":
+      case "evidence":
+        return firstFact || firstRisk || firstImplication || ""
+      case "comparison":
+      case "chart":
+        return firstRisk || firstImplication || firstFact || ""
+      case "stats":
+        return firstMetric || firstFact || ""
+      case "process":
+      case "timeline":
+        return firstImplication || firstRisk || firstFact || ""
+      default:
+        return firstFact || firstRisk || ""
+    }
+  }
+
+  switch (layout) {
+    case "cover":
+      return uniqueStrings([firstFact, firstRisk, firstImplication].filter(Boolean)).slice(0, 2).join("; ")
+    case "agenda":
+      return firstFact || firstRisk || firstImplication || ""
+    case "insight":
+    case "evidence":
+      return firstFact || firstRisk || firstImplication || ""
+    case "comparison":
+    case "chart":
+      return firstRisk || firstImplication || firstFact || ""
+    case "stats":
+      return firstMetric || firstFact || ""
+    case "process":
+    case "timeline":
+      return firstImplication || firstRisk || firstFact || ""
+    default:
+      return firstFact || firstRisk || ""
+  }
+}
+
+function getResearchLayoutItems(layout: PptPreviewSlide["layout"], research: NormalizedResearchBrief) {
+  switch (layout) {
+    case "cover":
+      return uniqueStrings([research.keyFacts[0], research.risks[0], research.implications[0]].filter(Boolean))
+    case "agenda":
+      return uniqueStrings([...research.keyFacts, ...research.risks, ...research.implications]).slice(0, 5)
+    case "insight":
+      return uniqueStrings([...research.keyFacts, ...research.implications]).slice(0, 4)
+    case "comparison":
+      return uniqueStrings([...research.risks, ...research.implications, ...research.keyFacts]).slice(0, 4)
+    case "evidence":
+      return uniqueStrings([...research.keyFacts, ...research.numericEvidence, ...research.risks]).slice(0, 4)
+    case "stats":
+      return uniqueStrings([...research.numericEvidence, ...research.keyFacts]).slice(0, 4)
+    case "chart":
+      return uniqueStrings([...research.risks, ...research.implications, ...research.numericEvidence]).slice(0, 4)
+    case "process":
+      return uniqueStrings([...research.implications, ...research.risks, ...research.keyFacts]).slice(0, 4)
+    case "timeline":
+      return uniqueStrings([...research.implications, ...research.risks, ...research.keyFacts]).slice(0, 4)
+    default:
+      return uniqueStrings([...research.keyFacts, ...research.risks, ...research.implications]).slice(0, 4)
+  }
 }
 
 function sanitizeRawPlan(rawPlan: unknown, request: PptPreviewRequest, style: PptPreviewVariantStyle) {
@@ -386,12 +806,53 @@ function inferPreviewProviderId(model: string) {
   return null
 }
 
+export function resolveLeadToolPreviewProviderPreference(
+  model: string,
+  explicitProvider?: string | null,
+): LeadToolPreviewProviderId | null {
+  const normalizedProvider = normalizeText(explicitProvider).toLowerCase()
+  if (
+    normalizedProvider === "pptoken" ||
+    normalizedProvider === "minimax" ||
+    normalizedProvider === "stepfun" ||
+    normalizedProvider === "writer"
+  ) {
+    return normalizedProvider
+  }
+
+  return inferPreviewProviderId(model)
+}
+
+export function normalizePptMasterRuntimeProviderError(
+  error: unknown,
+  provider: string,
+  model: string,
+) {
+  const message = error instanceof Error ? error.message : String(error)
+  const normalizedProvider = normalizeText(provider) || "unknown"
+  const normalizedModel = normalizeText(model) || "unknown"
+
+  if (/headers timeout error/iu.test(message)) {
+    return `ppt_master_runtime_provider_headers_timeout:${normalizedProvider}:${normalizedModel}`
+  }
+
+  if (/(?:fetch failed|connection error|connect timeout|etimedout|econnreset|econnrefused|enotfound)/iu.test(message)) {
+    return `ppt_master_runtime_provider_connect_failed:${normalizedProvider}:${normalizedModel}`
+  }
+
+  return message
+}
+
 async function generateTextWithLeadToolPreviewProvider(params: {
   systemPrompt: string
   userPrompt: string
   model: string
+  preferredProviderId?: LeadToolPreviewProviderId | null
 }) {
-  const preferredProviderId = inferPreviewProviderId(params.model)
+  const preferredProviderId = resolveLeadToolPreviewProviderPreference(
+    params.model,
+    params.preferredProviderId || getLeadToolPptPreviewProvider(),
+  )
 
   if (preferredProviderId === "minimax") {
     if (!hasLeadToolMinimaxProvider()) {
@@ -525,6 +986,21 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       text: result.result,
       providerId: result.providerId,
       model: result.model,
+    }
+  }
+
+  if (preferredProviderId === "writer") {
+    const text = await generateTextWithWriterModel(params.systemPrompt, params.userPrompt, params.model, {
+      temperature: 0.45,
+      maxTokens: 1400,
+      timeoutMs: 36_000,
+      totalTimeoutMs: 42_000,
+    })
+
+    return {
+      text,
+      providerId: hasAibermApiKey() ? "aiberm" : hasCrazyrouteApiKey() ? "crazyroute" : "writer",
+      model: params.model,
     }
   }
 
@@ -741,7 +1217,17 @@ function extractJsonObjectBlock(rawText: string) {
   throw new Error("ppt_preview_json_missing")
 }
 
-function buildFallbackBody(layout: PptPreviewSlide["layout"], fallbackTitle: string, language: PptPreviewRequest["language"]) {
+function buildFallbackBody(
+  layout: PptPreviewSlide["layout"],
+  fallbackTitle: string,
+  language: PptPreviewRequest["language"],
+  research?: NormalizedResearchBrief,
+) {
+  const researchBody = research ? buildResearchBody(layout, research, language) : ""
+  if (researchBody) {
+    return researchBody
+  }
+
   if (language === "zh-CN") {
     switch (layout) {
       case "cover":
@@ -791,55 +1277,71 @@ function buildFallbackBody(layout: PptPreviewSlide["layout"], fallbackTitle: str
   }
 }
 
-function buildFallbackSlideTitle(layout: PptPreviewSlide["layout"], fallbackTitle: string, language: PptPreviewRequest["language"]) {
+function buildFallbackSlideTitle(
+  layout: PptPreviewSlide["layout"],
+  fallbackTitle: string,
+  language: PptPreviewRequest["language"],
+  research?: NormalizedResearchBrief,
+) {
+  const topic = normalizeText(research?.topic) || fallbackTitle
   if (layout === "cover") {
-    return fallbackTitle
+    return topic
   }
 
   if (language === "zh-CN") {
     switch (layout) {
       case "agenda":
-        return `${fallbackTitle}的结构总览`
+        return `${topic}的结构总览`
       case "insight":
-        return `${fallbackTitle}的核心判断`
+        return `${topic}的核心判断`
       case "comparison":
-        return `${fallbackTitle}的关键比较`
+        return `${topic}的关键比较`
       case "evidence":
-        return `${fallbackTitle}的证据页`
+        return `${topic}的证据页`
       case "stats":
-        return `${fallbackTitle}的关键数据`
+        return `${topic}的关键数据`
       case "chart":
-        return `${fallbackTitle}的图示页`
+        return `${topic}的图示页`
       case "process":
-        return `${fallbackTitle}的执行路径`
+        return `${topic}的执行路径`
       case "timeline":
-        return `${fallbackTitle}的结束页`
+        return `${topic}的结束页`
     }
   }
 
   switch (layout) {
     case "agenda":
-      return `${fallbackTitle} structure`
+      return `${topic} structure`
     case "insight":
-      return `${fallbackTitle} key insight`
+      return `${topic} key insight`
     case "comparison":
-      return `${fallbackTitle} comparison`
+      return `${topic} comparison`
     case "evidence":
-      return `${fallbackTitle} proof`
+      return `${topic} proof`
     case "stats":
-      return `${fallbackTitle} stats`
+      return `${topic} stats`
     case "chart":
-      return `${fallbackTitle} chart`
+      return `${topic} chart`
     case "process":
-      return `${fallbackTitle} process`
+      return `${topic} process`
     case "timeline":
-      return `${fallbackTitle} closing`
+      return `${topic} closing`
     default:
-      return fallbackTitle
+      return topic
   }
 }
 
-function buildFallbackBullets(layout: PptPreviewSlide["layout"], fallbackTitle: string, language: PptPreviewRequest["language"]) {
+function buildFallbackBullets(
+  layout: PptPreviewSlide["layout"],
+  fallbackTitle: string,
+  language: PptPreviewRequest["language"],
+  research?: NormalizedResearchBrief,
+) {
+  const researchItems = research ? getResearchLayoutItems(layout, research) : []
+  if (researchItems.length > 0) {
+    return researchItems
+  }
+
   if (language === "zh-CN") {
     switch (layout) {
       case "cover":
@@ -889,49 +1391,64 @@ function buildFallbackBullets(layout: PptPreviewSlide["layout"], fallbackTitle: 
   }
 }
 
-function buildFallbackComparisonItems(slide: Pick<PptPreviewSlide, "bullets" | "title">) {
+function buildFallbackComparisonItems(
+  slide: Pick<PptPreviewSlide, "bullets" | "title">,
+  language: PptPreviewRequest["language"],
+) {
   return slide.bullets.slice(0, 4).map((bullet, index) => ({
     label: String.fromCharCode(65 + index),
-    title: `${slide.title} ${index + 1}`,
+    title: buildResearchHeadline(bullet, language) || `${slide.title} ${index + 1}`,
     detail: bullet,
   }))
 }
 
-function buildFallbackContentsItems(slide: Pick<PptPreviewSlide, "bullets" | "title">) {
+function buildFallbackContentsItems(
+  slide: Pick<PptPreviewSlide, "bullets" | "title">,
+  language: PptPreviewRequest["language"],
+) {
   return slide.bullets.slice(0, 9).map((bullet, index) => ({
     index: String(index + 1).padStart(2, "0"),
-    title: index === 0 ? slide.title : `Section ${index + 1}`,
+    title: buildResearchHeadline(bullet, language) || (index === 0 ? slide.title : `Section ${index + 1}`),
     detail: bullet,
   }))
 }
 
-function buildFallbackSpotlightItems(slide: Pick<PptPreviewSlide, "bullets" | "title">) {
+function buildFallbackSpotlightItems(
+  slide: Pick<PptPreviewSlide, "bullets" | "title">,
+  language: PptPreviewRequest["language"],
+) {
   return slide.bullets.slice(0, 4).map((bullet, index) => ({
-    title: index === 0 ? slide.title : `Signal ${index + 1}`,
+    title: buildResearchHeadline(bullet, language) || (index === 0 ? slide.title : `Signal ${index + 1}`),
     detail: bullet,
   }))
 }
 
-function buildFallbackMetricItems(slide: Pick<PptPreviewSlide, "bullets">) {
+function buildFallbackMetricItems(
+  slide: Pick<PptPreviewSlide, "bullets">,
+  language: PptPreviewRequest["language"],
+) {
   return slide.bullets.slice(0, 4).map((bullet, index) => ({
-    value: `${index + 1}`,
-    label: bullet,
-    note: "",
+    value: extractMetricValue(bullet, index),
+    label: buildResearchHeadline(bullet, language) || bullet,
+    note: bullet,
   }))
 }
 
 function buildFallbackChartItems(slide: Pick<PptPreviewSlide, "bullets">) {
   return slide.bullets.slice(0, 4).map((bullet, index) => ({
     label: String.fromCharCode(65 + index),
-    value: Math.max(20, Math.min(96, bullet.length * 4)),
+    value: extractChartValue(bullet, index),
     detail: bullet,
   }))
 }
 
-function buildFallbackProcessItems(slide: Pick<PptPreviewSlide, "bullets">) {
+function buildFallbackProcessItems(
+  slide: Pick<PptPreviewSlide, "bullets">,
+  language: PptPreviewRequest["language"],
+) {
   return slide.bullets.slice(0, 4).map((bullet, index) => ({
     step: String(index + 1).padStart(2, "0"),
-    title: `Step ${index + 1}`,
+    title: buildResearchHeadline(bullet, language) || `Step ${index + 1}`,
     detail: bullet,
   }))
 }
@@ -997,7 +1514,8 @@ function getLayoutTextLimits(layout: PptPreviewSlide["layout"], language: PptPre
 export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewRequest, style: PptPreviewVariantStyle): LeadToolPptPlan {
   const pageCount = resolvePptPreviewPageCount(request.pageCount)
   const styleSlots = getPptPreviewStyleSlotSequence(style.key, pageCount)
-  const fallbackTitle = request.prompt.trim()
+  const research = normalizeResearchBrief(request.researchBrief, request.prompt.trim())
+  const fallbackTitle = research.topic || request.prompt.trim()
   const rawSlides = Array.isArray(rawPlan?.slides) ? rawPlan.slides : []
   const normalizedCandidates = rawSlides.map((rawSlide: any, index: number) => {
     const titleCandidate = typeof rawSlide?.title === "string" ? stripMarkdownDecorations(rawSlide.title) : ""
@@ -1147,6 +1665,17 @@ export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewReques
     const limits = getLayoutTextLimits(slot.layout, request.language)
     const slotSchema = getPptPreviewTemplateSlotByLayout(style.key, slot.layout)
     const structuredFields = slotSchema?.structuredFields ?? []
+    const fallbackBullets = buildFallbackBullets(slot.layout, fallbackTitle, request.language, research)
+    const bulletSource = mergeMeaningfulTextCandidates(rawSlide.bullets ?? [], fallbackBullets, request.prompt, limits.bullets)
+    const bullets = bulletSource.length > 0 ? bulletSource : fallbackBullets.slice(0, limits.bullets)
+    const title =
+      isMeaningfulDeckText(rawSlide.title ?? "", request.prompt)
+        ? (rawSlide.title as string).trim()
+        : buildFallbackSlideTitle(slot.layout, fallbackTitle, request.language, research).trim()
+    const body =
+      isMeaningfulDeckText(rawSlide.body ?? "", request.prompt)
+        ? (rawSlide.body as string).trim()
+        : buildFallbackBody(slot.layout, fallbackTitle, request.language, research).trim()
 
     return {
       layout: slot.layout,
@@ -1154,38 +1683,96 @@ export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewReques
       nativePageType: slotSchema?.nativePageType,
       structuredFields: [...structuredFields],
       kicker: (rawSlide.kicker || `Slide ${index + 1}`).trim(),
-      title: (rawSlide.title || buildFallbackSlideTitle(slot.layout, fallbackTitle, request.language)).trim(),
-      body: (rawSlide.body || buildFallbackBody(slot.layout, fallbackTitle, request.language)).trim(),
-      bullets: (rawSlide.bullets?.length ? rawSlide.bullets : buildFallbackBullets(slot.layout, fallbackTitle, request.language))
-        .map((item: string) => item.trim())
-        .slice(0, limits.bullets),
+      title,
+      body,
+      bullets,
       contentsItems:
         structuredFields.includes("contentsItems")
-          ? (rawSlide.contentsItems?.length ? rawSlide.contentsItems : buildFallbackContentsItems(rawSlide as PptPreviewSlide)).slice(0, 9)
+          ? (
+              rawSlide.contentsItems?.length &&
+              hasMeaningfulStructuredContent(
+                rawSlide.contentsItems.flatMap((item: { title: string; detail: string }) => [item.title, item.detail]),
+                request.prompt,
+              )
+                ? rawSlide.contentsItems
+                : buildFallbackContentsItems({ title, bullets }, request.language)
+            ).slice(0, 9)
           : undefined,
       comparisonItems:
         structuredFields.includes("comparisonItems")
-          ? (rawSlide.comparisonItems?.length ? rawSlide.comparisonItems : buildFallbackComparisonItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          ? (
+              rawSlide.comparisonItems?.length &&
+              hasMeaningfulStructuredContent(
+                rawSlide.comparisonItems.flatMap((item: { title: string; detail: string }) => [item.title, item.detail]),
+                request.prompt,
+              )
+                ? rawSlide.comparisonItems
+                : buildFallbackComparisonItems({ title, bullets }, request.language)
+            ).slice(0, 4)
           : undefined,
       spotlightItems:
         structuredFields.includes("spotlightItems")
-          ? (rawSlide.spotlightItems?.length ? rawSlide.spotlightItems : buildFallbackSpotlightItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          ? (
+              rawSlide.spotlightItems?.length &&
+              hasMeaningfulStructuredContent(
+                rawSlide.spotlightItems.flatMap((item: { title: string; detail: string }) => [item.title, item.detail]),
+                request.prompt,
+              )
+                ? rawSlide.spotlightItems
+                : buildFallbackSpotlightItems({ title, bullets }, request.language)
+            ).slice(0, 4)
           : undefined,
       metricItems:
         structuredFields.includes("metricItems")
-          ? (rawSlide.metricItems?.length ? rawSlide.metricItems : buildFallbackMetricItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          ? (
+              rawSlide.metricItems?.length &&
+              hasMeaningfulStructuredContent(
+                rawSlide.metricItems.flatMap((item: { value: string; label: string; note?: string }) => [
+                  item.value,
+                  item.label,
+                  item.note ?? "",
+                ]),
+                request.prompt,
+              )
+                ? rawSlide.metricItems
+                : buildFallbackMetricItems({ bullets }, request.language)
+            ).slice(0, 4)
           : undefined,
       chartItems:
         structuredFields.includes("chartItems")
-          ? (rawSlide.chartItems?.length ? rawSlide.chartItems : buildFallbackChartItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          ? (
+              rawSlide.chartItems?.length &&
+              hasMeaningfulStructuredContent(
+                rawSlide.chartItems.flatMap((item: { label: string; detail: string }) => [item.label, item.detail]),
+                request.prompt,
+              )
+                ? rawSlide.chartItems
+                : buildFallbackChartItems({ bullets })
+            ).slice(0, 4)
           : undefined,
       processItems:
         structuredFields.includes("processItems")
-          ? (rawSlide.processItems?.length ? rawSlide.processItems : buildFallbackProcessItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          ? (
+              rawSlide.processItems?.length &&
+              hasMeaningfulStructuredContent(
+                rawSlide.processItems.flatMap((item: { title: string; detail: string }) => [item.title, item.detail]),
+                request.prompt,
+              )
+                ? rawSlide.processItems
+                : buildFallbackProcessItems({ bullets }, request.language)
+            ).slice(0, 4)
           : undefined,
       closingItems:
         structuredFields.includes("closingItems")
-          ? (rawSlide.closingItems?.length ? rawSlide.closingItems : buildFallbackClosingItems(rawSlide as PptPreviewSlide)).slice(0, 4)
+          ? (
+              rawSlide.closingItems?.length &&
+              hasMeaningfulStructuredContent(
+                rawSlide.closingItems.flatMap((item: { label: string; detail: string }) => [item.label, item.detail]),
+                request.prompt,
+              )
+                ? rawSlide.closingItems
+                : buildFallbackClosingItems({ bullets })
+            ).slice(0, 4)
           : undefined,
     }
   }) as LeadToolPptPlan["slides"]
@@ -1195,7 +1782,7 @@ export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewReques
     : []
 
   const normalizedTitle =
-    typeof rawPlan?.title === "string" && !isPreviewPlaceholder(rawPlan.title)
+    typeof rawPlan?.title === "string" && isMeaningfulDeckText(rawPlan.title, request.prompt)
       ? stripMarkdownDecorations(rawPlan.title)
       : fallbackTitle
 
@@ -1211,6 +1798,7 @@ export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewReques
 export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: PptPreviewVariantDescriptor) {
   const { style } = descriptor
   const pageCount = resolvePptPreviewPageCount(request.pageCount)
+  const research = normalizeResearchBrief(request.researchBrief, request.prompt.trim())
   const layoutSequence = getPptPreviewLayoutSequence(pageCount)
   const styleSlots = getPptPreviewStyleSlotSequence(style.key, pageCount)
   const intentSequence = buildPptPreviewIntentSequenceLabel(style.key, request.language, pageCount)
@@ -1246,6 +1834,11 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: Pp
     `Style intent: ${style.summary}`,
     `Style writing direction: ${style.stylePrompt}`,
     `Strengths: ${style.strengths.join(", ")}`,
+    research.keyFacts.length || research.numericEvidence.length || research.risks.length || research.implications.length
+      ? request.language === "zh-CN"
+        ? `研究结构映射：keyFacts=${research.keyFacts.length}，numericEvidence=${research.numericEvidence.length}，risks=${research.risks.length}，implications=${research.implications.length}。优先把 keyFacts 落到 agenda/evidence，numericEvidence 落到 stats/chart，risks 落到 comparison/chart，implications 落到 process/timeline。`
+        : `Research mapping: keyFacts=${research.keyFacts.length}, numericEvidence=${research.numericEvidence.length}, risks=${research.risks.length}, implications=${research.implications.length}. Prefer keyFacts for agenda/evidence, numericEvidence for stats/chart, risks for comparison/chart, and implications for process/timeline.`
+      : null,
     request.language === "zh-CN" ? `该模板的原生页型顺序: ${intentSequence}` : `Native page-intent sequence: ${intentSequence}`,
     request.language === "zh-CN" ? `模板能力注册表:\n${capabilityLabel}` : `Template capability registry:\n${capabilityLabel}`,
     request.language === "zh-CN"
@@ -1261,6 +1854,10 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: Pp
           "虽然 slides 的字段顺序固定，但内容必须按该模板的原生页型去写，不要把九页都写成普通文字页。",
           `layout 顺序固定为 ${layoutSequence.join(", ")}。`,
           "agenda 页优先产出 contentsItems；comparison 页优先产出 comparisonItems；evidence 页优先产出 spotlightItems；stats 页优先产出 metricItems；chart 页优先产出 chartItems；process 页优先产出 processItems；timeline 页优先产出 closingItems，不要只给 bullets。",
+          research.keyFacts.length > 0 ? "researchBrief 里的 keyFacts 不能只塞进封面，至少要分布到 agenda、insight、evidence 三类页面。" : "",
+          research.numericEvidence.length > 0 ? "researchBrief 里的 numericEvidence 必须优先进入 stats 或 chart 页，至少有一页出现明确数字信号。" : "",
+          research.risks.length > 0 ? "researchBrief 里的 risks 必须显式进入 comparison 或 chart 页，不要丢失风险外溢链。" : "",
+          research.implications.length > 0 ? "researchBrief 里的 implications 必须进入 process 或 timeline 页，转成行动顺序、响应动作或 watchpoints。" : "",
           "agenda 页的五个章节名必须体现该风格自己的信息组织方式，不要复用通用目录词。",
           "cover 页标题可以重写，但必须明确包含主题对象，不要简单等于原始 prompt。",
           templateMode === "single-template" && narrativeAnglePrompt ? `当前候选的叙事角要求：${narrativeAnglePrompt}` : "",
@@ -1273,6 +1870,10 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: Pp
           "Even though the field order is fixed, write each slot according to this preset's native page intent rather than treating all nine as generic text slides.",
           `The fixed layout order is: ${layoutSequence.join(", ")}.`,
           "Prefer returning contentsItems on agenda slides, comparisonItems on comparison slides, spotlightItems on evidence slides, metricItems on stats slides, chartItems on chart slides, processItems on process slides, and closingItems on closing slides rather than relying on bullets alone.",
+          research.keyFacts.length > 0 ? "Spread the researchBrief keyFacts across agenda, insight, and evidence rather than hiding them in the cover only." : "",
+          research.numericEvidence.length > 0 ? "Place numericEvidence into stats or chart slides so at least one slide carries explicit numerical proof." : "",
+          research.risks.length > 0 ? "Translate researchBrief risks into comparison or chart logic instead of dropping the risk chain." : "",
+          research.implications.length > 0 ? "Translate researchBrief implications into process or closing actions/watchpoints." : "",
           "The agenda slide must use chapter names that reflect this style's own information architecture rather than a generic shared outline.",
           "The cover title may be rewritten, but it must still explicitly name the topic rather than merely echoing the raw prompt.",
           "The last slide should usually function as a closing page with actions, watchpoints, or a final verdict rather than a literal timeline.",
@@ -1292,9 +1893,10 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
       "不要套用现成模板，不要引用外部素材底图，要基于当前页面内容直接构图。",
       "画布固定为 1280x720，必须包含 viewBox=\"0 0 1280 720\"。",
       "必须使用内联属性，不要使用 <style>、class、mask、foreignObject、textPath、symbol、script、animate、iframe，也不要使用 <g opacity>。",
+      "优先用 rect、line、circle、path、text 这些基础图元完成构图，减少无意义节点和重复装饰。",
       "所有文字和结构必须与当前页面内容匹配，不能残留示例文案、占位词或通用模板标题。",
       "输出中必须包含顶层语义分组，例如 background、chrome、content、annotations。",
-      "避免过度复制上一页布局；同一风格下要保持一致的视觉语法，但每一页都应重新构图。",
+      "同一风格下要保持一致的视觉语法，但每一页都应重新构图，不要复刻上一页壳子。",
     ].join(" ")
   }
 
@@ -1305,6 +1907,7 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
     "Do not wrap or reuse an existing template. Compose the slide directly from the current page content.",
     "The canvas is fixed at 1280x720 and must include viewBox=\"0 0 1280 720\".",
     "Use inline SVG attributes only. Do not use <style>, class, mask, foreignObject, textPath, symbol, script, animate, iframe, or <g opacity>.",
+    "Prefer rect, line, circle, path, and text primitives instead of bloated or repetitive node trees.",
     "All text and structure must match the current slide content. Never leave sample copy, placeholders, or generic template labels in the output.",
     "Include semantic top-level groups such as background, chrome, content, and annotations.",
     "Keep the visual language consistent within the variant while still recomposing each page rather than duplicating one shell.",
@@ -1312,17 +1915,43 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
 }
 
 function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContext) {
+  const textLimits = getLayoutTextLimits(context.slide.layout, context.deck.language)
+  const isSingleFocusLayout = context.slide.layout === "insight" || context.slide.layout === "timeline"
+  const previousSlides = context.previousSlides.slice(isSingleFocusLayout ? -1 : -2)
   const previousSummary =
-    context.previousSlides.length > 0
-      ? context.previousSlides
+    previousSlides.length > 0
+      ? previousSlides
           .map(
             (slide, index) =>
-              `${index + 1}. [${slide.layout}] ${slide.title} | ${slide.body} | ${slide.bullets.join(" / ")}`,
+              `${index + 1}. [${slide.layout}] ${slide.title} | bullets=${slide.bullets.slice(0, 2).join(" / ")}`,
           )
           .join("\n")
       : context.deck.language === "zh-CN"
         ? "无前序页面。"
         : "No previous slides yet."
+  const structuredSections = [
+    context.slide.contentsItems?.length
+      ? `Contents items: ${context.slide.contentsItems.map((item) => `${item.index} ${item.title}: ${item.detail}`).join(" | ")}`
+      : "",
+    context.slide.comparisonItems?.length
+      ? `Comparison items: ${context.slide.comparisonItems.map((item) => `${item.label} ${item.title}: ${item.detail}`).join(" | ")}`
+      : "",
+    context.slide.spotlightItems?.length
+      ? `Spotlight items: ${context.slide.spotlightItems.map((item) => `${item.title}: ${item.detail}`).join(" | ")}`
+      : "",
+    context.slide.metricItems?.length
+      ? `Metric items: ${context.slide.metricItems.map((item) => `${item.value} ${item.label}${item.note ? ` (${item.note})` : ""}`).join(" | ")}`
+      : "",
+    context.slide.chartItems?.length
+      ? `Chart items: ${context.slide.chartItems.map((item) => `${item.label}=${item.value}: ${item.detail}`).join(" | ")}`
+      : "",
+    context.slide.processItems?.length
+      ? `Process items: ${context.slide.processItems.map((item) => `${item.step} ${item.title}: ${item.detail}`).join(" | ")}`
+      : "",
+    context.slide.closingItems?.length
+      ? `Closing items: ${context.slide.closingItems.map((item) => `${item.label}: ${item.detail}`).join(" | ")}`
+      : "",
+  ].filter(Boolean)
 
   const layoutGuidance =
     context.deck.language === "zh-CN"
@@ -1349,6 +1978,33 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
           timeline: "Timeline slide. Make sequence and key milestones legible at a glance.",
         }
 
+  const shouldIncludeDeckOutline =
+    context.slide.layout === "agenda" || context.slide.layout === "timeline" || context.slideIndex === 0
+  const pageFocusInstruction =
+    context.deck.language === "zh-CN"
+      ? {
+          cover: "封面只保留一个主标题轴，不要把所有卖点都塞进首屏。",
+          agenda: "目录页要把章节关系排清楚，但不要重复写成长段解释。",
+          insight: "这页只保留一个主判断区和最多三个辅助 bullet，不要额外扩展说明。",
+          comparison: "对照页要先拉开两组关系，再放少量解释，不要把正文写成段落墙。",
+          evidence: "证据页优先锚点和证明材料，不要再铺一整页背景介绍。",
+          stats: "数据页只保留最关键的 3-4 个信号，避免堆满次要说明。",
+          chart: "图示页优先结构关系，正文说明从简。",
+          process: "流程页突出步骤推进，不要把每一步写成长段。",
+          timeline: "收束页只保留行动顺序和最终落点，不要回顾整份 deck。",
+        }[context.slide.layout]
+      : {
+          cover: "Keep one primary title axis on the cover instead of stacking every selling point.",
+          agenda: "Clarify the chapter structure without repeating long explanatory paragraphs.",
+          insight: "Keep one dominant claim area with no more than three supporting bullets.",
+          comparison: "Open with contrast first, then use minimal explanation instead of dense body copy.",
+          evidence: "Prioritize anchors and proof instead of reintroducing full background context.",
+          stats: "Keep only the 3-4 signals that matter most and avoid secondary clutter.",
+          chart: "Prioritize the structural diagram and keep explanatory copy compact.",
+          process: "Emphasize sequence and keep step descriptions short.",
+          timeline: "Use the closing slide for action order and landing point, not a full deck recap.",
+        }[context.slide.layout]
+
   return [
     `Deck title: ${context.deck.title}`,
     `Scenario: ${context.deck.scenario}`,
@@ -1365,35 +2021,59 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
     `Current page: ${context.slideIndex + 1} / ${context.variant.slides.length}`,
     `Layout type: ${context.slide.layout}`,
     `Layout guidance: ${layoutGuidance[context.slide.layout]}`,
+    `Copy limits: title <= ${textLimits.title}, body <= ${textLimits.body}, bullet <= ${textLimits.bullet}`,
+    `Page focus: ${pageFocusInstruction}`,
+    `Native page type: ${context.slide.nativePageType ?? "n/a"}`,
     `Kicker: ${context.slide.kicker}`,
     `Title: ${context.slide.title}`,
     `Body: ${context.slide.body}`,
     `Bullets: ${context.slide.bullets.join(" | ")}`,
+    ...structuredSections,
+    ...(shouldIncludeDeckOutline ? ["", "Deck outline:", ...context.deck.outline.map((item, index) => `${index + 1}. ${item}`)] : []),
     "",
-    "Deck outline:",
-    ...context.deck.outline.map((item, index) => `${index + 1}. ${item}`),
-    "",
-    "Previous slides already generated in this variant:",
+    "Recent previous slides in this variant:",
     previousSummary,
     "",
     context.deck.language === "zh-CN"
-      ? "请直接输出当前页 SVG。不要输出解释，不要引用 design_spec 路径，不要写模板示例词。"
-      : "Output the SVG for this page directly. Do not explain, do not cite file paths, and do not leave template sample text.",
+      ? "请直接输出当前页 SVG。优先保证强构图、清晰层级和可导出性；不要输出解释，不要引用 design_spec 路径，不要写模板示例词。"
+      : "Output the SVG for this page directly. Prioritize composition strength, visual hierarchy, and exportability. Do not explain, cite file paths, or leave template sample text.",
   ].join("\n")
 }
 
 async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideContext): Promise<PptMasterPreviewRuntimeSlideResult> {
-  const requestedModel = context.deck.previewModel ?? "MiniMax-M2.7-highspeed"
-  const providerResult = await Promise.race([
-    generateTextWithLeadToolPreviewProvider({
-      systemPrompt: buildRuntimeSlideSystemPrompt(context.deck.language),
-      userPrompt: buildRuntimeSlideUserPrompt(context),
-      model: requestedModel,
-    }),
-    new Promise<never>((_resolve, reject) =>
-      setTimeout(() => reject(new Error("ppt_master_runtime_slide_timeout")), RUNTIME_SLIDE_ATTEMPT_TIMEOUT_MS),
-    ),
-  ])
+  const requestedModel = getLeadToolPptRuntimeSlideModel() || context.deck.previewModel || "MiniMax-M3"
+  const slideTimeoutMs = getPptMasterSlideTimeoutMs()
+  const preferredProviderId = resolveLeadToolPreviewProviderPreference(
+    requestedModel,
+    getLeadToolPptRuntimeSlideProvider(),
+  )
+  let providerResult: Awaited<ReturnType<typeof generateTextWithLeadToolPreviewProvider>>
+
+  try {
+    providerResult = await Promise.race([
+      generateTextWithLeadToolPreviewProvider({
+        systemPrompt: buildRuntimeSlideSystemPrompt(context.deck.language),
+        userPrompt: buildRuntimeSlideUserPrompt(context),
+        model: requestedModel,
+        preferredProviderId,
+      }),
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(() => reject(new Error("ppt_master_runtime_slide_timeout")), slideTimeoutMs),
+      ),
+    ])
+  } catch (error) {
+    if (error instanceof Error && error.message === "ppt_master_runtime_slide_timeout") {
+      throw error
+    }
+
+    throw new Error(
+      normalizePptMasterRuntimeProviderError(
+        error,
+        preferredProviderId ?? "auto",
+        requestedModel,
+      ),
+    )
+  }
 
   return {
     provider: providerResult.providerId,

@@ -1,5 +1,6 @@
 import type {
   AiEntryStreamEvent,
+  AiEntryStreamSourceResult,
   ArtifactPart,
   MessagePart,
   ReasoningPart,
@@ -15,7 +16,7 @@ const REASONING_PART_ID = "reasoning"
 const TASK_PROGRESS_PART_ID = "task-progress"
 
 function upsertPart(parts: MessagePart[], part: MessagePart): MessagePart[] {
-  const index = parts.findIndex((p) => p.id === part.id)
+  const index = parts.findIndex((current) => current.id === part.id)
   if (index < 0) return [...parts, part]
   const next = parts.slice()
   next[index] = part
@@ -23,23 +24,18 @@ function upsertPart(parts: MessagePart[], part: MessagePart): MessagePart[] {
 }
 
 function getPartById<T extends MessagePart>(parts: MessagePart[], id: string, type: T["type"]): T | undefined {
-  return parts.find((p): p is T => p.id === id && p.type === type) as T | undefined
+  return parts.find((part): part is T => part.id === id && part.type === type)
 }
 
 function getTaskProgressPart(parts: MessagePart[]): TaskProgressPart | undefined {
   return getPartById<TaskProgressPart>(parts, TASK_PROGRESS_PART_ID, "task-progress")
 }
 
-function upsertTaskStep(parts: MessagePart[], step: TaskProgressStep): MessagePart[] {
+function markTaskProgressDone(parts: MessagePart[]): MessagePart[] {
   const existing = getTaskProgressPart(parts)
-  const steps = existing?.steps ?? []
-  const index = steps.findIndex((s) => s.type === step.type)
-  const nextSteps = index < 0 ? [...steps, step] : (() => {
-    const copy = steps.slice()
-    copy[index] = step
-    return copy
-  })()
-  return upsertPart(parts, { type: "task-progress", id: TASK_PROGRESS_PART_ID, steps: nextSteps })
+  if (!existing) return parts
+  if (existing.status === "done") return parts
+  return upsertPart(parts, { ...existing, status: "done" })
 }
 
 function optionalString(value: unknown): string | null {
@@ -50,10 +46,12 @@ function optionalString(value: unknown): string | null {
 
 function inferArtifactType(fileName: string | null): ArtifactPart["artifactType"] {
   if (!fileName) return "generic"
-  const n = fileName.trim().toLowerCase()
-  if (n.endsWith(".html") || n.endsWith(".htm")) return "html"
-  if (n.endsWith(".pptx") || n.endsWith(".ppt")) return "pptx"
-  if (n.endsWith(".png") || n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".webp")) return "image"
+  const normalized = fileName.trim().toLowerCase()
+  if (normalized.endsWith(".html") || normalized.endsWith(".htm")) return "html"
+  if (normalized.endsWith(".pptx") || normalized.endsWith(".ppt")) return "pptx"
+  if (normalized.endsWith(".png") || normalized.endsWith(".jpg") || normalized.endsWith(".jpeg") || normalized.endsWith(".webp")) {
+    return "image"
+  }
   return "generic"
 }
 
@@ -64,27 +62,263 @@ function artifactTypeFromKind(kind: string | null | undefined): ArtifactPart["ar
   return "generic"
 }
 
+function sourceIdForResult(namespace: string, index: number, result: AiEntryStreamSourceResult): string {
+  const url = optionalString(result.url)
+  if (url) return `source:url:${url}`
+  const title = optionalString(result.title)
+  if (title) return `source:${namespace}:${index}:${title}`
+  const snippet = optionalString(result.snippet)
+  if (snippet) return `source:${namespace}:${index}:${snippet}`
+  return `source:${namespace}:${index}`
+}
+
+function upsertSourcesFromResults(
+  parts: MessagePart[],
+  namespace: string,
+  results: AiEntryStreamSourceResult[],
+): MessagePart[] {
+  let next = parts
+  results.forEach((result, index) => {
+    const url = optionalString(result.url)
+    const title = optionalString(result.title)
+    const snippet = optionalString(result.snippet)
+    if (!url && !title && !snippet) return
+    next = upsertPart(next, {
+      type: "source",
+      id: sourceIdForResult(namespace, index, result),
+      sourceType: url ? "url" : "document",
+      title,
+      url,
+      snippet,
+    } satisfies SourcePart)
+  })
+  return next
+}
+
+function summarizeSources(results: AiEntryStreamSourceResult[]): string | undefined {
+  const labels = results
+    .map((result) => optionalString(result.title) ?? optionalString(result.url) ?? optionalString(result.snippet))
+    .filter((label): label is string => Boolean(label))
+
+  if (!labels.length) return undefined
+  const preview = labels.slice(0, 2).join(" / ")
+  return `${labels.length} sources${preview ? `: ${preview}` : ""}`
+}
+
+function startOrUpdateTaskProgress(
+  parts: MessagePart[],
+  step: TaskProgressStep,
+  status: TaskProgressPart["status"] = "running",
+): MessagePart[] {
+  const existing = getTaskProgressPart(parts)
+  const steps = existing?.steps ?? []
+  const index = steps.findIndex((current) => current.type === step.type)
+  const nextSteps =
+    index < 0
+      ? [...steps, step]
+      : steps.map((current, currentIndex) => (currentIndex === index ? step : current))
+
+  return upsertPart(parts, {
+    type: "task-progress",
+    id: TASK_PROGRESS_PART_ID,
+    status: existing?.status ?? status,
+    steps: nextSteps,
+  })
+}
+
+function applyToolCall(
+  parts: MessagePart[],
+  event: AiEntryStreamEvent,
+): MessagePart[] {
+  const toolName = optionalString(event.data?.toolName) || "tool"
+  const toolCallId = optionalString(event.data?.toolCallId) || toolName
+  const args = event.data?.args ?? null
+  const existing = getPartById<ToolCallPart>(parts, toolCallId, "tool-call")
+  const nextParts = upsertPart(parts, {
+    type: "tool-call",
+    id: toolCallId,
+    toolName,
+    toolCallId,
+    args: args ?? existing?.args ?? null,
+    state: "input-streaming",
+  })
+
+  return startOrUpdateTaskProgress(
+    nextParts,
+    {
+      type: `tool:${toolCallId}`,
+      toolName,
+      status: "running",
+      detail:
+        toolName === "web_search" ? optionalString(event.data?.args?.query) ?? undefined : undefined,
+      at: Date.now(),
+    },
+    "running",
+  )
+}
+
+function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): MessagePart[] {
+  const toolName = optionalString(event.data?.toolName) || "tool"
+  const toolCallId = optionalString(event.data?.toolCallId) || toolName
+  const result = event.data?.result ?? null
+  const isFailure = result?.ok === false
+
+  const existing = getPartById<ToolCallPart>(parts, toolCallId, "tool-call")
+  let nextParts = upsertPart(
+    parts,
+    existing
+      ? {
+          ...existing,
+          args: existing.args ?? null,
+          state: isFailure ? "output-error" : "output-available",
+          output: result,
+        }
+      : {
+          type: "tool-call",
+          id: toolCallId,
+          toolName,
+          toolCallId,
+          args: null,
+          state: isFailure ? "output-error" : "output-available",
+          output: result,
+        },
+  )
+
+  const sourceResults = Array.isArray(result?.results) ? result.results : []
+  if (toolName === "web_search" && sourceResults.length) {
+    nextParts = upsertSourcesFromResults(nextParts, `web-search:${toolCallId}`, sourceResults)
+  }
+
+  if (toolName === "export_ppt_deck" && result?.ok !== false) {
+    const fileName = optionalString(result?.fileName)
+    const artifactId = typeof result?.artifactId === "number" ? result.artifactId : null
+    nextParts = upsertPart(nextParts, {
+      type: "artifact",
+      id: `artifact:${artifactId ?? fileName ?? "ppt"}`,
+      artifactType: inferArtifactType(fileName),
+      artifactId,
+      title: optionalString(result?.title),
+      fileName,
+      previewUrl: optionalString(result?.previewUrl),
+      downloadUrl: optionalString(result?.downloadUrl),
+      workHref: optionalString(result?.workLibraryHref) ?? "/dashboard/works",
+      status: "created",
+    } satisfies ArtifactPart)
+  }
+
+  if (toolName === "preview_ppt_deck" && result?.ok !== false) {
+    const variants = Array.isArray(result?.variants)
+      ? result.variants
+          .map((variant) => ({
+            key: optionalString(variant?.key) ?? "",
+            name: optionalString(variant?.name) ?? "",
+            summary: optionalString(variant?.summary),
+          }))
+          .filter((variant) => variant.key)
+      : []
+    nextParts = upsertPart(nextParts, {
+      type: "report",
+      id: `report:${optionalString(result?.previewSessionId) ?? toolCallId}`,
+      reportType: "ppt-preview",
+      title: optionalString(result?.title),
+      variants,
+    } satisfies ReportPart)
+  }
+
+  if (sourceResults.length && toolName === "web_search") {
+    nextParts = startOrUpdateTaskProgress(
+      nextParts,
+      {
+        type: `tool:${toolCallId}`,
+        toolName,
+        status: isFailure ? "failed" : "completed",
+        detail:
+          isFailure
+            ? optionalString(result?.error?.message) ?? undefined
+            : summarizeSources(sourceResults),
+        at: Date.now(),
+      },
+      getTaskProgressPart(nextParts)?.status ?? "running",
+    )
+    return nextParts
+  }
+
+  return startOrUpdateTaskProgress(
+    nextParts,
+    {
+      type: `tool:${toolCallId}`,
+      toolName,
+      status: isFailure ? "failed" : "completed",
+      detail: isFailure ? optionalString(result?.error?.message) ?? undefined : undefined,
+      at: Date.now(),
+    },
+    getTaskProgressPart(nextParts)?.status ?? "running",
+  )
+}
+
+function applyToolCompletion(
+  parts: MessagePart[],
+  event: AiEntryStreamEvent,
+  state: "output-available" | "output-error",
+): MessagePart[] {
+  const toolName = optionalString(event.data?.toolName) || "tool"
+  const toolCallId = optionalString(event.data?.toolCallId) || toolName
+  const existing = getPartById<ToolCallPart>(parts, toolCallId, "tool-call")
+
+  const nextParts = upsertPart(
+    parts,
+    existing
+      ? {
+          ...existing,
+          state,
+          output: existing.output ?? event.data?.result ?? null,
+        }
+      : {
+          type: "tool-call",
+          id: toolCallId,
+          toolName,
+          toolCallId,
+          args: event.data?.args ?? null,
+          state,
+          output: event.data?.result ?? null,
+        },
+  )
+
+  return startOrUpdateTaskProgress(
+    nextParts,
+    {
+      type: `tool:${toolCallId}`,
+      toolName,
+      status: state === "output-error" ? "failed" : "completed",
+      detail:
+        state === "output-error"
+          ? optionalString(event.data?.message) ?? optionalString((event.data?.result as { error?: { message?: string } } | null)?.error?.message) ?? undefined
+          : undefined,
+      at: Date.now(),
+    },
+    getTaskProgressPart(nextParts)?.status ?? "running",
+  )
+}
+
 /**
  * 把一条 SSE 事件折叠进 parts（按 part id 不可变 upsert）。
- * 纯函数：相同输入→相同输出，无副作用，便于单测。
+ * 不修改输入数组、无副作用（step 的 at 用 Date.now() 作为时间戳元数据）。
  */
 export function applySseEvent(parts: MessagePart[], event: AiEntryStreamEvent): MessagePart[] {
   const type = event.event
   if (!type) return parts
 
-  // 正文由 message.content 承载，reducer 不产 text part。
   if (type === "message") return parts
 
   if (type === "reasoning") {
     const delta = typeof event.answer === "string" ? event.answer : ""
     const existing = getPartById<ReasoningPart>(parts, REASONING_PART_ID, "reasoning")
-    const next: ReasoningPart = {
+    return upsertPart(parts, {
       type: "reasoning",
       id: REASONING_PART_ID,
-      text: (existing?.text ?? "") + delta,
+      text: `${existing?.text ?? ""}${delta}`,
       status: "running",
-    }
-    return upsertPart(parts, next)
+    })
   }
 
   if (type === "reasoning_end") {
@@ -94,213 +328,140 @@ export function applySseEvent(parts: MessagePart[], event: AiEntryStreamEvent): 
   }
 
   if (type === "conversation_init") {
-    return upsertTaskStep(parts, { type: "conversation_init", status: "completed", at: Date.now() })
+    return startOrUpdateTaskProgress(parts, { type: "conversation_init", status: "completed", at: Date.now() })
   }
 
   if (type === "provider_selected" || type === "provider_fallback") {
-    const detail = [event.provider, event.provider_model].filter(Boolean).join(" / ") || undefined
-    return upsertTaskStep(parts, {
+    const detail = [optionalString(event.provider), optionalString(event.provider_model)].filter(Boolean).join(" / ")
+    return startOrUpdateTaskProgress(parts, {
       type: "provider",
       status: type === "provider_fallback" ? "info" : "running",
-      detail,
+      detail: detail || undefined,
       at: Date.now(),
     })
   }
 
   if (type === "knowledge_query_start") {
-    return upsertTaskStep(parts, { type: "knowledge_query", status: "running", at: Date.now() })
+    return startOrUpdateTaskProgress(parts, { type: "knowledge_query", status: "running", at: Date.now() })
   }
 
   if (type === "knowledge_query_result") {
     const status = event.data?.status || "miss"
     const snippetCount = typeof event.data?.snippetCount === "number" ? event.data.snippetCount : 0
     const datasetCount = typeof event.data?.datasetCount === "number" ? event.data.datasetCount : 0
-    const detail = status === "failed" ? event.data?.message || "failed" : `${snippetCount} snippets / ${datasetCount} datasets`
-    return upsertTaskStep(parts, {
-      type: "knowledge_query",
-      status: status === "failed" ? "failed" : status === "hit" ? "completed" : "info",
-      detail,
-      at: Date.now(),
-    })
+    const resultSources = Array.isArray(event.data?.result?.results) ? event.data.result.results : []
+    let nextParts = parts
+
+    if (resultSources.length) {
+      nextParts = upsertSourcesFromResults(
+        nextParts,
+        `knowledge-query:${optionalString(event.data?.toolCallId) ?? optionalString(event.data?.toolName) ?? "knowledge"}`,
+        resultSources,
+      )
+    }
+
+    nextParts = startOrUpdateTaskProgress(
+      nextParts,
+      {
+        type: "knowledge_query",
+        status: status === "failed" ? "failed" : status === "hit" ? "completed" : "info",
+        detail:
+          status === "failed"
+            ? event.data?.message || "failed"
+            : resultSources.length
+              ? summarizeSources(resultSources)
+              : `${snippetCount} snippets / ${datasetCount} datasets`,
+        at: Date.now(),
+      },
+      getTaskProgressPart(nextParts)?.status ?? "running",
+    )
+    return nextParts
   }
 
-  if (type === "tool_call") {
-    const toolName = event.data?.toolName || "tool"
-    const toolCallId = event.data?.toolCallId || toolName
-    const args = event.data?.args ?? null
-    const existing = getPartById<ToolCallPart>(parts, toolCallId, "tool-call")
-    parts = upsertPart(parts, {
-      type: "tool-call",
-      id: toolCallId,
-      toolName,
-      toolCallId,
-      args: existing?.args ?? args,
-      state: "input-streaming",
-    })
-    return upsertTaskStep(parts, {
-      type: `tool:${toolCallId}`,
-      toolName,
-      status: "running",
-      detail: toolName === "web_search" ? optionalString(event.data?.args?.query) ?? undefined : undefined,
-      at: Date.now(),
-    })
+  if (type === "tool_call" || type === "tool_call_start") {
+    return applyToolCall(parts, event)
   }
 
   if (type === "tool_result") {
-    const toolName = event.data?.toolName || "tool"
-    const toolCallId = event.data?.toolCallId || toolName
-    const result = event.data?.result ?? null
-    const isFailure = result?.ok === false
-
-    const existingTc = getPartById<ToolCallPart>(parts, toolCallId, "tool-call")
-    if (existingTc) {
-      parts = upsertPart(parts, {
-        ...existingTc,
-        state: isFailure ? "output-error" : "output-available",
-        output: result,
-      })
-    } else {
-      parts = upsertPart(parts, {
-        type: "tool-call",
-        id: toolCallId,
-        toolName,
-        toolCallId,
-        args: null,
-        state: isFailure ? "output-error" : "output-available",
-        output: result,
-      })
-    }
-
-    // web_search → source parts
-    if (toolName === "web_search" && Array.isArray(result?.results)) {
-      for (const r of result.results) {
-        const url = optionalString(r?.url)
-        if (!url) continue
-        parts = upsertPart(parts, {
-          type: "source",
-          id: `url:${url}`,
-          sourceType: "url",
-          title: optionalString(r?.title),
-          url,
-          snippet: optionalString(r?.snippet),
-        } as SourcePart)
-      }
-    }
-
-    // export_ppt_deck → artifact part
-    if (toolName === "export_ppt_deck" && result?.ok !== false) {
-      const fileName = optionalString(result?.fileName)
-      const artifactId = typeof result?.artifactId === "number" ? result.artifactId : null
-      parts = upsertPart(parts, {
-        type: "artifact",
-        id: `artifact:${artifactId ?? fileName ?? "ppt"}`,
-        artifactType: inferArtifactType(fileName),
-        artifactId,
-        title: optionalString(result?.title),
-        fileName,
-        previewUrl: optionalString(result?.previewUrl),
-        downloadUrl: optionalString(result?.downloadUrl),
-        workHref: optionalString(result?.workLibraryHref) ?? "/dashboard/works",
-        status: "created",
-      } as ArtifactPart)
-    }
-
-    // preview_ppt_deck → report part
-    if (toolName === "preview_ppt_deck" && result?.ok !== false && Array.isArray(result?.variants)) {
-      const variants = result.variants
-        .map((v) => ({
-          key: optionalString(v?.key) ?? "",
-          name: optionalString(v?.name) ?? "",
-          summary: optionalString(v?.summary),
-        }))
-        .filter((v) => v.key)
-      if (variants.length) {
-        parts = upsertPart(parts, {
-          type: "report",
-          id: `report:${optionalString(result?.previewSessionId) ?? toolCallId}`,
-          reportType: "ppt-preview",
-          title: optionalString(result?.title),
-          variants,
-        } as ReportPart)
-      }
-    }
-
-    return upsertTaskStep(parts, {
-      type: `tool:${toolCallId}`,
-      toolName,
-      status: isFailure ? "failed" : "completed",
-      detail: isFailure ? optionalString(result?.error?.message) ?? undefined : undefined,
-      at: Date.now(),
-    })
+    return applyToolResult(parts, event)
   }
 
-  if (type === "tool_call_done" || type === "tool_call_error") {
-    const toolCallId = event.data?.toolCallId || event.data?.toolName || "tool"
-    const existing = getPartById<ToolCallPart>(parts, toolCallId, "tool-call")
-    if (existing) {
-      parts = upsertPart(parts, {
-        ...existing,
-        state: type === "tool_call_error" ? "output-error" : "output-available",
-        output: existing.output ?? event.data?.result ?? null,
-      })
-    }
-    return parts
+  if (type === "tool_call_done") {
+    return applyToolCompletion(parts, event, "output-available")
+  }
+
+  if (type === "tool_call_error") {
+    return applyToolCompletion(parts, event, "output-error")
   }
 
   if (type === "artifact_created" && event.artifact) {
-    const a = event.artifact
-    const artifactId = typeof a.artifactId === "number" ? a.artifactId : null
-    const id = `artifact:${artifactId ?? optionalString(a.fileName) ?? "artifact"}`
+    const artifact = event.artifact
+    const artifactId = typeof artifact.artifactId === "number" ? artifact.artifactId : null
+    const id = `artifact:${artifactId ?? optionalString(artifact.fileName) ?? "artifact"}`
     const existing = getPartById<ArtifactPart>(parts, id, "artifact")
-    parts = upsertPart(parts, {
+    const nextParts = upsertPart(parts, {
       type: "artifact",
       id,
-      artifactType: artifactTypeFromKind(a.kind),
+      artifactType: artifactTypeFromKind(artifact.kind),
       artifactId,
-      title: existing?.title ?? optionalString(a.title),
-      fileName: existing?.fileName ?? optionalString(a.fileName),
-      previewUrl: existing?.previewUrl ?? optionalString(a.previewUrl),
-      downloadUrl: existing?.downloadUrl ?? optionalString(a.downloadUrl),
-      workHref: existing?.workHref ?? "/dashboard/works",
+      title: optionalString(artifact.title) ?? existing?.title ?? null,
+      fileName: optionalString(artifact.fileName) ?? existing?.fileName ?? null,
+      previewUrl: optionalString(artifact.previewUrl) ?? existing?.previewUrl ?? null,
+      downloadUrl: optionalString(artifact.downloadUrl) ?? existing?.downloadUrl ?? null,
+      workHref: existing?.workHref ?? optionalString(artifact.workLibraryHref) ?? "/dashboard/works",
       status: "created",
-    } as ArtifactPart)
-    return upsertTaskStep(parts, {
-      type: `artifact:${artifactId ?? optionalString(a.fileName) ?? "artifact"}`,
-      status: "completed",
-      detail: optionalString(a.fileName) ?? undefined,
-      at: Date.now(),
-    })
+    } satisfies ArtifactPart)
+
+    return startOrUpdateTaskProgress(
+      nextParts,
+      {
+        type: `artifact:${artifactId ?? optionalString(artifact.fileName) ?? "artifact"}`,
+        status: "completed",
+        detail: optionalString(artifact.fileName) ?? undefined,
+        at: Date.now(),
+      },
+      getTaskProgressPart(nextParts)?.status ?? "running",
+    )
   }
 
   if (type === "validation_result" && event.data?.validation) {
-    const v = event.data.validation
-    const id = `validation:${event.data.toolCallId ?? event.data.toolName ?? "tool"}`
-    parts = upsertPart(parts, {
+    const validation = event.data.validation
+    const validationId = `validation:${event.data.toolCallId ?? event.data.toolName ?? "tool"}`
+    const status =
+      validation.ok === false ? "failed" : validation.ok === true ? "passed" : "warning"
+    const checks = Array.isArray(validation.checks)
+      ? validation.checks.map((check) => ({
+          code: optionalString(check?.code) ?? "validation_check",
+          ok: check?.ok === true,
+          message: optionalString(check?.message) ?? "",
+        }))
+      : []
+    const nextParts = upsertPart(parts, {
       type: "validation",
-      id,
-      status: v.ok === false ? "failed" : "passed",
-      checks: Array.isArray(v.checks)
-        ? v.checks.map((c) => ({
-            code: optionalString(c?.code) ?? "validation_check",
-            ok: c?.ok === true,
-            message: optionalString(c?.message) ?? "",
-          }))
-        : [],
-    } as ValidationPart)
-    return upsertTaskStep(parts, {
-      type: `validation:${event.data.toolCallId ?? event.data.toolName ?? "tool"}`,
-      status: v.ok === false ? "failed" : "completed",
-      detail: Array.isArray(v.checks) ? v.checks.find((c) => c?.ok === false)?.message ?? undefined : undefined,
-      at: Date.now(),
-    })
+      id: validationId,
+      status,
+      checks,
+    } satisfies ValidationPart)
+
+    return startOrUpdateTaskProgress(
+      nextParts,
+      {
+        type: validationId,
+        status: status === "failed" ? "failed" : "completed",
+        detail: checks.find((check) => check.ok === false)?.message ?? undefined,
+        at: Date.now(),
+      },
+      getTaskProgressPart(nextParts)?.status ?? "running",
+    )
   }
 
   if (type === "message_end") {
-    const reasoning = getPartById<ReasoningPart>(parts, REASONING_PART_ID, "reasoning")
+    const nextParts = markTaskProgressDone(parts)
+    const reasoning = getPartById<ReasoningPart>(nextParts, REASONING_PART_ID, "reasoning")
     if (reasoning && reasoning.status !== "done") {
-      return upsertPart(parts, { ...reasoning, status: "done" })
+      return upsertPart(nextParts, { ...reasoning, status: "done" })
     }
-    return parts
+    return nextParts
   }
 
   return parts

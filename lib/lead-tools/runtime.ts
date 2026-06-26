@@ -40,6 +40,16 @@ const pptPreviewInputImageSchema = z.object({
   sourceNodeKey: z.string().trim().nullable().optional(),
   role: z.enum(["cover", "content", "logo", "reference"]).optional(),
 })
+
+const pptPreviewResearchBriefSchema = z.object({
+  topic: z.string().trim().min(1, "Research brief topic is required"),
+  keyFacts: z.array(z.string().trim().min(1)).min(1, "At least one key fact is required"),
+  numericEvidence: z.array(z.string().trim().min(1)).optional(),
+  risks: z.array(z.string().trim().min(1)).optional(),
+  implications: z.array(z.string().trim().min(1)).optional(),
+  sourceNotes: z.array(z.string().trim().min(1)).optional(),
+  rawSummary: z.string().trim().min(1).optional(),
+})
 const pptPreviewNarrativeAngleSchema = z.enum(["executive-brief", "campaign-story", "data-proof", "action-plan"])
 
 const pptPreviewSlideSchema = z.object({
@@ -186,11 +196,22 @@ const pptPreviewDeckSchema: z.ZodType<PptPreviewDeck> = z.object({
 const pptPreviewRequestSchema = z
   .object({
     prompt: z.string().trim().min(1, "Prompt is required"),
+    researchBrief: z
+      .union([
+        z
+          .string()
+          .trim()
+          .min(1, "Research brief must not be empty")
+          .max(12_000, "Research brief is too long"),
+        pptPreviewResearchBriefSchema,
+      ])
+      .optional(),
     scenario: pptScenarioSchema.default("marketing-campaign"),
     language: pptLanguageSchema.default("zh-CN"),
     model: pptPreviewModelSchema.optional(),
     templateMode: pptPreviewTemplateModeSchema.default("auto-4"),
     templateId: pptFrontendTemplateIdSchema.optional(),
+    narrativeAngle: pptPreviewNarrativeAngleSchema.optional(),
     pageCount: pptPreviewPageCountSchema.nullable().optional(),
     images: z.array(pptPreviewInputImageSchema).max(12).optional(),
   })
