@@ -188,6 +188,14 @@ type ChatStreamApiResponse = {
   provider?: string
   provider_model?: string
   agent_id?: string | null
+  skill_id?: string
+  artifact?: {
+    kind?: string
+    title?: string
+    fileName?: string
+    artifactId?: number | null
+    downloadUrl?: string | null
+  }
   error?: string
   data?: {
     toolName?: string
@@ -201,8 +209,21 @@ type ChatStreamApiResponse = {
       intent?: string
     }
     result?: {
+      ok?: boolean
       query?: string
       results?: Array<{ title?: string; url?: string; snippet?: string; provider?: string }>
+      error?: {
+        code?: string
+        message?: string
+      }
+    }
+    validation?: {
+      ok?: boolean
+      checks?: Array<{
+        code?: string
+        ok?: boolean
+        message?: string
+      }>
     }
   } | null
 }
@@ -1932,6 +1953,7 @@ export function AiEntryWorkspace({
             const toolName = event.data?.toolName || "tool"
             const toolId = event.data?.toolCallId || toolName
             const isWebSearch = toolName === "web_search"
+            const isToolFailure = event.data?.result?.ok === false
             const toolMessage = buildPptToolResultMessage({
               toolName,
               result: event.data?.result ?? null,
@@ -1962,8 +1984,39 @@ export function AiEntryWorkspace({
             upsertTaskEvent({
               type: `tool:${toolId}`,
               label: isWebSearch ? (isZh ? "\u7f51\u9875\u641c\u7d22\u5b8c\u6210" : "Web search completed") : `Tool: ${toolName}`,
-              detail: isWebSearch ? sourceDetail : undefined,
+              detail: isToolFailure
+                ? event.data?.result?.error?.message || "failed"
+                : isWebSearch
+                  ? sourceDetail
+                  : undefined,
+              status: isToolFailure ? "failed" : "completed",
+              at: now,
+            })
+            return
+          }
+
+          if (event.event === "artifact_created") {
+            const fileName = event.artifact?.fileName || event.artifact?.title || "artifact"
+            upsertTaskEvent({
+              type: `artifact:${event.artifact?.artifactId || fileName}`,
+              label: isZh ? "\u5df2\u751f\u6210\u53ef\u4e0b\u8f7d\u4ea4\u4ed8\u7269" : "Downloadable artifact created",
+              detail: fileName,
               status: "completed",
+              at: now,
+            })
+            return
+          }
+
+          if (event.event === "validation_result") {
+            const validationOk = event.data?.validation?.ok !== false
+            const failedChecks = Array.isArray(event.data?.validation?.checks)
+              ? event.data.validation.checks.filter((check: { ok?: boolean }) => check?.ok === false)
+              : []
+            upsertTaskEvent({
+              type: `validation:${event.data?.toolCallId || event.data?.toolName || "tool"}`,
+              label: isZh ? "\u5de5\u5177\u7ed3\u679c\u6821\u9a8c" : "Tool result validation",
+              detail: failedChecks[0]?.message,
+              status: validationOk ? "completed" : "failed",
               at: now,
             })
             return
