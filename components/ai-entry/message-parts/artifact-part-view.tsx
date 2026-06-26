@@ -1,68 +1,57 @@
 "use client"
 
-import type { ComponentType } from "react"
-import { Download, FileText, LibraryBig, LinkIcon } from "lucide-react"
+import { Download, Eye, LibraryBig, Package } from "lucide-react"
 
 import type { ArtifactPart } from "@/lib/ai-entry/message-parts/types"
 
-type Row = { label: string; value: string; href: string | null; icon: ComponentType<{ className?: string }> }
+function kindLabel(part: ArtifactPart, isZh: boolean): string {
+  if (part.artifactType === "html") return isZh ? "HTML 交付物" : "HTML deliverable"
+  if (part.artifactType === "pptx") return isZh ? "PPT 交付物" : "PPT deliverable"
+  if (part.artifactType === "image") return isZh ? "图像交付物" : "Image deliverable"
+  return isZh ? "交付文件" : "Deliverable"
+}
 
-function titleFor(part: ArtifactPart, isZh: boolean): string {
-  if (part.artifactType === "html") return isZh ? "已生成 HTML 成品" : "HTML deliverable generated"
-  if (part.artifactType === "pptx") return isZh ? "已生成 PPT 成品" : "PPT deliverable generated"
-  return isZh ? "已生成可交付文件" : "Deliverable generated"
+function extensionLabel(part: ArtifactPart) {
+  const source = part.fileName || part.title || ""
+  const match = source.match(/\.([a-z0-9]+)$/i)
+  if (match?.[1]) return match[1].toUpperCase()
+  if (part.artifactType === "pptx") return "PPTX"
+  if (part.artifactType === "html") return "HTML"
+  if (part.artifactType === "image") return "IMAGE"
+  return "FILE"
 }
 
 export function ArtifactPartView({ part, isZh }: { part: ArtifactPart; isZh: boolean }) {
-  const rows: Row[] = []
-  if (part.title) rows.push({ label: isZh ? "标题" : "Title", value: part.title, href: null, icon: FileText })
-  if (part.fileName) rows.push({ label: isZh ? "文件名" : "File", value: part.fileName, href: null, icon: FileText })
-  if (part.previewUrl) rows.push({ label: isZh ? "在线预览" : "Preview", value: part.previewUrl, href: part.previewUrl, icon: LinkIcon })
-  if (part.downloadUrl) rows.push({ label: isZh ? "下载" : "Download", value: part.downloadUrl, href: part.downloadUrl, icon: Download })
-  if (part.workHref) rows.push({ label: isZh ? "作品库" : "Work library", value: part.workHref, href: part.workHref, icon: LibraryBig })
-
   return (
-    <div className="artifact-block">
-      <div className="artifact-title">
-        <FileText className="h-5 w-5" />
-        {titleFor(part, isZh)}
+    <div className="artifact-card">
+      <div className="artifact-cover">
+        <Package className="h-7 w-7 text-primary/80" />
+        <span className="artifact-cover-ext">{extensionLabel(part)}</span>
       </div>
-      <div>
-        {rows.map((row) => {
-          const Icon = row.icon
-          const isWorkLibrary = row.label === (isZh ? "作品库" : "Work library")
-          return (
-            <div key={`${row.label}:${row.value}`} className="artifact-row">
-              <div className="artifact-label">
-                <Icon className="h-4 w-4" />
-                {row.label}
-              </div>
-              <div className="artifact-value">
-                {row.href ? (
-                  <a className="artifact-link" href={row.href} target={isWorkLibrary ? undefined : "_blank"} rel="noreferrer">
-                    {row.value}
-                  </a>
-                ) : (
-                  <span>{row.value}</span>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="message-actions">
-        {part.workHref ? (
-          <a className="action-secondary" href={part.workHref}>
-            <LibraryBig className="h-4 w-4" />
-            {isZh ? "打开作品库" : "Open in Works"}
-          </a>
-        ) : null}
-        {part.downloadUrl ? (
-          <a className="action-secondary" href={part.downloadUrl} target="_blank" rel="noreferrer">
-            <Download className="h-4 w-4" />
-            {isZh ? "导出" : "Export"}
-          </a>
-        ) : null}
+      <div className="artifact-meta">
+        <div className="artifact-eyebrow">{kindLabel(part, isZh)}</div>
+        <div className="artifact-title-text">{part.title || part.fileName || (isZh ? "生成产物" : "Generated artifact")}</div>
+        <div className="artifact-subtitle">{part.fileName || (isZh ? "可预览 / 下载 / 进入作品库" : "Ready to preview, download, or open in works")}</div>
+        <div className="artifact-card-actions">
+          {part.previewUrl ? (
+            <a className="artifact-action" href={part.previewUrl} target="_blank" rel="noreferrer">
+              <Eye className="h-3.5 w-3.5" />
+              {isZh ? "预览" : "Preview"}
+            </a>
+          ) : null}
+          {part.downloadUrl ? (
+            <a className="artifact-action" href={part.downloadUrl} target="_blank" rel="noreferrer">
+              <Download className="h-3.5 w-3.5" />
+              {isZh ? "下载" : "Download"}
+            </a>
+          ) : null}
+          {part.workHref ? (
+            <a className="artifact-action" href={part.workHref}>
+              <LibraryBig className="h-3.5 w-3.5" />
+              {isZh ? "作品库" : "Works"}
+            </a>
+          ) : null}
+        </div>
       </div>
     </div>
   )

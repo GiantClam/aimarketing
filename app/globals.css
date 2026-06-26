@@ -717,6 +717,14 @@
     box-shadow: 0 18px 44px rgba(0, 0, 0, 0.07);
   }
 
+  .assistant-message {
+    max-width: 860px;
+    padding: 22px 24px;
+    border-color: #e7e5dc;
+    border-radius: 18px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.055);
+  }
+
   .message-card-user {
     max-width: min(760px, 88%);
     border: 1px solid #d9d9d2;
@@ -732,6 +740,10 @@
     align-items: center;
     gap: 14px;
     margin-bottom: 18px;
+  }
+
+  .assistant-message-header {
+    margin-bottom: 12px;
   }
 
   .ai-avatar {
@@ -762,6 +774,16 @@
     color: #242424;
     font-size: 0.95rem;
     line-height: 1.8;
+  }
+
+  .assistant-body {
+    font-size: 15.5px;
+    line-height: 1.75;
+    color: #171717;
+  }
+
+  .assistant-body :where(p) {
+    margin: 0 0 14px;
   }
 
   .message-body :where(p) {
@@ -799,85 +821,216 @@
     background: #e8e8e1;
   }
 
-  .artifact-block {
-    margin-top: 20px;
+  .assistant-section {
+    margin-top: 16px;
   }
 
-  .artifact-title {
+  .assistant-live-panel {
+    margin-top: 16px;
+    border: 1px solid #e7e7df;
+    border-radius: 12px;
+    background: #fafaf7;
+    padding: 14px;
+  }
+
+  .process-list {
+    overflow: hidden;
+    border: 1px solid #e8e6dd;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .process-item + .process-item {
+    border-top: 1px solid #eeece4;
+  }
+
+  .process-row {
+    display: grid;
+    width: 100%;
+    min-height: 40px;
+    grid-template-columns: 130px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    font-size: 13px;
+    text-align: left;
+  }
+
+  .process-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    color: #222;
+  }
+
+  .process-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #686868;
+    font-size: 13px;
+  }
+
+  .process-success {
+    color: #20a455;
+  }
+
+  .process-trailing {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .process-panel {
+    border-top: 1px solid #eeece4;
+    padding: 10px 14px 12px;
+    background: #fcfcf9;
+  }
+
+  .artifact-section-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 16px;
-    color: #111;
-    font-family:
-      var(--font-display),
-      var(--font-display-fallback);
-    font-size: 1.25rem;
+    margin: 18px 0 10px;
+    color: #555;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .artifact-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .artifact-card {
+    display: grid;
+    width: 320px;
+    min-height: 128px;
+    grid-template-columns: 128px minmax(0, 1fr);
+    gap: 14px;
+    border: 1px solid #e8e6dd;
+    border-radius: 12px;
+    background: #fff;
+    padding: 10px;
+  }
+
+  .artifact-card-wide {
+    width: min(100%, 520px);
+    grid-template-columns: 128px minmax(0, 1fr);
+  }
+
+  .artifact-cover {
+    display: flex;
+    height: 104px;
+    width: 128px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #f4f0dd 0%, #ece7cf 100%);
+  }
+
+  .artifact-cover-muted {
+    background: #f5f3ec;
+  }
+
+  .artifact-cover-ext {
+    color: #666;
+    font-size: 10px;
     font-weight: 800;
-    letter-spacing: 0;
+    letter-spacing: 0.14em;
+  }
+
+  .artifact-meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .artifact-eyebrow {
+    margin-bottom: 4px;
+    color: #6b6b6b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
   }
 
-  .artifact-row {
-    display: grid;
-    grid-template-columns: 140px minmax(0, 1fr);
-    gap: 18px;
-    border-bottom: 1px solid #edede7;
-    padding: 13px 0;
-  }
-
-  .artifact-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #444;
-    font-size: 0.82rem;
+  .artifact-title-text {
+    color: #111;
+    font-size: 14px;
     font-weight: 700;
+    line-height: 1.35;
   }
 
-  .artifact-value {
-    min-width: 0;
-    color: #222;
-    font-size: 0.88rem;
-    line-height: 1.7;
+  .artifact-subtitle {
+    margin-top: 4px;
+    color: #666;
+    font-size: 12px;
+    line-height: 1.45;
   }
 
-  .file-name {
+  .artifact-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .artifact-action {
     display: inline-flex;
-    max-width: 100%;
-    border: 1px solid #e6e6df;
-    border-radius: 6px;
-    background: #f7f7f3;
-    padding: 4px 8px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.82rem;
-  }
-
-  .status-badge {
-    display: inline-flex;
-    height: 24px;
+    height: 34px;
     align-items: center;
     gap: 6px;
-    border: 1px solid #e5e5dc;
-    border-radius: 999px;
-    background: #f5f5ef;
-    padding: 0 9px;
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #25a85a;
-  }
-
-  .artifact-link {
+    border: 1px solid #e4e2d8;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0 12px;
     color: #111;
-    text-decoration: underline;
-    text-decoration-color: #d6d64a;
-    text-underline-offset: 3px;
+    font-size: 13px;
+    font-weight: 600;
+    transition:
+      border-color 180ms ease,
+      background 180ms ease,
+      transform 180ms ease;
+  }
+
+  .artifact-action:hover {
+    transform: translateY(-1px);
+    border-color: #d9d4c5;
+    background: #faf8f2;
+  }
+
+  .artifact-variant-list {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    margin-top: 12px;
+  }
+
+  .artifact-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    color: #666;
+    font-size: 11px;
+  }
+
+  .references-row {
+    display: flex;
+    height: 44px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    color: #333;
+    font-size: 13.5px;
   }
 
   .message-actions {
@@ -888,43 +1041,31 @@
     margin-top: 18px;
   }
 
-  .action-primary,
-  .action-secondary {
+  .message-feedback {
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .message-feedback-btn {
     display: inline-flex;
-    height: 40px;
+    height: 32px;
+    width: 32px;
     align-items: center;
     justify-content: center;
-    gap: 8px;
     border-radius: 8px;
-    padding: 0 18px;
-    font-family:
-      var(--font-display),
-      var(--font-display-fallback);
-    font-size: 0.82rem;
-    font-weight: 900;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+    border: 1px solid #e4e2d8;
+    background: #fff;
+    color: #444;
     transition:
       transform 200ms ease,
       border-color 200ms ease,
       background 200ms ease;
   }
 
-  .action-primary {
-    border: 1px solid #ded735;
-    background: #f5ef3d;
-    color: #111;
-  }
-
-  .action-secondary {
-    border: 1px solid #e4e4dc;
-    background: #fff;
-    color: #111;
-  }
-
-  .action-primary:hover,
-  .action-secondary:hover {
+  .message-feedback-btn:hover {
     transform: translateY(-1px);
+    border-color: #d7d2c5;
+    background: #faf8f2;
   }
 
   .chat-composer {
@@ -2429,13 +2570,43 @@
     border-radius: 14px;
   }
 
+  .assistant-message {
+    padding: 18px 18px 20px;
+  }
+
   .message-card-user {
     max-width: calc(100% - 46px);
   }
 
-  .artifact-row {
+  .process-row {
+    grid-template-columns: 1fr 28px;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .process-label {
+    grid-column: 1 / -1;
+  }
+
+  .process-value {
+    white-space: normal;
+  }
+
+  .process-trailing {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .artifact-card,
+  .artifact-card-wide {
+    width: 100%;
     grid-template-columns: 1fr;
-    gap: 6px;
+  }
+
+  .artifact-cover {
+    width: 100%;
+    height: 92px;
   }
 
   .chat-composer {
@@ -2447,10 +2618,8 @@
     width: 100%;
   }
 
-  .message-actions,
-  .action-primary,
-  .action-secondary {
-    width: 100%;
+  .message-feedback {
+    width: auto;
   }
 }
 

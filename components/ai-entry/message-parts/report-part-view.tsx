@@ -1,19 +1,24 @@
 "use client"
 
-import { LayoutTemplate } from "lucide-react"
+import { ArrowRight, LayoutTemplate } from "lucide-react"
 
 import type { ReportPart } from "@/lib/ai-entry/message-parts/types"
 
 export function ReportPartView({ part, isZh }: { part: ReportPart; isZh: boolean }) {
   if (!part.variants.length) return null
+
   return (
-    <div className="rounded-[10px] border border-border bg-muted/20 p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs">
-        <LayoutTemplate className="h-3.5 w-3.5 text-primary" />
-        <span className="font-medium text-foreground">{part.title || (isZh ? "预览方案" : "Preview variants")}</span>
-        <span className="text-muted-foreground">{part.variants.length}</span>
+    <div className="artifact-card artifact-card-wide">
+      <div className="artifact-cover artifact-cover-muted">
+        <LayoutTemplate className="h-8 w-8 text-primary/80" />
       </div>
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <div className="artifact-meta">
+        <div className="artifact-title-text">{part.title || (isZh ? "预览方案" : "Preview variants")}</div>
+        <div className="artifact-subtitle">
+          {isZh ? `${part.variants.length} 个输出方向可选` : `${part.variants.length} variants available`}
+        </div>
+      </div>
+      <ul className="artifact-variant-list">
         {part.variants.map((v) => (
           <li key={v.key} className="rounded-[8px] border border-border bg-background/60 p-2 text-xs">
             <div className="font-medium text-foreground">{v.name || v.key}</div>
@@ -21,8 +26,9 @@ export function ReportPartView({ part, isZh }: { part: ReportPart; isZh: boolean
           </li>
         ))}
       </ul>
-      <div className="mt-2 text-[11px] text-muted-foreground">
-        {isZh ? "选择 variant 后调用 export_ppt_deck 导出成品。" : "Pick a variant, then call export_ppt_deck to export."}
+      <div className="artifact-note">
+        <ArrowRight className="h-3.5 w-3.5" />
+        <span>{isZh ? "选择 variant 后可继续导出成品。" : "Choose a variant, then continue to export."}</span>
       </div>
     </div>
   )

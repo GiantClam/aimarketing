@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ListTree } from "lucide-react"
+import { Check, ChevronDown, ListTree, Loader2, TriangleAlert } from "lucide-react"
 
 import type { TaskProgressPart, TaskProgressStep } from "@/lib/ai-entry/message-parts/types"
 import { cn } from "@/lib/utils"
@@ -21,20 +21,44 @@ function stepLabel(step: TaskProgressStep, isZh: boolean): string {
 export function TaskProgressPartView({ part, isZh }: { part: TaskProgressPart; isZh: boolean }) {
   const [open, setOpen] = useState(false)
   if (!part.steps.length) return null
+
+  const completedCount = part.steps.filter((step) => step.status === "completed").length
+  const failedCount = part.steps.filter((step) => step.status === "failed").length
+  const runningCount = part.steps.filter((step) => step.status === "running").length
+  const summary = failedCount > 0
+    ? isZh
+      ? `${failedCount} 个步骤失败`
+      : `${failedCount} steps failed`
+    : runningCount > 0
+      ? isZh
+        ? `${runningCount} 个步骤进行中`
+        : `${runningCount} steps running`
+      : isZh
+        ? `${completedCount} 个步骤已完成`
+        : `${completedCount} steps completed`
+
   return (
-    <div className="rounded-[10px] border border-border bg-muted/20">
+    <div className="process-item">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground"
+        className="process-row"
+        aria-expanded={open}
       >
-        <ListTree className="h-3.5 w-3.5" />
-        <span>{isZh ? "步骤轨迹" : "Step trace"}</span>
-        <span className="ml-auto">{part.steps.length}</span>
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        <span className="process-label">
+          <ListTree className="h-3.5 w-3.5" />
+          <span>{isZh ? "步骤轨迹" : "Step trace"}</span>
+        </span>
+        <span className="process-value">{summary}</span>
+        <span className="process-trailing">
+          {failedCount > 0 ? <TriangleAlert className="h-3.5 w-3.5 text-destructive" /> : null}
+          {failedCount === 0 && runningCount > 0 ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : null}
+          {failedCount === 0 && runningCount === 0 ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : null}
+          <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+        </span>
       </button>
       {open ? (
-        <div className="space-y-1.5 border-t border-border px-3 py-2 pl-6 text-xs">
+        <div className="process-panel space-y-1.5">
           {part.steps.map((step, i) => (
             <div key={`${step.type}-${step.at}-${i}`} className="flex items-start gap-2">
               <span
@@ -49,7 +73,7 @@ export function TaskProgressPartView({ part, isZh }: { part: TaskProgressPart; i
                         : "bg-muted-foreground",
                 )}
               />
-              <span>
+              <span className="text-[12px] text-muted-foreground">
                 {stepLabel(step, isZh)}
                 {step.detail ? <span className="ml-1 text-muted-foreground/80">{step.detail}</span> : null}
               </span>

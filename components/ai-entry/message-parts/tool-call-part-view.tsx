@@ -1,10 +1,20 @@
 "use client"
 
 import { useState } from "react"
-import { Check, ChevronDown, Loader2, TriangleAlert, Wrench } from "lucide-react"
+import { Check, ChevronDown, Code2, Loader2, TriangleAlert, Wrench } from "lucide-react"
 
 import type { ToolCallPart } from "@/lib/ai-entry/message-parts/types"
 import { cn } from "@/lib/utils"
+
+function formatJson(value: unknown): string {
+  if (value === null || value === undefined) return "null"
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
 
 export function ToolCallPartView({ part, isZh }: { part: ToolCallPart; isZh: boolean }) {
   const [open, setOpen] = useState(false)
@@ -21,29 +31,60 @@ export function ToolCallPartView({ part, isZh }: { part: ToolCallPart; isZh: boo
       : state === "output-available"
         ? "Tool completed"
         : "Tool running"
+  const output = part.output ?? null
+  const outputText = output === null ? "" : formatJson(output)
+  const summary = isZh
+    ? `${part.toolName} ${state === "output-error" ? "失败" : state === "output-available" ? "完成" : "运行中"}`
+    : `${part.toolName} ${state === "output-error" ? "failed" : state === "output-available" ? "completed" : "running"}`
+
   return (
-    <div className="rounded-[10px] border border-border bg-muted/20">
+    <div className="process-item">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-xs"
+        aria-expanded={open}
+        className="process-row transition-colors hover:bg-muted/20"
       >
-        <Icon
-          className={cn(
-            "h-3.5 w-3.5",
-            state === "output-error" ? "text-destructive" : state === "output-available" ? "text-emerald-500" : "text-primary",
-            state === "input-streaming" && "animate-spin",
-          )}
-        />
-        <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="font-medium text-foreground">{part.toolName}</span>
-        <span className="text-muted-foreground">{label}</span>
-        <ChevronDown className={cn("ml-auto h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        <span className="process-label">
+          <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>{isZh ? "工具调用" : "Tool call"}</span>
+        </span>
+        <span className="process-value">{summary}</span>
+        <span className="process-trailing">
+          <Icon
+            className={cn(
+              "h-3.5 w-3.5",
+              state === "output-error" ? "text-destructive" : state === "output-available" ? "text-emerald-600" : "text-primary",
+              state === "input-streaming" && "animate-spin",
+            )}
+          />
+          <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+        </span>
       </button>
       {open ? (
-        <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-          <div className="mb-1 font-medium text-foreground">{isZh ? "参数" : "Args"}</div>
-          <pre className="overflow-x-auto rounded bg-background/60 p-2">{JSON.stringify(part.args ?? {}, null, 2)}</pre>
+        <div className="process-panel text-[11px] text-muted-foreground">
+          <div className="grid gap-3">
+            <section className="rounded-[10px] border border-border bg-background/80 p-2.5">
+              <div className="mb-1.5 flex items-center gap-2 font-medium text-foreground">
+                <Code2 className="h-3.5 w-3.5 text-primary" />
+                <span>{isZh ? "参数" : "Args"}</span>
+              </div>
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded-[8px] bg-muted/40 p-2 text-[11px] leading-6 text-foreground">
+                {formatJson(part.args ?? {})}
+              </pre>
+            </section>
+            {outputText ? (
+              <section className="rounded-[10px] border border-border bg-background/80 p-2.5">
+                <div className="mb-1.5 flex items-center justify-between gap-2 font-medium text-foreground">
+                  <span>{isZh ? "结果" : "Output"}</span>
+                  <span className="text-[10px] font-normal uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
+                </div>
+                <pre className={cn("overflow-x-auto whitespace-pre-wrap rounded-[8px] p-2 text-[11px] leading-6", state === "output-error" ? "bg-destructive/5 text-destructive" : "bg-muted/40 text-foreground")}>
+                  {outputText}
+                </pre>
+              </section>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

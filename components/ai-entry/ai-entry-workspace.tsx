@@ -13,7 +13,6 @@ import {
   FileText,
   ImageIcon,
   LibraryBig,
-  LinkIcon,
   Loader2,
   MoreHorizontal,
   Paperclip,
@@ -287,54 +286,38 @@ function parseArtifactResult(content: string): ParsedArtifactResult | null {
   return { body, title, rows, workHref, downloadHref }
 }
 
-function getArtifactRowIcon(label: string) {
-  if (/文件|file/i.test(label)) return FileText
-  if (/状态|status/i.test(label)) return Check
-  if (/下载|download/i.test(label)) return Download
-  if (/作品库|work library/i.test(label)) return LibraryBig
-  if (/链接|link|preview|open/i.test(label)) return LinkIcon
-  return FileText
-}
-
 function ArtifactResultBlock({ artifact }: { artifact: ParsedArtifactResult }) {
+  const primaryHref = artifact.rows.find((row) => /预览|preview|open|链接|link/i.test(row.label))?.href ?? null
   return (
-    <div className="artifact-block">
-      <div className="artifact-title">
-        <FileText className="h-5 w-5" />
-        {artifact.title}
+    <div className="artifact-card">
+      <div className="artifact-cover artifact-cover-muted">
+        <FileText className="h-7 w-7 text-primary/80" />
+        <span className="artifact-cover-ext">FILE</span>
       </div>
-      <div>
-        {artifact.rows.map((row) => {
-          const Icon = getArtifactRowIcon(row.label)
-          const isFile = /文件|file/i.test(row.label)
-          const isStatus = /状态|status/i.test(row.label)
-
-          return (
-            <div key={`${row.label}:${row.value}`} className="artifact-row">
-              <div className="artifact-label">
-                <Icon className="h-4 w-4" />
-                {row.label}
-              </div>
-              <div className="artifact-value">
-                {row.href ? (
-                  <a className="artifact-link" href={row.href} target="_blank" rel="noreferrer">
-                    {row.value || row.href}
-                    <ExternalLink className="ml-1 inline h-3.5 w-3.5" />
-                  </a>
-                ) : isStatus ? (
-                  <span className="status-badge">
-                    <span className="status-dot" />
-                    {row.value}
-                  </span>
-                ) : isFile ? (
-                  <span className="file-name">{row.value}</span>
-                ) : (
-                  row.value
-                )}
-              </div>
-            </div>
-          )
-        })}
+      <div className="artifact-meta">
+        <div className="artifact-eyebrow">Deliverable</div>
+        <div className="artifact-title-text">{artifact.title}</div>
+        <div className="artifact-subtitle">{artifact.rows.find((row) => /文件|file/i.test(row.label))?.value ?? artifact.rows[0]?.value ?? "Ready"}</div>
+        <div className="artifact-card-actions">
+          {primaryHref ? (
+            <a className="artifact-action" href={primaryHref} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3.5 w-3.5" />
+              Preview
+            </a>
+          ) : null}
+          {artifact.downloadHref ? (
+            <a className="artifact-action" href={artifact.downloadHref} target="_blank" rel="noreferrer">
+              <Download className="h-3.5 w-3.5" />
+              Download
+            </a>
+          ) : null}
+          {artifact.workHref ? (
+            <a className="artifact-action" href={artifact.workHref}>
+              <LibraryBig className="h-3.5 w-3.5" />
+              Works
+            </a>
+          ) : null}
+        </div>
       </div>
     </div>
   )
@@ -427,8 +410,9 @@ function readPendingConversationMessages(conversationId: string | null) {
         const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
         const content = typeof item?.content === "string" ? item.content : ""
         const attachments = Array.isArray(item?.attachments) ? item.attachments : undefined
+        const parts = Array.isArray(item?.parts) ? item.parts : undefined
         if (!role) return null
-        return { id, role, content, attachments } as ChatMessage
+        return { id, role, content, attachments, parts } as ChatMessage
       })
       .filter((item): item is ChatMessage => Boolean(item))
   } catch {
@@ -1753,6 +1737,24 @@ export function AiEntryWorkspace({
       ...messages.filter((message) => message.content.trim()).map((message) => ({ role: message.role, content: message.content })),
       { role: "user" as const, content: userMessageContent },
     ]
+    const baseMessages = messages
+    let assistantDraft: ChatMessage = { id: assistantMessageId, role: "assistant", content: "" }
+
+    const syncAssistantDraft = (nextDraft: ChatMessage) => {
+      if (
+        nextDraft.content === assistantDraft.content &&
+        nextDraft.parts === assistantDraft.parts &&
+        nextDraft.attachments === assistantDraft.attachments
+      ) {
+        return
+      }
+      assistantDraft = nextDraft
+      const nextMessages = [...baseMessages, userMessage, assistantDraft]
+      setMessages(nextMessages)
+      if (latestConversationIdRef.current) {
+        savePendingConversationMessages(latestConversationIdRef.current, nextMessages)
+      }
+    }
 
     setInput("")
     setAttachments([])
@@ -1765,7 +1767,11 @@ export function AiEntryWorkspace({
         at: Date.now(),
       },
     ])
-    setMessages((previous) => [...previous, userMessage, { id: assistantMessageId, role: "assistant", content: "" }])
+    const initialMessages = [...baseMessages, userMessage, assistantDraft]
+    setMessages(initialMessages)
+    if (latestConversationIdRef.current) {
+      savePendingConversationMessages(latestConversationIdRef.current, initialMessages)
+    }
     isLoadingRef.current = true
     setIsLoading(true)
     if (!conversationId) {
@@ -1860,30 +1866,20 @@ export function AiEntryWorkspace({
 
         const processEvent = (event: ChatStreamApiResponse) => {
           const now = Date.now()
-          setMessages((previous) => {
-            const target = previous.find((item) => item.id === assistantMessageId)
-            if (!target) return previous
-            const currentParts = target.parts ?? []
-            const nextParts = applySseEvent(currentParts, event)
-            if (nextParts === currentParts) return previous
-            const next = previous.map((item) =>
-              item.id === assistantMessageId ? { ...item, parts: nextParts } : item,
-            )
-            savePendingConversationMessages(latestConversationIdRef.current, next)
-            return next
-          })
           const streamConversationId =
             typeof event.conversation_id === "string" && event.conversation_id.trim()
               ? event.conversation_id.trim()
               : null
           if (streamConversationId) {
             latestConversationIdRef.current = streamConversationId
-            savePendingConversationMessages(streamConversationId, [
-              ...messages,
-              userMessage,
-              { id: assistantMessageId, role: "assistant", content: streamedText },
-            ])
+            savePendingConversationMessages(streamConversationId, [...baseMessages, userMessage, assistantDraft])
             setConversationId(streamConversationId)
+          }
+
+          const currentParts = assistantDraft.parts ?? []
+          const nextParts = applySseEvent(currentParts, event)
+          if (nextParts !== currentParts) {
+            syncAssistantDraft({ ...assistantDraft, parts: nextParts })
           }
 
           if (event.event === "conversation_init") {
@@ -1970,30 +1966,24 @@ export function AiEntryWorkspace({
             const toolId = event.data?.toolCallId || toolName
             const isWebSearch = toolName === "web_search"
             const isToolFailure = event.data?.result?.ok === false
-            const toolMessage = buildPptToolResultMessage({
-              toolName,
-              result: event.data?.result ?? null,
-              origin: typeof window !== "undefined" ? window.location.origin : null,
-              isZh,
-            })
             const sources = Array.isArray(event.data?.result?.results)
               ? event.data.result.results.filter((source) => typeof source?.url === "string" && source.url.trim())
               : []
             const sourceDetail = sources.length
               ? `${sources.length} ${isZh ? "\u4e2a\u6765\u6e90" : "sources"}: ${sources.slice(0, 2).map((source) => source.title || source.url).filter(Boolean).join(" / ")}`
               : undefined
+            const toolMessage = buildPptToolResultMessage({
+              toolName,
+              result: event.data?.result ?? null,
+              origin: typeof window !== "undefined" ? window.location.origin : null,
+              isZh,
+            })
 
             if (toolMessage && !streamedToolAppendix.includes(toolMessage)) {
               streamedToolAppendix = `${streamedToolAppendix}${toolMessage}`
-              const nextContent = `${streamedText}${streamedToolAppendix}`
-              setMessages((previous) => {
-                const next = previous.map((item) =>
-                  item.id === assistantMessageId
-                    ? { ...item, content: nextContent }
-                    : item,
-                )
-                savePendingConversationMessages(latestConversationIdRef.current, next)
-                return next
+              syncAssistantDraft({
+                ...assistantDraft,
+                content: `${streamedText}${streamedToolAppendix}`,
               })
             }
 
@@ -2042,18 +2032,10 @@ export function AiEntryWorkspace({
             const delta = typeof event.answer === "string" ? event.answer : ""
             if (!delta) return
             streamedText += delta
-            setMessages((previous) =>
-              {
-                const nextContent = `${streamedText}${streamedToolAppendix}`
-                const next = previous.map((item) =>
-                  item.id === assistantMessageId
-                    ? { ...item, content: nextContent }
-                    : item,
-                )
-                savePendingConversationMessages(latestConversationIdRef.current, next)
-                return next
-              },
-            )
+            syncAssistantDraft({
+              ...assistantDraft,
+              content: `${streamedText}${streamedToolAppendix}`,
+            })
             return
           }
 
@@ -2093,17 +2075,10 @@ export function AiEntryWorkspace({
               at: now,
             })
 
-            setMessages((previous) =>
-              {
-                const next = previous.map((item) =>
-                  item.id === assistantMessageId
-                    ? { ...item, content: resolvedTextWithTools || copy.unknownError }
-                    : item,
-                )
-                savePendingConversationMessages(latestConversationIdRef.current, next)
-                return next
-              },
-            )
+            syncAssistantDraft({
+              ...assistantDraft,
+              content: resolvedTextWithTools || (assistantDraft.parts?.length ? "" : copy.unknownError),
+            })
             return
           }
 
@@ -2139,13 +2114,10 @@ export function AiEntryWorkspace({
 
         if (streamError) throw new Error(streamError)
         if (!streamedText.trim()) {
-          setMessages((previous) =>
-            previous.map((item) =>
-              item.id === assistantMessageId
-                ? { ...item, content: copy.unknownError }
-                : item,
-            ),
-          )
+          syncAssistantDraft({
+            ...assistantDraft,
+            content: assistantDraft.parts?.length ? assistantDraft.content : copy.unknownError,
+          })
         }
       } else {
         const payload = (await response.json().catch(() => null)) as ChatApiResponse | null
@@ -2184,7 +2156,14 @@ export function AiEntryWorkspace({
         at: Date.now(),
       }
       setErrorMessage(renderedError)
-      setMessages((previous) => previous.map((item) => item.id === assistantMessageId ? { ...item, content: renderedError } : item))
+      if (!assistantDraft.content.trim() && !(assistantDraft.parts?.length ?? 0)) {
+        syncAssistantDraft({
+          ...assistantDraft,
+          content: renderedError,
+        })
+      } else if (latestConversationIdRef.current) {
+        savePendingConversationMessages(latestConversationIdRef.current, [...baseMessages, userMessage, assistantDraft])
+      }
       setPendingTaskEvents((current) => [...current, failedEvent].slice(-12))
     } finally {
       pendingFirstConversationRouteRef.current = false
@@ -2612,91 +2591,108 @@ export function AiEntryWorkspace({
                 const parsedArtifact = isAssistant ? parseArtifactResult(message.content) : null
                 const bodyContent = parsedArtifact?.body ?? message.content
                 const hasParts = Boolean(message.parts?.length)
-                const nonTextParts = hasParts ? message.parts ?? [] : []
-                const artifactPart = hasParts
-                  ? (message.parts ?? []).find((part): part is ArtifactPart => part.type === "artifact")
-                  : null
+                const parts = hasParts ? message.parts ?? [] : []
+                const processParts = parts.filter((part) => part.type !== "text" && part.type !== "source" && part.type !== "artifact" && part.type !== "report")
+                const artifactParts = parts.filter((part): part is ArtifactPart => part.type === "artifact")
+                const reportParts = parts.filter((part) => part.type === "report")
+                const referenceParts = parts.filter((part) => part.type === "source")
+                const artifactPart = artifactParts[0] ?? null
                 return isAssistant ? (
-                  <article key={message.id} className="message-card">
-                    <div className="message-header">
-                      <div className="ai-avatar">AI</div>
-                      <div className="min-w-0 flex-1">
-                        <div className="dashboard-kicker text-foreground">AI RESPONSE</div>
-                        <div className="message-time">{formatMessageTime(message.createdAt, displayLocale)}</div>
-                      </div>
-                      <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    {isPendingAssistant ? (
-                      <div className="flex items-center gap-2 text-sm text-foreground">
-                        <TypingIndicator />
-                        <span>{copy.loading}</span>
-                      </div>
-                    ) : bodyContent ? (
-                      <MessageContent bare markdown role="assistant" className="message-body p-0">{bodyContent}</MessageContent>
-                    ) : null}
-                    {parsedArtifact && !hasParts ? (
-                      <>
-                        <div className="message-divider" />
-                        <ArtifactResultBlock artifact={parsedArtifact} />
-                      </>
-                    ) : null}
-                    {nonTextParts.length ? (
-                      <MessagePartViewList parts={nonTextParts} isZh={isZh} />
-                    ) : null}
-                    {shouldShowLoadingDetails ? (
-                      <div className="mt-5 rounded-[12px] border border-[#e7e7df] bg-[#fafaf7] p-4">
-                        <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                          <TypingIndicator />
-                          <span className="truncate">{loadingEventSummary.currentLabel}</span>
+                  <Message key={message.id} className="items-start">
+                    <div className="ai-avatar mt-1 shrink-0">AI</div>
+                    <article className="message-card assistant-message">
+                      <div className="message-header assistant-message-header">
+                        <div className="min-w-0 flex-1">
+                          <div className="dashboard-kicker text-foreground">AI RESPONSE</div>
+                          <div className="message-time">{formatMessageTime(message.createdAt, displayLocale)}</div>
                         </div>
-                        {loadingEventSummary.totalCount > 0 ? (
-                          <div className="mb-2 rounded-[8px] border border-border/70 bg-background/70 px-2.5 py-2">
-                            <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                              <span className="truncate">{isZh ? "处理中" : "Processing"}</span>
-                              <span>{`${loadingEventSummary.completedCount}/${loadingEventSummary.totalCount}`}</span>
-                            </div>
-                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-primary transition-all duration-300"
-                                style={{ width: `${loadingEventSummary.progressPercent}%` }}
-                              />
-                            </div>
+                      </div>
+                      {isPendingAssistant ? (
+                        <div className="flex items-center gap-2 text-sm text-foreground">
+                          <TypingIndicator />
+                          <span>{copy.loading}</span>
+                        </div>
+                      ) : bodyContent ? (
+                        <MessageContent bare markdown role="assistant" className="message-body assistant-body p-0">{bodyContent}</MessageContent>
+                      ) : null}
+                      {processParts.length ? (
+                        <section className="assistant-section">
+                          <MessagePartViewList parts={processParts} isZh={isZh} className="process-list" />
+                        </section>
+                      ) : null}
+                      {shouldShowLoadingDetails ? (
+                        <div className="assistant-live-panel">
+                          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <TypingIndicator />
+                            <span className="truncate">{loadingEventSummary.currentLabel}</span>
                           </div>
-                        ) : null}
-                        <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} className="pl-0" />
-                      </div>
-                    ) : null}
-                    {message.content.trim() ? (
-                      <div className="message-actions">
-                        <MessageAction tooltip={copied ? copy.copiedReply : copy.copyReply}>
-                          <button type="button" className="action-primary" onClick={() => void handleCopyMessage(message.id, message.content)}>
-                            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                            <TextMorph text={copied ? copy.copied : copy.copy} />
-                          </button>
-                        </MessageAction>
-                        {(() => {
-                          const workHref = artifactPart?.workHref ?? parsedArtifact?.workHref ?? null
-                          const downloadHref = artifactPart?.downloadUrl ?? parsedArtifact?.downloadHref ?? null
-                          return (
-                            <>
-                              {workHref ? (
-                                <a className="action-secondary" href={workHref}>
-                                  <LibraryBig className="h-4 w-4" />
-                                  {isZh ? "打开作品库" : "Open in Works"}
-                                </a>
-                              ) : null}
-                              {downloadHref ? (
-                                <a className="action-secondary" href={downloadHref} target="_blank" rel="noreferrer">
-                                  <Download className="h-4 w-4" />
-                                  {isZh ? "导出" : "Export"}
-                                </a>
-                              ) : null}
-                            </>
-                          )
-                        })()}
-                      </div>
-                    ) : null}
-                  </article>
+                          {loadingEventSummary.totalCount > 0 ? (
+                            <div className="mb-2 rounded-[8px] border border-border/70 bg-background/70 px-2.5 py-2">
+                              <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                                <span className="truncate">{isZh ? "处理中" : "Processing"}</span>
+                                <span>{`${loadingEventSummary.completedCount}/${loadingEventSummary.totalCount}`}</span>
+                              </div>
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="h-full rounded-full bg-primary transition-all duration-300"
+                                  style={{ width: `${loadingEventSummary.progressPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : null}
+                          <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} className="pl-0" />
+                        </div>
+                      ) : null}
+                      {((artifactParts.length > 0) || reportParts.length > 0 || (parsedArtifact && !hasParts)) ? (
+                        <section className="assistant-section">
+                          <div className="artifact-section-title">
+                            <Sparkles className="h-3.5 w-3.5 text-primary" />
+                            <span>{isZh ? "生成产物" : "Generated artifacts"}</span>
+                          </div>
+                          <div className="artifact-grid">
+                            {artifactParts.length ? <MessagePartViewList parts={artifactParts} isZh={isZh} className="space-y-0" /> : null}
+                            {reportParts.length ? <MessagePartViewList parts={reportParts} isZh={isZh} className="space-y-3" /> : null}
+                            {parsedArtifact && !hasParts ? <ArtifactResultBlock artifact={parsedArtifact} /> : null}
+                          </div>
+                        </section>
+                      ) : null}
+                      {referenceParts.length ? (
+                        <section className="assistant-section">
+                          <MessagePartViewList parts={referenceParts} isZh={isZh} className="space-y-0" />
+                        </section>
+                      ) : null}
+                      {(bodyContent.trim() || artifactPart || parsedArtifact) ? (
+                        <div className="message-actions message-feedback">
+                          <MessageAction tooltip={copied ? copy.copiedReply : copy.copyReply}>
+                            <button type="button" className="message-feedback-btn" onClick={() => void handleCopyMessage(message.id, message.content)}>
+                              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                              <span className="sr-only">
+                                <TextMorph text={copied ? copy.copied : copy.copy} />
+                              </span>
+                            </button>
+                          </MessageAction>
+                          {(() => {
+                            const workHref = artifactPart?.workHref ?? parsedArtifact?.workHref ?? null
+                            const downloadHref = artifactPart?.downloadUrl ?? parsedArtifact?.downloadHref ?? null
+                            return (
+                              <>
+                                {workHref ? (
+                                  <a className="message-feedback-btn" href={workHref} aria-label={isZh ? "打开作品库" : "Open in Works"}>
+                                    <LibraryBig className="h-4 w-4" />
+                                  </a>
+                                ) : null}
+                                {downloadHref ? (
+                                  <a className="message-feedback-btn" href={downloadHref} target="_blank" rel="noreferrer" aria-label={isZh ? "导出" : "Export"}>
+                                    <Download className="h-4 w-4" />
+                                  </a>
+                                ) : null}
+                              </>
+                            )
+                          })()}
+                        </div>
+                      ) : null}
+                    </article>
+                  </Message>
                 ) : (
                   <Message key={message.id} className="justify-end">
                     <div className="message-card-user">
