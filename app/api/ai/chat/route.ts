@@ -1149,6 +1149,13 @@ export async function POST(request: NextRequest) {
                 answer: delta,
               })
             },
+            onReasoning: (delta) => {
+              sendEvent({
+                event: "reasoning",
+                conversation_id: conversationId,
+                answer: delta,
+              })
+            },
             onToolCall: (payload) => {
               sendEvent({
                 event: "tool_call",
@@ -1242,6 +1249,10 @@ export async function POST(request: NextRequest) {
             ? stripPptArtifactRelativeLinks(normalizedStreamedAnswer)
             : normalizedStreamedAnswer
           const resolvedStreamedAnswerWithTools = `${sanitizedStreamedAnswer}${streamedToolAppendix}`.trim()
+          sendEvent({
+            event: "reasoning_end",
+            conversation_id: conversationId,
+          })
           sendEvent({
             event: "message_end",
             conversation_id: conversationId,

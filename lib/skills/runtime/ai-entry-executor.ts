@@ -220,6 +220,7 @@ export async function runAiEntryConsultingStreaming(params: {
   onProviderSelected?: (info: ProviderRunInfo) => void
   onProviderSuccess?: (info: ProviderRunInfo & { outputChars: number }) => void
   onTextDelta?: (delta: string) => void
+  onReasoning?: (delta: string) => void
   onToolCall?: (payload: { toolName: string; toolCallId: string; args: unknown }) => void
   onToolResult?: (payload: { toolName: string; toolCallId: string; result: unknown }) => void
   onEmptyResponseRetry?: (info: { retryAttempt: number; retryLimit: number }) => void
@@ -271,6 +272,15 @@ export async function runAiEntryConsultingStreaming(params: {
                   accumulated += delta
                   hasStreamOutput = true
                   params.onTextDelta?.(delta)
+                }
+                continue
+              }
+
+              if (eventType === "reasoning" || eventType === "reasoning-delta") {
+                const reasoningPart = streamPart as unknown as { textDelta?: string; text?: string; delta?: string }
+                const reasoningDelta = reasoningPart.textDelta || reasoningPart.text || reasoningPart.delta || ""
+                if (reasoningDelta) {
+                  params.onReasoning?.(reasoningDelta)
                 }
                 continue
               }
