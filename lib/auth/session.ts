@@ -280,7 +280,12 @@ export async function deleteUserSessions(userId: number) {
   })
 }
 
-export async function getSessionUser(request: NextRequest): Promise<AuthUserPayload | null> {
+export async function getSessionUser(
+  request: NextRequest,
+  options?: {
+    hydrateDemoFromDb?: boolean
+  },
+): Promise<AuthUserPayload | null> {
   const internalServiceUser = await getInternalServiceAuthUser(request).catch((error) => {
     console.warn("auth.internal.resolve.failed", {
       message: getErrorMessage(error),
@@ -293,7 +298,7 @@ export async function getSessionUser(request: NextRequest): Promise<AuthUserPayl
 
   const demoCookie = request.cookies.get(DEMO_SESSION_COOKIE_NAME)?.value
   if (parseDemoCookieValue(demoCookie)) {
-    if (!isDemoSessionDbHydrationEnabled()) {
+    if (options?.hydrateDemoFromDb === false || !isDemoSessionDbHydrationEnabled()) {
       return createDemoAuthPayload()
     }
 

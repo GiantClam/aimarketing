@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { consumeSSEBuffer, flushSSEBuffer } from "@/lib/dify/sse.js"
 import type { AppLocale } from "@/lib/i18n/config"
 
 type PublicChatToolWorkbenchProps = {
@@ -26,6 +27,15 @@ type ChatExecutionResponse = {
   providerModel?: string | null
 }
 
+type ChatExecutionStreamEvent = {
+  event?: string
+  answer?: string
+  error?: string
+  conversation_id?: string
+  provider?: string | null
+  provider_model?: string | null
+}
+
 export function PublicChatToolWorkbench({
   locale,
   currentUser,
@@ -38,7 +48,7 @@ export function PublicChatToolWorkbench({
   const copy = isZh
     ? {
         title: "公开 AI 对话工作台",
-        body: "先在 public toolsite 里验证顾问式对话入口，再进入正式 workspace。当前先走非流式 platform execute，避免额外重写聊天 runtime。",
+        body: "先在 public toolsite 里验证顾问式对话入口，再进入正式 workspace。当前继续复用平台统一 execute，并以流式结果减少等待感。",
         placeholder: "例如：请帮我为 AI Marketing 设计一个面向 B2B 团队的首页信息架构。",
         submit: "提交对话",
         login: "登录后继续",
@@ -53,7 +63,7 @@ export function PublicChatToolWorkbench({
       }
     : {
         title: "Public AI chat workbench",
-        body: "Validate the advisor-style chat entry directly from the public toolsite before moving into the full workspace. This first pass uses non-streaming platform execute instead of rewriting the chat runtime.",
+        body: "Validate the advisor-style chat entry directly from the public toolsite before moving into the full workspace. This entry keeps using unified platform execute and now streams results to reduce perceived wait time.",
         placeholder: "Example: Help me design a homepage information architecture for AI Marketing aimed at B2B teams.",
         submit: "Send message",
         login: "Log in to continue",
@@ -101,15 +111,103 @@ export function PublicChatToolWorkbench({
         method: "POST",
         headers: {
           "content-type": "application/json",
+          accept: "text/event-stream, application/json",
         },
         body: JSON.stringify({
           message: prompt,
-          stream: false,
+          stream: true,
+          enterpriseKnowledge: {
+            enabled: false,
+          },
         }),
       })
 
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error || "chat_execution_failed")
+      }
+
+      const contentType = response.headers.get("content-type") || ""
+      if (contentType.includes("text/event-stream") && response.body) {
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder("utf-8")
+        let buffer = ""
+        let streamedMessage = ""
+        let finalResult: ChatExecutionResponse | null = null
+
+        const applyStreamEvent = (event: ChatExecutionStreamEvent) => {
+          if (event.event === "error") {
+            throw new Error(event.error || "chat_execution_failed")
+          }
+
+          if (event.event === "message" && typeof event.answer === "string") {
+            streamedMessage += event.answer
+            setResult((current) => ({
+              message: streamedMessage,
+              conversationId:
+                typeof event.conversation_id === "string"
+                  ? event.conversation_id
+                  : current?.conversationId,
+              provider: current?.provider ?? null,
+              providerModel: current?.providerModel ?? null,
+            }))
+            return
+          }
+
+          if (event.event === "provider_selected" || event.event === "provider_fallback") {
+            setResult((current) => ({
+              message: current?.message || streamedMessage,
+              conversationId:
+                typeof event.conversation_id === "string"
+                  ? event.conversation_id
+                  : current?.conversationId,
+              provider: typeof event.provider === "string" ? event.provider : current?.provider ?? null,
+              providerModel:
+                typeof event.provider_model === "string"
+                  ? event.provider_model
+                  : current?.providerModel ?? null,
+            }))
+            return
+          }
+
+          if (event.event === "message_end") {
+            finalResult = {
+              message:
+                typeof event.answer === "string" && event.answer.trim()
+                  ? event.answer.trim()
+                  : streamedMessage.trim(),
+              conversationId: typeof event.conversation_id === "string" ? event.conversation_id : undefined,
+              provider: typeof event.provider === "string" ? event.provider : null,
+              providerModel: typeof event.provider_model === "string" ? event.provider_model : null,
+            }
+            setResult(finalResult)
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parsed = consumeSSEBuffer(buffer)
+          buffer = parsed.rest
+          for (const event of parsed.events as ChatExecutionStreamEvent[]) {
+            applyStreamEvent(event)
+          }
+        }
+
+        for (const event of flushSSEBuffer(buffer) as ChatExecutionStreamEvent[]) {
+          applyStreamEvent(event)
+        }
+
+        if (!finalResult && !streamedMessage.trim()) {
+          throw new Error("chat_execution_failed")
+        }
+
+        return
+      }
+
       const data = (await response.json().catch(() => null)) as { error?: string } & ChatExecutionResponse
-      if (!response.ok || !data?.message) {
+      if (!data?.message) {
         throw new Error(data?.error || "chat_execution_failed")
       }
 
@@ -205,6 +303,10 @@ export function PublicChatToolWorkbench({
                   {result.message}
                 </div>
               </>
+            ) : isSubmitting ? (
+              <p className="text-sm leading-6 text-muted-foreground">
+                {isZh ? "正在连接模型并生成回答..." : "Connecting to the model and generating a response..."}
+              </p>
             ) : (
               <p className="text-sm leading-6 text-muted-foreground">
                 {isZh

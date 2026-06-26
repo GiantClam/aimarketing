@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -6,6 +7,7 @@ import {
   evaluatePlatformExecutionGate,
   normalizePlatformMediaExecutionPayload,
   normalizePlatformRegistryItemType,
+  proxyPlatformExecutionRequest,
   resolvePlatformBindingExecutionProxyTarget,
   resolvePlatformCapabilityExecutionProxyTarget,
 } from "@/lib/platform/execute"
@@ -185,6 +187,53 @@ test("binding execute target maps visual ad pipeline to RunningHub media run whe
       requiresLogin: true,
     },
   )
+})
+
+test("proxyPlatformExecutionRequest preserves SSE streams without buffering them into a single payload", async () => {
+  const originalFetch = globalThis.fetch
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: {"event":"conversation_init"}\n\n'))
+            controller.enqueue(new TextEncoder().encode('data: {"event":"message","answer":"hi"}\n\n'))
+            controller.close()
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-cache, no-transform",
+          },
+        },
+      )
+
+    const proxied = await proxyPlatformExecutionRequest(
+      new NextRequest("http://localhost:3000/api/platform/capabilities/ai-chat/execute?action=chat"),
+      {
+        action: "chat",
+        downstreamPath: "/api/ai/chat",
+        requiresLogin: true,
+      },
+      JSON.stringify({ message: "hello", stream: true }),
+      {
+        "x-platform-capability-slug": "ai-chat",
+      },
+    )
+
+    assert.equal(proxied.status, 200)
+    assert.equal(proxied.headers.get("content-type"), "text/event-stream; charset=utf-8")
+    assert.equal(proxied.headers.get("x-platform-proxy-target"), "/api/ai/chat")
+
+    const text = await proxied.text()
+    assert.match(text, /conversation_init/)
+    assert.match(text, /"answer":"hi"/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("execution gate blocks deferred runtime before proxying", () => {

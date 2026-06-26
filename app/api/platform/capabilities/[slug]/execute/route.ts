@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { isBillingCreditEnforcementEnabled } from "@/lib/billing/runtime"
 import { getSessionUser } from "@/lib/auth/session"
 import { normalizeLocale } from "@/lib/i18n/config"
 import { getPlatformCapabilityExecutionState } from "@/lib/platform/execution"
@@ -31,18 +32,6 @@ export async function POST(
   const { slug } = await context.params
   const locale = normalizeLocale(new URL(request.url).searchParams.get("locale")) || "en"
   const action = new URL(request.url).searchParams.get("action")
-  const currentUser = await getSessionUser(request).catch(() => null)
-  const state = await getPlatformCapabilityExecutionState(slug, locale, currentUser)
-
-  if (!state) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 })
-  }
-
-  const target = resolvePlatformCapabilityExecutionProxyTarget(slug, action)
-  if (!target) {
-    return NextResponse.json({ error: "unsupported_action" }, { status: 400 })
-  }
-
   const rawBody = await request.text()
   let parsedBody: Record<string, unknown> | null = null
   if (rawBody.trim()) {
@@ -51,6 +40,21 @@ export async function POST(
     } catch {
       parsedBody = null
     }
+  }
+
+  const currentUser = await getSessionUser(request, {
+    hydrateDemoFromDb: false,
+  }).catch(() => null)
+  const target = resolvePlatformCapabilityExecutionProxyTarget(slug, action)
+  if (!target) {
+    return NextResponse.json({ error: "unsupported_action" }, { status: 400 })
+  }
+
+  const state = await getPlatformCapabilityExecutionState(slug, locale, currentUser, {
+    includeBilling: Boolean(currentUser) && isBillingCreditEnforcementEnabled(),
+  })
+  if (!state) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 })
   }
 
   const gate = evaluatePlatformExecutionGate({

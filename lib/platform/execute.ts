@@ -375,6 +375,14 @@ export async function proxyPlatformExecutionRequest(
   }
   passthroughHeaders.set("x-platform-proxy-target", target.downstreamPath)
 
+  const responseContentType = response.headers.get("content-type")?.toLowerCase() || ""
+  if (responseContentType.includes("text/event-stream") && response.body) {
+    return new NextResponse(response.body, {
+      status: response.status,
+      headers: passthroughHeaders,
+    })
+  }
+
   return new NextResponse(await response.arrayBuffer(), {
     status: response.status,
     headers: passthroughHeaders,

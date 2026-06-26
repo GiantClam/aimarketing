@@ -409,11 +409,17 @@ export async function getPlatformCapabilityExecutionState(
   slug: string,
   locale: AppLocale,
   user?: AuthUser | null,
+  options?: {
+    includeBilling?: boolean
+  },
 ) {
   const capability = getLocalizedPlatformCapabilities(locale, "all").find((item) => item.slug === slug)
   if (!capability) return null
 
-  const billingEntitlement = await getSafeBillingEntitlement(user)
+  const billingEntitlement =
+    options?.includeBilling === false
+      ? null
+      : await getSafeBillingEntitlement(user)
   const runtimeModule = await import("@/lib/platform/runtime")
   return resolvePlatformCapabilityExecutionFromSnapshot(
     capability,
