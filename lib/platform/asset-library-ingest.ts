@@ -10,6 +10,7 @@ import {
   type PlatformArtifactRecord,
   type PlatformTaskRunKind,
 } from "@/lib/platform/task-run-store"
+import { byteLengthOf, toBase64 } from "@/lib/utils/binary"
 
 type AssetLibrarySource = "upload" | "generated" | "workflow" | "chat" | "assistant" | "import"
 
@@ -129,7 +130,7 @@ export async function uploadAssetLibraryArtifactBuffer(
   const payload = {
     title: input.fileName,
     mimeType: input.mimeType,
-    fileSize: Buffer.byteLength(Buffer.from(input.buffer)),
+    fileSize: byteLengthOf(input.buffer),
     ...(input.payload ?? {}),
   }
   const run = await createAssetLibraryRun({
@@ -183,7 +184,7 @@ export async function uploadAssetLibraryArtifactBuffer(
     source: input.source,
     payload: {
       ...(input.payload ?? {}),
-      embeddedContentBase64: Buffer.from(input.buffer).toString("base64"),
+      embeddedContentBase64: toBase64(input.buffer),
     },
   })
 }

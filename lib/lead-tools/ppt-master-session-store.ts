@@ -2,6 +2,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { gzipSync, gunzipSync } from "node:zlib"
+import { toUint8Array } from "@/lib/utils/binary"
 
 type StoredArchiveFile = {
   path: string
@@ -81,11 +82,11 @@ export async function createPptMasterSessionArchive(sessionDir: string) {
     files: files.sort((left, right) => left.path.localeCompare(right.path, "en")),
   }
 
-  return gzipSync(Buffer.from(JSON.stringify(payload), "utf8"))
+  return gzipSync(toUint8Array(Buffer.from(JSON.stringify(payload), "utf8")))
 }
 
 export async function restorePptMasterSessionArchive(sessionDir: string, archive: Uint8Array | Buffer) {
-  const payload = JSON.parse(gunzipSync(Buffer.from(archive)).toString("utf8")) as StoredArchivePayload
+  const payload = JSON.parse(gunzipSync(toUint8Array(archive)).toString("utf8")) as StoredArchivePayload
   if (payload.version !== 1 || !Array.isArray(payload.files)) {
     throw new Error("ppt_master_session_archive_invalid")
   }
@@ -98,7 +99,7 @@ export async function restorePptMasterSessionArchive(sessionDir: string, archive
       const relativePath = file.path.replace(/^\/+/u, "")
       const absolutePath = path.join(sessionDir, relativePath)
       await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-      await fs.writeFile(absolutePath, Buffer.from(file.dataBase64, "base64"))
+      await fs.writeFile(absolutePath, toUint8Array(Buffer.from(file.dataBase64, "base64")))
     }),
   )
 }

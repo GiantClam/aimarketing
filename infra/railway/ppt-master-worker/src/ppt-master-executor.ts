@@ -7,6 +7,7 @@ import {
   exportPptMasterSessionVariant,
 } from "../../../../lib/lead-tools/ppt-master-runtime.js"
 import type { PptPreviewRequest } from "../../../../lib/lead-tools/ppt-preview-data-fixed.js"
+import { toBase64 } from "../../../../lib/utils/binary.js"
 
 import type { ExportRequest, PreviewRequest } from "./types.js"
 
@@ -60,7 +61,7 @@ export async function runExportJob(request: ExportRequest): Promise<ExportJobRes
     contentType: artifact.contentType,
     slideCount: artifact.slideCount,
     variantName: artifact.variantName,
-    bufferBase64: Buffer.from(artifact.buffer).toString("base64"),
+    bufferBase64: toBase64(artifact.buffer),
   }
 }
 

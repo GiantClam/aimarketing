@@ -3,6 +3,7 @@ import { randomUUID } from "crypto"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 
 import { getR2BucketName, getR2Client, getR2PublicUrl, isR2Available } from "@/lib/r2"
+import { toUint8Array } from "@/lib/utils/binary"
 
 function sanitizeFileNameSegment(value: string) {
   return value
@@ -154,7 +155,7 @@ export async function uploadPlatformArtifactBufferToR2(input: {
     new PutObjectCommand({
       Bucket: getR2BucketName(),
       Key: storageKey,
-      Body: Buffer.from(input.buffer),
+      Body: toUint8Array(input.buffer),
       ContentType: input.contentType,
       CacheControl: "public, max-age=31536000, immutable",
     }),

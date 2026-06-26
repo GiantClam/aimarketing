@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { getAiEntryCurrentProviderConfig } from "@/lib/ai-entry/provider-routing"
+import { normalizeToolChoice, resolveAgentProxyProvider } from "@/app/api/ai/agent-proxy/provider"
 
 // page-agent is an in-browser DOM agent that calls an OpenAI-compatible
 // chat/completions endpoint. To avoid leaking provider API keys to the browser,
@@ -10,76 +10,6 @@ import { getAiEntryCurrentProviderConfig } from "@/lib/ai-entry/provider-routing
 // client-supplied apiKey is ignored — auth is the user's session cookie.
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-type ToolChoiceShape = "flat" | "nested"
-
-type AgentProxyProvider = {
-  id: string
-  apiKey: string
-  baseURL: string
-  model: string
-  headers?: Record<string, string>
-  // How this provider wants a forced named tool_choice serialized:
-  //  - "flat":   {type:"function", name:"X"}             (pptoken-style)
-  //  - "nested": {type:"function", function:{name:"X"}}  (DeepSeek / OpenAI standard)
-  toolChoiceShape: ToolChoiceShape
-  // Extra request-body fields to merge for this provider (e.g. DeepSeek thinking).
-  extraBody?: Record<string, unknown>
-}
-
-function normalizeEnv(value: string | undefined) {
-  const trimmed = value?.trim()
-  return trimmed ? trimmed : undefined
-}
-
-// DeepSeek is preferred when configured — it supports the forced named
-// tool_choice that page-agent emits every step (MiniMax does not). Otherwise
-// fall back to the active AI-entry text provider (pptoken/aiberm/crazyroute),
-// which wants the flat tool_choice shape.
-export function resolveAgentProxyProvider(): AgentProxyProvider | null {
-  const dsKey = normalizeEnv(process.env.DEEPSEEK_API_KEY)
-  if (dsKey) {
-    const thinkingEnabled = normalizeEnv(process.env.DEEPSEEK_THINKING)?.toLowerCase() === "enabled"
-    return {
-      id: "deepseek",
-      apiKey: dsKey,
-      baseURL: normalizeEnv(process.env.DEEPSEEK_BASE_URL) || "https://api.deepseek.com",
-      model: normalizeEnv(process.env.DEEPSEEK_MODEL) || "deepseek-v4-flash",
-      toolChoiceShape: "nested",
-      // Disable thinking by default: page-agent already captures reasoning in
-      // the AgentOutput reflection fields, and non-thinking is faster and avoids
-      // reasoning_content parsing concerns. Set DEEPSEEK_THINKING=enabled to opt in.
-      ...(thinkingEnabled ? {} : { extraBody: { thinking: { type: "disabled" } } }),
-    }
-  }
-
-  const current = getAiEntryCurrentProviderConfig()
-  if (!current || !current.apiKey || !current.baseURL) return null
-  return { ...current, toolChoiceShape: "flat" }
-}
-
-// Normalizes a forced named tool_choice to the shape the provider expects.
-// page-agent emits the nested OpenAI shape; pptoken wants the flat shape, while
-// DeepSeek / OpenAI want the nested shape. Non-named choices (strings such as
-// "auto" / "required" / "none") are passed through untouched.
-export function normalizeToolChoice(choice: unknown, shape: ToolChoiceShape): unknown {
-  if (!choice || typeof choice !== "object") return choice
-  const c = choice as { type?: string; name?: unknown; function?: { name?: unknown } }
-  if (c.type !== "function") return choice
-
-  if (shape === "flat") {
-    if (!c.name && c.function && typeof c.function.name === "string") {
-      return { type: "function", name: c.function.name }
-    }
-    return choice
-  }
-
-  // nested
-  if (!c.function && typeof c.name === "string") {
-    return { type: "function", function: { name: c.name } }
-  }
-  return choice
-}
 
 type ChatCompletionsBody = {
   model?: unknown

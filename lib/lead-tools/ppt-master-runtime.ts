@@ -266,68 +266,6 @@ function toSpecLockKey(index: number) {
   return `P${String(index + 1).padStart(2, "0")}`
 }
 
-function getRuntimeSlideTextLimits(
-  layout: PptPreviewSlide["layout"],
-  language: PptPreviewDeck["language"],
-  templateId?: string,
-) {
-  const zh = language === "zh-CN"
-  void templateId
-
-  switch (layout) {
-    case "cover":
-      return {
-        title: zh ? 22 : 42,
-        body: zh ? 42 : 96,
-        bullet: zh ? 14 : 28,
-      }
-    case "agenda":
-      return {
-        title: zh ? 22 : 42,
-        body: zh ? 40 : 90,
-        bullet: zh ? 18 : 34,
-      }
-    case "comparison":
-      return {
-        title: zh ? 20 : 38,
-        body: zh ? 36 : 84,
-        bullet: zh ? 16 : 30,
-      }
-    case "insight":
-      return {
-        title: zh ? 16 : 30,
-        body: zh ? 26 : 60,
-        bullet: zh ? 12 : 24,
-      }
-    case "timeline":
-      return {
-        title: zh ? 14 : 28,
-        body: zh ? 24 : 56,
-        bullet: zh ? 12 : 24,
-      }
-    case "stats":
-    case "chart":
-    case "process":
-      return {
-        title: zh ? 20 : 38,
-        body: zh ? 34 : 80,
-        bullet: zh ? 14 : 28,
-      }
-    case "evidence":
-      return {
-        title: zh ? 20 : 38,
-        body: zh ? 34 : 80,
-        bullet: zh ? 15 : 30,
-      }
-    default:
-      return {
-        title: zh ? 20 : 38,
-        body: zh ? 34 : 80,
-        bullet: zh ? 15 : 30,
-      }
-  }
-}
-
 function getRuntimeTypography(variantKey: PptPreviewVariant["styleKey"]): RuntimeTypography {
   switch (variantKey) {
     case "ppt169_brutalist_ai_newspaper_2026":

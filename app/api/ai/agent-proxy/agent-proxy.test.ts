@@ -61,17 +61,22 @@ type PostHandler = (
 
 type RouteModule = {
   POST: PostHandler
+}
+
+type ProviderModule = {
   normalizeToolChoice: (choice: unknown, shape: "flat" | "nested") => unknown
   resolveAgentProxyProvider: () => unknown
 }
 
 let route: RouteModule
+let providerModule: ProviderModule
 
 test.before(async () => {
   // The route lives under the catch-all "[...path]" directory; importing it
   // literally (brackets are legal in module specifiers, only Node's --test
   // glob arguments choke on them).
-  route = (await import("./[...path]/route")) as RouteModule
+  route = (await import("./[...path]/route")) as unknown as RouteModule
+  providerModule = (await import("./provider")) as ProviderModule
 })
 
 const envSnapshot: Record<string, string | undefined> = {}
@@ -113,33 +118,33 @@ const ctx = () => ({ params: Promise.resolve({ path: ["chat", "completions"] }) 
 
 test("normalizeToolChoice flattens nested -> flat for pptoken-style providers", () => {
   assert.deepEqual(
-    route.normalizeToolChoice({ type: "function", function: { name: "AgentOutput" } }, "flat"),
+    providerModule.normalizeToolChoice({ type: "function", function: { name: "AgentOutput" } }, "flat"),
     { type: "function", name: "AgentOutput" },
   )
 })
 
 test("normalizeToolChoice nests flat -> nested for DeepSeek-style providers", () => {
   assert.deepEqual(
-    route.normalizeToolChoice({ type: "function", name: "AgentOutput" }, "nested"),
+    providerModule.normalizeToolChoice({ type: "function", name: "AgentOutput" }, "nested"),
     { type: "function", function: { name: "AgentOutput" } },
   )
 })
 
 test("normalizeToolChoice leaves already-correct shapes untouched", () => {
   assert.deepEqual(
-    route.normalizeToolChoice({ type: "function", name: "AgentOutput" }, "flat"),
+    providerModule.normalizeToolChoice({ type: "function", name: "AgentOutput" }, "flat"),
     { type: "function", name: "AgentOutput" },
   )
   assert.deepEqual(
-    route.normalizeToolChoice({ type: "function", function: { name: "AgentOutput" } }, "nested"),
+    providerModule.normalizeToolChoice({ type: "function", function: { name: "AgentOutput" } }, "nested"),
     { type: "function", function: { name: "AgentOutput" } },
   )
 })
 
 test("normalizeToolChoice passes non-named choices through untouched", () => {
-  assert.equal(route.normalizeToolChoice("required", "flat"), "required")
-  assert.equal(route.normalizeToolChoice("auto", "nested"), "auto")
-  assert.equal(route.normalizeToolChoice(undefined, "flat"), undefined)
+  assert.equal(providerModule.normalizeToolChoice("required", "flat"), "required")
+  assert.equal(providerModule.normalizeToolChoice("auto", "nested"), "auto")
+  assert.equal(providerModule.normalizeToolChoice(undefined, "flat"), undefined)
 })
 
 // --- resolveAgentProxyProvider ---
@@ -147,7 +152,7 @@ test("normalizeToolChoice passes non-named choices through untouched", () => {
 test("resolveAgentProxyProvider prefers DeepSeek when its key is configured", () => {
   process.env.DEEPSEEK_API_KEY = "ds-key"
   process.env.DEEPSEEK_MODEL = "deepseek-v4-flash"
-  const provider = route.resolveAgentProxyProvider() as {
+  const provider = providerModule.resolveAgentProxyProvider() as {
     id: string
     model: string
     baseURL: string
@@ -162,14 +167,14 @@ test("resolveAgentProxyProvider prefers DeepSeek when its key is configured", ()
 })
 
 test("resolveAgentProxyProvider falls back to the AI-entry provider when DeepSeek is unset", () => {
-  const provider = route.resolveAgentProxyProvider() as { id: string; toolChoiceShape: string }
+  const provider = providerModule.resolveAgentProxyProvider() as { id: string; toolChoiceShape: string }
   assert.notEqual(provider, null)
   assert.equal(provider.toolChoiceShape, "flat")
 })
 
 test("resolveAgentProxyProvider returns null when nothing is configured", () => {
   providerConfigResult = null
-  const provider = route.resolveAgentProxyProvider()
+  const provider = providerModule.resolveAgentProxyProvider()
   assert.equal(provider, null)
 })
 
@@ -197,7 +202,7 @@ test("returns 400 when messages are missing", async () => {
 })
 
 test("overrides the client model with the server-configured model (pptoken)", async () => {
-  let capturedBody: { model?: string; tool_choice?: unknown } | null = null
+  let capturedBody: { model?: string; tool_choice?: unknown } = {}
   globalThis.fetch = (async (_input, init) => {
     capturedBody = JSON.parse((init as RequestInit).body as string) as {
       model?: string
@@ -213,11 +218,11 @@ test("overrides the client model with the server-configured model (pptoken)", as
     makeRequest({ model: "client-model", messages: [{ role: "user", content: "hi" }] }),
     ctx(),
   )
-  assert.equal(capturedBody?.model, "server-model")
+  assert.equal(capturedBody.model, "server-model")
 })
 
 test("flattens nested tool_choice for the pptoken provider", async () => {
-  let capturedBody: { tool_choice?: unknown } | null = null
+  let capturedBody: { tool_choice?: unknown } = {}
   globalThis.fetch = (async (_input, init) => {
     capturedBody = JSON.parse((init as RequestInit).body as string) as { tool_choice?: unknown }
     return new Response(JSON.stringify({ ok: true }), {
@@ -233,7 +238,7 @@ test("flattens nested tool_choice for the pptoken provider", async () => {
     }),
     ctx(),
   )
-  assert.deepEqual(capturedBody?.tool_choice, { type: "function", name: "AgentOutput" })
+  assert.deepEqual(capturedBody.tool_choice, { type: "function", name: "AgentOutput" })
 })
 
 // --- POST: DeepSeek path ---

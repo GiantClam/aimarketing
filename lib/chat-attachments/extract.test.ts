@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { deflateRawSync, deflateSync } from "node:zlib"
+import { toUint8Array } from "@/lib/utils/binary"
 
 import { ChatAttachmentError } from "./types"
 import { extractChatAttachmentText } from "./extract"
@@ -16,15 +17,26 @@ function crc32(buffer: Buffer) {
   return (crc ^ 0xffffffff) >>> 0
 }
 
+function concatBytes(parts: Uint8Array[]) {
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0)
+  const output = new Uint8Array(totalLength)
+  let offset = 0
+  for (const part of parts) {
+    output.set(part, offset)
+    offset += part.length
+  }
+  return output
+}
+
 function createZip(entries: Array<{ name: string; content: string | Buffer }>) {
-  const localParts: Buffer[] = []
-  const centralParts: Buffer[] = []
+  const localParts: Uint8Array[] = []
+  const centralParts: Uint8Array[] = []
   let offset = 0
 
   for (const entry of entries) {
     const name = Buffer.from(entry.name)
     const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content)
-    const compressed = deflateRawSync(content)
+    const compressed = deflateRawSync(toUint8Array(content))
     const crc = crc32(content)
 
     const local = Buffer.alloc(30)
@@ -38,7 +50,7 @@ function createZip(entries: Array<{ name: string; content: string | Buffer }>) {
     local.writeUInt16LE(name.length, 26)
     local.writeUInt16LE(0, 28)
 
-    localParts.push(local, name, compressed)
+    localParts.push(new Uint8Array(local), new Uint8Array(name), new Uint8Array(compressed))
 
     const central = Buffer.alloc(46)
     central.writeUInt32LE(0x02014b50, 0)
@@ -53,12 +65,12 @@ function createZip(entries: Array<{ name: string; content: string | Buffer }>) {
     central.writeUInt16LE(0, 30)
     central.writeUInt16LE(0, 32)
     central.writeUInt32LE(offset, 42)
-    centralParts.push(central, name)
+    centralParts.push(new Uint8Array(central), new Uint8Array(name))
 
     offset += local.length + name.length + compressed.length
   }
 
-  const centralDirectory = Buffer.concat(centralParts)
+  const centralDirectory = concatBytes(centralParts)
   const end = Buffer.alloc(22)
   end.writeUInt32LE(0x06054b50, 0)
   end.writeUInt16LE(entries.length, 8)
@@ -66,7 +78,7 @@ function createZip(entries: Array<{ name: string; content: string | Buffer }>) {
   end.writeUInt32LE(centralDirectory.length, 12)
   end.writeUInt32LE(offset, 16)
 
-  return Buffer.concat([...localParts, centralDirectory, end])
+  return concatBytes([...localParts, centralDirectory, new Uint8Array(end)])
 }
 
 function createDocx(text: string) {
@@ -88,7 +100,7 @@ function createDocx(text: string) {
 
 function createPdf(text: string) {
   const content = `BT /F1 12 Tf 72 720 Td (${text.replace(/[()\\]/g, "\\$&")}) Tj ET`
-  const compressed = deflateSync(Buffer.from(content, "latin1"))
+  const compressed = deflateSync(toUint8Array(Buffer.from(content, "latin1")))
   const objects: string[] = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
     "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
@@ -115,7 +127,7 @@ test("extracts plain text attachments", () => {
   const result = extractChatAttachmentText({
     fileName: "notes.txt",
     mediaType: "text/plain",
-    bytes: Buffer.from("Line one\r\nLine two\0"),
+    bytes: toUint8Array(Buffer.from("Line one\r\nLine two\0")),
   })
 
   assert.equal(result.extension, "txt")
@@ -127,7 +139,7 @@ test("extracts markdown attachments", () => {
   const result = extractChatAttachmentText({
     fileName: "brief.md",
     mediaType: "text/markdown",
-    bytes: Buffer.from("# Brief\n\nUse this tone."),
+    bytes: toUint8Array(Buffer.from("# Brief\n\nUse this tone.")),
   })
 
   assert.equal(result.extension, "md")
@@ -138,7 +150,7 @@ test("extracts docx document body text", () => {
   const result = extractChatAttachmentText({
     fileName: "brand.docx",
     mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    bytes: createDocx("Brand voice: direct and precise."),
+    bytes: toUint8Array(createDocx("Brand voice: direct and precise.")),
   })
 
   assert.equal(result.extension, "docx")
@@ -149,7 +161,7 @@ test("extracts copyable pdf text from flate streams", () => {
   const result = extractChatAttachmentText({
     fileName: "brief.pdf",
     mediaType: "application/pdf",
-    bytes: createPdf("PDF attachment text"),
+    bytes: toUint8Array(createPdf("PDF attachment text")),
   })
 
   assert.equal(result.extension, "pdf")
@@ -162,7 +174,7 @@ test("rejects unsupported legacy doc files", () => {
       extractChatAttachmentText({
         fileName: "legacy.doc",
         mediaType: "application/msword",
-        bytes: Buffer.from("not supported"),
+        bytes: toUint8Array(Buffer.from("not supported")),
       }),
     (error) => error instanceof ChatAttachmentError && error.code === "unsupported_file_type",
   )
@@ -172,7 +184,7 @@ test("caps extracted text", () => {
   const result = extractChatAttachmentText({
     fileName: "long.txt",
     mediaType: "text/plain",
-    bytes: Buffer.from("abcdef"),
+    bytes: toUint8Array(Buffer.from("abcdef")),
     maxTextChars: 3,
   })
 
@@ -180,4 +192,3 @@ test("caps extracted text", () => {
   assert.equal(result.textCharCount, 6)
   assert.equal(result.truncated, true)
 })
-

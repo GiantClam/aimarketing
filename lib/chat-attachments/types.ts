@@ -32,7 +32,7 @@ export type UnifiedChatAttachment = {
 export type ExtractChatAttachmentInput = {
   fileName: string
   mediaType?: string
-  bytes: Buffer
+  bytes: Uint8Array
   maxTextChars?: number
 }
 

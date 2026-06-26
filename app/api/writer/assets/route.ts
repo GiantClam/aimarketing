@@ -321,8 +321,10 @@ function createWriterAssetSseResponse(
           try {
             controller.enqueue(encoder.encode("data: [DONE]\n\n"))
           } catch (error) {
-            if (!(error instanceof Error && /controller is already closed/i.test(error.message))) {
-              throw error
+            if (error instanceof Error && /controller is already closed/i.test(error.message)) {
+              streamClosed = true
+            } else {
+              console.warn("writer.assets.done_emit_failed", error)
             }
           }
         }
@@ -332,7 +334,7 @@ function createWriterAssetSseResponse(
             controller.close()
           } catch (error) {
             if (!(error instanceof Error && /controller is already closed/i.test(error.message))) {
-              throw error
+              console.warn("writer.assets.stream_close_failed", error)
             }
           }
         }

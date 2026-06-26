@@ -7,6 +7,7 @@ import {
 } from "@/lib/platform/artifact-actions"
 import { buildAttachmentContentDisposition, buildInlineContentDisposition } from "@/lib/platform/minimax-audio"
 import { getPlatformArtifact } from "@/lib/platform/task-run-store"
+import { toUint8Array } from "@/lib/utils/binary"
 
 export const runtime = "nodejs"
 
@@ -20,7 +21,7 @@ function readEmbeddedArtifactContent(
   if (!encoded) return null
 
   return {
-    bytes: Buffer.from(encoded, "base64"),
+    bytes: toUint8Array(Buffer.from(encoded, "base64")),
     contentType: artifact.mimeType || "application/octet-stream",
   }
 }
@@ -73,7 +74,7 @@ export async function GET(
 
     headers.set("Content-Type", embeddedContent.contentType)
 
-    return new NextResponse(Buffer.from(embeddedContent.bytes), {
+    return new NextResponse(embeddedContent.bytes, {
       status: 200,
       headers,
     })

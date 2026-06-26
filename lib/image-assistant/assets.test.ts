@@ -31,7 +31,7 @@ test("imageSourceToDataUrl materializes remote image urls into data urls", async
     const result = await imageSourceToDataUrl(`http://127.0.0.1:${address.port}/asset.png`)
 
     assert.match(result, /^data:image\/png;base64,/)
-    assert.equal(Buffer.from(result.split(",")[1] || "", "base64").equals(pngBuffer), true)
+    assert.equal(Buffer.from(result.split(",")[1] || "", "base64").toString("base64"), pngBuffer.toString("base64"))
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
   }

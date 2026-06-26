@@ -104,6 +104,9 @@ const exportPptDeckInputSchema = z.object({
     .describe("Variant key chosen from preview_ppt_deck. If omitted, the first variant is exported."),
 })
 
+type PreviewPptDeckInput = z.infer<typeof previewPptDeckInputSchema>
+type ExportPptDeckInput = z.infer<typeof exportPptDeckInputSchema>
+
 function buildArtifactDownloadUrl(artifactId: number, download = false) {
   return `/api/platform/artifacts/${artifactId}/download${download ? "?download=1" : ""}`
 }
@@ -241,19 +244,20 @@ export function buildAiEntryPptTools(input: {
   const { currentUser } = input
 
   return {
-    preview_ppt_deck: tool({
+    preview_ppt_deck: tool<unknown, Record<string, unknown>>({
       description:
         "Generate a PPT preview deck from a conversation brief. Use this when the user wants a slide deck, PPT, pitch deck, training deck, or presentation draft.",
-      inputSchema: previewPptDeckInputSchema,
-      execute: async ({
-        prompt,
-        researchBrief,
-        scenario = "marketing-campaign",
-        language = "zh-CN",
-        templateMode = "auto-4",
-        templateId,
-        pageCount,
-      }) => {
+      inputSchema: previewPptDeckInputSchema as any,
+      execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
+        const {
+          prompt,
+          researchBrief,
+          scenario = "marketing-campaign",
+          language = "zh-CN",
+          templateMode = "auto-4",
+          templateId,
+          pageCount,
+        } = rawInput as PreviewPptDeckInput
         try {
           if (requiresResearchBrief(prompt) && !hasUsableResearchBrief(researchBrief)) {
             throw new Error("ppt_research_brief_required")
@@ -335,11 +339,12 @@ export function buildAiEntryPptTools(input: {
         }
       },
     }),
-    export_ppt_deck: tool({
+    export_ppt_deck: tool<unknown, Record<string, unknown>>({
       description:
         "Export the downloadable deck artifact from a previously generated preview session and selected variant. Use this after preview_ppt_deck when the user wants the actual deliverable file.",
-      inputSchema: exportPptDeckInputSchema,
-      execute: async ({ previewSessionId, selectedVariantKey }) => {
+      inputSchema: exportPptDeckInputSchema as any,
+      execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
+        const { previewSessionId, selectedVariantKey } = rawInput as ExportPptDeckInput
         try {
           const deck = await getPptPreviewSessionDeck(previewSessionId)
           const selectedVariant = selectDeckVariant(deck, selectedVariantKey)

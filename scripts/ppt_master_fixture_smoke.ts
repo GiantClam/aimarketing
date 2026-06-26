@@ -3,6 +3,7 @@ import path from "node:path"
 
 import { exportPptMasterSessionVariant } from "@/lib/lead-tools/ppt-master-runtime"
 import { generateLeadToolPptStoryDeck, materializeLeadToolPptDeckWithPptMasterRuntime } from "@/lib/lead-tools/generation-ppt-fixed"
+import { toUint8Array } from "@/lib/utils/binary"
 
 type SmokeOptions = {
   fixturePath: string
@@ -101,7 +102,7 @@ async function main() {
 
   const fileName = `smoke-${artifact.fileName}`
   const outputPath = path.join(options.outputDir, fileName)
-  await fs.writeFile(outputPath, artifact.buffer)
+  await fs.writeFile(outputPath, toUint8Array(artifact.buffer))
 
   console.log(
     JSON.stringify({

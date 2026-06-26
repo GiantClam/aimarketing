@@ -13,6 +13,7 @@ import {
   type PlatformTaskRunStore,
   type PlatformWorkItemRecord,
 } from "@/lib/platform/task-run-store"
+import { toBase64 } from "@/lib/utils/binary"
 
 type EnterpriseLeadToolUser = AuthUser & { id: number; enterpriseId: number }
 
@@ -209,7 +210,7 @@ async function saveLeadToolDownloadFileArtifact(
     mimeType: input.artifact.contentType,
     payload: {
       ...payload,
-      embeddedContentBase64: Buffer.from(input.artifact.buffer).toString("base64"),
+      embeddedContentBase64: toBase64(input.artifact.buffer),
     },
   })
 }

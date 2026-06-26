@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { toUint8Array } from "@/lib/utils/binary"
 
 import {
   buildAttachmentContentDisposition,
@@ -11,37 +12,53 @@ import {
   resolveMiniMaxFeatureId,
 } from "@/lib/platform/minimax-audio"
 
+function concatBytes(parts: Uint8Array[]) {
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0)
+  const output = new Uint8Array(totalLength)
+  let offset = 0
+  for (const part of parts) {
+    output.set(part, offset)
+    offset += part.length
+  }
+  return output
+}
+
+function writeBytes(target: Uint8Array, offset: number, source: Uint8Array, maxLength?: number) {
+  const chunk = maxLength == null ? source : source.subarray(0, maxLength)
+  target.set(chunk, offset)
+}
+
 function buildTarArchive(entries: Array<{ name: string; content: Uint8Array }>) {
-  const blocks: Buffer[] = []
+  const blocks: Uint8Array[] = []
 
   for (const entry of entries) {
-    const header = Buffer.alloc(512, 0)
-    Buffer.from(entry.name).copy(header, 0, 0, Math.min(Buffer.byteLength(entry.name), 100))
-    Buffer.from("0000777\0").copy(header, 100)
-    Buffer.from("0000000\0").copy(header, 108)
-    Buffer.from("0000000\0").copy(header, 116)
-    Buffer.from(entry.content.length.toString(8).padStart(11, "0") + "\0").copy(header, 124)
-    Buffer.from("00000000000\0").copy(header, 136)
+    const header = new Uint8Array(512)
+    writeBytes(header, 0, toUint8Array(Buffer.from(entry.name)), 100)
+    writeBytes(header, 100, toUint8Array(Buffer.from("0000777\0")))
+    writeBytes(header, 108, toUint8Array(Buffer.from("0000000\0")))
+    writeBytes(header, 116, toUint8Array(Buffer.from("0000000\0")))
+    writeBytes(header, 124, toUint8Array(Buffer.from(entry.content.length.toString(8).padStart(11, "0") + "\0")))
+    writeBytes(header, 136, toUint8Array(Buffer.from("00000000000\0")))
     header.fill(0x20, 148, 156)
     header[156] = "0".charCodeAt(0)
-    Buffer.from("ustar\0").copy(header, 257)
-    Buffer.from("00").copy(header, 263)
+    writeBytes(header, 257, toUint8Array(Buffer.from("ustar\0")))
+    writeBytes(header, 263, toUint8Array(Buffer.from("00")))
 
     let checksum = 0
     for (const value of header) checksum += value
-    Buffer.from(checksum.toString(8).padStart(6, "0") + "\0 ").copy(header, 148)
+    writeBytes(header, 148, toUint8Array(Buffer.from(checksum.toString(8).padStart(6, "0") + "\0 ")))
 
     blocks.push(header)
-    blocks.push(Buffer.from(entry.content))
+    blocks.push(entry.content)
 
     const remainder = entry.content.length % 512
     if (remainder !== 0) {
-      blocks.push(Buffer.alloc(512 - remainder, 0))
+      blocks.push(new Uint8Array(512 - remainder))
     }
   }
 
-  blocks.push(Buffer.alloc(1024, 0))
-  return new Uint8Array(Buffer.concat(blocks))
+  blocks.push(new Uint8Array(1024))
+  return concatBytes(blocks)
 }
 
 test("minimax audio config falls back to the default base url", () => {

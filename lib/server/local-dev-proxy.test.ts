@@ -1,8 +1,20 @@
 import assert from "node:assert/strict"
 import http from "node:http"
 import test from "node:test"
+import { toUint8Array } from "@/lib/utils/binary"
 
 import { isProxyTransportError, proxyAwareFetch } from "./local-dev-proxy"
+
+function concatBytes(parts: Uint8Array[]) {
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0)
+  const output = new Uint8Array(totalLength)
+  let offset = 0
+  for (const part of parts) {
+    output.set(part, offset)
+    offset += part.length
+  }
+  return output
+}
 
 test("proxyAwareFetch serializes FormData bodies with multipart headers", async () => {
   let receivedContentType = ""
@@ -10,10 +22,10 @@ test("proxyAwareFetch serializes FormData bodies with multipart headers", async 
 
   const server = http.createServer((req, res) => {
     receivedContentType = String(req.headers["content-type"] || "")
-    const chunks: Buffer[] = []
-    req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+    const chunks: Uint8Array[] = []
+    req.on("data", (chunk) => chunks.push(toUint8Array(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))))
     req.on("end", () => {
-      receivedBody = Buffer.concat(chunks).toString("utf8")
+      receivedBody = Buffer.from(concatBytes(chunks)).toString("utf8")
       res.writeHead(200, { "content-type": "application/json" })
       res.end(JSON.stringify({ ok: true }))
     })

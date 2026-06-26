@@ -1,4 +1,5 @@
 import { inflateRawSync, inflateSync } from "node:zlib"
+import { toUint8Array } from "@/lib/utils/binary"
 
 import {
   CHAT_ATTACHMENT_MAX_TEXT_CHARS,
@@ -94,7 +95,7 @@ function readZipEntry(buffer: Buffer, entry: ZipEntry) {
 
   if (entry.compressionMethod === 0) return compressed
   if (entry.compressionMethod === 8) {
-    const inflated = inflateRawSync(compressed)
+    const inflated = inflateRawSync(toUint8Array(compressed))
     if (entry.uncompressedSize > 0 && inflated.length !== entry.uncompressedSize) {
       return inflated
     }
@@ -257,9 +258,9 @@ function maybeInflatePdfStream(raw: Buffer, dictionary: string) {
     return raw
   }
   try {
-    return inflateSync(raw)
+    return inflateSync(toUint8Array(raw))
   } catch {
-    return inflateRawSync(raw)
+    return inflateRawSync(toUint8Array(raw))
   }
 }
 
@@ -307,19 +308,20 @@ export function extractPlainText(bytes: Buffer) {
 export function extractChatAttachmentText(input: ExtractChatAttachmentInput): ExtractedChatAttachmentText {
   const fileName = normalizeFileName(input.fileName)
   const originalMediaType = (input.mediaType || "").trim().toLowerCase()
+  const bytes = Buffer.from(input.bytes)
   const extension = validateChatAttachmentFile({
     fileName,
     mediaType: originalMediaType,
-    size: input.bytes.length,
+    size: bytes.length,
   })
 
   let rawText = ""
   if (extension === "txt" || extension === "md") {
-    rawText = extractPlainText(input.bytes)
+    rawText = extractPlainText(bytes)
   } else if (extension === "docx") {
-    rawText = extractDocxText(input.bytes)
+    rawText = extractDocxText(bytes)
   } else if (extension === "pdf") {
-    rawText = extractPdfText(input.bytes)
+    rawText = extractPdfText(bytes)
   }
 
   if (!rawText) {
@@ -332,7 +334,7 @@ export function extractChatAttachmentText(input: ExtractChatAttachmentInput): Ex
     extension,
     mediaType: "text/plain",
     originalMediaType,
-    size: input.bytes.length,
+    size: bytes.length,
     text: capped.text,
     textCharCount: rawText.length,
     truncated: capped.truncated,

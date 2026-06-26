@@ -4,6 +4,7 @@ import { requireSessionUser } from "@/lib/auth/guards"
 import { extractChatAttachmentText } from "@/lib/chat-attachments/extract"
 import { ChatAttachmentError } from "@/lib/chat-attachments/types"
 import { normalizeFileName } from "@/lib/chat-attachments/validation"
+import { toUint8Array } from "@/lib/utils/binary"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "file is required" }, { status: 400 })
     }
 
-    const bytes = Buffer.from(await file.arrayBuffer())
+    const bytes = toUint8Array(Buffer.from(await file.arrayBuffer()))
     const extracted = extractChatAttachmentText({
       fileName: file.name,
       mediaType: file.type,
@@ -56,4 +57,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "attachment_extract_failed" }, { status: 500 })
   }
 }
-

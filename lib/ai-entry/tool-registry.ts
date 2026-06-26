@@ -278,7 +278,7 @@ function wrapToolSet(params: {
       ...(sourceTool.onInputStart ? { onInputStart: sourceTool.onInputStart as any } : {}),
       ...(sourceTool.onInputDelta ? { onInputDelta: sourceTool.onInputDelta as any } : {}),
       ...(sourceTool.onInputAvailable ? { onInputAvailable: sourceTool.onInputAvailable as any } : {}),
-      execute: async (input, options) => {
+      execute: async (input: unknown, options: unknown) => {
         const startedAt = Date.now()
         const skillId = skillByToolId.get(toolId) || null
         const effectiveInput = maybeInjectResearchBrief(toolId, input, lastResearchBrief)

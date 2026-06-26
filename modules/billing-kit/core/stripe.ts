@@ -1,4 +1,4 @@
-import Stripe from "stripe"
+import StripeConstructor from "stripe"
 
 import { getBillingPlan, type BillingPlanCode } from "@/lib/billing/plans"
 
@@ -12,7 +12,8 @@ function normalizeEmail(raw: unknown) {
   return normalizeText(raw).toLowerCase()
 }
 
-let stripeClient: Stripe | null = null
+let stripeClient: StripeConstructor.Stripe | null = null
+type StripeSubscription = Awaited<ReturnType<ReturnType<typeof getStripeClient>["subscriptions"]["retrieve"]>>
 
 function getStripeSecretKey() {
   return normalizeText(process.env.STRIPE_SECRET_KEY)
@@ -58,7 +59,7 @@ export function getStripeClient() {
   const secretKey = getStripeSecretKey()
   if (!secretKey) throw new Error("stripe_secret_key_missing")
 
-  stripeClient = new Stripe(secretKey)
+  stripeClient = new StripeConstructor(secretKey)
   return stripeClient
 }
 
@@ -173,7 +174,7 @@ export async function createStripeBillingPortalSession(input: {
   })
 }
 
-export function inferStripePlanCode(subscription: Stripe.Subscription | null | undefined) {
+export function inferStripePlanCode(subscription: StripeSubscription | null | undefined) {
   const firstItem = subscription?.items?.data?.[0]
   return (
     getPlanCodeForStripePriceId(firstItem?.price?.id) ||

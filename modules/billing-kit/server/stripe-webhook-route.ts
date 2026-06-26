@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import type Stripe from "stripe"
 
 import { pool } from "@/modules/billing-kit/host/db"
 import { getBillingPlan } from "@/lib/billing/plans"
@@ -12,6 +11,12 @@ import {
   parseStripeClientReferenceId,
 } from "@/lib/billing/stripe"
 import { upsertActiveStripeSubscription } from "@/lib/billing/subscription-store"
+
+type StripeClient = ReturnType<typeof getStripeClient>
+type StripeSubscription = Awaited<ReturnType<StripeClient["subscriptions"]["retrieve"]>>
+type StripeWebhookEvent = ReturnType<StripeClient["webhooks"]["constructEvent"]>
+type StripeCheckoutSession = Extract<StripeWebhookEvent["data"]["object"], { object: "checkout.session" }>
+type StripeInvoice = Extract<StripeWebhookEvent["data"]["object"], { object: "invoice" }>
 
 function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
@@ -35,7 +40,7 @@ function readStripeTimestamp(record: Record<string, unknown>, key: string) {
   return typeof nestedValue === "number" ? nestedValue : null
 }
 
-function parseStripeSubscriptionReference(subscription: Stripe.Subscription | null | undefined) {
+function parseStripeSubscriptionReference(subscription: StripeSubscription | null | undefined) {
   const metadata = subscription?.metadata || {}
   const rawClientReferenceId = normalizeText(metadata.client_reference_id)
   if (rawClientReferenceId) {
@@ -226,7 +231,10 @@ async function upsertStripeSubscriptionStatus(
   return result.rows[0] || null
 }
 
-async function handleCheckoutCompleted(client: { query: typeof pool.query }, session: Stripe.Checkout.Session) {
+async function handleCheckoutCompleted(
+  client: { query: typeof pool.query },
+  session: StripeCheckoutSession,
+) {
   if (session.mode !== "subscription") return
   const stripeSubscriptionId = typeof session.subscription === "string" ? session.subscription : ""
   if (!stripeSubscriptionId) return
@@ -255,7 +263,10 @@ async function handleCheckoutCompleted(client: { query: typeof pool.query }, ses
   })
 }
 
-async function handleSubscriptionUpdated(client: { query: typeof pool.query }, subscription: Stripe.Subscription) {
+async function handleSubscriptionUpdated(
+  client: { query: typeof pool.query },
+  subscription: StripeSubscription,
+) {
   const refs = parseStripeSubscriptionReference(subscription)
   await upsertStripeSubscriptionStatus(client, {
     enterpriseId: refs.enterpriseId || null,
@@ -273,7 +284,7 @@ async function handleSubscriptionUpdated(client: { query: typeof pool.query }, s
   })
 }
 
-async function handleInvoicePaid(client: { query: typeof pool.query }, invoice: Stripe.Invoice) {
+async function handleInvoicePaid(client: { query: typeof pool.query }, invoice: StripeInvoice) {
   const invoiceRecord = invoice as unknown as Record<string, unknown>
   const invoiceSubscription = invoiceRecord.subscription
   const stripeSubscriptionId =
@@ -319,20 +330,20 @@ async function handleInvoicePaid(client: { query: typeof pool.query }, invoice: 
   }
 }
 
-async function applyStripeEvent(event: Stripe.Event) {
+async function applyStripeEvent(event: StripeWebhookEvent) {
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
     if (event.type === "checkout.session.completed") {
-      await handleCheckoutCompleted(client, event.data.object as Stripe.Checkout.Session)
+      await handleCheckoutCompleted(client, event.data.object as StripeCheckoutSession)
     } else if (
       event.type === "customer.subscription.created" ||
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      await handleSubscriptionUpdated(client, event.data.object as Stripe.Subscription)
+      await handleSubscriptionUpdated(client, event.data.object as StripeSubscription)
     } else if (event.type === "invoice.paid") {
-      await handleInvoicePaid(client, event.data.object as Stripe.Invoice)
+      await handleInvoicePaid(client, event.data.object as StripeInvoice)
     }
     await client.query("COMMIT")
   } catch (error) {
@@ -350,7 +361,7 @@ export async function handleStripeWebhookPost(request: NextRequest) {
     return NextResponse.json({ error: "stripe_signature_missing" }, { status: 400 })
   }
 
-  let event: Stripe.Event
+  let event: StripeWebhookEvent
   try {
     event = getStripeClient().webhooks.constructEvent(rawBody, signature, getStripeWebhookSecret())
   } catch (error) {

@@ -10,6 +10,14 @@ import {
 
 const WEB_SEARCH_MAX_RESULTS = 6
 
+const webSearchInputSchema = z.object({
+  query: z.string().min(2).describe("A focused web search query generated from the user's intent."),
+  intent: z.string().optional().describe("Why fresh external evidence is needed for this request."),
+  maxResults: z.number().int().min(1).max(10).optional(),
+})
+
+type WebSearchToolInput = z.infer<typeof webSearchInputSchema>
+
 function dedupeHits(hits: WebSearchHit[]) {
   const seen = new Set<string>()
   const output: WebSearchHit[] = []
@@ -30,14 +38,11 @@ export function buildAiEntryWebSearchTools(): ToolSet {
   if (!hasAnyWebSearchProviderConfig()) return {} as ToolSet
 
   return {
-    web_search: tool({
+    web_search: tool<unknown, Record<string, unknown>>({
       description: getWebSearchToolDescription(),
-      inputSchema: z.object({
-        query: z.string().min(2).describe("A focused web search query generated from the user's intent."),
-        intent: z.string().optional().describe("Why fresh external evidence is needed for this request."),
-        maxResults: z.number().int().min(1).max(10).optional(),
-      }),
-      execute: async ({ query, intent, maxResults }) => {
+      inputSchema: webSearchInputSchema as any,
+      execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
+        const { query, intent, maxResults } = rawInput as WebSearchToolInput
         const limit = Math.min(Math.max(maxResults ?? WEB_SEARCH_MAX_RESULTS, 1), 10)
         const [serperHits, tavilyHits] = await Promise.all([
           searchWithSerperWeb(query, { num: limit }).catch(() => []),

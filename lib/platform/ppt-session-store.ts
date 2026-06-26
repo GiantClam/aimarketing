@@ -3,6 +3,7 @@ import type {
   PersistedPptMasterSession,
   PptMasterSessionStore,
 } from "@/lib/lead-tools/ppt-master-session-store"
+import { toUint8Array } from "@/lib/utils/binary"
 
 const PLATFORM_PPT_MASTER_SESSIONS_TABLE = "AI_MARKETING_platform_ppt_master_sessions"
 
@@ -29,7 +30,7 @@ function mapRow(row: PptMasterSessionRow): PersistedPptMasterSession {
     sessionId: row.session_id,
     createdAt: toTimestampIso(row.created_at),
     manifest: row.manifest_payload,
-    archive: Buffer.from(row.archive_blob),
+    archive: Buffer.from(toUint8Array(row.archive_blob)),
   }
 }
 
@@ -84,7 +85,7 @@ export function createPostgresPptMasterSessionStore(): PptMasterSessionStore {
             archive_blob = EXCLUDED.archive_blob,
             updated_at = CURRENT_TIMESTAMP
         `,
-        [session.sessionId, session.createdAt, JSON.stringify(session.manifest), Buffer.from(session.archive)],
+        [session.sessionId, session.createdAt, JSON.stringify(session.manifest), toUint8Array(session.archive)],
       )
     },
     async getSession(sessionId) {

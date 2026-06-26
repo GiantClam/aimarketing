@@ -28,7 +28,7 @@ let exportPptMasterSessionVariantImpl = exportPptMasterSessionVariant
 let generateLeadToolPptStoryDeckImpl = generateLeadToolPptStoryDeck
 let getPreviewRuntimeImpl = getPreviewRuntime
 
-function useRemoteWorkerTransport() {
+function shouldUseRemoteWorkerTransport() {
   return getLeadToolPptExecutionTransport() === "remote-worker"
 }
 
@@ -65,7 +65,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
     const runtime = getPreviewRuntimeImpl()
     const previewMeta = getPreviewEngineMeta(runtime)
 
-    if (runtime.id === "ppt-master-agent" && useRemoteWorkerTransport()) {
+    if (runtime.id === "ppt-master-agent" && shouldUseRemoteWorkerTransport()) {
       const remote = await requestPptWorkerPreviewImpl({
         requestId: randomUUID(),
         prompt: request.prompt,
@@ -151,7 +151,7 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
       }
     }
 
-    if (useRemoteWorkerTransport() && action.previewSessionId) {
+    if (shouldUseRemoteWorkerTransport() && action.previewSessionId) {
       return {
         jobId: randomUUID(),
         status: "ready",
@@ -204,7 +204,7 @@ const pptMasterExportEngine: LeadToolPptExportEngine = {
       }
     }
 
-    if (useRemoteWorkerTransport() && action.previewSessionId) {
+    if (shouldUseRemoteWorkerTransport() && action.previewSessionId) {
       const artifact = await requestPptWorkerExportImpl({
         requestId: randomUUID(),
         previewSessionId: action.previewSessionId,
