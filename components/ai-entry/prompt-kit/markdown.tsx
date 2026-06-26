@@ -22,6 +22,8 @@ function MarkdownComponent({ children, className }: MarkdownProps) {
         "prose-ul:my-2 prose-ol:my-2 prose-li:my-1",
         "prose-code:rounded prose-code:bg-accent/15 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-inherit",
         "prose-pre:my-0 prose-pre:bg-transparent prose-pre:p-0",
+        "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:bg-muted/30 prose-blockquote:py-0.5 prose-blockquote:not-italic",
+        "prose-table:text-xs prose-th:border prose-th:border-border prose-th:px-2 prose-th:py-1 prose-td:border prose-td:border-border prose-td:px-2 prose-td:py-1",
         className,
       )}
     >
