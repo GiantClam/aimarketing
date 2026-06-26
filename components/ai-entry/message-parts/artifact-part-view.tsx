@@ -1,0 +1,58 @@
+"use client"
+
+import { Download, Eye, LibraryBig, Package } from "lucide-react"
+
+import type { ArtifactPart } from "@/lib/ai-entry/message-parts/types"
+
+function kindLabel(part: ArtifactPart, isZh: boolean): string {
+  if (part.artifactType === "html") return isZh ? "HTML 交付物" : "HTML deliverable"
+  if (part.artifactType === "pptx") return isZh ? "PPT 交付物" : "PPT deliverable"
+  if (part.artifactType === "image") return isZh ? "图像交付物" : "Image deliverable"
+  return isZh ? "交付文件" : "Deliverable"
+}
+
+function extensionLabel(part: ArtifactPart) {
+  const source = part.fileName || part.title || ""
+  const match = source.match(/\.([a-z0-9]+)$/i)
+  if (match?.[1]) return match[1].toUpperCase()
+  if (part.artifactType === "pptx") return "PPTX"
+  if (part.artifactType === "html") return "HTML"
+  if (part.artifactType === "image") return "IMAGE"
+  return "FILE"
+}
+
+export function ArtifactPartView({ part, isZh }: { part: ArtifactPart; isZh: boolean }) {
+  return (
+    <div className="artifact-card">
+      <div className="artifact-cover">
+        <Package className="h-7 w-7 text-primary/80" />
+        <span className="artifact-cover-ext">{extensionLabel(part)}</span>
+      </div>
+      <div className="artifact-meta">
+        <div className="artifact-eyebrow">{kindLabel(part, isZh)}</div>
+        <div className="artifact-title-text">{part.title || part.fileName || (isZh ? "生成产物" : "Generated artifact")}</div>
+        <div className="artifact-subtitle">{part.fileName || (isZh ? "可预览 / 下载 / 进入作品库" : "Ready to preview, download, or open in works")}</div>
+        <div className="artifact-card-actions">
+          {part.previewUrl ? (
+            <a className="artifact-action" href={part.previewUrl} target="_blank" rel="noreferrer">
+              <Eye className="h-3.5 w-3.5" />
+              {isZh ? "预览" : "Preview"}
+            </a>
+          ) : null}
+          {part.downloadUrl ? (
+            <a className="artifact-action" href={part.downloadUrl} target="_blank" rel="noreferrer">
+              <Download className="h-3.5 w-3.5" />
+              {isZh ? "下载" : "Download"}
+            </a>
+          ) : null}
+          {part.workHref ? (
+            <a className="artifact-action" href={part.workHref}>
+              <LibraryBig className="h-3.5 w-3.5" />
+              {isZh ? "作品库" : "Works"}
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}

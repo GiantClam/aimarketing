@@ -10,13 +10,12 @@ import { PublicSiteFooter } from "@/components/seo/public-site-footer"
 import { PublicSiteHeader } from "@/components/seo/public-site-header"
 import { SeoLandingPage } from "@/components/seo/seo-landing-page"
 import { Button } from "@/components/ui/button"
-import { getServerSessionUser } from "@/lib/auth/server-session"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
 import type { AppLocale } from "@/lib/i18n/config"
 import { buildLocalizedPublicUrl, getLocalizedPublicAlternates, isLocalizedPublicPath, localizePublicPath } from "@/lib/i18n/routing"
 import { listPlatformCapabilityExecutionStates } from "@/lib/platform/execution"
 import { listPlatformRegistryEntryExecutionStates } from "@/lib/platform/registry-entry-execution"
-import { listVisiblePlatformRegistryEntries } from "@/lib/platform/directory-resolver"
+import { buildPlatformRegistryDefaultEntries } from "@/lib/platform/control-plane"
 import { getAiCostPageCopy, localizeSeoPage } from "@/lib/seo/i18n"
 import { metadataForSeoPage } from "@/lib/seo/metadata"
 import {
@@ -292,13 +291,9 @@ export function getHomeMetadata(locale: AppLocale): Metadata {
 }
 
 export async function renderHomePage(locale: AppLocale) {
-  const currentUser = await getServerSessionUser().catch(() => null)
-  const platformCapabilities = (await listVisiblePlatformRegistryEntries({
-    locale,
-    itemType: "capability",
-    surface: "public",
-    enterpriseId: currentUser?.enterpriseId,
-  })).filter((item: { slug: string }) => ["ai-chat", "ai-ppt", "ai-image", "ai-video", "agent-platform"].includes(item.slug))
+  const platformCapabilities = buildPlatformRegistryDefaultEntries(locale, "capability").filter((item) =>
+    ["ai-chat", "ai-ppt", "ai-image", "ai-video", "agent-platform"].includes(item.slug),
+  )
 
   return <PublicHomePageContent platformCapabilities={platformCapabilities} />
 }
