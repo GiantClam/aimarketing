@@ -3,6 +3,7 @@ import { appendPlatformRunEvent } from "@/lib/platform/task-run-store"
 import { updatePlatformWorkflowRun } from "@/lib/platform/workflow-runner"
 import { createWorkflowCapabilityInvoker } from "@/lib/workflows/capability-invoker"
 import { retryWorkflowNodeExecution, runWorkflowDefinition, type WorkflowNodeRunState } from "@/lib/workflows/execution"
+import type { WorkflowNodeInputBundle } from "@/lib/workflows/node-executors"
 import {
   applyWorkflowNodeResultPreviews,
   collectWorkflowPersistenceTargets,
@@ -21,6 +22,7 @@ type WorkflowRunJobContext = {
   runId: number
   workflow: WorkflowDefinition
   currentUser: AuthUser
+  seedInput?: Partial<WorkflowNodeInputBundle>
   cookieHeader?: string | null
   locale?: "zh" | "en"
   requestOrigin: string
@@ -102,7 +104,10 @@ async function finalizeWorkflowRun(input: {
 
   const persistedOutputs = await persistFinalWorkflowOutputs({
     runId: input.runId,
+    workflowId: input.workflow.id,
+    workflowSlug: input.workflow.slug,
     workflowTitle: input.workflow.title,
+    workflowUpdatedAt: input.workflow.updatedAt,
     enterpriseId: input.currentUser.enterpriseId!,
     ownerUserId: input.currentUser.id,
     nodeStates: input.nodeStates,
@@ -124,6 +129,7 @@ async function finalizeWorkflowRun(input: {
         workflowStatus: input.resultStatus,
         persistedArtifactIds: persistedOutputs.artifactIds,
         persistedWorkItemIds: persistedOutputs.workItemIds,
+        persistedKnowledgeSaveJobIds: persistedOutputs.knowledgeSaveJobIds,
         previous: input.previousNormalizedResult,
         retry: input.retry ?? null,
       }),
@@ -136,8 +142,10 @@ function createJobCapabilityInvoker(context: WorkflowRunJobContext) {
     cookieHeader: context.cookieHeader,
     currentUser: context.currentUser,
     locale: context.locale ?? "en",
+    workflowMetadata: context.workflow.metadata ?? null,
     requestOrigin: context.requestOrigin,
     requestIp: context.requestIp,
+    activeWorkflowId: context.workflow.id,
   })
 }
 
@@ -154,8 +162,10 @@ export async function executeWorkflowRunJob(context: WorkflowRunJobContext) {
       ownerUserId: context.workflow.ownerUserId,
       nodes: context.workflow.nodes,
       edges: context.workflow.edges,
+      seedInput: context.seedInput,
       executorContext: {
         capabilityInvoker: createJobCapabilityInvoker(context),
+        workflowMetadata: context.workflow.metadata ?? null,
       },
       onNodeStateChange: (state) => persistWorkflowNodeStateWithEvent(context.runId, state),
     })
@@ -198,11 +208,13 @@ export async function executeWorkflowRetryJob(context: WorkflowRetryJobContext) 
       ownerUserId: context.workflow.ownerUserId,
       nodes: context.workflow.nodes,
       edges: context.workflow.edges,
+      seedInput: context.seedInput,
       nodeStates: context.existingNodeStates,
       nodeKey: context.nodeKey,
       mode: context.mode,
       executorContext: {
         capabilityInvoker: createJobCapabilityInvoker(context),
+        workflowMetadata: context.workflow.metadata ?? null,
       },
       onNodeStateChange: (state) => persistWorkflowNodeStateWithEvent(context.runId, state),
     })

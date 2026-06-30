@@ -89,6 +89,20 @@ function getBindingTargetHrefs(bindingTarget: string) {
     return { publicHref: "/workflows", workspaceHref: "/dashboard/workflows" }
   }
 
+  if (
+    bindingTarget === "sales-proposal" ||
+    bindingTarget === "paid-media-creative-pipeline" ||
+    bindingTarget === "seo-aeo-growth-engine" ||
+    bindingTarget === "short-video-growth" ||
+    bindingTarget === "brand-asset-factory" ||
+    bindingTarget === "reputation-guard" ||
+    bindingTarget === "compliance-review" ||
+    bindingTarget === "training-enablement" ||
+    bindingTarget === "knowledge-asset-loop"
+  ) {
+    return { publicHref: "/workflows", workspaceHref: "/dashboard/workflows" }
+  }
+
   if (bindingTarget === "knowledge-base") {
     return { publicHref: "/capabilities", workspaceHref: "/dashboard/knowledge-base" }
   }

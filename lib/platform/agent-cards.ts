@@ -244,6 +244,93 @@ export async function updateEnterpriseAgentCard(input: {
   return row
 }
 
+export async function upsertEnterpriseAgentCardBySlug(input: {
+  enterpriseId: number
+  slug: string
+  title: string
+  summary: string
+  focus: string
+  status?: EnterpriseAgentCardStatus
+  publicVisible?: boolean
+  workspaceVisible?: boolean
+  bindingTarget?: string
+  bindingMode?: PlatformBindingMode
+  notes?: string
+}) {
+  await ensurePlatformAgentCardTables()
+
+  const slug = normalizeSlug(input.slug)
+  if (!slug) {
+    throw new Error("invalid_slug")
+  }
+
+  const rows = await withPlatformAgentCardDbRetry("platform-agent-cards.select-by-slug", async () =>
+    db
+      .select()
+      .from(enterprisePlatformAgentCards)
+      .where(
+        and(
+          eq(enterprisePlatformAgentCards.enterpriseId, input.enterpriseId),
+          eq(enterprisePlatformAgentCards.slug, slug),
+        ),
+      )
+      .limit(1),
+  )
+
+  const existing = rows[0]
+  if (!existing) {
+    return createEnterpriseAgentCard({
+      enterpriseId: input.enterpriseId,
+      title: input.title,
+      summary: input.summary,
+      focus: input.focus,
+      status: input.status,
+      publicVisible: input.publicVisible,
+      workspaceVisible: input.workspaceVisible,
+      bindingTarget: input.bindingTarget,
+      bindingMode: input.bindingMode,
+      notes: input.notes,
+    })
+  }
+
+  return updateEnterpriseAgentCard({
+    enterpriseId: input.enterpriseId,
+    id: existing.id,
+    title: input.title,
+    summary: input.summary,
+    focus: input.focus,
+    status: input.status,
+    publicVisible: input.publicVisible,
+    workspaceVisible: input.workspaceVisible,
+    bindingTarget: input.bindingTarget,
+    bindingMode: input.bindingMode,
+    notes: input.notes,
+  })
+}
+
+export async function deleteEnterpriseAgentCardBySlug(input: {
+  enterpriseId: number
+  slug: string
+}) {
+  await ensurePlatformAgentCardTables()
+  const slug = normalizeSlug(input.slug)
+  if (!slug) return 0
+
+  const deleted = await withPlatformAgentCardDbRetry("platform-agent-cards.delete-by-slug", async () =>
+    db
+      .delete(enterprisePlatformAgentCards)
+      .where(
+        and(
+          eq(enterprisePlatformAgentCards.enterpriseId, input.enterpriseId),
+          eq(enterprisePlatformAgentCards.slug, slug),
+        ),
+      )
+      .returning({ id: enterprisePlatformAgentCards.id }),
+  )
+
+  return deleted.length
+}
+
 export function canManageEnterpriseAgentCards(user: AuthUserPayload | null | undefined) {
   return canManagePlatformRegistry(user)
 }

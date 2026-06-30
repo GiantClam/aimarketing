@@ -17,6 +17,7 @@ import {
   type HydratedPlatformTaskRun,
   type PlatformTaskRunStatus,
 } from "@/lib/platform/task-run-store"
+import { settleVideoBillingForRun } from "@/lib/platform/video-billing-settlement"
 import {
   getRunningHubConfig,
   queryRunningHubTask,
@@ -710,6 +711,16 @@ export async function queryRunningHubVideoTask(input: {
             },
           },
   })
+
+  if (nextStatus === "succeeded" || nextStatus === "failed") {
+    await settleVideoBillingForRun(detail).catch((error) => {
+      console.warn("platform.runninghub-video.billing.settle_failed", {
+        runId: detail.id,
+        status: nextStatus,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
 
   return buildTaskResponseFromRun(detail)
 }

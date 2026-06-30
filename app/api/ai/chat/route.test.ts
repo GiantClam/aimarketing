@@ -13,6 +13,9 @@ let releaseCalls = 0
 let toolRegistryWarnings: string[] = []
 let toolRegistryToolIds: string[] = []
 let emitArtifactFlow = false
+let lastStreamingSystemPrompt = ""
+let customAgentExecutionMode: "direct_agent" | "workflow_backed" = "direct_agent"
+let customAgentStatus: "published" | "disabled" | "archived" | "draft" = "published"
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -67,7 +70,35 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/ai-entry/agent-catalog") {
     return {
-      isAiEntryAgentId: (value: string | null | undefined) => typeof value === "string" && value.length > 0,
+      isAiEntryAgentId: (value: string | null | undefined) =>
+        typeof value === "string" && (value === "general" || value.startsWith("business-")),
+    }
+  }
+
+  if (request === "@/lib/platform/custom-agent-runtime-id") {
+    return {
+      parseCustomAgentRuntimeId: (value: string | null | undefined) => {
+        if (typeof value !== "string" || !value.startsWith("custom-agent:")) return null
+        const numeric = Number(value.slice("custom-agent:".length))
+        return Number.isInteger(numeric) && numeric > 0 ? numeric : null
+      },
+    }
+  }
+
+  if (request === "@/lib/platform/custom-agents") {
+    return {
+      getCustomAgentForUser: async ({ agentId }: { agentId: number }) => ({
+        id: agentId,
+        name: "Revenue Ops Copilot",
+        summary: "Turn business requests into practical GTM actions.",
+        goal: "Improve pipeline execution quality",
+        scope: "Business workbench direct chat",
+        guardrails: "Keep outputs concrete and execution-ready.",
+        systemPromptSummary: "Revenue-oriented execution copilot",
+        systemPrompt: "Bias toward concrete steps, owners, and deliverables.",
+        status: customAgentStatus,
+        executionMode: customAgentExecutionMode,
+      }),
     }
   }
 
@@ -197,11 +228,13 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/skills/runtime/ai-entry-executor") {
     return {
       runAiEntryConsultingStreaming: async (input: {
+        systemPrompt?: string
         onProviderSelected?: (payload: Record<string, unknown>) => void
         onTextDelta?: (delta: string) => void
         onToolCall?: (payload: Record<string, unknown>) => void
         onToolResult?: (payload: Record<string, unknown>) => void
       }) => {
+        lastStreamingSystemPrompt = input.systemPrompt || ""
         input.onProviderSelected?.({
           providerId: "pptoken",
           model: "gpt-5.4",
@@ -327,6 +360,9 @@ test.beforeEach(() => {
   toolRegistryWarnings = []
   toolRegistryToolIds = []
   emitArtifactFlow = false
+  lastStreamingSystemPrompt = ""
+  customAgentExecutionMode = "direct_agent"
+  customAgentStatus = "published"
 })
 
 test.after(() => {
@@ -378,4 +414,90 @@ test("ai chat route preserves business-agent streaming and emits artifact-create
   assert.match(text, /message_end/)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("ai chat route supports published direct custom agents in streaming chat", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我整理本周销售推进动作。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "custom-agent:42",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  const text = await response.text()
+  assert.match(text, /custom-agent:42/)
+  assert.match(text, /Normal chat reply\./)
+  assert.match(lastStreamingSystemPrompt, /Revenue Ops Copilot/)
+  assert.match(lastStreamingSystemPrompt, /Improve pipeline execution quality/)
+  assert.match(lastStreamingSystemPrompt, /Bias toward concrete steps, owners, and deliverables\./)
+  assert.equal(finalizeCalls, 1)
+  assert.equal(releaseCalls, 0)
+})
+
+test("ai chat route rejects workflow-backed custom agents in direct chat", async () => {
+  customAgentExecutionMode = "workflow_backed"
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我推进销售漏斗。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "custom-agent:7",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal((response as { status?: number }).status, 409)
+  assert.deepEqual((response as { body?: unknown }).body, {
+    error: "custom_agent_workflow_backed_chat_not_supported",
+  })
+  assert.equal(finalizeCalls, 0)
+})
+
+test("ai chat route rejects disabled custom agents before streaming starts", async () => {
+  customAgentStatus = "disabled"
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我整理销售跟进动作。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "custom-agent:8",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal((response as { status?: number }).status, 403)
+  assert.deepEqual((response as { body?: unknown }).body, {
+    error: "custom_agent_disabled",
+  })
+  assert.equal(finalizeCalls, 0)
+})
+
+test("ai chat route rejects archived custom agents before streaming starts", async () => {
+  customAgentStatus = "archived"
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我整理销售跟进动作。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "custom-agent:9",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal((response as { status?: number }).status, 403)
+  assert.deepEqual((response as { body?: unknown }).body, {
+    error: "custom_agent_archived",
+  })
+  assert.equal(finalizeCalls, 0)
 })

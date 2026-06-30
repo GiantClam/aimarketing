@@ -1,0 +1,58 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="24" y="24" width="1232" height="672" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="24" y="24" width="1232" height="84" fill="#1A1A18"/>
+    <rect x="24" y="108" width="1232" height="2" fill="#282826"/>
+    <rect x="846" y="108" width="2" height="588" fill="#282826"/>
+    <rect x="24" y="524" width="1232" height="2" fill="#282826"/>
+    <rect x="24" y="300" width="820" height="10" fill="#E85D26"/>
+  </g>
+
+  <g id="chrome">
+    <text x="44" y="62" fill="#E85D26" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="3">核心宣言</text>
+    <text x="44" y="92" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="500" letter-spacing="1.5">霍尔木兹海峡现状与全球能源运输影响（截至2026年6月24日）</text>
+    <text x="1178" y="62" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="end">03</text>
+    <text x="1234" y="62" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="end">/ 04</text>
+    <text x="1234" y="92" fill="#F0ECE5" font-size="14" font-family="Arial, Helvetica, sans-serif" font-weight="500" text-anchor="end" letter-spacing="1.2">BROADSIDE INSIGHT</text>
+  </g>
+
+  <g id="content">
+    <rect x="44" y="134" width="784" height="372" fill="none" stroke="#282826" stroke-width="2"/>
+    <text x="58" y="222" fill="#F0ECE5" font-size="88" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-2">能过，</text>
+    <text x="58" y="320" fill="#F0ECE5" font-size="88" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-2">不等于安全</text>
+
+    <text x="60" y="382" fill="#E85D26" font-size="124" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900">67</text>
+    <text x="220" y="382" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">艘 / 6月21日过峡</text>
+    <text x="220" y="418" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="500">高于前一日约55艘</text>
+
+    <text x="60" y="468" fill="#F0ECE5" font-size="30" font-family="Arial, Helvetica, sans-serif" font-weight="700">恢复节奏并不线性，通行回升仍被</text>
+    <text x="60" y="502" fill="#F0ECE5" font-size="30" font-family="Arial, Helvetica, sans-serif" font-weight="700">安全预期、费用与等待时间反复拉扯。</text>
+
+    <rect x="870" y="134" width="366" height="176" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="892" y="166" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">判断</text>
+    <text x="892" y="214" fill="#F0ECE5" font-size="44" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-1">能开航</text>
+    <text x="892" y="262" fill="#F0ECE5" font-size="44" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-1">不代表风险退场</text>
+
+    <rect x="870" y="328" width="366" height="178" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="892" y="360" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">支撑列</text>
+    <circle cx="898" cy="402" r="5" fill="#E85D26"/>
+    <text x="916" y="408" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700">约162艘油轮曾滞留，牵动约…</text>
+    <circle cx="898" cy="444" r="5" fill="#E85D26"/>
+    <text x="916" y="450" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700">部分油轮日租金逼近28万美元…</text>
+    <circle cx="898" cy="486" r="5" fill="#E85D26"/>
+    <text x="916" y="492" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700">即使重开协议存在，油气全面恢…</text>
+
+    <rect x="44" y="548" width="1192" height="116" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="64" y="588" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">一句话结论</text>
+    <text x="64" y="636" fill="#F0ECE5" font-size="42" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-1">航道在动，风险没有退；恢复通行，只是把焦虑从“停摆”改成“高价通行”。</text>
+  </g>
+
+  <g id="annotations">
+    <line x1="870" y1="214" x2="828" y2="214" stroke="#E85D26" stroke-width="3"/>
+    <line x1="828" y1="214" x2="828" y2="300" stroke="#E85D26" stroke-width="3"/>
+    <line x1="828" y1="300" x2="700" y2="300" stroke="#E85D26" stroke-width="3"/>
+    <text x="878" y="530" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="500" letter-spacing="1">重点不是“有没有船过”</text>
+    <text x="878" y="552" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="500" letter-spacing="1">而是“代价是否已常态化”</text>
+  </g>
+</svg>

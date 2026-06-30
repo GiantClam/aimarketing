@@ -1,0 +1,77 @@
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+  <!-- Background -->
+  <g id="background">
+    <rect width="1280" height="720" fill="#111111"/>
+  </g>
+  
+  <!-- Chrome / Layout Elements -->
+  <g id="chrome">
+    <!-- 左侧强调条 -->
+    <rect x="0" y="0" width="8" height="720" fill="#E85D26"/>
+    
+    <!-- 顶部装饰线 -->
+    <line x1="60" y1="60" x2="260" y2="60" stroke="#282826" stroke-width="2"/>
+    
+    <!-- 底部装饰线 -->
+    <line x1="60" y1="680" x2="1160" y2="680" stroke="#282826" stroke-width="2"/>
+    
+    <!-- 页码 -->
+    <text x="1180" y="700" fill="#E85D26" font-size="24" font-weight="bold">02 / 04</text>
+  </g>
+  
+  <!-- Content -->
+  <g id="content">
+    <!-- Kicker -->
+    <text x="60" y="96" fill="#E85D26" font-size="20" font-weight="bold" letter-spacing="4">栏目排版</text>
+    
+    <!-- 主标题 -->
+    <text x="60" y="156" fill="#F0ECE5" font-size="64" font-weight="bold">议程：风险溢价新常态</text>
+    <text x="60" y="220" fill="#F0ECE5" font-size="64" font-weight="bold">下的决策框架</text>
+    
+    <!-- 摘要正文 -->
+    <text x="60" y="280" fill="#F0ECE5" font-size="22" opacity="0.85">截至2026年6月24日，霍尔木兹海峡重启通航，但安全形势、</text>
+    <text x="60" y="310" fill="#F0ECE5" font-size="22" opacity="0.85">费用机制与控制权安排仍未稳定，安全溢价持续高企。</text>
+    
+    <!-- 议程项目容器 -->
+    <g id="agenda-items">
+      <!-- 项目 1 -->
+      <g>
+        <rect x="60" y="380" width="1140" height="56" fill="#1A1A18"/>
+        <rect x="56" y="380" width="4" height="56" fill="#282826"/>
+        <text x="84" y="418" fill="#E85D26" font-size="16" font-weight="bold">01</text>
+        <text x="140" y="418" fill="#F0ECE5" font-size="18" font-weight="bold">霍尔木兹：通航恢复≠风险消散</text>
+      </g>
+      
+      <!-- 项目 2 -->
+      <g>
+        <rect x="60" y="452" width="1140" height="56" fill="#1A1A18"/>
+        <rect x="56" y="452" width="4" height="56" fill="#282826"/>
+        <text x="84" y="490" fill="#E85D26" font-size="16" font-weight="bold">02</text>
+        <text x="140" y="490" fill="#F0ECE5" font-size="18" font-weight="bold">海峡重启但控制权安排未稳，安全溢价持续攀升</text>
+      </g>
+      
+      <!-- 项目 3 -->
+      <g>
+        <rect x="60" y="524" width="1140" height="56" fill="#1A1A18"/>
+        <rect x="56" y="524" width="4" height="56" fill="#282826"/>
+        <text x="84" y="562" fill="#E85D26" font-size="16" font-weight="bold">03</text>
+        <text x="140" y="562" fill="#F0ECE5" font-size="18" font-weight="bold">从“是否断航”到“恢复是否可持续”的范式转移</text>
+      </g>
+      
+      <!-- 项目 4 -->
+      <g>
+        <rect x="60" y="596" width="1140" height="56" fill="#1A1A18"/>
+        <rect x="56" y="596" width="4" height="56" fill="#282826"/>
+        <text x="84" y="634" fill="#E85D26" font-size="16" font-weight="bold">04</text>
+        <text x="140" y="634" fill="#F0ECE5" font-size="18" font-weight="bold">运价、战险保费、替代航线成本同步向上</text>
+      </g>
+    </g>
+  </g>
+  
+  <!-- Annotations -->
+  <g id="annotations">
+    <!-- 右下角装饰元素 -->
+    <rect x="1136" y="656" width="24" height="4" fill="#E85D26"/>
+    <rect x="1144" y="648" width="4" height="20" fill="#E85D26"/>
+  </g>
+</svg>

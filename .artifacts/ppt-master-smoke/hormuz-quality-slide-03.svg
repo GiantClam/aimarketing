@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="24" y="24" width="1232" height="672" fill="#111111" stroke="#282826" stroke-width="2"/>
+    <rect x="36" y="36" width="1208" height="648" fill="none" stroke="#282826" stroke-width="1"/>
+    <rect x="852" y="24" width="404" height="672" fill="#1A1A18"/>
+    <rect x="24" y="526" width="122" height="170" fill="#E85D26"/>
+    <rect x="728" y="24" width="14" height="672" fill="#E85D26"/>
+  </g>
+
+  <g id="chrome">
+    <text x="54" y="78" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" letter-spacing="4">核心宣言</text>
+    <line x1="54" y1="95" x2="222" y2="95" stroke="#E85D26" stroke-width="3"/>
+    <text x="1110" y="78" text-anchor="end" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="3">03 / 04</text>
+    <text x="1110" y="106" text-anchor="end" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600" letter-spacing="2">霍尔木兹海峡现状与全球能源运输影响</text>
+    <line x1="882" y1="126" x2="1218" y2="126" stroke="#282826" stroke-width="2"/>
+    <line x1="882" y1="614" x2="1218" y2="614" stroke="#282826" stroke-width="2"/>
+  </g>
+
+  <g id="content">
+    <text x="54" y="176" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="84" font-weight="900" letter-spacing="1">海峡在开，</text>
+    <text x="54" y="258" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="84" font-weight="900" letter-spacing="1">市场仍在戒备</text>
+
+    <text x="54" y="336" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">结论很直接：</text>
+    <text x="54" y="382" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="400">物流恢复可以快于信心恢复，</text>
+    <text x="54" y="423" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="400">油气流动全面回稳之前，</text>
+    <text x="54" y="464" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="400">风险定价仍会主导交易判断。</text>
+
+    <rect x="54" y="548" width="618" height="104" fill="none" stroke="#F0ECE5" stroke-width="2"/>
+    <text x="82" y="588" fill="#E85D26" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="36" font-weight="900" letter-spacing="1">开航不等于安心</text>
+    <text x="82" y="626" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600">船回来了，风险溢价还没走。</text>
+
+    <rect x="882" y="156" width="302" height="156" fill="none" stroke="#E85D26" stroke-width="3"/>
+    <text x="910" y="210" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" letter-spacing="2">单一焦点</text>
+    <text x="910" y="286" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="90" font-weight="900">67</text>
+    <text x="1068" y="286" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700">艘</text>
+    <text x="910" y="324" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600">6月21日左右通过</text>
+
+    <text x="882" y="386" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="2">支撑列</text>
+    <line x1="882" y1="400" x2="1218" y2="400" stroke="#282826" stroke-width="2"/>
+
+    <text x="882" y="450" fill="#E85D26" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="54" font-weight="900">162</text>
+    <text x="1026" y="450" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">艘油轮</text>
+    <text x="882" y="484" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="400">一度滞留，回流仍带犹豫。</text>
+
+    <text x="882" y="550" fill="#E85D26" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="54" font-weight="900">28</text>
+    <text x="983" y="550" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">万美元/日</text>
+    <text x="882" y="584" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="400">部分油轮日租金接近高点。</text>
+
+    <text x="882" y="654" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="28" font-weight="900" letter-spacing="1">市场判断：</text>
+    <text x="1048" y="654" fill="#E85D26" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="28" font-weight="900" letter-spacing="1">先恢复航迹，再恢复信任</text>
+  </g>
+
+  <g id="annotations">
+    <line x1="690" y1="216" x2="822" y2="216" stroke="#E85D26" stroke-width="3"/>
+    <line x1="822" y1="216" x2="822" y2="286" stroke="#E85D26" stroke-width="3"/>
+    <circle cx="822" cy="286" r="7" fill="#E85D26"/>
+    <text x="642" y="204" text-anchor="end" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">通行恢复</text>
+
+    <line x1="690" y1="598" x2="812" y2="598" stroke="#F0ECE5" stroke-width="2"/>
+    <line x1="812" y1="598" x2="812" y2="550" stroke="#F0ECE5" stroke-width="2"/>
+    <circle cx="812" cy="550" r="6" fill="#F0ECE5"/>
+    <text x="642" y="606" text-anchor="end" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">信心滞后</text>
+  </g>
+</svg>

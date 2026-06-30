@@ -1,0 +1,11 @@
+{
+  "submit": {
+    "jobId": "bd4b2533-5e34-4dbd-90e0-e13f42ca87dd",
+    "status": "queued"
+  },
+  "result": {
+    "jobId": "bd4b2533-5e34-4dbd-90e0-e13f42ca87dd",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:broadside-campaign-story:02_agenda:ppt_master_runtime_slide_timeout"
+  }
+}

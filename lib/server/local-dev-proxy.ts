@@ -397,10 +397,6 @@ export async function proxyAwareFetch(
   const url = normalizeFetchUrl(input)
   const target = new URL(url)
 
-  if (overrideAgent === null) {
-    return nativeFetch(input, init)
-  }
-
   if (!overrideAgent && (!hasLocalDevProxyTransport() || shouldBypassLocalDevProxy(url))) {
     return nativeFetch(input, init)
   }
@@ -409,7 +405,7 @@ export async function proxyAwareFetch(
   const isHttps = target.protocol === "https:"
   const transport = isHttps ? https : http
   const { method, headers, body } = await normalizeFetchRequestData(input, init)
-  const agent = overrideAgent ?? getProxyAgentForUrl(url)
+  const agent = overrideAgent === null ? undefined : overrideAgent ?? getProxyAgentForUrl(url)
 
   return await new Promise<Response>((resolve, reject) => {
     if (init.signal?.aborted) {

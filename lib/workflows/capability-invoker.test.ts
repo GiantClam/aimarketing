@@ -18,10 +18,13 @@ const originalLoad = nodeModule._load
 let workflowImageGenerateBodies: Record<string, unknown>[] = []
 let leadToolPreviewBodies: Record<string, unknown>[] = []
 let leadToolDownloadBodies: Record<string, unknown>[] = []
+let aiChatBodies: Record<string, unknown>[] = []
 let taskPollCount = 0
 let taskPollResponses: Array<Record<string, unknown>> = []
 let sessionDetailCount = 0
 let sessionDetailResponses: Record<string, unknown>[] = []
+let enterpriseKnowledgeLoadCount = 0
+let personalKnowledgeLoadCount = 0
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "server-only" || request === "client-only") {
@@ -50,6 +53,23 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
 
     return { NextRequest: TestNextRequest }
+  }
+
+  if (request === "@/app/api/ai/chat/route") {
+    return {
+      POST: async (req: { json: () => Promise<Record<string, unknown>> }) => {
+        const body = await req.json()
+        aiChatBodies.push(body)
+        return new Response(
+          JSON.stringify({
+            message: `agent:${String(body.message || "")}`,
+            provider: "openai",
+            providerModel: "gpt-5-mini",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      },
+    }
   }
 
   if (request === "@/app/api/image-assistant/generate/route") {
@@ -155,10 +175,173 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/lib/platform/custom-agents") {
+    return {
+      getCustomAgentForUser: async ({ agentId }: { agentId: number }) => {
+        if (agentId === 41) {
+          return {
+            id: 41,
+            name: "Brand Agent",
+            summary: "Brand-safe writing agent",
+            status: "draft",
+            systemPrompt: "Stay on brand.",
+            goal: "Write concise launch messaging.",
+            scope: "Marketing only.",
+            guardrails: "Do not mention pricing.",
+            knowledgeBindings: [17],
+            knowledgeRetrievalPolicy: {
+              enterpriseDatasetIds: [81],
+            },
+            executionMode: "direct_agent",
+            linkedWorkflowId: null,
+          }
+        }
+
+        if (agentId === 42) {
+          return {
+            id: 42,
+            name: "Workflow Agent",
+            summary: "Delegates into a linked workflow",
+            status: "published",
+            systemPrompt: "Use the linked workflow.",
+            goal: null,
+            scope: null,
+            guardrails: null,
+            executionMode: "workflow_backed",
+            linkedWorkflowId: 501,
+          }
+        }
+
+        if (agentId === 43) {
+          return {
+            id: 43,
+            name: "Disabled Agent",
+            summary: "Should not execute.",
+            status: "disabled",
+            systemPrompt: "Do not execute.",
+            goal: null,
+            scope: null,
+            guardrails: null,
+            executionMode: "direct_agent",
+            linkedWorkflowId: null,
+          }
+        }
+
+        if (agentId === 44) {
+          return {
+            id: 44,
+            name: "Archived Workflow Agent",
+            summary: "Links to an archived workflow.",
+            status: "published",
+            systemPrompt: "Use the archived workflow.",
+            goal: null,
+            scope: null,
+            guardrails: null,
+            executionMode: "workflow_backed",
+            linkedWorkflowId: 502,
+          }
+        }
+
+        return null
+      },
+    }
+  }
+
+  if (request === "@/lib/workflows/store") {
+    return {
+      getWorkflowDefinition: async (workflowId: number) =>
+        workflowId === 501
+          ? {
+              id: 501,
+              enterpriseId: 151,
+              ownerUserId: 96,
+              title: "Delegated workflow",
+              slug: "delegated-workflow",
+              status: "draft",
+              triggerType: "manual",
+              description: null,
+              metadata: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              nodes: [
+                {
+                  nodeKey: "delegate-text",
+                  type: "text_input",
+                  title: "Delegate text",
+                  positionX: 0,
+                  positionY: 0,
+                  config: { text: "" },
+                },
+              ],
+              edges: [],
+            }
+          : workflowId === 502
+            ? {
+                id: 502,
+                enterpriseId: 151,
+                ownerUserId: 96,
+                title: "Archived delegated workflow",
+                slug: "archived-delegated-workflow",
+                status: "archived",
+                triggerType: "manual",
+                description: null,
+                metadata: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                nodes: [],
+                edges: [],
+              }
+          : null,
+    }
+  }
+
+  if (request === "@/lib/workflows/execution") {
+    return {
+      runWorkflowDefinition: async ({ nodes }: { nodes: Array<{ nodeKey: string; type: string; config: Record<string, unknown> }> }) => {
+        const syntheticTextNode = nodes.find((node) => node.nodeKey.includes("agent-42-input-text"))
+        return {
+          status: "succeeded",
+          finalNodeKeys: ["delegate-result"],
+          nodeStates: {
+            "delegate-result": {
+              output: {
+                text: [String(syntheticTextNode?.config?.text || "delegated")],
+              },
+            },
+          },
+        }
+      },
+    }
+  }
+
   if (request === "@/lib/auth/session") {
     return {
       applyInternalServiceAuthHeader: (headers: Headers) => {
         headers.set("x-aimarketing-internal-auth", "test-token")
+      },
+    }
+  }
+
+  if (request === "@/lib/knowledge/service") {
+    return {
+      loadEnterpriseKnowledgeContext: async () => {
+        enterpriseKnowledgeLoadCount += 1
+        return {
+          datasetsUsed: [],
+          snippets: [],
+        }
+      },
+    }
+  }
+
+  if (request === "@/lib/knowledge/personal-datasets") {
+    return {
+      loadPersonalKnowledgeContext: async () => {
+        personalKnowledgeLoadCount += 1
+        return {
+          datasetsUsed: [],
+          snippets: [],
+        }
       },
     }
   }
@@ -199,7 +382,6 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   }
 
   if (
-    request === "@/app/api/ai/chat/route" ||
     request === "@/app/api/platform/media/run/route" ||
     request === "@/app/api/platform/media/tasks/[taskId]/route" ||
     request === "@/app/api/video-agent/workflow/route" ||
@@ -510,6 +692,7 @@ test.beforeEach(() => {
   workflowImageGenerateBodies = []
   leadToolPreviewBodies = []
   leadToolDownloadBodies = []
+  aiChatBodies = []
   taskPollCount = 0
   taskPollResponses = []
   sessionDetailCount = 0
@@ -525,6 +708,8 @@ test.beforeEach(() => {
       }],
     },
   }]
+  enterpriseKnowledgeLoadCount = 0
+  personalKnowledgeLoadCount = 0
 })
 
 test.after(() => {
@@ -827,4 +1012,264 @@ test("workflow ppt capability forwards structured image inputs to preview genera
       role: "content",
     },
   ])
+})
+
+test("agent-platform direct agent forwards composed system prompt to ai chat", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  const result = await invoke({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    node: {
+      nodeKey: "agent-1",
+      type: "agent_execute",
+      title: "Brand Agent",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        customAgentId: 41,
+        systemPrompt: "Append compliance footer.",
+      },
+    },
+    input: {
+      text: ["Write a launch headline"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(aiChatBodies.length, 1)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Stay on brand."), true)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not mention pricing."), true)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Append compliance footer."), true)
+  assert.deepEqual(result.output.text, ["agent:Write a launch headline"])
+  assert.equal(result.metadata?.customAgentId, 41)
+})
+
+test("agent-platform direct agent does not auto-query knowledge when no knowledge_retrieve node exists", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  await invoke({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    node: {
+      nodeKey: "agent-no-knowledge-1",
+      type: "agent_execute",
+      title: "Brand Agent",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        customAgentId: 41,
+      },
+    },
+    input: {
+      text: ["Write a launch summary"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(enterpriseKnowledgeLoadCount, 0)
+  assert.equal(personalKnowledgeLoadCount, 0)
+})
+
+test("agent-platform builtin ai-entry agent routes through ai chat with agent config", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  const result = await invoke({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    node: {
+      nodeKey: "agent-builtin-1",
+      type: "agent_execute",
+      title: "Brand Strategy Advisor",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        agentId: "executive-brand",
+        systemPrompt: "Use a concise executive tone.",
+      },
+    },
+    input: {
+      text: ["Position our spring launch"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(aiChatBodies.length, 1)
+  assert.equal((aiChatBodies[0]?.agentConfig as { agentId?: string } | undefined)?.agentId, "executive-brand")
+  assert.equal(aiChatBodies[0]?.systemPrompt, "Use a concise executive tone.")
+  assert.deepEqual(result.output.text, ["agent:Position our spring launch"])
+  assert.equal(result.metadata?.builtinAgentId, "executive-brand")
+  assert.equal(result.metadata?.executionMode, "ai_entry_agent")
+})
+
+test("agent-platform workflow-backed agent delegates into the linked workflow graph", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+    workflowRecursionPath: [9],
+  })
+
+  const result = await invoke({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    node: {
+      nodeKey: "agent-2",
+      type: "agent_execute",
+      title: "Workflow Agent",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        customAgentId: 42,
+        prompt: "Summarize the workflow input",
+      },
+    },
+    input: {
+      text: ["Use upstream brief"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.deepEqual(result.output.text, ["Use upstream brief"])
+  assert.equal(result.metadata?.linkedWorkflowId, 501)
+})
+
+test("agent-platform rejects disabled custom agents before execution", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  await assert.rejects(
+    () =>
+      invoke({
+        nodeType: "agent_execute",
+        capabilitySlug: "agent-platform",
+        action: "chat",
+        node: {
+          nodeKey: "agent-disabled-1",
+          type: "agent_execute",
+          title: "Disabled agent",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            customAgentId: 43,
+          },
+        },
+        input: {
+          text: ["Should not run"],
+          asset: [],
+          image: [],
+          video: [],
+          audio: [],
+          ppt: [],
+        },
+      }),
+    /workflow_custom_agent_disabled/,
+  )
+})
+
+test("agent-platform rejects workflow-backed agents when the linked workflow is archived", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  await assert.rejects(
+    () =>
+      invoke({
+        nodeType: "agent_execute",
+        capabilitySlug: "agent-platform",
+        action: "chat",
+        node: {
+          nodeKey: "agent-archived-workflow-1",
+          type: "agent_execute",
+          title: "Archived workflow agent",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            customAgentId: 44,
+          },
+        },
+        input: {
+          text: ["Should not run"],
+          asset: [],
+          image: [],
+          video: [],
+          audio: [],
+          ppt: [],
+        },
+      }),
+    /workflow_custom_agent_linked_workflow_archived/,
+  )
 })

@@ -15,7 +15,7 @@ test("lead tool metadata uses localized canonical URLs for hub, tool pages, and 
   assert.equal(hubMetadata.alternates?.languages?.en?.toString(), "http://localhost:3000/en/tools")
 
   assert.deepEqual(toolMetadata.title, {
-    absolute: "AI PPT 快速预览 | AI Marketing",
+    absolute: "AI PPT 生成器 | AI Marketing",
   })
   assert.equal(toolMetadata.alternates?.canonical?.toString(), "http://localhost:3000/zh/tools/ai-ppt-preview")
   assert.equal(toolMetadata.alternates?.languages?.en?.toString(), "http://localhost:3000/en/tools/ai-ppt-preview")

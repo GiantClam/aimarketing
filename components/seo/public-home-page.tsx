@@ -1,24 +1,18 @@
 "use client"
 
+import NextImage from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ArrowRight,
   Bot,
   Calculator,
-  CheckCircle2,
-  Image,
-  LayoutGrid,
-  LineChart,
+  Image as ImageIcon,
   LockKeyhole,
-  Network,
   PenTool,
   PlayCircle,
-  Plug,
-  Search,
   Sparkles,
   Users2,
-  Workflow,
 } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
@@ -31,33 +25,156 @@ import { Button } from "@/components/ui/button"
 import { shouldShowDemoEntry } from "@/lib/auth/demo-entry-visibility"
 import { getPublicCopy } from "@/lib/i18n/public-copy"
 import { localizePublicPath } from "@/lib/i18n/routing"
-import { getLocalizedPlatformHubLinks } from "@/lib/platform/catalog"
 import type { PlatformRegistryControlEntry } from "@/lib/platform/control-plane"
 import { buildPlatformLaunchPath } from "@/lib/platform/launch-path"
 import { SEO_EVENT } from "@/lib/seo/analytics"
 
 const capabilityIcons = [Bot, Sparkles, Users2] as const
-const audienceIcons = [LineChart, Search, PenTool, LockKeyhole] as const
-const resourceIcons = [Bot, Calculator, PenTool, PlayCircle, Image, LockKeyhole, Sparkles] as const
-const platformHubIcons = {
-  capabilities: LayoutGrid,
-  agents: Users2,
-  plugins: Plug,
-  "mcp-services": Network,
-  workflows: Workflow,
-} as const
+const resourceIcons = [Bot, Calculator, PenTool, PlayCircle, ImageIcon, LockKeyhole, Sparkles] as const
 const platformCapabilityIcons = {
   "ai-chat": Bot,
   "ai-ppt": Sparkles,
-  "ai-image": Image,
+  "ai-image": ImageIcon,
   "ai-video": PlayCircle,
   "agent-platform": Users2,
+} as const
+
+const homepageVisuals = {
+  hero: {
+    src: "/homepage-redesign/hero.png",
+    width: 1536,
+    height: 1024,
+    alt: "AI Marketing homepage hero concept showing a product-led black, yellow, and white workspace design",
+  },
+  proof: {
+    src: "/homepage-redesign/proof.png",
+    width: 1693,
+    height: 929,
+    alt: "Before and after concept showing scattered AI tools converging into one AI Marketing workspace",
+  },
+  capabilities: {
+    src: "/homepage-redesign/capabilities.png",
+    width: 1536,
+    height: 1024,
+    alt: "Capabilities section concept with image-led cards for content, research, visuals, workflows, and team review",
+  },
+  workflow: {
+    src: "/homepage-redesign/workflow.png",
+    width: 1717,
+    height: 916,
+    alt: "Workflow demo concept showing a video storyboard from brief to launch asset",
+  },
+  useCases: {
+    src: "/homepage-redesign/use-cases.png",
+    width: 1717,
+    height: 916,
+    alt: "Use cases section concept showing audience workflows for marketing teams, SEO teams, creators, and founders",
+  },
+  finalCta: {
+    src: "/homepage-redesign/final-cta.png",
+    width: 1672,
+    height: 941,
+    alt: "Final call to action concept for moving one campaign into one workspace",
+  },
 } as const
 
 function getProviderStatusLabel(status: "active" | "fallback" | "planned", locale: "zh" | "en") {
   if (status === "active") return locale === "zh" ? "已接入" : "Active"
   if (status === "fallback") return locale === "zh" ? "兼容链路" : "Fallback"
   return locale === "zh" ? "规划中" : "Planned"
+}
+
+function getHomepageNarrative(locale: "zh" | "en") {
+  const isZh = locale === "zh"
+
+  return {
+    heroTitle: isZh ? "一份 brief，跑完整个 AI 营销流程" : "One brief. Every AI workflow.",
+    heroDescription: isZh
+      ? "把策划、调研、文案、图片、视频和复核放进同一个营销工作台。"
+      : "Plan, research, write, create visuals, and review work from one shared marketing workspace.",
+    watchDemo: isZh ? "看 90 秒演示" : "Watch demo",
+    proofTitle: isZh ? "不再反复重建同一份 brief" : "Stop rebuilding the same brief.",
+    proofDescription: isZh
+      ? "把活动上下文、产出资产和团队复核留在同一个空间。"
+      : "Keep campaign context, outputs, and reviews in one shared workspace.",
+    beforeLabel: isZh ? "之前" : "Before",
+    afterLabel: isZh ? "之后" : "After",
+    capabilityTitle: isZh ? "营销工作，不是又一个聊天窗口" : "Marketing work, not another chat tab.",
+    capabilityDescription: isZh
+      ? "让同一份活动上下文贯穿内容、调研、视觉和团队复核。"
+      : "One campaign context travels across content, research, visuals, and team review.",
+    workflowTitle: isZh ? "从 brief 到上线资产" : "From brief to launch asset.",
+    workflowDescription: isZh
+      ? "用视频化流程展示上下文如何穿过调研、文案、视觉和审批。"
+      : "A video-style flow shows the same context moving through research, copy, visuals, and approval.",
+    platformTitle: isZh ? "把工具入口整理成一个产品工作台" : "Turn tool entry points into a product workspace.",
+    platformDescription: isZh
+      ? "首页保留 SEO 和工具入口，但第一层表达先让用户看懂工作台本身。"
+      : "The homepage keeps SEO and tools reachable, while the first layer explains the workspace itself.",
+    audienceTitle: isZh ? "从每周重复的营销工作开始" : "Start with the workflow you repeat every week.",
+    audienceDescription: isZh
+      ? "先选择场景，再进入围绕这个任务组织好的工作台。"
+      : "Pick the job, then open the workspace organized around it.",
+    resourcesTitle: isZh ? "需要更细的决策信息？" : "Need the decision details?",
+    resourcesDescription: isZh
+      ? "价格、成本、替代方案和 SEO 页面放在后半段承接深度阅读。"
+      : "Pricing, costs, alternatives, and SEO pages stay lower on the page for deeper evaluation.",
+    finalTitle: isZh ? "先把一个活动放进同一个工作台" : "Move one campaign into one workspace.",
+    finalDescription: isZh
+      ? "从一份 brief 开始，让上下文贯穿每一种输出。"
+      : "Start with a brief. Keep the context through every output.",
+    openWorkspace: isZh ? "打开工作台" : "Open workspace",
+    exploreCapabilities: isZh ? "查看能力入口" : "Explore capabilities",
+    browseUseCases: isZh ? "浏览使用场景" : "Browse use cases",
+    viewPricing: isZh ? "查看价格" : "View pricing",
+    beforeTools: isZh
+      ? ["ChatGPT 对话", "Claude 文案", "Gemini 调研", "图片工具", "视频工具"]
+      : ["ChatGPT chat", "Claude copy", "Gemini research", "Image tool", "Video tool"],
+    workflowSteps: isZh ? ["Brief", "调研", "创作", "复核"] : ["Brief", "Research", "Create", "Review"],
+    visualTabs: isZh ? ["文案", "图片", "视频", "复核"] : ["Copy", "Image", "Video", "Review"],
+  }
+}
+
+function VisualPanel({
+  visual,
+  priority = false,
+  className = "",
+}: {
+  visual: (typeof homepageVisuals)[keyof typeof homepageVisuals]
+  priority?: boolean
+  className?: string
+}) {
+  return (
+    <div className={`relative overflow-hidden rounded-[12px] border border-foreground/10 bg-[#111] shadow-2xl ${className}`}>
+      <NextImage
+        src={visual.src}
+        alt={visual.alt}
+        width={visual.width}
+        height={visual.height}
+        priority={priority}
+        sizes="(min-width: 1024px) 58vw, 100vw"
+        className="h-full w-full object-cover"
+      />
+      <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+    </div>
+  )
+}
+
+function ProductDemoVisual() {
+  return (
+    <div className="relative min-h-[460px] overflow-hidden rounded-[12px] border border-foreground/10 bg-[#111] shadow-2xl">
+      <NextImage
+        src={homepageVisuals.hero.src}
+        alt={homepageVisuals.hero.alt}
+        width={homepageVisuals.hero.width}
+        height={homepageVisuals.hero.height}
+        priority
+        sizes="(min-width: 1024px) 58vw, 100vw"
+        className="h-full min-h-[460px] w-full object-cover object-right"
+      />
+      <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+    </div>
+  )
 }
 
 export function PublicHomePageContent({
@@ -72,7 +189,6 @@ export function PublicHomePageContent({
   const pricingHref = localizePublicPath("/pricing", locale)
   const toolsHref = localizePublicPath("/tools", locale)
   const useCasesHref = localizePublicPath("/use-cases/ai-workspace-for-marketing-teams", locale)
-  const platformHubs = getLocalizedPlatformHubLinks(locale)
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -103,259 +219,118 @@ export function PublicHomePageContent({
       <PublicSiteHeader />
 
       <main className="public-grid-bg">
-        <section className="public-page-hero-shell mx-auto max-w-7xl">
-          <div className="public-panel grid overflow-hidden rounded-[12px] bg-background/90 lg:grid-cols-[minmax(0,1.12fr)_390px]">
-            <div className="border-b border-border px-6 py-8 lg:border-b-0 lg:border-r lg:px-8 lg:py-10">
-              <div className="grid gap-6">
+        <section className="mx-auto max-w-7xl px-4 py-6 lg:py-8">
+          <div className="grid gap-5 lg:grid-cols-[0.84fr_1.16fr] lg:items-stretch">
+            <div className="public-panel flex min-h-[460px] flex-col justify-between overflow-hidden rounded-[12px] bg-background/94 px-6 py-7 lg:px-8 lg:py-8">
+              <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="public-kicker rounded-[6px] border border-primary/35 bg-primary px-3 py-1 text-primary-foreground">
-                    {copy.home.eyebrow}
-                  </span>
-                  <span className="public-system-chip public-kicker rounded-[4px] px-3 py-1 text-muted-foreground">
+                  <span className="public-kicker rounded-[4px] bg-primary px-3 py-1 text-primary-foreground">
                     {copy.home.systemLabel}
                   </span>
-                  <span className="inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
+                  <span className="inline-flex items-center gap-2 rounded-[4px] border border-foreground/15 px-3 py-1">
                     <span className="public-signal" aria-hidden="true" />
                     <span className="public-kicker text-muted-foreground">{copy.home.campaignControlLabel}</span>
                   </span>
                 </div>
 
-                <div className="max-w-5xl">
-                  <h1 className="public-display max-w-5xl text-[3.35rem] text-foreground sm:text-[4.75rem] lg:text-[6.4rem]">
-                    {copy.home.title}
-                  </h1>
-                  <p className="mt-6 max-w-3xl text-base leading-8 text-muted-foreground sm:text-lg">
-                    {copy.home.description}
-                  </p>
-                  <p className="mt-4 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base">{copy.home.supportingCopy}</p>
-                </div>
-
-                <div className="grid gap-3 sm:flex sm:flex-wrap">
-                  <Button size="lg" className="public-button-primary h-13 justify-between px-6 sm:min-w-[230px]" asChild>
-                    <TrackedCtaLink
-                      href="/register"
-                      eventName={SEO_EVENT.homepageCtaClick}
-                      eventData={{ placement: "hero", cta: "primary", destination: "/register" }}
-                    >
-                      {copy.home.primaryCta}
-                      <ArrowRight className="h-4 w-4" />
-                    </TrackedCtaLink>
-                  </Button>
-                  <Button size="lg" className="public-button-secondary h-13 px-6 sm:min-w-[230px]" asChild>
-                    <TrackedCtaLink
-                      href={pricingHref}
-                      eventName={SEO_EVENT.homepageCtaClick}
-                      eventData={{ placement: "hero", cta: "pricing", destination: pricingHref }}
-                    >
-                      {copy.home.compareCta}
-                    </TrackedCtaLink>
-                  </Button>
-                  <Button size="lg" className="public-button-secondary h-13 px-6 sm:min-w-[230px]" asChild>
-                    <TrackedCtaLink
-                      href={useCasesHref}
-                      eventName={SEO_EVENT.homepageCtaClick}
-                      eventData={{ placement: "hero", cta: "use_cases", destination: useCasesHref }}
-                    >
-                      {copy.home.calculatorCta}
-                    </TrackedCtaLink>
-                  </Button>
-                  {isDevelopment ? (
-                    <Button
-                      size="lg"
-                      variant="ghost"
-                      className="h-13 rounded-[8px] border border-dashed border-border bg-card px-6 font-display text-xs font-bold uppercase tracking-[0.08em] hover:bg-primary hover:text-primary-foreground"
-                      onClick={handleDemoLogin}
-                    >
-                      {copy.home.demoCta}
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-2 lg:grid-cols-3">
-                  {copy.home.trustPoints.map((point, index) => (
-                    <div
-                      key={point}
-                      className="public-tag grid grid-cols-[28px_minmax(0,1fr)] items-start gap-3 rounded-[8px] px-4 py-3 text-sm"
-                    >
-                      <span className="font-display text-base font-bold text-primary">{String(index + 1).padStart(2, "0")}</span>
-                      <span className="leading-6 text-foreground/88">{point}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <aside className="grid bg-card/70">
-              <div className="border-b border-border px-6 py-5">
-                <div className="public-kicker text-muted-foreground">{copy.home.replacementEyebrow}</div>
-                <div className="mt-2 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                  {copy.home.replacementTitle}
-                </div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">{copy.home.sharedOutputLabel}</p>
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <div className="public-system-chip rounded-[4px] px-3 py-2">
-                    <div className="public-kicker text-foreground/56">{copy.home.modeLabel}</div>
-                    <div className="mt-1 font-display text-sm font-bold uppercase tracking-[0.06em] text-foreground">
-                      {copy.home.modeValue}
-                    </div>
-                  </div>
-                  <div className="public-system-chip rounded-[4px] px-3 py-2">
-                    <div className="public-kicker text-foreground/56">{copy.home.statusLabel}</div>
-                    <div className="mt-1 inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-[0.06em] text-foreground">
-                      <span className="public-signal" aria-hidden="true" />
-                      {copy.home.statusValue}
-                    </div>
-                  </div>
-                </div>
+                <h1 className="public-display mt-8 max-w-[11ch] text-[3.45rem] text-foreground sm:text-[4.6rem] lg:text-[5.55rem]">
+                  {getHomepageNarrative(locale).heroTitle}
+                </h1>
+                <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
+                  {getHomepageNarrative(locale).heroDescription}
+                </p>
               </div>
 
-              <div className="grid gap-0">
-                {copy.home.replacementStack.map((tool, index) => (
-                  <div key={tool} className="grid grid-cols-[54px_minmax(0,1fr)] items-center border-b border-border px-6 py-4 last:border-b-0">
-                    <span className="font-display text-2xl font-extrabold text-foreground/20">{String(index + 1).padStart(2, "0")}</span>
-                    <span className="font-display text-lg font-bold uppercase tracking-[0.02em] text-foreground">{tool}</span>
-                  </div>
-                ))}
-              </div>
-            </aside>
-          </div>
-        </section>
-
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-3">
-            {copy.home.capabilityCards.map(({ title, description }, index) => {
-              const Icon = capabilityIcons[index]
-              return (
-                <article key={title} className="bg-card px-6 py-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="public-kicker text-muted-foreground">{copy.home.capabilityLabel(index + 1)}</div>
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
-                      <Icon className="h-5 w-5 text-primary-foreground" />
-                    </div>
-                  </div>
-                  <h2 className="mt-6 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                    {title}
-                  </h2>
-                  <p className="mt-3 max-w-md text-base leading-7 text-muted-foreground">{description}</p>
-                </article>
-              )
-            })}
-          </div>
-        </section>
-
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="grid gap-8 lg:grid-cols-[0.78fr_1.22fr]">
-            <div className="public-panel rounded-[12px] px-6 py-6 lg:px-7 lg:py-7">
-              <p className="public-kicker text-muted-foreground">{locale === "zh" ? "Platform Directories" : "Platform Directories"}</p>
-              <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
-                {locale === "zh" ? "把工具站扩成平台入口" : "Expand the toolsite into a platform front door"}
-              </h2>
-              <p className="mt-4 max-w-xl text-lg leading-8 text-muted-foreground">
-                {locale === "zh"
-                  ? "公开前台继续承接 SEO、注册和工具试用，但入口不再只停留在单点工具，而是可以直接进入能力中心、智能体广场、插件目录、MCP 服务和工作流模板。"
-                  : "The public front door still handles SEO, signup, and trial usage, but it no longer stops at one-off tools. It now opens directly into capabilities, agents, plugins, MCP services, and workflow templates."}
-              </p>
-              <div className="mt-5">
-                <Button className="public-button-primary h-10 px-4" asChild>
-                  <Link href={toolsHref}>
-                    {locale === "zh" ? "进入应用中心" : "Open app center"}
+              <div className="mt-8 grid gap-3 sm:flex sm:flex-wrap">
+                <Button size="lg" className="public-button-primary h-12 justify-between px-6 sm:min-w-[210px]" asChild>
+                  <TrackedCtaLink
+                    href="/register"
+                    eventName={SEO_EVENT.homepageCtaClick}
+                    eventData={{ placement: "hero", cta: "primary", destination: "/register" }}
+                  >
+                    {copy.home.primaryCta}
                     <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  </TrackedCtaLink>
                 </Button>
-              </div>
-              <div className="mt-6 grid gap-3">
-                {platformHubs.map((hub) => {
-                  const Icon = platformHubIcons[hub.slug as keyof typeof platformHubIcons] ?? LayoutGrid
-                  return (
-                    <Link
-                      key={hub.slug}
-                      href={localizePublicPath(hub.href, locale)}
-                      className="group rounded-[8px] border border-border bg-card/70 px-4 py-4 transition hover:border-primary/35 hover:bg-background"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
-                          <Icon className="h-5 w-5 text-primary-foreground" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-display text-xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                            {hub.title}
-                          </div>
-                          <p className="mt-2 text-sm leading-7 text-muted-foreground">{hub.summary}</p>
-                        </div>
-                      </div>
-                    </Link>
-                  )
-                })}
+                <Button size="lg" className="public-button-secondary h-12 justify-between px-6 sm:min-w-[210px]" asChild>
+                  <TrackedCtaLink
+                    href="#workflow-demo"
+                    eventName={SEO_EVENT.homepageCtaClick}
+                    eventData={{ placement: "hero", cta: "watch_demo", destination: "#workflow-demo" }}
+                  >
+                    {getHomepageNarrative(locale).watchDemo}
+                    <PlayCircle className="h-4 w-4" />
+                  </TrackedCtaLink>
+                </Button>
+                {isDevelopment ? (
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    className="h-12 rounded-[6px] border border-dashed border-border bg-card px-6 font-display text-xs font-bold uppercase tracking-[0.08em] hover:bg-primary hover:text-primary-foreground"
+                    onClick={handleDemoLogin}
+                  >
+                    {copy.home.demoCta}
+                  </Button>
+                ) : null}
               </div>
             </div>
 
-            <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border xl:grid-cols-2">
-              {platformCapabilities.map((item) => {
-                const Icon = platformCapabilityIcons[item.slug as keyof typeof platformCapabilityIcons] ?? Sparkles
+            <ProductDemoVisual />
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 py-6 lg:py-8">
+          <div className="grid gap-5 lg:grid-cols-[0.62fr_1.38fr] lg:items-stretch">
+            <div className="public-panel rounded-[12px] px-6 py-7 lg:px-7">
+              <p className="public-kicker text-muted-foreground">{copy.home.replacementEyebrow}</p>
+              <h2 className="mt-4 max-w-lg font-display text-4xl font-extrabold uppercase leading-[0.94] tracking-[-0.04em] text-foreground sm:text-5xl">
+                {getHomepageNarrative(locale).proofTitle}
+              </h2>
+              <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">{getHomepageNarrative(locale).proofDescription}</p>
+            </div>
+
+            <VisualPanel visual={homepageVisuals.proof} className="min-h-[320px]" />
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 py-8 lg:py-10">
+          <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+            <div className="max-w-3xl">
+              <h2 className="font-display text-5xl font-extrabold uppercase leading-[0.94] tracking-[-0.04em] text-foreground">
+                {getHomepageNarrative(locale).capabilityTitle}
+              </h2>
+              <p className="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">{getHomepageNarrative(locale).capabilityDescription}</p>
+            </div>
+            <Button className="public-button-secondary h-12 px-5" asChild>
+              <TrackedCtaLink
+                href={toolsHref}
+                eventName={SEO_EVENT.homepageCtaClick}
+                eventData={{ placement: "capabilities", cta: "explore_tools", destination: toolsHref }}
+              >
+                {getHomepageNarrative(locale).exploreCapabilities}
+              </TrackedCtaLink>
+            </Button>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[1.24fr_0.76fr]">
+            <VisualPanel visual={homepageVisuals.capabilities} className="min-h-[520px]" />
+            <div className="grid gap-3">
+              {copy.home.capabilityCards.map(({ title, description }, index) => {
+                const Icon = capabilityIcons[index]
                 return (
-                  <article key={item.slug} className="bg-card px-6 py-6">
+                  <article key={title} className="rounded-[12px] border border-border bg-card p-5">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-3">
-                        <div className="public-kicker text-muted-foreground">
-                          {item.capabilityKind?.toUpperCase() || "CAPABILITY"}
-                        </div>
-                        <h3 className="font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                          {item.title}
+                      <div>
+                        <div className="public-kicker text-muted-foreground">{copy.home.capabilityLabel(index + 1)}</div>
+                        <h3 className="mt-3 font-display text-2xl font-extrabold uppercase leading-none tracking-[-0.02em] text-foreground">
+                          {title}
                         </h3>
                       </div>
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-primary">
                         <Icon className="h-5 w-5 text-primary-foreground" />
                       </div>
                     </div>
-
-                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{item.summary}</p>
-
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {(item.bindings ?? []).map((binding) => (
-                        <span key={`${item.slug}-${binding.provider}`} className="public-system-chip rounded-[4px] px-3 py-2 text-xs leading-5 text-muted-foreground">
-                          {binding.provider} · {getProviderStatusLabel(binding.status, locale)}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="mt-5 space-y-2">
-                      {item.proofPoints.slice(0, 2).map((point) => (
-                        <div key={point} className="public-tag rounded-[6px] px-3 py-2 text-sm text-foreground/82">
-                          {point}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      {item.publicHref ? (
-                        <Button className="public-button-primary h-10 px-4" asChild>
-                          <Link
-                            href={buildPlatformLaunchPath({
-                              itemType: "capability",
-                              slug: item.slug,
-                              surface: "public",
-                              locale,
-                            })}
-                          >
-                            {locale === "zh" ? "打开入口" : "Open Entry"}
-                          </Link>
-                        </Button>
-                      ) : null}
-                      {item.workspaceHref ? (
-                        <Button className="public-button-secondary h-10 px-4" asChild>
-                          <Link
-                            href={buildPlatformLaunchPath({
-                              itemType: "capability",
-                              slug: item.slug,
-                              surface: "workspace",
-                              locale,
-                            })}
-                          >
-                            {locale === "zh" ? "企业工作台" : "Workspace"}
-                          </Link>
-                        </Button>
-                      ) : null}
-                    </div>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">{description}</p>
                   </article>
                 )
               })}
@@ -363,189 +338,209 @@ export function PublicHomePageContent({
           </div>
         </section>
 
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="grid gap-8 lg:grid-cols-[0.82fr_1.18fr]">
-            <div className="public-panel rounded-[12px] px-6 py-6 lg:px-7 lg:py-7">
-              <p className="public-kicker text-muted-foreground">{copy.home.workflowEyebrow}</p>
-              <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
-                {copy.home.workflowTitle}
-              </h2>
-              <p className="mt-4 max-w-xl text-lg leading-8 text-muted-foreground">{copy.home.workflowDescription}</p>
-            </div>
+        <section id="workflow-demo" className="mx-auto max-w-7xl px-4 py-8 lg:py-10">
+          <div className="overflow-hidden rounded-[12px] border border-foreground/15 bg-[#111] text-white">
+            <div className="grid gap-7 px-6 py-8 lg:px-8 lg:py-10">
+              <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+                <div className="max-w-3xl">
+                  <h2 className="font-display text-5xl font-extrabold uppercase leading-[0.94] tracking-[-0.04em] text-white">
+                    {getHomepageNarrative(locale).workflowTitle}
+                  </h2>
+                  <p className="mt-4 max-w-2xl text-lg leading-8 text-white/68">{getHomepageNarrative(locale).workflowDescription}</p>
+                </div>
+                <Button className="h-12 rounded-[6px] border border-primary/40 bg-primary px-5 font-display text-xs font-extrabold uppercase tracking-[0.08em] text-primary-foreground hover:bg-primary/92" asChild>
+                  <TrackedCtaLink
+                    href={toolsHref}
+                    eventName={SEO_EVENT.homepageCtaClick}
+                    eventData={{ placement: "workflow", cta: "watch_walkthrough", destination: toolsHref }}
+                  >
+                    {getHomepageNarrative(locale).watchDemo}
+                    <PlayCircle className="h-4 w-4" />
+                  </TrackedCtaLink>
+                </Button>
+              </div>
 
-            <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border">
-              {copy.home.workflows.map((step, index) => (
-                <article key={step.title} className="grid gap-4 bg-card px-6 py-5 lg:grid-cols-[72px_minmax(0,1fr)]">
-                  <div className="font-display text-5xl font-extrabold leading-none text-primary">{String(index + 1).padStart(2, "0")}</div>
-                  <div>
-                    <h3 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                      {step.title}
-                    </h3>
-                    <p className="mt-2 text-base leading-7 text-muted-foreground">{step.description}</p>
-                  </div>
-                </article>
-              ))}
+              <VisualPanel visual={homepageVisuals.workflow} className="min-h-[430px] border-white/10" />
             </div>
           </div>
         </section>
 
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="flex flex-col justify-between gap-6 border-b border-border pb-6 md:flex-row md:items-end">
-            <div>
-              <p className="public-kicker text-muted-foreground">{copy.home.audienceEyebrow}</p>
-              <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
-                {copy.home.audienceTitle}
+        <section className="mx-auto max-w-7xl px-4 py-8 lg:py-10">
+          <div className="grid gap-5 lg:grid-cols-[0.68fr_1.32fr]">
+            <div className="public-panel rounded-[12px] px-6 py-7 lg:px-7">
+              <p className="public-kicker text-muted-foreground">{locale === "zh" ? "Platform" : "Platform"}</p>
+              <h2 className="mt-4 font-display text-5xl font-extrabold uppercase leading-[0.94] tracking-[-0.04em] text-foreground">
+                {getHomepageNarrative(locale).platformTitle}
               </h2>
+              <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">{getHomepageNarrative(locale).platformDescription}</p>
+              <div className="mt-6">
+                <Button className="public-button-primary h-11 px-5" asChild>
+                  <Link href={toolsHref}>
+                    {getHomepageNarrative(locale).openWorkspace}
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
             </div>
-            <Button className="public-button-secondary h-12 px-5" asChild>
-              <TrackedCtaLink
-                href={useCasesHref}
-                eventName={SEO_EVENT.homepageCtaClick}
-                eventData={{ placement: "solutions", cta: "explore_solutions", destination: useCasesHref }}
-              >
-                {copy.home.exploreSolutionsCta}
-              </TrackedCtaLink>
-            </Button>
-          </div>
 
-          <div className="mt-8 grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-2 xl:grid-cols-4">
-            {copy.home.audienceCards.map(({ title, description, href }, index) => {
-              const Icon = audienceIcons[index] || Sparkles
-              return (
-                <Link
-                  key={title}
-                  href={href}
-                  className="group bg-card px-6 py-6 transition hover:bg-background"
+            <div className="grid gap-3 md:grid-cols-2">
+              {platformCapabilities.slice(0, 4).map((item) => {
+                const Icon = platformCapabilityIcons[item.slug as keyof typeof platformCapabilityIcons] ?? Sparkles
+                return (
+                  <article key={item.slug} className="rounded-[12px] border border-border bg-card p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="public-kicker text-muted-foreground">{item.capabilityKind?.toUpperCase() || "CAPABILITY"}</div>
+                        <h3 className="mt-3 font-display text-2xl font-extrabold uppercase leading-none tracking-[-0.02em] text-foreground">{item.title}</h3>
+                      </div>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-primary">
+                        <Icon className="h-5 w-5 text-primary-foreground" />
+                      </div>
+                    </div>
+                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{item.summary}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {(item.bindings ?? []).slice(0, 2).map((binding) => (
+                        <span key={`${item.slug}-${binding.provider}`} className="public-system-chip rounded-[4px] px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
+                          {binding.provider} · {getProviderStatusLabel(binding.status, locale)}
+                        </span>
+                      ))}
+                    </div>
+                    {item.publicHref ? (
+                      <Link
+                        href={buildPlatformLaunchPath({
+                          itemType: "capability",
+                          slug: item.slug,
+                          surface: "public",
+                          locale,
+                        })}
+                        className="mt-5 inline-flex items-center gap-2 font-display text-xs font-extrabold uppercase tracking-[0.12em] text-foreground transition hover:text-primary-foreground hover:[text-shadow:0_0_0_var(--foreground)]"
+                      >
+                        {locale === "zh" ? "打开入口" : "Open entry"}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    ) : null}
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 py-8 lg:py-10">
+          <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+            <VisualPanel visual={homepageVisuals.useCases} className="min-h-[430px]" />
+
+            <div className="public-panel rounded-[12px] px-6 py-7 lg:px-7">
+              <p className="public-kicker text-muted-foreground">{copy.home.audienceEyebrow}</p>
+              <h2 className="mt-4 font-display text-5xl font-extrabold uppercase leading-[0.94] tracking-[-0.04em] text-foreground">
+                {getHomepageNarrative(locale).audienceTitle}
+              </h2>
+              <p className="mt-5 text-base leading-7 text-muted-foreground">{getHomepageNarrative(locale).audienceDescription}</p>
+              <Button className="public-button-secondary mt-6 h-11 px-5" asChild>
+                <TrackedCtaLink
+                  href={useCasesHref}
+                  eventName={SEO_EVENT.homepageCtaClick}
+                  eventData={{ placement: "solutions", cta: "explore_solutions", destination: useCasesHref }}
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="public-kicker text-muted-foreground">{copy.home.useCaseLabel(index + 1)}</div>
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
+                  {getHomepageNarrative(locale).browseUseCases}
+                </TrackedCtaLink>
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 py-8 lg:py-10">
+          <div className="grid gap-5">
+            <div className="public-panel rounded-[12px] px-6 py-6 lg:px-7">
+              <div className="grid gap-5 lg:grid-cols-[0.72fr_1fr_auto] lg:items-end">
+                <div>
+                  <p className="public-kicker text-muted-foreground">{locale === "zh" ? "Decision layer" : "Decision layer"}</p>
+                  <h2 className="mt-3 max-w-2xl font-display text-4xl font-extrabold uppercase leading-[0.94] tracking-[-0.04em] text-foreground sm:text-5xl">
+                    {getHomepageNarrative(locale).resourcesTitle}
+                  </h2>
+                </div>
+                <p className="max-w-xl text-base leading-7 text-muted-foreground lg:pb-1">
+                  {getHomepageNarrative(locale).resourcesDescription}
+                </p>
+                <Button className="public-button-secondary h-11 px-5 lg:self-end" asChild>
+                  <TrackedCtaLink
+                    href={pricingHref}
+                    eventName={SEO_EVENT.homepageCtaClick}
+                    eventData={{ placement: "pricing", cta: "open_pricing", destination: pricingHref }}
+                  >
+                    {getHomepageNarrative(locale).viewPricing}
+                  </TrackedCtaLink>
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-[12px] border border-border bg-card p-3">
+              <PublicPricingGrid compact />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {copy.home.resources.slice(0, 4).map(({ label, title, href }, index) => {
+                const Icon = resourceIcons[index]
+                return (
+                  <Link key={href} href={href} className="group flex items-center gap-4 rounded-[10px] border border-border bg-card px-4 py-4 transition hover:border-primary/60 hover:bg-background">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-primary">
                       <Icon className="h-5 w-5 text-primary-foreground" />
                     </div>
-                  </div>
-                  <h3 className="mt-6 font-display text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                    {title}
-                  </h3>
-                  <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">{description}</p>
-                  <div className="mt-5 font-display text-xs font-bold uppercase tracking-[0.16em] text-foreground/58 group-hover:text-foreground">
-                    {copy.home.openDetailLabel}
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        </section>
-
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-3">
-            {copy.home.resources.map(({ label, title, href }, index) => {
-              const Icon = resourceIcons[index]
-              return (
-                <Link key={href} href={href} className="group flex items-center gap-4 bg-card px-5 py-5 transition hover:bg-background">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-primary/30 bg-primary/95">
-                    <Icon className="h-5 w-5 text-primary-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="public-kicker text-muted-foreground">{label}</p>
-                    <h3 className="mt-1 font-display text-xl font-extrabold uppercase tracking-[0.02em] text-foreground">
-                      {title}
-                    </h3>
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        </section>
-
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="flex flex-col justify-between gap-6 border-b border-border pb-6 md:flex-row md:items-end">
-            <div className="max-w-3xl">
-              <p className="public-kicker text-muted-foreground">{copy.home.pricingEyebrow}</p>
-              <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
-                {copy.home.pricingTitle}
-              </h2>
-              <p className="mt-4 text-lg leading-8 text-muted-foreground">{copy.home.pricingDescription}</p>
+                    <div className="min-w-0">
+                      <p className="public-kicker text-muted-foreground">{label}</p>
+                      <h3 className="mt-1 line-clamp-2 font-display text-lg font-extrabold uppercase leading-tight tracking-[0.01em] text-foreground">{title}</h3>
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
-            <Button className="public-button-secondary h-12 px-5" asChild>
-              <TrackedCtaLink
-                href={pricingHref}
-                eventName={SEO_EVENT.homepageCtaClick}
-                eventData={{ placement: "pricing", cta: "open_pricing", destination: pricingHref }}
-              >
-                {copy.home.pricingCta}
-              </TrackedCtaLink>
-            </Button>
-          </div>
-
-          <div className="mt-8">
-            <PublicPricingGrid compact />
           </div>
         </section>
 
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="border-b border-border pb-6">
-            <p className="public-kicker text-muted-foreground">{copy.home.faqEyebrow}</p>
-            <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-foreground">
-              {copy.home.faqTitle}
-            </h2>
-          </div>
-
-          <div className="mt-8 grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-2">
+        <section className="mx-auto max-w-7xl px-4 py-8 lg:py-10">
+          <div className="grid gap-px overflow-hidden rounded-[12px] border border-border bg-border lg:grid-cols-2">
             {copy.home.faqs.map((faq) => (
               <article key={faq.question} className="bg-card px-6 py-6">
-                <h3 className="font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">{faq.question}</h3>
+                <h3 className="font-display text-2xl font-extrabold uppercase leading-tight tracking-[-0.01em] text-foreground">{faq.question}</h3>
                 <p className="mt-3 text-base leading-7 text-muted-foreground">{faq.answer}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="public-page-section-shell mx-auto max-w-7xl">
-          <div className="overflow-hidden rounded-[12px] border border-primary/30 bg-primary text-primary-foreground shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]">
-            <div className="grid gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:px-8 lg:py-10">
-              <div className="max-w-3xl">
-                <p className="public-kicker text-primary-foreground/60">{copy.home.finalEyebrow}</p>
-                <h2 className="mt-3 font-display text-5xl font-extrabold uppercase tracking-[-0.04em] text-primary-foreground">
-                  {copy.home.finalTitle}
-                </h2>
-                <p className="mt-4 text-lg leading-8 text-primary-foreground/80">{copy.home.finalDescription}</p>
+        <section className="mx-auto max-w-7xl px-4 py-8 lg:py-12">
+          <div className="relative overflow-hidden rounded-[12px] border border-foreground/15 bg-[#111] px-6 py-10 text-white lg:px-8 lg:py-12">
+            <div className="absolute inset-x-0 bottom-0 h-28 bg-primary" />
+            <div className="relative mx-auto max-w-3xl text-center">
+              <h2 className="font-display text-5xl font-extrabold uppercase leading-[0.94] tracking-[-0.04em] text-white sm:text-6xl">
+                {getHomepageNarrative(locale).finalTitle}
+              </h2>
+              <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-white/72">{getHomepageNarrative(locale).finalDescription}</p>
 
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <Button size="lg" className="h-12 rounded-[8px] border border-primary-foreground/20 bg-accent px-6 font-display text-xs font-bold uppercase tracking-[0.08em] text-accent-foreground hover:bg-accent/92" asChild>
-                    <TrackedCtaLink
-                      href="/register"
-                      eventName={SEO_EVENT.homepageCtaClick}
-                      eventData={{ placement: "final_cta", cta: "primary", destination: "/register" }}
-                    >
-                      {copy.home.primaryCta}
-                    </TrackedCtaLink>
-                  </Button>
-                  <Button size="lg" className="h-12 rounded-[8px] border border-primary-foreground/30 bg-transparent px-6 font-display text-xs font-bold uppercase tracking-[0.08em] text-primary-foreground hover:bg-primary-foreground/10" asChild>
-                    <TrackedCtaLink
-                      href={useCasesHref}
-                      eventName={SEO_EVENT.homepageCtaClick}
-                      eventData={{ placement: "final_cta", cta: "use_cases", destination: useCasesHref }}
-                    >
-                      {copy.home.calculatorCta}
-                    </TrackedCtaLink>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-px self-stretch overflow-hidden rounded-[8px] border border-primary-foreground/18 bg-primary-foreground/18">
-                {copy.home.trustPoints.slice(0, 3).map((point, index) => (
-                  <div key={point} className="grid grid-cols-[26px_minmax(0,1fr)] gap-3 bg-primary px-4 py-4">
-                    <CheckCircle2 className="mt-1 h-4 w-4 text-primary-foreground/72" />
-                    <div>
-                      <div className="font-display text-sm font-bold uppercase tracking-[0.08em] text-primary-foreground/62">
-                        {copy.home.signalLabel(index + 1)}
-                      </div>
-                      <div className="mt-1 text-sm leading-6 text-primary-foreground/82">{point}</div>
-                    </div>
-                  </div>
-                ))}
+              <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+                <Button size="lg" className="h-12 rounded-[6px] border border-primary bg-primary px-6 font-display text-xs font-extrabold uppercase tracking-[0.08em] text-primary-foreground hover:bg-primary/92" asChild>
+                  <TrackedCtaLink
+                    href="/register"
+                    eventName={SEO_EVENT.homepageCtaClick}
+                    eventData={{ placement: "final_cta", cta: "primary", destination: "/register" }}
+                  >
+                    {copy.home.primaryCta}
+                    <ArrowRight className="h-4 w-4" />
+                  </TrackedCtaLink>
+                </Button>
+                <Button size="lg" className="h-12 rounded-[6px] border border-white/24 bg-transparent px-6 font-display text-xs font-extrabold uppercase tracking-[0.08em] text-white hover:bg-white/10" asChild>
+                  <TrackedCtaLink
+                    href={pricingHref}
+                    eventName={SEO_EVENT.homepageCtaClick}
+                    eventData={{ placement: "final_cta", cta: "pricing", destination: pricingHref }}
+                  >
+                    {getHomepageNarrative(locale).viewPricing}
+                  </TrackedCtaLink>
+                </Button>
               </div>
             </div>
+
+            <VisualPanel visual={homepageVisuals.finalCta} className="relative mx-auto mt-10 max-w-5xl border-white/12" />
           </div>
         </section>
 

@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Check, ChevronDown, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PencilLine, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/components/workflows/workflow-agent-options"
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas"
 import { WorkflowNodeConfigPanel } from "@/components/workflows/workflow-node-config-panel"
 import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palette"
@@ -27,6 +31,13 @@ import {
   reconcileWorkflowImagePromptReferences,
   replaceWorkflowImagePromptAliasTokensBatch,
 } from "@/lib/workflows/image-prompt-references"
+import {
+  createEmptyEnterpriseWorkflowPreset,
+  listEnterpriseWorkflowPresets,
+  upsertEnterpriseWorkflowPresetsMetadata,
+  type EnterpriseWorkflowPreset,
+} from "@/lib/workflows/presets"
+import { applyEnterpriseWorkflowPresetDraft, cloneEnterpriseWorkflowPreset } from "@/lib/workflows/preset-editor"
 import { resolveWorkflowResumeNodeExecution } from "@/lib/workflows/manual-resume"
 import { isWorkflowResumeCompatible } from "@/lib/workflows/resume-compatibility"
 import { buildWorkflowRunStatusPath } from "@/lib/workflows/run-status-path"
@@ -109,6 +120,12 @@ type WorkflowRunStatusSnapshot = {
   statusPath?: string
 }
 
+type EnterprisePresetEditorState = {
+  draft: EnterpriseWorkflowPreset
+  original: EnterpriseWorkflowPreset | null
+  isNew: boolean
+}
+
 type WorkflowRunStartResponse = WorkflowRunResultsDetail & {
   executionMode?: "fresh" | "resume"
   resumedFrom?: {
@@ -180,6 +197,7 @@ function buildSnapshot(workflow: SerializedWorkflowDefinition) {
     title: workflow.title,
     description: workflow.description,
     status: workflow.status,
+    metadata: workflow.metadata,
     nodes: workflow.nodes,
     edges: workflow.edges,
   })
@@ -222,6 +240,10 @@ function resolveLatestExecutionTimestamp(execution: WorkflowRunResultsDetail["no
     execution.createdAt ??
     ""
   )
+}
+
+function parsePresetListInput(value: string) {
+  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))]
 }
 
 function collapseNodeExecutionsToLatest(detail: WorkflowRunResultsDetail | null) {
@@ -327,7 +349,11 @@ function buildNode(
   llmModelCatalog: WorkflowLlmModelCatalog,
   workflowImageProviderOptions: WorkflowImageProviderOption[],
   voiceOptions: WorkflowVoiceOption[],
+  builtinAgents: WorkflowBuiltinAgentOption[],
+  customAgents: WorkflowCustomAgentOption[],
   position?: { x: number; y: number },
+  initialConfig?: Record<string, unknown>,
+  titleOverride?: string,
 ) {
   const index = nodes.length
   const column = index % 3
@@ -336,7 +362,7 @@ function buildNode(
   return {
     nodeKey: buildNodeKey(type, nodes),
     type,
-    title: getDefaultWorkflowNodeTitle(type, locale),
+    title: titleOverride?.trim() || getDefaultWorkflowNodeTitle(type, locale),
     positionX: position?.x ?? 96 + column * 320,
     positionY: position?.y ?? 96 + row * 420,
     config:
@@ -355,6 +381,12 @@ function buildNode(
                 selectedProviderId: llmModelCatalog.defaultProviderId,
                 selectedModelId: llmModelCatalog.defaultModelId,
               }
+            : type === "agent_execute"
+              ? {
+                  customAgentId: customAgents[0]?.id ?? null,
+                  agentId: customAgents[0] ? null : builtinAgents[0]?.id ?? null,
+                  prompt: "",
+                }
             : type === "image_generate"
               ? {
                   selectedProviderId: workflowImageProviderOptions[0]?.providerId || "pptoken",
@@ -405,13 +437,13 @@ function buildNode(
                         volume: "1",
                         pitch: "1",
                       }
-                : type === "audio_generate"
-                  ? {
-                      genre: "electronic-pop",
-                      mood: "uplifting",
-                      vocals: "instrumental",
-                      lyricsSource: "ai_generate",
-                    }
+                  : type === "audio_generate"
+                    ? {
+                        genre: "electronic-pop",
+                        mood: "uplifting",
+                        vocals: "instrumental",
+                        lyricsSource: "ai_generate",
+                      }
                   : type === "ppt_generate"
                     ? {
                         pageCount: 8,
@@ -420,11 +452,29 @@ function buildNode(
                         scenario: "marketing-campaign",
                         templateMode: "auto-4",
                       }
+                    : type === "knowledge_retrieve"
+                      ? {
+                          selectedDatasetIds: [],
+                          selectedPersonalDatasetIds: [],
+                          topK: 4,
+                          prompt: "",
+                        }
+                      : type === "knowledge_write"
+                        ? {
+                            datasetId: null,
+                            datasetScope: "enterprise",
+                            knowledgeCategory: "general",
+                            documentTitle: "",
+                          }
                     : type === "product_store"
                       ? {
                           libraryTarget: "asset_library",
+                          persistToWorkLibrary: false,
+                          persistToKnowledgeBase: false,
+                          knowledgeTargetType: "knowledge_base",
                         }
           : {},
+        ...(initialConfig ?? {}),
   } satisfies WorkflowDefinitionNode
 }
 
@@ -480,6 +530,8 @@ export function WorkflowBuilderPage({
   llmModelCatalog,
   workflowImageProviderOptions,
   voiceOptions,
+  builtinAgents,
+  customAgents,
   initialLatestRunDetail = null,
   initialLatestRunId = null,
 }: {
@@ -489,9 +541,12 @@ export function WorkflowBuilderPage({
   llmModelCatalog: WorkflowLlmModelCatalog
   workflowImageProviderOptions: WorkflowImageProviderOption[]
   voiceOptions: WorkflowVoiceOption[]
+  builtinAgents: WorkflowBuiltinAgentOption[]
+  customAgents: WorkflowCustomAgentOption[]
   initialLatestRunDetail?: WorkflowRunResultsDetail | null
   initialLatestRunId?: number | null
 }) {
+  const router = useRouter()
   const canvasShellRef = useRef<HTMLDivElement | null>(null)
   const dragMovedRef = useRef<Record<FloatingControlKey, boolean>>({
     library: false,
@@ -513,13 +568,93 @@ export function WorkflowBuilderPage({
   const [controlDragState, setControlDragState] = useState<FloatingControlDragState | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [publishPanelOpen, setPublishPanelOpen] = useState(false)
+  const [publishPending, setPublishPending] = useState(false)
+  const [publishName, setPublishName] = useState(`${initialWorkflow.title} Agent`)
+  const [publishSummary, setPublishSummary] = useState(initialWorkflow.description || "")
+  const [publishSystemPrompt, setPublishSystemPrompt] = useState("")
+  const [publishVisibility, setPublishVisibility] = useState<"private" | "shared">("private")
   const [latestRunDetail, setLatestRunDetail] = useState<WorkflowRunResultsDetail | null>(initialLatestRunDetail)
   const [savedSnapshot, setSavedSnapshot] = useState(() => buildSnapshot(initialWorkflow))
+  const [presetEditors, setPresetEditors] = useState<Record<string, EnterprisePresetEditorState>>({})
   const latestRunRequestInFlightRef = useRef(false)
   const assetCandidatesRequestedRef = useRef(false)
   const latestRunInitialFetchRequestedRef = useRef(false)
+  const presetCopy =
+    locale === "zh"
+      ? {
+          title: "Enterprise Presets",
+          description: "把行业、品牌语气、默认渠道和审查规则直接挂在 workflow 上，运行时自动带入，不会自动插入知识库节点。",
+          add: "新增预设",
+          edit: "编辑",
+          confirm: "确定",
+          cancel: "取消",
+          collapse: "收起",
+          empty: "当前还没有企业预设。至少配置一个默认预设，便于运行时自动注入品牌和渠道上下文。",
+          setDefault: "设为默认",
+          remove: "删除",
+          name: "预设名称",
+          industry: "行业",
+          audience: "目标受众",
+          brandVoice: "品牌语气",
+          channels: "默认渠道",
+          reviewRules: "审查规则",
+          bannedTerms: "禁用词",
+          notes: "备注",
+          knowledgeDatasets: "允许知识源 ID",
+          listHint: "用逗号或换行分隔",
+          idHint: "仅配置允许范围，不会自动加入 knowledge_retrieve 节点。",
+          defaultBadge: "Default",
+          editingBadge: "编辑中",
+        }
+      : {
+          title: "Enterprise presets",
+          description: "Attach industry, brand voice, default channels, and review rules to this workflow so runs inherit them without auto-inserting knowledge nodes.",
+          add: "Add preset",
+          edit: "Edit",
+          confirm: "Confirm",
+          cancel: "Cancel",
+          collapse: "Collapse",
+          empty: "No enterprise presets yet. Keep at least one default preset so runs inherit brand and channel context.",
+          setDefault: "Set default",
+          remove: "Remove",
+          name: "Preset name",
+          industry: "Industry",
+          audience: "Audience",
+          brandVoice: "Brand voice",
+          channels: "Default channels",
+          reviewRules: "Review rules",
+          bannedTerms: "Banned terms",
+          notes: "Notes",
+          knowledgeDatasets: "Allowed knowledge IDs",
+          listHint: "Use commas or new lines",
+          idHint: "This only defines the allowed scope. It does not auto-add knowledge_retrieve nodes.",
+          defaultBadge: "Default",
+          editingBadge: "Editing",
+        }
 
   const dirty = useMemo(() => buildSnapshot(workflow) !== savedSnapshot, [savedSnapshot, workflow])
+  const enterprisePresets = useMemo(
+    () => listEnterpriseWorkflowPresets(workflow.metadata, locale),
+    [locale, workflow.metadata],
+  )
+  const displayedEnterprisePresets = useMemo(() => {
+    const persistedPresetIds = new Set(enterprisePresets.map((preset) => preset.id))
+    const persistedItems = enterprisePresets.map((preset) => ({
+      preset: presetEditors[preset.id]?.draft ?? preset,
+      isEditing: Boolean(presetEditors[preset.id]),
+      isNew: false,
+    }))
+    const draftOnlyItems = Object.values(presetEditors)
+      .filter((editor) => editor.isNew && !persistedPresetIds.has(editor.draft.id))
+      .map((editor) => ({
+        preset: editor.draft,
+        isEditing: true,
+        isNew: true,
+      }))
+
+    return [...persistedItems, ...draftOnlyItems]
+  }, [enterprisePresets, presetEditors])
   const latestRunMatchesWorkflow = useMemo(
     () => (latestRunDetail ? isWorkflowResumeCompatible(workflow, latestRunDetail.workflow) : true),
     [latestRunDetail, workflow],
@@ -542,6 +677,62 @@ export function WorkflowBuilderPage({
   const selectedNode = useMemo(
     () => workflow.nodes.find((node) => node.nodeKey === selectedNodeKey) ?? null,
     [selectedNodeKey, workflow.nodes],
+  )
+  const updateEnterprisePresets = useCallback(
+    (updater: (current: EnterpriseWorkflowPreset[]) => EnterpriseWorkflowPreset[]) => {
+      setWorkflow((current) => {
+        const nextPresets = updater(listEnterpriseWorkflowPresets(current.metadata, locale))
+        return {
+          ...current,
+          metadata: upsertEnterpriseWorkflowPresetsMetadata(current.metadata, nextPresets),
+        }
+      })
+    },
+    [locale],
+  )
+  const startPresetEdit = useCallback((preset: EnterpriseWorkflowPreset, options?: { isNew?: boolean }) => {
+    setPresetEditors((current) => ({
+      ...current,
+      [preset.id]: {
+        draft: cloneEnterpriseWorkflowPreset(preset),
+        original: options?.isNew ? null : cloneEnterpriseWorkflowPreset(preset),
+        isNew: Boolean(options?.isNew),
+      },
+    }))
+  }, [])
+  const updatePresetDraft = useCallback(
+    (presetId: string, updater: (draft: EnterpriseWorkflowPreset) => EnterpriseWorkflowPreset) => {
+      setPresetEditors((current) => {
+        const editor = current[presetId]
+        if (!editor) return current
+        return {
+          ...current,
+          [presetId]: {
+            ...editor,
+            draft: updater(cloneEnterpriseWorkflowPreset(editor.draft)),
+          },
+        }
+      })
+    },
+    [],
+  )
+  const discardPresetEdit = useCallback((presetId: string) => {
+    setPresetEditors((current) => {
+      if (!current[presetId]) return current
+      const next = { ...current }
+      delete next[presetId]
+      return next
+    })
+  }, [])
+  const commitPresetEdit = useCallback(
+    (presetId: string) => {
+      const editor = presetEditors[presetId]
+      if (!editor) return
+
+      updateEnterprisePresets((current) => applyEnterpriseWorkflowPresetDraft(current, editor.draft))
+      discardPresetEdit(presetId)
+    },
+    [discardPresetEdit, presetEditors, updateEnterprisePresets],
   )
   const resumeTargetTitle = useMemo(() => {
     if (!resumeTargetNodeKey) return null
@@ -859,6 +1050,17 @@ export function WorkflowBuilderPage({
           resume: "继续运行",
           runPending: "运行中...",
           list: "返回列表",
+          publishAsAgent: "发布为 Agent",
+          publishPanelTitle: "从 Workflow 发布 Agent",
+          publishName: "Agent 名称",
+          publishSummary: "Agent 简介",
+          publishSystemPrompt: "系统提示词",
+          publishVisibility: "可见性",
+          publishVisibilityPrivate: "私有",
+          publishVisibilityShared: "共享",
+          publishConfirm: "确认发布",
+          publishPending: "发布中...",
+          publishSuccess: "Workflow 已发布为 Agent。",
           dirty: "未保存",
           saved: "已保存",
           createNodeFirst: "请先添加至少一个节点。",
@@ -891,6 +1093,17 @@ export function WorkflowBuilderPage({
           resume: "Resume run",
           runPending: "Running...",
           list: "Back to list",
+          publishAsAgent: "Publish as agent",
+          publishPanelTitle: "Publish workflow as an agent",
+          publishName: "Agent name",
+          publishSummary: "Agent summary",
+          publishSystemPrompt: "System prompt",
+          publishVisibility: "Visibility",
+          publishVisibilityPrivate: "Private",
+          publishVisibilityShared: "Shared",
+          publishConfirm: "Publish agent",
+          publishPending: "Publishing...",
+          publishSuccess: "Workflow published as an agent.",
           dirty: "Unsaved",
           saved: "Saved",
           createNodeFirst: "Add at least one node first.",
@@ -964,8 +1177,12 @@ export function WorkflowBuilderPage({
           setLatestRunDetail(fullPayload.data)
           if (!dirty) {
             const serialized = serializeWorkflowDefinition(fullPayload.data.workflow)
-            setWorkflow(serialized)
-            setSavedSnapshot(buildSnapshot(serialized))
+            const incomingUpdatedAt = Date.parse(serialized.updatedAt)
+            const currentUpdatedAt = Date.parse(workflow.updatedAt)
+            if (!Number.isNaN(incomingUpdatedAt) && !Number.isNaN(currentUpdatedAt) && incomingUpdatedAt >= currentUpdatedAt) {
+              setWorkflow(serialized)
+              setSavedSnapshot(buildSnapshot(serialized))
+            }
           }
           setMessage(copy.latestRunReady)
         }
@@ -984,7 +1201,7 @@ export function WorkflowBuilderPage({
       latestRunRequestInFlightRef.current = false
       window.clearInterval(timer)
     }
-  }, [copy.latestRunReady, dirty, effectiveLatestRunDetail?.detailPath, effectiveLatestRunDetail?.run.status])
+  }, [copy.latestRunReady, dirty, effectiveLatestRunDetail?.detailPath, effectiveLatestRunDetail?.run.status, workflow.updatedAt])
 
   const updateWorkflow = (patch: Partial<SerializedWorkflowDefinition>) => {
     setWorkflow((current) => ({
@@ -1062,7 +1279,12 @@ export function WorkflowBuilderPage({
     })
   }
 
-  const addNode = (type: WorkflowNodeType, position?: { x: number; y: number }) => {
+  const addNode = (
+    type: WorkflowNodeType,
+    position?: { x: number; y: number },
+    initialConfig?: Record<string, unknown>,
+    titleOverride?: string,
+  ) => {
     setWorkflow((current) => {
       const nextNode = buildNode(
         type,
@@ -1071,7 +1293,11 @@ export function WorkflowBuilderPage({
         llmModelCatalog,
         workflowImageProviderOptions,
         voiceOptions,
+        builtinAgents,
+        customAgents,
         position,
+        initialConfig,
+        titleOverride,
       )
       return {
         ...current,
@@ -1080,6 +1306,32 @@ export function WorkflowBuilderPage({
     })
     setMessage(null)
     setErrorMessage(null)
+  }
+
+  const addCustomAgentNode = (customAgentId: number, position?: { x: number; y: number }) => {
+    const customAgent = customAgents.find((item) => item.id === customAgentId)
+    addNode(
+      "agent_execute",
+      position,
+      {
+        customAgentId,
+      },
+      customAgent?.name || undefined,
+    )
+  }
+
+  const addBuiltinAgentNode = (builtinAgentId: string, position?: { x: number; y: number }) => {
+    const builtinAgent = builtinAgents.find((item) => item.id === builtinAgentId)
+    addNode(
+      "agent_execute",
+      position,
+      {
+        customAgentId: null,
+        agentId: builtinAgentId,
+        builtinAgentId,
+      },
+      builtinAgent?.name || undefined,
+    )
   }
 
   const deleteNode = (nodeKey: string) => {
@@ -1174,6 +1426,7 @@ export function WorkflowBuilderPage({
         title: currentWorkflow.title,
         description: currentWorkflow.description,
         status: currentWorkflow.status,
+        metadata: currentWorkflow.metadata,
         nodes: currentWorkflow.nodes,
         edges: currentWorkflow.edges,
       }),
@@ -1332,6 +1585,38 @@ export function WorkflowBuilderPage({
     }
   }
 
+  const handlePublishAsAgent = async () => {
+    setPublishPending(true)
+    setMessage(null)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`/api/workflows/${workflow.id}/publish-as-agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          name: publishName,
+          summary: publishSummary,
+          systemPrompt: publishSystemPrompt || null,
+          visibility: publishVisibility,
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as { data?: { id?: number }; error?: string } | null
+      if (!response.ok || !payload?.data?.id) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_publish_as_agent_failed")
+      }
+
+      setPublishPanelOpen(false)
+      setMessage(copy.publishSuccess)
+      router.push(`/dashboard/agent-platform/${payload.data.id}`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "workflow_publish_as_agent_failed")
+    } finally {
+      setPublishPending(false)
+    }
+  }
+
   return (
     <div className="h-full overflow-hidden bg-transparent">
       <section className="public-grid-bg workspace-page-shell-tight flex h-full w-full flex-col">
@@ -1353,6 +1638,9 @@ export function WorkflowBuilderPage({
               <Button type="button" variant="outline" className="h-9 rounded-[8px]" asChild>
                 <Link href="/dashboard/workflows">{copy.list}</Link>
               </Button>
+              <Button type="button" variant="outline" className="h-9 rounded-[8px]" onClick={() => setPublishPanelOpen((current) => !current)} disabled={controlsLocked || publishPending}>
+                {copy.publishAsAgent}
+              </Button>
               <Button type="button" variant="outline" className="h-9 rounded-[8px]" onClick={() => void handleSave()} disabled={controlsLocked} data-agent-save>
                 {saving ? copy.savePending : copy.save}
               </Button>
@@ -1361,6 +1649,293 @@ export function WorkflowBuilderPage({
               </Button>
             </div>
           </div>
+
+          <section className="dashboard-panel rounded-[12px] border border-border bg-card/85 px-4 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="max-w-3xl">
+                <div className="dashboard-kicker text-muted-foreground">{presetCopy.title}</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{presetCopy.description}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-[8px]"
+                onClick={() => {
+                  const nextPreset = createEmptyEnterpriseWorkflowPreset(locale, displayedEnterprisePresets.length)
+                  startPresetEdit(nextPreset, { isNew: true })
+                }}
+              >
+                {presetCopy.add}
+              </Button>
+            </div>
+
+            {displayedEnterprisePresets.length === 0 ? (
+              <div className="mt-4 rounded-[10px] border border-dashed border-border/80 bg-background/60 px-4 py-4 text-sm text-muted-foreground">
+                {presetCopy.empty}
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-4">
+                {displayedEnterprisePresets.map(({ preset, isEditing, isNew }, index) => (
+                  <article key={preset.id} className="rounded-[10px] border border-border/80 bg-background/70 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-semibold text-foreground">{preset.name}</div>
+                        {preset.isDefault ? (
+                          <Badge variant="outline" className="rounded-[4px] border-primary/30 bg-background/80 text-[10px] uppercase tracking-[0.08em]">
+                            {presetCopy.defaultBadge}
+                          </Badge>
+                        ) : null}
+                        {isEditing ? (
+                          <Badge variant="outline" className="rounded-[4px] border-border bg-background/80 text-[10px] uppercase tracking-[0.08em]">
+                            {presetCopy.editingBadge}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {!isEditing && !preset.isDefault ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 rounded-[8px] px-3 text-xs"
+                            onClick={() =>
+                              updateEnterprisePresets((current) =>
+                                current.map((item, itemIndex) => ({
+                                  ...item,
+                                  isDefault: itemIndex === index,
+                                })),
+                              )
+                            }
+                          >
+                            {presetCopy.setDefault}
+                          </Button>
+                        ) : null}
+                        {isEditing ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 rounded-[8px] px-3 text-xs"
+                              onClick={() => discardPresetEdit(preset.id)}
+                            >
+                              <X className="mr-1.5 h-3.5 w-3.5" />
+                              {presetCopy.cancel}
+                            </Button>
+                            <Button
+                              type="button"
+                              className="h-8 rounded-[8px] px-3 text-xs"
+                              onClick={() => commitPresetEdit(preset.id)}
+                            >
+                              <Check className="mr-1.5 h-3.5 w-3.5" />
+                              {presetCopy.confirm}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 rounded-[8px] px-3 text-xs"
+                            onClick={() => startPresetEdit(preset)}
+                          >
+                            <PencilLine className="mr-1.5 h-3.5 w-3.5" />
+                            {presetCopy.edit}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 rounded-[8px] px-3 text-xs"
+                          onClick={() => {
+                            if (isNew) {
+                              discardPresetEdit(preset.id)
+                              return
+                            }
+                            updateEnterprisePresets((current) =>
+                              current.length <= 1
+                                ? []
+                                : current
+                                    .filter((item) => item.id !== preset.id)
+                                    .map((item, itemIndex) => ({
+                                      ...item,
+                                      isDefault: itemIndex === 0 ? true : item.isDefault,
+                                    })),
+                            )
+                            discardPresetEdit(preset.id)
+                          }}
+                        >
+                          {presetCopy.remove}
+                        </Button>
+                        {!isEditing ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 w-8 rounded-[8px] p-0"
+                            onClick={() => startPresetEdit(preset)}
+                            aria-label={presetCopy.edit}
+                            title={presetCopy.edit}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {isEditing ? (
+                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.name}</span>
+                        <Input
+                          value={preset.name}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({ ...draft, name: event.target.value }))
+                          }
+                          className="h-10 rounded-[10px] border-border/80 bg-background/80"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.industry}</span>
+                        <Input
+                          value={preset.industry}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({ ...draft, industry: event.target.value }))
+                          }
+                          className="h-10 rounded-[10px] border-border/80 bg-background/80"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.audience}</span>
+                        <Input
+                          value={preset.audience}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({ ...draft, audience: event.target.value }))
+                          }
+                          className="h-10 rounded-[10px] border-border/80 bg-background/80"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.brandVoice}</span>
+                        <Input
+                          value={preset.brandVoice}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({ ...draft, brandVoice: event.target.value }))
+                          }
+                          className="h-10 rounded-[10px] border-border/80 bg-background/80"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.channels}</span>
+                        <Textarea
+                          value={preset.channelTargets.join("\n")}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({
+                              ...draft,
+                              channelTargets: parsePresetListInput(event.target.value),
+                            }))
+                          }
+                          placeholder={presetCopy.listHint}
+                          className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.reviewRules}</span>
+                        <Textarea
+                          value={preset.reviewRules.join("\n")}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({
+                              ...draft,
+                              reviewRules: parsePresetListInput(event.target.value),
+                            }))
+                          }
+                          placeholder={presetCopy.listHint}
+                          className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.bannedTerms}</span>
+                        <Textarea
+                          value={preset.bannedTerms.join("\n")}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({
+                              ...draft,
+                              bannedTerms: parsePresetListInput(event.target.value),
+                            }))
+                          }
+                          placeholder={presetCopy.listHint}
+                          className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.knowledgeDatasets}</span>
+                        <Textarea
+                          value={preset.allowedKnowledgeDatasetIds.join(", ")}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({
+                              ...draft,
+                              allowedKnowledgeDatasetIds: parsePresetListInput(event.target.value)
+                                .map((value) => Number(value))
+                                .filter((value) => Number.isInteger(value) && value > 0),
+                            }))
+                          }
+                          placeholder="12, 18, 27"
+                          className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+                        />
+                        <div className="text-xs leading-5 text-muted-foreground">{presetCopy.idHint}</div>
+                      </label>
+                      <label className="grid gap-2 text-sm text-foreground lg:col-span-2">
+                        <span className="dashboard-kicker text-muted-foreground">{presetCopy.notes}</span>
+                        <Textarea
+                          value={preset.notes}
+                          onChange={(event) =>
+                            updatePresetDraft(preset.id, (draft) => ({ ...draft, notes: event.target.value }))
+                          }
+                          className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+                        />
+                      </label>
+                    </div>
+                    ) : (
+                      <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        {preset.industry ? (
+                          <span className="rounded-[999px] border border-border/80 bg-background/80 px-3 py-1">
+                            {presetCopy.industry}: {preset.industry}
+                          </span>
+                        ) : null}
+                        {preset.audience ? (
+                          <span className="rounded-[999px] border border-border/80 bg-background/80 px-3 py-1">
+                            {presetCopy.audience}: {preset.audience}
+                          </span>
+                        ) : null}
+                        {preset.brandVoice ? (
+                          <span className="rounded-[999px] border border-border/80 bg-background/80 px-3 py-1">
+                            {presetCopy.brandVoice}: {preset.brandVoice}
+                          </span>
+                        ) : null}
+                        {preset.channelTargets.length > 0 ? (
+                          <span className="rounded-[999px] border border-border/80 bg-background/80 px-3 py-1">
+                            {presetCopy.channels}: {preset.channelTargets.join(" / ")}
+                          </span>
+                        ) : null}
+                        {preset.reviewRules.length > 0 ? (
+                          <span className="rounded-[999px] border border-border/80 bg-background/80 px-3 py-1">
+                            {presetCopy.reviewRules}: {preset.reviewRules.length}
+                          </span>
+                        ) : null}
+                        {preset.bannedTerms.length > 0 ? (
+                          <span className="rounded-[999px] border border-border/80 bg-background/80 px-3 py-1">
+                            {presetCopy.bannedTerms}: {preset.bannedTerms.length}
+                          </span>
+                        ) : null}
+                        {preset.allowedKnowledgeDatasetIds.length > 0 ? (
+                          <span className="rounded-[999px] border border-border/80 bg-background/80 px-3 py-1">
+                            {presetCopy.knowledgeDatasets}: {preset.allowedKnowledgeDatasetIds.join(", ")}
+                          </span>
+                        ) : null}
+                        {preset.notes ? <span className="text-muted-foreground">{preset.notes}</span> : null}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
 
           {message ? (
             <div className="rounded-[10px] border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
@@ -1382,6 +1957,63 @@ export function WorkflowBuilderPage({
               {(resumeTargetTitle ? copy.resumeTargetHintWithNode.replace("{node}", resumeTargetTitle) : copy.resumeTargetHint)}
             </div>
           ) : null}
+          {publishPanelOpen ? (
+            <div className="rounded-[10px] border border-border bg-card/80 px-4 py-4">
+              <div className="mb-3 text-sm font-semibold text-foreground">{copy.publishPanelTitle}</div>
+              <div className="grid gap-3">
+                <label className="grid gap-2 text-sm text-foreground">
+                  <span>{copy.publishName}</span>
+                  <input
+                    className="dashboard-chip h-11 rounded-[4px] border border-border bg-background px-3 text-sm"
+                    value={publishName}
+                    onChange={(event) => setPublishName(event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-foreground">
+                  <span>{copy.publishSummary}</span>
+                  <textarea
+                    className="dashboard-chip min-h-24 rounded-[4px] border border-border bg-background px-3 py-3 text-sm"
+                    value={publishSummary}
+                    onChange={(event) => setPublishSummary(event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-foreground">
+                  <span>{copy.publishSystemPrompt}</span>
+                  <textarea
+                    className="dashboard-chip min-h-28 rounded-[4px] border border-border bg-background px-3 py-3 text-sm"
+                    value={publishSystemPrompt}
+                    onChange={(event) => setPublishSystemPrompt(event.target.value)}
+                  />
+                </label>
+                <div className="grid gap-2 text-sm text-foreground">
+                  <span>{copy.publishVisibility}</span>
+                  <div className="flex flex-wrap gap-3">
+                    <label className="dashboard-chip flex items-center gap-2 rounded-[4px] px-3 py-2 text-sm">
+                      <input
+                        type="radio"
+                        checked={publishVisibility === "private"}
+                        onChange={() => setPublishVisibility("private")}
+                      />
+                      <span>{copy.publishVisibilityPrivate}</span>
+                    </label>
+                    <label className="dashboard-chip flex items-center gap-2 rounded-[4px] px-3 py-2 text-sm">
+                      <input
+                        type="radio"
+                        checked={publishVisibility === "shared"}
+                        onChange={() => setPublishVisibility("shared")}
+                      />
+                      <span>{copy.publishVisibilityShared}</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <Button type="button" onClick={() => void handlePublishAsAgent()} disabled={publishPending}>
+                    {publishPending ? copy.publishPending : copy.publishConfirm}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div ref={canvasShellRef} className="relative min-h-0 flex-1 overflow-hidden rounded-[18px] border border-border/70 bg-background/35">
@@ -1394,6 +2026,8 @@ export function WorkflowBuilderPage({
                 llmModelCatalog={llmModelCatalog}
                 workflowImageProviderOptions={workflowImageProviderOptions}
                 voiceOptions={voiceOptions}
+                builtinAgents={builtinAgents}
+                customAgents={customAgents}
                 selectedNodeKey={selectedNodeKey}
                 pendingConnectionSourceKey={pendingConnectionSourceKey}
                 uploadPending={uploadPending}
@@ -1438,7 +2072,11 @@ export function WorkflowBuilderPage({
                     <WorkflowNodePalette
                       className="flex-1 overflow-y-auto rounded-none border-0 bg-transparent shadow-none"
                       locale={locale}
+                      builtinAgents={builtinAgents}
+                      customAgents={customAgents}
                       onAddNode={(type) => addNode(type)}
+                      onAddBuiltinAgent={(builtinAgentId) => addBuiltinAgentNode(builtinAgentId)}
+                      onAddCustomAgent={(customAgentId) => addCustomAgentNode(customAgentId)}
                     />
                     <button
                       type="button"

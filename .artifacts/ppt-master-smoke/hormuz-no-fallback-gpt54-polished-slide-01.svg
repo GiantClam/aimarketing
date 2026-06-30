@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#111111"/>
+    <rect x="38" y="36" width="1204" height="648" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="54" y="52" width="1172" height="616" fill="none" stroke="#282826" stroke-width="1"/>
+    <rect x="860" y="0" width="420" height="720" fill="#1A1A18"/>
+    <rect x="834" y="0" width="18" height="720" fill="#E85D26"/>
+    <rect x="0" y="584" width="1280" height="136" fill="#151513"/>
+    <rect x="0" y="576" width="1280" height="8" fill="#E85D26"/>
+    <line x1="96" y1="152" x2="744" y2="152" stroke="#E85D26" stroke-width="4"/>
+    <line x1="96" y1="486" x2="812" y2="486" stroke="#282826" stroke-width="2"/>
+    <line x1="904" y1="152" x2="1180" y2="152" stroke="#E85D26" stroke-width="3"/>
+    <line x1="904" y1="468" x2="1180" y2="468" stroke="#282826" stroke-width="2"/>
+  </g>
+
+  <g id="chrome">
+    <text x="96" y="94" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="4">大字报头</text>
+    <text x="1112" y="94" text-anchor="end" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">01 / 04</text>
+    <text x="96" y="626" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">霍尔木兹海峡现状与全球能源运输影响</text>
+    <text x="96" y="652" fill="#8E8A84" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600" letter-spacing="1.5">截至2026年6月24日</text>
+    <text x="1184" y="652" text-anchor="end" fill="#8E8A84" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2">BROADSIDE</text>
+  </g>
+
+  <g id="content">
+    <text x="96" y="226" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="74" font-weight="900">霍尔木兹海峡重开，</text>
+    <text x="96" y="312" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="74" font-weight="900">不等于风险退场</text>
+
+    <text x="98" y="386" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">截至2026年6月24日，通航已重启，但真正进入决策面的，</text>
+    <text x="98" y="424" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">是高成本、高波动与高不确定性。</text>
+
+    <rect x="904" y="184" width="276" height="76" fill="#E85D26"/>
+    <text x="922" y="216" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="900" letter-spacing="1.5">POST-REOPEN</text>
+    <text x="922" y="248" fill="#111111" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="32" font-weight="900">风险没有出场</text>
+
+    <text x="904" y="308" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800">管理层判断已从</text>
+    <text x="904" y="342" fill="#E85D26" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="36" font-weight="900">“会不会断”</text>
+    <text x="904" y="378" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800">转向</text>
+    <text x="904" y="414" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="36" font-weight="900">“要为多久的贵与乱买单”</text>
+
+    <rect x="904" y="510" width="276" height="118" fill="none" stroke="#282826" stroke-width="2"/>
+    <text x="922" y="544" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">全球约五分之一</text>
+    <text x="922" y="576" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">海运原油仍押注此处</text>
+    <text x="922" y="610" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900">恢复的是船流，不是定价秩序</text>
+  </g>
+
+  <g id="annotations">
+    <rect x="96" y="522" width="260" height="92" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="116" y="553" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="1.2">判断切换</text>
+    <text x="116" y="584" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">断航概率回落，</text>
+    <text x="116" y="609" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">但成本中枢抬升。</text>
+
+    <rect x="378" y="522" width="260" height="92" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="398" y="553" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="1.2">运输现实</text>
+    <text x="398" y="584" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">恢复的是船流，</text>
+    <text x="398" y="609" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">未恢复的是定价锚。</text>
+
+    <rect x="660" y="522" width="260" height="92" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="680" y="553" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="1.2">一线结论</text>
+    <text x="680" y="584" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">重开不是清零，</text>
+    <text x="680" y="609" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">只是风险换形态。</text>
+
+    <line x1="852" y1="84" x2="852" y2="636" stroke="#282826" stroke-width="2"/>
+    <circle cx="838" cy="226" r="8" fill="#E85D26"/>
+    <circle cx="838" cy="344" r="8" fill="#E85D26"/>
+    <circle cx="838" cy="568" r="8" fill="#E85D26"/>
+  </g>
+</svg>

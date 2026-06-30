@@ -1,9 +1,13 @@
 import {
   deletePlatformArtifactPermanently,
+  enqueuePlatformKnowledgeSaveJob,
   listPlatformArtifactsForEnterprise,
+  promotePlatformArtifactToWorkItem,
   savePlatformArtifact,
+  type PlatformTaskRunStore,
   type PlatformArtifactRecord,
 } from "@/lib/platform/task-run-store"
+import { inferWorkItemTypeFromArtifact } from "@/lib/platform/artifact-actions"
 import type { WorkflowNodeRunState } from "@/lib/workflows/execution"
 import type { WorkflowDefinitionEdge, WorkflowDefinitionNode } from "@/lib/workflows/schema"
 import { updateWorkflowNodeExecution } from "@/lib/workflows/store"
@@ -33,6 +37,15 @@ function buildWorkflowGeneratedArtifactPayload(payload: Record<string, unknown>)
   }
 }
 
+type WorkflowPersistenceStore = Pick<
+  PlatformTaskRunStore,
+  | "savePlatformArtifact"
+  | "promotePlatformArtifactToWorkItem"
+  | "enqueuePlatformKnowledgeSaveJob"
+  | "listPlatformArtifactsForEnterprise"
+  | "deletePlatformArtifactPermanently"
+>
+
 export type WorkflowPersistenceTarget = {
   sourceNodeKey: string
   targetNodeKey: string
@@ -42,6 +55,54 @@ function normalizeWorkflowStoredTitle(value: unknown) {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function normalizeWorkflowKnowledgeSaveTargetType(value: unknown, datasetScope: "enterprise" | "personal") {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim()
+  }
+
+  return datasetScope === "personal" ? "personal_knowledge_base" : "knowledge_base"
+}
+
+function readWorkflowKnowledgeWriteMetadata(
+  state: WorkflowNodeRunState | undefined,
+  node: WorkflowDefinitionNode | undefined,
+) {
+  if (!state || state.status !== "succeeded" || state.metadata?.persistenceTarget !== "knowledge_write") {
+    return null
+  }
+
+  const title =
+    normalizeWorkflowStoredTitle(state.metadata.knowledgeDocumentTitle) ??
+    normalizeWorkflowStoredTitle(node?.title) ??
+    `${node?.nodeKey ?? state.nodeKey}-knowledge`
+  const content = typeof state.metadata.knowledgeDraftContent === "string" ? state.metadata.knowledgeDraftContent.trim() : ""
+  if (!content) return null
+
+  const rawDatasetId = state.metadata.datasetId
+  const datasetId =
+    typeof rawDatasetId === "number" && Number.isInteger(rawDatasetId) && rawDatasetId > 0
+      ? rawDatasetId
+      : typeof rawDatasetId === "string" && rawDatasetId.trim()
+        ? Number(rawDatasetId)
+        : NaN
+  if (!Number.isInteger(datasetId) || datasetId <= 0) return null
+
+  const datasetScope = state.metadata.datasetScope === "personal" ? "personal" : "enterprise"
+  const knowledgeCategory =
+    typeof state.metadata.knowledgeCategory === "string" && state.metadata.knowledgeCategory.trim()
+      ? state.metadata.knowledgeCategory.trim()
+      : "general"
+
+  return {
+    title,
+    content,
+    datasetId,
+    datasetScope,
+    knowledgeCategory,
+    targetType: normalizeWorkflowKnowledgeSaveTargetType(state.metadata.targetType, datasetScope),
+  }
 }
 
 function toWorkflowStoredTitleKey(title: string) {
@@ -111,23 +172,36 @@ function buildWorkflowStoredTitleState(items: PlatformArtifactRecord[]) {
 
 export async function persistFinalWorkflowOutputs(input: {
   runId: number
+  workflowId: number
+  workflowSlug: string
   workflowTitle: string
+  workflowUpdatedAt?: Date | null
   enterpriseId: number
   ownerUserId: number
   nodeStates: Record<string, WorkflowNodeRunState>
   workflowNodes: WorkflowDefinitionNode[]
   persistenceTargets: WorkflowPersistenceTarget[]
+  store?: WorkflowPersistenceStore
 }) {
   const createdArtifacts: number[] = []
+  const createdWorkItems: number[] = []
+  const createdKnowledgeSaveJobs: number[] = []
   const workflowNodeByKey = new Map(input.workflowNodes.map((node) => [node.nodeKey, node] as const))
+  const store = input.store ?? {
+    savePlatformArtifact,
+    promotePlatformArtifactToWorkItem,
+    enqueuePlatformKnowledgeSaveJob,
+    listPlatformArtifactsForEnterprise,
+    deletePlatformArtifactPermanently,
+  }
 
   let assetLibraryTitleState = buildWorkflowStoredTitleState(
-    await listPlatformArtifactsForEnterprise(input.enterpriseId),
+    await store.listPlatformArtifactsForEnterprise(input.enterpriseId),
   )
 
   const reloadAssetLibraryTitleState = async () => {
     assetLibraryTitleState = buildWorkflowStoredTitleState(
-      await listPlatformArtifactsForEnterprise(input.enterpriseId),
+      await store.listPlatformArtifactsForEnterprise(input.enterpriseId),
     )
   }
 
@@ -137,7 +211,7 @@ export async function persistFinalWorkflowOutputs(input: {
     if (matchedArtifactIds.length === 0) return
 
     for (const artifactId of matchedArtifactIds) {
-      await deletePlatformArtifactPermanently(artifactId, input.enterpriseId)
+      await store.deletePlatformArtifactPermanently(artifactId, input.enterpriseId)
     }
 
     await reloadAssetLibraryTitleState()
@@ -163,6 +237,75 @@ export async function persistFinalWorkflowOutputs(input: {
     assetLibraryTitleState.reservedTitleKeys.add(toWorkflowStoredTitleKey(title))
   }
 
+  const shouldPersistToWorkLibrary = (storeNode: WorkflowDefinitionNode | undefined) =>
+    Boolean(storeNode?.config.persistToWorkLibrary)
+
+  const shouldPersistToKnowledgeBase = (storeNode: WorkflowDefinitionNode | undefined) =>
+    Boolean(storeNode?.config.persistToKnowledgeBase)
+
+  const knowledgeTargetTypeForStoreNode = (storeNode: WorkflowDefinitionNode | undefined) => {
+    const configured = storeNode?.config.knowledgeTargetType
+    return typeof configured === "string" && configured.trim() ? configured.trim() : "knowledge_base"
+  }
+
+  const workflowVersionAt = input.workflowUpdatedAt instanceof Date ? input.workflowUpdatedAt.toISOString() : null
+
+  const persistArtifactSideEffects = async (params: {
+    artifact: PlatformArtifactRecord
+    title: string
+    outputKind: "text" | "asset" | "image" | "video" | "audio" | "ppt"
+    sourceNodeKey: string
+    targetNodeKey: string
+    storeNode: WorkflowDefinitionNode | undefined
+  }) => {
+    if (shouldPersistToWorkLibrary(params.storeNode)) {
+      const workItem = await store.promotePlatformArtifactToWorkItem({
+        enterpriseId: input.enterpriseId,
+        ownerUserId: input.ownerUserId,
+        sourceArtifactId: params.artifact.id,
+        type: inferWorkItemTypeFromArtifact(params.artifact),
+        title: params.title,
+        summary: `${input.workflowTitle} / ${params.outputKind}`,
+        metadata: {
+          source: "workflow",
+          workflowId: input.workflowId,
+          workflowSlug: input.workflowSlug,
+          workflowTitle: input.workflowTitle,
+          workflowRunId: input.runId,
+          workflowVersionAt,
+          sourceNodeKey: params.sourceNodeKey,
+          workflowStoreNodeKey: params.targetNodeKey,
+          outputKind: params.outputKind,
+          persistedFrom: "product_store",
+        },
+      })
+      createdWorkItems.push(workItem.id)
+    }
+
+    if (shouldPersistToKnowledgeBase(params.storeNode)) {
+      const job = await store.enqueuePlatformKnowledgeSaveJob({
+        artifactId: params.artifact.id,
+        enterpriseId: input.enterpriseId,
+        ownerUserId: input.ownerUserId,
+        targetType: knowledgeTargetTypeForStoreNode(params.storeNode),
+        requestPayload: {
+          source: "workflow",
+          workflowId: input.workflowId,
+          workflowSlug: input.workflowSlug,
+          workflowTitle: input.workflowTitle,
+          workflowRunId: input.runId,
+          workflowVersionAt,
+          artifactTitle: params.title,
+          sourceNodeKey: params.sourceNodeKey,
+          workflowStoreNodeKey: params.targetNodeKey,
+          outputKind: params.outputKind,
+          persistedFrom: "product_store",
+        },
+      })
+      createdKnowledgeSaveJobs.push(job.id)
+    }
+  }
+
   for (const target of input.persistenceTargets) {
     const state = input.nodeStates[target.sourceNodeKey]
     const storeNode = workflowNodeByKey.get(target.targetNodeKey)
@@ -181,7 +324,7 @@ export async function persistFinalWorkflowOutputs(input: {
         await overwriteAssetLibraryTitleIfNeeded(title)
       }
 
-      const artifact = await savePlatformArtifact({
+      const artifact = await store.savePlatformArtifact({
         runId: input.runId,
         enterpriseId: input.enterpriseId,
         ownerUserId: input.ownerUserId,
@@ -190,12 +333,25 @@ export async function persistFinalWorkflowOutputs(input: {
         mimeType: "text/plain",
         source: "workflow",
         payload: buildWorkflowGeneratedArtifactPayload({
+          workflowId: input.workflowId,
+          workflowSlug: input.workflowSlug,
+          workflowTitle: input.workflowTitle,
+          workflowRunId: input.runId,
+          workflowVersionAt,
           text: value,
           workflowNodeKey: target.sourceNodeKey,
           workflowStoreNodeKey: target.targetNodeKey,
         }),
       })
       createdArtifacts.push(artifact.id)
+      await persistArtifactSideEffects({
+        artifact,
+        title,
+        outputKind: "text",
+        sourceNodeKey: target.sourceNodeKey,
+        targetNodeKey: target.targetNodeKey,
+        storeNode,
+      })
       reserveStoredTitle(title)
     }
 
@@ -221,7 +377,7 @@ export async function persistFinalWorkflowOutputs(input: {
           await overwriteAssetLibraryTitleIfNeeded(title)
         }
 
-        const artifact = await savePlatformArtifact({
+        const artifact = await store.savePlatformArtifact({
           runId: input.runId,
           enterpriseId: input.enterpriseId,
           ownerUserId: input.ownerUserId,
@@ -232,6 +388,11 @@ export async function persistFinalWorkflowOutputs(input: {
           storageKey: item.storageKey || null,
           source: "workflow",
           payload: buildWorkflowGeneratedArtifactPayload({
+            workflowId: input.workflowId,
+            workflowSlug: input.workflowSlug,
+            workflowTitle: input.workflowTitle,
+            workflowRunId: input.runId,
+            workflowVersionAt,
             artifactId: item.artifactId ?? null,
             workflowNodeKey: target.sourceNodeKey,
             workflowStoreNodeKey: target.targetNodeKey,
@@ -239,14 +400,83 @@ export async function persistFinalWorkflowOutputs(input: {
           }),
         })
         createdArtifacts.push(artifact.id)
+        await persistArtifactSideEffects({
+          artifact,
+          title,
+          outputKind: kind,
+          sourceNodeKey: target.sourceNodeKey,
+          targetNodeKey: target.targetNodeKey,
+          storeNode,
+        })
         reserveStoredTitle(title)
       }
     }
   }
 
+  for (const node of input.workflowNodes) {
+    if (node.type !== "knowledge_write") continue
+
+    const state = input.nodeStates[node.nodeKey]
+    const knowledgeWrite = readWorkflowKnowledgeWriteMetadata(state, node)
+    if (!knowledgeWrite) continue
+
+    const title = ensureUniqueWorkflowStoredTitle(knowledgeWrite.title, assetLibraryTitleState.reservedTitleKeys)
+    const artifact = await store.savePlatformArtifact({
+      runId: input.runId,
+      enterpriseId: input.enterpriseId,
+      ownerUserId: input.ownerUserId,
+      kind: "text",
+      title,
+      mimeType: "text/markdown",
+      source: "workflow",
+      payload: buildWorkflowGeneratedArtifactPayload({
+        workflowId: input.workflowId,
+        workflowSlug: input.workflowSlug,
+        workflowTitle: input.workflowTitle,
+        workflowRunId: input.runId,
+        workflowVersionAt,
+        text: knowledgeWrite.content,
+        workflowNodeKey: node.nodeKey,
+        outputKind: "knowledge_write",
+        datasetId: knowledgeWrite.datasetId,
+        datasetScope: knowledgeWrite.datasetScope,
+        knowledgeCategory: knowledgeWrite.knowledgeCategory,
+        requiresManualConfirmation: true,
+        persistedFrom: "knowledge_write",
+      }),
+    })
+    createdArtifacts.push(artifact.id)
+    reserveStoredTitle(title)
+
+    const job = await store.enqueuePlatformKnowledgeSaveJob({
+      artifactId: artifact.id,
+      enterpriseId: input.enterpriseId,
+      ownerUserId: input.ownerUserId,
+      targetType: knowledgeWrite.targetType,
+      requestPayload: {
+        source: "workflow",
+        workflowId: input.workflowId,
+        workflowSlug: input.workflowSlug,
+        workflowTitle: input.workflowTitle,
+        workflowRunId: input.runId,
+        workflowVersionAt,
+        artifactTitle: title,
+        sourceNodeKey: node.nodeKey,
+        workflowNodeType: node.type,
+        datasetId: knowledgeWrite.datasetId,
+        datasetScope: knowledgeWrite.datasetScope,
+        knowledgeCategory: knowledgeWrite.knowledgeCategory,
+        manualConfirmationRequired: true,
+        persistedFrom: "knowledge_write",
+      },
+    })
+    createdKnowledgeSaveJobs.push(job.id)
+  }
+
   return {
     artifactIds: createdArtifacts,
-    workItemIds: [],
+    workItemIds: createdWorkItems,
+    knowledgeSaveJobIds: createdKnowledgeSaveJobs,
   }
 }
 
@@ -367,6 +597,7 @@ export function buildWorkflowRunNormalizedResult(input: {
   workflowStatus: "succeeded" | "failed"
   persistedArtifactIds: number[]
   persistedWorkItemIds: number[]
+  persistedKnowledgeSaveJobIds?: number[]
   previous?: Record<string, unknown> | null
   retry?: {
     mode: "node" | "branch"
@@ -376,6 +607,12 @@ export function buildWorkflowRunNormalizedResult(input: {
   const previous = input.previous ?? null
   const artifactIds = [...new Set([...toNumberList(previous?.persistedArtifactIds), ...input.persistedArtifactIds])]
   const workItemIds = [...new Set([...toNumberList(previous?.persistedWorkItemIds), ...input.persistedWorkItemIds])]
+  const knowledgeSaveJobIds = [
+    ...new Set([
+      ...toNumberList(previous?.persistedKnowledgeSaveJobIds),
+      ...toNumberList(input.persistedKnowledgeSaveJobIds),
+    ]),
+  ]
 
   return {
     workflowId: input.workflowId,
@@ -383,6 +620,7 @@ export function buildWorkflowRunNormalizedResult(input: {
     workflowStatus: input.workflowStatus,
     persistedArtifactIds: artifactIds,
     persistedWorkItemIds: workItemIds,
+    persistedKnowledgeSaveJobIds: knowledgeSaveJobIds,
     lastRetry:
       input.retry
         ? {

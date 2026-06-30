@@ -26,8 +26,6 @@ import {
   type PlatformDirectorySourceRef,
   type PlatformDirectorySurface,
 } from "@/lib/platform/directory-config"
-import { resolveLocalizedPlatformCapabilitiesFromSnapshot } from "@/lib/platform/capability-resolver"
-import { getPlatformRuntimeSnapshot } from "@/lib/platform/runtime"
 
 type PlatformDirectoryEntryBase = {
   itemType: PlatformDirectoryItemType
@@ -273,6 +271,9 @@ export function getLocalizedPlatformDirectoryEntries(
   itemType: Exclude<PlatformDirectoryItemType, "tool">,
 ) {
   if (itemType === "capability") {
+    const { resolveLocalizedPlatformCapabilitiesFromSnapshot } =
+      require("@/lib/platform/capability-resolver") as typeof import("@/lib/platform/capability-resolver")
+    const { getPlatformRuntimeSnapshot } = require("@/lib/platform/runtime") as typeof import("@/lib/platform/runtime")
     return resolveLocalizedPlatformCapabilitiesFromSnapshot(locale, "all", getPlatformRuntimeSnapshot()).map((item) =>
       toPlatformDirectoryEntry(itemType, item),
     )

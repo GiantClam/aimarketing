@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111" />
+  <g id="background">
+    <path fill="none" stroke="#282826" stroke-width="2" d="M42,24 H1238 A18,18 0 0 1 1256,42 V678 A18,18 0 0 1 1238,696 H42 A18,18 0 0 1 24,678 V42 A18,18 0 0 1 42,24 Z" />
+    <rect x="40" y="40" width="1200" height="640" fill="#1A1A18" stroke="#282826" stroke-width="1.5" />
+    <rect x="40" y="40" width="1200" height="16" fill="#E85D26" />
+    <line x1="438" y1="56" x2="438" y2="680" stroke="#282826" stroke-width="2" />
+    <line x1="845" y1="160" x2="845" y2="680" stroke="#282826" stroke-width="2" />
+    <line x1="438" y1="160" x2="1240" y2="160" stroke="#282826" stroke-width="2" />
+  </g>
+  <g id="chrome">
+    <text x="64" y="98" fill="#E85D26" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">栏目排版</text>
+    <text x="64" y="146" fill="#F0ECE5" font-size="66" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="1">决策看板</text>
+    <text x="1036" y="96" fill="#F0ECE5" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="end">02 / 04</text>
+    <text x="1036" y="126" fill="#F0ECE5" font-size="14" font-family="Arial, Helvetica, sans-serif" font-weight="500" text-anchor="end" opacity="0.75">霍尔木兹海峡现状与全球能源运输影响</text>
+    <text x="1132" y="96" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800">BROADSIDE</text>
+    <rect x="1088" y="110" width="120" height="4" fill="#E85D26" />
+  </g>
+  <g id="content">
+    <g id="left-column">
+      <text x="64" y="220" fill="#F0ECE5" font-size="32" font-family="Arial, Helvetica, sans-serif" font-weight="800">不是一条航道</text>
+      <text x="64" y="266" fill="#F0ECE5" font-size="32" font-family="Arial, Helvetica, sans-serif" font-weight="800">而是一整套成本传导</text>
+      <line x1="64" y1="292" x2="386" y2="292" stroke="#E85D26" stroke-width="5" />
+      <text x="64" y="342" fill="#F0ECE5" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="500">这不是单点航道新闻，而是能源运输成</text>
+      <text x="64" y="378" fill="#F0ECE5" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="500">本、节奏与供应安全的联动冲击。</text>
+
+      <rect x="64" y="434" width="330" height="188" fill="none" stroke="#282826" stroke-width="2" />
+      <text x="84" y="470" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.5">VERDICT</text>
+      <text x="84" y="520" fill="#F0ECE5" font-size="44" font-family="Arial, Helvetica, sans-serif" font-weight="900">先看</text>
+      <text x="84" y="566" fill="#F0ECE5" font-size="44" font-family="Arial, Helvetica, sans-serif" font-weight="900">成本链</text>
+      <text x="84" y="610" fill="#F0ECE5" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.78">恢复不等于安全感回归，</text>
+      <text x="84" y="638" fill="#F0ECE5" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.78">市场先给风险重新定价。</text>
+    </g>
+
+    <g id="agenda-grid">
+      <g id="item-01">
+        <text x="474" y="224" fill="#E85D26" font-size="70" font-family="Arial, Helvetica, sans-serif" font-weight="900">01</text>
+        <text x="560" y="214" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">船流回升</text>
+        <text x="560" y="248" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.85">但航道控制权、收费安排与…</text>
+        <line x1="474" y1="272" x2="810" y2="272" stroke="#282826" stroke-width="2" />
+      </g>
+
+      <g id="item-02">
+        <text x="474" y="354" fill="#E85D26" font-size="70" font-family="Arial, Helvetica, sans-serif" font-weight="900">02</text>
+        <text x="560" y="344" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">指标同向</text>
+        <text x="560" y="378" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.85">通过量、滞留量与租金飙升共同说明市…</text>
+        <line x1="474" y1="402" x2="810" y2="402" stroke="#282826" stroke-width="2" />
+      </g>
+
+      <g id="item-03">
+        <text x="474" y="484" fill="#E85D26" font-size="70" font-family="Arial, Helvetica, sans-serif" font-weight="900">03</text>
+        <text x="560" y="474" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">预期脆弱</text>
+        <text x="560" y="508" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.85">任何单一事件都可能重置预期，并迅速…</text>
+        <line x1="474" y1="532" x2="810" y2="532" stroke="#282826" stroke-width="2" />
+      </g>
+
+      <g id="item-04">
+        <text x="474" y="614" fill="#E85D26" font-size="70" font-family="Arial, Helvetica, sans-serif" font-weight="900">04</text>
+        <text x="560" y="604" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">采购承压</text>
+        <text x="560" y="638" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.85">进口国与采购方需要同步面对成本抬升…</text>
+      </g>
+    </g>
+
+    <g id="right-rail">
+      <rect x="875" y="186" width="329" height="454" fill="none" stroke="#282826" stroke-width="2" />
+      <text x="901" y="224" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.6">DECISION PATH</text>
+
+      <rect x="901" y="256" width="277" height="70" fill="#111111" stroke="#282826" stroke-width="1.5" />
+      <text x="923" y="286" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800">先问：航道能不能过</text>
+      <text x="923" y="311" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.8">看恢复速度与通行安排</text>
+
+      <line x1="1039" y1="326" x2="1039" y2="356" stroke="#E85D26" stroke-width="4" />
+
+      <rect x="901" y="356" width="277" height="70" fill="#111111" stroke="#282826" stroke-width="1.5" />
+      <text x="923" y="386" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800">再问：成本会不会降</text>
+      <text x="923" y="411" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.8">看保费、运价与租船费</text>
+
+      <line x1="1039" y1="426" x2="1039" y2="456" stroke="#E85D26" stroke-width="4" />
+
+      <rect x="901" y="456" width="277" height="70" fill="#111111" stroke="#282826" stroke-width="1.5" />
+      <text x="923" y="486" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800">最后：谁先承担波动</text>
+      <text x="923" y="511" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.8">看进口国、炼厂与采购合同</text>
+
+      <rect x="901" y="554" width="277" height="60" fill="#E85D26" />
+      <text x="923" y="592" fill="#111111" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="900">风险未走，成本先说话</text>
+    </g>
+  </g>
+  <g id="annotations">
+    <line x1="438" y1="108" x2="1240" y2="108" stroke="#282826" stroke-width="1" />
+    <text x="64" y="672" fill="#F0ECE5" font-size="14" font-family="Arial, Helvetica, sans-serif" font-weight="500" opacity="0.6">议程页以四段推进：恢复、指标、预期、采购。</text>
+    <circle cx="418" cy="292" r="6" fill="#E85D26" />
+    <circle cx="845" cy="272" r="5" fill="#E85D26" />
+    <circle cx="845" cy="402" r="5" fill="#E85D26" />
+    <circle cx="845" cy="532" r="5" fill="#E85D26" />
+  </g>
+</svg>

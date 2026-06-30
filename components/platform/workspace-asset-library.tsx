@@ -262,7 +262,7 @@ function AssetMetricCard({
   label,
   value,
   detail,
-  accentClassName = "bg-[#f5ef3d]",
+  accentClassName = "bg-[#ffd000]",
 }: {
   icon: typeof Sparkles
   label: string
@@ -360,7 +360,7 @@ function AssetPagination({
                 className={cn(
                   "h-9 min-w-9 rounded-[8px] px-3 text-sm font-black",
                   page === currentPage
-                    ? "border border-[#ded735] bg-[#f5ef3d] text-[#111]"
+                    ? "border border-[#c9a400] bg-[#ffd000] text-[#111]"
                     : "border border-[#deded6] bg-white text-[#111]",
                 )}
                 onClick={() => onPageChange(page)}
@@ -452,6 +452,7 @@ export function WorkspaceAssetLibrary({
   const [previewItem, setPreviewItem] = useState<WorkspaceAssetLibraryItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<WorkspaceAssetLibraryItem | null>(null)
   const [submittingDelete, setSubmittingDelete] = useState(false)
+  const [reusingRunId, setReusingRunId] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState<AssetNotice>(null)
@@ -467,6 +468,9 @@ export function WorkspaceAssetLibrary({
           uploadAssets: "上传素材",
           uploadPending: "上传中...",
           openWorkflows: "打开工作流",
+          openRun: "查看运行",
+          reuseWorkflow: "复用流程",
+          reuseWorkflowPending: "复用中...",
           refresh: "刷新",
           metricsTotal: "总资产数",
           metricsImages: "图片",
@@ -540,6 +544,9 @@ export function WorkspaceAssetLibrary({
           uploadAssets: "Upload assets",
           uploadPending: "Uploading...",
           openWorkflows: "Open workflows",
+          openRun: "Open run",
+          reuseWorkflow: "Reuse flow",
+          reuseWorkflowPending: "Reusing...",
           refresh: "Refresh",
           metricsTotal: "Total assets",
           metricsImages: "Images",
@@ -845,6 +852,62 @@ export function WorkspaceAssetLibrary({
     }
   }
 
+  async function handleReuseWorkflowRun(item: WorkspaceAssetLibraryItem) {
+    setReusingRunId(item.runId)
+    setNotice(null)
+
+    try {
+      const response = await fetch(`/api/workflows/runs/${item.runId}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      })
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            data?: {
+              workflow?: {
+                title: string
+                description: string | null
+                metadata: Record<string, unknown> | null
+                nodes: unknown[]
+                edges: unknown[]
+              }
+            }
+            error?: string
+          }
+        | null
+
+      if (!response.ok || !payload?.data?.workflow) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "workflow_run_detail_failed")
+      }
+
+      const createResponse = await fetch("/api/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          title: `${payload.data.workflow.title} Copy`,
+          description: payload.data.workflow.description,
+          metadata: payload.data.workflow.metadata,
+          nodes: payload.data.workflow.nodes,
+          edges: payload.data.workflow.edges,
+        }),
+      })
+      const createPayload = (await createResponse.json().catch(() => null)) as
+        | { data?: { id?: number }; error?: string }
+        | null
+
+      if (!createResponse.ok || !createPayload?.data?.id) {
+        throw new Error(typeof createPayload?.error === "string" ? createPayload.error : "workflow_create_failed")
+      }
+
+      router.push(`/dashboard/workflows/${createPayload.data.id}`)
+    } catch (error) {
+      setErrorNotice(error instanceof Error ? error.message : copy.uploadFailed)
+    } finally {
+      setReusingRunId(null)
+    }
+  }
+
   const tableRows = pagedItems.map((item) => {
     const typeMeta = getAssetTypeMeta(item, locale)
     const sourceMeta = getAssetSourceMeta(item, locale)
@@ -922,7 +985,7 @@ export function WorkspaceAssetLibrary({
               title={copy.preview}
               aria-label={copy.preview}
               onClick={() => setPreviewItem(item)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
             >
               <Eye className="h-4 w-4" />
             </button>
@@ -934,8 +997,8 @@ export function WorkspaceAssetLibrary({
               className={cn(
                 "inline-flex h-9 w-9 items-center justify-center rounded-[8px] border transition",
                 favorite
-                  ? "border-[#ded735] bg-[#f5ef3d] text-[#111]"
-                  : "border-[#deded6] bg-white text-[#111] hover:border-[#c8c22b] hover:bg-[#f5ef3d]",
+                  ? "border-[#c9a400] bg-[#ffd000] text-[#111]"
+                  : "border-[#deded6] bg-white text-[#111] hover:border-[#b89100] hover:bg-[#ffd000]",
               )}
             >
               <Star className={cn("h-4 w-4", favorite && "fill-current")} />
@@ -945,7 +1008,7 @@ export function WorkspaceAssetLibrary({
               title={copy.copyLink}
               aria-label={copy.copyLink}
               onClick={() => void handleCopyLink(item)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
             >
               <Link2 className="h-4 w-4" />
             </button>
@@ -953,10 +1016,32 @@ export function WorkspaceAssetLibrary({
               href={item.downloadUrl}
               title={copy.download}
               aria-label={copy.download}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
             >
               <Download className="h-4 w-4" />
             </a>
+            {item.hasWorkItem || getAssetSourceBucket(item) === "workflow" ? (
+              <>
+                <Link
+                  href={`/dashboard/workflows/runs/${item.runId}`}
+                  title={copy.openRun}
+                  aria-label={copy.openRun}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+                >
+                  <Workflow className="h-4 w-4" />
+                </Link>
+                <button
+                  type="button"
+                  title={copy.reuseWorkflow}
+                  aria-label={copy.reuseWorkflow}
+                  onClick={() => void handleReuseWorkflowRun(item)}
+                  disabled={reusingRunId === item.runId}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000] disabled:opacity-45"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               title={copy.delete}
@@ -994,7 +1079,7 @@ export function WorkspaceAssetLibrary({
                 onChange={(event) => void handleUploadFiles(event.target.files)}
               />
               <Button
-                className="h-11 rounded-[9px] border border-[#ded735] bg-[#f5ef3d] px-[22px] text-sm font-black text-[#111] hover:bg-[#f5ef3d]/90"
+                className="h-11 rounded-[9px] border border-[#c9a400] bg-[#ffd000] px-[22px] text-sm font-black text-[#111] hover:bg-[#ffd000]/90"
                 onClick={() => uploadInputRef.current?.click()}
                 disabled={uploading}
               >
@@ -1082,7 +1167,7 @@ export function WorkspaceAssetLibrary({
                       onClick={() => setActiveTab(tab.id)}
                       className={cn(
                         "inline-flex h-10 items-center gap-2 border-b-2 px-1 text-sm font-bold transition",
-                        activeTab === tab.id ? "border-[#f5ef3d] text-[#111]" : "border-transparent text-[#666]",
+                        activeTab === tab.id ? "border-[#ffd000] text-[#111]" : "border-transparent text-[#666]",
                       )}
                     >
                       <span>{tab.label}</span>
@@ -1165,7 +1250,7 @@ export function WorkspaceAssetLibrary({
                     className={cn(
                       "inline-flex h-10 w-10 items-center justify-center rounded-[8px] border",
                       viewMode === "grid"
-                        ? "border-[#ded735] bg-[#f5ef3d] text-[#111]"
+                        ? "border-[#c9a400] bg-[#ffd000] text-[#111]"
                         : "border-[#deded6] bg-white text-[#111]",
                     )}
                   >
@@ -1178,7 +1263,7 @@ export function WorkspaceAssetLibrary({
                     className={cn(
                       "inline-flex h-10 w-10 items-center justify-center rounded-[8px] border",
                       viewMode === "table"
-                        ? "border-[#ded735] bg-[#f5ef3d] text-[#111]"
+                        ? "border-[#c9a400] bg-[#ffd000] text-[#111]"
                         : "border-[#deded6] bg-white text-[#111]",
                     )}
                   >
@@ -1213,14 +1298,14 @@ export function WorkspaceAssetLibrary({
 
             {items.length === 0 ? (
               <div className="mt-5 rounded-[18px] border border-dashed border-[#deded6] bg-[#fafaf7] px-6 py-10 text-center">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[14px] bg-[#f5ef3d] text-[#111]">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[14px] bg-[#ffd000] text-[#111]">
                   <Sparkles className="h-7 w-7" />
                 </div>
                 <h2 className="mt-5 font-display text-[32px] font-black uppercase text-[#111]">{copy.emptyTitle}</h2>
                 <p className="mx-auto mt-3 max-w-[640px] text-sm leading-7 text-[#666]">{copy.emptyDescription}</p>
                 <div className="mt-6 flex flex-wrap justify-center gap-3">
                   <Button
-                    className="h-11 rounded-[9px] border border-[#ded735] bg-[#f5ef3d] px-5 text-sm font-black text-[#111] hover:bg-[#f5ef3d]/90"
+                    className="h-11 rounded-[9px] border border-[#c9a400] bg-[#ffd000] px-5 text-sm font-black text-[#111] hover:bg-[#ffd000]/90"
                     onClick={() => uploadInputRef.current?.click()}
                   >
                     <Upload className="mr-2 h-4 w-4" />
@@ -1274,7 +1359,7 @@ export function WorkspaceAssetLibrary({
                             onClick={() => toggleSelection(item.artifactId)}
                             className={cn(
                               "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border bg-white/95",
-                              selected ? "border-[#ded735] text-[#111]" : "border-[#deded6] text-[#666]",
+                              selected ? "border-[#c9a400] text-[#111]" : "border-[#deded6] text-[#666]",
                             )}
                           >
                             {selected ? <Check className="h-4 w-4" /> : null}
@@ -1286,7 +1371,7 @@ export function WorkspaceAssetLibrary({
                             onClick={() => toggleFavorite(item.artifactId)}
                             className={cn(
                               "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border bg-white/95",
-                              favorite ? "border-[#ded735] text-[#111]" : "border-[#deded6] text-[#666]",
+                              favorite ? "border-[#c9a400] text-[#111]" : "border-[#deded6] text-[#666]",
                             )}
                           >
                             <Star className={cn("h-4 w-4", favorite && "fill-current")} />
@@ -1307,7 +1392,7 @@ export function WorkspaceAssetLibrary({
                           <button
                             type="button"
                             onClick={() => void handleCopyLink(item)}
-                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
                             aria-label={copy.copyLink}
                           >
                             <Copy className="h-4 w-4" />
@@ -1336,18 +1421,38 @@ export function WorkspaceAssetLibrary({
                           <button
                             type="button"
                             onClick={() => setPreviewItem(item)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
                             aria-label={copy.preview}
                           >
                             <Eye className="h-4 w-4" />
                           </button>
                           <a
                             href={item.downloadUrl}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
                             aria-label={copy.download}
                           >
                             <Download className="h-4 w-4" />
                           </a>
+                          {item.hasWorkItem || getAssetSourceBucket(item) === "workflow" ? (
+                            <>
+                              <Link
+                                href={`/dashboard/workflows/runs/${item.runId}`}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+                                aria-label={copy.openRun}
+                              >
+                                <Workflow className="h-4 w-4" />
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => void handleReuseWorkflowRun(item)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000] disabled:opacity-45"
+                                aria-label={copy.reuseWorkflow}
+                                disabled={reusingRunId === item.runId}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => setDeleteItem(item)}

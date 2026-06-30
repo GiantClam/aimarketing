@@ -4,6 +4,7 @@ import { WorkflowListPage } from "@/components/workflows/workflow-list-page"
 import { requireServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
+import { listPlatformRegistryEntryExecutionStates } from "@/lib/platform/registry-entry-execution"
 import { listWorkflowDefinitionsForEnterprise } from "@/lib/workflows/store"
 
 function getWorkflowIdFromNormalizedResult(value: unknown) {
@@ -23,8 +24,15 @@ export default async function DashboardWorkflowsPage() {
   }
 
   const workflows = await listWorkflowDefinitionsForEnterprise(enterpriseId)
-
-  const recentRuns = (await listRecentWorkflowTaskRunsForEnterprise(enterpriseId, 60))
+  const templates = await listPlatformRegistryEntryExecutionStates({
+    locale,
+    itemType: "workflow",
+    surface: "workspace",
+    enterpriseId,
+    currentUser,
+  })
+  const recentWorkflowRuns = await listRecentWorkflowTaskRunsForEnterprise(enterpriseId, 60)
+  const recentRuns = recentWorkflowRuns
     .map((run) => ({
       id: run.id,
       workflowId: getWorkflowIdFromNormalizedResult(run.normalizedResult),
@@ -44,6 +52,7 @@ export default async function DashboardWorkflowsPage() {
     <WorkflowListPage
       locale={displayLocale}
       initialWorkflows={serializedWorkflows}
+      initialTemplates={templates}
       recentRuns={recentRuns}
       currentUserName={currentUser.name}
     />

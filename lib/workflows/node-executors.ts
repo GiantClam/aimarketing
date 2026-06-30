@@ -1,4 +1,5 @@
 import { resolveUploadNodeOutputs, type WorkflowAssetRef } from "@/lib/workflows/uploads"
+import { getDefaultEnterpriseWorkflowPreset } from "@/lib/workflows/presets"
 import type { WorkflowDefinitionNode, WorkflowNodeType, WorkflowValueKind } from "@/lib/workflows/schema"
 
 export type WorkflowMediaRef = {
@@ -25,7 +26,7 @@ export type WorkflowNodeOutputBundle = Partial<WorkflowNodeInputBundle>
 
 export type WorkflowCapabilityInvokeParams = {
   nodeType: WorkflowNodeType
-  capabilitySlug: "ai-chat" | "content-repurpose" | "ai-image" | "ai-video" | "ai-music" | "ai-ppt"
+  capabilitySlug: "ai-chat" | "agent-platform" | "content-repurpose" | "ai-image" | "ai-video" | "ai-music" | "ai-ppt"
   action: string
   node: WorkflowDefinitionNode
   input: WorkflowNodeInputBundle
@@ -36,6 +37,7 @@ export type WorkflowNodeExecutionContext = {
   ownerUserId: number
   node: WorkflowDefinitionNode
   input: WorkflowNodeInputBundle
+  workflowMetadata?: Record<string, unknown> | null
   capabilityInvoker?: (params: WorkflowCapabilityInvokeParams) => Promise<WorkflowNodeExecutionResult>
 }
 
@@ -50,7 +52,7 @@ export type WorkflowNodeExecutionResult = {
 
 export type WorkflowNodeExecutor = {
   nodeType: WorkflowNodeType
-  capabilitySlug?: "ai-chat" | "content-repurpose" | "ai-image" | "ai-video" | "ai-music" | "ai-ppt"
+  capabilitySlug?: "ai-chat" | "agent-platform" | "content-repurpose" | "ai-image" | "ai-video" | "ai-music" | "ai-ppt"
   action: string
   outputKinds: WorkflowValueKind[]
   execute(context: WorkflowNodeExecutionContext): Promise<WorkflowNodeExecutionResult>
@@ -80,9 +82,82 @@ function normalizeNodeTextConfig(node: WorkflowDefinitionNode) {
   return textValue.trim()
 }
 
+function normalizePositiveInteger(value: unknown, fallback: number) {
+  const numeric =
+    typeof value === "number" && Number.isFinite(value)
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback
+}
+
+function normalizePositiveIntegerList(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is number => Number.isInteger(item) && item > 0)
+}
+
+export function resolveKnowledgeRetrieveEnterpriseDatasetSelection(input: {
+  selectedDatasetIds: unknown
+  workflowMetadata?: Record<string, unknown> | null
+}) {
+  const selectedDatasetIds = normalizePositiveIntegerList(input.selectedDatasetIds)
+  const defaultPreset = getDefaultEnterpriseWorkflowPreset(input.workflowMetadata, "en")
+  const allowedDatasetIds = defaultPreset?.allowedKnowledgeDatasetIds ?? []
+
+  if (allowedDatasetIds.length === 0) {
+    return {
+      datasetIds: selectedDatasetIds,
+      restrictedByPreset: false,
+    }
+  }
+
+  if (selectedDatasetIds.length > 0) {
+    const allowedSet = new Set(allowedDatasetIds)
+    return {
+      datasetIds: selectedDatasetIds.filter((id) => allowedSet.has(id)),
+      restrictedByPreset: true,
+    }
+  }
+
+  return {
+    datasetIds: allowedDatasetIds,
+    restrictedByPreset: true,
+  }
+}
+
+function buildKnowledgeWriteDocument(input: {
+  title: string
+  node: WorkflowDefinitionNode
+  bundle: WorkflowNodeInputBundle
+}) {
+  const sections = [
+    `# ${input.title}`,
+    input.bundle.text.length > 0 ? `## Text\n\n${input.bundle.text.join("\n\n")}` : "",
+    input.bundle.asset.length > 0
+      ? `## Files\n${input.bundle.asset.map((item) => `- ${item.fileName}${item.url ? `: ${item.url}` : ""}`).join("\n")}`
+      : "",
+    input.bundle.image.length > 0
+      ? `## Images\n${input.bundle.image.map((item) => `- ${(item.title || "Image").trim()}: ${item.url || item.downloadUrl || ""}`).join("\n")}`
+      : "",
+    input.bundle.video.length > 0
+      ? `## Videos\n${input.bundle.video.map((item) => `- ${(item.title || "Video").trim()}: ${item.url || item.downloadUrl || ""}`).join("\n")}`
+      : "",
+    input.bundle.audio.length > 0
+      ? `## Audio\n${input.bundle.audio.map((item) => `- ${(item.title || "Audio").trim()}: ${item.url || item.downloadUrl || ""}`).join("\n")}`
+      : "",
+    input.bundle.ppt.length > 0
+      ? `## Presentations\n${input.bundle.ppt.map((item) => `- ${(item.title || "Presentation").trim()}: ${item.url || item.downloadUrl || ""}`).join("\n")}`
+      : "",
+    `## Workflow metadata\n- nodeKey: ${input.node.nodeKey}\n- nodeTitle: ${input.node.title}`,
+  ].filter(Boolean)
+
+  return sections.join("\n\n").trim()
+}
+
 function createCapabilityBackedExecutor(input: {
   nodeType: WorkflowNodeType
-  capabilitySlug: "ai-chat" | "content-repurpose" | "ai-image" | "ai-video" | "ai-music" | "ai-ppt"
+  capabilitySlug: "ai-chat" | "agent-platform" | "content-repurpose" | "ai-image" | "ai-video" | "ai-music" | "ai-ppt"
   action: string
   outputKinds: WorkflowValueKind[]
 }): WorkflowNodeExecutor {
@@ -171,6 +246,12 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
     action: "chat",
     outputKinds: ["text"],
   }),
+  agent_execute: createCapabilityBackedExecutor({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    outputKinds: ["text"],
+  }),
   image_generate: createCapabilityBackedExecutor({
     nodeType: "image_generate",
     capabilitySlug: "ai-image",
@@ -213,11 +294,140 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
     action: "preview",
     outputKinds: ["ppt"],
   }),
+  knowledge_retrieve: {
+    nodeType: "knowledge_retrieve",
+    action: "knowledge-retrieve",
+    outputKinds: ["text"],
+    async execute(context) {
+      const configuredPrompt = normalizeNodeTextConfig(context.node)
+      const upstreamText = context.input.text.join("\n\n").trim()
+      const query = [configuredPrompt, upstreamText].filter(Boolean).join("\n\n").trim()
+      if (!query) {
+        throw new Error("workflow_knowledge_retrieve_query_required")
+      }
+
+      const configuredEnterpriseDatasetIds = normalizePositiveIntegerList(context.node.config.selectedDatasetIds)
+      const enterpriseDatasetSelection = resolveKnowledgeRetrieveEnterpriseDatasetSelection({
+        selectedDatasetIds: configuredEnterpriseDatasetIds,
+        workflowMetadata: context.workflowMetadata,
+      })
+      const preferredPersonalDatasetIds = normalizePositiveIntegerList(context.node.config.selectedPersonalDatasetIds)
+      const topK = normalizePositiveInteger(context.node.config.topK, 4)
+      const shouldQueryEnterprise =
+        configuredEnterpriseDatasetIds.length > 0
+          ? enterpriseDatasetSelection.datasetIds.length > 0
+          : preferredPersonalDatasetIds.length === 0 &&
+            (enterpriseDatasetSelection.datasetIds.length > 0 || !enterpriseDatasetSelection.restrictedByPreset)
+
+      const [enterpriseRetrieval, personalRetrieval] = await Promise.all([
+        shouldQueryEnterprise
+          ? (async () => {
+              const { loadEnterpriseKnowledgeContext } = await import("@/lib/knowledge/service")
+              return loadEnterpriseKnowledgeContext({
+                enterpriseId: context.enterpriseId,
+                query,
+                preferredDatasetIds: enterpriseDatasetSelection.datasetIds,
+                topK,
+              })
+            })()
+          : Promise.resolve(null),
+        preferredPersonalDatasetIds.length > 0
+          ? (async () => {
+              const { loadPersonalKnowledgeContext } = await import("@/lib/knowledge/personal-datasets")
+              return loadPersonalKnowledgeContext({
+                userId: context.ownerUserId,
+                query,
+                preferredDatasetIds: preferredPersonalDatasetIds,
+                topK,
+              })
+            })()
+          : Promise.resolve(null),
+      ])
+
+      const mergedDatasetsUsed = [
+        ...(enterpriseRetrieval?.datasetsUsed ?? []),
+        ...(personalRetrieval?.datasetsUsed ?? []),
+      ]
+      const mergedSnippets = [
+        ...(enterpriseRetrieval?.snippets ?? []),
+        ...(personalRetrieval?.snippets ?? []),
+      ]
+
+      const retrievalText =
+        mergedSnippets.length
+          ? mergedSnippets
+              .map((snippet, index) => `[#${index + 1}] ${snippet.title}\n${snippet.content}`)
+              .join("\n\n")
+          : "No knowledge snippets found."
+
+      return {
+        output: {
+          text: [retrievalText],
+        },
+        metadata: {
+          persistenceTarget: "knowledge_retrieve",
+          datasetsUsed: mergedDatasetsUsed,
+          snippetCount: mergedSnippets.length,
+          preferredEnterpriseDatasetIds: enterpriseDatasetSelection.datasetIds,
+        },
+      }
+    },
+  },
+  knowledge_write: {
+    nodeType: "knowledge_write",
+    action: "knowledge-write",
+    outputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
+    async execute(context) {
+      const datasetScope = context.node.config.datasetScope === "personal" ? "personal" : "enterprise"
+      const datasetId = normalizePositiveInteger(context.node.config.datasetId, 0)
+      if (!datasetId) {
+        throw new Error("workflow_knowledge_write_dataset_required")
+      }
+
+      const title =
+        (typeof context.node.config.documentTitle === "string" && context.node.config.documentTitle.trim()) ||
+        `${context.node.title || "workflow-knowledge"}-${context.node.nodeKey}`
+      const content = buildKnowledgeWriteDocument({
+        title,
+        node: context.node,
+        bundle: context.input,
+      })
+
+      const knowledgeCategory =
+        typeof context.node.config.knowledgeCategory === "string" &&
+        ["general", "brand", "product", "case-study", "compliance", "campaign"].includes(context.node.config.knowledgeCategory)
+          ? (context.node.config.knowledgeCategory as "general" | "brand" | "product" | "case-study" | "compliance" | "campaign")
+          : "general"
+
+      return {
+        output: {
+          text: [...context.input.text],
+          asset: [...context.input.asset],
+          image: [...context.input.image],
+          video: [...context.input.video],
+          audio: [...context.input.audio],
+          ppt: [...context.input.ppt],
+        },
+        metadata: {
+          persistenceTarget: "knowledge_write",
+          manualConfirmationRequired: true,
+          knowledgeDocumentTitle: title,
+          knowledgeDraftContent: content,
+          targetType: datasetScope === "personal" ? "personal_knowledge_base" : "knowledge_base",
+          datasetId,
+          datasetScope,
+          knowledgeCategory,
+        },
+      }
+    },
+  },
   product_store: {
     nodeType: "product_store",
     action: "store-output",
     outputKinds: [],
     async execute(context) {
+      const persistToWorkLibrary = Boolean(context.node.config.persistToWorkLibrary)
+      const persistToKnowledgeBase = Boolean(context.node.config.persistToKnowledgeBase)
       return {
         output: {
           text: [...context.input.text],
@@ -229,6 +439,8 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
         },
         metadata: {
           persistenceTarget: "asset_library",
+          persistToWorkLibrary,
+          persistToKnowledgeBase,
         },
       }
     },

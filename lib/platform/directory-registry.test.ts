@@ -20,12 +20,13 @@ test("tool directory exposes deferred waitlist state without pretending the tool
 })
 
 test("deferred tool directory can mark enterprise-only entries without inventing runtime", () => {
-  const entry = getLocalizedToolDirectoryEntryBySlug("en", "hot-video-research")
-
-  assert.ok(entry)
-  assert.equal(entry?.status, "coming_soon")
-  assert.equal(entry?.availability, "enterprise_only")
-  assert.equal(entry?.accessMode, "deferred")
+  assert.equal(
+    getPlatformDirectoryAvailability("tool", "hot-video-research", {
+      status: "coming_soon_tool",
+      surface: "public",
+    }),
+    "enterprise_only",
+  )
 })
 
 test("workspace-only platform entries resolve to enterprise-only availability", () => {

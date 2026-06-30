@@ -289,6 +289,19 @@ function makeRelatedLink(href: string, description: string): SeoRelatedLink {
   }
 }
 
+function normalizeSeoRelatedLinks(page: SeoPage) {
+  const currentPath = seoPathForPage(page)
+  const seen = new Set<string>()
+
+  return page.relatedLinks.filter((link) => {
+    if (link.href === currentPath || seen.has(link.href)) {
+      return false
+    }
+    seen.add(link.href)
+    return true
+  })
+}
+
 function topicRelatedLinks(title: string): SeoRelatedLink[] {
   if (/video script/i.test(title)) {
     return [
@@ -1042,7 +1055,7 @@ function promptPage(input: {
   }
 }
 
-export const seoPages: SeoPage[] = [
+const rawSeoPages: SeoPage[] = [
   ...claudeFablePages,
   alternativePage({
     slug: "chatgpt-team-alternative",
@@ -2205,6 +2218,11 @@ export const seoPages: SeoPage[] = [
     ],
   }),
 ]
+
+export const seoPages: SeoPage[] = rawSeoPages.map((page) => ({
+  ...page,
+  relatedLinks: normalizeSeoRelatedLinks(page),
+}))
 
 export function seoPathForPage(page: Pick<SeoPage, "group" | "slug">) {
   return `/${page.group}/${page.slug}`

@@ -1,0 +1,70 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#111111"/>
+    <rect x="42" y="42" width="1196" height="636" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="60" y="60" width="1160" height="600" fill="#1A1A18" stroke="#282826" stroke-width="1.5"/>
+    <rect x="60" y="146" width="1160" height="2" fill="#282826"/>
+    <rect x="870" y="146" width="2" height="514" fill="#282826"/>
+    <rect x="60" y="520" width="810" height="2" fill="#282826"/>
+    <rect x="60" y="60" width="14" height="600" fill="#E85D26"/>
+  </g>
+
+  <g id="chrome">
+    <text x="92" y="96" fill="#E85D26" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="20" font-weight="700" letter-spacing="3">核心宣言</text>
+    <text x="1110" y="96" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="18" font-weight="700" text-anchor="end" letter-spacing="2">03 / 04</text>
+    <text x="92" y="128" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="15" font-weight="500" letter-spacing="1.4">霍尔木兹海峡现状与全球能源运输影响（截至2026年6月24日）</text>
+    <rect x="893" y="77" width="293" height="34" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <text x="910" y="100" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="14" font-weight="700" letter-spacing="1.8">BROADSIDE / INSIGHT / MARKET STRESS</text>
+  </g>
+
+  <g id="content">
+    <text x="96" y="238" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="76" font-weight="900" letter-spacing="-1.5">海峡重开，</text>
+    <text x="96" y="322" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="76" font-weight="900" letter-spacing="-1.5">市场仍按</text>
+    <rect x="94" y="346" width="542" height="88" fill="#E85D26"/>
+    <text x="114" y="409" fill="#111111" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="74" font-weight="900" letter-spacing="-1">战时定价</text>
+
+    <text x="96" y="474" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="28" font-weight="600" letter-spacing="0.2">更多船只重新通过霍尔木兹海峡，</text>
+    <text x="96" y="512" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="28" font-weight="600" letter-spacing="0.2">但任何单一事件都可能…</text>
+
+    <rect x="896" y="168" width="294" height="142" fill="#E85D26"/>
+    <text x="919" y="216" fill="#111111" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="18" font-weight="800" letter-spacing="2.5">单一判断</text>
+    <text x="919" y="270" fill="#111111" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="66" font-weight="900" letter-spacing="-1">重开 ≠</text>
+    <text x="919" y="323" fill="#111111" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="66" font-weight="900" letter-spacing="-1">回稳</text>
+
+    <rect x="896" y="332" width="294" height="148" fill="none" stroke="#282826" stroke-width="2"/>
+    <text x="919" y="365" fill="#E85D26" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="16" font-weight="800" letter-spacing="2">通过量</text>
+    <text x="919" y="435" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="88" font-weight="900">67</text>
+    <text x="1036" y="435" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="28" font-weight="700">艘</text>
+    <text x="919" y="467" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="22" font-weight="600">6月21日约67艘通过…</text>
+
+    <rect x="896" y="498" width="294" height="148" fill="none" stroke="#282826" stroke-width="2"/>
+    <text x="919" y="531" fill="#E85D26" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="16" font-weight="800" letter-spacing="2">滞留峰值</text>
+    <text x="919" y="601" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="88" font-weight="900">162</text>
+    <text x="1068" y="601" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="28" font-weight="700">艘</text>
+    <text x="919" y="633" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="22" font-weight="600">曾有约162艘油轮滞留…</text>
+
+    <rect x="88" y="548" width="354" height="84" fill="none" stroke="#282826" stroke-width="2"/>
+    <text x="108" y="580" fill="#E85D26" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="16" font-weight="800" letter-spacing="2">成本压力</text>
+    <text x="108" y="617" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="30" font-weight="800">部分油轮日租金逼近28…</text>
+
+    <rect x="458" y="548" width="392" height="84" fill="#F0ECE5"/>
+    <text x="480" y="580" fill="#111111" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="15" font-weight="800" letter-spacing="2">市场语法</text>
+    <text x="480" y="616" fill="#111111" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="30" font-weight="900">船流恢复，风险溢价未退</text>
+  </g>
+
+  <g id="annotations">
+    <line x1="654" y1="388" x2="860" y2="388" stroke="#E85D26" stroke-width="3"/>
+    <line x1="842" y1="388" x2="842" y2="310" stroke="#E85D26" stroke-width="3"/>
+    <circle cx="842" cy="310" r="7" fill="#E85D26"/>
+    <text x="664" y="374" fill="#E85D26" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="16" font-weight="800" letter-spacing="1.6">通行回升只修复表面流量</text>
+
+    <line x1="746" y1="588" x2="860" y2="588" stroke="#F0ECE5" stroke-width="2"/>
+    <line x1="842" y1="588" x2="842" y2="560" stroke="#F0ECE5" stroke-width="2"/>
+    <circle cx="842" cy="560" r="5" fill="#F0ECE5"/>
+    <text x="622" y="573" fill="#F0ECE5" font-family="Arial, 'Noto Sans SC', sans-serif" font-size="15" font-weight="700" letter-spacing="1.2">真正未复位的是安全预期与定价机制</text>
+
+    <rect x="1088" y="64" width="120" height="10" fill="#E85D26"/>
+    <rect x="1088" y="648" width="120" height="10" fill="#E85D26"/>
+  </g>
+</svg>

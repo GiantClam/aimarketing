@@ -1,0 +1,5 @@
+{
+  "jobId": "4be98976-a89b-41ea-9119-90f5bf277af0",
+  "status": "failed",
+  "message": "Error: PIL (Pillow) is required. Run: pip install Pillow"
+}

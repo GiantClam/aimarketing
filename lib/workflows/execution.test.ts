@@ -102,6 +102,32 @@ test("runWorkflowDefinition executes serial and parallel branches deterministica
   assert.equal(result.nodeStates["llm-1"]?.output.text?.[0]?.includes("Launch brief"), true)
 })
 
+test("runWorkflowDefinition injects seed text into root text_input nodes without configured text", async () => {
+  const result = await runWorkflowDefinition({
+    enterpriseId: 1,
+    ownerUserId: 1,
+    nodes: [
+      { nodeKey: "input-1", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: {} },
+      { nodeKey: "llm-1", type: "llm_generate", title: "LLM", positionX: 0, positionY: 0, config: {} },
+    ],
+    edges: [{ sourceNodeKey: "input-1", targetNodeKey: "llm-1", inputName: "text" }],
+    seedInput: {
+      text: ["Workflow-backed launch brief"],
+    },
+    executorContext: {
+      capabilityInvoker: async ({ input }) => ({
+        output: {
+          text: [`Seen: ${input.text.join(" ")}`],
+        },
+      }),
+    },
+  })
+
+  assert.equal(result.status, "succeeded")
+  assert.deepEqual(result.nodeStates["input-1"]?.output.text, ["Workflow-backed launch brief"])
+  assert.match(result.nodeStates["llm-1"]?.output.text?.[0] || "", /Workflow-backed launch brief/)
+})
+
 test("retryWorkflowNodeExecution reruns only the selected failed branch", async () => {
   const nodes: WorkflowDefinitionNode[] = [
     { nodeKey: "input-1", type: "text_input", title: "Input", positionX: 0, positionY: 0, config: { text: "Prompt" } },

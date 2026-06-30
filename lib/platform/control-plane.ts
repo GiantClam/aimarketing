@@ -164,7 +164,17 @@ function getDefaultBindingTarget(itemType: PlatformRegistryItemType, slug: strin
 
   if (slug === "campaign-launch") return "campaign-launch"
   if (slug === "content-repurpose") return "content-repurpose"
+  if (slug === "lead-to-outreach") return "lead-to-outreach"
   if (slug === "visual-ad-pipeline") return "visual-ad-pipeline"
+  if (slug === "sales-proposal") return "sales-proposal"
+  if (slug === "paid-media-creative-pipeline") return "paid-media-creative-pipeline"
+  if (slug === "seo-aeo-growth-engine") return "seo-aeo-growth-engine"
+  if (slug === "short-video-growth") return "short-video-growth"
+  if (slug === "brand-asset-factory") return "brand-asset-factory"
+  if (slug === "reputation-guard") return "reputation-guard"
+  if (slug === "compliance-review") return "compliance-review"
+  if (slug === "training-enablement") return "training-enablement"
+  if (slug === "knowledge-asset-loop") return "knowledge-asset-loop"
   return "agent-platform"
 }
 
@@ -239,7 +249,17 @@ export function getPlatformRegistryBindingOptions(
     { value: "agent-platform", label: label("智能体中台", "Agent platform") },
     { value: "content-repurpose", label: label("内容复用工作流", "Content repurpose workflow") },
     { value: "campaign-launch", label: label("Campaign Launch", "Campaign Launch") },
+    { value: "lead-to-outreach", label: label("Lead-to-Outreach", "Lead-to-Outreach") },
     { value: "visual-ad-pipeline", label: label("Visual Ad Pipeline", "Visual Ad Pipeline") },
+    { value: "sales-proposal", label: label("销售提案", "Sales Proposal") },
+    { value: "paid-media-creative-pipeline", label: label("付费投放创意流水线", "Paid Media Creative Pipeline") },
+    { value: "seo-aeo-growth-engine", label: label("SEO / AEO 增长引擎", "SEO / AEO Growth Engine") },
+    { value: "short-video-growth", label: label("短视频增长", "Short Video Growth") },
+    { value: "brand-asset-factory", label: label("品牌资产工厂", "Brand Asset Factory") },
+    { value: "reputation-guard", label: label("舆情响应", "Reputation Guard") },
+    { value: "compliance-review", label: label("合规审查", "Compliance Review") },
+    { value: "training-enablement", label: label("培训赋能", "Training Enablement") },
+    { value: "knowledge-asset-loop", label: label("知识资产闭环", "Knowledge Asset Loop") },
     { value: "knowledge-base", label: label("知识库", "Knowledge base") },
   ]
 }

@@ -7,6 +7,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { AppLocale } from "@/lib/i18n/config"
+import {
+  summarizeSharedKnowledgeTargets,
+  type EnterpriseKnowledgeGovernanceDataset,
+} from "@/lib/knowledge/governance-targets"
+import {
+  summarizeWorkflowKnowledgeUsage,
+  type WorkflowKnowledgeGovernanceSummary,
+} from "@/lib/workflows/knowledge-governance"
+import { isWorkflowNodeType, type WorkflowDefinitionNode } from "@/lib/workflows/schema"
 
 type EnterpriseDifyDataset = {
   datasetId: string
@@ -41,6 +50,71 @@ type AdvisorOverrideSummary = {
   apiKeyMasked: string
   hasApiKey: boolean
   enabled: boolean
+}
+
+type CustomAgentKnowledgeGovernanceItem = {
+  id: number
+  name: string
+  status: "draft" | "published" | "disabled" | "archived"
+  knowledgeBindingDetails: Array<{ id: number; name: string }>
+  enterpriseKnowledgeBindingDetails: Array<{ id: number; name: string; category: string }>
+  knowledgeRetrievalPolicy: {
+    retrievalMode?: "semantic" | "keyword" | "hybrid"
+    maxChunks?: number
+    requiredCitations?: boolean
+  } | null
+}
+
+type WorkflowKnowledgeApiRecord = {
+  id: number
+  title: string
+  status: string
+  nodes: Array<{
+    nodeKey: string
+    type: string
+    title: string
+    config: Record<string, unknown>
+    positionX: number
+    positionY: number
+  }>
+}
+
+type PersonalKnowledgeDocumentItem = {
+  id: number
+  datasetId: number
+  datasetName: string
+  name: string
+  sourceType: string
+  status: string
+  chunkCount: number
+  updatedAt: string
+}
+
+type PersonalKnowledgeActivityItem = {
+  id: string
+  documentId: number
+  title: string
+  datasetName: string
+  status: string
+  at: string | null
+}
+
+type KnowledgeSaveQueueItem = {
+  id: number
+  artifactId: number
+  status: "queued" | "running" | "succeeded" | "failed" | "rejected"
+  targetType: string
+  requestPayload: Record<string, unknown> | null
+  errorMessage: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  artifact: {
+    id: number
+    runId: number
+    title: string
+    mimeType: string | null
+    createdAt: string | null
+  } | null
 }
 
 function formatEnterpriseDifyMessage(error: unknown, fallback: string, locale: AppLocale) {
@@ -94,6 +168,7 @@ export function EnterpriseKnowledgeGovernancePanel({
   const [difyHasApiKey, setDifyHasApiKey] = useState(false)
   const [difyEnabled, setDifyEnabled] = useState(false)
   const [difyDatasets, setDifyDatasets] = useState<EnterpriseDifyDataset[]>([])
+  const [enterpriseDatasetGovernance, setEnterpriseDatasetGovernance] = useState<EnterpriseKnowledgeGovernanceDataset[]>([])
   const [loadingDifyConfig, setLoadingDifyConfig] = useState(false)
   const [savingDifyConfig, setSavingDifyConfig] = useState(false)
   const [difyMessage, setDifyMessage] = useState("")
@@ -104,6 +179,17 @@ export function EnterpriseKnowledgeGovernancePanel({
   const [leadHunterModeDrafts, setLeadHunterModeDrafts] = useState<Partial<Record<LeadHunterAdvisorType, "dify" | "skill">>>({})
   const [savingLeadHunterAdvisorType, setSavingLeadHunterAdvisorType] = useState<LeadHunterAdvisorType | null>(null)
   const [advisorConfigMessage, setAdvisorConfigMessage] = useState("")
+  const [customAgents, setCustomAgents] = useState<CustomAgentKnowledgeGovernanceItem[]>([])
+  const [loadingCustomAgents, setLoadingCustomAgents] = useState(false)
+  const [workflowKnowledge, setWorkflowKnowledge] = useState<WorkflowKnowledgeGovernanceSummary[]>([])
+  const [loadingWorkflowKnowledge, setLoadingWorkflowKnowledge] = useState(false)
+  const [personalKnowledgeDocuments, setPersonalKnowledgeDocuments] = useState<PersonalKnowledgeDocumentItem[]>([])
+  const [personalKnowledgeActivity, setPersonalKnowledgeActivity] = useState<PersonalKnowledgeActivityItem[]>([])
+  const [loadingPersonalKnowledge, setLoadingPersonalKnowledge] = useState(false)
+  const [knowledgeSaveQueue, setKnowledgeSaveQueue] = useState<KnowledgeSaveQueueItem[]>([])
+  const [loadingKnowledgeSaveQueue, setLoadingKnowledgeSaveQueue] = useState(false)
+  const [knowledgeSaveQueueMessage, setKnowledgeSaveQueueMessage] = useState("")
+  const [knowledgeSaveQueueAction, setKnowledgeSaveQueueAction] = useState<{ jobId: number; action: "approve" | "reject" } | null>(null)
 
   const enabledDifyDatasetCount = useMemo(
     () => difyDatasets.filter((dataset) => dataset.enabled).length,
@@ -112,6 +198,10 @@ export function EnterpriseKnowledgeGovernancePanel({
   const hasEnterpriseKnowledgeBinding = useMemo(
     () => Boolean(difyBaseUrl.trim() || difyHasApiKey || difyDatasets.length > 0),
     [difyBaseUrl, difyDatasets.length, difyHasApiKey],
+  )
+  const sharedKnowledgeTargets = useMemo(
+    () => summarizeSharedKnowledgeTargets(enterpriseDatasetGovernance),
+    [enterpriseDatasetGovernance],
   )
 
   const applyAdvisorConfigPayload = useCallback((payload: any) => {
@@ -156,9 +246,15 @@ export function EnterpriseKnowledgeGovernancePanel({
 
     setLoadingDifyConfig(true)
     try {
-      const response = await fetch("/api/enterprise/dify", { cache: "no-store" })
+      const [response, governanceResponse] = await Promise.all([
+        fetch("/api/enterprise/dify", { cache: "no-store" }),
+        fetch("/api/knowledge/datasets?includeBindings=1", { cache: "no-store" }),
+      ])
       if (!response.ok) return
-      const json = await response.json()
+      const [json, governanceJson] = await Promise.all([
+        response.json(),
+        governanceResponse.ok ? governanceResponse.json().catch(() => null) : Promise.resolve(null),
+      ])
       const binding = json?.data?.binding
       setDifyBaseUrl(typeof binding?.baseUrl === "string" ? binding.baseUrl : "")
       setDifyApiKeyMasked(typeof binding?.apiKeyMasked === "string" ? binding.apiKeyMasked : "")
@@ -173,6 +269,11 @@ export function EnterpriseKnowledgeGovernancePanel({
               priority: Number(dataset?.priority || 100),
               enabled: Boolean(dataset?.enabled),
             }))
+          : [],
+      )
+      setEnterpriseDatasetGovernance(
+        Array.isArray(governanceJson?.data?.items)
+          ? (governanceJson.data.items as EnterpriseKnowledgeGovernanceDataset[])
           : [],
       )
     } finally {
@@ -194,6 +295,144 @@ export function EnterpriseKnowledgeGovernancePanel({
     }
   }, [applyAdvisorConfigPayload, canManage, currentUserId])
 
+  const loadCustomAgents = useCallback(async () => {
+    if (!canManage || !Number.isFinite(currentUserId) || currentUserId <= 0) return
+
+    setLoadingCustomAgents(true)
+    try {
+      const response = await fetch("/api/platform/custom-agents", { cache: "no-store" })
+      if (!response.ok) return
+      const json = await response.json().catch(() => null)
+      const items: Record<string, unknown>[] = Array.isArray(json?.data?.items)
+        ? json.data.items.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+        : []
+      setCustomAgents(
+        items
+          .map((item): CustomAgentKnowledgeGovernanceItem => ({
+            id: Number(item.id || 0),
+            name: String(item.name || ""),
+            status:
+              item.status === "published" || item.status === "disabled" || item.status === "archived"
+                ? item.status
+                : "draft",
+            knowledgeBindingDetails: Array.isArray(item.knowledgeBindingDetails)
+              ? item.knowledgeBindingDetails
+                  .filter((detail: unknown): detail is { id: number; name: string } => Boolean(detail && typeof detail === "object" && Number.isInteger((detail as { id?: unknown }).id) && typeof (detail as { name?: unknown }).name === "string"))
+              : [],
+            enterpriseKnowledgeBindingDetails: Array.isArray(item.enterpriseKnowledgeBindingDetails)
+              ? item.enterpriseKnowledgeBindingDetails
+                  .filter((detail: unknown): detail is { id: number; name: string; category: string } =>
+                    Boolean(
+                      detail &&
+                        typeof detail === "object" &&
+                        Number.isInteger((detail as { id?: unknown }).id) &&
+                        typeof (detail as { name?: unknown }).name === "string" &&
+                        typeof (detail as { category?: unknown }).category === "string",
+                    ),
+                  )
+              : [],
+            knowledgeRetrievalPolicy:
+              item.knowledgeRetrievalPolicy && typeof item.knowledgeRetrievalPolicy === "object"
+                ? (item.knowledgeRetrievalPolicy as CustomAgentKnowledgeGovernanceItem["knowledgeRetrievalPolicy"])
+                : null,
+          }))
+          .filter((item) => item.id > 0),
+      )
+    } finally {
+      setLoadingCustomAgents(false)
+    }
+  }, [canManage, currentUserId])
+
+  const loadWorkflowKnowledge = useCallback(async () => {
+    if (!canView || !Number.isFinite(currentUserId) || currentUserId <= 0) return
+
+    setLoadingWorkflowKnowledge(true)
+    try {
+      const response = await fetch("/api/workflows", { cache: "no-store" })
+      if (!response.ok) return
+      const json = await response.json().catch(() => null)
+      const items = Array.isArray(json?.data) ? (json.data as WorkflowKnowledgeApiRecord[]) : []
+      const normalized = items
+        .filter((item): item is WorkflowKnowledgeApiRecord => Boolean(item && typeof item === "object" && Array.isArray(item.nodes)))
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          status: item.status,
+          nodes: item.nodes
+            .filter(
+              (node): node is WorkflowDefinitionNode =>
+                Boolean(
+                  node &&
+                    typeof node === "object" &&
+                    typeof node.nodeKey === "string" &&
+                    typeof node.title === "string" &&
+                    typeof node.positionX === "number" &&
+                    typeof node.positionY === "number" &&
+                    node.config &&
+                    typeof node.config === "object" &&
+                    isWorkflowNodeType(node.type),
+                ),
+            )
+            .map((node) => ({
+              nodeKey: node.nodeKey,
+              type: node.type,
+              title: node.title,
+              positionX: node.positionX,
+              positionY: node.positionY,
+              config: node.config,
+            })),
+        }))
+      setWorkflowKnowledge(
+        summarizeWorkflowKnowledgeUsage(normalized),
+      )
+    } finally {
+      setLoadingWorkflowKnowledge(false)
+    }
+  }, [canView, currentUserId])
+
+  const loadPersonalKnowledge = useCallback(async () => {
+    if (!canView || !Number.isFinite(currentUserId) || currentUserId <= 0) return
+
+    setLoadingPersonalKnowledge(true)
+    try {
+      const [documentsResponse, activityResponse] = await Promise.all([
+        fetch("/api/knowledge/personal-documents", { cache: "no-store" }),
+        fetch("/api/knowledge/personal-activity", { cache: "no-store" }),
+      ])
+      const [documentsJson, activityJson] = await Promise.all([
+        documentsResponse.json().catch(() => null),
+        activityResponse.json().catch(() => null),
+      ])
+
+      const documents = Array.isArray(documentsJson?.data?.items)
+        ? (documentsJson.data.items as PersonalKnowledgeDocumentItem[])
+        : []
+      const activity = Array.isArray(activityJson?.data?.items)
+        ? (activityJson.data.items as PersonalKnowledgeActivityItem[])
+        : []
+
+      setPersonalKnowledgeDocuments(documents)
+      setPersonalKnowledgeActivity(activity)
+    } finally {
+      setLoadingPersonalKnowledge(false)
+    }
+  }, [canView, currentUserId])
+
+  const loadKnowledgeSaveQueue = useCallback(async () => {
+    if (!canView || !Number.isFinite(currentUserId) || currentUserId <= 0) return
+
+    setLoadingKnowledgeSaveQueue(true)
+    try {
+      const response = await fetch("/api/platform/knowledge-save-jobs?limit=20", { cache: "no-store" })
+      if (!response.ok) return
+      const json = await response.json().catch(() => null)
+      const items = Array.isArray(json?.data?.items) ? (json.data.items as KnowledgeSaveQueueItem[]) : []
+      setKnowledgeSaveQueue(items)
+    } finally {
+      setLoadingKnowledgeSaveQueue(false)
+    }
+  }, [canView, currentUserId])
+
   useEffect(() => {
     void loadDifyConfig()
   }, [loadDifyConfig])
@@ -201,6 +440,50 @@ export function EnterpriseKnowledgeGovernancePanel({
   useEffect(() => {
     void loadAdvisorConfig()
   }, [loadAdvisorConfig])
+
+  useEffect(() => {
+    void loadCustomAgents()
+  }, [loadCustomAgents])
+
+  useEffect(() => {
+    void loadWorkflowKnowledge()
+  }, [loadWorkflowKnowledge])
+
+  useEffect(() => {
+    void loadPersonalKnowledge()
+  }, [loadPersonalKnowledge])
+
+  useEffect(() => {
+    void loadKnowledgeSaveQueue()
+  }, [loadKnowledgeSaveQueue])
+
+  const resolveKnowledgeSaveQueueJob = async (jobId: number, action: "approve" | "reject") => {
+    setKnowledgeSaveQueueAction({ jobId, action })
+    setKnowledgeSaveQueueMessage("")
+    try {
+      const response = await fetch(`/api/platform/knowledge-save-jobs/${jobId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(json?.error || "knowledge_save_job_action_failed")
+      }
+      await loadKnowledgeSaveQueue()
+      setKnowledgeSaveQueueMessage(
+        action === "approve"
+          ? t("知识入库任务已确认。", "Knowledge save job approved.")
+          : t("知识入库任务已驳回。", "Knowledge save job rejected."),
+      )
+    } catch (error) {
+      setKnowledgeSaveQueueMessage(
+        error instanceof Error ? error.message : t("知识入库任务处理失败。", "Failed to resolve knowledge save job."),
+      )
+    } finally {
+      setKnowledgeSaveQueueAction(null)
+    }
+  }
 
   const updateEnterpriseDifyEnabled = async (nextEnabled: boolean) => {
     if (!canManage) return
@@ -483,12 +766,453 @@ export function EnterpriseKnowledgeGovernancePanel({
                     </div>
                   )}
                 </div>
+
+                <div className={`${shellClassName} space-y-3 p-4`}>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{t("知识绑定目标", "Knowledge binding targets")}</p>
+                    <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                      {t("展示企业知识数据集当前挂到哪些共享入口，便于核对 AI 对话、Writer 和顾问外部知识是否已纳入统一治理。", "Shows which shared targets each enterprise dataset is bound to so AI chat, Writer, and advisor external knowledge stay under one governance view.")}
+                    </p>
+                  </div>
+
+                  {enterpriseDatasetGovernance.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">{t("当前没有企业级知识绑定目标。", "No enterprise knowledge binding targets yet.")}</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {enterpriseDatasetGovernance.map((dataset) => (
+                        <div key={dataset.id} className={`${insetClassName} p-4`}>
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{dataset.name}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                #{dataset.id} · {dataset.category}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {dataset.bindings.length === 0 ? (
+                                <span className="text-sm text-muted-foreground">{t("未绑定共享目标", "No shared targets")}</span>
+                              ) : (
+                                dataset.bindings.map((binding) => (
+                                  <span key={binding.id} className={tagClassName}>
+                                    {binding.targetType === "ai_entry"
+                                      ? t("AI 对话", "AI chat")
+                                      : binding.targetType === "writer"
+                                        ? "Writer"
+                                        : t("顾问外部知识", "Advisor external knowledge")}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <div className={`${shellClassName} p-4 text-sm text-muted-foreground`}>
                 <p className="font-medium text-foreground">{t("当前企业未配置知识库", "No knowledge base configured for current enterprise")}</p>
               </div>
             )}
+          </div>
+        </article>
+      ) : null}
+
+      {canView ? (
+        <article className={panelClassName}>
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-primary/30 bg-primary/95">
+              <Database className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="dashboard-kicker text-muted-foreground">{t("Personal knowledge", "Personal knowledge")}</div>
+              <h2 className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {t("我的知识条目与最近写入", "My knowledge items and recent writes")}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                {t("这里展示当前用户自己的知识条目，以及最近一次写入或更新的个人知识记录。", "This shows the current user's personal knowledge items and the most recent personal writes or updates.")}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 xl:grid-cols-2">
+            <div className={`${shellClassName} p-4`}>
+              <p className="text-sm font-medium text-foreground">{t("个人知识条目", "Personal knowledge items")}</p>
+              <div className="mt-3 space-y-3">
+                {loadingPersonalKnowledge ? (
+                  <p className="text-sm text-muted-foreground">{t("正在读取个人知识条目...", "Loading personal knowledge items...")}</p>
+                ) : null}
+                {!loadingPersonalKnowledge && personalKnowledgeDocuments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("当前还没有个人知识条目。", "No personal knowledge items yet.")}</p>
+                ) : null}
+                {personalKnowledgeDocuments.map((item) => (
+                  <div key={item.id} className={`${insetClassName} space-y-1 p-4`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-foreground">{item.name}</p>
+                      <span className={tagClassName}>{item.status}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("数据集", "Dataset")}: {item.datasetName}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("来源", "Source")}: {item.sourceType} · {t("分块", "Chunks")} {item.chunkCount}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("最近更新", "Updated")}: {item.updatedAt}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${shellClassName} p-4`}>
+              <p className="text-sm font-medium text-foreground">{t("最近写入记录", "Recent writes")}</p>
+              <div className="mt-3 space-y-3">
+                {loadingPersonalKnowledge ? (
+                  <p className="text-sm text-muted-foreground">{t("正在读取最近写入记录...", "Loading recent writes...")}</p>
+                ) : null}
+                {!loadingPersonalKnowledge && personalKnowledgeActivity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("当前还没有最近写入记录。", "No recent writes yet.")}</p>
+                ) : null}
+                {personalKnowledgeActivity.map((item) => (
+                  <div key={item.id} className={`${insetClassName} space-y-1 p-4`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-foreground">{item.title}</p>
+                      <span className={tagClassName}>{item.status}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("数据集", "Dataset")}: {item.datasetName}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("时间", "Time")}: {item.at || t("未知", "Unknown")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </article>
+      ) : null}
+
+      {canView ? (
+        <article className={panelClassName}>
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-primary/30 bg-primary/95">
+              <Database className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="dashboard-kicker text-muted-foreground">{t("Knowledge queue", "Knowledge queue")}</div>
+              <h2 className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {t("知识入库待处理队列", "Pending knowledge save queue")}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                {t("这里集中展示 workflow 运行产生的知识入库任务，管理员可在治理页统一确认或驳回。", "This centralizes workflow-generated knowledge save jobs so admins can approve or reject them from governance.")} 
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {knowledgeSaveQueueMessage ? <p className="text-sm text-muted-foreground">{knowledgeSaveQueueMessage}</p> : null}
+            {loadingKnowledgeSaveQueue ? (
+              <p className="text-sm text-muted-foreground">{t("正在读取知识入库队列...", "Loading knowledge save queue...")}</p>
+            ) : null}
+
+            {!loadingKnowledgeSaveQueue && knowledgeSaveQueue.length === 0 ? (
+              <div className={`${shellClassName} p-4 text-sm text-muted-foreground`}>
+                {t("当前没有待处理或历史知识入库任务。", "No pending or historical knowledge save jobs yet.")}
+              </div>
+            ) : null}
+
+            {knowledgeSaveQueue.map((job) => (
+              <div key={job.id} className={`${shellClassName} space-y-4 p-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {job.artifact?.title || (typeof job.requestPayload?.artifactTitle === "string" ? job.requestPayload.artifactTitle : `#${job.artifactId}`)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      #{job.id} · {job.targetType} · {t("状态", "status")} {job.status}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={tagClassName}>
+                      {t("数据集", "dataset")} #{typeof job.requestPayload?.datasetId === "number" ? job.requestPayload.datasetId : "-"}
+                    </span>
+                    <span className={tagClassName}>
+                      {t("范围", "scope")} {job.requestPayload?.datasetScope === "personal" ? t("个人", "personal") : t("企业", "enterprise")}
+                    </span>
+                    <span className={tagClassName}>
+                      {t("分类", "category")} {typeof job.requestPayload?.knowledgeCategory === "string" ? job.requestPayload.knowledgeCategory : "general"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div className={`${insetClassName} space-y-1 p-4 text-sm`}>
+                    <div className="text-xs text-muted-foreground">
+                      {t("创建时间", "Created")}: {job.createdAt || t("未知", "Unknown")}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("运行记录", "Run")}: {job.artifact?.runId ? `#${job.artifact.runId}` : t("未知", "Unknown")}
+                    </div>
+                    {job.errorMessage ? <div className="text-xs text-red-600">{job.errorMessage}</div> : null}
+                  </div>
+
+                  {canManage &&
+                  job.status === "queued" &&
+                  job.requestPayload?.manualConfirmationRequired === true &&
+                  typeof job.requestPayload?.datasetId === "number" ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="dashboard-button-primary"
+                        disabled={knowledgeSaveQueueAction?.jobId === job.id}
+                        onClick={() => void resolveKnowledgeSaveQueueJob(job.id, "approve")}
+                      >
+                        {t("确认入库", "Approve save")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="dashboard-button-secondary"
+                        disabled={knowledgeSaveQueueAction?.jobId === job.id}
+                        onClick={() => void resolveKnowledgeSaveQueueJob(job.id, "reject")}
+                      >
+                        {t("驳回入库", "Reject save")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      ) : null}
+
+      {canManage ? (
+        <article className={panelClassName}>
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-primary/30 bg-primary/95">
+              <Database className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="dashboard-kicker text-muted-foreground">{t("Agent bindings", "Agent bindings")}</div>
+              <h2 className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {t("Agent 知识库绑定", "Agent knowledge bindings")}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                {t("企业管理员可以在这里核对每个自定义 Agent 绑定了哪些个人知识库、企业知识库，以及当前检索策略。", "Admins can verify each custom agent's personal datasets, enterprise datasets, and retrieval policy here.")}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {loadingCustomAgents ? (
+              <p className="text-sm text-muted-foreground">{t("正在读取 Agent 绑定...", "Loading agent bindings...")}</p>
+            ) : null}
+
+            {!loadingCustomAgents && customAgents.length === 0 ? (
+              <div className={`${shellClassName} p-4 text-sm text-muted-foreground`}>
+                {t("当前没有可治理的自定义 Agent。", "No custom agents available for governance yet.")}
+              </div>
+            ) : null}
+
+            {customAgents.map((agent) => (
+              <div key={agent.id} className={`${shellClassName} space-y-4 p-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{agent.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      ID #{agent.id} · {agent.status}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={tagClassName}>
+                      {(agent.knowledgeRetrievalPolicy?.retrievalMode || "hybrid").toString()}
+                    </span>
+                    <span className={tagClassName}>
+                      {t("片段", "chunks")} {agent.knowledgeRetrievalPolicy?.maxChunks || 4}
+                    </span>
+                    <span className={tagClassName}>
+                      {agent.knowledgeRetrievalPolicy?.requiredCitations === false
+                        ? t("可不带引用", "citations optional")
+                        : t("要求引用", "citations required")}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className={`${insetClassName} p-4`}>
+                    <p className="text-xs text-muted-foreground">{t("个人知识库", "Personal datasets")}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {agent.knowledgeBindingDetails.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">{t("未绑定", "None")}</span>
+                      ) : (
+                        agent.knowledgeBindingDetails.map((detail) => (
+                          <span key={`personal-${detail.id}`} className={tagClassName}>
+                            {detail.name}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className={`${insetClassName} p-4`}>
+                    <p className="text-xs text-muted-foreground">{t("企业知识库", "Enterprise datasets")}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {agent.enterpriseKnowledgeBindingDetails.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">{t("未绑定", "None")}</span>
+                      ) : (
+                        agent.enterpriseKnowledgeBindingDetails.map((detail) => (
+                          <span key={`enterprise-${detail.id}`} className={tagClassName}>
+                            {detail.name} ({detail.category})
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      ) : null}
+
+      {canView ? (
+        <article className={panelClassName}>
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-primary/30 bg-primary/95">
+              <Workflow className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="dashboard-kicker text-muted-foreground">{t("Workflow knowledge", "Workflow knowledge")}</div>
+              <h2 className="mt-2 font-display text-2xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {t("Workflow 知识链路", "Workflow knowledge paths")}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                {t("这里列出哪些 workflow 会显式读取知识库、写入知识库，或把产物排入知识沉淀队列。", "This shows which workflows explicitly read knowledge, write knowledge, or queue outputs for knowledge ingestion.")}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {loadingWorkflowKnowledge ? (
+              <p className="text-sm text-muted-foreground">{t("正在读取 Workflow 知识链路...", "Loading workflow knowledge paths...")}</p>
+            ) : null}
+
+            {!loadingWorkflowKnowledge && workflowKnowledge.length === 0 ? (
+              <div className={`${shellClassName} p-4 text-sm text-muted-foreground`}>
+                {t("当前还没有接入知识读写主流程的 workflow。", "No workflows are wired into the knowledge read/write flow yet.")}
+              </div>
+            ) : null}
+
+            {workflowKnowledge.map((workflow) => (
+              <div key={workflow.workflowId} className={`${shellClassName} space-y-4 p-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{workflow.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      ID #{workflow.workflowId} · {workflow.status}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {workflow.readNodes.length > 0 ? (
+                      <span className={tagClassName}>
+                        {t("读取", "read")} {workflow.readNodes.length}
+                      </span>
+                    ) : null}
+                    {workflow.writeNodes.length > 0 ? (
+                      <span className={tagClassName}>
+                        {t("写入", "write")} {workflow.writeNodes.length}
+                      </span>
+                    ) : null}
+                    {workflow.queueNodes.length > 0 ? (
+                      <span className={tagClassName}>
+                        {t("沉淀队列", "queue")} {workflow.queueNodes.length}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <div className={`${insetClassName} p-4`}>
+                    <p className="text-xs text-muted-foreground">{t("知识读取节点", "Knowledge read nodes")}</p>
+                    <div className="mt-3 space-y-2">
+                      {workflow.readNodes.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">{t("无", "None")}</span>
+                      ) : (
+                        workflow.readNodes.map((node) => (
+                          <div key={node.nodeKey} className="space-y-1 text-sm text-foreground">
+                            <div className="font-medium">{node.title}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {node.selectedDatasetIds.length > 0
+                                ? `${t("限定数据集", "datasets")} #${node.selectedDatasetIds.join(", #")}`
+                                : node.selectedPersonalDatasetIds.length === 0
+                                  ? t("未限定数据集，将按企业知识服务默认范围检索。", "No dataset filter; retrieval follows the enterprise default scope.")
+                                  : t("未限定企业数据集。", "No enterprise dataset filter.")}
+                            </div>
+                            {node.selectedPersonalDatasetIds.length > 0 ? (
+                              <div className="text-xs text-muted-foreground">
+                                {t("个人数据集", "personal datasets")} #{node.selectedPersonalDatasetIds.join(", #")}
+                              </div>
+                            ) : null}
+                            <div className="text-xs text-muted-foreground">
+                              topK {node.topK}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={`${insetClassName} p-4`}>
+                    <p className="text-xs text-muted-foreground">{t("知识写入节点", "Knowledge write nodes")}</p>
+                    <div className="mt-3 space-y-2">
+                      {workflow.writeNodes.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">{t("无", "None")}</span>
+                      ) : (
+                        workflow.writeNodes.map((node) => (
+                          <div key={node.nodeKey} className="space-y-1 text-sm text-foreground">
+                            <div className="font-medium">{node.title}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {node.datasetId
+                                ? `${t("目标数据集", "target dataset")} #${node.datasetId}`
+                                : t("未配置目标数据集。", "Target dataset not configured.")}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {t("范围", "scope")}: {node.datasetScope === "personal" ? t("个人知识库", "personal") : t("企业知识库", "enterprise")}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {t("分类", "category")}: {node.knowledgeCategory}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={`${insetClassName} p-4`}>
+                    <p className="text-xs text-muted-foreground">{t("资产沉淀到知识库", "Asset to knowledge queue")}</p>
+                    <div className="mt-3 space-y-2">
+                      {workflow.queueNodes.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">{t("无", "None")}</span>
+                      ) : (
+                        workflow.queueNodes.map((node) => (
+                          <div key={node.nodeKey} className="space-y-1 text-sm text-foreground">
+                            <div className="font-medium">{node.title}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {t("目标", "target")}: {node.knowledgeTargetType}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </article>
       ) : null}
@@ -571,6 +1295,31 @@ export function EnterpriseKnowledgeGovernancePanel({
                     </div>
 
                     <div className={`${insetClassName} grid gap-3 p-4 text-sm`}>
+                      <div className={`${shellClassName} space-y-2 p-3`}>
+                        <p className="text-xs text-muted-foreground">
+                          {t("共享知识数据集", "Shared knowledge datasets")}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {sharedKnowledgeTargets.advisorDatasets.length === 0 ? (
+                            <span className="text-sm text-muted-foreground">
+                              {t("当前没有挂到顾问知识池的数据集。", "No datasets are currently bound to the advisor knowledge pool.")}
+                            </span>
+                          ) : (
+                            sharedKnowledgeTargets.advisorDatasets.map((dataset) => (
+                              <span key={`advisor-dataset-${card.advisorType}-${dataset.id}`} className={tagClassName}>
+                                {dataset.name} ({dataset.category})
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        <p className="text-xs leading-6 text-muted-foreground">
+                          {t(
+                            "当前模型下，内置专家助手共享 advisor_external_knowledge 绑定池；这里展示的是该顾问当前可消费的共享知识集。",
+                            "Under the current model, built-in advisors share the advisor_external_knowledge pool; this lists the shared datasets available to the advisor.",
+                          )}
+                        </p>
+                      </div>
+
                       {isLeadHunterWorkflow ? (
                         <div className="space-y-4">
                           <p className="text-xs leading-6 text-muted-foreground">

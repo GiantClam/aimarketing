@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <g id="background">
+    <rect width="1280" height="720" fill="#111111"/>
+  </g>
+  
+  <g id="chrome">
+    <!-- Maybe a top bar or side element -->
+  </g>
+  
+  <g id="content">
+    <!-- Kicker -->
+    <!-- Title -->
+    <!-- Body -->
+    <!-- 4 Agenda items -->
+  </g>
+  
+  <g id="annotations">
+    <!-- Decorative elements -->
+  </g>
+</svg>
+
+
+For the Broadside style with agenda layout:
+- Left side: Could have a vertical accent bar or section marker
+- Large title at top
+- Body text below title
+- 4 numbered sections arranged vertically or in a grid
+
+Given the 1280x720 canvas, I can do:
+- Full width background
+- Left accent bar (maybe 8-10px wide in accent color)
+- Kicker in top left area
+- Large title
+- Body text
+- 4 agenda items with large numbers
+
+Let me design:
+
+Top area:
+- Kicker: "栏目排版" - small, uppercase-ish feel
+- Title: "议程：冲击全链路的四个决策节点" - large, bold
+
+Middle:
+- Body text describing the situation
+
+Bottom/Main:
+- 4 numbered items arranged in 2x2 grid or vertically with clear numbering
+
+Since bullets are about "decision points", I'll use large numbers (01, 02, 03, 04) with the text beside them.
+
+Let me create a visually striking agenda page:
+
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <!-- Background -->
+  <rect width="1280" height="720" fill="#111111"/>
+  
+  <!-- Left accent bar -->
+  <rect x="0" y="0" width="12" height="720" fill="#E85D26"/>
+  
+  <!-- Chrome - top area -->
+  <g id="chrome">
+    <!-- Kicker -->
+    <text x="60" y="80" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#E85D26" letter-spacing="3">栏目排版</text>
+    
+    <!-- Title -->
+    <text x="60" y="140" font-family="Arial, sans-serif" font-size="52" font-weight="bold" fill="#F0ECE5">议程：冲击全链路的四个决策节点</text>
+    
+    <!-- Body -->
+    <text x="60" y="200" font-family="Arial, sans-serif" font-size="22" fill="#F0ECE5">截至2026年6月24日，霍尔木兹海峡重启通航，但安全形势、费用机制与控制权安排仍…</text>
+  </g>
+  
+  <!-- Content - 4 agenda items -->
+  <g id="content">
+    <!-- Item 1 -->
+    <text x="60" y="300" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#E85D26">01</text>
+    <text x="140" y="300" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">海峡通航重启但机制未稳，市场焦点已…</text>
+    
+    <!-- Item 2 -->
+    <text x="60" y="400" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#E85D26">02</text>
+    <text x="140" y="400" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">运价、战险保费与替代航线成本同步传…</text>
+    
+    <!-- Item 3 -->
+    <text x="60" y="500" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#E85D26">03</text>
+    <text x="140" y="500" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">新军事摩擦、扣船或临时封控可随时触…</text>
+    
+    <!-- Item 4 -->
+    <text x="60" y="600" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#E85D26">04</text>
+    <text x="140" y="600" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">同步准备运价抬升、交期变长和供应改…</text>
+  </g>
+  
+  <!-- Annotations -->
+  <g id="annotations">
+    <!-- Decorative line under title -->
+    <rect x="60" y="160" width="200" height="4" fill="#E85D26"/>
+  </g>
+</svg>
+
+
+I'm adjusting the layout to better fit the agenda style with the 4-5 chapters. The vertical arrangement with large numbers creates a clear visual hierarchy that emphasizes each decision point. The accent color draws attention to key elements while maintaining the broadside poster aesthetic. I'll adjust the vertical spacing to fit all content properly. The title ends at y=135, body text at y=185, then the 4 items start at y=260 with 90px spacing between them (260, 350, 440, 530). This leaves room at the bottom. I could add a bottom decorative element or summary, but the current spacing works well. I should also refine the typography—using bold weights, uppercase letters for the kicker to give it visual distinction, and maintaining clear hierarchy with font sizes. I'll also incorporate some structural lines to organize the content more effectively.
+</think>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <g id="background">
+    <rect width="1280" height="720" fill="#111111"/>
+  </g>
+  
+  <g id="chrome">
+    <rect x="0" y="0" width="1280" height="8" fill="#E85D26"/>
+    <rect x="0" y="712" width="1280" height="8" fill="#E85D26"/>
+    <text x="48" y="95" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#E85D26" letter-spacing="4">栏目排版</text>
+    <text x="48" y="155" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#F0ECE5">议程：冲击全链路的四个决策节点</text>
+    <rect x="48" y="175" width="180" height="5" fill="#E85D26"/>
+    <text x="48" y="225" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">截至2026年6月24日，霍尔木兹海峡重启通航，但安全形势、费用机制与控制权安排仍需关注。</text>
+  </g>
+  
+  <g id="content">
+    <g>
+      <rect x="48" y="280" width="560" height="180" fill="#1A1A18" rx="0"/>
+      <rect x="48" y="280" width="6" height="180" fill="#E85D26"/>
+      <text x="80" y="340" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E85D26">01</text>
+      <text x="170" y="330" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#F0ECE5">海峡通航重启但机制未稳</text>
+      <text x="170" y="360" font-family="Arial, sans-serif" font-size="16" fill="#F0ECE5">市场焦点已从风险溢价转向机制稳定性</text>
+      <line x1="170" y1="380" x2="570" y2="380" stroke="#282826" stroke-width="1"/>
+      <text x="170" y="410" font-family="Arial, sans-serif" font-size="14" fill="#E85D26">关联：保险条款 · 船东责任 · 货主对冲</text>
+    </g>
+    
+    <g>
+      <rect x="672" y="280" width="560" height="180" fill="#1A1A18" rx="0"/>
+      <rect x="672" y="280" width="6" height="180" fill="#E85D26"/>
+      <text x="704" y="340" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E85D26">02</text>
+      <text x="794" y="330" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#F0ECE5">运价、战险保费与替代成本</text>
+      <text x="794" y="360" font-family="Arial, sans-serif" font-size="16" fill="#F0ECE5">三价同步传导至终端采购成本</text>
+      <line x1="794" y1="380" x2="1194" y2="380" stroke="#282826" stroke-width="1"/>
+      <text x="794" y="410" font-family="Arial, sans-serif" font-size="14" fill="#E85D26">关联：VLCC租金 · 战争险费率 · 绕行溢价</text>
+    </g>
+    
+    <g>
+      <rect x="48" y="490" width="560" height="180" fill="#1A1A18" rx="0"/>
+      <rect x="48" y="490" width="6" height="180" fill="#E85D26"/>
+      <text x="80" y="550" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E85D26">03</text>
+      <text x="170" y="540" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#F0ECE5">新军事摩擦与封控风险</text>
+      <text x="170" y="570" font-family="Arial, sans-serif" font-size="16" fill="#F0ECE5">扣船或临时封控可随时触发</text>
+      <line x1="170" y1="590" x2="570" y2="590" stroke="#282826" stroke-width="1"/>
+      <text x="170" y="620" font-family="Arial, sans-serif" font-size="14" fill="#E85D26">关联：海军护航 · 霍尔木兹倡议 · 应急协议</text>
+    </g>
+    
+    <g>
+      <rect x="672" y="490" width="560" height="180" fill="#1A1A18" rx="0"/>
+      <rect x="672" y="490" width="6" height="180" fill="#E85D26"/>
+      <text x="704" y="550" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E85D26">04</text>
+      <text x="794" y="540" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#F0ECE5">同步准备供应链重构</text>
+      <text x="794" y="570" font-family="Arial, sans-serif" font-size="16" fill="#F0ECE5">运价抬升、交期变长与供应改线并行</text>
+      <line x1="794" y1="590" x2="1194" y2="590" stroke="#282826" stroke-width="1"/>
+      <text x="794" y="620" font-family="Arial, sans-serif" font-size="14" fill="#E85D26">关联：战略储备 · 替代供应国 · 采购多元化</text>
+    </g>
+  </g>
+  
+  <g id="annotations">
+    <text x="48" y="700" font-family="Arial, sans-serif" font-size="12" fill="#282826">SLIDE 02 / 04 | 霍尔木兹海峡现状与全球能源运输影响</text>
+    <circle cx="1232" cy="48" r="24" fill="#1A1A18" stroke="#E85D26" stroke-width="2"/>
+    <text x="1232" y="54" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#E85D26" text-anchor="middle">▶</text>
+  </g>
+</svg>

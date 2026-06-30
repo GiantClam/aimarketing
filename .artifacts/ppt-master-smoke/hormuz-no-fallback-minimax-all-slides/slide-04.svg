@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <g id="background">
+    <rect width="1280" height="720" fill="#111111"/>
+  </g>
+  
+  <g id="chrome">
+    <rect x="40" y="40" width="1200" height="640" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="40" y="40" width="1200" height="80" fill="#1A1A18"/>
+    <rect x="40" y="720" width="1200" height="2" fill="#E85D26"/>
+  </g>
+  
+  <g id="content">
+    <g id="header">
+      <rect x="60" y="55" width="180" height="50" fill="#E85D26"/>
+      <text x="150" y="90" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#111111" text-anchor="middle">下一页告示</text>
+      
+      <text x="280" y="90" font-family="Arial, sans-serif" font-size="42" font-weight="bold" fill="#F0ECE5" text-anchor="start">立即行动：三层布防体系</text>
+      
+      <text x="1000" y="90" font-family="Arial, sans-serif" font-size="18" fill="#888888" text-anchor="end">4 / 4</text>
+    </g>
+    
+    <g id="timeline-container">
+      <g id="vertical-line">
+        <line x1="300" y1="180" x2="300" y2="620" stroke="#E85D26" stroke-width="4"/>
+      </g>
+      
+      <g id="node-1">
+        <circle cx="300" cy="220" r="20" fill="#E85D26"/>
+        <text x="300" y="227" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#111111" text-anchor="middle">1</text>
+        <rect x="360" y="170" width="820" height="100" fill="#1A1A18" stroke="#282826" stroke-width="1"/>
+        <text x="390" y="215" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#E85D26">审查现有租船合同</text>
+        <text x="390" y="255" font-family="Arial, sans-serif" font-size="22" fill="#F0ECE5">识别不可抗力条款、绕行条款与战争险豁免漏洞</text>
+      </g>
+      
+      <g id="node-2">
+        <circle cx="300" cy="360" r="20" fill="#E85D26"/>
+        <text x="300" y="367" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#111111" text-anchor="middle">2</text>
+        <rect x="360" y="310" width="820" height="100" fill="#1A1A18" stroke="#282826" stroke-width="1"/>
+        <text x="390" y="355" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#E85D26">建立替代航线成本模型</text>
+        <text x="390" y="395" font-family="Arial, sans-serif" font-size="22" fill="#F0ECE5">计算好望角与苏伊士运河双轨方案的费用差异与时效损耗</text>
+      </g>
+      
+      <g id="node-3">
+        <circle cx="300" cy="500" r="20" fill="#E85D26"/>
+        <text x="300" y="507" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#111111" text-anchor="middle">3</text>
+        <rect x="360" y="450" width="820" height="100" fill="#1A1A18" stroke="#282826" stroke-width="1"/>
+        <text x="390" y="495" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#E85D26">将地缘风险溢价纳入年度预算</text>
+        <text x="390" y="535" font-family="Arial, sans-serif" font-size="22" fill="#F0ECE5">在财务模型中预设10%-25%的运价波动缓冲区间</text>
+      </g>
+    </g>
+    
+    <g id="footer-message">
+      <rect x="60" y="580" width="1160" height="60" fill="#1A1A18"/>
+      <text x="640" y="620" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#F0ECE5" text-anchor="middle">管理层需同步准备：运价抬升 + 交期变长 + 供应改道</text>
+    </g>
+  </g>
+  
+  <g id="annotations">
+    <text x="1180" y="700" font-family="Arial, sans-serif" font-size="12" fill="#555555" text-anchor="end">截至2026年6月24日</text>
+  </g>
+</svg>

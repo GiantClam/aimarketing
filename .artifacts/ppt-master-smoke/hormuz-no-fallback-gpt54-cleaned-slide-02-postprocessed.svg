@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="28" y="28" width="1224" height="664" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="46" y="46" width="1188" height="628" fill="#1A1A18" stroke="#282826" stroke-width="1.5"/>
+    <rect x="46" y="46" width="16" height="628" fill="#E85D26"/>
+    <rect x="1116" y="46" width="118" height="628" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <line x1="92" y1="176" x2="1088" y2="176" stroke="#282826" stroke-width="2"/>
+    <line x1="92" y1="462" x2="1088" y2="462" stroke="#282826" stroke-width="2"/>
+    <line x1="598" y1="176" x2="598" y2="462" stroke="#282826" stroke-width="2"/>
+  </g>
+
+  <g id="chrome">
+    <text x="92" y="98" fill="#E85D26" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="3">栏目排版</text>
+    <text x="92" y="148" fill="#F0ECE5" font-size="66" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1">管理层先看这五件事</text>
+    <text x="1138" y="96" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle">02</text>
+    <text x="1138" y="124" fill="#F0ECE5" font-size="12" font-family="Arial, Helvetica, sans-serif" letter-spacing="2" text-anchor="middle">AGENDA</text>
+    <line x1="1090" y1="144" x2="1186" y2="144" stroke="#E85D26" stroke-width="4"/>
+    <text x="1138" y="642" fill="#F0ECE5" font-size="12" font-family="Arial, Helvetica, sans-serif" letter-spacing="2" text-anchor="middle">2026.06.24</text>
+  </g>
+
+  <g id="content">
+    <text x="92" y="222" fill="#F0ECE5" font-size="29" font-family="Arial, Helvetica, sans-serif" font-weight="600">这不是新闻回顾，而是一份关于成本、时效与供应控制权的决策清单。</text>
+
+    <rect x="92" y="254" width="454" height="176" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <rect x="92" y="254" width="92" height="176" fill="#E85D26"/>
+    <text x="138" y="322" fill="#111111" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">01</text>
+    <text x="206" y="304" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="1">运行状态</text>
+    <text x="206" y="352" fill="#F0ECE5" font-size="31" font-family="Arial, Helvetica, sans-serif" font-weight="700">航道恢复开放，</text>
+    <text x="206" y="390" fill="#F0ECE5" font-size="31" font-family="Arial, Helvetica, sans-serif" font-weight="700">但运行秩序仍未完全稳定</text>
+
+    <rect x="598" y="254" width="490" height="176" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <rect x="598" y="254" width="92" height="176" fill="#F0ECE5"/>
+    <text x="644" y="322" fill="#111111" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">02</text>
+    <text x="712" y="304" fill="#E85D26" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="1">价格压力</text>
+    <text x="712" y="352" fill="#F0ECE5" font-size="31" font-family="Arial, Helvetica, sans-serif" font-weight="700">战险、运价与附加费</text>
+    <text x="712" y="390" fill="#F0ECE5" font-size="31" font-family="Arial, Helvetica, sans-serif" font-weight="700">尚未回落至冲突前</text>
+
+    <rect x="92" y="500" width="454" height="132" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <rect x="92" y="500" width="92" height="132" fill="#F0ECE5"/>
+    <text x="138" y="581" fill="#111111" font-size="50" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">03</text>
+    <text x="206" y="542" fill="#E85D26" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="1">瓶颈判断</text>
+    <text x="206" y="586" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">海峡仍是全球能源物流最敏感的关键瓶颈</text>
+
+    <rect x="598" y="500" width="490" height="132" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <rect x="598" y="500" width="92" height="132" fill="#E85D26"/>
+    <text x="644" y="581" fill="#111111" font-size="50" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">04</text>
+    <text x="712" y="542" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="1">利润挤压</text>
+    <text x="712" y="586" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">成本同步压向炼厂、贸易商与进口买方</text>
+
+    <rect x="1116" y="176" width="118" height="286" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <text x="1175" y="216" fill="#E85D26" font-size="14" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2" text-anchor="middle">VERDICT</text>
+    <text x="1175" y="268" fill="#F0ECE5" font-size="42" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">05</text>
+    <text x="1175" y="314" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle">核心判断</text>
+    <text x="1175" y="358" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">通航恢复</text>
+    <text x="1175" y="390" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">不等于</text>
+    <text x="1175" y="422" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">供应链复原</text>
+  </g>
+
+  <g id="annotations">
+    <line x1="546" y1="342" x2="582" y2="342" stroke="#E85D26" stroke-width="3"/>
+    <line x1="546" y1="566" x2="582" y2="566" stroke="#E85D26" stroke-width="3"/>
+    <line x1="1088" y1="342" x2="1116" y2="342" stroke="#E85D26" stroke-width="3"/>
+    <line x1="1088" y1="566" x2="1116" y2="566" stroke="#E85D26" stroke-width="3"/>
+    <text x="92" y="660" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="1">从“能不能过”转向“代价由谁承担”</text>
+  </g>
+</svg>

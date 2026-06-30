@@ -16,7 +16,7 @@ export type PlatformTaskRunStatus = "queued" | "running" | "succeeded" | "failed
 export type PlatformRunEventLevel = "info" | "warn" | "error"
 export type PlatformArtifactKind = "file" | "link" | "text" | "json"
 export type PlatformWorkItemType = "deck" | "article" | "image_set" | "video" | "audio" | "document"
-export type PlatformKnowledgeSaveJobStatus = "queued" | "running" | "succeeded" | "failed"
+export type PlatformKnowledgeSaveJobStatus = "queued" | "running" | "succeeded" | "failed" | "rejected"
 
 export type PlatformTaskRunRecord = typeof platformTaskRuns.$inferSelect
 export type PlatformTaskRunEventRecord = typeof platformTaskRunEvents.$inferSelect
@@ -100,6 +100,12 @@ export type EnqueuePlatformKnowledgeSaveJobInput = {
   errorMessage?: string | null
 }
 
+export type UpdatePlatformKnowledgeSaveJobInput = {
+  status?: PlatformKnowledgeSaveJobStatus
+  resultPayload?: Record<string, unknown> | null
+  errorMessage?: string | null
+}
+
 export type PlatformTaskRunStore = {
   createPlatformTaskRun(input: CreatePlatformTaskRunInput): Promise<PlatformTaskRunRecord>
   appendPlatformRunEvent(runId: number, input: AppendPlatformRunEventInput): Promise<PlatformTaskRunEventRecord>
@@ -107,6 +113,17 @@ export type PlatformTaskRunStore = {
   savePlatformArtifact(input: SavePlatformArtifactInput): Promise<PlatformArtifactRecord>
   promotePlatformArtifactToWorkItem(input: CreatePlatformWorkItemInput): Promise<PlatformWorkItemRecord>
   enqueuePlatformKnowledgeSaveJob(input: EnqueuePlatformKnowledgeSaveJobInput): Promise<PlatformKnowledgeSaveJobRecord>
+  getPlatformKnowledgeSaveJob(jobId: number): Promise<PlatformKnowledgeSaveJobRecord | null>
+  updatePlatformKnowledgeSaveJob(
+    jobId: number,
+    enterpriseId: number,
+    input: UpdatePlatformKnowledgeSaveJobInput,
+  ): Promise<PlatformKnowledgeSaveJobRecord | null>
+  listPlatformKnowledgeSaveJobsForEnterprise(
+    enterpriseId: number,
+    limit?: number,
+    status?: PlatformKnowledgeSaveJobStatus | null,
+  ): Promise<PlatformKnowledgeSaveJobRecord[]>
   listPlatformTaskRunsForEnterprise(enterpriseId: number): Promise<PlatformTaskRunRecord[]>
   listRecentWorkflowTaskRunsForEnterprise(enterpriseId: number, limit?: number): Promise<PlatformTaskRunRecord[]>
   listPlatformArtifactsForEnterprise(enterpriseId: number): Promise<PlatformArtifactRecord[]>
@@ -130,7 +147,7 @@ const TASK_RUN_STATUSES = new Set<PlatformTaskRunStatus>(["queued", "running", "
 const RUN_EVENT_LEVELS = new Set<PlatformRunEventLevel>(["info", "warn", "error"])
 const ARTIFACT_KINDS = new Set<PlatformArtifactKind>(["file", "link", "text", "json"])
 const WORK_ITEM_TYPES = new Set<PlatformWorkItemType>(["deck", "article", "image_set", "video", "audio", "document"])
-const KNOWLEDGE_JOB_STATUSES = new Set<PlatformKnowledgeSaveJobStatus>(["queued", "running", "succeeded", "failed"])
+const KNOWLEDGE_JOB_STATUSES = new Set<PlatformKnowledgeSaveJobStatus>(["queued", "running", "succeeded", "failed", "rejected"])
 
 async function withPlatformTaskRunDbRetry<T>(label: string, operation: () => Promise<T>) {
   return withDbRetry(label, operation, {
@@ -693,6 +710,73 @@ export async function enqueuePlatformKnowledgeSaveJob(input: EnqueuePlatformKnow
   return row
 }
 
+export async function getPlatformKnowledgeSaveJob(jobId: number) {
+  await ensurePlatformTaskRunTables()
+
+  const [row] = await withPlatformTaskRunDbRetry("get-platform-knowledge-save-job", () =>
+    db
+      .select()
+      .from(platformKnowledgeSaveJobs)
+      .where(eq(platformKnowledgeSaveJobs.id, jobId))
+      .limit(1),
+  )
+
+  return row ?? null
+}
+
+export async function updatePlatformKnowledgeSaveJob(
+  jobId: number,
+  enterpriseId: number,
+  input: UpdatePlatformKnowledgeSaveJobInput,
+) {
+  await ensurePlatformTaskRunTables()
+
+  const nextValues: Partial<typeof platformKnowledgeSaveJobs.$inferInsert> & { updatedAt: Date } = {
+    updatedAt: new Date(),
+  }
+
+  if (input.status !== undefined) nextValues.status = normalizeKnowledgeSaveJobStatus(input.status)
+  if (input.resultPayload !== undefined) nextValues.resultPayload = input.resultPayload
+  if (input.errorMessage !== undefined) nextValues.errorMessage = normalizeOptionalText(input.errorMessage, 10_000)
+
+  const [row] = await withPlatformTaskRunDbRetry("update-platform-knowledge-save-job", () =>
+    db
+      .update(platformKnowledgeSaveJobs)
+      .set(nextValues)
+      .where(and(eq(platformKnowledgeSaveJobs.id, jobId), eq(platformKnowledgeSaveJobs.enterpriseId, enterpriseId)))
+      .returning(),
+  )
+
+  return row ?? null
+}
+
+export async function listPlatformKnowledgeSaveJobsForEnterprise(
+  enterpriseId: number,
+  limit = 50,
+  status?: PlatformKnowledgeSaveJobStatus | null,
+) {
+  await ensurePlatformTaskRunTables()
+
+  const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50
+  const normalizedStatus = status && KNOWLEDGE_JOB_STATUSES.has(status) ? status : null
+
+  return withPlatformTaskRunDbRetry("list-platform-knowledge-save-jobs-for-enterprise", () =>
+    db
+      .select()
+      .from(platformKnowledgeSaveJobs)
+      .where(
+        normalizedStatus
+          ? and(
+              eq(platformKnowledgeSaveJobs.enterpriseId, enterpriseId),
+              eq(platformKnowledgeSaveJobs.status, normalizedStatus),
+            )
+          : eq(platformKnowledgeSaveJobs.enterpriseId, enterpriseId),
+      )
+      .orderBy(desc(platformKnowledgeSaveJobs.createdAt), desc(platformKnowledgeSaveJobs.id))
+      .limit(normalizedLimit),
+  )
+}
+
 export async function listPlatformTaskRunsForEnterprise(enterpriseId: number) {
   await ensurePlatformTaskRunTables()
 
@@ -1024,6 +1108,35 @@ export function createInMemoryPlatformTaskRunStore(): PlatformTaskRunStore {
       return row
     },
 
+    async getPlatformKnowledgeSaveJob(jobId) {
+      return knowledgeSaveJobs.find((job) => job.id === jobId) ?? null
+    },
+
+    async updatePlatformKnowledgeSaveJob(jobId, enterpriseId, input) {
+      const index = knowledgeSaveJobs.findIndex((job) => job.id === jobId && job.enterpriseId === enterpriseId)
+      if (index < 0) return null
+      const current = knowledgeSaveJobs[index]!
+      const next: PlatformKnowledgeSaveJobRecord = {
+        ...current,
+        status: input.status !== undefined ? normalizeKnowledgeSaveJobStatus(input.status) : current.status,
+        resultPayload: input.resultPayload !== undefined ? input.resultPayload : current.resultPayload,
+        errorMessage:
+          input.errorMessage !== undefined ? normalizeOptionalText(input.errorMessage, 10_000) : current.errorMessage,
+        updatedAt: new Date(),
+      }
+      knowledgeSaveJobs.splice(index, 1, next)
+      return next
+    },
+
+    async listPlatformKnowledgeSaveJobsForEnterprise(enterpriseId, limit = 50, status) {
+      const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 200) : 50
+      const normalizedStatus = status && KNOWLEDGE_JOB_STATUSES.has(status) ? status : null
+      return knowledgeSaveJobs
+        .filter((job) => job.enterpriseId === enterpriseId && (!normalizedStatus || job.status === normalizedStatus))
+        .sort((left, right) => right.id - left.id)
+        .slice(0, normalizedLimit)
+    },
+
     async listPlatformTaskRunsForEnterprise(enterpriseId) {
       return [...runs.values()]
         .filter((run) => run.enterpriseId === enterpriseId)
@@ -1151,6 +1264,9 @@ export const platformTaskRunStore: PlatformTaskRunStore = {
   savePlatformArtifact,
   promotePlatformArtifactToWorkItem,
   enqueuePlatformKnowledgeSaveJob,
+  getPlatformKnowledgeSaveJob,
+  updatePlatformKnowledgeSaveJob,
+  listPlatformKnowledgeSaveJobsForEnterprise,
   listPlatformTaskRunsForEnterprise,
   listRecentWorkflowTaskRunsForEnterprise,
   listPlatformArtifactsForEnterprise,

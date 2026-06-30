@@ -33,6 +33,14 @@ type RunningHubConfigLike = {
 let governedImageSelectionCalls: Array<Record<string, unknown>> = []
 let submitRunningHubTaskCalls: Array<{ mediaTarget: string; payload: Record<string, unknown>; config?: RunningHubConfigLike }> = []
 let executeMediaCapabilityCalls: Array<Record<string, unknown>> = []
+let reserveFeatureCreditsCalls: Array<Record<string, unknown>> = []
+let finalizeReservedCreditsCalls: Array<Record<string, unknown>> = []
+let releaseReservedCreditsCalls: Array<Record<string, unknown>> = []
+let attachPendingVideoBillingToRunCalls: Array<Record<string, unknown>> = []
+let settleVideoBillingForRunIdCalls: Array<Record<string, unknown>> = []
+let reserveCreditsShouldThrow = false
+let executeMediaCapabilityShouldThrow = false
+let attachPendingVideoBillingShouldThrow = false
 
 const baseRunningHubConfig: RunningHubConfigLike = {
   baseUrl: "https://www.runninghub.cn",
@@ -91,6 +99,44 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       hasFeatureAccess: () => true,
       hasFeatureAccessWithFallback: () => true,
+    }
+  }
+
+  if (request === "@/lib/billing/costing") {
+    return {
+      estimateVideoGenerationCredits: (input: Record<string, unknown>) => ({
+        featureKey: "video_generation",
+        provider: input.provider || null,
+        model: input.model || null,
+        officialCostUsd: 0.24,
+        costBasisUsd: 0.24,
+        credits: 240,
+        multiplier: 2,
+        source: "estimate",
+        metadata: input,
+      }),
+    }
+  }
+
+  if (request === "@/lib/billing/runtime") {
+    return {
+      reserveFeatureCredits: async (input: Record<string, unknown>) => {
+        reserveFeatureCreditsCalls.push(input)
+        if (reserveCreditsShouldThrow) throw new Error("insufficient_credits")
+        return {
+          creditAccountId: 1,
+          reserveIdempotencyKey: String(input.idempotencyKey || "reserve"),
+          amount: Number(input.amount || 0),
+        }
+      },
+      finalizeReservedCredits: async (input: Record<string, unknown>) => {
+        finalizeReservedCreditsCalls.push(input)
+        return { id: 2 }
+      },
+      releaseReservedCredits: async (input: Record<string, unknown>) => {
+        releaseReservedCreditsCalls.push(input)
+        return { id: 3 }
+      },
     }
   }
 
@@ -181,6 +227,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
       executeMediaCapability: async (input: Record<string, unknown>) => {
         executeMediaCapabilityCalls.push(input)
+        if (executeMediaCapabilityShouldThrow) throw new Error("provider_failed")
         return {
           mode: "async",
           status: "queued",
@@ -248,6 +295,20 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/lib/platform/video-billing-settlement") {
+    return {
+      attachPendingVideoBillingToRun: async (input: Record<string, unknown>) => {
+        attachPendingVideoBillingToRunCalls.push(input)
+        if (attachPendingVideoBillingShouldThrow) throw new Error("attach_failed")
+        return { status: "pending" }
+      },
+      settleVideoBillingForRunId: async (runId: number | null | undefined) => {
+        settleVideoBillingForRunIdCalls.push({ runId })
+        return null
+      },
+    }
+  }
+
   return originalLoad.call(this, request, parent, isMain)
 }
 
@@ -262,6 +323,14 @@ test.beforeEach(() => {
   governedImageSelectionCalls = []
   submitRunningHubTaskCalls = []
   executeMediaCapabilityCalls = []
+  reserveFeatureCreditsCalls = []
+  finalizeReservedCreditsCalls = []
+  releaseReservedCreditsCalls = []
+  attachPendingVideoBillingToRunCalls = []
+  settleVideoBillingForRunIdCalls = []
+  reserveCreditsShouldThrow = false
+  executeMediaCapabilityShouldThrow = false
+  attachPendingVideoBillingShouldThrow = false
 })
 
 test.after(() => {
@@ -370,6 +439,15 @@ test("platform media text-to-video submits through the unified runtime facade", 
   assert.equal(executeMediaCapabilityCalls.length, 1)
   assert.equal(executeMediaCapabilityCalls[0]?.featureId, "text-to-video")
   assert.equal(executeMediaCapabilityCalls[0]?.modelId, "minimax:video:text-to-video:MiniMax-Hailuo-02-Pro")
+  assert.equal(reserveFeatureCreditsCalls.length, 1)
+  assert.equal(reserveFeatureCreditsCalls[0]?.featureKey, "video_generation")
+  assert.equal(reserveFeatureCreditsCalls[0]?.amount, 240)
+  assert.equal(finalizeReservedCreditsCalls.length, 0)
+  assert.equal(releaseReservedCreditsCalls.length, 0)
+  assert.equal(attachPendingVideoBillingToRunCalls.length, 1)
+  assert.equal(attachPendingVideoBillingToRunCalls[0]?.runId, 1)
+  assert.equal(attachPendingVideoBillingToRunCalls[0]?.featureId, "text-to-video")
+  assert.equal(settleVideoBillingForRunIdCalls.length, 0)
   assert.equal(response.body?.data?.taskId, "runtime-task-1")
 })
 
@@ -389,4 +467,69 @@ test("platform media image-to-video submits through the unified runtime facade",
   assert.equal(executeMediaCapabilityCalls.length, 1)
   assert.equal(executeMediaCapabilityCalls[0]?.featureId, "image-to-video")
   assert.equal(executeMediaCapabilityCalls[0]?.modelId, "minimax:video:image-to-video:MiniMax-Hailuo-2.3-Fast")
+  assert.equal(reserveFeatureCreditsCalls.length, 1)
+  assert.equal(finalizeReservedCreditsCalls.length, 0)
+  assert.equal(attachPendingVideoBillingToRunCalls.length, 1)
+  assert.equal(attachPendingVideoBillingToRunCalls[0]?.featureId, "image-to-video")
+})
+
+test("platform media video rejects when shared credits are insufficient", async () => {
+  reserveCreditsShouldThrow = true
+
+  const response = await POST({
+    url: "http://localhost:3000/api/platform/media/run?target=ai-video&action=generate",
+    json: async () => ({
+      featureId: "text-to-video",
+      params: {
+        prompt: "Launch film",
+      },
+    }),
+  })
+
+  assert.equal(response.status, 402)
+  assert.equal(response.body?.error, "insufficient_credits")
+  assert.equal(executeMediaCapabilityCalls.length, 0)
+  assert.equal(finalizeReservedCreditsCalls.length, 0)
+  assert.equal(releaseReservedCreditsCalls.length, 0)
+})
+
+test("platform media video releases reserved credits when provider submit fails", async () => {
+  executeMediaCapabilityShouldThrow = true
+
+  const response = await POST({
+    url: "http://localhost:3000/api/platform/media/run?target=ai-video&action=generate",
+    json: async () => ({
+      featureId: "text-to-video",
+      params: {
+        prompt: "Launch film",
+      },
+    }),
+  })
+
+  assert.equal(response.status, 502)
+  assert.equal(response.body?.error, "provider_failed")
+  assert.equal(reserveFeatureCreditsCalls.length, 1)
+  assert.equal(finalizeReservedCreditsCalls.length, 0)
+  assert.equal(releaseReservedCreditsCalls.length, 1)
+})
+
+test("platform media video releases reserved credits when billing attach fails after submit", async () => {
+  attachPendingVideoBillingShouldThrow = true
+
+  const response = await POST({
+    url: "http://localhost:3000/api/platform/media/run?target=ai-video&action=generate",
+    json: async () => ({
+      featureId: "text-to-video",
+      params: {
+        prompt: "Launch film",
+      },
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(reserveFeatureCreditsCalls.length, 1)
+  assert.equal(attachPendingVideoBillingToRunCalls.length, 1)
+  assert.equal(finalizeReservedCreditsCalls.length, 0)
+  assert.equal(releaseReservedCreditsCalls.length, 1)
+  assert.equal(releaseReservedCreditsCalls[0]?.reason, "video_billing_attach_failed")
 })

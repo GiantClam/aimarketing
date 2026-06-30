@@ -10,6 +10,7 @@ const originalLoad = nodeModule._load
 
 let currentUser: any = { enterpriseId: 9, enterpriseRole: "admin" }
 let listItems: any[] = [{ id: 2, name: "Brand KB", category: "brand" }]
+let governanceItems: any[] = [{ id: 2, name: "Brand KB", category: "brand", bindings: [{ id: 7, targetType: "writer" }] }]
 let createArgs: any = null
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
@@ -31,6 +32,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/knowledge/service") {
     return {
       listKnowledgeDatasetsSnapshot: async () => listItems,
+      listKnowledgeDatasetsGovernanceSnapshot: async () => governanceItems,
       createKnowledgeDataset: async (args: unknown) => {
         createArgs = args
         return {
@@ -59,6 +61,7 @@ test.before(async () => {
 test.beforeEach(() => {
   currentUser = { enterpriseId: 9, enterpriseRole: "admin" }
   listItems = [{ id: 2, name: "Brand KB", category: "brand" }]
+  governanceItems = [{ id: 2, name: "Brand KB", category: "brand", bindings: [{ id: 7, targetType: "writer" }] }]
   createArgs = null
 })
 
@@ -72,6 +75,17 @@ test("knowledge datasets route returns snapshot items", async () => {
   assert.equal((response as any).status, 200)
   assert.equal((response as any).body?.data?.items?.length, 1)
   assert.equal((response as any).body?.data?.items?.[0]?.name, "Brand KB")
+})
+
+test("knowledge datasets route returns governance bindings when requested", async () => {
+  const response = await GET({
+    nextUrl: {
+      searchParams: new URLSearchParams("includeBindings=1"),
+    },
+  } as any)
+
+  assert.equal((response as any).status, 200)
+  assert.equal((response as any).body?.data?.items?.[0]?.bindings?.[0]?.targetType, "writer")
 })
 
 test("knowledge datasets route creates a dataset for admins", async () => {

@@ -1451,7 +1451,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                   </div>
                 <div className="mt-5 space-y-4">
                   {activeTab.message ? (
-                    <div className="rounded-lg border border-[#e6dc58] bg-[#fffde8] px-4 py-3 text-sm text-[#222]">
+                    <div className="rounded-lg border border-[#ffd84a] bg-[#fff6cc] px-4 py-3 text-sm text-[#222]">
                       {activeTab.message}
                     </div>
                   ) : null}
@@ -1543,7 +1543,7 @@ export function WorkspaceCapabilitiesMediaWorkspace({
                               {result.title || result.outputType || (result.url ? "file" : "text")} · {result.text || result.url || "—"}
                             </span>
                             {result.url ? (
-                              <a href={result.url} target="_blank" rel="noreferrer" className="font-bold text-[#111] underline decoration-[#d6d64a] underline-offset-4">
+                              <a href={result.url} target="_blank" rel="noreferrer" className="font-bold text-[#111] underline decoration-[#c9a400] underline-offset-4">
                                 {copy.download}
                               </a>
                             ) : null}

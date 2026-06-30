@@ -1,0 +1,75 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="24" y="24" width="1232" height="672" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="40" y="40" width="1200" height="640" fill="#1A1A18" stroke="#282826" stroke-width="1.5"/>
+    <rect x="40" y="40" width="1200" height="92" fill="#111111"/>
+    <rect x="40" y="132" width="1200" height="4" fill="#E85D26"/>
+    <rect x="864" y="40" width="376" height="640" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <rect x="864" y="40" width="8" height="640" fill="#E85D26"/>
+    <rect x="88" y="224" width="728" height="392" fill="none" stroke="#282826" stroke-width="1.5"/>
+    <rect x="88" y="224" width="728" height="12" fill="#E85D26"/>
+  </g>
+  <g id="chrome">
+    <text x="88" y="84" fill="#E85D26" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="4">栏目排版</text>
+    <text x="1160" y="84" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="end">02 / 04</text>
+    <text x="88" y="114" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" letter-spacing="1">霍尔木兹海峡现状与全球能源运输影响（截至2026年6月24日）</text>
+    <line x1="88" y1="170" x2="816" y2="170" stroke="#F0ECE5" stroke-width="1.5"/>
+    <line x1="896" y1="170" x2="1184" y2="170" stroke="#F0ECE5" stroke-width="1.5"/>
+    <text x="896" y="202" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">目录推进</text>
+  </g>
+  <g id="content">
+    <text x="88" y="206" fill="#F0ECE5" font-size="72" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="1">先看结论</text>
+    <text x="896" y="256" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="800">当前最重要的不是判断</text>
+    <text x="896" y="300" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="800">危机是否结束，而是判断</text>
+    <text x="896" y="344" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="800">供应链是否已具备承压能力。</text>
+
+    <rect x="112" y="264" width="164" height="132" fill="none" stroke="#F0ECE5" stroke-width="1.5"/>
+    <rect x="112" y="264" width="164" height="132" fill="#111111"/>
+    <text x="128" y="308" fill="#E85D26" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="700">01</text>
+    <text x="128" y="346" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">恢复信号</text>
+    <text x="128" y="378" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">与脆弱现实并存</text>
+
+    <rect x="286" y="264" width="164" height="132" fill="none" stroke="#F0ECE5" stroke-width="1.5"/>
+    <text x="302" y="308" fill="#E85D26" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="700">02</text>
+    <text x="302" y="346" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">风险外溢</text>
+    <text x="302" y="378" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">快于情绪修复</text>
+
+    <rect x="460" y="264" width="164" height="132" fill="none" stroke="#F0ECE5" stroke-width="1.5"/>
+    <text x="476" y="308" fill="#E85D26" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="700">03</text>
+    <text x="476" y="344" fill="#F0ECE5" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="800">霍尔木兹海峡</text>
+    <text x="476" y="374" fill="#F0ECE5" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="800">通行量正在回升</text>
+
+    <rect x="634" y="264" width="164" height="132" fill="none" stroke="#F0ECE5" stroke-width="1.5"/>
+    <text x="650" y="308" fill="#E85D26" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="700">04</text>
+    <text x="650" y="344" fill="#F0ECE5" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="800">更多船只重新</text>
+    <text x="650" y="374" fill="#F0ECE5" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="800">通过海峡</text>
+
+    <line x1="194" y1="408" x2="194" y2="560" stroke="#E85D26" stroke-width="4"/>
+    <line x1="368" y1="408" x2="368" y2="560" stroke="#E85D26" stroke-width="4"/>
+    <line x1="542" y1="408" x2="542" y2="560" stroke="#E85D26" stroke-width="4"/>
+    <line x1="716" y1="408" x2="716" y2="560" stroke="#E85D26" stroke-width="4"/>
+    <line x1="194" y1="560" x2="716" y2="560" stroke="#E85D26" stroke-width="4"/>
+
+    <text x="112" y="604" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700">先判断系统承压，再讨论恢复叙事</text>
+
+    <rect x="896" y="406" width="288" height="96" fill="none" stroke="#F0ECE5" stroke-width="1.5"/>
+    <text x="916" y="442" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700">焦点一</text>
+    <text x="916" y="474" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="800">航道恢复不等于</text>
+    <text x="916" y="504" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="800">风险定价已恢复</text>
+
+    <rect x="896" y="522" width="288" height="96" fill="none" stroke="#F0ECE5" stroke-width="1.5"/>
+    <text x="916" y="558" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700">焦点二</text>
+    <text x="916" y="590" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="800">更多船只重返海峡，</text>
+    <text x="916" y="620" fill="#F0ECE5" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="800">但市场仍保留警戒</text>
+  </g>
+  <g id="annotations">
+    <rect x="896" y="88" width="210" height="40" fill="#E85D26"/>
+    <text x="1001" y="115" fill="#111111" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle">结论先行</text>
+    <circle cx="1128" cy="108" r="6" fill="#F0ECE5"/>
+    <circle cx="1150" cy="108" r="6" fill="#F0ECE5"/>
+    <circle cx="1172" cy="108" r="6" fill="#F0ECE5"/>
+    <line x1="112" y1="648" x2="1184" y2="648" stroke="#282826" stroke-width="2"/>
+    <text x="112" y="674" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif">判断标准：通行恢复、成本压力、风险外溢、供应链韧性</text>
+  </g>
+</svg>

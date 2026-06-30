@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111" />
+  <g id="background">
+    <rect x="24" y="24" width="1232" height="672" fill="#111111" stroke="#282826" stroke-width="2" />
+    <rect x="40" y="40" width="1200" height="640" fill="none" stroke="#282826" stroke-width="1" />
+    <rect x="0" y="0" width="1280" height="16" fill="#E85D26" />
+    <rect x="0" y="704" width="1280" height="16" fill="#E85D26" />
+    <rect x="836" y="58" width="364" height="604" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+    <rect x="72" y="132" width="708" height="380" fill="#1A1A18" stroke="#F0ECE5" stroke-width="2" />
+    <rect x="72" y="528" width="708" height="110" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+    <line x1="72" y1="244" x2="780" y2="244" stroke="#282826" stroke-width="2" />
+    <line x1="860" y1="236" x2="1176" y2="236" stroke="#282826" stroke-width="2" />
+    <line x1="860" y1="386" x2="1176" y2="386" stroke="#282826" stroke-width="2" />
+    <line x1="860" y1="536" x2="1176" y2="536" stroke="#282826" stroke-width="2" />
+  </g>
+  <g id="chrome">
+    <text x="72" y="86" fill="#E85D26" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="3">核心宣言</text>
+    <text x="1188" y="86" text-anchor="end" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">03 / 04</text>
+    <text x="72" y="660" fill="#F0ECE5" font-size="18" font-family="Arial, Helvetica, sans-serif" letter-spacing="1.5">霍尔木兹海峡现状与全球能源运输影响（截至2026年6月24日）</text>
+    <text x="1188" y="660" text-anchor="end" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">BROADSIDE INSIGHT</text>
+  </g>
+  <g id="content">
+    <text x="92" y="204" fill="#F0ECE5" font-size="72" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1">恢复的是通航，</text>
+    <text x="92" y="296" fill="#E85D26" font-size="96" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="1">不是确定性</text>
+
+    <text font-weight="500" font-size="26" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="92" y="572">若风险溢价、运输周期与替代路径成本留在高位，</text><text font-weight="500" font-size="26" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="92" y="606">全球能源运输恢复流动，也仍停留在高波动区间。</text><text x="860" y="118" fill="#E85D26" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="2">主判断</text>
+    <text x="860" y="172" fill="#F0ECE5" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">通了</text>
+    <text x="1014" y="172" fill="#F0ECE5" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">≠</text>
+    <text x="1070" y="172" fill="#E85D26" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">稳了</text>
+
+    <text x="860" y="280" fill="#E85D26" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.5">01 市场焦点</text>
+    <text font-weight="700" font-size="28" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="860" y="314">已从断航预期，改写为</text><text font-weight="700" font-size="28" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="860" y="348">高成本与高波动常态。</text><text x="860" y="430" fill="#E85D26" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.5">02 船舶与保险</text>
+    <text font-weight="700" font-size="28" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="860" y="464">油轮、LNG船与保险条款</text><text font-weight="700" font-size="28" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="860" y="498">仍在重估风险价格。</text><text x="860" y="580" fill="#E85D26" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.5">03 供应链含义</text>
+    <text font-weight="700" font-size="28" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="860" y="614">航运恢复并不等于供给链</text><text font-weight="700" font-size="28" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" x="860" y="648">恢复原有确定性。</text></g>
+  <g id="annotations">
+    <rect x="664" y="88" width="116" height="44" fill="#E85D26" />
+    <text x="722" y="118" text-anchor="middle" fill="#111111" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="900">判断</text>
+    <line x1="744" y1="332" x2="824" y2="332" stroke="#E85D26" stroke-width="4" />
+    <circle cx="824" cy="332" r="7" fill="#E85D26" />
+    <line x1="744" y1="596" x2="824" y2="596" stroke="#E85D26" stroke-width="4" />
+    <circle cx="824" cy="596" r="7" fill="#E85D26" />
+    <rect x="92" y="330" width="246" height="70" fill="#E85D26" />
+    <text x="108" y="376" fill="#111111" font-size="40" font-family="Arial, Helvetica, sans-serif" font-weight="900">恢复流动</text>
+    <rect x="352" y="330" width="246" height="70" fill="#F0ECE5" />
+    <text x="368" y="376" fill="#111111" font-size="40" font-family="Arial, Helvetica, sans-serif" font-weight="900">保留波动</text>
+  </g>
+</svg>

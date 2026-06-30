@@ -72,7 +72,7 @@ const sourceStyles: Record<TaskSource, string> = {
 }
 
 const sourceDotStyles: Record<TaskSource, string> = {
-  tool: "bg-[#f5ef3d]",
+  tool: "bg-[#ffd000]",
   workflow: "bg-[#2463d4]",
   agent: "bg-[#23a55a]",
   media: "bg-[#7653d6]",
@@ -311,7 +311,7 @@ function TaskCenterHeader({
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="inline-flex h-11 items-center gap-2 rounded-[9px] border border-[#ded735] bg-[#f5ef3d] px-[22px] text-sm font-black text-[#111] shadow-[0_10px_24px_rgba(245,239,61,0.22)] transition hover:-translate-y-0.5 hover:bg-[#fbf45a]"
+          className="inline-flex h-11 items-center gap-2 rounded-[9px] border border-[#c9a400] bg-[#ffd000] px-[22px] text-sm font-black text-[#111] shadow-[0_10px_24px_rgba(255,208,0,0.22)] transition hover:-translate-y-0.5 hover:bg-[#ffd21a]"
         >
           <RefreshCw className="h-4 w-4" />
           Refresh tasks
@@ -339,7 +339,7 @@ function TaskMetricCard({
   return (
     <article className="min-h-28 rounded-2xl border border-[#e7e7df] bg-white p-5 shadow-[0_10px_28px_rgba(0,0,0,0.055)]">
       <div className="flex items-start gap-4">
-        <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[10px] border border-[#ded735] bg-[#f5ef3d] text-[#111]">
+        <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[10px] border border-[#c9a400] bg-[#ffd000] text-[#111]">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
@@ -413,7 +413,7 @@ function TaskFilterToolbar({
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder="Search task name, run ID..."
-              className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#c8c22b] focus:ring-4 focus:ring-[#f5ef3d]/25"
+              className="h-11 w-full rounded-[9px] border border-[#deded6] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#b89100] focus:ring-4 focus:ring-[#ffd000]/25"
             />
           </label>
         }
@@ -459,7 +459,7 @@ function TaskActions({ run }: { run: NormalizedTaskRun }) {
     <div className="flex items-center gap-2">
       <Link
         href={`/dashboard/tasks/${run.id}`}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
         title="View details"
         aria-label="View details"
       >
@@ -467,7 +467,7 @@ function TaskActions({ run }: { run: NormalizedTaskRun }) {
       </Link>
       <button
         type="button"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
         title={isFailed ? "Retry" : "Open result"}
         aria-label={isFailed ? "Retry" : "Open result"}
       >
@@ -475,7 +475,7 @@ function TaskActions({ run }: { run: NormalizedTaskRun }) {
       </button>
       <button
         type="button"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#c8c22b] hover:bg-[#f5ef3d]"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e1e1da] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
         title="More"
         aria-label="More"
       >
@@ -582,7 +582,7 @@ function TaskPagination({
             key={item}
             type="button"
             onClick={() => onPageChange(item)}
-            className={`h-9 w-9 rounded-lg border font-black ${item === page ? "border-[#ded735] bg-[#f5ef3d] text-[#111]" : "border-[#deded6] bg-white text-[#111]"}`}
+            className={`h-9 w-9 rounded-lg border font-black ${item === page ? "border-[#c9a400] bg-[#ffd000] text-[#111]" : "border-[#deded6] bg-white text-[#111]"}`}
           >
             {item}
           </button>
@@ -640,7 +640,7 @@ function DonutChart({ rate }: { rate: number }) {
 function Sparkline() {
   return (
     <svg viewBox="0 0 180 52" className="h-[52px] w-full" role="img" aria-label="Average duration trend">
-      <path d="M4 38 C 28 18, 42 34, 62 24 S 95 14, 112 27 S 148 40, 176 12" fill="none" stroke="#f5ef3d" strokeLinecap="round" strokeWidth="5" />
+      <path d="M4 38 C 28 18, 42 34, 62 24 S 95 14, 112 27 S 148 40, 176 12" fill="none" stroke="#ffd000" strokeLinecap="round" strokeWidth="5" />
       <path d="M4 38 C 28 18, 42 34, 62 24 S 95 14, 112 27 S 148 40, 176 12" fill="none" stroke="#111" strokeLinecap="round" strokeWidth="1.5" />
     </svg>
   )
@@ -673,7 +673,7 @@ function TasksOverTime({ runs }: { runs: NormalizedTaskRun[] }) {
         {days.map((day) => (
           <div key={day.label} className="flex flex-1 flex-col items-center gap-2">
             <div className="flex h-20 w-full max-w-[26px] flex-col justify-end overflow-hidden rounded-t-lg border border-[#e7e7df] bg-[#f7f7f2]">
-              <div style={{ height: `${Math.max(8, (day.running / day.total) * 80)}px` }} className="bg-[#f5ef3d]" />
+              <div style={{ height: `${Math.max(8, (day.running / day.total) * 80)}px` }} className="bg-[#ffd000]" />
               <div style={{ height: `${Math.max(0, (day.failed / day.total) * 80)}px` }} className="bg-[#d93025]" />
               <div style={{ height: `${Math.max(0, (day.succeeded / day.total) * 80)}px` }} className="bg-[#23a55a]" />
             </div>

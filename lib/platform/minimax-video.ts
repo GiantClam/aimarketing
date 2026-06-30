@@ -17,6 +17,7 @@ import {
   type HydratedPlatformTaskRun,
   type PlatformTaskRunStatus,
 } from "@/lib/platform/task-run-store"
+import { settleVideoBillingForRun } from "@/lib/platform/video-billing-settlement"
 import type { MiniMaxAudioConfig } from "@/lib/platform/minimax-audio"
 import { getMiniMaxAudioConfig, isMiniMaxAudioConfigured } from "@/lib/platform/minimax-audio"
 import {
@@ -660,6 +661,16 @@ export async function queryMiniMaxVideoTask(input: {
             },
           },
   })
+
+  if (nextStatus === "succeeded" || nextStatus === "failed") {
+    await settleVideoBillingForRun(detail).catch((error) => {
+      console.warn("platform.minimax-video.billing.settle_failed", {
+        runId: detail.id,
+        status: nextStatus,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
 
   return buildTaskResponseFromRun(detail)
 }

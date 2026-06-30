@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" font-family="Noto Sans SC, Microsoft YaHei, PingFang SC, sans-serif">
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#111111" />
+    <rect x="36" y="36" width="1208" height="648" fill="none" stroke="#282826" stroke-width="2" />
+    <rect x="560" y="76" width="670" height="590" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+    <rect x="1210" y="0" width="70" height="720" fill="#1A1A18" />
+    <line x1="534" y1="76" x2="534" y2="666" stroke="#282826" stroke-width="2" />
+    <text x="1006" y="628" font-size="340" font-weight="900" fill="#E85D26" fill-opacity="0.08" text-anchor="middle">02</text>
+  </g>
+
+  <g id="chrome">
+    <text x="48" y="22" font-size="13" font-weight="500" fill="#F0ECE5" fill-opacity="0.78" dominant-baseline="hanging">霍尔木兹海峡现状与全球能源运输影响（截至2026年6月24日）</text>
+    <rect x="48" y="52" width="156" height="32" fill="#E85D26" />
+    <text x="60" y="57" font-size="17" font-weight="900" fill="#111111" dominant-baseline="hanging">栏目排版</text>
+    <text x="1232" y="22" font-size="24" font-weight="900" fill="#F0ECE5" text-anchor="end" dominant-baseline="hanging">02 / 04</text>
+    <line x1="48" y1="98" x2="500" y2="98" stroke="#282826" stroke-width="2" />
+    <line x1="590" y1="98" x2="1202" y2="98" stroke="#282826" stroke-width="2" />
+  </g>
+
+  <g id="content">
+    <text x="48" y="110" font-size="118" font-weight="900" fill="#F0ECE5" dominant-baseline="hanging">本次</text>
+    <text x="48" y="220" font-size="118" font-weight="900" fill="#F0ECE5" dominant-baseline="hanging">判断</text>
+    <rect x="52" y="350" width="412" height="10" fill="#E85D26" />
+
+    <text x="50" y="388" font-size="30" font-weight="700" fill="#F0ECE5" dominant-baseline="hanging">当前核心不是能不能过，</text>
+    <text x="50" y="430" font-size="30" font-weight="700" fill="#F0ECE5" dominant-baseline="hanging">而是这条通道还能</text>
+    <text x="50" y="466" font-size="42" font-weight="900" fill="#E85D26" dominant-baseline="hanging">稳多久、贵多久。</text>
+
+    <rect x="48" y="500" width="220" height="76" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+    <rect x="48" y="500" width="72" height="6" fill="#E85D26" />
+    <text font-size="19" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="62" y="518">航道恢复开放，</text><text font-size="19" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="62" y="544">秩序未完全稳固</text><rect x="280" y="500" width="220" height="76" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+    <rect x="280" y="500" width="72" height="6" fill="#E85D26" />
+    <text font-size="19" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="294" y="518">运价、战险、保费</text><text font-size="19" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="294" y="544">仍高于冲突前</text><rect x="48" y="590" width="220" height="76" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+    <rect x="48" y="590" width="72" height="6" fill="#E85D26" />
+    <text font-size="18" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="62" y="607">成本正传导至炼厂、</text><text font-size="18" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="62" y="632">贸易商与进口方</text><rect x="280" y="590" width="220" height="76" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+    <rect x="280" y="590" width="72" height="6" fill="#E85D26" />
+    <text font-size="17" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="294" y="607">改道可行，</text><text font-size="17" font-weight="700" dominant-baseline="hanging" fill="#F0ECE5" x="294" y="632">但交期与费用同步上升</text><line x1="648" y1="126" x2="648" y2="606" stroke="#E85D26" stroke-width="3" />
+
+    <rect x="592" y="126" width="610" height="102" fill="#111111" stroke="#282826" stroke-width="2" />
+    <rect x="1008" y="157" width="174" height="38" fill="none" stroke="#E85D26" stroke-width="2" />
+    <rect x="641" y="163" width="14" height="14" fill="#E85D26" />
+    <text x="620" y="146" font-size="48" font-weight="900" fill="#F0ECE5" dominant-baseline="hanging">01</text>
+    <text x="692" y="160" font-size="18" font-weight="800" fill="#F0ECE5" dominant-baseline="hanging">霍尔木兹海峡已开航，风险未退场</text>
+    <text x="1095" y="166" font-size="18" font-weight="900" fill="#E85D26" text-anchor="middle" dominant-baseline="hanging">已开航但风险未退</text>
+
+    <rect x="592" y="252" width="610" height="102" fill="#E85D26" stroke="#E85D26" stroke-width="2" />
+    <rect x="1008" y="283" width="174" height="38" fill="#111111" stroke="#111111" stroke-width="2" />
+    <rect x="641" y="289" width="14" height="14" fill="#111111" />
+    <text x="620" y="272" font-size="48" font-weight="900" fill="#111111" dominant-baseline="hanging">02</text>
+    <text x="692" y="279" font-size="30" font-weight="900" fill="#111111" dominant-baseline="hanging">本次判断</text>
+    <text x="1095" y="292" font-size="18" font-weight="900" fill="#F0ECE5" text-anchor="middle" dominant-baseline="hanging">能通过但难保稳价</text>
+
+    <rect x="592" y="378" width="610" height="102" fill="#111111" stroke="#282826" stroke-width="2" />
+    <rect x="1008" y="409" width="174" height="38" fill="none" stroke="#E85D26" stroke-width="2" />
+    <rect x="641" y="415" width="14" height="14" fill="#E85D26" />
+    <text x="620" y="398" font-size="48" font-weight="900" fill="#F0ECE5" dominant-baseline="hanging">03</text>
+    <text x="692" y="412" font-size="20" font-weight="800" fill="#F0ECE5" dominant-baseline="hanging">海峡恢复，不等于市场恢复</text>
+    <text x="1095" y="418" font-size="18" font-weight="900" fill="#E85D26" text-anchor="middle" dominant-baseline="hanging">海峡恢复市场未稳</text>
+
+    <rect x="592" y="504" width="610" height="102" fill="#111111" stroke="#282826" stroke-width="2" />
+    <rect x="1008" y="535" width="174" height="38" fill="none" stroke="#E85D26" stroke-width="2" />
+    <rect x="641" y="541" width="14" height="14" fill="#E85D26" />
+    <text x="620" y="524" font-size="48" font-weight="900" fill="#F0ECE5" dominant-baseline="hanging">04</text>
+    <text x="692" y="531" font-size="30" font-weight="900" fill="#F0ECE5" dominant-baseline="hanging">现在就执行</text>
+    <text x="1095" y="544" font-size="18" font-weight="900" fill="#E85D26" text-anchor="middle" dominant-baseline="hanging">先控成本再保交期</text>
+  </g>
+
+  <g id="annotations">
+    <polyline points="462,486 520,486 520,303 592,303" fill="none" stroke="#E85D26" stroke-width="2" />
+    <circle cx="520" cy="303" r="5" fill="#E85D26" />
+    <rect x="334" y="452" width="82" height="32" fill="none" stroke="#E85D26" stroke-width="2" />
+    <text x="375" y="458" font-size="18" font-weight="900" fill="#E85D26" text-anchor="middle" dominant-baseline="hanging">稳多久</text>
+    <rect x="426" y="452" width="82" height="32" fill="none" stroke="#E85D26" stroke-width="2" />
+    <text x="467" y="458" font-size="18" font-weight="900" fill="#E85D26" text-anchor="middle" dominant-baseline="hanging">贵多久</text>
+  </g>
+</svg>

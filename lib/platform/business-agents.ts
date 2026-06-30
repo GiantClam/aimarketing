@@ -37,6 +37,9 @@ export type LocalizedBusinessAgentConfig = Omit<
   summary: string
   systemPromptSummary: string
   samplePrompts: string[]
+  executionMode?: "direct_agent" | "workflow_backed"
+  linkedWorkflowId?: number | null
+  linkedWorkflowTitle?: string | null
 }
 
 const BUSINESS_AGENTS: BusinessAgentConfig[] = [
@@ -79,7 +82,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "根据这篇内容，整理一版站内 SEO 改写清单。", en: "Turn this article into an onsite SEO rewrite checklist." },
       { zh: "给我一版从长文到 FAQ、案例页和 landing page 的复用路径。", en: "Create a reuse path from one article into FAQ, case study, and landing page outputs." },
     ],
-    workflowSlugs: ["content-repurpose"],
+    workflowSlugs: ["content-repurpose", "seo-aeo-growth-engine"],
     artifactKinds: ["copy", "brief", "workflow_result", "report"],
   },
   {
@@ -100,7 +103,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "围绕 AI 营销工具，整理一版可被回答引擎提取的问题簇和 FAQ。", en: "Build answer-engine question clusters and FAQs around AI marketing tools." },
       { zh: "把这些文章改成更适合 AEO 的页面结构和内部链接计划。", en: "Turn these articles into an AEO page-structure and internal-linking plan." },
     ],
-    workflowSlugs: ["content-repurpose", "campaign-launch"],
+    workflowSlugs: ["content-repurpose", "campaign-launch", "seo-aeo-growth-engine"],
     artifactKinds: ["report", "brief", "plan", "knowledge_note"],
   },
   {
@@ -121,7 +124,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "为这个 SaaS 产品做一版 AI citation readiness 审计。", en: "Create an AI citation readiness audit for this SaaS product." },
       { zh: "围绕这些目标查询，规划一版公开证据和第三方信号补强路线。", en: "Plan public proof and third-party signal improvements for these target queries." },
     ],
-    workflowSlugs: ["content-repurpose", "campaign-launch"],
+    workflowSlugs: ["content-repurpose", "campaign-launch", "seo-aeo-growth-engine"],
     artifactKinds: ["report", "plan", "knowledge_note", "brief"],
   },
   {
@@ -163,7 +166,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "把这个卖点改成 founder-led、UGC 和 product demo 三种脚本。", en: "Turn this value proposition into founder-led, UGC, and product-demo scripts." },
       { zh: "根据这些视频数据，判断下一轮该保留哪些创意模式。", en: "Use these video metrics to decide which creative patterns to keep next." },
     ],
-    workflowSlugs: ["visual-ad-pipeline", "campaign-launch"],
+    workflowSlugs: ["visual-ad-pipeline", "campaign-launch", "short-video-growth"],
     artifactKinds: ["copy", "plan", "asset", "report"],
   },
   {
@@ -226,7 +229,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "为一个新 SaaS 产品制定 PPC 上线计划和关键词矩阵。", en: "Create a PPC launch plan and keyword matrix for a new SaaS product." },
       { zh: "分析这份搜索词报告，给出否词和匹配方式优化建议。", en: "Analyze this search query report and suggest negative keywords plus match-type changes." },
     ],
-    workflowSlugs: ["campaign-launch"],
+    workflowSlugs: ["campaign-launch", "paid-media-creative-pipeline"],
     artifactKinds: ["report", "plan", "brief", "workflow_result"],
   },
   {
@@ -247,7 +250,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "根据这些素材和预算，做一版付费社媒 30 天投放计划。", en: "Build a 30-day paid social plan from these assets and budget." },
       { zh: "审查我们的 paid social 账户，判断问题在受众、素材还是落地页。", en: "Audit our paid social account and diagnose whether the issue is audience, creative, or landing page." },
     ],
-    workflowSlugs: ["campaign-launch", "visual-ad-pipeline"],
+    workflowSlugs: ["campaign-launch", "visual-ad-pipeline", "paid-media-creative-pipeline"],
     artifactKinds: ["plan", "report", "asset", "workflow_result"],
   },
   {
@@ -268,7 +271,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "为这个落地页设计一批 UGC、Founder-led 和产品演示广告脚本。", en: "Create UGC, founder-led, and product-demo ad scripts for this landing page." },
       { zh: "审查这些广告素材，判断疲劳、信息层级和下一轮测试方向。", en: "Review these ads for fatigue, message hierarchy, and next test direction." },
     ],
-    workflowSlugs: ["visual-ad-pipeline", "campaign-launch"],
+    workflowSlugs: ["visual-ad-pipeline", "campaign-launch", "paid-media-creative-pipeline"],
     artifactKinds: ["asset", "copy", "brief", "report"],
   },
   {
@@ -289,7 +292,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "帮我判断当前付费投放问题是追踪、账户结构、素材还是落地页。", en: "Diagnose whether our paid media problem is tracking, structure, creative, or landing page." },
       { zh: "做一版投放账户的 stop、fix、test、scale 行动清单。", en: "Create a stop, fix, test, and scale action list for this ad account." },
     ],
-    workflowSlugs: ["campaign-launch"],
+    workflowSlugs: ["campaign-launch", "paid-media-creative-pipeline"],
     artifactKinds: ["report", "plan", "brief", "knowledge_note"],
   },
   {
@@ -310,7 +313,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "整理我们的事件命名、UTM 规则和 CRM 回传字段。", en: "Organize our event naming, UTM rules, and CRM feedback fields." },
       { zh: "审查这个漏斗的归因风险，告诉我哪些数据不能直接用于扩量决策。", en: "Audit attribution risk in this funnel and identify which data should not drive scaling decisions." },
     ],
-    workflowSlugs: ["campaign-launch"],
+    workflowSlugs: ["campaign-launch", "paid-media-creative-pipeline"],
     artifactKinds: ["plan", "report", "workflow_result", "knowledge_note"],
   },
   {
@@ -352,7 +355,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "把现有提案改成更适合 CEO 和市场负责人共同评审的版本。", en: "Rewrite the current proposal for a CEO and marketing-lead review setting." },
       { zh: "基于这个 campaign brief，整理图片、PPT 和文案协同生产清单。", en: "Turn this campaign brief into a coordinated copy, deck, and image production plan." },
     ],
-    workflowSlugs: ["campaign-launch", "visual-ad-pipeline"],
+    workflowSlugs: ["campaign-launch", "visual-ad-pipeline", "brand-asset-factory"],
     artifactKinds: ["brief", "copy", "asset", "workflow_result"],
   },
   {
@@ -373,7 +376,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "把这个 brief 变成图片、PPT 和落地页协同生产计划。", en: "Turn this brief into a coordinated production plan for image, deck, and landing page teams." },
       { zh: "根据现有视觉方向，帮我做一版对外提案结构。", en: "Based on the current visual direction, build an external proposal structure." },
     ],
-    workflowSlugs: ["campaign-launch", "visual-ad-pipeline"],
+    workflowSlugs: ["campaign-launch", "visual-ad-pipeline", "brand-asset-factory"],
     artifactKinds: ["asset", "brief", "copy", "workflow_result"],
   },
   {
@@ -394,7 +397,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "把这个品牌 campaign brief 转成视频脚本结构、镜头节奏和素材清单。", en: "Turn this campaign brief into a video script structure, pacing plan, and asset checklist." },
       { zh: "根据当前提案，帮我整理 CEO 可快速过稿的视频核心卖点和镜头顺序。", en: "From the current pitch, organize the core video selling points and shot order for a fast CEO review." },
     ],
-    workflowSlugs: ["visual-ad-pipeline", "campaign-launch"],
+    workflowSlugs: ["visual-ad-pipeline", "campaign-launch", "short-video-growth"],
     artifactKinds: ["asset", "brief", "copy", "workflow_result"],
   },
   {
@@ -457,7 +460,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "根据这次会议纪要，整理成交风险和 48 小时内的跟进动作。", en: "Turn this meeting summary into close risks and a 48-hour follow-up plan." },
       { zh: "把当前提案改成更适合 CFO 审阅的版本。", en: "Rewrite the current proposal for a CFO review." },
     ],
-    workflowSlugs: ["content-repurpose"],
+    workflowSlugs: ["content-repurpose", "sales-proposal"],
     artifactKinds: ["brief", "copy", "report", "knowledge_note"],
   },
   {
@@ -478,7 +481,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "客户一直拖着不确认下一步，帮我重写跟进话术。", en: "The buyer keeps delaying. Rewrite the follow-up language." },
       { zh: "把这次异议处理整理成团队可复用的话术卡。", en: "Turn this objection pattern into a reusable team response card." },
     ],
-    workflowSlugs: ["content-repurpose"],
+    workflowSlugs: ["content-repurpose", "sales-proposal"],
     artifactKinds: ["copy", "report", "knowledge_note", "brief"],
   },
   {
@@ -541,7 +544,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "哪些输出值得加入知识库，应该怎么写入和命名？", en: "Which outputs are worth saving into knowledge, and how should we name and file them?" },
       { zh: "帮我规划一个团队复用最近优质内容产物的机制。", en: "Design a team reuse loop for our latest high-quality content outputs." },
     ],
-    workflowSlugs: ["content-repurpose"],
+    workflowSlugs: ["content-repurpose", "knowledge-asset-loop"],
     artifactKinds: ["asset", "knowledge_note", "report", "workflow_result"],
   },
   {
@@ -562,7 +565,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "帮我整理一版作品库命名和归档规范。", en: "Draft a naming and filing policy for the work library." },
       { zh: "从最近的内容产物里挑出最值得写入知识库的条目。", en: "Identify the recent outputs most worth saving into the knowledge base." },
     ],
-    workflowSlugs: ["content-repurpose"],
+    workflowSlugs: ["content-repurpose", "brand-asset-factory", "knowledge-asset-loop"],
     artifactKinds: ["asset", "report", "knowledge_note", "workflow_result"],
   },
   {
@@ -583,7 +586,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "帮我设计一版短视频素材库的命名、标签和归档规范。", en: "Design a naming, tagging, and filing policy for the short-form video library." },
       { zh: "从这批视频内容里挑出最值得沉淀到知识库的脚本、卖点和镜头模式。", en: "Identify which scripts, hooks, and shot patterns from these videos should be retained in knowledge." },
     ],
-    workflowSlugs: ["content-repurpose", "visual-ad-pipeline"],
+    workflowSlugs: ["content-repurpose", "visual-ad-pipeline", "short-video-growth", "knowledge-asset-loop"],
     artifactKinds: ["asset", "knowledge_note", "report", "workflow_result"],
   },
   {
@@ -604,7 +607,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "这次客户投诉可能发酵，帮我准备一版危机沟通口径。", en: "Prepare crisis communication language for a customer complaint that may escalate." },
       { zh: "把 CEO 的观点整理成适合 LinkedIn 和媒体采访的表达。", en: "Turn the CEO's point of view into LinkedIn and interview-ready messaging." },
     ],
-    workflowSlugs: ["campaign-launch"],
+    workflowSlugs: ["campaign-launch", "reputation-guard"],
     artifactKinds: ["brief", "copy", "report", "knowledge_note"],
   },
   {
@@ -625,7 +628,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "审查这组界面，指出层级、间距和可访问性问题。", en: "Review this UI for hierarchy, spacing, and accessibility issues." },
       { zh: "把这个功能设计成可复用的 dashboard 组件模式。", en: "Design this feature as a reusable dashboard component pattern." },
     ],
-    workflowSlugs: ["visual-ad-pipeline"],
+    workflowSlugs: ["visual-ad-pipeline", "brand-asset-factory"],
     artifactKinds: ["brief", "asset", "report", "knowledge_note"],
   },
   {
@@ -646,7 +649,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "用户要从业务类型进入 agent，对这个流程做 UX 风险审查。", en: "Review UX risks in the flow from business type to agent workbench." },
       { zh: "把这个需求拆成页面结构、主要状态和交互边界。", en: "Break this requirement into page structure, key states, and interaction boundaries." },
     ],
-    workflowSlugs: ["visual-ad-pipeline"],
+    workflowSlugs: ["visual-ad-pipeline", "brand-asset-factory"],
     artifactKinds: ["brief", "plan", "report", "knowledge_note"],
   },
   {
@@ -667,7 +670,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "把这份 RFP 要求转成赢单主题、证明材料和风险问题。", en: "Turn this RFP into win themes, proof points, and risk questions." },
       { zh: "客户是 CFO 主导，提案应该怎么重写？", en: "Rewrite the proposal structure for a CFO-led buyer process." },
     ],
-    workflowSlugs: ["content-repurpose"],
+    workflowSlugs: ["content-repurpose", "sales-proposal"],
     artifactKinds: ["brief", "copy", "report", "knowledge_note"],
   },
   {
@@ -688,7 +691,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "这些数据处理流程有哪些审计证据缺口？", en: "What audit evidence gaps exist in these data-handling processes?" },
       { zh: "把这个 AI 工作流上线前的合规检查项列出来。", en: "List compliance checks before launching this AI workflow." },
     ],
-    workflowSlugs: ["campaign-launch"],
+    workflowSlugs: ["campaign-launch", "sales-proposal", "compliance-review", "reputation-guard"],
     artifactKinds: ["report", "plan", "knowledge_note"],
   },
   {
@@ -709,7 +712,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "根据这些字段，整理一版数据分类和处理依据。", en: "Create data classification and processing-basis notes for these fields." },
       { zh: "这个供应商接入前，隐私尽调应该问哪些问题？", en: "What privacy diligence questions should we ask before onboarding this vendor?" },
     ],
-    workflowSlugs: ["campaign-launch"],
+    workflowSlugs: ["campaign-launch", "compliance-review", "reputation-guard"],
     artifactKinds: ["report", "plan", "knowledge_note"],
   },
   {
@@ -730,7 +733,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "这个保健品 landing page 哪些地方需要改成更合规？", en: "Which parts of this supplement landing page need compliance revisions?" },
       { zh: "把这组宣传语改成更稳妥的合规表达。", en: "Rewrite these promotional claims into safer compliant language." },
     ],
-    workflowSlugs: ["campaign-launch"],
+    workflowSlugs: ["campaign-launch", "compliance-review"],
     artifactKinds: ["copy", "report", "knowledge_note"],
   },
   {
@@ -751,7 +754,7 @@ const BUSINESS_AGENTS: BusinessAgentConfig[] = [
       { zh: "把这份 SOP 变成 60 分钟培训课和练习任务。", en: "Turn this SOP into a 60-minute training session and practice tasks." },
       { zh: "如何评估这次销售赋能培训有没有真正生效？", en: "How should we measure whether this sales enablement training worked?" },
     ],
-    workflowSlugs: ["content-repurpose"],
+    workflowSlugs: ["content-repurpose", "training-enablement"],
     artifactKinds: ["plan", "brief", "knowledge_note", "report"],
   },
   {

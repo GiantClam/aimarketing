@@ -1,6 +1,3 @@
-import {
-  loadEnterpriseKnowledgeContext,
-} from "@/lib/knowledge/service"
 import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
 /* eslint-disable no-useless-escape */
 import { z } from "zod"
@@ -114,6 +111,18 @@ const WRITER_MEMORY_RETRIEVAL_TIMEOUT_MS = Math.max(
 )
 
 const writerResearchCache = new Map<string, { expiresAt: number; value: Promise<WriterResearchResult> }>()
+
+async function loadWriterEnterpriseKnowledgeContext(params: {
+  enterpriseId: number
+  query: string
+  queryVariants?: string[]
+  preferredScopes?: EnterpriseKnowledgeScope[]
+  platform: string
+  mode: string
+}) {
+  const { loadEnterpriseKnowledgeContext } = await import("@/lib/knowledge/service")
+  return loadEnterpriseKnowledgeContext(params)
+}
 
 type SearchItem = {
   title: string
@@ -2632,7 +2641,7 @@ async function extractBriefDefaultsFromEnterpriseKnowledge(params: {
   }
 
   const enterpriseKnowledge = await withTimeout(
-    loadEnterpriseKnowledgeContext({
+    loadWriterEnterpriseKnowledgeContext({
       enterpriseId: params.enterpriseId,
       query: clipWriterEnterpriseRetrievalQuery(params.query),
       queryVariants: normalizeWriterEnterpriseQueryVariants([
@@ -4139,8 +4148,8 @@ export async function generateWriterDraftWithSkills(
 
   const enterpriseKnowledgePromise = shouldUseEnterpriseKnowledge
     ? withTimeout(
-        loadEnterpriseKnowledgeContext({
-          enterpriseId: options?.enterpriseId,
+        loadWriterEnterpriseKnowledgeContext({
+          enterpriseId: options?.enterpriseId as number,
           query: contextQuery,
           queryVariants: options?.enterpriseQueryVariants,
           preferredScopes: options?.preferredEnterpriseScopes,

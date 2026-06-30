@@ -21,11 +21,13 @@ import {
   TestTube2,
   Users2,
   Zap,
+  Workflow,
 } from "lucide-react"
 
 import { EnterpriseKnowledgeGovernancePanel } from "@/components/platform/enterprise-knowledge-governance-panel"
 import { EnterpriseMemberGovernancePanel } from "@/components/platform/enterprise-member-governance-panel"
 import { PlatformGovernanceSettingsPanel } from "@/components/platform/platform-governance-settings-panel"
+import { WorkspaceWorkflowTemplateStudio } from "@/components/platform/workspace-workflow-template-studio"
 import { Button } from "@/components/ui/button"
 import type { AppLocale } from "@/lib/i18n/config"
 import type { CustomerGovernanceSnapshot } from "@/lib/platform/customer-governance"
@@ -35,6 +37,20 @@ import { getLocalizedWorkspaceEnterpriseSettingEntries } from "@/lib/platform/wo
 function formatNumber(value: number | null) {
   if (typeof value !== "number" || Number.isNaN(value)) return "—"
   return new Intl.NumberFormat("en-US").format(value)
+}
+
+function formatPercent(value: number | null) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—"
+  return `${Math.round(value * 100)}%`
+}
+
+function formatDuration(value: number | null, locale: "zh" | "en") {
+  if (typeof value !== "number" || Number.isNaN(value) || value < 0) return "—"
+  const seconds = Math.round(value / 1000)
+  if (seconds < 60) return locale === "zh" ? `${seconds} 秒` : `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainderSeconds = seconds % 60
+  return locale === "zh" ? `${minutes} 分 ${remainderSeconds} 秒` : `${minutes}m ${remainderSeconds}s`
 }
 
 function getCustomerRuntimeStatusLabel(
@@ -81,7 +97,7 @@ function SettingsMetricCard({
   return (
     <article className="dashboard-panel relative overflow-hidden rounded-[14px] border border-[#e7e7df] bg-white p-4 shadow-[0_10px_28px_rgba(0,0,0,0.045)]">
       <div className="flex items-start gap-3">
-        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] bg-[#f5ef3d] text-[#111] [clip-path:polygon(0_0,88%_0,100%_14%,100%_100%,0_100%)]">
+        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] bg-[#ffd000] text-[#111] [clip-path:polygon(0_0,88%_0,100%_14%,100%_100%,0_100%)]">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
@@ -197,7 +213,7 @@ function HashNavLink({
       className={[
         className,
         active ? activeClassName : inactiveClassName,
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f5ef3d] focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffd000] focus-visible:ring-offset-2 focus-visible:ring-offset-white",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -442,12 +458,14 @@ export function WorkspacePlatformGovernance({
             ["governance", "治理设置", ShieldCheck],
             ["model-routing", "模型路由", Route],
             ["runtime-availability", "运行时可用性", Activity],
+            ["workflow-governance", "工作流治理", Workflow],
             ["enterprise-admin", "企业管理员", Users2],
           ]
         : [
             ["governance", "Governance", ShieldCheck],
             ["model-routing", "Model Routing", Route],
             ["runtime-availability", "Runtime Availability", Activity],
+            ["workflow-governance", "Workflow Governance", Workflow],
             ["enterprise-admin", "Enterprise admin", Users2],
           ],
     [displayLocale],
@@ -461,6 +479,7 @@ export function WorkspacePlatformGovernance({
             ["default-routes", "默认路由"],
             ["providers", "Provider 配置"],
             ["runtime-availability", "运行时可用性"],
+            ["workflow-governance", "工作流治理"],
             ["admin-controls", "企业治理"],
           ]
         : [
@@ -469,6 +488,7 @@ export function WorkspacePlatformGovernance({
             ["default-routes", "Default routes"],
             ["providers", "Provider configuration"],
             ["runtime-availability", "Runtime availability"],
+            ["workflow-governance", "Workflow governance"],
             ["admin-controls", "Enterprise controls"],
           ],
     [displayLocale],
@@ -500,6 +520,9 @@ export function WorkspacePlatformGovernance({
     }
     if (activeHash === "default-routes" || activeHash === "providers" || activeHash === "routing-rules" || activeHash === "provider-editor") {
       return "model-routing"
+    }
+    if (activeHash === "workflow-governance") {
+      return "workflow-governance"
     }
     if (activeHash === "admin-controls") {
       return "enterprise-admin"
@@ -569,6 +592,21 @@ export function WorkspacePlatformGovernance({
           lastCheck: "Last Check",
           adminTitle: "Enterprise Admin Controls",
           adminBody: "成员、知识、席位和治理偏好保留真实管理入口，避免管理员在个人设置和平台设置之间跳转。",
+          workflowTitle: "Workflow Governance",
+          workflowBody: "把最近工作流运行、成功率、质量门覆盖、审查规则和知识闭环压成一个企业运营视角。",
+          workflowCoverage: "Workflow coverage",
+          workflowRuns: "Recent workflow runs",
+          workflowSuccess: "Recent success rate",
+          workflowDuration: "Avg run duration",
+          workflowCredits: "Recent credits",
+          workflowKnowledge: "Knowledge loop coverage",
+          workflowAssets: "Asset retention",
+          workflowTableTitle: "Workflow performance",
+          workflowStatus: "Status",
+          workflowRunsCol: "Runs",
+          workflowSuccessCol: "Success",
+          workflowCreditsCol: "Avg credits",
+          workflowKnowledgeCol: "Knowledge",
         }
       : {
           policyAudit: "Policy audit log",
@@ -631,6 +669,22 @@ export function WorkspacePlatformGovernance({
           lastCheck: "Last Check",
           adminTitle: "Enterprise Admin Controls",
           adminBody: "Member, knowledge, seat, and governance controls stay directly manageable here instead of scattering admin work across personal settings.",
+          workflowTitle: "Workflow Governance",
+          workflowBody:
+            "Compress recent workflow runs, success rate, quality-gate coverage, review rules, and knowledge-loop signals into one enterprise operating view.",
+          workflowCoverage: "Workflow coverage",
+          workflowRuns: "Recent workflow runs",
+          workflowSuccess: "Recent success rate",
+          workflowDuration: "Avg run duration",
+          workflowCredits: "Recent credits",
+          workflowKnowledge: "Knowledge loop coverage",
+          workflowAssets: "Asset retention",
+          workflowTableTitle: "Workflow performance",
+          workflowStatus: "Status",
+          workflowRunsCol: "Runs",
+          workflowSuccessCol: "Success",
+          workflowCreditsCol: "Avg credits",
+          workflowKnowledgeCol: "Knowledge",
         }
 
   return (
@@ -683,8 +737,8 @@ export function WorkspacePlatformGovernance({
                       active={activeTopLevelSection === id}
                       onActivate={setActiveHash}
                       className="flex h-10 items-center gap-2 rounded-lg px-3 text-sm transition"
-                      activeClassName="bg-[#111] font-extrabold text-[#f5ef3d]"
-                      inactiveClassName="font-bold text-[#111] hover:bg-[#f5ef3d]/35"
+                      activeClassName="bg-[#111] font-extrabold text-[#ffd000]"
+                      inactiveClassName="font-bold text-[#111] hover:bg-[#ffd000]/35"
                     >
                       <Icon className="h-4 w-4" />
                       {String(label)}
@@ -708,7 +762,7 @@ export function WorkspacePlatformGovernance({
                       <span
                         className={
                           activeHash === id
-                            ? "h-2 w-2 rounded-full bg-[#f5ef3d]"
+                            ? "h-2 w-2 rounded-full bg-[#ffd000]"
                             : "h-2 w-2 rounded-full border border-[#d8d8d0]"
                         }
                       />
@@ -800,7 +854,7 @@ export function WorkspacePlatformGovernance({
                       }
                       onActivate={setActiveHash}
                       className="py-3 text-sm"
-                      activeClassName="border-b-2 border-[#f5ef3d] font-black text-[#111]"
+                      activeClassName="border-b-2 border-[#ffd000] font-black text-[#111]"
                       inactiveClassName="font-extrabold text-[#666]"
                     >
                       {tab}
@@ -826,7 +880,7 @@ export function WorkspacePlatformGovernance({
                           <td className="px-4 py-4 text-[#333]">{row.provider} / {row.model}</td>
                           <td className="px-4 py-4 text-[#666]">{row.fallback}</td>
                           <td className="px-4 py-4"><StatusBadge label={row.active ? "Active" : "Disabled"} tone={row.active ? "success" : "neutral"} /></td>
-                          <td className="px-4 py-4"><a href="#provider-editor" className="font-black uppercase text-[#111] underline decoration-[#d6d64a] underline-offset-4">{ui.edit}</a></td>
+                          <td className="px-4 py-4"><a href="#provider-editor" className="font-black uppercase text-[#111] underline decoration-[#c9a400] underline-offset-4">{ui.edit}</a></td>
                         </tr>
                       ))}
                     </tbody>
@@ -879,10 +933,10 @@ export function WorkspacePlatformGovernance({
                     <div className="mt-4 space-y-3">
                       <div className="rounded-lg border border-white/15 bg-white/8 p-3 text-sm">Workspace: {ui.scopeName}</div>
                       <div className="rounded-lg border border-white/15 bg-white/8 p-3 text-sm">Task type: Video generation</div>
-                      <div className="rounded-lg border border-[#f5ef3d]/40 bg-[#f5ef3d] p-3 text-sm font-black text-[#111]">
+                      <div className="rounded-lg border border-[#ffd000]/40 bg-[#ffd000] p-3 text-sm font-black text-[#111]">
                         Primary: {defaultRouteRows.find((row) => row.label === "Video generation")?.provider || "MiniMax"} / {defaultRouteRows.find((row) => row.label === "Video generation")?.model || "Hailuo"}
                       </div>
-                      <Button className="h-10 w-full rounded-lg border border-[#ded735] bg-[#f5ef3d] font-black uppercase text-[#111]">
+                      <Button className="h-10 w-full rounded-lg border border-[#c9a400] bg-[#ffd000] font-black uppercase text-[#111]">
                         <TestTube2 className="mr-2 h-4 w-4" />
                         {ui.simulate}
                       </Button>
@@ -945,6 +999,84 @@ export function WorkspacePlatformGovernance({
                 </div>
               </SettingsSectionCard>
 
+              {snapshot.workflows ? (
+                <SettingsSectionCard id="workflow-governance" eyebrow="WORKFLOW GOVERNANCE" title={ui.workflowTitle} description={ui.workflowBody}>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                    <SettingsMetricCard icon={Workflow} label={ui.workflowCoverage} value={String(snapshot.workflows.totalWorkflowCount)} helper={`${snapshot.workflows.liveWorkflowCount} live`} />
+                    <SettingsMetricCard icon={Activity} label={ui.workflowRuns} value={String(snapshot.workflows.recentRunCount)} helper={`${snapshot.workflows.recentSucceededRunCount} succeeded / ${snapshot.workflows.recentFailedRunCount} failed`} tone="success" />
+                    <SettingsMetricCard icon={CheckCircle2} label={ui.workflowSuccess} value={formatPercent(snapshot.workflows.recentSuccessRate)} helper={ui.workflowSuccess} tone="success" />
+                    <SettingsMetricCard icon={Clock3} label={ui.workflowDuration} value={formatDuration(snapshot.workflows.recentAverageDurationMs, displayLocale)} helper={ui.workflowDuration} />
+                    <SettingsMetricCard icon={CreditCard} label={ui.workflowCredits} value={formatNumber(snapshot.workflows.recentCreditsConsumed)} helper={ui.workflowCredits} tone="warning" />
+                    <SettingsMetricCard icon={Database} label={ui.workflowKnowledge} value={`${snapshot.workflows.workflowsWithKnowledgeLoop}/${snapshot.workflows.totalWorkflowCount}`} helper={ui.workflowKnowledge} />
+                  </div>
+
+                  <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-xl border border-[#e7e7df] bg-[#fafaf7] p-4">
+                      <div className="font-display text-xl font-black uppercase text-[#111]">{ui.workflowKnowledge}</div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <StatusBadge label={`${snapshot.workflows.workflowsWithQualityGates} quality-gated`} tone="success" />
+                        <StatusBadge label={`${snapshot.workflows.workflowsWithReviewRules} review-ruled`} tone="warning" />
+                        <StatusBadge label={`${snapshot.workflows.workflowsWithKnowledgeLoop} knowledge-loop`} tone="success" />
+                        <StatusBadge label={`${snapshot.workflows.workflowsWithDefaultPreset} preset-backed`} tone="neutral" />
+                      </div>
+                      <div className="mt-4 space-y-2 text-sm text-[#666]">
+                        <div>{ui.workflowAssets}: {formatNumber(snapshot.workflows.recentArtifactCount)} artifacts / {formatNumber(snapshot.workflows.recentWorkItemCount)} work items</div>
+                        <div>{ui.workflowKnowledge}: {formatNumber(snapshot.workflows.recentKnowledgeSaveJobCount)} queued knowledge jobs</div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-[#111] bg-[#111] p-4 text-white">
+                      <div className="font-display text-xl font-black uppercase">{ui.workflowTableTitle}</div>
+                      <p className="mt-2 text-sm leading-6 text-white/70">{ui.workflowBody}</p>
+                      <div className="mt-4 space-y-2">
+                        {snapshot.workflows.topWorkflows.slice(0, 4).map((workflow) => (
+                          <div key={workflow.workflowId} className="rounded-lg border border-white/15 bg-white/8 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="font-bold">{workflow.title}</div>
+                              <StatusBadge label={workflow.status} tone={workflow.status === "live" ? "success" : workflow.status === "draft" ? "warning" : "neutral"} />
+                            </div>
+                            <div className="mt-2 text-xs text-white/70">
+                              {workflow.runCount} runs · {formatPercent(workflow.successRate)} · {workflow.knowledgeReadNodeCount}/{workflow.knowledgeWriteNodeCount}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 overflow-hidden rounded-xl border border-[#ededE7]">
+                    <table className="w-full border-collapse text-left text-sm">
+                      <thead className="bg-[#fafaf7] text-xs font-black uppercase text-[#555]">
+                        <tr>
+                          <th className="px-4 py-3">{ui.workflowTableTitle}</th>
+                          <th className="px-4 py-3">{ui.workflowStatus}</th>
+                          <th className="px-4 py-3">{ui.workflowRunsCol}</th>
+                          <th className="px-4 py-3">{ui.workflowSuccessCol}</th>
+                          <th className="px-4 py-3">{ui.workflowCreditsCol}</th>
+                          <th className="px-4 py-3">{ui.workflowKnowledgeCol}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {snapshot.workflows.topWorkflows.map((workflow) => (
+                          <tr key={workflow.workflowId} className="border-t border-[#ededE7]">
+                            <td className="px-4 py-4 font-bold text-[#111]">{workflow.title}</td>
+                            <td className="px-4 py-4">
+                              <StatusBadge label={workflow.status} tone={workflow.status === "live" ? "success" : workflow.status === "draft" ? "warning" : "neutral"} />
+                            </td>
+                            <td className="px-4 py-4 text-[#333]">{workflow.runCount}</td>
+                            <td className="px-4 py-4 text-[#333]">{formatPercent(workflow.successRate)}</td>
+                            <td className="px-4 py-4 text-[#333]">{workflow.averageCreditsConsumed.toFixed(1)}</td>
+                            <td className="px-4 py-4 text-[#666]">
+                              {workflow.knowledgeReadNodeCount}/{workflow.knowledgeWriteNodeCount} · queue {workflow.assetQueueNodeCount}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </SettingsSectionCard>
+              ) : null}
+
               <SettingsSectionCard id="enterprise-admin" eyebrow="ENTERPRISE ADMIN" title={ui.adminTitle} description={ui.adminBody}>
                 <div id="admin-controls" className="space-y-5">
                   <EnterpriseMemberGovernancePanel
@@ -958,6 +1090,7 @@ export function WorkspacePlatformGovernance({
                     canView={canViewEnterpriseGovernance}
                     canManage={canManageEnterpriseGovernance}
                   />
+                  <WorkspaceWorkflowTemplateStudio locale={displayLocale} />
                   <div className="grid gap-4 xl:grid-cols-2">
                     {enterpriseSettings.map((item) => (
                       <article key={item.slug} className="rounded-xl border border-[#e7e7df] bg-[#fafaf7] p-4">

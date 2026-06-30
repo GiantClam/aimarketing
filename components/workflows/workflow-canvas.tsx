@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AudioLines,
   Archive,
+  Bot,
   ArrowDownToLine,
   Copy,
   FileUp,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/components/workflows/workflow-agent-options"
 import { WorkflowNodeEditorFields } from "@/components/workflows/workflow-node-editor-fields"
 import { WorkflowNodeOutputPreview } from "@/components/workflows/workflow-node-output-preview"
 import { cn } from "@/lib/utils"
@@ -52,6 +54,8 @@ const INPUT_PORT_CENTER_X = 22
 const OUTPUT_PORT_CENTER_X = NODE_WIDTH - 22
 const ZOOM_STEP = 0.12
 const CONNECTION_SNAP_RADIUS = 44
+const MIN_CANVAS_SCALE = 0.3
+const MAX_CANVAS_SCALE = 1.6
 
 const NODE_VISUALS: Record<
   WorkflowNodeType,
@@ -116,6 +120,21 @@ const NODE_VISUALS: Record<
     accentClassName: "border-violet-300/80 bg-violet-100 text-violet-800",
     glowClassName: "from-violet-200/80 via-violet-100/20 to-transparent",
   },
+  knowledge_retrieve: {
+    icon: Link2,
+    accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800",
+    glowClassName: "from-sky-200/80 via-sky-100/20 to-transparent",
+  },
+  knowledge_write: {
+    icon: ArrowDownToLine,
+    accentClassName: "border-emerald-300/80 bg-emerald-100 text-emerald-800",
+    glowClassName: "from-emerald-200/80 via-emerald-100/20 to-transparent",
+  },
+  agent_execute: {
+    icon: Bot,
+    accentClassName: "border-amber-400/80 bg-amber-100 text-amber-900",
+    glowClassName: "from-amber-200/80 via-amber-100/20 to-transparent",
+  },
   product_store: {
     icon: Archive,
     accentClassName: "border-slate-300/80 bg-slate-100 text-slate-800",
@@ -165,6 +184,8 @@ type WorkflowCanvasProps = {
     category: "system" | "voice_cloning" | "voice_generation"
     description: string[]
   }>
+  builtinAgents: WorkflowBuiltinAgentOption[]
+  customAgents: WorkflowCustomAgentOption[]
   selectedNodeKey: string | null
   pendingConnectionSourceKey: string | null
   uploadPending: boolean
@@ -339,7 +360,7 @@ function getExecutionTone(status: string | null) {
 }
 
 function clampScale(value: number) {
-  return Math.min(1.6, Math.max(0.75, value))
+  return Math.min(MAX_CANVAS_SCALE, Math.max(MIN_CANVAS_SCALE, value))
 }
 
 function getPortPanelHeight(inputCount: number, outputCount: number) {
@@ -378,6 +399,8 @@ export function WorkflowCanvas({
   llmModelCatalog,
   workflowImageProviderOptions,
   voiceOptions,
+  builtinAgents,
+  customAgents,
   selectedNodeKey,
   pendingConnectionSourceKey,
   uploadPending,
@@ -728,8 +751,8 @@ export function WorkflowCanvas({
     setTitleDraft("")
   }
 
-  const canZoomOut = viewport.scale > 0.8
-  const canZoomIn = viewport.scale < 1.55
+  const canZoomOut = viewport.scale > MIN_CANVAS_SCALE
+  const canZoomIn = viewport.scale < MAX_CANVAS_SCALE
   const activeConnectionDrag = connectionDrag
   const activeConnectionSourceKey = activeConnectionDrag?.sourceNodeKey ?? null
 
@@ -888,7 +911,7 @@ export function WorkflowCanvas({
                       : connectionDrag.currentY
                   }
                   r="5"
-                  fill="rgba(244, 255, 89, 1)"
+                  fill="rgb(255, 208, 0)"
                   stroke="rgba(37, 99, 235, 1)"
                   strokeWidth="2"
                 />
@@ -1057,7 +1080,7 @@ export function WorkflowCanvas({
                       className={cn(
                         "absolute z-20 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-background shadow-sm transition",
                         active ? "border-primary bg-primary/95" : "border-border/90",
-                        hovered ? "scale-110 border-primary bg-[rgb(244,255,89)]" : "",
+                        hovered ? "scale-110 border-primary bg-[rgb(255,208,0)]" : "",
                   )}
                       style={{
                         left: INPUT_PORT_CENTER_X,
@@ -1261,6 +1284,8 @@ export function WorkflowCanvas({
                       llmModelCatalog={llmModelCatalog}
                       workflowImageProviderOptions={workflowImageProviderOptions}
                       voiceOptions={voiceOptions}
+                      builtinAgents={builtinAgents}
+                      customAgents={customAgents}
                       textPromptSuggestions={textPromptSuggestions}
                       uploadPending={uploadPending}
                       showPersistedPreview={!executionSnapshot}

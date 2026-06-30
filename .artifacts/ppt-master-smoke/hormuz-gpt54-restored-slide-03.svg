@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#111111"/>
+    <rect x="36" y="34" width="1208" height="652" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="36" y="34" width="14" height="652" fill="#E85D26"/>
+    <rect x="1046" y="34" width="198" height="652" fill="#151513"/>
+    <line x1="70" y1="166" x2="1018" y2="166" stroke="#282826" stroke-width="2"/>
+    <line x1="70" y1="474" x2="1018" y2="474" stroke="#282826" stroke-width="2"/>
+    <line x1="712" y1="166" x2="712" y2="650" stroke="#282826" stroke-width="2"/>
+  </g>
+  <g id="chrome">
+    <text x="70" y="86" fill="#E85D26" font-size="22" font-weight="700" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">核心宣言</text>
+    <text x="70" y="126" fill="#F0ECE5" font-size="18" font-weight="600" letter-spacing="1.5" font-family="Arial, Helvetica, sans-serif">HORMUZ / INSIGHT / 03</text>
+    <text x="1220" y="86" text-anchor="end" fill="#F0ECE5" font-size="18" font-weight="700" letter-spacing="2" font-family="Arial, Helvetica, sans-serif">03 — 04</text>
+    <text x="1220" y="646" text-anchor="end" fill="#F0ECE5" font-size="14" font-weight="600" letter-spacing="1.2" font-family="Arial, Helvetica, sans-serif">截至2026年6月24日</text>
+    <text x="1220" y="668" text-anchor="end" fill="#8F8B84" font-size="12" font-weight="600" letter-spacing="1.2" font-family="Arial, Helvetica, sans-serif">全球能源运输影响观察</text>
+  </g>
+  <g id="content">
+    <text x="70" y="238" fill="#F0ECE5" font-size="74" font-weight="900" letter-spacing="-1.5" font-family="Arial, Helvetica, sans-serif">恢复通航，</text>
+    <text x="70" y="320" fill="#F0ECE5" font-size="74" font-weight="900" letter-spacing="-1.5" font-family="Arial, Helvetica, sans-serif">不等于风险退场</text>
+
+    <rect x="744" y="190" width="238" height="242" fill="#E85D26"/>
+    <text x="863" y="292" text-anchor="middle" fill="#111111" font-size="126" font-weight="900" font-family="Arial, Helvetica, sans-serif">20%</text>
+    <text x="863" y="338" text-anchor="middle" fill="#111111" font-size="24" font-weight="800" letter-spacing="2" font-family="Arial, Helvetica, sans-serif">海运原油仍经此</text>
+    <text x="863" y="370" text-anchor="middle" fill="#111111" font-size="24" font-weight="800" letter-spacing="2" font-family="Arial, Helvetica, sans-serif">全球关键咽喉未变</text>
+
+    <text x="70" y="540" fill="#F0ECE5" font-size="28" font-weight="700" letter-spacing="0.2" font-family="Arial, Helvetica, sans-serif">霍尔木兹海峡仍承载全球约20%海运原油，</text>
+    <text x="70" y="580" fill="#F0ECE5" font-size="28" font-weight="700" letter-spacing="0.2" font-family="Arial, Helvetica, sans-serif">航道一旦反复，风险定价就会立刻回潮。</text>
+
+    <rect x="744" y="492" width="238" height="126" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="766" y="530" fill="#E85D26" font-size="18" font-weight="800" letter-spacing="2" font-family="Arial, Helvetica, sans-serif">判断</text>
+    <text x="766" y="570" fill="#F0ECE5" font-size="34" font-weight="900" letter-spacing="0.5" font-family="Arial, Helvetica, sans-serif">通航恢复是表层，</text>
+    <text x="766" y="604" fill="#F0ECE5" font-size="34" font-weight="900" letter-spacing="0.5" font-family="Arial, Helvetica, sans-serif">高压运营才是常态。</text>
+
+    <rect x="1046" y="120" width="154" height="68" fill="#E85D26"/>
+    <text x="1123" y="164" text-anchor="middle" fill="#111111" font-size="24" font-weight="900" letter-spacing="1.5" font-family="Arial, Helvetica, sans-serif">代价仍在</text>
+
+    <text x="1076" y="246" fill="#F0ECE5" font-size="18" font-weight="800" letter-spacing="1.2" font-family="Arial, Helvetica, sans-serif">01</text>
+    <text x="1108" y="246" fill="#F0ECE5" font-size="20" font-weight="700" font-family="Arial, Helvetica, sans-serif">战险与保险条款</text>
+    <text x="1108" y="274" fill="#F0ECE5" font-size="20" font-weight="700" font-family="Arial, Helvetica, sans-serif">仍高于冲突前水平</text>
+    <line x1="1072" y1="296" x2="1214" y2="296" stroke="#282826" stroke-width="2"/>
+
+    <text x="1076" y="360" fill="#F0ECE5" font-size="18" font-weight="800" letter-spacing="1.2" font-family="Arial, Helvetica, sans-serif">02</text>
+    <text x="1108" y="360" fill="#F0ECE5" font-size="20" font-weight="700" font-family="Arial, Helvetica, sans-serif">LNG船与油轮成本</text>
+    <text x="1108" y="388" fill="#F0ECE5" font-size="20" font-weight="700" font-family="Arial, Helvetica, sans-serif">恢复速度并不同步</text>
+    <line x1="1072" y1="410" x2="1214" y2="410" stroke="#282826" stroke-width="2"/>
+
+    <text x="1076" y="474" fill="#F0ECE5" font-size="18" font-weight="800" letter-spacing="1.2" font-family="Arial, Helvetica, sans-serif">03</text>
+    <text x="1108" y="474" fill="#F0ECE5" font-size="20" font-weight="700" font-family="Arial, Helvetica, sans-serif">延误会直接挤压</text>
+    <text x="1108" y="502" fill="#F0ECE5" font-size="20" font-weight="700" font-family="Arial, Helvetica, sans-serif">库存安全与补货节奏</text>
+
+    <rect x="1046" y="566" width="154" height="84" fill="none" stroke="#E85D26" stroke-width="2"/>
+    <text x="1123" y="600" text-anchor="middle" fill="#E85D26" font-size="16" font-weight="800" letter-spacing="1.5" font-family="Arial, Helvetica, sans-serif">POST-REOPEN</text>
+    <text x="1123" y="628" text-anchor="middle" fill="#F0ECE5" font-size="22" font-weight="900" letter-spacing="1" font-family="Arial, Helvetica, sans-serif">风险未清零</text>
+  </g>
+  <g id="annotations">
+    <line x1="982" y1="236" x2="1030" y2="216" stroke="#E85D26" stroke-width="3"/>
+    <line x1="982" y1="386" x2="1030" y2="404" stroke="#E85D26" stroke-width="3"/>
+    <line x1="324" y1="334" x2="324" y2="446" stroke="#E85D26" stroke-width="4"/>
+    <text x="342" y="430" fill="#E85D26" font-size="20" font-weight="800" letter-spacing="1.5" font-family="Arial, Helvetica, sans-serif">真正变化的是成本曲线，</text>
+    <text x="342" y="456" fill="#E85D26" font-size="20" font-weight="800" letter-spacing="1.5" font-family="Arial, Helvetica, sans-serif">不是风险本身。</text>
+  </g>
+</svg>

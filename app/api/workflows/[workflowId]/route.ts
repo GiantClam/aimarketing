@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import {
+  deleteWorkflowDefinition,
   getWorkflowDefinition,
   updateWorkflowDefinition,
   type WorkflowDefinitionStatus,
@@ -129,6 +130,34 @@ export async function PATCH(
           ? 400
           : 500
 
+    return NextResponse.json({ error: message }, { status })
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ workflowId: string }> },
+) {
+  try {
+    const currentUser = await getSessionUser(request).catch(() => null)
+    if (!currentUser) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+    }
+    if (!currentUser.enterpriseId) {
+      return NextResponse.json({ error: "enterprise_context_required" }, { status: 403 })
+    }
+
+    const { workflowId } = await params
+    const numericWorkflowId = parseWorkflowId(workflowId)
+    if (!numericWorkflowId) {
+      return NextResponse.json({ error: "invalid_workflow_id" }, { status: 400 })
+    }
+
+    await deleteWorkflowDefinition(numericWorkflowId, currentUser.enterpriseId)
+    return NextResponse.json({ data: { id: numericWorkflowId, deleted: true } })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "workflow_delete_failed"
+    const status = message === "workflow_definition_not_found" ? 404 : 500
     return NextResponse.json({ error: message }, { status })
   }
 }

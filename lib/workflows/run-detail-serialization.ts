@@ -25,3 +25,5 @@ export function serializeWorkflowRunDetail(detail: Awaited<ReturnType<typeof get
     statusPath: `/api/workflows/runs/${detail.run.id}?mode=status`,
   }
 }
+
+export type SerializedWorkflowRunDetail = NonNullable<ReturnType<typeof serializeWorkflowRunDetail>>

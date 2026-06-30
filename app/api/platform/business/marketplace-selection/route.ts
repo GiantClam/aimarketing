@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
+import { getLocalizedBusinessAgentConfigById } from "@/lib/platform/business-agents"
+import { getLocalizedExecutiveBusinessMenuAgentById } from "@/lib/platform/business-menu-builtin-agents"
 import {
   getBusinessMarketplaceSelection,
   sanitizeBusinessMarketplaceSelectionInput,
   upsertBusinessMarketplaceSelection,
 } from "@/lib/platform/business-marketplace-selection"
+import { buildSelectedCustomBusinessMenuAgents } from "@/lib/platform/custom-agent-business-view"
+import { listCustomAgentsForUser } from "@/lib/platform/custom-agents"
 import { listImportedAgencyAgentsByIds } from "@/lib/platform/imported-agency-agents"
 import { getLocalizedWorkspaceMarketplaceEntries } from "@/lib/platform/workspace-business"
 
@@ -22,7 +26,27 @@ export async function GET(request: NextRequest) {
 
     const locale = resolveLocale(request.nextUrl.searchParams.get("locale"))
     const selection = (await getBusinessMarketplaceSelection(auth.user.id)) || { selectedAgentIds: [] }
-    const selectedAgents = listImportedAgencyAgentsByIds(locale, selection.selectedAgentIds)
+    const selectedImportedAgents = listImportedAgencyAgentsByIds(locale, selection.selectedAgentIds)
+    const selectedBuiltinBusinessAgents = selection.selectedAgentIds
+      .map((agentId) =>
+        getLocalizedBusinessAgentConfigById(locale, agentId) ||
+        getLocalizedExecutiveBusinessMenuAgentById(locale, agentId),
+      )
+      .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
+    const customAgents =
+      auth.user.enterpriseId
+        ? await listCustomAgentsForUser({
+            enterpriseId: auth.user.enterpriseId,
+            userId: auth.user.id,
+            isEnterpriseAdmin: auth.user.enterpriseRole === "admin" && auth.user.enterpriseStatus === "active",
+          }).catch(() => [])
+        : []
+    const selectedCustomAgents = buildSelectedCustomBusinessMenuAgents(customAgents, locale, selection.selectedAgentIds)
+    const selectedAgents = [
+      ...selectedBuiltinBusinessAgents,
+      ...selectedImportedAgents,
+      ...selectedCustomAgents,
+    ]
     const selectedEntries = getLocalizedWorkspaceMarketplaceEntries(locale, {
       includeSlugs: [...new Set(selectedAgents.map((agent) => agent.businessSlug))],
     })

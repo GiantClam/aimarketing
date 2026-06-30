@@ -3,6 +3,7 @@ export const WORKFLOW_NODE_TYPES = [
   "text_input",
   "writer",
   "llm_generate",
+  "agent_execute",
   "image_generate",
   "video_generate",
   "digital_human",
@@ -10,6 +11,8 @@ export const WORKFLOW_NODE_TYPES = [
   "voice_synthesis",
   "audio_generate",
   "ppt_generate",
+  "knowledge_retrieve",
+  "knowledge_write",
   "product_store",
 ] as const
 
@@ -60,6 +63,10 @@ const WORKFLOW_NODE_TITLE_CATALOG: Record<WorkflowNodeType, Record<WorkflowLocal
     zh: "大模型",
     en: "LLM Generate",
   },
+  agent_execute: {
+    zh: "智能体",
+    en: "Agent",
+  },
   image_generate: {
     zh: "图片生成",
     en: "Image Generate",
@@ -87,6 +94,14 @@ const WORKFLOW_NODE_TITLE_CATALOG: Record<WorkflowNodeType, Record<WorkflowLocal
   ppt_generate: {
     zh: "PPT 生成",
     en: "PPT Generate",
+  },
+  knowledge_retrieve: {
+    zh: "知识检索",
+    en: "Knowledge Retrieve",
+  },
+  knowledge_write: {
+    zh: "知识写入",
+    en: "Knowledge Write",
   },
   product_store: {
     zh: "素材库存储",
@@ -123,6 +138,12 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
     title: "LLM Generate",
     outputKinds: ["text"],
     acceptedInputKinds: ["text"],
+  },
+  agent_execute: {
+    type: "agent_execute",
+    title: "Agent",
+    outputKinds: ["text"],
+    acceptedInputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
   },
   image_generate: {
     type: "image_generate",
@@ -165,6 +186,18 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
     title: "PPT Generate",
     outputKinds: ["ppt"],
     acceptedInputKinds: ["text", "image"],
+  },
+  knowledge_retrieve: {
+    type: "knowledge_retrieve",
+    title: "Knowledge Retrieve",
+    outputKinds: ["text"],
+    acceptedInputKinds: ["text", "asset"],
+  },
+  knowledge_write: {
+    type: "knowledge_write",
+    title: "Knowledge Write",
+    outputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
+    acceptedInputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
   },
   product_store: {
     type: "product_store",

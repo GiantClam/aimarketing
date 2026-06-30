@@ -10,61 +10,14 @@ import { Button } from "@/components/ui/button"
 import { WorkspaceOutputActions } from "@/components/workspace/workspace-output-actions"
 import { WorkflowNodeOutputPreview } from "@/components/workflows/workflow-node-output-preview"
 import { cn } from "@/lib/utils"
+import type { SerializedWorkflowRunDetail } from "@/lib/workflows/run-detail-serialization"
+import { summarizeWorkflowRunGovernance } from "@/lib/workflows/run-governance"
 import { isWorkflowNodeType, resolveWorkflowNodeTitle } from "@/lib/workflows/schema"
 import { buildWorkflowRunStatusPath } from "@/lib/workflows/run-status-path"
 import { isWorkflowRunActiveStatus } from "@/lib/workflows/run-status"
 
 type WorkflowRunStatus = string
 type WorkflowNodeExecutionStatus = string
-
-type WorkflowRunArtifact = {
-  id: number
-  title: string
-  kind: string
-  mimeType: string | null
-  storageKey?: string | null
-  externalUrl?: string | null
-  payload?: unknown
-  createdAt: string | null
-}
-
-type WorkflowRunWorkItem = {
-  id: number
-  title: string
-  type: string
-  sourceArtifactId: number
-  createdAt: string | null
-  updatedAt: string | null
-}
-
-type WorkflowRunEvent = {
-  id: number
-  level: string
-  message: string
-  payload?: Record<string, unknown> | null
-  createdAt: string | null
-}
-
-type SerializedWorkflowRun = {
-  id: number
-  enterpriseId: number
-  userId: number
-  kind: string
-  itemType: string
-  itemSlug: string
-  externalRunId: string | null
-  externalSystem: string | null
-  status: WorkflowRunStatus
-  inputPayload: Record<string, unknown> | null
-  normalizedResult: Record<string, unknown> | null
-  startedAt: string | null
-  finishedAt: string | null
-  createdAt: string | null
-  updatedAt: string | null
-  events: WorkflowRunEvent[]
-  artifacts: WorkflowRunArtifact[]
-  workItems: WorkflowRunWorkItem[]
-}
 
 type SerializedWorkflowNode = {
   nodeKey: string
@@ -81,53 +34,13 @@ type SerializedWorkflowEdge = {
   inputName: string | null
 }
 
-type SerializedWorkflowDefinition = {
-  id: number
-  enterpriseId: number
-  ownerUserId: number
-  title: string
-  slug: string
-  status: string
-  triggerType: string
-  description: string | null
-  metadata: Record<string, unknown> | null
-  createdAt: string | null
-  updatedAt: string | null
-  nodes: SerializedWorkflowNode[]
-  edges: SerializedWorkflowEdge[]
-}
-
-type SerializedWorkflowNodeExecution = {
-  id: number
-  runId: number
-  workflowId: number
-  nodeKey: string
-  nodeType: string
-  status: WorkflowNodeExecutionStatus
-  providerId: string | null
-  modelId: string | null
-  taskRunId: number | null
-  inputPayload: Record<string, unknown> | null
-  outputPayload: Record<string, unknown> | null
-  errorMessage: string | null
-  creditsConsumed: number
-  startedAt: string | null
-  finishedAt: string | null
-  createdAt: string | null
-  updatedAt: string | null
-}
-
-export type WorkflowRunResultsDetail = {
-  run: SerializedWorkflowRun
-  workflow: SerializedWorkflowDefinition
-  nodeExecutions: SerializedWorkflowNodeExecution[]
+export type WorkflowRunResultsDetail = SerializedWorkflowRunDetail & {
   detailPath: string
-  statusPath?: string
 }
 
 type WorkflowRunStatusSnapshot = {
-  run: SerializedWorkflowRun
-  nodeExecutions: SerializedWorkflowNodeExecution[]
+  run: WorkflowRunResultsDetail["run"]
+  nodeExecutions: WorkflowRunResultsDetail["nodeExecutions"]
   detailPath: string
   statusPath?: string
 }
@@ -159,6 +72,7 @@ function formatTimestamp(locale: "zh" | "en", value: string | null) {
 function getStatusTone(status: WorkflowRunStatus | WorkflowNodeExecutionStatus) {
   if (status === "succeeded") return "border-emerald-200 bg-emerald-50 text-emerald-700"
   if (status === "running") return "border-blue-200 bg-blue-50 text-blue-700"
+  if (status === "rejected") return "border-slate-200 bg-slate-100 text-slate-700"
   if (status === "failed") return "border-red-200 bg-red-50 text-red-700"
   if (status === "cancelled") return "border-neutral-200 bg-neutral-100 text-neutral-600"
   return "border-amber-200 bg-amber-50 text-amber-700"
@@ -169,6 +83,7 @@ function getStatusLabel(locale: "zh" | "en", status: WorkflowRunStatus | Workflo
     if (status === "queued") return "排队中"
     if (status === "running") return "运行中"
     if (status === "succeeded") return "已成功"
+    if (status === "rejected") return "已驳回"
     if (status === "failed") return "失败"
     return "已取消"
   }
@@ -176,6 +91,7 @@ function getStatusLabel(locale: "zh" | "en", status: WorkflowRunStatus | Workflo
   if (status === "queued") return "Queued"
   if (status === "running") return "Running"
   if (status === "succeeded") return "Succeeded"
+  if (status === "rejected") return "Rejected"
   if (status === "failed") return "Failed"
   return "Cancelled"
 }
@@ -215,6 +131,24 @@ function formatNodeType(locale: "zh" | "en", type: string) {
   return isWorkflowNodeType(type) ? resolveWorkflowNodeTitle(type, null, locale) : type.replace(/_/g, " ")
 }
 
+function getGovernanceTone(status: "tracked" | "attention" | "pending") {
+  if (status === "tracked") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  if (status === "pending") return "border-blue-200 bg-blue-50 text-blue-700"
+  return "border-amber-200 bg-amber-50 text-amber-700"
+}
+
+function getGovernanceLabel(locale: "zh" | "en", status: "tracked" | "attention" | "pending") {
+  if (locale === "zh") {
+    if (status === "tracked") return "有证据"
+    if (status === "pending") return "待运行"
+    return "缺少信号"
+  }
+
+  if (status === "tracked") return "Tracked"
+  if (status === "pending") return "Pending"
+  return "Needs signal"
+}
+
 export function WorkflowRunResultsPage({
   locale,
   detail: initialDetail,
@@ -226,6 +160,7 @@ export function WorkflowRunResultsPage({
   const [detail, setDetail] = useState(initialDetail)
   const [message, setMessage] = useState<string | null>(null)
   const [retrying, setRetrying] = useState<{ nodeKey: string; mode: "node" | "branch" } | null>(null)
+  const [knowledgeJobAction, setKnowledgeJobAction] = useState<{ jobId: number; action: "approve" | "reject" } | null>(null)
   const detailRequestInFlightRef = useRef(false)
 
   const childMap = useMemo(() => buildChildMap(detail.workflow.nodes, detail.workflow.edges), [detail.workflow.edges, detail.workflow.nodes])
@@ -234,6 +169,16 @@ export function WorkflowRunResultsPage({
     [detail.workflow.nodes],
   )
   const firstArtifact = detail.run.artifacts[0] ?? null
+  const governanceSummary = useMemo(
+    () =>
+      summarizeWorkflowRunGovernance({
+        locale,
+        workflow: detail.workflow,
+        run: detail.run,
+        nodeExecutions: detail.nodeExecutions,
+      }),
+    [detail.nodeExecutions, detail.run, detail.workflow, locale],
+  )
 
   useEffect(() => {
     setDetail(initialDetail)
@@ -319,6 +264,19 @@ export function WorkflowRunResultsPage({
           retryHint: "分支重试会重跑该节点及其所有下游节点。",
           artifact: "输出产物",
           workItem: "作品记录",
+          governance: "治理摘要",
+          governanceSignals: "治理信号",
+          qualityGate: "质量门",
+          reviewRules: "审查规则",
+          channels: "默认渠道",
+          bannedTerms: "禁用词",
+          knowledgeJobs: "知识入库任务",
+          approveKnowledgeJob: "确认入库",
+          rejectKnowledgeJob: "驳回入库",
+          approvalSignals: "审批信号",
+          defaultPreset: "默认预设",
+          knowledgeFlow: "知识闭环",
+          noneConfigured: "未配置",
           none: "暂无",
           executionId: "执行记录",
           nodeCount: "个节点",
@@ -346,6 +304,19 @@ export function WorkflowRunResultsPage({
           retryHint: "Branch retry reruns this node and all downstream nodes.",
           artifact: "Artifact",
           workItem: "Work item",
+          governance: "Governance summary",
+          governanceSignals: "Governance signals",
+          qualityGate: "Quality gate",
+          reviewRules: "Review rules",
+          channels: "Default channels",
+          bannedTerms: "Banned terms",
+          knowledgeJobs: "Knowledge save jobs",
+          approveKnowledgeJob: "Approve save",
+          rejectKnowledgeJob: "Reject save",
+          approvalSignals: "Approval signals",
+          defaultPreset: "Default preset",
+          knowledgeFlow: "Knowledge loop",
+          noneConfigured: "Unconfigured",
           none: "None",
           executionId: "Execution record",
           nodeCount: "nodes",
@@ -355,6 +326,19 @@ export function WorkflowRunResultsPage({
           panelTitle: "Current run results",
           dismiss: "Close results panel",
         }
+
+  async function refreshDetail() {
+    const response = await fetch(detail.detailPath, {
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+    const payload = (await response.json().catch(() => null)) as { data?: WorkflowRunResultsDetail; error?: string } | null
+    if (!response.ok || !payload?.data?.run) {
+      throw new Error(payload?.error || "workflow_run_refresh_failed")
+    }
+    setDetail(payload.data)
+    onDetailChange?.(payload.data)
+  }
 
   async function retryNode(nodeKey: string, mode: "node" | "branch") {
     setRetrying({ nodeKey, mode })
@@ -394,6 +378,46 @@ export function WorkflowRunResultsPage({
       })
     } finally {
       setRetrying(null)
+    }
+  }
+
+  async function resolveKnowledgeSaveJob(jobId: number, action: "approve" | "reject") {
+    setKnowledgeJobAction({ jobId, action })
+    setMessage(null)
+
+    try {
+      const response = await fetch(`/api/platform/knowledge-save-jobs/${jobId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ action }),
+      })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        throw new Error(payload?.error || "knowledge_save_job_action_failed")
+      }
+
+      await refreshDetail()
+      const successMessage =
+        locale === "zh"
+          ? action === "approve"
+            ? "知识草稿已确认入库。"
+            : "知识草稿已驳回。"
+          : action === "approve"
+            ? "Knowledge draft approved."
+            : "Knowledge draft rejected."
+      setMessage(successMessage)
+      toast.success(action === "approve" ? copy.approveKnowledgeJob : copy.rejectKnowledgeJob)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "knowledge_save_job_action_failed"
+      setMessage(errorMessage)
+      toast.error(action === "approve" ? copy.approveKnowledgeJob : copy.rejectKnowledgeJob, {
+        description: errorMessage,
+      })
+    } finally {
+      setKnowledgeJobAction(null)
     }
   }
 
@@ -501,6 +525,16 @@ export function WorkflowRunResultsPage({
               </div>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 {detail.run.inputPayload ? copy.inputPayload : copy.none}
+              </p>
+            </article>
+
+            <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+              <div className="dashboard-kicker text-muted-foreground">{copy.governance}</div>
+              <div className="mt-3 text-3xl font-extrabold uppercase tracking-[0.02em] text-foreground">
+                {governanceSummary.totalCreditsConsumed}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {governanceSummary.qualityGates.length} {copy.qualityGate} · {governanceSummary.knowledgeSaveJobCount} {copy.knowledgeJobs}
               </p>
             </article>
           </div>
@@ -692,6 +726,172 @@ export function WorkflowRunResultsPage({
                   downloadPayload={firstArtifact.payload}
                 />
               ) : null}
+
+              <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
+                <div className="dashboard-kicker text-muted-foreground">{copy.governance}</div>
+                <div className="mt-3 space-y-4">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                      Credits: {governanceSummary.totalCreditsConsumed}
+                    </div>
+                    <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                      {copy.approvalSignals}: {governanceSummary.approvalSignalCount}
+                    </div>
+                    <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                      {copy.knowledgeFlow}: {governanceSummary.explicitKnowledgeReadNodes} / {governanceSummary.explicitKnowledgeWriteNodes}
+                    </div>
+                    <div className="dashboard-chip rounded-[4px] px-3 py-2 text-sm text-foreground/85">
+                      Queue to knowledge: {governanceSummary.assetToKnowledgeQueueNodes}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[10px] border border-border/70 bg-background/80 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.defaultPreset}</div>
+                    {governanceSummary.defaultPreset ? (
+                      <div className="mt-3 space-y-2 text-sm text-foreground/85">
+                        <div className="font-semibold text-foreground">{governanceSummary.defaultPreset.name}</div>
+                        <div>{governanceSummary.defaultPreset.industry || copy.noneConfigured}</div>
+                        <div>{governanceSummary.defaultPreset.audience || copy.noneConfigured}</div>
+                        <div>{governanceSummary.defaultPreset.brandVoice || copy.noneConfigured}</div>
+                        {governanceSummary.defaultPreset.notes ? (
+                          <div className="text-muted-foreground">{governanceSummary.defaultPreset.notes}</div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-sm text-muted-foreground">{copy.noneConfigured}</div>
+                    )}
+                  </div>
+
+                  <div className="rounded-[10px] border border-border/70 bg-background/80 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.governanceSignals}</div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {governanceSummary.reviewRules.map((item) => (
+                        <span key={`review-${item}`} className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                          {copy.reviewRules}: {item}
+                        </span>
+                      ))}
+                      {governanceSummary.channelTargets.map((item) => (
+                        <span key={`channel-${item}`} className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                          {copy.channels}: {item}
+                        </span>
+                      ))}
+                      {governanceSummary.bannedTerms.map((item) => (
+                        <span key={`banned-${item}`} className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                          {copy.bannedTerms}: {item}
+                        </span>
+                      ))}
+                      {governanceSummary.allowedKnowledgeDatasetIds.map((item) => (
+                        <span key={`knowledge-${item}`} className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                          Knowledge ID: {item}
+                        </span>
+                      ))}
+                      {governanceSummary.reviewRules.length === 0 &&
+                      governanceSummary.channelTargets.length === 0 &&
+                      governanceSummary.bannedTerms.length === 0 &&
+                      governanceSummary.allowedKnowledgeDatasetIds.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">{copy.noneConfigured}</div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[10px] border border-border/70 bg-background/80 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.qualityGate}</div>
+                    <div className="mt-3 space-y-2">
+                      {governanceSummary.qualityGates.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">{copy.noneConfigured}</div>
+                      ) : (
+                        governanceSummary.qualityGates.map((gate) => (
+                          <div key={gate.label} className="rounded-[8px] border border-border/70 bg-card/60 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-sm font-semibold text-foreground">{gate.label}</div>
+                              <Badge className={cn("rounded-[6px] border px-3 py-1 text-xs font-medium", getGovernanceTone(gate.status))}>
+                                {getGovernanceLabel(locale, gate.status)}
+                              </Badge>
+                            </div>
+                            {gate.evidence.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {gate.evidence.map((item) => (
+                                  <span key={item} className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                                    {item}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[10px] border border-border/70 bg-background/80 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.knowledgeJobs}</div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                        queued:{governanceSummary.knowledgeSaveJobStatusCounts.queued}
+                      </span>
+                      <span className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                        running:{governanceSummary.knowledgeSaveJobStatusCounts.running}
+                      </span>
+                      <span className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                        succeeded:{governanceSummary.knowledgeSaveJobStatusCounts.succeeded}
+                      </span>
+                      <span className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                        failed:{governanceSummary.knowledgeSaveJobStatusCounts.failed}
+                      </span>
+                      <span className="dashboard-chip rounded-[4px] px-2.5 py-1 text-xs text-foreground/85">
+                        rejected:{governanceSummary.knowledgeSaveJobStatusCounts.rejected}
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {detail.run.knowledgeSaveJobs.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">{copy.none}</div>
+                      ) : (
+                        detail.run.knowledgeSaveJobs.map((job) => (
+                          <div key={job.id} className="rounded-[8px] border border-border/70 bg-card/60 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-sm font-semibold text-foreground">
+                                #{job.id} · {job.targetType}
+                              </div>
+                              <Badge className={cn("rounded-[6px] border px-3 py-1 text-xs font-medium", getStatusTone(job.status))}>
+                                {getStatusLabel(locale, job.status)}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 text-sm text-muted-foreground">
+                              {(typeof job.requestPayload?.artifactTitle === "string" && job.requestPayload.artifactTitle) || copy.none}
+                            </div>
+                            {job.status === "queued" &&
+                            job.requestPayload?.manualConfirmationRequired === true &&
+                            typeof job.requestPayload?.datasetId === "number" ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => resolveKnowledgeSaveJob(job.id, "approve")}
+                                  disabled={knowledgeJobAction?.jobId === job.id}
+                                  className="dashboard-button-primary"
+                                >
+                                  {copy.approveKnowledgeJob}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => resolveKnowledgeSaveJob(job.id, "reject")}
+                                  disabled={knowledgeJobAction?.jobId === job.id}
+                                  className="dashboard-button-secondary"
+                                >
+                                  {copy.rejectKnowledgeJob}
+                                </Button>
+                              </div>
+                            ) : null}
+                            {job.errorMessage ? (
+                              <div className="mt-2 text-xs text-red-600">{job.errorMessage}</div>
+                            ) : null}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
 
               <article className="dashboard-panel workspace-card-panel rounded-[12px] border border-border bg-card/85">
                 <div className="dashboard-kicker text-muted-foreground">{copy.payload}</div>

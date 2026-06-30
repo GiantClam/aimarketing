@@ -1,0 +1,79 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="28" y="28" width="1224" height="664" rx="0" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="44" y="44" width="1192" height="632" fill="#1A1A18" stroke="#282826" stroke-width="1.5"/>
+    <rect x="44" y="44" width="16" height="632" fill="#E85D26"/>
+    <rect x="1046" y="44" width="190" height="632" fill="#151513"/>
+    <line x1="84" y1="158" x2="1016" y2="158" stroke="#282826" stroke-width="2"/>
+    <line x1="84" y1="530" x2="1016" y2="530" stroke="#282826" stroke-width="2"/>
+    <line x1="84" y1="600" x2="1236" y2="600" stroke="#282826" stroke-width="2"/>
+  </g>
+
+  <g id="chrome">
+    <text x="84" y="92" fill="#E85D26" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">下一张告示</text>
+    <text x="1088" y="92" fill="#F0ECE5" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="start">04</text>
+    <text x="1128" y="92" fill="#F0ECE5" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="400" text-anchor="start">/ 04</text>
+    <text x="1088" y="128" fill="#E85D26" font-size="14" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="1.5">BROADSIDE</text>
+    <text x="1088" y="652" fill="#F0ECE5" font-size="13" font-family="Arial, Helvetica, sans-serif" font-weight="400" letter-spacing="1">截至2026年6月24日</text>
+  </g>
+
+  <g id="content">
+    <text x="84" y="148" fill="#F0ECE5" font-size="76" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-1">现在就执行</text>
+
+    <text x="84" y="205" fill="#F0ECE5" font-size="25" font-family="Arial, Helvetica, sans-serif" font-weight="500">企业应把高运价、长交期、供应改道视为同一组经营变量。</text>
+
+    <rect x="84" y="248" width="932" height="10" fill="#282826"/>
+    <rect x="84" y="248" width="932" height="10" fill="none" stroke="#282826" stroke-width="1"/>
+    <line x1="156" y1="253" x2="944" y2="253" stroke="#E85D26" stroke-width="4"/>
+
+    <circle cx="184" cy="253" r="18" fill="#E85D26" stroke="#F0ECE5" stroke-width="2"/>
+    <circle cx="500" cy="253" r="18" fill="#E85D26" stroke="#F0ECE5" stroke-width="2"/>
+    <circle cx="816" cy="253" r="18" fill="#E85D26" stroke="#F0ECE5" stroke-width="2"/>
+
+    <rect x="110" y="296" width="220" height="178" fill="#111111" stroke="#282826" stroke-width="2"/>
+    <rect x="426" y="296" width="220" height="178" fill="#111111" stroke="#282826" stroke-width="2"/>
+    <rect x="742" y="296" width="220" height="178" fill="#111111" stroke="#282826" stroke-width="2"/>
+
+    <text x="110" y="286" fill="#E85D26" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.5">STEP 01</text>
+    <text x="426" y="286" fill="#E85D26" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.5">STEP 02</text>
+    <text x="742" y="286" fill="#E85D26" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="1.5">STEP 03</text>
+
+    <text x="132" y="340" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">重估</text>
+    <text x="132" y="378" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">到岸成本</text>
+    <text x="132" y="425" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="500">把运价、战险、保费</text>
+    <text x="132" y="452" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="500">同步写进报价假设</text>
+
+    <text x="448" y="340" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">重排</text>
+    <text x="448" y="378" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">采购节奏</text>
+    <text x="448" y="425" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="500">给关键原料留更长</text>
+    <text x="448" y="452" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="500">提前期与缓冲库存</text>
+
+    <text x="764" y="340" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">准备</text>
+    <text x="764" y="378" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">替代航线</text>
+    <text x="764" y="425" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="500">预设分流方案与</text>
+    <text x="764" y="452" fill="#F0ECE5" font-size="19" font-family="Arial, Helvetica, sans-serif" font-weight="500">临时切换触发条件</text>
+
+    <text x="84" y="570" fill="#F0ECE5" font-size="42" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-0.5">先把“还能过”改成“怎么稳着过”。</text>
+
+    <rect x="1084" y="182" width="108" height="108" fill="none" stroke="#E85D26" stroke-width="3"/>
+    <text x="1138" y="227" fill="#E85D26" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">市场已</text>
+    <text x="1138" y="255" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle">开航</text>
+
+    <rect x="1084" y="320" width="108" height="108" fill="none" stroke="#F0ECE5" stroke-width="2"/>
+    <text x="1138" y="365" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">企业仍要</text>
+    <text x="1138" y="393" fill="#E85D26" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle">改表</text>
+
+    <rect x="1084" y="458" width="108" height="108" fill="#E85D26"/>
+    <text x="1138" y="503" fill="#111111" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">今天起</text>
+    <text x="1138" y="531" fill="#111111" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle">执行</text>
+  </g>
+
+  <g id="annotations">
+    <line x1="184" y1="271" x2="184" y2="296" stroke="#E85D26" stroke-width="2"/>
+    <line x1="500" y1="271" x2="500" y2="296" stroke="#E85D26" stroke-width="2"/>
+    <line x1="816" y1="271" x2="816" y2="296" stroke="#E85D26" stroke-width="2"/>
+    <rect x="84" y="622" width="360" height="34" fill="#E85D26"/>
+    <text x="96" y="646" fill="#111111" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="0.5">恢复不是结束，执行才是答案</text>
+  </g>
+</svg>

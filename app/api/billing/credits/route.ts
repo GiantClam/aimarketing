@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
-import { ensureDemoBillingCreditFloor } from "@/lib/billing/default-free-plan"
+import { ensureDefaultFreeBillingForUser, ensureDemoBillingCreditFloor } from "@/lib/billing/default-free-plan"
 import { pool } from "@/lib/db"
 
 export const runtime = "nodejs"
@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
     )
     const account = result.rows[0] || null
     if (!account) {
-      const freeState = await ensureDemoBillingCreditFloor(user)
+      const freeState = user.isDemo
+        ? await ensureDemoBillingCreditFloor(user)
+        : await ensureDefaultFreeBillingForUser(user)
       return NextResponse.json({
         account: {
           id: freeState.creditAccount.id,

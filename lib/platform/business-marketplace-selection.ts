@@ -4,10 +4,25 @@ import { db } from "@/lib/db"
 import { businessMarketplaceSelections } from "@/lib/db/schema"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
+import { getBusinessAgentConfigById } from "@/lib/platform/business-agents"
+import { isExecutiveBusinessMenuAgentId } from "@/lib/platform/business-menu-builtin-agents"
+import { isCustomAgentRuntimeId } from "@/lib/platform/custom-agent-runtime-id"
 import { isImportedAgencyAgentId } from "@/lib/platform/imported-agency-agents"
 
 export type BusinessMarketplaceSelection = {
   selectedAgentIds: string[]
+}
+
+export function isBusinessMarketplaceSelectableAgentId(value: string | null | undefined) {
+  if (typeof value !== "string") return false
+  const agentId = value.trim()
+  if (!agentId) return false
+  return Boolean(
+    isImportedAgencyAgentId(agentId) ||
+      getBusinessAgentConfigById(agentId) ||
+      isExecutiveBusinessMenuAgentId(agentId) ||
+      isCustomAgentRuntimeId(agentId),
+  )
 }
 
 const RETRY_DELAYS_MS = [250, 750] as const
@@ -70,7 +85,7 @@ function normalizeSelectedAgentIds(input: unknown) {
 
   for (const item of rawIds) {
     const agentId = typeof item === "string" ? item.trim() : ""
-    if (!agentId || seen.has(agentId) || !isImportedAgencyAgentId(agentId)) continue
+    if (!agentId || seen.has(agentId) || !isBusinessMarketplaceSelectableAgentId(agentId)) continue
     seen.add(agentId)
     selectedAgentIds.push(agentId)
     if (selectedAgentIds.length >= 256) break

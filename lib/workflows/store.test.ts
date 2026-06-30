@@ -5,6 +5,7 @@ import {
   buildMissingWorkflowNodeExecutionSeeds,
   createInMemoryWorkflowStore,
   createWorkflowDefinition,
+  deleteWorkflowDefinition,
   getWorkflowDefinition,
   listWorkflowDefinitionsForEnterprise,
   updateWorkflowDefinition,
@@ -283,4 +284,72 @@ test("workflow store seeds missing node executions when a retried run predates n
       status: "queued",
     },
   ])
+})
+
+test("workflow store triggers workflow archive hook only when status first transitions to archived", async () => {
+  const archivedCalls: Array<{ workflowId: number; enterpriseId: number }> = []
+  const store = createInMemoryWorkflowStore({
+    onWorkflowArchived(input) {
+      archivedCalls.push(input)
+    },
+  })
+
+  const created = await createWorkflowDefinition(
+    {
+      enterpriseId: 14,
+      ownerUserId: 3,
+      title: "Archive me",
+    },
+    store,
+  )
+
+  await updateWorkflowDefinition(
+    {
+      workflowId: created.id,
+      enterpriseId: 14,
+      status: "live",
+    },
+    store,
+  )
+  assert.deepEqual(archivedCalls, [])
+
+  await updateWorkflowDefinition(
+    {
+      workflowId: created.id,
+      enterpriseId: 14,
+      status: "archived",
+    },
+    store,
+  )
+  assert.deepEqual(archivedCalls, [{ workflowId: created.id, enterpriseId: 14 }])
+
+  await updateWorkflowDefinition(
+    {
+      workflowId: created.id,
+      enterpriseId: 14,
+      title: "Archive me v2",
+    },
+    store,
+  )
+  assert.deepEqual(archivedCalls, [{ workflowId: created.id, enterpriseId: 14 }])
+})
+
+test("workflow store deletes a workflow definition by enterprise scope", async () => {
+  const store = createInMemoryWorkflowStore()
+
+  const created = await createWorkflowDefinition(
+    {
+      enterpriseId: 15,
+      ownerUserId: 3,
+      title: "Delete me",
+    },
+    store,
+  )
+
+  await deleteWorkflowDefinition(created.id, 15, store)
+
+  const loaded = await getWorkflowDefinition(created.id, 15, store)
+  assert.equal(loaded, null)
+  const listed = await listWorkflowDefinitionsForEnterprise(15, store)
+  assert.deepEqual(listed, [])
 })

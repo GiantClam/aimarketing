@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Bot, History, Plus, X } from "lucide-react"
+import { Bot, History, Loader2, Play, Plus, X } from "lucide-react"
 
 import {
   AiEntryWorkspace,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ai-entry/ai-entry-workspace"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Sheet,
   SheetContent,
@@ -18,6 +19,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  WorkflowRunResultsPage,
+  type WorkflowRunResultsDetail,
+} from "@/components/workflows/workflow-run-results-page"
 import type { LocalizedBusinessAgentConfig } from "@/lib/platform/business-agents"
 import {
   resolveWorkspaceBusinessSlug,
@@ -46,6 +51,26 @@ type BusinessWorkbenchStatePayload = {
   tabs?: AgentWorkspaceTab[]
 }
 
+type WorkflowBackedRunUiState = {
+  detail: WorkflowRunResultsDetail | null
+  submitting: boolean
+  message: string | null
+}
+
+function isWorkflowBackedBusinessAgent(
+  agent: LocalizedBusinessAgentConfig | null,
+): agent is LocalizedBusinessAgentConfig & {
+  executionMode: "workflow_backed"
+  linkedWorkflowId: number
+} {
+  return Boolean(
+    agent &&
+      agent.executionMode === "workflow_backed" &&
+      typeof agent.linkedWorkflowId === "number" &&
+      agent.linkedWorkflowId > 0,
+  )
+}
+
 function buildCopy(locale: "zh" | "en") {
   if (locale === "zh") {
     return {
@@ -57,6 +82,15 @@ function buildCopy(locale: "zh" | "en") {
       closeTab: "关闭标签页",
       noOpenTabs: "还没有打开的 Agent 标签页。",
       historyDescription: "右侧侧滑展示当前标签页对应 agent 的历史会话，点击即可切回该消息时间线。",
+      workflowRunnerTitle: "Workflow 驱动 Agent",
+      workflowRunnerDescription: "这个 Agent 会把当前输入作为 workflow 根节点种子，直接进入真实 workflow run 链路。",
+      workflowPromptLabel: "运行输入",
+      workflowPromptPlaceholder: "输入 brief、需求说明、会议纪要或想让这个 Agent 推进的业务目标……",
+      workflowRun: "启动 Workflow",
+      workflowRunning: "Workflow 已提交，正在进入节点执行。",
+      workflowReset: "重置输入",
+      workflowOpen: "打开 Workflow",
+      workflowNoDetail: "运行结果会在这里持续更新。",
     }
   }
 
@@ -69,6 +103,15 @@ function buildCopy(locale: "zh" | "en") {
     closeTab: "Close tab",
     noOpenTabs: "No open agent tabs yet.",
     historyDescription: "Open the right-side history tray for the active agent tab and jump back into any prior conversation.",
+    workflowRunnerTitle: "Workflow-backed agent",
+    workflowRunnerDescription: "This agent sends the current brief into the real workflow runtime as seed input and follows the actual run state.",
+    workflowPromptLabel: "Run input",
+    workflowPromptPlaceholder: "Enter a brief, request, meeting notes, or the business objective you want this agent to move forward...",
+    workflowRun: "Run workflow",
+    workflowRunning: "Workflow dispatched. Entering node execution now.",
+    workflowReset: "Reset input",
+    workflowOpen: "Open workflow",
+    workflowNoDetail: "Run results will stream here once the workflow starts.",
   }
 }
 
@@ -146,6 +189,7 @@ export function WorkspaceBusinessAgentWorkbench({
   const [conversationHistory, setConversationHistory] = useState<AgentConversationSummary[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [workflowRunStateByTab, setWorkflowRunStateByTab] = useState<Record<string, WorkflowBackedRunUiState>>({})
 
   const sanitizeTabs = useCallback(
     (input: unknown): AgentWorkspaceTab[] => {
@@ -270,6 +314,8 @@ export function WorkspaceBusinessAgentWorkbench({
     () => agents.find((agent) => agent.agentId === activeAgentId) || defaultAgent || null,
     [activeAgentId, agents, defaultAgent],
   )
+  const activeWorkflowBackedAgent = isWorkflowBackedBusinessAgent(activeAgent) ? activeAgent : null
+  const activeWorkflowRunState = activeTab ? workflowRunStateByTab[activeTab.id] : undefined
 
   useEffect(() => {
     tabsRef.current = tabs
@@ -403,8 +449,9 @@ export function WorkspaceBusinessAgentWorkbench({
   }, [activeTabId, activeViewSlug, tabs])
 
   useEffect(() => {
-    if (!activeAgentId) {
+    if (!activeAgentId || activeWorkflowBackedAgent) {
       setConversationHistory([])
+      setHistoryLoading(false)
       return
     }
 
@@ -438,7 +485,7 @@ export function WorkspaceBusinessAgentWorkbench({
     return () => {
       cancelled = true
     }
-  }, [activeAgentId, activeTab?.conversationId])
+  }, [activeAgentId, activeTab?.conversationId, activeWorkflowBackedAgent])
 
   const accessoryLinks = useMemo<AiEntryWorkspaceLinkAction[]>(() => {
     if (!activeEntry) return []
@@ -470,12 +517,27 @@ export function WorkspaceBusinessAgentWorkbench({
     }
   }, [activeAgent, locale])
 
-  const updateActiveTab = (updater: (tab: AgentWorkspaceTab) => AgentWorkspaceTab) => {
+  const updateActiveTab = useCallback((updater: (tab: AgentWorkspaceTab) => AgentWorkspaceTab) => {
     if (!activeTab) return
     setTabs((current) =>
       dedupeTabsByAgent(current.map((tab) => (tab.id === activeTab.id ? updater(tab) : tab))),
     )
-  }
+  }, [activeTab])
+
+  const updateWorkflowRunState = useCallback(
+    (tabId: string, patch: Partial<WorkflowBackedRunUiState>) => {
+      setWorkflowRunStateByTab((current) => ({
+        ...current,
+        [tabId]: {
+          detail: current[tabId]?.detail ?? null,
+          submitting: current[tabId]?.submitting ?? false,
+          message: current[tabId]?.message ?? null,
+          ...patch,
+        },
+      }))
+    },
+    [],
+  )
 
   const resetActiveConversation = () => {
     if (!activeAgent) return
@@ -488,7 +550,66 @@ export function WorkspaceBusinessAgentWorkbench({
     setHistoryOpen(false)
   }
 
+  const resetActiveWorkflowInput = useCallback(() => {
+    if (!activeAgent || !activeTab) return
+    updateActiveTab((tab) => ({
+      ...tab,
+      draftSeed: activeAgent.samplePrompts[0] || "",
+      workspaceVersion: tab.workspaceVersion + 1,
+    }))
+    updateWorkflowRunState(activeTab.id, {
+      detail: null,
+      message: null,
+    })
+  }, [activeAgent, activeTab, updateActiveTab, updateWorkflowRunState])
+
+  const runActiveWorkflowBackedAgent = useCallback(async () => {
+    if (!activeWorkflowBackedAgent || !activeTab) return
+
+    updateWorkflowRunState(activeTab.id, {
+      submitting: true,
+      message: null,
+    })
+
+    try {
+      const response = await fetch(`/api/workflows/${activeWorkflowBackedAgent.linkedWorkflowId}/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          prompt: activeTab.draftSeed,
+          sourceAgentId: activeWorkflowBackedAgent.agentId,
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as { data?: WorkflowRunResultsDetail; error?: string } | null
+      if (!response.ok || !payload?.data?.run) {
+        throw new Error(payload?.error || "workflow_run_failed")
+      }
+
+      updateWorkflowRunState(activeTab.id, {
+        detail: payload.data,
+        message: copy.workflowRunning,
+      })
+    } catch (error) {
+      updateWorkflowRunState(activeTab.id, {
+        message: error instanceof Error ? error.message : "workflow_run_failed",
+      })
+    } finally {
+      updateWorkflowRunState(activeTab.id, {
+        submitting: false,
+      })
+    }
+  }, [activeTab, activeWorkflowBackedAgent, copy.workflowRunning, updateWorkflowRunState])
+
   const closeTab = (tabId: string) => {
+    setWorkflowRunStateByTab((current) => {
+      if (!(tabId in current)) return current
+      const next = { ...current }
+      delete next[tabId]
+      return next
+    })
     setTabs((current) => {
       if (current.length <= 1) return current
       const nextTabs = current.filter((tab) => tab.id !== tabId)
@@ -577,52 +698,164 @@ export function WorkspaceBusinessAgentWorkbench({
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2 pb-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setHistoryOpen(true)}
-                className="dashboard-chip h-8 w-8 rounded-[6px] border border-border bg-background px-0 text-xs text-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground"
-                aria-label={copy.historyOpen}
-                title={copy.historyOpen}
-              >
-                <History className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={resetActiveConversation}
-                className="dashboard-chip h-8 w-8 rounded-[6px] border border-border bg-background px-0 text-xs text-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground"
-                aria-label={copy.newConversation}
-                title={copy.newConversation}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            {!activeWorkflowBackedAgent ? (
+              <div className="flex shrink-0 items-center gap-2 pb-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setHistoryOpen(true)}
+                  className="dashboard-chip h-8 w-8 rounded-[6px] border border-border bg-background px-0 text-xs text-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                  aria-label={copy.historyOpen}
+                  title={copy.historyOpen}
+                >
+                  <History className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetActiveConversation}
+                  className="dashboard-chip h-8 w-8 rounded-[6px] border border-border bg-background px-0 text-xs text-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                  aria-label={copy.newConversation}
+                  title={copy.newConversation}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
 
         <div className="min-h-0 flex-1 p-1 sm:p-1.5">
-          <AiEntryWorkspace
-            key={`${activeTab.id}:${activeTab.workspaceVersion}`}
-            initialConversationId={activeTab.conversationId}
-            embedded
-            compactEmbedded
-            forcedAgentId={activeAgent.agentId}
-            draftSeed={activeTab.draftSeed}
-            embeddedPromptButtons={activeAgent.samplePrompts}
-            embeddedLinkActions={accessoryLinks}
-            embeddedContextChips={accessoryContextChips}
-            embeddedGuideMessage={activeAgentGuideMessage}
-            onConversationIdChange={(conversationId) => {
-              updateActiveTab((tab) => ({
-                ...tab,
-                conversationId,
-              }))
-            }}
-          />
+          {activeWorkflowBackedAgent ? (
+            <section className="flex h-full min-h-0 flex-col gap-3 rounded-[12px] border border-border bg-background/80 p-3 sm:p-4">
+              <div className="space-y-2">
+                <div className="dashboard-kicker text-muted-foreground">{copy.workflowRunnerTitle}</div>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-semibold text-foreground">{activeAgent.name}</h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{copy.workflowRunnerDescription}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" className="h-8 rounded-[8px] px-3 text-xs" onClick={resetActiveWorkflowInput}>
+                      {copy.workflowReset}
+                    </Button>
+                    <Button type="button" variant="outline" className="h-8 rounded-[8px] px-3 text-xs" asChild>
+                      <a href={`/dashboard/workflows/${activeWorkflowBackedAgent.linkedWorkflowId}`}>{copy.workflowOpen}</a>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {accessoryContextChips.map((chip) => (
+                  <span key={chip} className="dashboard-chip rounded-[4px] px-2.5 py-1 text-[11px] text-muted-foreground">
+                    {chip}
+                  </span>
+                ))}
+              </div>
+
+              <label className="grid gap-2 text-sm text-foreground">
+                <span className="dashboard-kicker text-muted-foreground">{copy.workflowPromptLabel}</span>
+                <Textarea
+                  className="min-h-28 rounded-[8px] border-border bg-background"
+                  placeholder={copy.workflowPromptPlaceholder}
+                  value={activeTab.draftSeed}
+                  onChange={(event) => {
+                    const nextValue = event.target.value
+                    updateActiveTab((tab) => ({
+                      ...tab,
+                      draftSeed: nextValue,
+                    }))
+                  }}
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                {activeAgent.samplePrompts.slice(0, 3).map((prompt) => (
+                  <Button
+                    key={prompt}
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-[8px] px-3 text-xs"
+                    onClick={() => {
+                      updateActiveTab((tab) => ({
+                        ...tab,
+                        draftSeed: prompt,
+                      }))
+                    }}
+                  >
+                    {prompt}
+                  </Button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  className="h-9 rounded-[8px] px-4"
+                  disabled={activeWorkflowRunState?.submitting}
+                  onClick={() => {
+                    void runActiveWorkflowBackedAgent()
+                  }}
+                >
+                  {activeWorkflowRunState?.submitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+                  {copy.workflowRun}
+                </Button>
+                {activeWorkflowRunState?.message ? (
+                  <span className="text-sm text-muted-foreground">{activeWorkflowRunState.message}</span>
+                ) : null}
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-auto">
+                {activeWorkflowRunState?.detail ? (
+                  <WorkflowRunResultsPage
+                    locale={locale}
+                    detail={activeWorkflowRunState.detail}
+                    firstArtifactSourceUrl={null}
+                    embedded
+                    onDetailChange={(detail) => {
+                      updateWorkflowRunState(activeTab.id, { detail })
+                    }}
+                    onDismiss={() => {
+                      updateWorkflowRunState(activeTab.id, {
+                        detail: null,
+                        message: null,
+                      })
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full min-h-[220px] items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/10 p-6 text-sm text-muted-foreground">
+                    {copy.workflowNoDetail}
+                  </div>
+                )}
+              </div>
+            </section>
+          ) : (
+            <AiEntryWorkspace
+              key={`${activeTab.id}:${activeTab.workspaceVersion}`}
+              initialConversationId={activeTab.conversationId}
+              embedded
+              compactEmbedded
+              forcedAgentId={activeAgent.agentId}
+              draftSeed={activeTab.draftSeed}
+              embeddedPromptButtons={activeAgent.samplePrompts}
+              embeddedLinkActions={accessoryLinks}
+              embeddedContextChips={accessoryContextChips}
+              embeddedGuideMessage={activeAgentGuideMessage}
+              onConversationIdChange={(conversationId) => {
+                updateActiveTab((tab) => ({
+                  ...tab,
+                  conversationId,
+                }))
+              }}
+            />
+          )}
         </div>
       </div>
 

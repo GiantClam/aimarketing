@@ -6,6 +6,7 @@ import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
 import { getAiEntryConversation } from "@/lib/ai-entry/repository"
 import { getBusinessAgentConfigById } from "@/lib/platform/business-agents"
+import { isCustomAgentRuntimeId } from "@/lib/platform/custom-agent-runtime-id"
 import { isImportedAgencyAgentId } from "@/lib/platform/imported-agency-agents"
 import {
   resolveWorkspaceBusinessSlug,
@@ -92,7 +93,13 @@ function sanitizeTab(input: unknown): BusinessWorkbenchStateTab | null {
       ? (input as { agentId: string }).agentId.trim()
       : ""
 
-  if (!id || !agentId || (!getBusinessAgentConfigById(agentId) && !isImportedAgencyAgentId(agentId))) return null
+  if (
+    !id ||
+    !agentId ||
+    (!getBusinessAgentConfigById(agentId) && !isImportedAgencyAgentId(agentId) && !isCustomAgentRuntimeId(agentId))
+  ) {
+    return null
+  }
 
   const conversationIdRaw =
     typeof (input as { conversationId?: unknown })?.conversationId === "string"

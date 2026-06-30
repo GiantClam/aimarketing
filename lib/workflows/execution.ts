@@ -48,6 +48,7 @@ export type WorkflowRunDefinitionInput = {
   ownerUserId: number
   nodes: WorkflowDefinitionNode[]
   edges: WorkflowDefinitionEdge[]
+  seedInput?: Partial<WorkflowNodeInputBundle>
   executorContext?: Omit<WorkflowNodeExecutionContext, "enterpriseId" | "ownerUserId" | "node" | "input">
   initialState?: Record<string, WorkflowNodeRunState>
   rerunNodeKeys?: string[]
@@ -307,9 +308,14 @@ function collectUpstreamInputs(
   parentMap: Map<string, string[]>,
   edges: WorkflowDefinitionEdge[],
   nodeStates: Record<string, WorkflowNodeRunState>,
+  seedInput?: Partial<WorkflowNodeInputBundle>,
 ) {
   const bundle = createWorkflowNodeInputBundle()
-  for (const parentNodeKey of parentMap.get(nodeKey) ?? []) {
+  const parents = parentMap.get(nodeKey) ?? []
+  if (parents.length === 0 && seedInput) {
+    Object.assign(bundle, mergeWorkflowNodeOutputBundles(bundle, seedInput))
+  }
+  for (const parentNodeKey of parents) {
     const parentState = nodeStates[parentNodeKey]
     if (!parentState || parentState.status !== "succeeded") continue
 
@@ -436,7 +442,7 @@ export async function runWorkflowDefinition(input: WorkflowRunDefinitionInput): 
           enterpriseId: input.enterpriseId,
           ownerUserId: input.ownerUserId,
           node,
-          input: collectUpstreamInputs(node.nodeKey, plan.parentMap, input.edges, nodeStates),
+          input: collectUpstreamInputs(node.nodeKey, plan.parentMap, input.edges, nodeStates, input.seedInput),
           ...input.executorContext,
         })
 

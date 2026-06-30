@@ -9,6 +9,7 @@ import {
   platformWorkflows,
 } from "@/lib/db/schema"
 import { ensureEnterpriseAuthTables } from "@/lib/enterprise/server"
+import { disableCustomAgentsLinkedToWorkflow } from "@/lib/platform/custom-agents"
 import {
   ensurePlatformTaskRunTables,
   getPlatformTaskRun,
@@ -76,6 +77,11 @@ export type WorkflowStore = {
   listWorkflowDefinitionsForEnterprise(enterpriseId: number): Promise<WorkflowDefinition[]>
   getWorkflowDefinition(workflowId: number, enterpriseId: number): Promise<WorkflowDefinition | null>
   updateWorkflowDefinition(input: UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition>
+  deleteWorkflowDefinition(workflowId: number, enterpriseId: number): Promise<void>
+}
+
+export type CreateInMemoryWorkflowStoreOptions = {
+  onWorkflowArchived?: (input: { workflowId: number; enterpriseId: number }) => Promise<void> | void
 }
 
 export type WorkflowRunDetail = {
@@ -835,6 +841,13 @@ const dbWorkflowStore: WorkflowStore = {
       }
     })
 
+    if (status === "archived" && existing.status !== "archived") {
+      await disableCustomAgentsLinkedToWorkflow({
+        workflowId: input.workflowId,
+        enterpriseId: input.enterpriseId,
+      })
+    }
+
     return {
       ...existing,
       title,
@@ -848,9 +861,29 @@ const dbWorkflowStore: WorkflowStore = {
       edges,
     }
   },
+
+  async deleteWorkflowDefinition(workflowId, enterpriseId) {
+    await ensureWorkflowTables()
+
+    const existing = await loadWorkflowDefinitionFromDb(workflowId, enterpriseId)
+    if (!existing) {
+      throw new Error("workflow_definition_not_found")
+    }
+
+    await disableCustomAgentsLinkedToWorkflow({
+      workflowId,
+      enterpriseId,
+    })
+
+    await withWorkflowDbRetry("workflow-store.delete-workflow", async () =>
+      db
+        .delete(platformWorkflows)
+        .where(and(eq(platformWorkflows.id, workflowId), eq(platformWorkflows.enterpriseId, enterpriseId))),
+    )
+  },
 }
 
-export function createInMemoryWorkflowStore(): WorkflowStore {
+export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStoreOptions = {}): WorkflowStore {
   let nextWorkflowId = 1
 
   const workflows = new Map<number, WorkflowDefinition>()
@@ -927,6 +960,7 @@ export function createInMemoryWorkflowStore(): WorkflowStore {
       const nodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
       const nodeKeys = new Set(nodes.map((node) => node.nodeKey))
       const edges = normalizeWorkflowEdges(input.edges ?? existing.edges, nodeKeys)
+      const status = normalizeStatus(input.status ?? existing.status)
       const now = new Date()
       const workflow: WorkflowDefinition = {
         ...existing,
@@ -935,7 +969,7 @@ export function createInMemoryWorkflowStore(): WorkflowStore {
           title === existing.title
             ? existing.slug
             : `${normalizeSlug(title)}-${input.workflowId}`.slice(0, 160),
-        status: normalizeStatus(input.status ?? existing.status),
+        status,
         triggerType: normalizeTriggerType(input.triggerType ?? existing.triggerType),
         description: input.description !== undefined ? normalizeOptionalText(input.description, 10_000) : existing.description,
         metadata: input.metadata !== undefined ? input.metadata : existing.metadata,
@@ -945,11 +979,25 @@ export function createInMemoryWorkflowStore(): WorkflowStore {
       }
 
       workflows.set(workflow.id, workflow)
+      if (status === "archived" && existing.status !== "archived") {
+        await options.onWorkflowArchived?.({
+          workflowId: workflow.id,
+          enterpriseId: workflow.enterpriseId,
+        })
+      }
       return {
         ...workflow,
         nodes: workflow.nodes.map((node) => ({ ...node, config: { ...node.config } })),
         edges: workflow.edges.map((edge) => ({ ...edge })),
       }
+    },
+
+    async deleteWorkflowDefinition(workflowId, enterpriseId) {
+      const existing = workflows.get(workflowId)
+      if (!existing || existing.enterpriseId !== enterpriseId) {
+        throw new Error("workflow_definition_not_found")
+      }
+      workflows.delete(workflowId)
     },
   }
 }
@@ -970,6 +1018,10 @@ export async function getWorkflowDefinition(workflowId: number, enterpriseId: nu
 
 export async function updateWorkflowDefinition(input: UpdateWorkflowDefinitionInput, store: WorkflowStore = workflowStore) {
   return store.updateWorkflowDefinition(input)
+}
+
+export async function deleteWorkflowDefinition(workflowId: number, enterpriseId: number, store: WorkflowStore = workflowStore) {
+  return store.deleteWorkflowDefinition(workflowId, enterpriseId)
 }
 
 export function getWorkflowNodeExecutionTable() {

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#111111"/>
+    <rect x="0" y="0" width="1280" height="22" fill="#E85D26"/>
+    <rect x="0" y="694" width="1280" height="26" fill="#F0ECE5"/>
+    <rect x="930" y="0" width="350" height="720" fill="#1A1A18"/>
+    <rect x="902" y="0" width="8" height="720" fill="#E85D26"/>
+    <rect x="74" y="86" width="22" height="560" fill="#E85D26"/>
+    <rect x="108" y="86" width="2" height="560" fill="#282826"/>
+    <rect x="0" y="138" width="1280" height="2" fill="#282826"/>
+    <rect x="0" y="560" width="1280" height="2" fill="#282826"/>
+    <circle cx="1088" cy="166" r="114" fill="none" stroke="#282826" stroke-width="2"/>
+    <circle cx="1088" cy="166" r="86" fill="none" stroke="#282826" stroke-width="2"/>
+    <circle cx="1088" cy="166" r="56" fill="none" stroke="#E85D26" stroke-width="3"/>
+    <path d="M1008 166 L1168 166" stroke="#F0ECE5" stroke-width="3"/>
+    <path d="M1088 86 L1088 246" stroke="#F0ECE5" stroke-width="3"/>
+    <path d="M1040 118 L1136 214" stroke="#282826" stroke-width="2"/>
+    <path d="M1136 118 L1040 214" stroke="#282826" stroke-width="2"/>
+    <rect x="948" y="312" width="272" height="316" fill="none" stroke="#282826" stroke-width="2"/>
+    <rect x="948" y="312" width="272" height="58" fill="#E85D26"/>
+    <rect x="948" y="404" width="272" height="2" fill="#282826"/>
+    <rect x="948" y="486" width="272" height="2" fill="#282826"/>
+    <rect x="948" y="568" width="272" height="2" fill="#282826"/>
+  </g>
+  <g id="chrome">
+    <text x="74" y="58" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="4">大字报头</text>
+    <text x="1198" y="58" text-anchor="end" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">01 / 04</text>
+    <text x="74" y="682" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">霍尔木兹海峡现状与全球能源运输影响（截至2026年6月24日）</text>
+    <text x="1210" y="682" text-anchor="end" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">BROADSIDE</text>
+  </g>
+  <g id="content">
+    <text x="126" y="198" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="800" letter-spacing="1">霍尔木兹海峡：</text>
+    <text x="126" y="286" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="800" letter-spacing="1">通航已开，</text>
+    <text x="126" y="374" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="900" letter-spacing="1">风险未退</text>
+
+    <rect x="126" y="430" width="704" height="108" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="154" y="468" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">截至2026年6月24日，海峡已重启通航，</text>
+    <text x="154" y="504" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">但管理层真正要判断的是高成本、高波动与高…</text>
+
+    <rect x="126" y="582" width="230" height="46" fill="#E85D26"/>
+    <rect x="372" y="582" width="230" height="46" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <rect x="618" y="582" width="230" height="46" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+
+    <text x="140" y="612" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800">全球约五分之一</text>
+    <text x="140" y="632" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800">海运原油经此…</text>
+
+    <text x="386" y="612" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800">市场焦点已从断航</text>
+    <text x="386" y="632" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800">转向恢复能…</text>
+
+    <text x="632" y="612" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800">油轮、LNG船与</text>
+    <text x="632" y="632" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800">保险溢价仍…</text>
+
+    <text x="968" y="349" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="900" letter-spacing="2">封面判断</text>
+
+    <text x="972" y="438" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">船道恢复</text>
+    <text x="1178" y="438" text-anchor="end" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900">≠</text>
+
+    <text x="972" y="520" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">风险回落</text>
+    <text x="1178" y="520" text-anchor="end" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900">×</text>
+
+    <text x="972" y="602" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">成本重定价</text>
+    <text x="1178" y="602" text-anchor="end" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900">!</text>
+  </g>
+  <g id="annotations">
+    <text x="952" y="88" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="2">主航道重启</text>
+    <text x="952" y="108" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" letter-spacing="1">风险圈层仍在扩散</text>
+    <path d="M952 122 L1048 146" stroke="#E85D26" stroke-width="2"/>
+    <circle cx="1048" cy="146" r="4" fill="#E85D26"/>
+
+    <text x="126" y="548" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" letter-spacing="2">VERDICT</text>
+    <text x="126" y="566" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">通航重开，只是第一层好消息。</text>
+  </g>
+</svg>

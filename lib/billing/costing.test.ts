@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { creditsFromOfficialCostUsd, estimateGptImage2Credits, estimateTextCredits } from "./costing"
+import { creditsFromOfficialCostUsd, estimateGptImage2Credits, estimateTextCredits, estimateVideoGenerationCredits } from "./costing"
 
 test("costing applies 50 percent official cost basis and rounds up credits", () => {
   const estimate = creditsFromOfficialCostUsd({
@@ -80,4 +80,33 @@ test("costing supports writer image and fixed image export features", () => {
 
   assert.equal(writerImage.credits, 80)
   assert.equal(exportCost.credits, 1)
+})
+
+test("costing estimates video generation by feature, duration, and resolution", () => {
+  const textToVideo = estimateVideoGenerationCredits({
+    featureId: "text-to-video",
+    durationSeconds: 6,
+    resolution: "768P",
+    provider: "minimax",
+    model: "MiniMax-Hailuo-2.3",
+  })
+  const imageToVideo1080 = estimateVideoGenerationCredits({
+    featureId: "image-to-video",
+    durationSeconds: 10,
+    resolution: "1080P",
+    provider: "minimax",
+    model: "MiniMax-Hailuo-2.3-Fast",
+  })
+  const videoEnhance = estimateVideoGenerationCredits({
+    featureId: "video-enhance",
+    durationSeconds: 5,
+    resolution: "720p",
+    provider: "runninghub",
+  })
+
+  assert.equal(textToVideo.officialCostUsd, 0.48)
+  assert.equal(textToVideo.multiplier, 2)
+  assert.equal(textToVideo.credits, 480)
+  assert.equal(imageToVideo1080.credits, 1200)
+  assert.equal(videoEnhance.credits, 200)
 })

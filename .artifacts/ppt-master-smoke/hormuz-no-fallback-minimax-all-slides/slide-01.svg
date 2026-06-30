@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <rect x="0" y="0" width="1280" height="720" fill="#111111"/>
+  
+  <g id="chrome">
+    <rect x="0" y="0" width="1280" height="12" fill="#E85D26"/>
+    <rect x="0" y="708" width="1280" height="12" fill="#E85D26"/>
+    <rect x="0" y="0" width="8" height="720" fill="#1A1A18"/>
+  </g>
+  
+  <g id="annotations">
+    <polygon points="1100,0 1280,0 1280,180 1100,0" fill="#1A1A18"/>
+    <line x1="1050" y1="0" x2="1280" y2="230" stroke="#E85D26" stroke-width="3"/>
+    <line x1="1000" y1="0" x2="1280" y2="280" stroke="#282826" stroke-width="2"/>
+  </g>
+  
+  <g id="content">
+    <text x="80" y="100" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#E85D26" letter-spacing="8">大字报头</text>
+    
+    <text x="80" y="200" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#F0ECE5">霍尔木兹海峡：</text>
+    <text x="80" y="290" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#E85D26">恢复通航≠风险消弭</text>
+    
+    <text x="80" y="370" font-family="Arial, sans-serif" font-size="22" fill="#F0ECE5">截至2026年6月24日，霍尔木兹海峡重启通航，但安全形势、</text>
+    <text x="80" y="400" font-family="Arial, sans-serif" font-size="22" fill="#F0ECE5">费用机制与控制权安排仍未达成多边共识。</text>
+    
+    <rect x="80" y="460" width="560" height="4" fill="#E85D26"/>
+    
+    <text x="80" y="520" font-family="Arial, sans-serif" font-size="18" fill="#F0ECE5">● 海峡承担全球约1/5海运原油与1/4LNG运输</text>
+    <text x="80" y="560" font-family="Arial, sans-serif" font-size="18" fill="#F0ECE5">● 安全形势、费用机制与控制权分歧持续</text>
+    <text x="80" y="600" font-family="Arial, sans-serif" font-size="18" fill="#F0ECE5">● 油轮、LNG船及保险条款风险显著上升</text>
+  </g>
+</svg>

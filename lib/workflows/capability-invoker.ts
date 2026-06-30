@@ -10,7 +10,9 @@ import { POST as leadToolDownloadPost } from "@/app/api/tools/[slug]/download/ro
 import { POST as leadToolPreviewPost } from "@/app/api/tools/[slug]/preview/route"
 import { POST as videoWorkflowPost } from "@/app/api/video-agent/workflow/route"
 import { POST as writerChatStreamPost } from "@/app/api/writer/chat/stream/route"
+import { isAiEntryAgentId } from "@/lib/ai-entry/agent-catalog"
 import { applyInternalServiceAuthHeader, type AuthUser } from "@/lib/auth/session"
+import { getCustomAgentForUser, type CustomAgentView } from "@/lib/platform/custom-agents"
 import {
   findModelByCapabilityAndAlias,
   getDefaultModelId,
@@ -26,24 +28,36 @@ import {
 import { getPlatformBindingTargetExecutionState, getPlatformCapabilityExecutionState } from "@/lib/platform/execution"
 import { shouldChargeSharedCreditsForCapability } from "@/lib/platform/shared-credits-policy"
 import { buildWorkflowImageGenerateRequestBody } from "@/lib/workflows/image-capability-request"
+import { buildEnterpriseWorkflowPresetPrompt, getDefaultEnterpriseWorkflowPreset } from "@/lib/workflows/presets"
+import {
+  createWorkflowNodeInputBundle,
+  mergeWorkflowNodeOutputBundles,
+} from "@/lib/workflows/node-executors"
 import {
   isEmbeddableWorkflowImagePromptUrl,
 } from "@/lib/workflows/image-prompt-references"
 import type {
   WorkflowCapabilityInvokeParams,
   WorkflowMediaRef,
+  WorkflowNodeInputBundle,
   WorkflowNodeExecutionResult,
 } from "@/lib/workflows/node-executors"
+import { runWorkflowDefinition, type WorkflowNodeRunState } from "@/lib/workflows/execution"
+import { getWorkflowDefinition } from "@/lib/workflows/store"
+import { getAllowedWorkflowTargetInputKinds, type WorkflowDefinitionEdge, type WorkflowDefinitionNode, type WorkflowNodeInputName, type WorkflowValueKind } from "@/lib/workflows/schema"
 
 type WorkflowCapabilityInvokerOptions = {
   cookieHeader?: string | null
   currentUser: AuthUser
   locale?: "zh" | "en"
+  workflowMetadata?: Record<string, unknown> | null
   requestOrigin?: string
   requestIp?: string
   maxPollAttempts?: number
   pollIntervalMs?: number
   callTimeoutMs?: number
+  activeWorkflowId?: number | null
+  workflowRecursionPath?: number[]
 }
 
 const DEFAULT_WORKFLOW_CAPABILITY_TIMEOUT_MS = 120_000
@@ -215,6 +229,190 @@ function normalizeBooleanString(value: unknown, fallback: boolean) {
   return fallback
 }
 
+function isEnterpriseAdminUser(currentUser: AuthUser) {
+  return currentUser.enterpriseRole === "admin" && currentUser.enterpriseStatus === "active"
+}
+
+function normalizeWorkflowCustomAgentId(value: unknown) {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isInteger(numeric) && numeric > 0) return numeric
+  }
+  return null
+}
+
+function buildWorkflowCustomAgentSystemPrompt(agent: CustomAgentView) {
+  const sections = [
+    agent.systemPrompt.trim(),
+    agent.goal?.trim() ? `Goal:\n${agent.goal.trim()}` : "",
+    agent.scope?.trim() ? `Scope:\n${agent.scope.trim()}` : "",
+    agent.guardrails?.trim() ? `Guardrails:\n${agent.guardrails.trim()}` : "",
+  ].filter(Boolean)
+
+  return sections.join("\n\n").trim()
+}
+
+function inferMediaMimeType(kind: Exclude<WorkflowValueKind, "text" | "asset">, mimeType: string | null | undefined) {
+  if (mimeType?.trim()) return mimeType.trim()
+  if (kind === "image") return "image/png"
+  if (kind === "video") return "video/mp4"
+  if (kind === "audio") return "audio/mpeg"
+  return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+}
+
+function buildSyntheticUploadNodeFiles(input: WorkflowNodeInputBundle) {
+  const uploadedFiles = input.asset.map((asset) => ({
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    artifactId: asset.artifactId,
+    storageKey: asset.storageKey,
+    url: asset.url ?? null,
+  }))
+
+  const mediaGroups: Array<{ kind: Exclude<WorkflowValueKind, "text" | "asset">; items: WorkflowMediaRef[] }> = [
+    { kind: "image", items: input.image },
+    { kind: "video", items: input.video },
+    { kind: "audio", items: input.audio },
+    { kind: "ppt", items: input.ppt },
+  ]
+
+  for (const group of mediaGroups) {
+    for (const item of group.items) {
+      uploadedFiles.push({
+        fileName: item.title ?? `${group.kind}-input`,
+        mimeType: inferMediaMimeType(group.kind, item.mimeType),
+        artifactId: item.artifactId,
+        storageKey: item.storageKey,
+        url: item.url ?? item.downloadUrl ?? null,
+      })
+    }
+  }
+
+  return uploadedFiles.filter((item) => item.url || item.storageKey || item.artifactId)
+}
+
+function kindToInputName(kind: Exclude<WorkflowValueKind, "asset">): WorkflowNodeInputName {
+  if (kind === "text") return "text"
+  if (kind === "image") return "images"
+  if (kind === "video") return "videos"
+  if (kind === "audio") return "audios"
+  return "presentations"
+}
+
+function collectLinkedWorkflowRootNodeKeys(nodes: WorkflowDefinitionNode[], edges: WorkflowDefinitionEdge[]) {
+  const targetedNodeKeys = new Set(edges.map((edge) => edge.targetNodeKey))
+  return nodes.filter((node) => !targetedNodeKeys.has(node.nodeKey)).map((node) => node.nodeKey)
+}
+
+function collectLinkedWorkflowFinalOutput(input: {
+  nodeStates: Record<string, WorkflowNodeRunState>
+  finalNodeKeys: string[]
+}) {
+  const merged = createWorkflowNodeInputBundle()
+  for (const nodeKey of input.finalNodeKeys) {
+    const state = input.nodeStates[nodeKey]
+    if (!state) continue
+    Object.assign(merged, mergeWorkflowNodeOutputBundles(merged, state.output))
+  }
+  return merged
+}
+
+function buildLinkedWorkflowDelegationGraph(input: {
+  agent: CustomAgentView
+  workflow: NonNullable<Awaited<ReturnType<typeof getWorkflowDefinition>>>
+  prompt: string
+  upstream: WorkflowNodeInputBundle
+  locale: "zh" | "en"
+}) {
+  const nodes = input.workflow.nodes.map((node) => ({
+    ...node,
+    config: { ...node.config },
+  }))
+  const edges = input.workflow.edges.map((edge) => ({
+    ...edge,
+    inputName: edge.inputName ?? null,
+  }))
+  const rootNodeKeys = collectLinkedWorkflowRootNodeKeys(nodes, edges)
+
+  const syntheticNodes: WorkflowDefinitionNode[] = []
+  const syntheticEdges: WorkflowDefinitionEdge[] = []
+
+  if (input.prompt.trim()) {
+    const textNodeKey = `agent-${input.agent.id}-input-text`
+    syntheticNodes.push({
+      nodeKey: textNodeKey,
+      type: "text_input",
+      title: input.locale === "zh" ? "Agent 输入" : "Agent Input",
+      positionX: -480,
+      positionY: 120,
+      config: {
+        text: input.prompt.trim(),
+      },
+    })
+
+    for (const rootNodeKey of rootNodeKeys) {
+      const rootNode = nodes.find((node) => node.nodeKey === rootNodeKey)
+      if (!rootNode) continue
+      if (getAllowedWorkflowTargetInputKinds(rootNode.type).includes("text")) {
+        syntheticEdges.push({
+          sourceNodeKey: textNodeKey,
+          targetNodeKey: rootNodeKey,
+          inputName: kindToInputName("text"),
+        })
+      }
+    }
+  }
+
+  const uploadedFiles = buildSyntheticUploadNodeFiles(input.upstream)
+  if (uploadedFiles.length > 0) {
+    const uploadNodeKey = `agent-${input.agent.id}-input-upload`
+    syntheticNodes.push({
+      nodeKey: uploadNodeKey,
+      type: "upload",
+      title: input.locale === "zh" ? "Agent 资源" : "Agent Assets",
+      positionX: -480,
+      positionY: 320,
+      config: {
+        uploadedFiles,
+        referencedArtifactIds: [],
+      },
+    })
+
+    for (const rootNodeKey of rootNodeKeys) {
+      const rootNode = nodes.find((node) => node.nodeKey === rootNodeKey)
+      if (!rootNode) continue
+      const acceptedKinds = getAllowedWorkflowTargetInputKinds(rootNode.type)
+      for (const kind of acceptedKinds) {
+        if (kind === "text") continue
+        const hasMatchingUpstream =
+          kind === "asset"
+            ? input.upstream.asset.length > 0
+            : kind === "image"
+              ? input.upstream.image.length > 0 || input.upstream.asset.some((item) => item.mimeType?.startsWith("image/"))
+              : kind === "video"
+                ? input.upstream.video.length > 0 || input.upstream.asset.some((item) => item.mimeType?.startsWith("video/"))
+                : kind === "audio"
+                  ? input.upstream.audio.length > 0 || input.upstream.asset.some((item) => item.mimeType?.startsWith("audio/"))
+                  : input.upstream.ppt.length > 0
+
+        if (!hasMatchingUpstream) continue
+
+        syntheticEdges.push({
+          sourceNodeKey: uploadNodeKey,
+          targetNodeKey: rootNodeKey,
+          inputName: kind === "asset" ? "assets" : kindToInputName(kind),
+        })
+      }
+    }
+  }
+
+  return {
+    nodes: [...syntheticNodes, ...nodes],
+    edges: [...syntheticEdges, ...edges],
+  }
+}
+
 function findFirstAssetUrlByMimePrefix(input: WorkflowCapabilityInvokeParams["input"], prefix: string) {
   for (const asset of input.asset) {
     if (asset.mimeType?.startsWith(prefix) && asset.url) return asset.url
@@ -274,7 +472,11 @@ function extractWorkflowPptInputImages(input: WorkflowCapabilityInvokeParams["in
   return [...collected.values()]
 }
 
-function buildPromptText(params: WorkflowCapabilityInvokeParams, _locale: "zh" | "en") {
+function buildPromptText(
+  params: WorkflowCapabilityInvokeParams,
+  locale: "zh" | "en",
+  workflowMetadata?: Record<string, unknown> | null,
+) {
   const inheritedText = params.input.text.map((item) => item.trim()).filter(Boolean)
   const configuredPrompt =
     inheritedText.length > 0
@@ -286,8 +488,13 @@ function buildPromptText(params: WorkflowCapabilityInvokeParams, _locale: "zh" |
           : ""
   const referenceUrls = extractUrlLikeItems(params.input)
   const includeReferenceUrls = params.capabilitySlug !== "ai-image" && params.capabilitySlug !== "ai-ppt"
+  const presetPrompt = buildEnterpriseWorkflowPresetPrompt(
+    getDefaultEnterpriseWorkflowPreset(workflowMetadata, locale),
+    locale,
+  )
 
   const sections = [
+    presetPrompt,
     configuredPrompt,
     inheritedText.length > 0 ? inheritedText.join("\n\n") : "",
     includeReferenceUrls && referenceUrls.length > 0
@@ -852,7 +1059,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
   ): Promise<WorkflowNodeExecutionResult> {
     const locale = options.locale || "en"
     const origin = normalizeOrigin(options.requestOrigin)
-    const prompt = buildPromptText(params, options.locale ?? "en")
+    const prompt = buildPromptText(params, options.locale ?? "en", options.workflowMetadata)
     const executionState =
       params.capabilitySlug === "content-repurpose"
         ? await getPlatformBindingTargetExecutionState(params.capabilitySlug, locale, options.currentUser)
@@ -893,10 +1100,213 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
 
     return withTimeout(
       (async (): Promise<WorkflowNodeExecutionResult> => {
-        if (params.capabilitySlug === "ai-chat") {
+        if (params.capabilitySlug === "ai-chat" || params.capabilitySlug === "agent-platform") {
           const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
           const selectedModelId = normalizeOptionalText(params.node.config.selectedModelId)
-          const systemPrompt = normalizeOptionalText(params.node.config.systemPrompt)
+          const configuredSystemPrompt = normalizeOptionalText(params.node.config.systemPrompt)
+
+          if (params.capabilitySlug === "agent-platform") {
+            if (!options.currentUser.enterpriseId) {
+              throw new Error("workflow_custom_agent_enterprise_required")
+            }
+
+            const customAgentId =
+              normalizeWorkflowCustomAgentId(params.node.config.customAgentId) ??
+              normalizeWorkflowCustomAgentId(params.node.config.agentId)
+            const builtinAgentId =
+              typeof params.node.config.agentId === "string" && isAiEntryAgentId(params.node.config.agentId)
+                ? params.node.config.agentId
+                : typeof params.node.config.builtinAgentId === "string" && isAiEntryAgentId(params.node.config.builtinAgentId)
+                  ? params.node.config.builtinAgentId
+                  : null
+            if (!customAgentId) {
+              if (!builtinAgentId) {
+                throw new Error("workflow_custom_agent_required")
+              }
+
+              const response = await aiChatPost(
+                createJsonRequest({
+                  origin,
+                  path: "/api/ai/chat",
+                  body: {
+                    message: prompt,
+                    stream: false,
+                    agentConfig: {
+                      agentId: builtinAgentId,
+                    },
+                    ...(configuredSystemPrompt ? { systemPrompt: configuredSystemPrompt } : {}),
+                    ...(selectedProviderId
+                      ? {
+                          modelConfig: {
+                            providerId: selectedProviderId,
+                            ...(selectedModelId ? { modelId: selectedModelId } : {}),
+                          },
+                        }
+                      : {}),
+                  },
+                  cookieHeader: options.cookieHeader,
+                  requestIp: options.requestIp,
+                  currentUser: options.currentUser,
+                }),
+              )
+
+              if (!response || !response.ok) {
+                throw new Error(await parseErrorResponse(response))
+              }
+
+              const payload = await parseJsonResponse(response)
+              const message = typeof payload?.message === "string" ? payload.message : ""
+              if (!message.trim()) {
+                throw new Error("workflow_llm_empty_response")
+              }
+
+              return {
+                output: {
+                  text: [message],
+                },
+                providerId: typeof payload?.provider === "string" ? payload.provider : null,
+                modelId: typeof payload?.providerModel === "string" ? payload.providerModel : null,
+                metadata: {
+                  builtinAgentId,
+                  executionMode: "ai_entry_agent",
+                },
+              }
+            }
+
+            const customAgent = await getCustomAgentForUser({
+              agentId: customAgentId,
+              enterpriseId: options.currentUser.enterpriseId,
+              userId: options.currentUser.id,
+              isEnterpriseAdmin: isEnterpriseAdminUser(options.currentUser),
+            })
+            if (!customAgent) {
+              throw new Error("workflow_custom_agent_not_found")
+            }
+            if (customAgent.status === "disabled") {
+              throw new Error("workflow_custom_agent_disabled")
+            }
+            if (customAgent.status === "archived") {
+              throw new Error("workflow_custom_agent_archived")
+            }
+
+            if (customAgent.executionMode === "workflow_backed" && customAgent.linkedWorkflowId) {
+              const recursionPath = new Set([
+                ...(options.workflowRecursionPath ?? []),
+                ...(options.activeWorkflowId ? [options.activeWorkflowId] : []),
+              ])
+              if (recursionPath.has(customAgent.linkedWorkflowId)) {
+                throw new Error("workflow_custom_agent_recursive_loop")
+              }
+
+              const linkedWorkflow = await getWorkflowDefinition(
+                customAgent.linkedWorkflowId,
+                options.currentUser.enterpriseId,
+              )
+              if (!linkedWorkflow) {
+                throw new Error("workflow_custom_agent_linked_workflow_not_found")
+              }
+              if (linkedWorkflow.status === "archived") {
+                throw new Error("workflow_custom_agent_linked_workflow_archived")
+              }
+
+              const delegatedGraph = buildLinkedWorkflowDelegationGraph({
+                agent: customAgent,
+                workflow: linkedWorkflow,
+                prompt,
+                upstream: params.input,
+                locale,
+              })
+              const nestedInvoker = createWorkflowCapabilityInvoker({
+                ...options,
+                activeWorkflowId: linkedWorkflow.id,
+                workflowMetadata: linkedWorkflow.metadata ?? null,
+                workflowRecursionPath: [
+                  ...(options.workflowRecursionPath ?? []),
+                  ...(options.activeWorkflowId ? [options.activeWorkflowId] : []),
+                  linkedWorkflow.id,
+                ],
+              })
+              const delegatedResult = await runWorkflowDefinition({
+                enterpriseId: linkedWorkflow.enterpriseId,
+                ownerUserId: linkedWorkflow.ownerUserId,
+                nodes: delegatedGraph.nodes,
+                edges: delegatedGraph.edges,
+                executorContext: {
+                  capabilityInvoker: nestedInvoker,
+                  workflowMetadata: linkedWorkflow.metadata ?? null,
+                },
+              })
+
+              if (delegatedResult.status !== "succeeded") {
+                throw new Error("workflow_custom_agent_linked_workflow_failed")
+              }
+
+              return {
+                output: collectLinkedWorkflowFinalOutput({
+                  nodeStates: delegatedResult.nodeStates,
+                  finalNodeKeys: delegatedResult.finalNodeKeys,
+                }),
+                metadata: {
+                  customAgentId: customAgent.id,
+                  executionMode: customAgent.executionMode,
+                  linkedWorkflowId: customAgent.linkedWorkflowId,
+                },
+              }
+            }
+
+            const systemPrompt = [
+              buildWorkflowCustomAgentSystemPrompt(customAgent),
+              configuredSystemPrompt,
+            ]
+              .filter(Boolean)
+              .join("\n\n")
+              .trim()
+            const response = await aiChatPost(
+              createJsonRequest({
+                origin,
+                path: "/api/ai/chat",
+                body: {
+                  message: prompt,
+                  stream: false,
+                  ...(systemPrompt ? { systemPrompt } : {}),
+                  ...(selectedProviderId
+                    ? {
+                      modelConfig: {
+                        providerId: selectedProviderId,
+                        ...(selectedModelId ? { modelId: selectedModelId } : {}),
+                      },
+                    }
+                  : {}),
+              },
+              cookieHeader: options.cookieHeader,
+                requestIp: options.requestIp,
+                currentUser: options.currentUser,
+              }),
+            )
+
+            if (!response || !response.ok) {
+              throw new Error(await parseErrorResponse(response))
+            }
+
+            const payload = await parseJsonResponse(response)
+            const message = typeof payload?.message === "string" ? payload.message : ""
+            if (!message.trim()) {
+              throw new Error("workflow_llm_empty_response")
+            }
+
+            return {
+              output: {
+                text: [message],
+              },
+              providerId: typeof payload?.provider === "string" ? payload.provider : null,
+              modelId: typeof payload?.providerModel === "string" ? payload.providerModel : null,
+              metadata: {
+                customAgentId: customAgent.id,
+                executionMode: customAgent.executionMode,
+              },
+            }
+          }
+
           const response = await aiChatPost(
             createJsonRequest({
               origin,
@@ -904,7 +1314,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               body: {
                 message: prompt,
                 stream: false,
-                ...(systemPrompt ? { systemPrompt } : {}),
+                ...(configuredSystemPrompt ? { systemPrompt: configuredSystemPrompt } : {}),
                 ...(selectedProviderId
                   ? {
                       modelConfig: {

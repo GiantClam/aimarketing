@@ -240,6 +240,10 @@ export function resolvePlatformBindingExecutionProxyTarget(
     return resolvePlatformCapabilityExecutionProxyTarget("ai-ppt", action)
   }
 
+  if (bindingTarget === "lead-to-outreach") {
+    return resolvePlatformCapabilityExecutionProxyTarget("ai-chat", action, runningHubConfig)
+  }
+
   if (bindingTarget === "visual-ad-pipeline") {
     return resolvePlatformMediaExecutionProxyTarget("visual-ad-pipeline", action, runningHubConfig)
   }

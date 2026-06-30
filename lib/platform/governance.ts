@@ -7,6 +7,9 @@ import { getLatestBillingSubscription } from "@/lib/billing/subscription-store"
 import { getWorkspaceBillingSnapshot } from "@/lib/billing/workspace"
 import type { AuthUser } from "@/lib/auth/session"
 import { summarizeRegistryCounts, type GovernanceRegistryEntryCounts } from "@/lib/platform/governance-utils"
+import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
+import { summarizePlatformWorkflowGovernance, type PlatformWorkflowGovernanceSummary } from "@/lib/platform/workflow-governance-summary"
+import { listWorkflowDefinitionsForEnterprise, listWorkflowNodeExecutionStatuses } from "@/lib/workflows/store"
 
 const GOVERNANCE_REGISTRY_ITEM_TYPES = [
   "capability",
@@ -42,6 +45,7 @@ export type PlatformGovernanceSnapshot = {
   runtime: PlatformRuntimeSnapshot
   registry: PlatformGovernanceRegistrySummary[]
   billing: PlatformGovernanceBillingSummary
+  workflows: PlatformWorkflowGovernanceSummary | null
 }
 
 function normalizeErrorMessage(error: unknown) {
@@ -115,6 +119,39 @@ async function getSafePlatformGovernanceBilling(user: AuthUser): Promise<Platfor
   }
 }
 
+async function getSafePlatformWorkflowGovernanceSummary(input: {
+  locale: AppLocale
+  currentUser: AuthUser
+}): Promise<PlatformWorkflowGovernanceSummary | null> {
+  const enterpriseId = input.currentUser.enterpriseId
+  if (!enterpriseId) return null
+
+  try {
+    const [workflows, recentRuns] = await Promise.all([
+      listWorkflowDefinitionsForEnterprise(enterpriseId),
+      listRecentWorkflowTaskRunsForEnterprise(enterpriseId, 60),
+    ])
+
+    const nodeExecutionsByRunId = new Map(
+      await Promise.all(
+        recentRuns.map(async (run) => [
+          run.id,
+          await listWorkflowNodeExecutionStatuses(run.id),
+        ] as const),
+      ),
+    )
+
+    return summarizePlatformWorkflowGovernance({
+      locale: input.locale === "zh" ? "zh" : "en",
+      workflows,
+      recentRuns,
+      nodeExecutionsByRunId,
+    })
+  } catch {
+    return null
+  }
+}
+
 export async function getPlatformGovernanceSnapshot({
   locale,
   currentUser,
@@ -122,9 +159,10 @@ export async function getPlatformGovernanceSnapshot({
   locale: AppLocale
   currentUser: AuthUser
 }): Promise<PlatformGovernanceSnapshot> {
-  const [registry, billing] = await Promise.all([
+  const [registry, billing, workflows] = await Promise.all([
     getPlatformGovernanceRegistry(locale, currentUser.enterpriseId ?? null),
     getSafePlatformGovernanceBilling(currentUser),
+    getSafePlatformWorkflowGovernanceSummary({ locale, currentUser }),
   ])
 
   return {
@@ -133,5 +171,6 @@ export async function getPlatformGovernanceSnapshot({
     runtime: getPlatformRuntimeSnapshot(),
     registry,
     billing,
+    workflows,
   }
 }

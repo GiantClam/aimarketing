@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111" />
+  <g id="background">
+    <rect x="24" y="24" width="1232" height="672" fill="none" stroke="#282826" stroke-width="2" />
+    <rect x="24" y="24" width="210" height="672" fill="#1A1A18" />
+    <rect x="234" y="24" width="2" height="672" fill="#282826" />
+    <rect x="24" y="612" width="1232" height="84" fill="#151514" />
+    <rect x="24" y="610" width="1232" height="2" fill="#282826" />
+    <rect x="886" y="24" width="370" height="672" fill="none" stroke="#282826" stroke-width="2" />
+    <rect x="886" y="24" width="370" height="94" fill="#161615" />
+  </g>
+
+  <g id="chrome">
+    <text x="48" y="76" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="2">下一张告示</text>
+    <text x="48" y="124" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="3">PAGE 04</text>
+    <text x="48" y="166" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2">BROADSIDE / TIMELINE</text>
+
+    <text x="914" y="74" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="2">截至2026年6月24日</text>
+    <text x="914" y="100" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1.5">霍尔木兹海峡现状与全球能源运输影响</text>
+
+    <text x="48" y="660" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2">从“恢复通航”转向“高压常态”</text>
+    <text x="1138" y="660" text-anchor="end" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2">立即部署</text>
+  </g>
+
+  <g id="content">
+    <text letter-spacing="-1" font-size="62" font-weight="900" font-family="Arial Black, Arial, Helvetica, sans-serif" fill="#F0ECE5" x="274" y="112">现在就按高压</text><text letter-spacing="-1" font-size="62" font-weight="900" font-family="Arial Black, Arial, Helvetica, sans-serif" fill="#F0ECE5" x="274" y="180">常态部署</text><rect x="274" y="196" width="300" height="10" fill="#E85D26" />
+    <text letter-spacing="0.5" font-size="26" font-weight="700" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" x="274" y="244">管理层当前不该押注快速回归低成本航运，</text><text letter-spacing="0.5" font-size="26" font-weight="700" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" x="274" y="282">而应把恢复通航后的高价、高险、高波动</text><text letter-spacing="0.5" font-size="26" font-weight="700" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" x="274" y="320">视作一段需要主动配置的运营常态。</text><rect x="274" y="338" width="560" height="170" fill="#161615" stroke="#282826" stroke-width="2" />
+    <text x="302" y="378" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="2">三项先手动作</text>
+
+    <text font-size="28" font-weight="700" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" x="302" y="422">01  提前锁定运价与保险预算</text><text font-size="28" font-weight="700" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" x="302" y="464">02  重排到港窗口与库存阈值</text><text font-size="28" font-weight="700" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" x="302" y="506">03  同步准备改道、替代装港</text><rect x="274" y="536" width="560" height="56" fill="#E85D26" />
+    <text x="294" y="573" fill="#111111" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="28" font-weight="900" letter-spacing="1">不要等成本回落，再开始动作</text>
+
+    <rect x="914" y="148" width="314" height="446" fill="#1A1A18" stroke="#282826" stroke-width="2" />
+
+    <text x="938" y="188" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">推进时间线</text>
+
+    <line x1="976" y1="234" x2="976" y2="546" stroke="#F0ECE5" stroke-width="3" />
+
+    <circle cx="976" cy="248" r="10" fill="#E85D26" />
+    <circle cx="976" cy="352" r="10" fill="#E85D26" />
+    <circle cx="976" cy="456" r="10" fill="#E85D26" />
+    <circle cx="976" cy="532" r="10" fill="#F0ECE5" />
+
+    <text x="1004" y="242" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5">现在</text>
+    <text x="1004" y="266" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">预算先锁</text>
+    <text x="1004" y="294" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="17">运价与战险先按高位编列</text>
+
+    <text x="1004" y="346" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5">接着</text>
+    <text x="1004" y="370" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">排程重算</text>
+    <text x="1004" y="398" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="17">用延误情景重设到港与库存</text>
+
+    <text x="1004" y="450" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5">随后</text>
+    <text x="1004" y="474" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">改道备份</text>
+    <text x="1004" y="502" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="17">替代装港与绕航方案并行准备</text>
+
+    <text x="1004" y="526" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5">目标</text>
+    <text x="1004" y="550" fill="#F0ECE5" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="30" font-weight="900">把波动变成预案</text>
+  </g>
+
+  <g id="annotations">
+    <rect x="48" y="210" width="150" height="150" fill="none" stroke="#E85D26" stroke-width="2" />
+    <line x1="48" y1="210" x2="198" y2="360" stroke="#E85D26" stroke-width="2" />
+    <line x1="198" y1="210" x2="48" y2="360" stroke="#E85D26" stroke-width="2" />
+    <text x="122" y="292" text-anchor="middle" fill="#E85D26" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="24" font-weight="900">高压</text>
+
+    <line x1="236" y1="626" x2="1216" y2="626" stroke="#282826" stroke-width="1" />
+    <text x="914" y="644" fill="#6F6A62" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="1.5">结论不是等待恢复，而是按压力运行</text>
+  </g>
+</svg>

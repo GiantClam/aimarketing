@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { AudioLines, ExternalLink, FileUp, ImageIcon, Trash2, Video } from "lucide-react"
 
+import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/components/workflows/workflow-agent-options"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -67,6 +68,13 @@ type WorkflowVoiceOption = {
   description: string[]
 }
 
+type KnowledgeDatasetOption = {
+  id: number
+  name: string
+  category: string
+  scope: "enterprise" | "personal"
+}
+
 type WriterPlatformOption = {
   value: string
   label: string
@@ -87,6 +95,8 @@ type WorkflowNodeEditorFieldsProps = {
     models: WorkflowLlmModelOption[]
   }>
   voiceOptions: WorkflowVoiceOption[]
+  builtinAgents: WorkflowBuiltinAgentOption[]
+  customAgents: WorkflowCustomAgentOption[]
   textPromptSuggestions?: Array<{
     sourceNodeKey: string
     sourceTitle: string
@@ -112,6 +122,30 @@ function asString(value: unknown) {
 
 function asNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
+function buildAgentSelectValue(kind: "builtin" | "custom", id: string | number | null | undefined) {
+  if (id == null || id === "") return ""
+  return `${kind}:${String(id)}`
+}
+
+function parseAgentSelectValue(value: string) {
+  const [kind, ...rest] = value.split(":")
+  const rawId = rest.join(":").trim()
+  if (!rawId) return null
+
+  if (kind === "builtin") {
+    return { kind, id: rawId } as const
+  }
+
+  if (kind === "custom") {
+    const numericId = Number(rawId)
+    if (Number.isInteger(numericId) && numericId > 0) {
+      return { kind, id: numericId } as const
+    }
+  }
+
+  return null
 }
 
 function buildWorkflowModelSelectionValue(input: {
@@ -270,6 +304,8 @@ export function WorkflowNodeEditorFields({
   llmModelCatalog,
   workflowImageProviderOptions,
   voiceOptions,
+  builtinAgents,
+  customAgents,
   textPromptSuggestions = [],
   uploadPending,
   showPersistedPreview = true,
@@ -280,6 +316,8 @@ export function WorkflowNodeEditorFields({
   const [textSelectionStart, setTextSelectionStart] = useState<number | null>(null)
   const [textInputFocused, setTextInputFocused] = useState(false)
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
+  const [enterpriseKnowledgeDatasets, setEnterpriseKnowledgeDatasets] = useState<KnowledgeDatasetOption[]>([])
+  const [personalKnowledgeDatasets, setPersonalKnowledgeDatasets] = useState<KnowledgeDatasetOption[]>([])
   const copy =
     locale === "zh"
       ? {
@@ -296,6 +334,25 @@ export function WorkflowNodeEditorFields({
           provider: "Provider",
           model: "模型",
           systemPrompt: "系统提示词",
+          agent: "Agent",
+          builtinAgents: "内置 Agent",
+          enterpriseAgents: "企业 Agent",
+          agentPrompt: "Agent 提示",
+          agentPromptPlaceholder: "没有上游文本时，填写这里作为 Agent 输入。",
+          noBuiltinAgents: "还没有可选内置 Agent。",
+          noCustomAgents: "还没有可选企业 Agent。",
+          agentMode: "执行模式",
+          agentCategory: "类别",
+          general: "通用",
+          executive: "专家顾问",
+          business: "业务",
+          linkedWorkflow: "关联工作流",
+          knowledgeDatasets: "知识库",
+          knowledgeQuery: "检索查询",
+          knowledgeTopK: "返回条数",
+          knowledgeCategory: "知识分类",
+          knowledgeDocumentTitle: "知识标题",
+          noKnowledgeDatasets: "暂无可用知识库。",
           prompt: "提示词",
           promptPlaceholder: "输入图片生成提示词。",
           writerPlatform: "平台",
@@ -343,6 +400,10 @@ export function WorkflowNodeEditorFields({
           fileName: "文件名称",
           fileNamePlaceholder: "留空时自动生成不重复名称",
           fileNameHint: "如果素材库中存在同名文件，将使用新结果覆盖旧文件。",
+          persistToWorkLibrary: "同步到作品库",
+          persistToKnowledgeBase: "加入知识入库队列",
+          knowledgeTargetType: "知识目标",
+          knowledgeTargetTypeHint: "默认使用 knowledge_base，可沿当前知识入库任务路由扩展。",
           latestPreview: "最近预览",
           auto: "自动",
           modelAuto: "自动路由",
@@ -363,6 +424,25 @@ export function WorkflowNodeEditorFields({
           provider: "Provider",
           model: "Model",
           systemPrompt: "System prompt",
+          agent: "Agent",
+          builtinAgents: "Built-in agents",
+          enterpriseAgents: "Enterprise agents",
+          agentPrompt: "Agent prompt",
+          agentPromptPlaceholder: "Used as the agent input when no upstream text is connected.",
+          noBuiltinAgents: "No built-in agents available yet.",
+          noCustomAgents: "No enterprise agents available yet.",
+          agentMode: "Execution mode",
+          agentCategory: "Category",
+          general: "General",
+          executive: "Executive",
+          business: "Business",
+          linkedWorkflow: "Linked workflow",
+          knowledgeDatasets: "Knowledge datasets",
+          knowledgeQuery: "Retrieve query",
+          knowledgeTopK: "Top K",
+          knowledgeCategory: "Knowledge category",
+          knowledgeDocumentTitle: "Document title",
+          noKnowledgeDatasets: "No knowledge datasets available yet.",
           prompt: "Prompt",
           promptPlaceholder: "Write the image prompt.",
           writerPlatform: "Platform",
@@ -410,12 +490,76 @@ export function WorkflowNodeEditorFields({
           fileName: "File name",
           fileNamePlaceholder: "Leave empty to auto-generate a unique name",
           fileNameHint: "If the asset library already contains the same file name, the new result replaces it.",
+          persistToWorkLibrary: "Also save to work library",
+          persistToKnowledgeBase: "Queue for knowledge ingestion",
+          knowledgeTargetType: "Knowledge target",
+          knowledgeTargetTypeHint: "Defaults to knowledge_base and stays compatible with the current ingestion queue.",
           latestPreview: "Latest preview",
           auto: "Auto",
           modelAuto: "Auto routing",
           on: "On",
           off: "Off",
         }
+
+  useEffect(() => {
+    let cancelled = false
+
+    Promise.all([
+      fetch("/api/knowledge/datasets", {
+        credentials: "same-origin",
+        cache: "no-store",
+      }),
+      fetch("/api/knowledge/personal-datasets", {
+        credentials: "same-origin",
+        cache: "no-store",
+      }),
+    ])
+      .then(async ([enterpriseResponse, personalResponse]) => {
+        const [enterprisePayload, personalPayload] = await Promise.all([
+          enterpriseResponse.json().catch(() => null),
+          personalResponse.json().catch(() => null),
+        ])
+        if (!enterpriseResponse.ok) {
+          throw new Error(typeof enterprisePayload?.error === "string" ? enterprisePayload.error : "knowledge_datasets_failed")
+        }
+
+        const enterpriseItems = Array.isArray(enterprisePayload?.data?.items) ? enterprisePayload.data.items : []
+        const personalItems = Array.isArray(personalPayload?.data?.items) ? personalPayload.data.items : []
+        if (cancelled) return
+        setEnterpriseKnowledgeDatasets(
+          enterpriseItems
+            .filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+            .map((item: Record<string, unknown>) => ({
+              id: typeof item.id === "number" ? item.id : 0,
+              name: typeof item.name === "string" ? item.name : `Dataset ${String(item.id || "")}`,
+              category: typeof item.category === "string" ? item.category : "general",
+              scope: "enterprise" as const,
+            }))
+            .filter((item: KnowledgeDatasetOption) => item.id > 0),
+        )
+        setPersonalKnowledgeDatasets(
+          personalItems
+            .filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+            .map((item: Record<string, unknown>) => ({
+              id: typeof item.id === "number" ? item.id : 0,
+              name: typeof item.name === "string" ? item.name : `Dataset ${String(item.id || "")}`,
+              category: typeof item.category === "string" ? item.category : "general",
+              scope: "personal" as const,
+            }))
+            .filter((item: KnowledgeDatasetOption) => item.id > 0),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEnterpriseKnowledgeDatasets([])
+          setPersonalKnowledgeDatasets([])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const updateConfig = (patch: Record<string, unknown>) => {
     onUpdateNode(node.nodeKey, {
@@ -439,6 +583,33 @@ export function WorkflowNodeEditorFields({
   const previewVideoTitle = asString(node.config.previewVideoTitle) || node.title
   const previewAudioUrl = asString(node.config.previewAudioUrl)
   const previewAudioTitle = asString(node.config.previewAudioTitle) || node.title
+  const selectedBuiltinAgentId =
+    typeof node.config.agentId === "string"
+      ? node.config.agentId
+      : typeof node.config.builtinAgentId === "string"
+        ? node.config.builtinAgentId
+        : ""
+  const selectedCustomAgentId =
+    typeof node.config.customAgentId === "number" ? String(node.config.customAgentId) : asString(node.config.customAgentId)
+  const selectedAgentValue = selectedCustomAgentId
+    ? buildAgentSelectValue("custom", selectedCustomAgentId)
+    : selectedBuiltinAgentId
+      ? buildAgentSelectValue("builtin", selectedBuiltinAgentId)
+      : ""
+  const selectedCustomAgent =
+    customAgents.find((agent) => String(agent.id) === selectedCustomAgentId) || null
+  const selectedBuiltinAgent = builtinAgents.find((agent) => agent.id === selectedBuiltinAgentId) || null
+  const selectedKnowledgeDatasetIds = Array.isArray(node.config.selectedDatasetIds)
+    ? node.config.selectedDatasetIds.filter((value): value is number => Number.isInteger(value) && value > 0)
+    : []
+  const selectedPersonalKnowledgeDatasetIds = Array.isArray(node.config.selectedPersonalDatasetIds)
+    ? node.config.selectedPersonalDatasetIds.filter((value): value is number => Number.isInteger(value) && value > 0)
+    : []
+  const selectedKnowledgeWriteDatasetScope = asString(node.config.datasetScope) === "personal" ? "personal" : "enterprise"
+  const selectedKnowledgeWriteDatasetValue =
+    typeof node.config.datasetId === "number" && node.config.datasetId > 0
+      ? `${selectedKnowledgeWriteDatasetScope}:${node.config.datasetId}`
+      : ""
   const languageOptions: OptionItem[] = [
     { value: "zh-CN", label: locale === "zh" ? "中文" : "Chinese" },
     { value: "en-US", label: locale === "zh" ? "英文" : "English" },
@@ -1041,6 +1212,240 @@ export function WorkflowNodeEditorFields({
         </div>
       ) : null}
 
+      {node.type === "agent_execute" ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <SectionLabel>{copy.agent}</SectionLabel>
+            <select
+              value={selectedAgentValue}
+              onChange={(event) => {
+                const selection = parseAgentSelectValue(event.target.value)
+                if (!selection) {
+                  updateConfig({ customAgentId: null, agentId: null, builtinAgentId: null })
+                  return
+                }
+
+                if (selection.kind === "builtin") {
+                  updateConfig({
+                    customAgentId: null,
+                    agentId: selection.id,
+                    builtinAgentId: selection.id,
+                  })
+                  return
+                }
+
+                updateConfig({
+                  customAgentId: selection.id,
+                  agentId: null,
+                  builtinAgentId: null,
+                })
+              }}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {builtinAgents.length === 0 && customAgents.length === 0 ? <option value="">{copy.noBuiltinAgents}</option> : null}
+              {builtinAgents.length > 0 ? (
+                <optgroup label={copy.builtinAgents}>
+                  {builtinAgents.map((agent) => (
+                    <option key={agent.id} value={buildAgentSelectValue("builtin", agent.id)}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {customAgents.length > 0 ? (
+                <optgroup label={copy.enterpriseAgents}>
+                  {customAgents.map((agent) => (
+                    <option key={agent.id} value={buildAgentSelectValue("custom", agent.id)}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </select>
+          </div>
+
+          {selectedBuiltinAgent ? (
+            <div className="rounded-[10px] border border-border/80 bg-background/60 p-3 text-sm text-foreground">
+              <div className="font-medium">{selectedBuiltinAgent.description}</div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {copy.agentCategory}: {copy[selectedBuiltinAgent.category]}
+              </div>
+            </div>
+          ) : null}
+
+          {selectedCustomAgent ? (
+            <div className="rounded-[10px] border border-border/80 bg-background/60 p-3 text-sm text-foreground">
+              <div className="font-medium">{selectedCustomAgent.summary}</div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {copy.agentMode}: {selectedCustomAgent.executionMode}
+              </div>
+              {selectedCustomAgent.linkedWorkflowTitle ? (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {copy.linkedWorkflow}: {selectedCustomAgent.linkedWorkflowTitle}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <SectionLabel>{copy.agentPrompt}</SectionLabel>
+            <Textarea
+              data-agent-config={`${node.nodeKey}:prompt`}
+              value={asString(node.config.prompt)}
+              placeholder={copy.agentPromptPlaceholder}
+              onChange={(event) => updateConfig({ prompt: event.target.value })}
+              className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {node.type === "knowledge_retrieve" ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <SectionLabel>{copy.knowledgeDatasets}</SectionLabel>
+            <div className="space-y-2 rounded-[10px] border border-border/80 bg-background/60 p-3">
+              {enterpriseKnowledgeDatasets.length === 0 ? (
+                <div className="text-sm text-muted-foreground">{copy.noKnowledgeDatasets}</div>
+              ) : (
+                enterpriseKnowledgeDatasets.map((dataset) => {
+                  const checked = selectedKnowledgeDatasetIds.includes(dataset.id)
+                  return (
+                    <label key={dataset.id} className="flex items-center justify-between gap-3 text-sm text-foreground">
+                      <span className="min-w-0 truncate">{dataset.name}</span>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const nextIds = event.target.checked
+                            ? [...selectedKnowledgeDatasetIds, dataset.id]
+                            : selectedKnowledgeDatasetIds.filter((value) => value !== dataset.id)
+                          updateConfig({ selectedDatasetIds: [...new Set(nextIds)] })
+                        }}
+                      />
+                    </label>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>{locale === "zh" ? "个人知识库" : "Personal knowledge datasets"}</SectionLabel>
+            <div className="space-y-2 rounded-[10px] border border-border/80 bg-background/60 p-3">
+              {personalKnowledgeDatasets.length === 0 ? (
+                <div className="text-sm text-muted-foreground">{copy.noKnowledgeDatasets}</div>
+              ) : (
+                personalKnowledgeDatasets.map((dataset) => {
+                  const checked = selectedPersonalKnowledgeDatasetIds.includes(dataset.id)
+                  return (
+                    <label key={`personal-${dataset.id}`} className="flex items-center justify-between gap-3 text-sm text-foreground">
+                      <span className="min-w-0 truncate">{dataset.name}</span>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const nextIds = event.target.checked
+                            ? [...selectedPersonalKnowledgeDatasetIds, dataset.id]
+                            : selectedPersonalKnowledgeDatasetIds.filter((value) => value !== dataset.id)
+                          updateConfig({ selectedPersonalDatasetIds: [...new Set(nextIds)] })
+                        }}
+                      />
+                    </label>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>{copy.knowledgeQuery}</SectionLabel>
+            <Textarea
+              value={asString(node.config.prompt)}
+              onChange={(event) => updateConfig({ prompt: event.target.value })}
+              className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>{copy.knowledgeTopK}</SectionLabel>
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={String(asNumber(node.config.topK, 4))}
+              onChange={(event) => updateConfig({ topK: Number(event.target.value) || 4 })}
+              className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {node.type === "knowledge_write" ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <SectionLabel>{copy.knowledgeDatasets}</SectionLabel>
+            <select
+              value={selectedKnowledgeWriteDatasetValue}
+              onChange={(event) => {
+                const [scope, rawId] = event.target.value.split(":")
+                const datasetId = rawId ? Number(rawId) : null
+                updateConfig({
+                  datasetScope: scope === "personal" ? "personal" : "enterprise",
+                  datasetId: datasetId && Number.isInteger(datasetId) && datasetId > 0 ? datasetId : null,
+                })
+              }}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              <option value="">{copy.noKnowledgeDatasets}</option>
+              {enterpriseKnowledgeDatasets.length > 0 ? (
+                <optgroup label={locale === "zh" ? "企业知识库" : "Enterprise"}>
+                  {enterpriseKnowledgeDatasets.map((dataset) => (
+                    <option key={`enterprise-${dataset.id}`} value={`enterprise:${dataset.id}`}>
+                      {dataset.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {personalKnowledgeDatasets.length > 0 ? (
+                <optgroup label={locale === "zh" ? "个人知识库" : "Personal"}>
+                  {personalKnowledgeDatasets.map((dataset) => (
+                    <option key={`personal-${dataset.id}`} value={`personal:${dataset.id}`}>
+                      {dataset.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>{copy.knowledgeDocumentTitle}</SectionLabel>
+            <Input
+              value={asString(node.config.documentTitle)}
+              onChange={(event) => updateConfig({ documentTitle: event.target.value })}
+              className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>{copy.knowledgeCategory}</SectionLabel>
+            <select
+              value={asString(node.config.knowledgeCategory) || "general"}
+              onChange={(event) => updateConfig({ knowledgeCategory: event.target.value || "general" })}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              <option value="general">general</option>
+              <option value="brand">brand</option>
+              <option value="product">product</option>
+              <option value="case-study">case-study</option>
+              <option value="compliance">compliance</option>
+              <option value="campaign">campaign</option>
+            </select>
+          </div>
+        </div>
+      ) : null}
+
       {node.type === "image_generate" ? (
         <div className="space-y-3">
           <div className="space-y-2">
@@ -1480,6 +1885,33 @@ export function WorkflowNodeEditorFields({
             />
             <div className="text-xs leading-5 text-muted-foreground">{copy.fileNameHint}</div>
           </div>
+          <label className="flex items-center gap-2 rounded-[10px] border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={node.config.persistToWorkLibrary === true}
+              onChange={(event) => updateConfig({ persistToWorkLibrary: event.target.checked })}
+            />
+            <span>{copy.persistToWorkLibrary}</span>
+          </label>
+          <label className="flex items-center gap-2 rounded-[10px] border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={node.config.persistToKnowledgeBase === true}
+              onChange={(event) => updateConfig({ persistToKnowledgeBase: event.target.checked })}
+            />
+            <span>{copy.persistToKnowledgeBase}</span>
+          </label>
+          {node.config.persistToKnowledgeBase === true ? (
+            <div className="space-y-2">
+              <SectionLabel>{copy.knowledgeTargetType}</SectionLabel>
+              <Input
+                value={asString(node.config.knowledgeTargetType) || "knowledge_base"}
+                onChange={(event) => updateConfig({ knowledgeTargetType: event.target.value })}
+                className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+              />
+              <div className="text-xs leading-5 text-muted-foreground">{copy.knowledgeTargetTypeHint}</div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

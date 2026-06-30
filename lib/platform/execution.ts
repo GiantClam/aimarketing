@@ -119,6 +119,7 @@ function getBindingTargetCreditHook(bindingTarget: string) {
   return (
     bindingTarget === "content-repurpose" ||
     bindingTarget === "campaign-launch" ||
+    bindingTarget === "lead-to-outreach" ||
     bindingTarget === "visual-ad-pipeline" ||
     getCapabilityCreditHook(bindingTarget)
   )
@@ -316,6 +317,21 @@ function getBindingTargetDescriptor(bindingTarget: string, locale: AppLocale) {
       proofPoints: [
         zh ? "通过 AI PPT 预览链路承接公开入口" : "Uses the AI PPT preview chain as its public execution path.",
         zh ? "为企业级多步骤启动流程保留扩展位" : "Leaves room for enterprise multi-step launch orchestration.",
+      ],
+    }
+  }
+
+  if (bindingTarget === "lead-to-outreach") {
+    return {
+      title: zh ? "Lead-to-Outreach" : "Lead-to-Outreach",
+      summary: zh
+        ? "把目标客户画像、外联文案与销售推进动作收敛成统一获客外联流程。"
+        : "Bring ICP mapping, outreach copy, and sales progression into one outbound workflow.",
+      publicHref: "/workflows",
+      workspaceHref: "/dashboard/workflows",
+      proofPoints: [
+        zh ? "由内置业务 Agent 串联获客、外联与销售。": "Connects pipeline, outbound, and sales through built-in business agents.",
+        zh ? "作为 enterprise workflow productization 的 P0 模板。": "Ships as a P0 enterprise workflow productization template.",
       ],
     }
   }

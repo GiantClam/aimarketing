@@ -57,6 +57,14 @@ export async function POST(
     if (!numericWorkflowId) {
       return NextResponse.json({ error: "invalid_workflow_id" }, { status: 400 })
     }
+    const body = (await request.json().catch(() => ({}))) as {
+      prompt?: unknown
+      sourceAgentId?: unknown
+    }
+    const requestedPrompt =
+      typeof body.prompt === "string" ? body.prompt.trim().slice(0, 8_000) : ""
+    const requestedSourceAgentId =
+      typeof body.sourceAgentId === "string" ? body.sourceAgentId.trim().slice(0, 160) : ""
 
     const workflow = await getWorkflowDefinition(numericWorkflowId, currentUser.enterpriseId)
     if (!workflow) {
@@ -67,12 +75,15 @@ export async function POST(
       await listRecentWorkflowTaskRunsForEnterprise(currentUser.enterpriseId, 40),
       workflow.id,
     )
+    const latestRunPrompt =
+      typeof latestRunRecord?.inputPayload?.prompt === "string" ? latestRunRecord.inputPayload.prompt.trim() : ""
+    const latestRunCanResume = latestRunPrompt === requestedPrompt
     const latestRunDetail = latestRunRecord ? await getWorkflowRunDetail(latestRunRecord.id, currentUser.enterpriseId) : null
     const latestRunMatchesWorkflow =
       latestRunDetail ? isWorkflowResumeCompatible(workflow, latestRunDetail.workflow) : false
     const latestRunStatus = latestRunDetail?.run.status ?? latestRunRecord?.status ?? null
 
-    if (latestRunStatus === "running" && latestRunRecord && latestRunDetail && latestRunMatchesWorkflow) {
+    if (latestRunStatus === "running" && latestRunRecord && latestRunDetail && latestRunMatchesWorkflow && latestRunCanResume) {
       void runWorkflowTaskRecoveryPass({
         runId: latestRunRecord.id,
         requestOrigin: new URL(request.url).origin,
@@ -100,7 +111,7 @@ export async function POST(
       )
     }
 
-    if (latestRunStatus === "failed" && latestRunRecord && latestRunDetail && latestRunMatchesWorkflow) {
+    if (latestRunStatus === "failed" && latestRunRecord && latestRunDetail && latestRunMatchesWorkflow && latestRunCanResume) {
       const retryNodeKey = latestRunDetail ? resolveWorkflowResumeNodeKey(latestRunDetail) : null
 
       if (latestRunDetail && retryNodeKey) {
@@ -179,6 +190,8 @@ export async function POST(
       inputPayload: {
         workflowId: workflow.id,
         trigger: "manual",
+        ...(requestedPrompt ? { prompt: requestedPrompt } : {}),
+        ...(requestedSourceAgentId ? { sourceAgentId: requestedSourceAgentId } : {}),
       },
     })
 

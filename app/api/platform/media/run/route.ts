@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { hasFeatureAccess, hasFeatureAccessWithFallback } from "@/lib/auth/guards"
+import { estimateVideoGenerationCredits } from "@/lib/billing/costing"
+import {
+  releaseReservedCredits,
+  reserveFeatureCredits,
+  type BillingReservation,
+} from "@/lib/billing/runtime"
 import type { OpenAiCompatibleImageProviderId } from "@/lib/image-assistant/openai-compatible-image"
 import { normalizePlatformMediaExecutionPayload } from "@/lib/platform/execute"
 import {
@@ -28,10 +34,22 @@ import {
   executeRunningHubVideoFeature,
   resolveRunningHubVideoFeatureId,
 } from "@/lib/platform/runninghub-video"
+import {
+  attachPendingVideoBillingToRun,
+  settleVideoBillingForRunId,
+} from "@/lib/platform/video-billing-settlement"
 
 export const runtime = "nodejs"
 
 type MediaExecutionFeature = "image_design_generation" | "video_generation" | "audio_generation"
+type MediaRouteUser = {
+  id: number
+  enterpriseId: number | null
+}
+type VideoBillingState = {
+  reservation: BillingReservation | null
+  estimate: ReturnType<typeof estimateVideoGenerationCredits>
+}
 
 function normalizeAction(value: string | null) {
   return value?.trim().toLowerCase() || "execute"
@@ -86,6 +104,112 @@ function buildMediaExecutionResponse(input: {
       data: input.data,
     }) ?? { data: input.data }
   )
+}
+
+function readVideoDurationSeconds(params: Record<string, unknown>, payload: Record<string, unknown>): string | number | null {
+  const value = params.duration ?? payload.duration ?? params.durationSeconds ?? payload.durationSeconds ?? null
+  return typeof value === "string" || typeof value === "number" ? value : null
+}
+
+function readVideoResolution(params: Record<string, unknown>, payload: Record<string, unknown>) {
+  const value = params.resolution ?? payload.resolution
+  return typeof value === "string" ? value : null
+}
+
+function resolveVideoBillingProvider(modelId: string | null | undefined, fallback: "minimax" | "runninghub") {
+  if (modelId?.startsWith("runninghub:")) return "runninghub"
+  if (modelId?.startsWith("minimax:")) return "minimax"
+  return fallback
+}
+
+async function reserveVideoCreditsForSubmission(input: {
+  currentUser: MediaRouteUser
+  featureId: string
+  provider: "minimax" | "runninghub"
+  modelId?: string | null
+  params: Record<string, unknown>
+  payload: Record<string, unknown>
+}) {
+  const estimate = estimateVideoGenerationCredits({
+    featureId: input.featureId,
+    durationSeconds: readVideoDurationSeconds(input.params, input.payload),
+    resolution: readVideoResolution(input.params, input.payload),
+    provider: input.provider,
+    model: input.modelId || null,
+  })
+  const reservation = await reserveFeatureCredits({
+    userId: input.currentUser.id,
+    enterpriseId: input.currentUser.enterpriseId,
+    featureKey: estimate.featureKey,
+    amount: estimate.credits,
+    idempotencyKey: `video-generation:${input.currentUser.id}:${input.featureId}:${Date.now()}:reserve`,
+    metadata: {
+      route: "platform.media.run",
+      featureId: input.featureId,
+      estimate,
+    },
+  })
+
+  return { reservation, estimate }
+}
+
+async function releaseVideoCreditsForSubmission(input: {
+  billing: VideoBillingState | null
+  currentUser: MediaRouteUser
+  idempotencyScope: string
+  reason: string
+}) {
+  if (!input.billing) return null
+  return releaseReservedCredits({
+    reservation: input.billing.reservation,
+    userId: input.currentUser.id,
+    enterpriseId: input.currentUser.enterpriseId,
+    idempotencyKey: `video-generation:${input.currentUser.id}:${input.idempotencyScope}:${Date.now()}:release`,
+    reason: input.reason,
+  })
+}
+
+async function attachVideoBillingOrRelease(input: {
+  runId: number | null
+  billing: VideoBillingState | null
+  currentUser: MediaRouteUser
+  featureId: string
+  provider?: string | null
+  model?: string | null
+  metadata?: Record<string, unknown> | null
+}) {
+  const attached = await attachPendingVideoBillingToRun({
+    runId: input.runId,
+    currentUser: input.currentUser,
+    billing: input.billing,
+    featureId: input.featureId,
+    provider: input.provider,
+    model: input.model,
+    metadata: input.metadata,
+  }).catch((error) => {
+    console.warn("platform.media.video.billing.attach_failed", {
+      featureId: input.featureId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  })
+
+  if (!attached && input.billing?.reservation) {
+    await releaseVideoCreditsForSubmission({
+      billing: input.billing,
+      currentUser: input.currentUser,
+      idempotencyScope: input.featureId,
+      reason: "video_billing_attach_failed",
+    }).catch((error) => {
+      console.warn("platform.media.video.billing.release_failed", {
+        featureId: input.featureId,
+        reason: "video_billing_attach_failed",
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  return attached
 }
 
 export async function POST(request: NextRequest) {
@@ -249,6 +373,22 @@ export async function POST(request: NextRequest) {
       if (!isRunningHubConfiguredForTarget(target, runningHubVideoConfig)) {
         return NextResponse.json({ error: "runninghub_not_configured" }, { status: 503 })
       }
+      let videoBilling: VideoBillingState
+      try {
+        videoBilling = await reserveVideoCreditsForSubmission({
+          currentUser,
+          featureId: legacyRunningHubFeatureId,
+          provider: "runninghub",
+          modelId: typeof params.model === "string" ? params.model : typeof payload.model === "string" ? payload.model : null,
+          params,
+          payload,
+        })
+      } catch (error) {
+        if (error instanceof Error && error.message === "insufficient_credits") {
+          return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+        }
+        throw error
+      }
 
       const legacyResult = await executeRunningHubVideoFeature({
         currentUser,
@@ -268,7 +408,41 @@ export async function POST(request: NextRequest) {
       })
 
       if (legacyResult instanceof NextResponse) {
+        await releaseVideoCreditsForSubmission({
+          billing: videoBilling,
+          currentUser,
+          idempotencyScope: legacyRunningHubFeatureId,
+          reason: "video_submit_failed",
+        }).catch((error) => {
+          console.warn("platform.media.video.billing.release_failed", {
+            featureId: legacyRunningHubFeatureId,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        })
         return legacyResult
+      }
+
+      const legacyRunId = Number(legacyResult.taskId)
+      const attachedBilling = await attachVideoBillingOrRelease({
+        runId: Number.isFinite(legacyRunId) ? legacyRunId : null,
+        currentUser,
+        billing: videoBilling,
+        featureId: legacyRunningHubFeatureId,
+        provider: "runninghub",
+        model: typeof params.model === "string" ? params.model : typeof payload.model === "string" ? payload.model : null,
+        metadata: {
+          route: "platform.media.run",
+          featureId: legacyRunningHubFeatureId,
+          taskId: typeof legacyResult.taskId === "string" ? legacyResult.taskId : null,
+        },
+      })
+      if (attachedBilling && (legacyResult.status === "SUCCESS" || legacyResult.status === "FAILED")) {
+        await settleVideoBillingForRunId(Number.isFinite(legacyRunId) ? legacyRunId : null).catch((error) => {
+          console.warn("platform.media.video.billing.settle_failed", {
+            featureId: legacyRunningHubFeatureId,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        })
       }
 
       return NextResponse.json(
@@ -288,6 +462,22 @@ export async function POST(request: NextRequest) {
       requestedModel: params.model ?? payload.model,
       videoRuntime: enterpriseVideoRuntime,
     })
+    const videoBilling = await reserveVideoCreditsForSubmission({
+      currentUser,
+      featureId,
+      provider: resolveVideoBillingProvider(modelId, enterpriseVideoRuntime?.kind === "runninghub" ? "runninghub" : "minimax"),
+      modelId,
+      params,
+      payload,
+    }).catch((error) => {
+      if (error instanceof Error && error.message === "insufficient_credits") {
+        return NextResponse.json({ error: "insufficient_credits" }, { status: 402 })
+      }
+      throw error
+    })
+    if (videoBilling instanceof NextResponse) {
+      return videoBilling
+    }
 
     const result = await executeMediaCapability({
       currentUser,
@@ -310,7 +500,53 @@ export async function POST(request: NextRequest) {
     })
 
     if (result instanceof NextResponse) {
+      await releaseVideoCreditsForSubmission({
+        billing: videoBilling,
+        currentUser,
+        idempotencyScope: featureId,
+        reason: "video_submit_failed",
+      }).catch((error) => {
+        console.warn("platform.media.video.billing.release_failed", {
+          featureId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
       return result
+    }
+
+    const resultTask = result.mode === "async" ? result.task : null
+    const payloadRunId = typeof result.payload?.taskId === "string" ? Number(result.payload.taskId) : null
+    const resultRunId =
+      typeof resultTask?.localRunId === "number"
+        ? resultTask.localRunId
+        : payloadRunId && Number.isFinite(payloadRunId)
+          ? payloadRunId
+          : null
+    const attachedBilling = await attachVideoBillingOrRelease({
+      runId: resultRunId,
+      currentUser,
+      billing: videoBilling,
+      featureId,
+      provider: typeof result.provider === "string" ? result.provider : videoBilling.estimate.provider,
+      model: typeof result.modelId === "string" ? result.modelId : modelId,
+      metadata: {
+        route: "platform.media.run",
+        featureId,
+        taskId:
+          typeof result.payload?.taskId === "string"
+            ? result.payload.taskId
+            : typeof resultTask?.providerTaskId === "string"
+              ? resultTask.providerTaskId
+              : null,
+      },
+    })
+    if (attachedBilling && (result.status === "succeeded" || result.status === "failed")) {
+      await settleVideoBillingForRunId(resultRunId).catch((error) => {
+        console.warn("platform.media.video.billing.settle_failed", {
+          featureId,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
     }
 
     return NextResponse.json(

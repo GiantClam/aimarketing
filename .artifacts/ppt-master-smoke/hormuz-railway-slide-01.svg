@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <rect width="1280" height="720" fill="#111111" />
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#111111" />
+    <rect x="864" y="0" width="416" height="720" fill="#1A1A18" />
+    <rect x="0" y="618" width="1280" height="102" fill="#0D0D0D" />
+    <line x1="0" y1="96" x2="1280" y2="96" stroke="#282826" stroke-width="2" />
+    <line x1="824" y1="0" x2="824" y2="720" stroke="#282826" stroke-width="2" />
+    <line x1="0" y1="618" x2="1280" y2="618" stroke="#282826" stroke-width="2" />
+    <rect x="902" y="82" width="284" height="284" fill="none" stroke="#E85D26" stroke-width="2" />
+    <rect x="934" y="114" width="220" height="220" fill="none" stroke="#282826" stroke-width="2" />
+    <path d="M1018 140 L1078 140 L1110 170 L1110 232 L1082 260 L1042 260 L1016 286 L978 286 L954 252 L954 196 L982 168 Z" fill="none" stroke="#E85D26" stroke-width="10" stroke-linejoin="miter" />
+    <path d="M980 214 L1016 214 L1048 184 L1072 184" fill="none" stroke="#F0ECE5" stroke-width="3" />
+    <circle cx="980" cy="214" r="5" fill="#F0ECE5" />
+    <circle cx="1016" cy="214" r="5" fill="#F0ECE5" />
+    <circle cx="1048" cy="184" r="5" fill="#F0ECE5" />
+    <circle cx="1072" cy="184" r="5" fill="#F0ECE5" />
+    <line x1="1060" y1="470" x2="1230" y2="470" stroke="#E85D26" stroke-width="4" />
+    <line x1="1100" y1="498" x2="1230" y2="498" stroke="#F0ECE5" stroke-width="2" />
+    <line x1="1138" y1="526" x2="1230" y2="526" stroke="#F0ECE5" stroke-width="2" />
+  </g>
+  <g id="chrome">
+    <text x="54" y="62" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" letter-spacing="3">大字报头</text>
+    <text x="1226" y="62" text-anchor="end" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">01 / 04</text>
+    <text x="54" y="690" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600" letter-spacing="1.2">霍尔木兹海峡现状与全球能源运输影响（截至2026年6月24日）</text>
+    <text x="1226" y="690" text-anchor="end" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="1.5">BROADSIDE</text>
+  </g>
+  <g id="content">
+    <text x="58" y="180" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="78" font-weight="900" letter-spacing="-1.5">霍尔木兹海峡：</text>
+    <text x="58" y="270" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="112" font-weight="900" letter-spacing="-3">恢复未稳</text>
+    <rect x="60" y="316" width="602" height="8" fill="#E85D26" />
+    <text letter-spacing="0.2" font-size="31" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" font-weight="500" x="60" y="388">通行在回升，但控制权、成本与安全性仍未定盘，</text><text letter-spacing="0.2" font-size="31" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" font-weight="500" x="60" y="430">全球能源运输正进入“可通行、不安心”的…</text><text x="60" y="494" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" letter-spacing="2">结论先行：</text>
+    <text x="226" y="494" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">恢复不是回归常态</text>
+    <text x="60" y="538" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" letter-spacing="2">管理层焦点：</text>
+    <text x="226" y="538" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">运力、保费、库存</text>
+    <text x="60" y="582" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" letter-spacing="2">窗口判断：</text>
+    <text x="226" y="582" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">未来数周最脆弱</text>
+    <text x="882" y="418" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="2.2">VISUAL AXIS</text>
+    <text x="882" y="454" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="900" letter-spacing="-1">能通行</text>
+    <text x="882" y="510" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="900" letter-spacing="-1">不安心</text>
+    <text letter-spacing="0.3" font-size="21" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" font-weight="600" x="882" y="572">海峡不是关闭，</text><text letter-spacing="0.3" font-size="21" font-family="Arial, Helvetica, sans-serif" fill="#F0ECE5" font-weight="600" x="882" y="602">而是进入高摩擦运行。</text></g>
+  <g id="annotations">
+    <rect x="874" y="600" width="322" height="64" fill="none" stroke="#282826" stroke-width="2" />
+    <text x="892" y="626" fill="#E85D26" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" letter-spacing="1.6">POSTER VERDICT</text>
+    <text x="892" y="652" fill="#F0ECE5" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">恢复在路上，常态仍缺席。</text>
+  </g>
+</svg>

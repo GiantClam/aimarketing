@@ -42,6 +42,8 @@ import {
 import { loadEnterpriseKnowledgeContext } from "@/lib/knowledge/service"
 import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
 import { hasCustomAiChatModelSelection } from "@/lib/platform/shared-credits-policy"
+import { getCustomAgentForUser } from "@/lib/platform/custom-agents"
+import { parseCustomAgentRuntimeId } from "@/lib/platform/custom-agent-runtime-id"
 import {
   normalizeAttachmentList,
   normalizeMessages,
@@ -539,12 +541,16 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
   const rawAgentId =
     typeof input?.agentId === "string" ? input.agentId.trim() : ""
   const resolvedAgentId =
-    rawAgentId && isAiEntryAgentId(rawAgentId)
+    rawAgentId && (isAiEntryAgentId(rawAgentId) || parseCustomAgentRuntimeId(rawAgentId) !== null)
       ? rawAgentId
+      : null
+  const consultingAgentId =
+    resolvedAgentId && isAiEntryAgentId(resolvedAgentId)
+      ? resolvedAgentId
       : null
   const lockModelToConsultingModel = shouldLockConsultingAdvisorModel({
     entryMode: input?.entryMode,
-    agentId: resolvedAgentId,
+    agentId: consultingAgentId,
   })
   const consultingModelMode = resolveConsultingModelMode()
 
@@ -558,15 +564,44 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
 function parseConversationScope(input: ChatRequestBody) {
   if (input.conversationScope === "consulting") return "consulting" as const
   if (input.conversationScope === "chat") return "chat" as const
+  const rawAgentId =
+    typeof input.agentConfig?.agentId === "string" ? input.agentConfig.agentId.trim() : ""
+  const consultingAgentId = rawAgentId && isAiEntryAgentId(rawAgentId) ? rawAgentId : null
   if (
     shouldLockConsultingAdvisorModel({
       entryMode: input.agentConfig?.entryMode,
-      agentId: typeof input.agentConfig?.agentId === "string" ? input.agentConfig.agentId : null,
+      agentId: consultingAgentId,
     })
   ) {
     return "consulting" as const
   }
   return "chat" as const
+}
+
+function buildCustomAgentInstruction(agent: {
+  name: string
+  summary: string
+  goal: string | null
+  scope: string | null
+  guardrails: string | null
+  systemPromptSummary: string | null
+  systemPrompt: string
+}) {
+  const sections = [
+    `You are operating as the enterprise custom agent "${agent.name}".`,
+    agent.summary.trim() ? `## Agent summary\n${agent.summary.trim()}` : "",
+    agent.goal?.trim() ? `## Primary goal\n${agent.goal.trim()}` : "",
+    agent.scope?.trim() ? `## Scope\n${agent.scope.trim()}` : "",
+    agent.guardrails?.trim() ? `## Guardrails\n${agent.guardrails.trim()}` : "",
+    agent.systemPromptSummary?.trim()
+      ? `## Prompt summary\n${agent.systemPromptSummary.trim()}`
+      : "",
+    agent.systemPrompt.trim()
+      ? `## Custom agent system prompt\n${agent.systemPrompt.trim()}`
+      : "",
+  ]
+
+  return sections.filter(Boolean).join("\n\n")
 }
 
 async function persistAiEntryTurnSafe(params: {
@@ -747,14 +782,45 @@ export async function POST(request: NextRequest) {
       enabledSkillIds,
     })
     const {
-      effectiveAgentId,
-      routeDecision,
       skillRouteDecision,
       selectedSkills,
       selectedSkillIds,
       runtimePolicy,
-      resolvedInstruction,
     } = consultingRuntime
+    let { effectiveAgentId, routeDecision, resolvedInstruction } = consultingRuntime
+    const customAgentId = parseCustomAgentRuntimeId(agentConfig.agentId)
+    if (customAgentId !== null) {
+      if (typeof currentUser.enterpriseId !== "number" || currentUser.enterpriseId <= 0) {
+        return NextResponse.json({ error: "custom_agent_not_found" }, { status: 404 })
+      }
+      const customAgent = await getCustomAgentForUser({
+        agentId: customAgentId,
+        enterpriseId: currentUser.enterpriseId,
+        userId: currentUser.id,
+        isEnterpriseAdmin: currentUser.enterpriseRole === "admin" && currentUser.enterpriseStatus === "active",
+      })
+      if (!customAgent) {
+        return NextResponse.json({ error: "custom_agent_not_found" }, { status: 404 })
+      }
+      if (customAgent.status === "disabled") {
+        return NextResponse.json({ error: "custom_agent_disabled" }, { status: 403 })
+      }
+      if (customAgent.status === "archived") {
+        return NextResponse.json({ error: "custom_agent_archived" }, { status: 403 })
+      }
+      if (customAgent.executionMode !== "direct_agent") {
+        return NextResponse.json({ error: "custom_agent_workflow_backed_chat_not_supported" }, { status: 409 })
+      }
+      effectiveAgentId = agentConfig.agentId
+      routeDecision = null
+      resolvedInstruction = [
+        buildCustomAgentInstruction(customAgent),
+        resolvedInstruction,
+      ]
+        .map((section) => section.trim())
+        .filter(Boolean)
+        .join("\n\n")
+    }
     shouldQueryEnterpriseKnowledgeForRequest = shouldQueryAiEntryEnterpriseKnowledge({
       canQueryEnterpriseKnowledge,
       effectiveAgentId,

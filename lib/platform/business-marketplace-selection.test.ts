@@ -34,6 +34,25 @@ test("business marketplace selection sanitizer keeps only valid imported agents"
   ])
 })
 
+test("business marketplace selection sanitizer accepts built-in business agents, executive agents, and custom runtime ids", async () => {
+  const { sanitizeBusinessMarketplaceSelectionInput } = await import("./business-marketplace-selection")
+
+  const selection = sanitizeBusinessMarketplaceSelectionInput({
+    selectedAgentIds: [
+      "business-sales-close",
+      "custom-agent:42",
+      "executive-brand",
+      "custom-agent:not-a-number",
+    ],
+  })
+
+  assert.deepEqual(selection.selectedAgentIds, [
+    "business-sales-close",
+    "custom-agent:42",
+    "executive-brand",
+  ])
+})
+
 test("business marketplace selection sanitizer accepts a bare array payload", async () => {
   const { sanitizeBusinessMarketplaceSelectionInput } = await import("./business-marketplace-selection")
 

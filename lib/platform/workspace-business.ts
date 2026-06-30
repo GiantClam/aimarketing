@@ -480,6 +480,40 @@ const enEntries: LocalizedWorkspaceBusinessEntry[] = [
       { label: "Platform settings", href: "/dashboard/platform-settings" },
     ],
   },
+  {
+    slug: "finance",
+    iconKey: "operations",
+    title: "Finance management",
+    summary: "Organize budgeting, financial modeling, pricing, cash flow, and operating reviews into one finance lane.",
+    description:
+      "Built for finance, operations analysis, and revenue teams that need one workspace for budgeting tradeoffs, pricing strategy, and operating review cycles.",
+    outcomes: ["Budgeting and forecasting", "Financial modeling and scenarios", "Pricing and margin structure", "Operating reviews and cash flow"],
+    href: buildDashboardBusinessHref("finance"),
+    workflowSlugs: ["content-repurpose"],
+    relatedLinks: [
+      { label: "AI Chat", href: "/dashboard/ai" },
+      { label: "Writer", href: "/dashboard/writer" },
+      { label: "Workflows", href: "/dashboard/workflows" },
+      { label: "Platform settings", href: "/dashboard/platform-settings" },
+    ],
+  },
+  {
+    slug: "paid-media",
+    iconKey: "lead",
+    title: "Paid media",
+    summary: "Organize account structure, bidding, creative testing, and attribution governance into one paid-media lane.",
+    description:
+      "Built for acquisition, growth, and media teams that need one operating surface for campaign structure, optimization, creative testing, and measurement.",
+    outcomes: ["Campaign structure", "Bidding and budget strategy", "Creative and asset testing", "Attribution and incrementality review"],
+    href: buildDashboardBusinessHref("paid-media"),
+    workflowSlugs: ["campaign-launch"],
+    relatedLinks: [
+      { label: "AI Chat", href: "/dashboard/ai" },
+      { label: "AI Image", href: "/dashboard/image-assistant" },
+      { label: "Workflows", href: "/dashboard/workflows" },
+      { label: "Capabilities", href: "/dashboard/capabilities" },
+    ],
+  },
 ]
 
 const importedCategoryEntryMeta: Record<
@@ -692,8 +726,10 @@ function buildImportedWorkspaceEntries(
   includedSlugs?: readonly string[] | null,
 ) {
   const allowedSlugs = includedSlugs ? new Set(includedSlugs) : null
+  const importedSlugSet = new Set(IMPORTED_WORKSPACE_BUSINESS_SLUGS)
 
   return Object.entries(importedCategoryEntryMeta)
+    .filter(([slug]) => importedSlugSet.has(slug as (typeof IMPORTED_WORKSPACE_BUSINESS_SLUGS)[number]))
     .filter(([slug]) => !allowedSlugs || allowedSlugs.has(slug))
     .map(([slug, meta]) => ({
     slug,

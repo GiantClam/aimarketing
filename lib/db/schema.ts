@@ -846,6 +846,117 @@ export const platformWorkflowEdges = pgTable(
   }),
 )
 
+export const enterprisePlatformCustomAgents = pgTable(
+  withPrefix("enterprise_platform_custom_agents"),
+  {
+    id: serial("id").primaryKey(),
+    enterpriseId: integer("enterprise_id")
+      .notNull()
+      .references(() => enterprises.id, { onDelete: "cascade" }),
+    ownerUserId: integer("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceAgentId: varchar("source_agent_id", { length: 128 }),
+    linkedWorkflowId: integer("linked_workflow_id").references(() => platformWorkflows.id, { onDelete: "set null" }),
+    name: varchar("name", { length: 160 }).notNull(),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    category: varchar("category", { length: 24 }).default("custom").notNull(),
+    summary: text("summary").notNull(),
+    systemPrompt: text("system_prompt").notNull(),
+    systemPromptSummary: text("system_prompt_summary"),
+    goal: text("goal"),
+    scope: text("scope"),
+    guardrails: text("guardrails"),
+    defaultOutputType: varchar("default_output_type", { length: 32 }).default("text").notNull(),
+    runtimeModelOptions: jsonb("runtime_model_options").$type<Record<string, unknown> | null>(),
+    knowledgeBindings: jsonb("knowledge_bindings").$type<number[] | null>(),
+    knowledgeRetrievalPolicy: jsonb("knowledge_retrieval_policy").$type<Record<string, unknown> | null>(),
+    toolBindings: jsonb("tool_bindings").$type<Record<string, unknown> | null>(),
+    skillBindings: jsonb("skill_bindings").$type<Record<string, unknown> | null>(),
+    mcpBindings: jsonb("mcp_bindings").$type<Record<string, unknown> | null>(),
+    artifactKinds: jsonb("artifact_kinds").$type<string[] | null>(),
+    visibility: varchar("visibility", { length: 16 }).default("private").notNull(),
+    status: varchar("status", { length: 24 }).default("draft").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    publishedAt: timestamp("published_at"),
+    archivedAt: timestamp("archived_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    enterpriseSlugUnique: uniqueIndex(withPrefix("enterprise_platform_custom_agents_enterprise_slug_idx")).on(
+      table.enterpriseId,
+      table.slug,
+    ),
+    enterpriseOwnerStatusIdx: index(withPrefix("enterprise_platform_custom_agents_enterprise_owner_status_idx")).on(
+      table.enterpriseId,
+      table.ownerUserId,
+      table.status,
+    ),
+    enterpriseUpdatedIdx: index(withPrefix("enterprise_platform_custom_agents_enterprise_updated_idx")).on(
+      table.enterpriseId,
+      table.updatedAt,
+    ),
+    linkedWorkflowIdx: index(withPrefix("enterprise_platform_custom_agents_linked_workflow_idx")).on(table.linkedWorkflowId),
+  }),
+)
+
+export const enterprisePlatformCustomAgentBusinessBindings = pgTable(
+  withPrefix("enterprise_platform_custom_agent_business_bindings"),
+  {
+    id: serial("id").primaryKey(),
+    agentId: integer("agent_id")
+      .notNull()
+      .references(() => enterprisePlatformCustomAgents.id, { onDelete: "cascade" }),
+    businessSlug: varchar("business_slug", { length: 64 }).notNull(),
+    displayPriority: integer("display_priority").default(100).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    agentBusinessUnique: uniqueIndex(withPrefix("enterprise_platform_custom_agent_business_bindings_agent_business_idx")).on(
+      table.agentId,
+      table.businessSlug,
+    ),
+    businessEnabledIdx: index(withPrefix("enterprise_platform_custom_agent_business_bindings_business_enabled_idx")).on(
+      table.businessSlug,
+      table.enabled,
+    ),
+  }),
+)
+
+export const enterprisePlatformCustomAgentWorkflowBindings = pgTable(
+  withPrefix("enterprise_platform_custom_agent_workflow_bindings"),
+  {
+    id: serial("id").primaryKey(),
+    agentId: integer("agent_id")
+      .notNull()
+      .references(() => enterprisePlatformCustomAgents.id, { onDelete: "cascade" }),
+    workflowId: integer("workflow_id")
+      .notNull()
+      .references(() => platformWorkflows.id, { onDelete: "cascade" }),
+    nodeRole: varchar("node_role", { length: 64 }).default("agent").notNull(),
+    inputSchema: jsonb("input_schema").$type<Record<string, unknown> | null>(),
+    outputSchema: jsonb("output_schema").$type<Record<string, unknown> | null>(),
+    knowledgeSourceIds: jsonb("knowledge_source_ids").$type<number[] | null>(),
+    retrievalMode: varchar("retrieval_mode", { length: 24 }),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    agentWorkflowUnique: uniqueIndex(withPrefix("enterprise_platform_custom_agent_workflow_bindings_agent_workflow_idx")).on(
+      table.agentId,
+      table.workflowId,
+    ),
+    workflowEnabledIdx: index(withPrefix("enterprise_platform_custom_agent_workflow_bindings_workflow_enabled_idx")).on(
+      table.workflowId,
+      table.enabled,
+    ),
+  }),
+)
+
 export const enterprisePlatformPluginSlots = pgTable(
   withPrefix("enterprise_platform_plugin_slots"),
   {
@@ -1186,6 +1297,54 @@ export const personalKnowledgeBases = pgTable(withPrefix("personal_knowledge_bas
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 })
+
+export const userKnowledgeDatasets = pgTable(
+  withPrefix("user_knowledge_datasets"),
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    enterpriseId: integer("enterprise_id").references(() => enterprises.id, { onDelete: "set null" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    category: varchar("category", { length: 32 }).default("general").notNull(),
+    description: text("description"),
+    enabled: boolean("enabled").default(true).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userNameUnique: uniqueIndex(withPrefix("user_knowledge_datasets_user_name_idx")).on(table.userId, table.name),
+    userUpdatedIdx: index(withPrefix("user_knowledge_datasets_user_updated_idx")).on(table.userId, table.updatedAt),
+  }),
+)
+
+export const userKnowledgeDocuments = pgTable(
+  withPrefix("user_knowledge_documents"),
+  {
+    id: serial("id").primaryKey(),
+    datasetId: integer("dataset_id")
+      .notNull()
+      .references(() => userKnowledgeDatasets.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    enterpriseId: integer("enterprise_id").references(() => enterprises.id, { onDelete: "set null" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    sourceType: varchar("source_type", { length: 24 }).default("manual").notNull(),
+    sourceUrl: text("source_url"),
+    status: varchar("status", { length: 24 }).default("ready").notNull(),
+    chunkCount: integer("chunk_count").default(0).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    datasetUpdatedIdx: index(withPrefix("user_knowledge_documents_dataset_updated_idx")).on(table.datasetId, table.updatedAt),
+    userStatusIdx: index(withPrefix("user_knowledge_documents_user_status_idx")).on(table.userId, table.status),
+  }),
+)
 
 // Template usage tracking
 export const templateUsage = pgTable(withPrefix("template_usage"), {

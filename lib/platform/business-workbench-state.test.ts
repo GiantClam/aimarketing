@@ -100,6 +100,27 @@ test("business workbench state sanitizer dedupes tabs by agent id", async () => 
   assert.equal(state.activeTabId, "tab-1")
 })
 
+test("business workbench state sanitizer accepts custom agent runtime tabs", async () => {
+  const { sanitizeBusinessWorkbenchStateInput } = await loadBusinessWorkbenchStateModule()
+  const state = sanitizeBusinessWorkbenchStateInput({
+    currentViewSlug: "content-growth",
+    activeTabId: "tab-1",
+    tabs: [
+      {
+        id: "tab-1",
+        agentId: "custom-agent:42",
+        conversationId: "conv-42",
+        draftSeed: "pipeline review",
+        workspaceVersion: 1,
+      },
+    ],
+  })
+
+  assert.equal(state.tabs.length, 1)
+  assert.equal(state.tabs[0]?.agentId, "custom-agent:42")
+  assert.equal(state.activeTabId, "tab-1")
+})
+
 test("business workbench state validation clears stale conversation ids that no longer belong to the tab agent", async () => {
   const {
     sanitizeBusinessWorkbenchStateInput,

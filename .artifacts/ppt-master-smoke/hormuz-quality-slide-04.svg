@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111111"/>
+  <g id="background">
+    <rect x="24" y="24" width="1232" height="672" rx="0" fill="#111111" stroke="#282826" stroke-width="2"/>
+    <rect x="24" y="24" width="14" height="672" fill="#E85D26"/>
+    <rect x="1048" y="24" width="208" height="672" fill="#151513" stroke="#282826" stroke-width="1.5"/>
+    <rect x="58" y="106" width="944" height="2" fill="#282826"/>
+    <rect x="58" y="614" width="944" height="2" fill="#282826"/>
+    <rect x="58" y="214" width="944" height="1.5" fill="#282826"/>
+    <rect x="58" y="490" width="944" height="1.5" fill="#282826"/>
+  </g>
+
+  <g id="chrome">
+    <text x="58" y="66" fill="#E85D26" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2">下一张告示</text>
+    <text x="105" y="668" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="3">04</text>
+    <text x="1138" y="60" fill="#F0ECE5" font-size="16" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle" letter-spacing="2">时间线 / ACTION</text>
+    <text x="1138" y="92" fill="#E85D26" font-size="12" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle" letter-spacing="2">HORMUZ • 2026.06.24</text>
+    <rect x="1078" y="122" width="120" height="2" fill="#E85D26"/>
+    <rect x="1078" y="586" width="120" height="2" fill="#E85D26"/>
+    <text x="1138" y="636" fill="#F0ECE5" font-size="13" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle" letter-spacing="2">持续扰动 ≠ 一次性事件</text>
+  </g>
+
+  <g id="content">
+    <text x="58" y="168" fill="#F0ECE5" font-size="86" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="1">现在就做</text>
+    <text x="60" y="252" fill="#F0ECE5" font-size="29" font-family="Arial, Helvetica, sans-serif" font-weight="700">把霍尔木兹当作持续扰动源，而不是一次性事件，决策节奏必须</text>
+    <text x="60" y="292" fill="#F0ECE5" font-size="29" font-family="Arial, Helvetica, sans-serif" font-weight="700">前移到“先锁定、再应变、再替代”。</text>
+
+    <rect x="72" y="350" width="858" height="6" fill="#F0ECE5"/>
+    <rect x="158" y="338" width="24" height="24" fill="#E85D26" stroke="#111111" stroke-width="2"/>
+    <rect x="455" y="338" width="24" height="24" fill="#E85D26" stroke="#111111" stroke-width="2"/>
+    <rect x="752" y="338" width="24" height="24" fill="#E85D26" stroke="#111111" stroke-width="2"/>
+
+    <rect x="82" y="382" width="190" height="170" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="98" y="416" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="2">STEP 01</text>
+    <text x="98" y="456" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">先锁船期</text>
+    <text x="98" y="494" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">优先锁定船期、</text>
+    <text x="98" y="524" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">战争险与运价</text>
+
+    <rect x="379" y="382" width="190" height="170" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="395" y="416" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="2">STEP 02</text>
+    <text x="395" y="456" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">改采购节奏</text>
+    <text x="395" y="494" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">调整采购节奏与</text>
+    <text x="395" y="524" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">安全库存</text>
+
+    <rect x="676" y="382" width="230" height="170" fill="#1A1A18" stroke="#282826" stroke-width="2"/>
+    <text x="692" y="416" fill="#E85D26" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="2">STEP 03</text>
+    <text x="692" y="456" fill="#F0ECE5" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">备替代路径</text>
+    <text x="692" y="494" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">建立绕行、管道</text>
+    <text x="692" y="524" fill="#F0ECE5" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">替代、替代港方案</text>
+
+    <text x="82" y="590" fill="#E85D26" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="1">一句话：</text>
+    <text x="188" y="590" fill="#F0ECE5" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="900">不要等“恢复正常”，要按“长期波动”运营。</text>
+  </g>
+
+  <g id="annotations">
+    <rect x="1074" y="148" width="128" height="88" fill="#E85D26"/>
+    <text x="1088" y="181" fill="#111111" font-size="18" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="1">结论</text>
+    <text x="1088" y="210" fill="#111111" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="900">前移决策</text>
+
+    <text x="1078" y="282" fill="#F0ECE5" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">航道可通，不等于</text>
+    <text x="1078" y="308" fill="#F0ECE5" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">成本回落。</text>
+
+    <text x="1078" y="360" fill="#F0ECE5" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">市场先看风险价差，</text>
+    <text x="1078" y="386" fill="#F0ECE5" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">再看物理通行。</text>
+
+    <text x="1078" y="452" fill="#E85D26" font-size="15" font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="2">OPERATE FOR DISRUPTION</text>
+    <rect x="1078" y="470" width="102" height="2" fill="#282826"/>
+    <text x="1078" y="506" fill="#F0ECE5" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">锁资源</text>
+    <text x="1078" y="532" fill="#F0ECE5" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">调节奏</text>
+    <text x="1078" y="558" fill="#F0ECE5" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">备替代</text>
+  </g>
+</svg>

@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation"
 
 import { WorkflowBuilderPage } from "@/components/workflows/workflow-builder-page"
+import { getAiEntryAgentCatalog } from "@/lib/ai-entry/agent-catalog"
 import { hasFeatureAccessWithFallback } from "@/lib/auth/guards"
 import { requireServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import { isMiniMaxAudioConfigured, listMiniMaxVoices } from "@/lib/platform/minimax-audio"
+import { listCustomAgentsForUser } from "@/lib/platform/custom-agents"
 import { listRecentWorkflowTaskRunsForEnterprise } from "@/lib/platform/task-run-store"
 import { serializeWorkflowRunDetail } from "@/lib/workflows/run-detail-serialization"
 import { getWorkflowDefinition, getWorkflowRunDetail } from "@/lib/workflows/store"
@@ -56,7 +58,7 @@ export default async function WorkflowBuilderRoutePage({
   }
   const enterpriseId = currentUser.enterpriseId
 
-  const [workflow, llmProviderCatalog, workflowImageSelection, recentWorkflowRuns, voiceOptions] = await Promise.all([
+  const [workflow, llmProviderCatalog, workflowImageSelection, recentWorkflowRuns, voiceOptions, customAgents] = await Promise.all([
     measureWorkflowBuilderPageStep(numericWorkflowId, "workflow-definition", () =>
       getWorkflowDefinition(numericWorkflowId, enterpriseId),
     ),
@@ -85,6 +87,13 @@ export default async function WorkflowBuilderRoutePage({
             .catch(() => []),
         )
       : Promise.resolve([]),
+    measureWorkflowBuilderPageStep(numericWorkflowId, "custom-agents", () =>
+      listCustomAgentsForUser({
+        enterpriseId,
+        userId: currentUser.id,
+        isEnterpriseAdmin: currentUser.enterpriseRole === "admin" && currentUser.enterpriseStatus === "active",
+      }).catch(() => []),
+    ),
   ])
 
   if (!workflow) {
@@ -158,6 +167,21 @@ export default async function WorkflowBuilderRoutePage({
         )
       }
       voiceOptions={voiceOptions}
+      builtinAgents={getAiEntryAgentCatalog().map((agent) => ({
+        id: agent.id,
+        category: agent.category,
+        name: displayLocale === "zh" ? agent.name.zh : agent.name.en,
+        description: displayLocale === "zh" ? agent.description.zh : agent.description.en,
+      }))}
+      customAgents={customAgents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        summary: agent.summary,
+        status: agent.status,
+        executionMode: agent.executionMode,
+        linkedWorkflowId: agent.linkedWorkflowId,
+        linkedWorkflowTitle: agent.linkedWorkflowTitle,
+      }))}
       initialLatestRunDetail={
         serializedLatestRunDetail
           ? {

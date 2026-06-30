@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionUser } from "@/lib/auth/session"
-import { createKnowledgeDataset, listKnowledgeDatasetsSnapshot } from "@/lib/knowledge/service"
+import {
+  createKnowledgeDataset,
+  listKnowledgeDatasetsGovernanceSnapshot,
+  listKnowledgeDatasetsSnapshot,
+} from "@/lib/knowledge/service"
 import type { KnowledgeScope } from "@/lib/knowledge/types"
 
 export const runtime = "nodejs"
@@ -26,7 +30,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "enterprise_context_required" }, { status: 403 })
     }
 
-    const datasets = await listKnowledgeDatasetsSnapshot(currentUser.enterpriseId)
+    const includeBindings = request.nextUrl?.searchParams?.get("includeBindings") === "1"
+    const datasets = includeBindings
+      ? await listKnowledgeDatasetsGovernanceSnapshot(currentUser.enterpriseId)
+      : await listKnowledgeDatasetsSnapshot(currentUser.enterpriseId)
     return NextResponse.json({ data: { items: datasets } })
   } catch (error) {
     return NextResponse.json(

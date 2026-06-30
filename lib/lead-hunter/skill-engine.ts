@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
-import { loadEnterpriseKnowledgeContext } from "@/lib/knowledge/service"
 import type { EnterpriseKnowledgeContext } from "@/lib/knowledge/types"
 import { generateTextWithWriterModel } from "@/lib/writer/aiberm"
 import type { LeadHunterEvidenceItem } from "@/lib/lead-hunter/evidence-types"
@@ -94,6 +93,18 @@ type SearchCacheEntry = {
 
 const SEARCH_QUERY_CACHE = new Map<string, SearchCacheEntry>()
 let SKILL_GUIDE_CACHE: string | null | undefined
+
+async function loadLeadHunterEnterpriseKnowledgeContext(params: {
+  enterpriseId: number
+  query: string
+  queryVariants?: string[]
+  preferredScopes?: string[]
+  platform: string
+  mode: string
+}) {
+  const { loadEnterpriseKnowledgeContext } = await import("@/lib/knowledge/service")
+  return loadEnterpriseKnowledgeContext(params)
+}
 
 function sanitizeAssistantContent(raw: string) {
   return raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
@@ -994,7 +1005,7 @@ export async function runLeadHunterSkillConversation(input: LeadHunterSkillRunIn
     ? (async () => {
         await emit({ event: "node_started", data: { node_name: "enterprise_knowledge_retrieval" } })
         try {
-          const context = await loadEnterpriseKnowledgeContext({
+          const context = await loadLeadHunterEnterpriseKnowledgeContext({
             enterpriseId: input.enterpriseId as number,
             query: input.query,
             queryVariants: buildEnterpriseKnowledgeQueryVariants(input.query, companyName),
@@ -1171,4 +1182,3 @@ export function createLeadHunterSkillSseStream(input: LeadHunterSkillRunInput) {
 
   return { stream, done }
 }
-

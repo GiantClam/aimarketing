@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <g id="background">
+    <rect width="1280" height="720" fill="#111111"/>
+    <rect x="0" y="0" width="1280" height="8" fill="#E85D26"/>
+    <rect x="0" y="712" width="1280" height="8" fill="#E85D26"/>
+  </g>
+  
+  <g id="chrome">
+    <rect x="40" y="40" width="200" height="4" fill="#E85D26"/>
+    <text x="40" y="80" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#E85D26">核心宣言</text>
+    <text x="40" y="105" font-family="Arial, sans-serif" font-size="14" fill="#F0ECE5" opacity="0.6">第3页 / 共4页</text>
+    
+    <rect x="1080" y="40" width="160" height="36" fill="#E85D26"/>
+    <text x="1095" y="64" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#111111">洞察页</text>
+  </g>
+  
+  <g id="content">
+    <g id="main-statement">
+      <text x="640" y="200" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#F0ECE5" text-anchor="middle">核心判断</text>
+      
+      <text x="640" y="300" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E85D26" text-anchor="middle">航运恢复≠供给链恢复</text>
+      
+      <rect x="240" y="330" width="800" height="4" fill="#282826"/>
+    </g>
+    
+    <g id="context-panel">
+      <rect x="120" y="380" width="440" height="180" fill="#1A1A18"/>
+      <rect x="120" y="380" width="440" height="180" fill="none" stroke="#282826" stroke-width="2"/>
+      
+      <text x="160" y="420" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5" opacity="0.7">当前局势</text>
+      
+      <text x="160" y="460" font-family="Arial, sans-serif" font-size="24" fill="#F0ECE5">截至2026年6月24日</text>
+      <text x="160" y="500" font-family="Arial, sans-serif" font-size="24" fill="#F0ECE5">霍尔木兹海峡重启通航</text>
+      <text x="160" y="540" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#E85D26">但...</text>
+    </g>
+    
+    <g id="insight-pillars">
+      <rect x="620" y="380" width="520" height="180" fill="#1A1A18"/>
+      <rect x="620" y="380" width="520" height="180" fill="none" stroke="#282826" stroke-width="2"/>
+      
+      <text x="660" y="420" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5" opacity="0.7">三大管理挑战</text>
+      
+      <g id="pillar-1">
+        <circle cx="690" cy="470" r="12" fill="#E85D26"/>
+        <text x="715" y="476" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">风险管理体系重构</text>
+      </g>
+      
+      <g id="pillar-2">
+        <circle cx="690" cy="510" r="12" fill="#E85D26"/>
+        <text x="715" y="516" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">供应链韧性重建</text>
+      </g>
+      
+      <g id="pillar-3">
+        <circle cx="690" cy="550" r="12" fill="#E85D26"/>
+        <text x="715" y="556" font-family="Arial, sans-serif" font-size="20" fill="#F0ECE5">备用航线预案</text>
+      </g>
+    </g>
+    
+    <g id="call-to-action">
+      <rect x="120" y="600" width="1020" height="60" fill="#E85D26"/>
+      <text x="640" y="640" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#111111" text-anchor="middle">管理层需放弃"等风平浪静"思维</text>
+    </g>
+  </g>
+  
+  <g id="annotations">
+    <text x="1240" y="700" font-family="Arial, sans-serif" font-size="12" fill="#F0ECE5" opacity="0.4" text-anchor="end">霍尔木兹海峡能源运输分析</text>
+  </g>
+</svg>

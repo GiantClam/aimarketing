@@ -29,6 +29,7 @@ import { localizePublicPath } from "@/lib/i18n/routing"
 import { listLocalizedBusinessAgentConfigsBySlug } from "@/lib/platform/business-agents"
 import { getLocalizedPlatformHubLinks } from "@/lib/platform/catalog"
 import type { PlatformRegistryControlEntry } from "@/lib/platform/control-plane"
+import type { PlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
 import {
   buildDashboardBusinessHref,
   getLocalizedWorkspaceBusinessEntries,
@@ -200,13 +201,18 @@ function getProviderStatusLabel(status: "active" | "fallback" | "planned", local
 export function WorkspacePlatformHome({
   locale,
   capabilities,
+  workflowTemplates,
 }: {
   locale: AppLocale
   capabilities: PlatformRegistryControlEntry[]
+  workflowTemplates: PlatformRegistryEntryExecutionState[]
 }) {
   const displayLocale = locale === "zh" ? "zh" : "en"
   const hubs = getLocalizedPlatformHubLinks(locale)
   const businessEntries = getLocalizedWorkspaceBusinessEntries(locale)
+  const featuredWorkflowTemplates = workflowTemplates
+    .filter((item) => item.enabled && item.workspaceVisible)
+    .slice(0, 4)
 
   const copy =
     displayLocale === "zh"
@@ -215,6 +221,9 @@ export function WorkspacePlatformHome({
           title: "ENTERPRISE WORKSPACE FRONT DOOR",
           description:
             "把 AI、PPT、图片、视频、智能体、插件、MCP 和工作流放回同一个工作台首页，避免继续从单页功能入口开始跳转。",
+          templatesTitle: "业务工作流模板",
+          templatesDescription:
+            "先从可复用业务流程启动，再进入 Builder、知识、素材和具体能力页面，避免团队继续从单点工具拼装流程。",
           businessTitle: "业务视角入口",
           businessDescription:
             "先按业务目标进入工作台，再决定落到 AI、Writer、Image、Video、Knowledge、Billing 还是平台治理页面。",
@@ -227,6 +236,7 @@ export function WorkspacePlatformHome({
           expertTitle: "专家工作台示例",
           expertDescription: "用一个成交专家工作台示例页，统一角色说明、示例问题、输入区、历史占位和输出动作结构。",
           openWorkspace: "OPEN VIEW",
+          openTemplate: "START FLOW",
           viewPublic: "查看公共入口",
           openBusiness: "OPEN VIEW",
           openExpert: "查看专家工作台",
@@ -236,6 +246,9 @@ export function WorkspacePlatformHome({
           title: "ENTERPRISE WORKSPACE FRONT DOOR",
           description:
             "Put AI, PPT, image, video, agents, plugins, MCP, and workflows back onto one workspace homepage.",
+          templatesTitle: "Business workflow templates",
+          templatesDescription:
+            "Start from reusable business flows first, then move into Builder, knowledge, asset, and capability surfaces as needed.",
           businessTitle: "Business entry layer",
           businessDescription:
             "Start from a business objective first, then land into AI, Writer, Image, Video, Knowledge, Billing, or governance routes as needed.",
@@ -249,6 +262,7 @@ export function WorkspacePlatformHome({
           expertDescription:
             "Use one closing-expert example page to standardize role framing, sample prompts, input, history placeholders, and output actions.",
           openWorkspace: "OPEN VIEW",
+          openTemplate: "START FLOW",
           viewPublic: "View Public Entry",
           openBusiness: "OPEN VIEW",
           openExpert: "View expert workbench",
@@ -284,6 +298,73 @@ export function WorkspacePlatformHome({
           </div>
 
           <div className="space-y-4">
+            <div>
+              <div className="dashboard-kicker text-muted-foreground">{copy.templatesTitle}</div>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground">{copy.templatesDescription}</p>
+            </div>
+
+            {featuredWorkflowTemplates.length > 0 ? (
+              <div className="grid gap-6 xl:grid-cols-2">
+                {featuredWorkflowTemplates.map((template) => {
+                  const metric = directoryMetrics.workflows ?? fallbackMetric
+                  const targetHref = template.workspaceLaunchPath || template.workspaceHref || "/dashboard/workflows"
+
+                  return (
+                    <article key={template.slug} className="workspace-command-card">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="workspace-icon-block">
+                          <Workflow className="h-7 w-7 stroke-[2]" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="dashboard-kicker text-muted-foreground">WORKFLOW TEMPLATE</div>
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                        </div>
+                      </div>
+
+                      <h2 className="mt-5 font-display text-3xl font-extrabold uppercase leading-none text-foreground">
+                        {template.title}
+                      </h2>
+                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{template.summary}</p>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {[template.label, ...template.notes.slice(0, 2)].filter(Boolean).map((item) => (
+                          <div key={`${template.slug}-${item}`} className="workspace-card-chip">
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-auto flex flex-col gap-4 pt-6 sm:flex-row sm:items-end sm:justify-between">
+                        <WorkspaceCardAction href={targetHref} label={copy.openTemplate} />
+                        <MetricModule metric={metric} />
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            ) : (
+              <article className="workspace-command-card">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="workspace-icon-block">
+                    <Workflow className="h-7 w-7 stroke-[2]" />
+                  </div>
+                  <div className="dashboard-kicker text-muted-foreground">WORKFLOW TEMPLATE</div>
+                </div>
+                <h2 className="mt-5 font-display text-3xl font-extrabold uppercase leading-none text-foreground">
+                  {displayLocale === "zh" ? "工作流模板入口" : "Workflow template entry"}
+                </h2>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+                  {displayLocale === "zh"
+                    ? "当前企业还没有开启可见模板，先进入工作流页查看平台模板和企业自定义模板。"
+                    : "No visible workflow templates are enabled for this enterprise yet. Open the workflows surface to inspect platform and enterprise templates."}
+                </p>
+                <div className="mt-auto flex flex-col gap-4 pt-6 sm:flex-row sm:items-end sm:justify-between">
+                  <WorkspaceCardAction href="/dashboard/workflows" label={copy.openTemplate} />
+                  <MetricModule metric={directoryMetrics.workflows ?? fallbackMetric} />
+                </div>
+              </article>
+            )}
+
             <div className="grid gap-6 xl:grid-cols-3">
               {businessEntries.map((entry) => {
                 const Icon = businessIcons[entry.iconKey]

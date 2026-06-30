@@ -5,6 +5,7 @@ import { platformTaskRuns } from "@/lib/db/schema"
 import { getUserAuthPayload } from "@/lib/enterprise/server"
 import { getPlatformTaskRun, appendPlatformRunEvent } from "@/lib/platform/task-run-store"
 import { updatePlatformWorkflowRun } from "@/lib/platform/workflow-runner"
+import type { WorkflowNodeInputBundle } from "@/lib/workflows/node-executors"
 import { executeWorkflowRetryJob, executeWorkflowRunJob } from "@/lib/workflows/run-job"
 import {
   cloneNormalizedResult,
@@ -54,6 +55,14 @@ const WORKFLOW_STALE_RUNNING_MS = Math.max(
       Math.max(configuredCapabilityTimeoutMs || 0, configuredVideoTimeoutMs || 0, DEFAULT_WORKFLOW_STALE_RUNNING_MS),
   ),
 )
+
+function buildSeedInputFromRunInputPayload(inputPayload: Record<string, unknown> | null | undefined): Partial<WorkflowNodeInputBundle> | undefined {
+  const prompt = typeof inputPayload?.prompt === "string" ? inputPayload.prompt.trim() : ""
+  if (!prompt) return undefined
+  return {
+    text: [prompt],
+  }
+}
 
 function buildExistingNodeStates(detail: WorkflowRunDetail) {
   return Object.fromEntries(
@@ -208,6 +217,7 @@ function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
 
     const pendingRetry = parseWorkflowRetryRequest(hydratedRun.normalizedResult)
     const previousNormalizedResult = stripWorkflowRetryRequest(hydratedRun.normalizedResult)
+    const seedInput = buildSeedInputFromRunInputPayload(hydratedRun.inputPayload)
     const heartbeatTimer = setInterval(() => {
       void touchWorkflowRun(runId).catch(() => {})
     }, WORKFLOW_RUN_HEARTBEAT_MS)
@@ -218,6 +228,7 @@ function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
           runId,
           workflow: detail.workflow,
           currentUser,
+          seedInput,
           existingNodeStates: buildExistingNodeStates(detail),
           mode: pendingRetry.mode,
           nodeKey: pendingRetry.nodeKey,
@@ -232,6 +243,7 @@ function executeTrackedWorkflowRun(runId: number, requestOrigin: string) {
         runId,
         workflow: detail.workflow,
         currentUser,
+        seedInput,
         locale: "zh",
         requestOrigin,
       })

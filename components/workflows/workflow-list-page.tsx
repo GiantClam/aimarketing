@@ -19,9 +19,12 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { DashboardFilterToolbar } from "@/components/ui/dashboard-filter-toolbar"
+import { listEnterpriseWorkflowPresets } from "@/lib/workflows/presets"
+import { getWorkflowTemplatePresentation } from "@/lib/workflows/template-definitions"
 import { cn } from "@/lib/utils"
 import type { WorkflowDefinition } from "@/lib/workflows/store"
 import { resolveWorkflowNodeTitle, type WorkflowDefinitionNode, type WorkflowNodeType } from "@/lib/workflows/schema"
+import type { PlatformRegistryEntryExecutionState } from "@/lib/platform/registry-entry-execution"
 
 type WorkflowListDefinition = Omit<WorkflowDefinition, "createdAt" | "updatedAt"> & {
   createdAt: string
@@ -43,6 +46,33 @@ type WorkflowNodePreviewItem = {
   label: string
   tone: WorkflowNodePreviewTone
 }
+
+type WorkflowRunDetailSnapshot = {
+  workflow: {
+    title: string
+    description: string | null
+    metadata: Record<string, unknown> | null
+    nodes: WorkflowDefinition["nodes"]
+    edges: WorkflowDefinition["edges"]
+  }
+}
+
+type WorkflowTemplateItem = Pick<
+  PlatformRegistryEntryExecutionState,
+  | "slug"
+  | "status"
+  | "title"
+  | "summary"
+  | "bindingTarget"
+  | "runtimeStatus"
+  | "accessState"
+  | "workspaceHref"
+  | "publicHref"
+  | "workspaceLaunchPath"
+  | "publicLaunchPath"
+  | "label"
+  | "notes"
+>
 
 const WORKFLOW_CARDS_PER_PAGE = 6
 const RECENT_RUNS_PER_PAGE = 10
@@ -100,11 +130,23 @@ function formatDuration(createdAt: string | null, finishedAt: string | null, loc
   return locale === "zh" ? `${hours} 小时 ${remainingMinutes} 分` : `${hours}h ${remainingMinutes}m`
 }
 
-function getWorkflowStatusMeta(status: WorkflowDefinition["status"], locale: "zh" | "en") {
+function getWorkflowStatusMeta(status: WorkflowDefinition["status"] | "beta" | "planned", locale: "zh" | "en") {
   if (status === "live") {
     return {
       label: locale === "zh" ? "已启用" : "Live",
       className: "border-[#ccefd7] bg-[#eefaf2] text-[#168449]",
+    }
+  }
+  if (status === "beta") {
+    return {
+      label: locale === "zh" ? "测试中" : "Beta",
+      className: "border-[#d8c9ff] bg-[#f2ecff] text-[#6846d6]",
+    }
+  }
+  if (status === "planned") {
+    return {
+      label: locale === "zh" ? "已规划" : "Planned",
+      className: "border-[#e8d474] bg-[#fff7d6] text-[#9a7900]",
     }
   }
   if (status === "archived") {
@@ -182,6 +224,17 @@ function buildWorkflowNodePreview(nodes: WorkflowDefinitionNode[], locale: "zh" 
   return preview
 }
 
+function listWorkflowQualityGates(metadata: Record<string, unknown> | null | undefined) {
+  if (!metadata || typeof metadata !== "object" || !Array.isArray(metadata.qualityGates)) return []
+  return [
+    ...new Set(
+      metadata.qualityGates
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim()),
+    ),
+  ]
+}
+
 function WorkflowMetricCard({
   icon: Icon,
   label,
@@ -198,7 +251,7 @@ function WorkflowMetricCard({
   return (
     <article className="rounded-2xl border border-[#e7e7df] bg-white p-5 shadow-[0_10px_28px_rgba(0,0,0,0.055)]">
       <div className="flex items-start gap-4">
-        <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[10px] bg-[#f5ef3d] text-[#111]">
+        <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
@@ -307,7 +360,7 @@ function WorkflowPagination({
             className={cn(
               "h-9 min-w-9 rounded-[8px] px-3 text-sm font-black",
               page === currentPage
-                ? "bg-[#f5ef3d] text-[#111]"
+                ? "bg-primary text-primary-foreground"
                 : "border border-[#deded6] bg-white text-[#111]",
             )}
             onClick={() => onPageChange(page)}
@@ -331,18 +384,24 @@ function WorkflowPagination({
 export function WorkflowListPage({
   locale,
   initialWorkflows,
+  initialTemplates,
   recentRuns,
   currentUserName,
 }: {
   locale: "zh" | "en"
   initialWorkflows: WorkflowListDefinition[]
+  initialTemplates: WorkflowTemplateItem[]
   recentRuns: WorkflowListRunItem[]
   currentUserName: string
 }) {
   const router = useRouter()
   const [workflows, setWorkflows] = useState(initialWorkflows)
+  const [templates] = useState(initialTemplates)
   const [submitting, setSubmitting] = useState(false)
+  const [instantiatingTemplateSlug, setInstantiatingTemplateSlug] = useState<string | null>(null)
   const [duplicatingWorkflowId, setDuplicatingWorkflowId] = useState<number | null>(null)
+  const [duplicatingRunId, setDuplicatingRunId] = useState<number | null>(null)
+  const [deletingWorkflowId, setDeletingWorkflowId] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [runsPage, setRunsPage] = useState(1)
@@ -356,11 +415,24 @@ export function WorkflowListPage({
           eyebrow: "Workflow Builder",
           title: "工作流",
           description:
-            "把上传、文案、图片、视频和 PPT 生产链保存为可复用工作流资产，在同一页面里管理卡片、快速打开 Builder，并追踪最近运行结果。",
+            "把工作流模板与已保存 workflow definitions 收敛到同一入口，先按模板启动业务流程，再进入 Builder 维护可编辑的执行链与最近运行记录。",
           createWorkflow: "创建工作流",
           createBuilder: "创建并进入 Builder",
           createPending: "创建中...",
           viewRunHistory: "查看运行记录",
+          templatesEyebrow: "Workflow Templates",
+          templatesTitle: "工作流模板",
+          templatesDescription: "企业工作流模板来自平台目录，适合作为业务启动入口；已保存 workflow 则继续承担 Builder 可编辑流程图。",
+          templateOpenWorkspace: "在 Workflow 中打开",
+          templateCreateAction: "从模板创建",
+          templateCreatePending: "创建中...",
+          templateViewPublic: "查看公共页",
+          templateBindingTarget: "绑定目标",
+          templateInputs: "输入",
+          templateFlow: "流程",
+          templateOutputs: "输出",
+          templateTeams: "适用团队",
+          noTemplates: "当前企业还没有可见的工作流模板，请先在平台目录或企业模板配置中开启。",
           metricsTotal: "工作流总数",
           metricsActive: "启用中的工作流",
           metricsSucceeded: "近 7 天成功运行",
@@ -384,6 +456,10 @@ export function WorkflowListPage({
           openAction: "打开",
           duplicateAction: "复制",
           duplicatePending: "复制中...",
+          deleteAction: "删除",
+          deletePending: "删除中...",
+          duplicateFromRunAction: "从运行复制",
+          duplicateFromRunPending: "复制运行中...",
           viewRunsAction: "查看运行",
           moreAction: "更多",
           noWorkflows: "当前企业还没有保存任何工作流，先创建第一条可复用链路。",
@@ -415,16 +491,32 @@ export function WorkflowListPage({
           defaultWorkflowTitle: "未命名工作流",
           duplicatedSuffix: "副本",
           noRunsForWorkflow: "暂无运行",
+          qualityGateCount: "质量门",
+          reviewRuleCount: "审查规则",
+          knowledgeNodes: "知识节点",
         }
       : {
           eyebrow: "Workflow Builder",
           title: "WORKFLOWS",
           description:
-            "Save repeatable upload, copy, image, video, and PPT production chains as reusable workflow assets, then manage cards and recent execution from one console.",
+            "Bring workflow templates and saved workflow definitions into one surface so teams can launch a reusable business flow first, then maintain editable builder chains and recent runs.",
           createWorkflow: "Create workflow",
           createBuilder: "Create and open builder",
           createPending: "Creating...",
           viewRunHistory: "View run history",
+          templatesEyebrow: "Workflow Templates",
+          templatesTitle: "WORKFLOW TEMPLATES",
+          templatesDescription: "Enterprise workflow templates come from the shared platform directory, while saved workflows remain the editable builder definitions.",
+          templateOpenWorkspace: "Open in workflows",
+          templateCreateAction: "Create from template",
+          templateCreatePending: "Creating...",
+          templateViewPublic: "View public page",
+          templateBindingTarget: "Binding target",
+          templateInputs: "Inputs",
+          templateFlow: "Flow",
+          templateOutputs: "Outputs",
+          templateTeams: "Teams",
+          noTemplates: "No workflow templates are currently visible for this enterprise. Enable them in the platform directory or enterprise template studio first.",
           metricsTotal: "Total workflows",
           metricsActive: "Active workflows",
           metricsSucceeded: "Successful runs (7d)",
@@ -448,6 +540,10 @@ export function WorkflowListPage({
           openAction: "Open",
           duplicateAction: "Duplicate",
           duplicatePending: "Duplicating...",
+          deleteAction: "Delete",
+          deletePending: "Deleting...",
+          duplicateFromRunAction: "Copy from run",
+          duplicateFromRunPending: "Copying run...",
           viewRunsAction: "View runs",
           moreAction: "More",
           noWorkflows: "No workflows have been saved for this enterprise yet. Create the first reusable production chain.",
@@ -479,9 +575,26 @@ export function WorkflowListPage({
           defaultWorkflowTitle: "Untitled workflow",
           duplicatedSuffix: "Copy",
           noRunsForWorkflow: "No runs yet",
+          qualityGateCount: "Quality gates",
+          reviewRuleCount: "Review rules",
+          knowledgeNodes: "Knowledge nodes",
         }
 
   const workflowMap = useMemo(() => new Map(workflows.map((workflow) => [workflow.id, workflow])), [workflows])
+  const templatePresentationMap = useMemo(
+    () =>
+      new Map(
+        templates.map((template) => [
+          template.slug,
+          getWorkflowTemplatePresentation({
+            locale,
+            slug: template.slug,
+            bindingTarget: template.bindingTarget,
+          }),
+        ]),
+      ),
+    [locale, templates],
+  )
 
   const latestRunsByWorkflowId = useMemo(() => {
     const map = new Map<number, WorkflowListRunItem>()
@@ -625,6 +738,102 @@ export function WorkflowListPage({
     }
   }
 
+  async function handleCreateFromTemplate(template: WorkflowTemplateItem) {
+    setInstantiatingTemplateSlug(template.slug)
+    setErrorMessage("")
+
+    try {
+      const response = await fetch(`/api/workflow-templates/${template.slug}/instantiate?locale=${locale}`, {
+        method: "POST",
+        credentials: "same-origin",
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.data) {
+        throw new Error(typeof result?.error === "string" ? result.error : "workflow_template_instantiate_failed")
+      }
+
+      const created = result.data as WorkflowDefinition
+      const normalized = {
+        ...created,
+        createdAt: new Date(created.createdAt).toISOString(),
+        updatedAt: new Date(created.updatedAt).toISOString(),
+      } satisfies WorkflowListDefinition
+      setWorkflows((current) => [normalized, ...current])
+      setCurrentPage(1)
+      router.push(`/dashboard/workflows/${normalized.id}`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "workflow_template_instantiate_failed")
+    } finally {
+      setInstantiatingTemplateSlug(null)
+    }
+  }
+
+  async function handleDeleteWorkflow(workflow: WorkflowListDefinition) {
+    const confirmed =
+      typeof window === "undefined"
+        ? false
+        : window.confirm(
+            locale === "zh"
+              ? `确认删除工作流「${workflow.title}」？此操作不可撤销。`
+              : `Delete workflow "${workflow.title}"? This cannot be undone.`,
+          )
+    if (!confirmed) return
+
+    setDeletingWorkflowId(workflow.id)
+    setErrorMessage("")
+
+    try {
+      const response = await fetch(`/api/workflows/${workflow.id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(typeof result?.error === "string" ? result.error : "workflow_delete_failed")
+      }
+
+      setWorkflows((current) => current.filter((item) => item.id !== workflow.id))
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "workflow_delete_failed")
+    } finally {
+      setDeletingWorkflowId(null)
+    }
+  }
+
+  async function handleCreateFromRun(run: WorkflowListRunItem) {
+    setDuplicatingRunId(run.id)
+    setErrorMessage("")
+
+    try {
+      const response = await fetch(`/api/workflows/runs/${run.id}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      })
+      const result = (await response.json().catch(() => null)) as
+        | { data?: WorkflowRunDetailSnapshot; error?: string }
+        | null
+      if (!response.ok || !result?.data?.workflow) {
+        throw new Error(typeof result?.error === "string" ? result.error : "workflow_run_detail_failed")
+      }
+
+      const snapshot = result.data.workflow
+      const created = await createWorkflow({
+        title: `${snapshot.title} ${copy.duplicatedSuffix}`,
+        description: snapshot.description,
+        nodes: snapshot.nodes,
+        edges: snapshot.edges,
+        metadata: snapshot.metadata,
+      })
+      setWorkflows((current) => [created, ...current])
+      setCurrentPage(1)
+      router.push(`/dashboard/workflows/${created.id}`)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "workflow_duplicate_failed")
+    } finally {
+      setDuplicatingRunId(null)
+    }
+  }
+
   const runsStart = filteredRuns.length === 0 ? 0 : (runsPage - 1) * RECENT_RUNS_PER_PAGE + 1
   const runsEnd = Math.min(filteredRuns.length, runsPage * RECENT_RUNS_PER_PAGE)
 
@@ -653,7 +862,7 @@ export function WorkflowListPage({
                 </Link>
               </Button>
               <Button
-                className="h-11 rounded-[9px] border border-[#ded735] bg-[#f5ef3d] px-[22px] text-sm font-black text-[#111] hover:bg-[#f5ef3d]/90"
+                className="h-11 rounded-[9px] border border-primary/50 bg-primary px-[22px] text-sm font-black text-[#111] hover:bg-primary/90"
                 onClick={() => void handleCreate()}
                 disabled={submitting}
                 data-agent-new-workflow
@@ -694,14 +903,14 @@ export function WorkflowListPage({
                   }}
                 />
                 <div className="relative flex h-full flex-col">
-                  <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[14px] bg-[#f5ef3d] text-[#111]">
+                  <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[14px] bg-primary text-primary-foreground">
                     <Plus className="h-8 w-8" />
                   </div>
                   <h3 className="mt-6 font-display text-[30px] font-black uppercase leading-none text-[#111]">{copy.createTitle}</h3>
                   <p className="mt-4 max-w-[28rem] text-sm leading-6 text-[#666]">{copy.createDescription}</p>
                   <div className="mt-auto pt-8">
                     <Button
-                      className="h-[46px] w-full rounded-[9px] border border-[#ded735] bg-[#f5ef3d] text-sm font-black text-[#111] hover:bg-[#f5ef3d]/90"
+                      className="h-[46px] w-full rounded-[9px] border border-primary/50 bg-primary text-sm font-black text-[#111] hover:bg-primary/90"
                       onClick={() => void handleCreate()}
                       disabled={submitting}
                       data-agent-new-workflow
@@ -717,6 +926,11 @@ export function WorkflowListPage({
                 const latestRun = latestRunsByWorkflowId.get(workflow.id)
                 const nodePreview = buildWorkflowNodePreview(workflow.nodes, locale)
                 const hasDescription = Boolean(workflow.description && workflow.description.trim())
+                const qualityGates = listWorkflowQualityGates(workflow.metadata)
+                const defaultPreset =
+                  listEnterpriseWorkflowPresets(workflow.metadata, locale).find((preset) => preset.isDefault) ?? null
+                const knowledgeReadNodeCount = workflow.nodes.filter((node) => node.type === "knowledge_retrieve").length
+                const knowledgeWriteNodeCount = workflow.nodes.filter((node) => node.type === "knowledge_write").length
 
                 return (
                   <article
@@ -755,9 +969,21 @@ export function WorkflowListPage({
                       </div>
                     </div>
 
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                        {copy.qualityGateCount}: {qualityGates.length}
+                      </span>
+                      <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                        {copy.reviewRuleCount}: {defaultPreset?.reviewRules.length ?? 0}
+                      </span>
+                      <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                        {copy.knowledgeNodes}: {knowledgeReadNodeCount}/{knowledgeWriteNodeCount}
+                      </span>
+                    </div>
+
                     <div className="mt-6 flex flex-wrap items-center gap-2">
                       <Button
-                        className="h-[42px] rounded-[9px] border border-[#ded735] bg-[#f5ef3d] px-[22px] text-sm font-black text-[#111] hover:bg-[#f5ef3d]/90"
+                        className="h-[42px] rounded-[9px] border border-primary/50 bg-primary px-[22px] text-sm font-black text-[#111] hover:bg-primary/90"
                         asChild
                       >
                         <Link href={`/dashboard/workflows/${workflow.id}`}>{copy.openAction}</Link>
@@ -773,6 +999,14 @@ export function WorkflowListPage({
                       <Link href={latestRun ? `/dashboard/workflows/runs/${latestRun.id}` : `/dashboard/workflows/${workflow.id}`} className="h-10 px-[14px] text-sm font-extrabold text-[#111]">
                         {latestRun ? copy.viewRunsAction : copy.noRunsForWorkflow}
                       </Link>
+                      <button
+                        type="button"
+                        className="h-10 px-[14px] text-sm font-extrabold text-[#d93025]"
+                        onClick={() => void handleDeleteWorkflow(workflow)}
+                        disabled={deletingWorkflowId === workflow.id}
+                      >
+                        {deletingWorkflowId === workflow.id ? copy.deletePending : copy.deleteAction}
+                      </button>
                       <Link
                         href={`/dashboard/workflows/${workflow.id}`}
                         className="ml-auto flex h-10 w-10 items-center justify-center rounded-[9px] text-[#111] hover:bg-[#f7f7f2]"
@@ -795,6 +1029,143 @@ export function WorkflowListPage({
             <div className="mt-6">
               <WorkflowPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>
+          </section>
+
+          <section className="rounded-[18px] border border-[#e7e7df] bg-white p-6 shadow-[0_14px_34px_rgba(0,0,0,0.06)]">
+            <div className="flex flex-col gap-3 border-b border-[#efefe7] pb-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#777]">{copy.templatesEyebrow}</div>
+                <h2 className="mt-2 font-display text-2xl font-black uppercase leading-none text-[#111]">{copy.templatesTitle}</h2>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-[#666]">{copy.templatesDescription}</p>
+              </div>
+              <div className="text-sm font-semibold text-[#666]">{templates.length}</div>
+            </div>
+
+            {templates.length === 0 ? (
+              <div className="mt-5 rounded-2xl border border-dashed border-[#d9d9d0] bg-[#fafaf7] px-5 py-6 text-sm text-[#666]">
+                {copy.noTemplates}
+              </div>
+            ) : (
+              <div className="mt-6 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+                {templates.map((template) => {
+                  const status = getWorkflowStatusMeta(template.status, locale)
+                  const presentation = templatePresentationMap.get(template.slug) || null
+                  const publicHref = template.publicHref
+
+                  return (
+                    <article
+                      key={template.slug}
+                      className="min-h-[260px] rounded-2xl border border-[#e7e7df] bg-white p-7 shadow-[0_10px_28px_rgba(0,0,0,0.045)]"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h3 className="truncate font-display text-[28px] font-black uppercase leading-none text-[#111]">
+                            {template.title}
+                          </h3>
+                          <div className="mt-3 text-sm text-[#666]">{template.label}</div>
+                        </div>
+                        <WorkflowStatusBadge label={status.label} className={status.className} />
+                      </div>
+
+                      <p className="mt-4 min-h-[44px] text-sm leading-6 text-[#666]">{template.summary}</p>
+
+                      {presentation ? (
+                        <div className="mt-5 grid gap-3 md:grid-cols-2">
+                          <div className="rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
+                            <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateInputs}</div>
+                            <div className="mt-2 text-sm font-semibold text-[#111]">
+                              {presentation.inputFields.map((field) => field.label).join(" · ")}
+                            </div>
+                          </div>
+                          <div className="rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
+                            <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateOutputs}</div>
+                            <div className="mt-2 text-sm font-semibold text-[#111]">
+                              {presentation.outputs.slice(0, 3).join(" · ")}
+                            </div>
+                          </div>
+                          <div className="rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3 md:col-span-2">
+                            <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateFlow}</div>
+                            <div className="mt-2 text-sm font-semibold text-[#111]">
+                              {presentation.steps.slice(0, 4).join(" → ")}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-5 rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
+                          <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateBindingTarget}</div>
+                          <div className="mt-2 text-sm font-semibold text-[#111]">{template.bindingTarget}</div>
+                        </div>
+                      )}
+
+                      {template.notes.length > 0 ? (
+                        <div className="mt-5 flex flex-wrap gap-2">
+                          {template.notes.slice(0, 3).map((note) => (
+                            <span key={note} className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                              {note}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {presentation?.suitableTeams.length ? (
+                        <div className="mt-5">
+                          <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.templateTeams}</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {presentation.suitableTeams.map((team) => (
+                              <span key={team} className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                                {team}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {presentation?.qualityGates.length ? (
+                        <div className="mt-5">
+                          <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.qualityGateCount}</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {presentation.qualityGates.slice(0, 3).map((gate) => (
+                              <span key={gate} className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                                {gate}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-6 flex flex-wrap items-center gap-2">
+                        <Button
+                          className="h-[42px] rounded-[9px] border border-primary/50 bg-primary px-[22px] text-sm font-black text-[#111] hover:bg-primary/90"
+                          onClick={() => void handleCreateFromTemplate(template)}
+                          disabled={instantiatingTemplateSlug === template.slug}
+                        >
+                          {instantiatingTemplateSlug === template.slug ? copy.templateCreatePending : copy.templateCreateAction}
+                        </Button>
+                        {template.workspaceLaunchPath || template.workspaceHref ? (
+                          <Button
+                            variant="outline"
+                            className="h-[42px] rounded-[9px] border-[#deded6] bg-white px-[18px] text-sm font-extrabold text-[#111]"
+                            onClick={() => void handleCreateFromTemplate(template)}
+                            disabled={instantiatingTemplateSlug === template.slug}
+                          >
+                            {instantiatingTemplateSlug === template.slug ? copy.templateCreatePending : copy.templateOpenWorkspace}
+                          </Button>
+                        ) : null}
+                        {publicHref ? (
+                          <Button
+                            variant="outline"
+                            className="h-[42px] rounded-[9px] border-[#deded6] bg-white px-[18px] text-sm font-extrabold text-[#111]"
+                            asChild
+                          >
+                            <Link href={publicHref}>{copy.templateViewPublic}</Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
           </section>
 
           <section id="recent-runs" className="rounded-[18px] border border-[#e7e7df] bg-white p-6 shadow-[0_14px_34px_rgba(0,0,0,0.06)]">
@@ -918,6 +1289,16 @@ export function WorkflowListPage({
                             <Link href={`/dashboard/workflows/runs/${run.id}`} className="font-extrabold text-[#111] hover:underline">
                               {copy.viewRunsAction}
                             </Link>
+                            {workflow ? (
+                              <button
+                                type="button"
+                                className="font-extrabold text-[#111] hover:underline disabled:opacity-45"
+                                onClick={() => void handleCreateFromRun(run)}
+                                disabled={duplicatingRunId === run.id}
+                              >
+                                {duplicatingRunId === run.id ? copy.duplicateFromRunPending : copy.duplicateFromRunAction}
+                              </button>
+                            ) : null}
                             {workflowHref ? (
                               <Link href={workflowHref} className="font-extrabold text-[#111] hover:underline">
                                 {copy.openAction}

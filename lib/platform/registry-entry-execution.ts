@@ -58,7 +58,17 @@ export function mapBindingTargetToCapabilitySlug(bindingTarget: string) {
 
   if (bindingTarget === "content-repurpose") return "content-repurpose"
   if (bindingTarget === "campaign-launch") return "campaign-launch"
+  if (bindingTarget === "lead-to-outreach") return "lead-to-outreach"
   if (bindingTarget === "visual-ad-pipeline") return "visual-ad-pipeline"
+  if (bindingTarget === "sales-proposal") return "campaign-launch"
+  if (bindingTarget === "paid-media-creative-pipeline") return "visual-ad-pipeline"
+  if (bindingTarget === "seo-aeo-growth-engine") return "content-repurpose"
+  if (bindingTarget === "short-video-growth") return "visual-ad-pipeline"
+  if (bindingTarget === "brand-asset-factory") return "campaign-launch"
+  if (bindingTarget === "reputation-guard") return "knowledge-base"
+  if (bindingTarget === "compliance-review") return "knowledge-base"
+  if (bindingTarget === "training-enablement") return "content-repurpose"
+  if (bindingTarget === "knowledge-asset-loop") return "knowledge-base"
   if (bindingTarget === "knowledge-base") return "knowledge-base"
   return null
 }
@@ -226,7 +236,7 @@ export async function buildRegistryEntryExecutionMap(
     capabilityStates.map((item) => [item.capabilitySlug, item] as const),
   )
 
-  for (const bindingTarget of ["content-repurpose", "campaign-launch", "visual-ad-pipeline", "knowledge-base"] as const) {
+  for (const bindingTarget of ["content-repurpose", "campaign-launch", "lead-to-outreach", "visual-ad-pipeline", "knowledge-base"] as const) {
     executionMap.set(
       bindingTarget,
       await getPlatformBindingTargetExecutionState(bindingTarget, locale, user),

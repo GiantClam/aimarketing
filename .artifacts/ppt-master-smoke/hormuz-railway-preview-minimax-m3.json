@@ -1,0 +1,11 @@
+{
+  "submit": {
+    "jobId": "38cb9d2c-6277-4cc0-b11a-90b8175031f6",
+    "status": "queued"
+  },
+  "result": {
+    "jobId": "38cb9d2c-6277-4cc0-b11a-90b8175031f6",
+    "status": "failed",
+    "message": "Failed after 3 attempts. Last error: 已达到 Token Plan 用量上限：请升级 Token Plan 套餐或购买积分补充用量。 (2056)"
+  }
+}

@@ -8,6 +8,7 @@ import type { KnowledgeProvider } from "@/lib/knowledge/provider"
 import {
   createKnowledgeDocument,
   deleteKnowledgeDocument,
+  listKnowledgeBindingsForDataset,
   getKnowledgeDatasetById,
   getKnowledgeChunkCountsByDocumentIds,
   getKnowledgeDocumentDetail,
@@ -311,6 +312,16 @@ export function toKnowledgeSourceClientState(source: KnowledgeSource | null): Kn
 export async function listKnowledgeDatasetsSnapshot(enterpriseId: number) {
   const datasets = await listKnowledgeDatasetsWithAutoSync(enterpriseId)
   return datasets.filter((dataset) => dataset.enabled)
+}
+
+export async function listKnowledgeDatasetsGovernanceSnapshot(enterpriseId: number) {
+  const datasets = await listKnowledgeDatasetsSnapshot(enterpriseId)
+  return Promise.all(
+    datasets.map(async (dataset) => ({
+      ...dataset,
+      bindings: await listKnowledgeBindingsForDataset(dataset.id),
+    })),
+  )
 }
 
 export async function createKnowledgeDataset(params: {
