@@ -101,7 +101,12 @@ function parsePositiveInt(raw: string | undefined, fallback: number) {
 }
 
 function normalizeText(raw: unknown) {
-  return typeof raw === "string" ? raw.trim() : ""
+  if (typeof raw !== "string") return ""
+  const trimmed = raw.trim()
+  if (!trimmed) return ""
+
+  const quoted = trimmed.match(/^(['"])([\s\S]*)\1$/)
+  return quoted ? quoted[2].trim() : trimmed
 }
 
 function canonicalModelFingerprint(value: string) {
@@ -197,13 +202,6 @@ function buildProviderModelCandidates(
     const key = canonicalModelFingerprint(variant)
     if (!dedupeByFingerprint.has(key)) {
       dedupeByFingerprint.set(key, variant)
-    } else {
-      const existing = dedupeByFingerprint.get(key) || ""
-      const better =
-        compareModelCandidatePreference(providerId, variant, existing) < 0
-          ? variant
-          : existing
-      dedupeByFingerprint.set(key, better)
     }
   }
 

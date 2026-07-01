@@ -334,6 +334,75 @@ test("provider fallback: pptoken degrades to aiberm then crazyroute", async () =
   )
 })
 
+test("quoted provider base urls are sanitized before fallback execution", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "\"https://pptoken.example/v1\"",
+      AI_ENTRY_PPTOKEN_MODEL: "pptoken/default-chat-model",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "\"https://aiberm.example/v1\"",
+      AI_ENTRY_AIBERM_MODEL: "aiberm/default-chat-model",
+      AI_ENTRY_CRAZYROUTE_API_KEY: "test-key-c",
+      AI_ENTRY_CRAZYROUTE_BASE_URL: "'https://crazy.example/v1'",
+      AI_ENTRY_CRAZYROUTE_MODEL: "crazy/default-chat-model",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(async (params) => {
+        attempts.push(`${params.providerId}:${params.baseURL}:${params.model}`)
+        if (params.providerId !== "crazyroute") {
+          throw new Error("provider temporarily unavailable")
+        }
+        return "ok"
+      })
+
+      assert.equal(result.providerId, "crazyroute")
+      assert.deepEqual(attempts, [
+        "pptoken:https://pptoken.example/v1:pptoken/default-chat-model",
+        "aiberm:https://aiberm.example/v1:aiberm/default-chat-model",
+        "crazyroute:https://crazy.example/v1:crazy/default-chat-model",
+      ])
+    },
+  )
+})
+
+test("same-provider model fallback preserves dotted gpt model ids before generated dash variants", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "openai/gpt-5.4",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(
+        async (params) => {
+          attempts.push(`${params.providerId}:${params.model}`)
+          if (params.model === "gpt-5.4") {
+            throw new Error("selected model unavailable")
+          }
+          return "ok"
+        },
+        {
+          preferredProviderId: "pptoken",
+          preferredModel: "gpt-5.4",
+          forcePreferredProvider: true,
+        },
+      )
+
+      assert.equal(result.providerId, "pptoken")
+      assert.equal(result.model, "openai/gpt-5.4")
+      assert.deepEqual(attempts, [
+        "pptoken:gpt-5.4",
+        "pptoken:openai/gpt-5.4",
+      ])
+    },
+  )
+})
+
 test("provider order: non-openai models skip pptoken and use aiberm then crazyroute", async () => {
   await withProviderEnv(
     {
@@ -554,8 +623,8 @@ test("force model across providers: aiberm prefers catalog runtime id for sonnet
           )
 
           assert.equal(result.providerId, "aiberm")
-          assert.equal(result.model, "claude-sonnet-4-6")
-          assert.deepEqual(attempts, ["aiberm:claude-sonnet-4-6"])
+          assert.equal(result.model, "claude-sonnet-4.6")
+          assert.deepEqual(attempts, ["aiberm:claude-sonnet-4.6"])
         },
       )
     },
