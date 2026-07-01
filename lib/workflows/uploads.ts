@@ -8,6 +8,8 @@ export type WorkflowAssetRef = {
   fileName: string
   mimeType: string
   url?: string | null
+  embeddedContentBase64?: string
+  inlinePreviewText?: string | null
 }
 
 export type WorkflowUploadedFileInput = {

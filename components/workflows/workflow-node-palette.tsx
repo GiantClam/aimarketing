@@ -3,11 +3,12 @@
 import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/components/workflows/workflow-agent-options"
 import { cn } from "@/lib/utils"
 import { getDefaultWorkflowNodeTitle, type WorkflowLocale, type WorkflowNodeType } from "@/lib/workflows/schema"
-import { Archive, ArrowDownToLine, AudioLines, Bot, FileUp, Film, ImageIcon, Link2, Mic, Music, PanelsTopLeft, PenSquare, Sparkles, Type, UserRound } from "lucide-react"
+import { Archive, ArrowDownToLine, AudioLines, Bot, FileText, FileUp, Film, ImageIcon, Link2, Mic, Music, PanelsTopLeft, PenSquare, Sparkles, Type, UserRound } from "lucide-react"
 
 const NODE_ORDER: WorkflowNodeType[] = [
   "upload",
   "text_input",
+  "file_create",
   "writer",
   "llm_generate",
   "agent_execute",
@@ -37,6 +38,10 @@ const NODE_VISUALS: Record<
   text_input: {
     icon: Type,
     accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800",
+  },
+  file_create: {
+    icon: FileText,
+    accentClassName: "border-lime-300/80 bg-lime-100 text-lime-800",
   },
   writer: {
     icon: PenSquare,

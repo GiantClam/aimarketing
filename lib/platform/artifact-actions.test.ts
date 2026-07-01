@@ -3,6 +3,8 @@ import test from "node:test"
 
 import {
   getPlatformArtifactPreviewKind,
+  hasPlatformArtifactAccessibleContent,
+  isPlatformArtifactAssetLibraryEligible,
   resolvePlatformArtifactSourceUrl,
 } from "@/lib/platform/artifact-actions"
 
@@ -31,4 +33,64 @@ test("artifact source url prefers R2 public url over external url", () => {
   } as Parameters<typeof resolvePlatformArtifactSourceUrl>[0])
 
   assert.equal(url, "https://pub-example.r2.dev/platform-artifacts/1/2/runninghub/demo.mp4")
+})
+
+test("artifact accessible content accepts embedded payload and inline text fallbacks", () => {
+  assert.equal(
+    hasPlatformArtifactAccessibleContent({
+      externalUrl: null,
+      storageKey: null,
+      payload: {
+        embeddedContentBase64: "dGVzdA==",
+      },
+    } as Parameters<typeof hasPlatformArtifactAccessibleContent>[0]),
+    true,
+  )
+
+  assert.equal(
+    hasPlatformArtifactAccessibleContent({
+      externalUrl: null,
+      storageKey: null,
+      payload: {
+        text: "workflow text output",
+      },
+    } as Parameters<typeof hasPlatformArtifactAccessibleContent>[0]),
+    true,
+  )
+
+  assert.equal(
+    hasPlatformArtifactAccessibleContent({
+      externalUrl: null,
+      storageKey: null,
+      payload: {
+        source: "upload",
+      },
+    } as Parameters<typeof hasPlatformArtifactAccessibleContent>[0]),
+    false,
+  )
+})
+
+test("asset library eligibility only accepts file-backed artifact content", () => {
+  assert.equal(
+    isPlatformArtifactAssetLibraryEligible({
+      externalUrl: null,
+      storageKey: null,
+      payload: {
+        text: "workflow text output",
+      },
+    } as Parameters<typeof isPlatformArtifactAssetLibraryEligible>[0]),
+    false,
+  )
+
+  assert.equal(
+    isPlatformArtifactAssetLibraryEligible({
+      externalUrl: null,
+      storageKey: null,
+      payload: {
+        embeddedContentBase64: "dGVzdA==",
+        text: "workflow file output",
+      },
+    } as Parameters<typeof isPlatformArtifactAssetLibraryEligible>[0]),
+    true,
+  )
 })

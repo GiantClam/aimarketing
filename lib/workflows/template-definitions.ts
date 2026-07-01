@@ -5,6 +5,43 @@ type LocalizedText = {
   en: string
 }
 
+const CONTENT_REPURPOSE_SEO_AGENT_PROMPT: LocalizedText = {
+  zh: [
+    "基于上游资产与复用目标，输出给下一个写作节点直接使用的 SEO 复用 brief。",
+    "必须按以下小节输出并给出具体内容：1) 核心主题一句话 2) 目标受众 3) 搜索意图 4) 关键词簇（主关键词、长尾关键词、问题簇） 5) 文章结构（标题、3-6 个小节、每节要点） 6) 渠道改写要求（按用户指定渠道逐项写）。",
+    "不要先做点评，不要给泛泛建议，不要解释过程。",
+  ].join(" "),
+  en: [
+    "Using the upstream asset and repurpose goal, produce an SEO repurpose brief that the next writing node can use directly.",
+    "Output these exact sections with specific content: 1) Core theme in one sentence 2) Target audience 3) Search intent 4) Keyword clusters (primary, long-tail, question clusters) 5) Article structure (headline, 3-6 sections, key points per section) 6) Channel adaptation requirements (one block per requested channel).",
+    "Do not start with critique, generic advice, or process commentary.",
+  ].join(" "),
+}
+
+const CONTENT_REPURPOSE_DISTRIBUTION_AGENT_PROMPT: LocalizedText = {
+  zh: [
+    "基于上游成稿，输出可执行的分发计划，而不是内容点评。",
+    "必须按以下小节输出并给出明确动作：1) 渠道优先级 2) 每个渠道的改写动作 3) 发布时间节奏 4) CTA 与承接动作 5) 实验假设与衡量指标 6) 需要沉淀到资产库的内容。",
+    "不要评价文章好坏，不要给空泛建议。",
+  ].join(" "),
+  en: [
+    "Based on the upstream draft, output an executable distribution plan instead of a content critique.",
+    "Use these exact sections with concrete actions: 1) Channel priority 2) Rewrite action per channel 3) Publishing cadence 4) CTA and handoff action 5) Experiment hypotheses and metrics 6) Assets that should be stored in the asset library.",
+    "Do not evaluate the draft or give generic advice.",
+  ].join(" "),
+}
+
+const CONTENT_REPURPOSE_LEGACY_PROMPTS = {
+  seoAgent: {
+    zh: "抽取关键词、问题簇、文章结构改写建议和复用方向。",
+    en: "Extract keywords, question clusters, article rewrite structure, and reuse directions.",
+  },
+  distributionAgent: {
+    zh: "把上游内容改写成分发节奏、渠道改编和下一步实验建议。",
+    en: "Turn the upstream content into a distribution cadence, channel adaptations, and next experiments.",
+  },
+} as const
+
 export type WorkflowTemplateDefinitionKey =
   | "campaign-launch"
   | "content-repurpose"
@@ -288,10 +325,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 416,
             positionY: 120,
             agentId: "business-seo-repurpose",
-            prompt: {
-              zh: "抽取关键词、问题簇、文章结构改写建议和复用方向。",
-              en: "Extract keywords, question clusters, article rewrite structure, and reuse directions.",
-            },
+            prompt: CONTENT_REPURPOSE_SEO_AGENT_PROMPT,
           }),
           fixedNode({
             locale,
@@ -312,10 +346,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 736,
             positionY: 340,
             agentId: "business-content-growth",
-            prompt: {
-              zh: "把上游内容改写成分发节奏、渠道改编和下一步实验建议。",
-              en: "Turn the upstream content into a distribution cadence, channel adaptations, and next experiments.",
-            },
+            prompt: CONTENT_REPURPOSE_DISTRIBUTION_AGENT_PROMPT,
           }),
           fixedNode({
             locale,
@@ -2007,4 +2038,39 @@ export function buildWorkflowFromTemplate(input: {
       recommendedAgentIds: [...definition.recommendedAgentIds],
     } satisfies Record<string, unknown>,
   }
+}
+
+export function reconcileWorkflowTemplateNodeConfig(input: {
+  templateKey: string | null | undefined
+  nodeKey: string
+  config: Record<string, unknown>
+}) {
+  const nextConfig = { ...input.config }
+  const currentPrompt = typeof nextConfig.prompt === "string" ? nextConfig.prompt.trim() : ""
+
+  if (input.templateKey === "content-repurpose") {
+    if (
+      input.nodeKey === "seo-agent" &&
+      (currentPrompt === CONTENT_REPURPOSE_LEGACY_PROMPTS.seoAgent.zh ||
+        currentPrompt === CONTENT_REPURPOSE_LEGACY_PROMPTS.seoAgent.en)
+    ) {
+      nextConfig.prompt =
+        currentPrompt === CONTENT_REPURPOSE_LEGACY_PROMPTS.seoAgent.en
+          ? CONTENT_REPURPOSE_SEO_AGENT_PROMPT.en
+          : CONTENT_REPURPOSE_SEO_AGENT_PROMPT.zh
+    }
+
+    if (
+      input.nodeKey === "distribution-agent" &&
+      (currentPrompt === CONTENT_REPURPOSE_LEGACY_PROMPTS.distributionAgent.zh ||
+        currentPrompt === CONTENT_REPURPOSE_LEGACY_PROMPTS.distributionAgent.en)
+    ) {
+      nextConfig.prompt =
+        currentPrompt === CONTENT_REPURPOSE_LEGACY_PROMPTS.distributionAgent.en
+          ? CONTENT_REPURPOSE_DISTRIBUTION_AGENT_PROMPT.en
+          : CONTENT_REPURPOSE_DISTRIBUTION_AGENT_PROMPT.zh
+    }
+  }
+
+  return nextConfig
 }

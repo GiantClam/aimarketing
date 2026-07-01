@@ -53,3 +53,20 @@ test("ai-ppt catalog copy reflects template choice, page planning, four candidat
   assert.ok(enTool?.proofPoints.some((item) => item.includes("Preview before login")))
   assert.ok(enTool?.faqs.some((item) => /template|page count/i.test(item.question)))
 })
+
+test("seo remediation lead tools are exposed as live public pages with workflow routing", () => {
+  const paths = getLeadToolPaths()
+  const briefTool = getLocalizedLeadToolBySlug("content-brief-generator", "en")
+  const descriptionTool = getLocalizedLeadToolBySlug("product-description-generator", "en")
+
+  assert.equal(paths.includes("/tools/content-brief-generator"), true)
+  assert.equal(paths.includes("/tools/product-description-generator"), true)
+  assert.equal(paths.includes("/tools/press-release-generator"), true)
+  assert.equal(paths.includes("/tools/bio-generator"), true)
+  assert.equal(paths.includes("/tools/seo-title-generator"), true)
+
+  assert.equal(briefTool?.status, "live")
+  assert.equal(briefTool?.primaryCta?.href, "/tools/ai-seo-meta-generator")
+  assert.equal(briefTool?.relatedLinks?.some((link) => link.href === "/agents/seo-article-agent"), true)
+  assert.equal(descriptionTool?.secondaryCta?.href, "/tools/product-description-generator/examples/product-description-examples")
+})

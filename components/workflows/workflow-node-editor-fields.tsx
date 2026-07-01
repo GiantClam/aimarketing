@@ -22,7 +22,12 @@ import {
   normalizeRunningHubSeedreamSize,
   resolveWorkflowImageModelKind,
 } from "@/lib/image-assistant/model-options"
-import type { WorkflowDefinitionNode } from "@/lib/workflows/schema"
+import {
+  pptPreviewModelOptions,
+  pptPreviewRuntimeOptions,
+  type PptPreviewRuntimeValue,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { getDefaultWorkflowNodeTitle, type WorkflowDefinitionNode } from "@/lib/workflows/schema"
 
 type WorkflowAssetCandidate = {
   id: number
@@ -163,6 +168,16 @@ function parseWorkflowModelSelectionValue(value: string) {
   const modelId = decodeURIComponent(encodedModelId).trim()
   if (!providerId || !modelId) return null
   return { providerId, modelId }
+}
+
+const WRITER_SUPPORTED_PROVIDER_IDS = new Set(["aiberm", "crazyroute", "pptoken"])
+
+function getWorkflowPptRuntimeTitle(locale: "zh" | "en", runtime: PptPreviewRuntimeValue) {
+  if (locale === "zh") {
+    return runtime === "ppt-master-agent" ? "可编辑 PPT" : "HTML PPT"
+  }
+
+  return runtime === "ppt-master-agent" ? "Editable PPT" : "HTML PPT"
 }
 
 function buildWorkflowModelSelectOption(input: {
@@ -323,13 +338,13 @@ export function WorkflowNodeEditorFields({
       ? {
           uploadNew: "上传新素材",
           uploadedFiles: "已上传",
-          libraryRefs: "素材库",
+          libraryRefs: "资产库",
           textValue: "文本",
-          assetLibrary: "打开素材库",
+          assetLibrary: "打开资产库",
           uploadPending: "上传中...",
           removeUpload: "移除",
           noUploads: "还没有文件。",
-          noAssetCandidates: "素材库暂时没有可选素材。",
+          noAssetCandidates: "资产库暂时没有可选素材。",
           suggestionTarget: "用于",
           provider: "Provider",
           model: "模型",
@@ -339,6 +354,9 @@ export function WorkflowNodeEditorFields({
           enterpriseAgents: "企业 Agent",
           agentPrompt: "Agent 提示",
           agentPromptPlaceholder: "没有上游文本时，填写这里作为 Agent 输入。",
+          agentTools: "Agent 工具",
+          webSearch: "启用 Web Search",
+          webSearchHint: "默认关闭。仅在当前 Agent 需要联网检索最新信息时再开启。",
           noBuiltinAgents: "还没有可选内置 Agent。",
           noCustomAgents: "还没有可选企业 Agent。",
           agentMode: "执行模式",
@@ -395,11 +413,15 @@ export function WorkflowNodeEditorFields({
           volume: "音量",
           pitch: "音高",
           pageCount: "页数",
+          pptAgent: "PPT 类型",
+          pptAgentHint: "HTML PPT 输出网页化演示稿；可编辑 PPT 输出可继续修改的 PPT 成品。",
           scenario: "场景",
           language: "语言",
           fileName: "文件名称",
           fileNamePlaceholder: "留空时自动生成不重复名称",
-          fileNameHint: "如果素材库中存在同名文件，将使用新结果覆盖旧文件。",
+          fileNameHint: "如果资产库中存在同名文件，将使用新结果覆盖旧文件。",
+          fileFormat: "文件格式",
+          fileNodeHint: "先将文本结果物化为文件，再连接到资产库节点。",
           persistToWorkLibrary: "同步到作品库",
           persistToKnowledgeBase: "加入知识入库队列",
           knowledgeTargetType: "知识目标",
@@ -429,6 +451,9 @@ export function WorkflowNodeEditorFields({
           enterpriseAgents: "Enterprise agents",
           agentPrompt: "Agent prompt",
           agentPromptPlaceholder: "Used as the agent input when no upstream text is connected.",
+          agentTools: "Agent tools",
+          webSearch: "Enable web search",
+          webSearchHint: "Off by default. Turn it on only when this agent needs fresh external information.",
           noBuiltinAgents: "No built-in agents available yet.",
           noCustomAgents: "No enterprise agents available yet.",
           agentMode: "Execution mode",
@@ -485,11 +510,15 @@ export function WorkflowNodeEditorFields({
           volume: "Volume",
           pitch: "Pitch",
           pageCount: "Pages",
+          pptAgent: "PPT type",
+          pptAgentHint: "HTML PPT outputs a web-based deck; Editable PPT outputs a deck that can keep being edited.",
           scenario: "Scenario",
           language: "Language",
           fileName: "File name",
           fileNamePlaceholder: "Leave empty to auto-generate a unique name",
           fileNameHint: "If the asset library already contains the same file name, the new result replaces it.",
+          fileFormat: "File format",
+          fileNodeHint: "Materialize text into a file first, then connect it to the asset library node.",
           persistToWorkLibrary: "Also save to work library",
           persistToKnowledgeBase: "Queue for knowledge ingestion",
           knowledgeTargetType: "Knowledge target",
@@ -716,6 +745,43 @@ export function WorkflowNodeEditorFields({
     getDefaultModelId("video.digital_human") ||
     digitalHumanModelOptions[0]?.value ||
     ""
+  const audioGenerateModelDefinitions = listModels({ capability: "audio.generate" })
+  const audioGenerateModelOptions: OptionItem[] = buildModelSelectOptions(audioGenerateModelDefinitions).map((option) => ({
+    value: option.value,
+    label: option.label,
+  }))
+  const currentAudioGenerateModelId =
+    findModelByCapabilityAndAlias({
+      capability: "audio.generate",
+      value: asString(node.config.model),
+    })?.id ||
+    getDefaultModelId("audio.generate") ||
+    audioGenerateModelOptions[0]?.value ||
+    ""
+  const voiceSynthesisModelDefinitions = listModels({ capability: "audio.voice_synthesis" })
+  const voiceSynthesisModelOptions: OptionItem[] = buildModelSelectOptions(voiceSynthesisModelDefinitions).map((option) => ({
+    value: option.value,
+    label: option.label,
+  }))
+  const currentVoiceSynthesisModelId =
+    findModelByCapabilityAndAlias({
+      capability: "audio.voice_synthesis",
+      value: asString(node.config.model),
+    })?.id ||
+    getDefaultModelId("audio.voice_synthesis") ||
+    voiceSynthesisModelOptions[0]?.value ||
+    ""
+  const pptModelOptions: OptionItem[] = pptPreviewModelOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+  }))
+  const pptRuntimeOptions: OptionItem[] = pptPreviewRuntimeOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+  }))
+  const currentPptRuntimeId =
+    (asString(node.config.previewRuntime) as PptPreviewRuntimeValue) || pptPreviewRuntimeOptions[0]?.value || "frontend-slides-agent"
+  const currentPptModelId = asString(node.config.model) || pptModelOptions[0]?.value || "MiniMax-M2.7-highspeed"
   const audioGenreOptions: OptionItem[] =
     locale === "zh"
       ? [
@@ -768,10 +834,6 @@ export function WorkflowNodeEditorFields({
           { value: "ai_generate", label: "AI lyrics" },
           { value: "manual", label: "Fixed lyrics" },
         ]
-  const speechModelOptions: OptionItem[] = [
-    { value: "speech-2.8-hd", label: "Speech 2.8 HD" },
-    { value: "speech-2.8-turbo", label: "Speech 2.8 Turbo" },
-  ]
   const languageBoostOptions: OptionItem[] =
     locale === "zh"
       ? [
@@ -788,6 +850,12 @@ export function WorkflowNodeEditorFields({
   const speechVolumeOptions: OptionItem[] = ["0.8", "1", "1.2"].map((value) => ({ value, label: `${value}x` }))
   const speechPitchOptions: OptionItem[] = ["0.8", "1", "1.2"].map((value) => ({ value, label: `${value}x` }))
   const pageCountOptions: OptionItem[] = ["6", "8", "10", "12"].map((value) => ({ value, label: value }))
+  const fileFormatOptions: OptionItem[] = [
+    { value: "md", label: "MD" },
+    { value: "txt", label: "TXT" },
+    { value: "html", label: "HTML" },
+    { value: "json", label: "JSON" },
+  ]
   const scenarioOptions: OptionItem[] =
     locale === "zh"
       ? [
@@ -842,6 +910,77 @@ export function WorkflowNodeEditorFields({
         providerId: currentSelectedProviderId,
         providerLabel: activeProvider?.label || currentSelectedProviderId,
         modelId: currentSelectedModelId,
+      }),
+    )
+  }
+  const currentAgentProviderId =
+    asString(node.config.selectedProviderId) || activeProvider?.providerId || llmModelCatalog.defaultProviderId || ""
+  const currentAgentModelId =
+    asString(node.config.selectedModelId) || activeProvider?.models[0]?.modelId || llmModelCatalog.defaultModelId || ""
+  const currentAgentModelSelectionValue =
+    llmModelSelectOptions.find(
+      (option) =>
+        option.providerId === currentAgentProviderId &&
+        option.modelId === currentAgentModelId,
+    )?.value ||
+    (currentAgentProviderId && currentAgentModelId
+      ? buildWorkflowModelSelectionValue({
+          providerId: currentAgentProviderId,
+          modelId: currentAgentModelId,
+        })
+      : "")
+  const writerProviders = llmModelCatalog.providers.filter((provider) =>
+    WRITER_SUPPORTED_PROVIDER_IDS.has(provider.providerId),
+  )
+  const writerModelCatalogProviders = writerProviders.length > 0 ? writerProviders : llmModelCatalog.providers
+  const currentWriterProviderId =
+    asString(node.config.selectedProviderId) ||
+    writerModelCatalogProviders[0]?.providerId ||
+    llmModelCatalog.defaultProviderId ||
+    ""
+  const activeWriterProvider =
+    writerModelCatalogProviders.find((provider) => provider.providerId === currentWriterProviderId) ||
+    writerModelCatalogProviders[0] ||
+    null
+  const currentWriterModelId =
+    asString(node.config.selectedModelId) ||
+    activeWriterProvider?.models[0]?.modelId ||
+    llmModelCatalog.defaultModelId ||
+    ""
+  const writerModelSelectOptions: WorkflowModelSelectOption[] = writerModelCatalogProviders.flatMap((provider) =>
+    provider.models.map((model) =>
+      buildWorkflowModelSelectOption({
+        providerId: provider.providerId,
+        providerLabel: provider.label,
+        modelId: model.modelId,
+        modelLabel: model.label,
+        optionId: model.optionId,
+      }),
+    ),
+  )
+  const currentWriterModelSelectionValue =
+    writerModelSelectOptions.find(
+      (option) =>
+        option.providerId === currentWriterProviderId &&
+        option.modelId === currentWriterModelId,
+    )?.value ||
+    (currentWriterProviderId && currentWriterModelId
+      ? buildWorkflowModelSelectionValue({
+          providerId: currentWriterProviderId,
+          modelId: currentWriterModelId,
+        })
+      : "")
+  if (
+    currentWriterProviderId &&
+    currentWriterModelId &&
+    currentWriterModelSelectionValue &&
+    !writerModelSelectOptions.some((option) => option.value === currentWriterModelSelectionValue)
+  ) {
+    writerModelSelectOptions.push(
+      buildWorkflowModelSelectOption({
+        providerId: currentWriterProviderId,
+        providerLabel: activeWriterProvider?.label || currentWriterProviderId,
+        modelId: currentWriterModelId,
       }),
     )
   }
@@ -1141,6 +1280,30 @@ export function WorkflowNodeEditorFields({
       {node.type === "writer" ? (
         <div className="space-y-3">
           <div className="space-y-2">
+            <SectionLabel>{copy.model}</SectionLabel>
+            <select
+              value={currentWriterModelSelectionValue}
+              onChange={(event) => {
+                const selectedOption =
+                  writerModelSelectOptions.find((option) => option.value === event.target.value) || null
+                const parsed = selectedOption || parseWorkflowModelSelectionValue(event.target.value)
+                if (!parsed) return
+                updateConfig({
+                  selectedProviderId: parsed.providerId || null,
+                  selectedModelId: parsed.modelId || null,
+                  selectedModelOptionId: event.target.value || null,
+                })
+              }}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {writerModelSelectOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
             <SectionLabel>{copy.writerPlatform}</SectionLabel>
             <select
               value={asString(node.config.platform) || (locale === "zh" ? "wechat" : "generic")}
@@ -1288,6 +1451,32 @@ export function WorkflowNodeEditorFields({
           ) : null}
 
           <div className="space-y-2">
+            <SectionLabel>{copy.model}</SectionLabel>
+            <select
+              value={currentAgentModelSelectionValue}
+              onChange={(event) => {
+                const selectedOption =
+                  llmModelSelectOptions.find((option) => option.value === event.target.value) || null
+                const parsed = selectedOption || parseWorkflowModelSelectionValue(event.target.value)
+                if (!parsed) return
+                updateConfig({
+                  selectedProviderId: parsed.providerId || null,
+                  selectedModelId: parsed.modelId || null,
+                  selectedModelOptionId: event.target.value || null,
+                })
+              }}
+              disabled={llmModelSelectOptions.length === 0}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {llmModelSelectOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
             <SectionLabel>{copy.agentPrompt}</SectionLabel>
             <Textarea
               data-agent-config={`${node.nodeKey}:prompt`}
@@ -1296,6 +1485,22 @@ export function WorkflowNodeEditorFields({
               onChange={(event) => updateConfig({ prompt: event.target.value })}
               className="min-h-24 rounded-[10px] border-border/80 bg-background/80 text-sm"
             />
+          </div>
+
+          <div className="space-y-2">
+            <SectionLabel>{copy.agentTools}</SectionLabel>
+            <label className="flex items-start gap-2 rounded-[10px] border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={node.config.webSearchEnabled === true}
+                onChange={(event) => updateConfig({ webSearchEnabled: event.target.checked })}
+                className="mt-0.5"
+              />
+              <span className="space-y-1">
+                <span className="block">{copy.webSearch}</span>
+                <span className="block text-xs leading-5 text-muted-foreground">{copy.webSearchHint}</span>
+              </span>
+            </label>
           </div>
         </div>
       ) : null}
@@ -1728,6 +1933,20 @@ export function WorkflowNodeEditorFields({
       {node.type === "music_generate" || node.type === "audio_generate" ? (
         <div className="space-y-3">
           <div className="space-y-2">
+            <SectionLabel>{copy.model}</SectionLabel>
+            <select
+              value={currentAudioGenerateModelId}
+              onChange={(event) => updateConfig({ model: event.target.value })}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {audioGenerateModelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
             <SectionLabel>{copy.genre}</SectionLabel>
             <OptionChips
               options={audioGenreOptions}
@@ -1789,11 +2008,11 @@ export function WorkflowNodeEditorFields({
           <div className="space-y-2">
             <SectionLabel>{copy.model}</SectionLabel>
             <select
-              value={asString(node.config.model) || "speech-2.8-hd"}
+              value={currentVoiceSynthesisModelId}
               onChange={(event) => updateConfig({ model: event.target.value })}
               className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
             >
-              {speechModelOptions.map((option) => (
+              {voiceSynthesisModelOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -1842,6 +2061,60 @@ export function WorkflowNodeEditorFields({
       {node.type === "ppt_generate" ? (
         <div className="space-y-3">
           <div className="space-y-2">
+            <SectionLabel>{copy.pptAgent}</SectionLabel>
+            <select
+              value={currentPptRuntimeId}
+              onChange={(event) => {
+                const nextRuntime = event.target.value as PptPreviewRuntimeValue
+                const knownTitles = new Set([
+                  getDefaultWorkflowNodeTitle("ppt_generate", "zh"),
+                  getDefaultWorkflowNodeTitle("ppt_generate", "en"),
+                  "PPT 快速预览 Agent",
+                  "PPT 成品 Agent",
+                  "PPT Preview Agent",
+                  "PPT Master Agent",
+                  getWorkflowPptRuntimeTitle("zh", "frontend-slides-agent"),
+                  getWorkflowPptRuntimeTitle("zh", "ppt-master-agent"),
+                  getWorkflowPptRuntimeTitle(locale, "frontend-slides-agent"),
+                  getWorkflowPptRuntimeTitle(locale, "ppt-master-agent"),
+                  getWorkflowPptRuntimeTitle("en", "frontend-slides-agent"),
+                  getWorkflowPptRuntimeTitle("en", "ppt-master-agent"),
+                ])
+                onUpdateNode(node.nodeKey, {
+                  title: knownTitles.has(node.title)
+                    ? getWorkflowPptRuntimeTitle(locale, nextRuntime)
+                    : node.title,
+                  config: {
+                    ...node.config,
+                    previewRuntime: nextRuntime,
+                  },
+                })
+              }}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {pptRuntimeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div className="text-xs leading-5 text-muted-foreground">{copy.pptAgentHint}</div>
+          </div>
+          <div className="space-y-2">
+            <SectionLabel>{copy.model}</SectionLabel>
+            <select
+              value={currentPptModelId}
+              onChange={(event) => updateConfig({ model: event.target.value })}
+              className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
+            >
+              {pptModelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
             <SectionLabel>{copy.pageCount}</SectionLabel>
             <OptionChips
               options={pageCountOptions}
@@ -1869,6 +2142,29 @@ export function WorkflowNodeEditorFields({
               value={asString(node.config.scenario) || "marketing-campaign"}
               onChange={(value) => updateConfig({ scenario: value })}
             />
+          </div>
+        </div>
+      ) : null}
+
+      {node.type === "file_create" ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <SectionLabel>{copy.fileFormat}</SectionLabel>
+            <OptionChips
+              options={fileFormatOptions}
+              value={asString(node.config.fileFormat) || "md"}
+              onChange={(value) => updateConfig({ fileFormat: value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <SectionLabel>{copy.fileName}</SectionLabel>
+            <Input
+              value={asString(node.config.fileName)}
+              onChange={(event) => updateConfig({ fileName: event.target.value })}
+              placeholder={copy.fileNamePlaceholder}
+              className="h-10 rounded-[10px] border-border/80 bg-background/80 text-sm"
+            />
+            <div className="text-xs leading-5 text-muted-foreground">{copy.fileNodeHint}</div>
           </div>
         </div>
       ) : null}

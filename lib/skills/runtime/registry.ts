@@ -31,6 +31,8 @@ type WriterSkillInput = {
   history?: unknown[]
   conversationStatus?: string
   enterpriseId?: number | null
+  selectedProviderId?: string | null
+  selectedModelId?: string | null
   onProgress?: (event: { type: string; label: string; detail?: string; status: string; at?: number }) => void | Promise<void>
 }
 
@@ -91,6 +93,8 @@ export function loadWriterSkillRunner() {
         history: (input.history || []) as any,
         conversationStatus: input.conversationStatus as any,
         enterpriseId: input.enterpriseId,
+        selectedProviderId: (input.selectedProviderId || null) as any,
+        selectedModelId: (input.selectedModelId || null) as any,
         onProgress: input.onProgress as any,
       } as any)
     },

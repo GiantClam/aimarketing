@@ -23,6 +23,7 @@ export type WorkflowNodeInputBundle = {
 }
 
 export type WorkflowNodeOutputBundle = Partial<WorkflowNodeInputBundle>
+type WorkflowFileFormat = "md" | "txt" | "html" | "json"
 
 export type WorkflowCapabilityInvokeParams = {
   nodeType: WorkflowNodeType
@@ -95,6 +96,78 @@ function normalizePositiveInteger(value: unknown, fallback: number) {
 function normalizePositiveIntegerList(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.filter((item): item is number => Number.isInteger(item) && item > 0)
+}
+
+function normalizeWorkflowFileFormat(value: unknown): WorkflowFileFormat {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : ""
+  if (normalized === "txt" || normalized === "html" || normalized === "json") {
+    return normalized
+  }
+  return "md"
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+}
+
+function resolveWorkflowFileMimeType(format: WorkflowFileFormat) {
+  if (format === "txt") return "text/plain"
+  if (format === "html") return "text/html"
+  if (format === "json") return "application/json"
+  return "text/markdown"
+}
+
+function ensureWorkflowFileName(value: unknown, format: WorkflowFileFormat, fallbackTitle: string) {
+  const normalized =
+    typeof value === "string" && value.trim()
+      ? value.trim().slice(0, 255)
+      : `${fallbackTitle || "workflow-output"}`.trim().slice(0, 255) || "workflow-output"
+  const extension = `.${format}`
+  if (normalized.toLowerCase().endsWith(extension)) return normalized
+  return `${normalized}${extension}`.slice(0, 255)
+}
+
+function buildWorkflowFileContent(textItems: string[], format: WorkflowFileFormat, fileName: string) {
+  const normalizedItems = textItems.map((item) => item.trim()).filter(Boolean)
+  if (normalizedItems.length === 0) {
+    throw new Error("workflow_file_create_text_required")
+  }
+
+  if (format === "json") {
+    const parsedItems = normalizedItems.map((item) => {
+      try {
+        return JSON.parse(item)
+      } catch {
+        throw new Error(`workflow_file_create_invalid_json:${fileName}`)
+      }
+    })
+    return JSON.stringify(parsedItems.length === 1 ? parsedItems[0] : parsedItems, null, 2)
+  }
+
+  const combined = normalizedItems.join("\n\n")
+  if (format === "html") {
+    const looksLikeHtml = /<([a-z][\w-]*)\b[^>]*>/i.test(combined)
+    if (looksLikeHtml) return combined
+    return [
+      "<!doctype html>",
+      '<html lang="en">',
+      "<head>",
+      '  <meta charset="utf-8" />',
+      `  <title>${escapeHtml(fileName)}</title>`,
+      "</head>",
+      "<body>",
+      `  <pre>${escapeHtml(combined)}</pre>`,
+      "</body>",
+      "</html>",
+    ].join("\n")
+  }
+
+  return combined
 }
 
 export function resolveKnowledgeRetrieveEnterpriseDatasetSelection(input: {
@@ -230,6 +303,35 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
       return {
         output: {
           text: [text],
+        },
+      }
+    },
+  },
+  file_create: {
+    nodeType: "file_create",
+    action: "file-create",
+    outputKinds: ["asset"],
+    async execute(context) {
+      const format = normalizeWorkflowFileFormat(context.node.config.fileFormat)
+      const fileName = ensureWorkflowFileName(context.node.config.fileName, format, context.node.title || "workflow-file")
+      const content = buildWorkflowFileContent(context.input.text, format, fileName)
+
+      const asset: WorkflowAssetRef = {
+        source: "upload",
+        fileName,
+        mimeType: resolveWorkflowFileMimeType(format),
+        embeddedContentBase64: Buffer.from(content, "utf8").toString("base64"),
+        inlinePreviewText: content,
+      }
+
+      return {
+        output: {
+          asset: [asset],
+        },
+        metadata: {
+          persistenceTarget: "file_create",
+          fileName,
+          fileFormat: format,
         },
       }
     },
@@ -430,7 +532,6 @@ const WORKFLOW_NODE_EXECUTORS: Record<WorkflowNodeType, WorkflowNodeExecutor> = 
       const persistToKnowledgeBase = Boolean(context.node.config.persistToKnowledgeBase)
       return {
         output: {
-          text: [...context.input.text],
           asset: [...context.input.asset],
           image: [...context.input.image],
           video: [...context.input.video],

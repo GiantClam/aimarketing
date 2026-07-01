@@ -544,10 +544,12 @@ test("runWorkflowDefinition fails when upload asset mime type does not match tar
 test("product_store echoes upstream outputs for preview rendering", async () => {
   const nodes: WorkflowDefinitionNode[] = [
     { nodeKey: "text-1", type: "text_input", title: "Prompt", positionX: 0, positionY: 0, config: { text: "Stored text" } },
+    { nodeKey: "file-1", type: "file_create", title: "File", positionX: 0, positionY: 0, config: { fileFormat: "md" } },
     { nodeKey: "store-1", type: "product_store", title: "Store", positionX: 0, positionY: 0, config: {} },
   ]
   const edges: WorkflowDefinitionEdge[] = [
-    { sourceNodeKey: "text-1", targetNodeKey: "store-1", inputName: "text" },
+    { sourceNodeKey: "text-1", targetNodeKey: "file-1", inputName: "text" },
+    { sourceNodeKey: "file-1", targetNodeKey: "store-1", inputName: "assets" },
   ]
 
   const result = await runWorkflowDefinition({
@@ -558,13 +560,6 @@ test("product_store echoes upstream outputs for preview rendering", async () => 
   })
 
   assert.equal(result.status, "succeeded")
-  assert.deepEqual(result.nodeStates["store-1"]?.output, {
-    text: ["Stored text"],
-    asset: [],
-    image: [],
-    video: [],
-    audio: [],
-    ppt: [],
-  })
+  assert.equal(result.nodeStates["store-1"]?.output.asset?.[0]?.fileName, "File.md")
   assert.equal(result.nodeStates["store-1"]?.metadata?.persistenceTarget, "asset_library")
 })

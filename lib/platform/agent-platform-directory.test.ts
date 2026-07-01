@@ -81,3 +81,29 @@ test("buildAgentPlatformDirectoryGroups keeps executive advisors eligible for bu
   assert.equal(brandAdvisorCard?.kind, "builtin")
   assert.equal(brandAdvisorCard?.businessMenuAgentId, "executive-brand")
 })
+
+test("buildAgentPlatformDirectoryGroups appends imported registry sections into agent platform", () => {
+  const groups = buildAgentPlatformDirectoryGroups({
+    locale: "zh",
+    builtinAgents: getAiEntryAgentCatalog(),
+    builtinGroups: getAiEntryAgentGroups(),
+    customAgents: [],
+    importedAgents: [
+      {
+        agentId: "agency-marketing-email-strategist",
+        name: "邮件营销策略师",
+        summary: "围绕分层、自动化和投递率组织邮件增长系统。",
+        sourceCategory: "marketing",
+        sourceCategoryLabel: "营销",
+        nativeHref: "/dashboard/business?view=marketing&agent=agency-marketing-email-strategist",
+      },
+    ],
+  })
+
+  const importedGroup = groups.find((group) => group.id === "imported:marketing")
+  const importedCard = importedGroup?.cards.find((card) => card.kind === "builtin" && card.id === "agency-marketing-email-strategist")
+
+  assert.equal(importedGroup?.label, "营销")
+  assert.equal(importedCard?.kind, "builtin")
+  assert.equal(importedCard?.businessMenuAgentId, "agency-marketing-email-strategist")
+})

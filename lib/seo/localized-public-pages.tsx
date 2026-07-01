@@ -30,6 +30,7 @@ type LocalizedSeoGroup =
   | "alternatives"
   | "compare"
   | "prompts"
+  | "resources"
   | "use-cases"
 
 type PlatformDirectoryPage = "agents" | "capabilities" | "plugins" | "mcp-services" | "workflows"
@@ -45,28 +46,28 @@ function getPublicResourceDirectory(locale: AppLocale): PublicResourceEntry[] {
   return locale === "zh"
     ? [
         {
-          label: "专题",
-          title: "Claude Fable 5 主题集群",
-          description: "承接 Claude Fable 5 pricing、prompts、benchmarks、API 和 SEO use cases 的专题入口。",
-          href: "/claude/fable-5",
+          label: "Brief",
+          title: "什么是内容简报？",
+          description: "定义 content brief 的作用、字段和如何衔接 SEO 生产工作流。",
+          href: "/resources/what-is-a-content-brief",
         },
         {
-          label: "成本",
-          title: "AI 工具成本计算器",
-          description: "对比团队继续叠加 ChatGPT、Claude、Gemini 和图片工具订阅的真实成本。",
-          href: "/resources/ai-subscription-cost-calculator",
+          label: "Strategy",
+          title: "什么是内容支柱？",
+          description: "解释 content pillar、topic cluster 和 SEO 结构化内链之间的关系。",
+          href: "/resources/what-is-a-content-pillar",
         },
         {
-          label: "场景",
-          title: "面向营销团队的 AI 工作台",
-          description: "从 broad commercial intent 切入，承接营销团队对共享 AI 工作台的需求。",
-          href: "/use-cases/ai-workspace-for-marketing-teams",
+          label: "ROI",
+          title: "内容营销 ROI",
+          description: "把内容产出、工具成本和工作流效率放进同一个 ROI 视角里衡量。",
+          href: "/resources/content-marketing-roi",
         },
         {
-          label: "SEO",
-          title: "面向 SEO 团队的 AI 工作台",
-          description: "把 brief、结构、内链和文章生产统一到同一个 SEO 工作流里。",
-          href: "/use-cases/ai-workspace-for-seo-teams",
+          label: "工具",
+          title: "内容简报生成器",
+          description: "先把 brief 结构化，再继续生成标题、Meta、FAQ 和内链方向。",
+          href: "/tools/content-brief-generator",
         },
         {
           label: "对比",
@@ -83,28 +84,28 @@ function getPublicResourceDirectory(locale: AppLocale): PublicResourceEntry[] {
       ]
     : [
         {
-          label: "Cluster",
-          title: "Claude Fable 5 topic hub",
-          description: "The main cluster entry for Claude Fable 5 pricing, prompts, benchmarks, API, and SEO use cases.",
-          href: "/claude/fable-5",
+          label: "Brief",
+          title: "What is a content brief?",
+          description: "Define the role of a content brief and how it supports SEO production before drafting begins.",
+          href: "/resources/what-is-a-content-brief",
         },
         {
-          label: "Costs",
-          title: "AI subscription cost calculator",
-          description: "Compare what a team spends on stacked ChatGPT, Claude, Gemini, image, and writing subscriptions.",
-          href: "/resources/ai-subscription-cost-calculator",
+          label: "Strategy",
+          title: "What is a content pillar?",
+          description: "Explain how content pillars, topic clusters, and internal links work together in an SEO system.",
+          href: "/resources/what-is-a-content-pillar",
         },
         {
-          label: "Use Case",
-          title: "AI workspace for marketing teams",
-          description: "The broad commercial entry for teams evaluating a shared multi-model marketing workspace.",
-          href: "/use-cases/ai-workspace-for-marketing-teams",
+          label: "ROI",
+          title: "Content marketing ROI",
+          description: "Measure content value alongside tool cost, workflow drag, and publish efficiency.",
+          href: "/resources/content-marketing-roi",
         },
         {
-          label: "SEO",
-          title: "AI workspace for SEO teams",
-          description: "A workflow page for briefs, structure, internal links, and article production in one SEO system.",
-          href: "/use-cases/ai-workspace-for-seo-teams",
+          label: "Tool",
+          title: "Content brief generator",
+          description: "Start from one topic and turn it into a structured brief before generating final content.",
+          href: "/tools/content-brief-generator",
         },
         {
           label: "Compare",
@@ -646,6 +647,18 @@ export function getCompareMetadata(locale: AppLocale, slug: string) {
 
 export function renderComparePage(locale: AppLocale, slug: string) {
   return renderLocalizedSeoPage(locale, "compare", slug)
+}
+
+export function getResourceStaticParams() {
+  return getLocalizedSeoStaticParams("resources")
+}
+
+export function getResourceMetadata(locale: AppLocale, slug: string) {
+  return getLocalizedSeoMetadata(locale, "resources", slug)
+}
+
+export function renderResourcePage(locale: AppLocale, slug: string) {
+  return renderLocalizedSeoPage(locale, "resources", slug)
 }
 
 export function getPromptStaticParams() {

@@ -16,6 +16,16 @@ function sanitizeFileName(value: string) {
     .slice(0, 120)
 }
 
+function normalizeWorkflowUploadContentType(fileType: string) {
+  const normalized = fileType.trim()
+  if (!normalized) return normalized
+  if (normalized.toLowerCase().includes("charset=")) return normalized
+  if (normalized.toLowerCase().startsWith("text/")) {
+    return `${normalized}; charset=utf-8`
+  }
+  return normalized
+}
+
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getSessionUser(request).catch(() => null)
@@ -28,7 +38,7 @@ export async function POST(request: NextRequest) {
       fileType?: string
     }
     const fileName = typeof body.fileName === "string" ? sanitizeFileName(body.fileName) : ""
-    const fileType = typeof body.fileType === "string" ? body.fileType.trim() : ""
+    const fileType = typeof body.fileType === "string" ? normalizeWorkflowUploadContentType(body.fileType) : ""
 
     if (!fileName || !fileType) {
       return NextResponse.json({ error: "file_name_and_type_required" }, { status: 400 })

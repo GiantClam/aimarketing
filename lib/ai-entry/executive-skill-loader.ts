@@ -88,11 +88,131 @@ const BUSINESS_AGENT_SKILL_MAP = Object.fromEntries(
   listBusinessAgentConfigs().map((agent) => [agent.agentId, [agent.promptDocumentPath]]),
 )
 
+const BUSINESS_AGENT_IMPORTED_SKILL_MAP: Record<string, string[]> = {
+  "business-content-growth-strategist": [
+    "marketing/marketing-content-creator.md",
+  ],
+  "business-seo-repurpose": [
+    "marketing/marketing-seo-specialist.md",
+  ],
+  "business-aeo-foundations": [
+    "marketing/marketing-aeo-foundations.md",
+  ],
+  "business-ai-citation-strategist": [
+    "marketing/marketing-ai-citation-strategist.md",
+  ],
+  "business-xiaohongshu-growth-strategist": [
+    "marketing/marketing-xiaohongshu-specialist.md",
+  ],
+  "business-tiktok-growth-strategist": [
+    "marketing/marketing-tiktok-strategist.md",
+  ],
+  "business-wechat-content-operator": [
+    "marketing/marketing-wechat-official-account.md",
+  ],
+  "business-pr-communications": [
+    "marketing/marketing-pr-communications-manager.md",
+  ],
+  "business-brand-creative": [
+    "design/design-brand-guardian.md",
+  ],
+  "business-campaign-creative": [
+    "marketing/marketing-social-media-strategist.md",
+    "marketing/marketing-growth-hacker.md",
+    "paid-media/paid-media-creative-strategist.md",
+  ],
+  "business-video-creative": [
+    "marketing/marketing-video-optimization-specialist.md",
+    "marketing/marketing-short-video-editing-coach.md",
+    "paid-media/paid-media-creative-strategist.md",
+  ],
+  "business-ppc-strategist": [
+    "paid-media/paid-media-ppc-strategist.md",
+  ],
+  "business-paid-social-strategist": [
+    "paid-media/paid-media-paid-social-strategist.md",
+  ],
+  "business-ad-creative-strategist": [
+    "paid-media/paid-media-creative-strategist.md",
+  ],
+  "business-paid-media-auditor": [
+    "paid-media/paid-media-auditor.md",
+  ],
+  "business-tracking-analytics-specialist": [
+    "paid-media/paid-media-tracking-specialist.md",
+  ],
+  "business-pricing-analyst": [
+    "specialized/specialized-pricing-analyst.md",
+  ],
+  "business-lead-conversion": [
+    "sales/sales-offer-lead-gen-strategist.md",
+    "marketing/marketing-email-strategist.md",
+    "sales/sales-outbound-strategist.md",
+  ],
+  "business-outreach-planner": [
+    "sales/sales-outbound-strategist.md",
+  ],
+  "business-objection-handler": [
+    "sales/sales-discovery-coach.md",
+    "sales/sales-deal-strategist.md",
+    "sales/sales-coach.md",
+  ],
+  "business-sales-close": [
+    "sales/sales-deal-strategist.md",
+  ],
+  "business-proposal-strategist": [
+    "sales/sales-proposal-strategist.md",
+  ],
+  "business-ui-design-system": [
+    "design/design-ui-designer.md",
+  ],
+  "business-ux-architect": [
+    "design/design-ux-architect.md",
+  ],
+  "business-compliance-auditor": [
+    "security/security-compliance-auditor.md",
+  ],
+  "business-privacy-officer": [
+    "specialized/data-privacy-officer.md",
+  ],
+  "business-healthcare-marketing-compliance": [
+    "specialized/healthcare-marketing-compliance.md",
+  ],
+  "business-training-designer": [
+    "specialized/corporate-training-designer.md",
+  ],
+  "business-recruitment-specialist": [
+    "specialized/recruitment-specialist.md",
+  ],
+  "business-hr-onboarding": [
+    "specialized/hr-onboarding.md",
+  ],
+  "business-legal-document-review": [
+    "specialized/legal-document-review.md",
+  ],
+  "business-legal-client-intake": [
+    "specialized/legal-client-intake.md",
+  ],
+  "business-enterprise-operations": [
+    "specialized/operations-manager.md",
+  ],
+  "business-governance-capacity": [
+    "specialized/automation-governance-architect.md",
+  ],
+}
+
 function getStaticAgentSkillSource(agentId: string) {
   if (AGENT_SKILL_MAP[agentId]?.length) {
     return {
       baseDir: EXECUTIVE_SKILL_BASE_DIR,
       files: AGENT_SKILL_MAP[agentId],
+    }
+  }
+
+  if (BUSINESS_AGENT_IMPORTED_SKILL_MAP[agentId]?.length) {
+    return {
+      baseDir: IMPORTED_AGENCY_AGENT_SKILL_BASE_DIR,
+      files: BUSINESS_AGENT_IMPORTED_SKILL_MAP[agentId],
     }
   }
 

@@ -3,6 +3,9 @@ import "server-only"
 import {
   getPlatformArtifactFormatGroup,
   getPlatformArtifactPreviewKind,
+  hasPlatformArtifactAccessibleContent,
+  isPlatformArtifactTextPreviewable,
+  isPlatformArtifactAssetLibraryEligible,
   resolvePlatformArtifactSourceUrl,
 } from "@/lib/platform/artifact-actions"
 import {
@@ -43,8 +46,12 @@ export type EnterpriseUnifiedAssetLibraryItem = {
   referenceCount: number
   hasWorkItem: boolean
   storageKey: string | null
-  status: "ready"
+  status: "ready" | "unavailable"
+  hasAccessibleContent: boolean
+  inlinePreviewText: string | null
 }
+
+const INLINE_PREVIEW_TEXT_LIMIT = 20_000
 
 function isUploadSourceArtifact(artifact: PlatformArtifactRecord) {
   const payload = artifact.payload
@@ -60,6 +67,10 @@ function isUploadSourceArtifact(artifact: PlatformArtifactRecord) {
 function buildPlatformArtifactDownloadUrl(artifactId: number, download = false) {
   const search = download ? "?download=1" : ""
   return `/api/platform/artifacts/${artifactId}/download${search}`
+}
+
+function shouldProxyPlatformArtifactAccess(artifact: Pick<PlatformArtifactRecord, "mimeType" | "title">) {
+  return isPlatformArtifactTextPreviewable(artifact)
 }
 
 function readWorkRecordSource(record: PlatformWorkLibraryItemRecord | null | undefined) {
@@ -89,10 +100,21 @@ function readArtifactSource(artifact: PlatformArtifactRecord) {
   return typeof payloadSource === "string" ? payloadSource : null
 }
 
+function readInlinePreviewText(artifact: PlatformArtifactRecord) {
+  if (!artifact.payload || typeof artifact.payload !== "object") return null
+  const payload = artifact.payload as Record<string, unknown>
+  const text = typeof payload.text === "string" ? payload.text.trim() : ""
+  if (!text) return null
+  return text.slice(0, INLINE_PREVIEW_TEXT_LIMIT)
+}
+
 export function mapArtifactToEnterpriseAssetLibraryCandidate(
   artifact: PlatformArtifactRecord,
 ): EnterpriseAssetLibraryCandidate {
   const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
+  const proxiedUrl = buildPlatformArtifactDownloadUrl(artifact.id)
+  const proxiedDownloadUrl = buildPlatformArtifactDownloadUrl(artifact.id, true)
+  const shouldProxy = shouldProxyPlatformArtifactAccess(artifact)
 
   return {
     id: artifact.id,
@@ -103,8 +125,8 @@ export function mapArtifactToEnterpriseAssetLibraryCandidate(
     createdAt: artifact.createdAt instanceof Date ? artifact.createdAt.toISOString() : null,
     previewKind: getPlatformArtifactPreviewKind(artifact),
     sourceUrl,
-    previewUrl: sourceUrl || buildPlatformArtifactDownloadUrl(artifact.id),
-    downloadUrl: sourceUrl || buildPlatformArtifactDownloadUrl(artifact.id, true),
+    previewUrl: shouldProxy ? proxiedUrl : sourceUrl || proxiedUrl,
+    downloadUrl: shouldProxy ? proxiedDownloadUrl : sourceUrl || proxiedDownloadUrl,
   }
 }
 
@@ -113,6 +135,10 @@ export function mapArtifactToEnterpriseUnifiedAssetLibraryItem(
   workRecord?: PlatformWorkLibraryItemRecord | null,
 ): EnterpriseUnifiedAssetLibraryItem {
   const sourceUrl = resolvePlatformArtifactSourceUrl(artifact)
+  const proxiedUrl = buildPlatformArtifactDownloadUrl(artifact.id)
+  const proxiedDownloadUrl = buildPlatformArtifactDownloadUrl(artifact.id, true)
+  const shouldProxy = shouldProxyPlatformArtifactAccess(artifact)
+  const hasAccessibleContent = hasPlatformArtifactAccessibleContent(artifact)
 
   return {
     artifactId: artifact.id,
@@ -126,12 +152,14 @@ export function mapArtifactToEnterpriseUnifiedAssetLibraryItem(
     formatGroup: getPlatformArtifactFormatGroup(artifact),
     sourceType: readWorkRecordSource(workRecord) || readArtifactSource(artifact),
     sourceUrl,
-    previewUrl: sourceUrl || buildPlatformArtifactDownloadUrl(artifact.id),
-    downloadUrl: sourceUrl || buildPlatformArtifactDownloadUrl(artifact.id, true),
+    previewUrl: shouldProxy ? proxiedUrl : sourceUrl || proxiedUrl,
+    downloadUrl: shouldProxy ? proxiedDownloadUrl : sourceUrl || proxiedDownloadUrl,
     referenceCount: workRecord?.referenceCount ?? 0,
     hasWorkItem: Boolean(workRecord),
     storageKey: artifact.storageKey,
-    status: "ready",
+    status: hasAccessibleContent ? "ready" : "unavailable",
+    hasAccessibleContent,
+    inlinePreviewText: readInlinePreviewText(artifact),
   }
 }
 
@@ -162,7 +190,7 @@ export async function listEnterpriseUnifiedAssetLibraryItems(
     }
   }
 
-  return artifacts.map((artifact) =>
-    mapArtifactToEnterpriseUnifiedAssetLibraryItem(artifact, latestWorkRecordByArtifactId.get(artifact.id)),
-  )
+  return artifacts
+    .filter((artifact) => isPlatformArtifactAssetLibraryEligible(artifact))
+    .map((artifact) => mapArtifactToEnterpriseUnifiedAssetLibraryItem(artifact, latestWorkRecordByArtifactId.get(artifact.id)))
 }

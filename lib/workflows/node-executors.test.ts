@@ -158,8 +158,14 @@ test("product_store echoes upstream output for preview and marks asset library p
       },
     },
     input: {
-      text: ["Stored text"],
-      asset: [],
+      text: [],
+      asset: [{
+        source: "upload",
+        fileName: "Stored text.md",
+        mimeType: "text/markdown",
+        embeddedContentBase64: "IyBTdG9yZWQgdGV4dA==",
+        inlinePreviewText: "# Stored text",
+      }],
       image: [{ url: "https://example.com/result.png", title: "Result image" }],
       video: [],
       audio: [],
@@ -168,8 +174,13 @@ test("product_store echoes upstream output for preview and marks asset library p
   })
 
   assert.deepEqual(result.output, {
-    text: ["Stored text"],
-    asset: [],
+    asset: [{
+      source: "upload",
+      fileName: "Stored text.md",
+      mimeType: "text/markdown",
+      embeddedContentBase64: "IyBTdG9yZWQgdGV4dA==",
+      inlinePreviewText: "# Stored text",
+    }],
     image: [{ url: "https://example.com/result.png", title: "Result image" }],
     video: [],
     audio: [],
@@ -178,6 +189,38 @@ test("product_store echoes upstream output for preview and marks asset library p
   assert.equal(result.metadata?.persistenceTarget, "asset_library")
   assert.equal(result.metadata?.persistToWorkLibrary, true)
   assert.equal(result.metadata?.persistToKnowledgeBase, true)
+})
+
+test("file_create materializes text into a markdown asset", async () => {
+  const executor = resolveWorkflowNodeExecutor("file_create")
+  const result = await executor.execute({
+    enterpriseId: 1,
+    ownerUserId: 1,
+    node: {
+      nodeKey: "file-1",
+      type: "file_create",
+      title: "Brief File",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        fileFormat: "md",
+        fileName: "launch-brief",
+      },
+    },
+    input: {
+      text: ["# Launch brief\n\nHello world"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(result.output.asset?.length, 1)
+  assert.equal(result.output.asset?.[0]?.fileName, "launch-brief.md")
+  assert.equal(result.output.asset?.[0]?.mimeType, "text/markdown")
+  assert.equal(result.metadata?.fileFormat, "md")
 })
 
 test("upload executor returns canonical asset output", async () => {

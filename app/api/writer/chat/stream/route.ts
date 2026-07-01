@@ -88,6 +88,18 @@ export async function POST(req: NextRequest) {
     const platform = normalizeWriterPlatform(body?.platform)
     const mode = normalizeWriterMode(platform, body?.mode)
     const language = normalizeWriterLanguage(body?.language)
+    const selectedProviderId =
+      typeof body?.modelConfig?.providerId === "string" && body.modelConfig.providerId.trim()
+        ? body.modelConfig.providerId.trim()
+        : typeof body?.selectedProviderId === "string" && body.selectedProviderId.trim()
+          ? body.selectedProviderId.trim()
+          : null
+    const selectedModelId =
+      typeof body?.modelConfig?.modelId === "string" && body.modelConfig.modelId.trim()
+        ? body.modelConfig.modelId.trim()
+        : typeof body?.selectedModelId === "string" && body.selectedModelId.trim()
+          ? body.selectedModelId.trim()
+          : null
 
     const rateLimit = await checkRateLimit({
       key: `writer:chat:stream:${auth.user.id}:${getRequestIp(req)}:${platform}:${mode}`,
@@ -228,6 +240,8 @@ export async function POST(req: NextRequest) {
             history,
             conversationStatus: existingConversation?.status as WriterConversationStatus | undefined,
             enterpriseId: auth.user.enterpriseId,
+            selectedProviderId,
+            selectedModelId,
             onProgress: async (event) => {
               sendProgressEvent(event)
             },

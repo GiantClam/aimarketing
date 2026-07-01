@@ -2286,6 +2286,31 @@
     color: #fff;
   }
 
+  .agent-card-secondary-action {
+    display: inline-flex;
+    min-height: 38px;
+    min-width: 160px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #d5d5cd;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0 16px;
+    color: #444;
+    font-family:
+      var(--font-display),
+      var(--font-display-fallback);
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .agent-card-secondary-action:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
   .agent-preview {
     display: inline-flex;
     align-items: center;
@@ -2499,6 +2524,7 @@
   }
 
   .agent-card-primary-action,
+  .agent-card-secondary-action,
   .agent-preview {
     width: 100%;
   }

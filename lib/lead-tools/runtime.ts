@@ -26,6 +26,7 @@ import {
 const pptScenarioSchema = z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"])
 const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
 const pptPreviewModelSchema = z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"])
+const pptPreviewRuntimeSchema = z.enum(["ppt-master-agent", "frontend-slides-agent"])
 const pptPreviewTemplateModeSchema = z.enum(["auto-4", "single-template"])
 const pptFrontendTemplateIdSchema = z.enum(["long-table", "playful", "broadside", "neo-grid-bold"])
 const pptPreviewPageCountSchema = z
@@ -209,6 +210,7 @@ const pptPreviewRequestSchema = z
     scenario: pptScenarioSchema.default("marketing-campaign"),
     language: pptLanguageSchema.default("zh-CN"),
     model: pptPreviewModelSchema.optional(),
+    previewRuntime: pptPreviewRuntimeSchema.optional(),
     templateMode: pptPreviewTemplateModeSchema.default("auto-4"),
     templateId: pptFrontendTemplateIdSchema.optional(),
     narrativeAngle: pptPreviewNarrativeAngleSchema.optional(),

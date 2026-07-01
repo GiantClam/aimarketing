@@ -40,6 +40,7 @@ const LOCALIZED_PUBLIC_PREFIXES = [
   "/capabilities/",
   "/plugins/",
   "/mcp-services/",
+  "/resources/",
   "/tools/",
   "/workflows/",
 ] as const

@@ -1,6 +1,6 @@
 import { claudeFablePages } from "@/lib/seo/claude-fable-pages"
 
-export type SeoGroup = "alternatives" | "solutions" | "agents" | "compare" | "use-cases" | "prompts" | "claude"
+export type SeoGroup = "alternatives" | "solutions" | "agents" | "compare" | "use-cases" | "prompts" | "claude" | "resources"
 
 export type SeoSection = {
   heading: string
@@ -1052,6 +1052,13 @@ function promptPage(input: {
       ...topicRelatedLinks(input.title).filter((link) => link.href !== input.agentHref && link.href !== currentPath),
       makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See where reusable prompts fit inside a broader team workflow."),
     ],
+  }
+}
+
+function resourcePage(input: Omit<SeoPage, "group">): SeoPage {
+  return {
+    group: "resources",
+    ...input,
   }
 }
 
@@ -2215,6 +2222,588 @@ const rawSeoPages: SeoPage[] = [
       "Skipping format requirements and then blaming the model for awkward composition.",
       "Prompting for on-brand visuals without describing the brand in any usable detail.",
       "Generating many variants before the team agrees on one clear creative direction.",
+    ],
+  }),
+  resourcePage({
+    slug: "what-is-a-content-brief",
+    title: "What Is a Content Brief? Definition, Template, and Example | AI Marketing",
+    description:
+      "Learn what a content brief is, what fields it should include, and how marketing teams can turn one brief into SEO pages, drafts, FAQs, and internal links.",
+    h1: "What Is a Content Brief?",
+    intro:
+      "A content brief is the working document that keeps topic, audience, search intent, structure, proof, and CTA aligned before writing starts. Strong briefs help marketing teams publish faster because the brief, outline, and downstream assets all start from the same shared context.",
+    primaryKeyword: "what is a content brief",
+    secondaryKeywords: [
+      "content brief",
+      "content brief template",
+      "content brief example",
+      "AI content brief generator",
+    ],
+    audience:
+      "Marketing teams, SEO operators, and content leads who need clearer briefs before drafting landing pages, blog content, or campaign assets.",
+    highlights: [
+      "A content brief should reduce rewrite loops by aligning audience, intent, structure, proof, and CTA before drafting begins.",
+      "The best briefs connect directly to downstream execution such as outlines, FAQs, internal links, and review notes.",
+      "This topic is strongest when it routes readers into a reusable generator, an SEO workflow, and a related production agent.",
+    ],
+    sections: [
+      {
+        heading: "What a content brief actually does",
+        body: [
+          "A content brief is not just a title and a word-count target. It is the planning layer that tells the writer what question the page should answer, who it is for, how deep it needs to go, and what action the page should move the reader toward.",
+          "For SEO teams, the brief is also where search intent, required headings, internal links, proof points, FAQs, and conversion goals get aligned before production starts.",
+        ],
+      },
+      {
+        heading: "What a strong content brief includes",
+        body: [
+          "The most useful briefs are specific enough to guide drafting without forcing the writer to guess what matters.",
+        ],
+        bullets: [
+          "Primary keyword, search intent, and the audience stage the page needs to serve.",
+          "A clear angle for the page, including what makes the result different or more useful than a generic draft.",
+          "Required sections, proof points, examples, and questions the page must answer.",
+          "CTA direction, related links, and the product or workflow pages the content should support.",
+        ],
+      },
+      {
+        heading: "Why content briefs matter more once teams use AI",
+        body: [
+          "AI speeds up drafting, but weak briefs simply make the wrong draft arrive faster. When the brief is vague, teams still lose time rewriting structure, correcting positioning, and patching internal links after the fact.",
+          "A stronger brief lets the same context travel into title generation, outline building, FAQ drafting, SEO review, and final approval instead of being rebuilt at every step.",
+        ],
+      },
+      {
+        heading: "A practical content brief workflow for SEO teams",
+        body: [
+          "The fastest path is to treat the brief as the shared operating context for the rest of the workflow, not as a throwaway planning note.",
+        ],
+        bullets: [
+          "Start with the keyword, search intent, audience, and page goal.",
+          "Define the sections, proof points, FAQs, and internal links before the draft starts.",
+          "Use a generator or SEO workflow to turn the brief into titles, descriptions, and a first structured outline.",
+          "Review the draft against the original brief so the page stays aligned with intent and conversion goals.",
+        ],
+      },
+      {
+        heading: "What teams usually miss in content briefs",
+        body: [
+          "Most weak briefs fail because they stop at topic selection and never describe the decision the page should help the reader make.",
+        ],
+        bullets: [
+          "Treating the brief like a writing assignment instead of a search-intent and conversion plan.",
+          "Skipping required links to product, compare, or use-case pages that should carry the reader forward.",
+          "Asking for a draft before the team agrees on audience, offer, and proof.",
+          "Leaving FAQs and objection handling to the end instead of planning them up front.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        question: "What is the difference between a content brief and an outline?",
+        answer:
+          "A content brief defines the goal, audience, intent, proof, and CTA. An outline is one output that can be generated from that brief.",
+      },
+      {
+        question: "Should AI generate the brief or the draft first?",
+        answer:
+          "The brief should come first. A shared brief gives AI enough context to produce a stronger outline, draft, FAQ set, and internal-link plan.",
+      },
+      {
+        question: "Who should own a content brief on a marketing team?",
+        answer:
+          "Usually the SEO lead, content strategist, or campaign owner owns the brief, while writers and reviewers use it as the shared execution reference.",
+      },
+    ],
+    cta: {
+      primaryLabel: "Generate a content brief",
+      primaryHref: "/tools/content-brief-generator",
+      secondaryLabel: "Open the SEO team workflow",
+      secondaryHref: "/use-cases/ai-workspace-for-seo-teams",
+    },
+    relatedLinks: [
+      makeRelatedLink("/tools/content-brief-generator", "Turn the brief into a reusable generator workflow instead of starting from scratch."),
+      makeRelatedLink("/tools/ai-seo-meta-generator", "Generate title, description, and structural directions from the same page brief."),
+      makeRelatedLink("/agents/seo-article-agent", "Move from one brief into a publishable SEO article workflow with clearer review steps."),
+    ],
+  }),
+  resourcePage({
+    slug: "what-is-a-content-pillar",
+    title: "What Is a Content Pillar? Examples and Strategy | AI Marketing",
+    description:
+      "Understand what a content pillar is, how it connects to topic clusters and cornerstone content, and how marketing teams can build pillar-led SEO workflows.",
+    h1: "What Is a Content Pillar?",
+    intro:
+      "A content pillar is the main topic page or strategic theme that anchors a set of related supporting content. It helps teams organize search intent, internal links, and reusable campaign context around one central subject instead of publishing disconnected pages.",
+    primaryKeyword: "what is a content pillar",
+    secondaryKeywords: [
+      "content pillar",
+      "content pillar examples",
+      "cornerstone content",
+      "topic cluster strategy",
+    ],
+    audience:
+      "SEO teams and content strategists who need a cleaner way to structure topic ownership, internal links, and cluster planning.",
+    highlights: [
+      "A content pillar gives one broad topic a clear home, then routes readers and crawlers into related supporting pages.",
+      "Pillar strategy works best when it is paired with cluster planning, internal links, and reusable brief structure.",
+      "This page should connect method terms to a real SEO workflow, not stop at theory alone.",
+    ],
+    sections: [
+      {
+        heading: "What makes a page a content pillar",
+        body: [
+          "A content pillar covers the broad concept, frames the subtopics, and acts as the main internal-link hub for supporting pages. It is usually more comprehensive than a single FAQ or long-tail article because it needs to guide the whole topic cluster.",
+          "The goal is not just ranking one page. The goal is to create a structure where related pages support one another instead of competing for the same idea.",
+        ],
+      },
+      {
+        heading: "How content pillars relate to topic clusters",
+        body: [
+          "A pillar sets the center of gravity for a topic cluster. Supporting pages then answer narrower questions, capture adjacent intents, and link back into the pillar when the reader needs a higher-level explanation or next step.",
+          "That structure helps both navigation and SEO because it tells search engines which page carries the broadest authority and which pages handle specific supporting intent.",
+        ],
+      },
+      {
+        heading: "Content pillar vs cornerstone content",
+        body: [
+          "The two phrases often overlap. In practice, cornerstone content usually refers to the most important foundational content on the site, while a content pillar often describes the organizing page in a broader topic-cluster system.",
+          "The useful distinction is operational: cornerstone content is usually your most strategic evergreen page, while a content pillar is the page that coordinates related supporting content and internal links around a topic.",
+        ],
+      },
+      {
+        heading: "How teams should build one",
+        body: [
+          "The best pillar planning starts before drafting, when the team still has room to choose what the central page should own and what supporting pages should cover.",
+        ],
+        bullets: [
+          "Choose the broad topic and define the main search intent the pillar should satisfy.",
+          "List the subtopics, comparisons, examples, and FAQs that deserve their own supporting pages.",
+          "Map the internal links between the pillar, supporting content, tools, and decision pages.",
+          "Use one shared brief so the pillar and supporting pages keep the same positioning and CTA logic.",
+        ],
+      },
+      {
+        heading: "Where content pillar projects fail",
+        body: [
+          "Most failures come from treating the pillar as a single article instead of a topic-management system.",
+        ],
+        bullets: [
+          "Publishing multiple broad pages that all chase the same definition-level keyword.",
+          "Skipping internal-link planning until after the content has already gone live.",
+          "Using a generic cluster map that never connects to product pages, use cases, or comparison pages.",
+          "Separating strategy from execution so the brief never reaches the writing and review workflow.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        question: "Is a content pillar always one long page?",
+        answer:
+          "Not always. It is usually a comprehensive page, but the main requirement is that it anchors the topic and coordinates the supporting content structure.",
+      },
+      {
+        question: "How many supporting pages should a content pillar have?",
+        answer:
+          "There is no fixed number. The right count depends on how many distinct intents, examples, or decision angles the topic needs.",
+      },
+      {
+        question: "Can AI help build topic clusters from a pillar?",
+        answer:
+          "Yes. AI can help turn the pillar brief into cluster ideas, section outlines, FAQs, and internal-link plans, as long as the core topic strategy is clear first.",
+      },
+    ],
+    cta: {
+      primaryLabel: "Build a topic cluster",
+      primaryHref: "/resources/topic-cluster-strategy",
+      secondaryLabel: "Open the SEO article workflow",
+      secondaryHref: "/agents/seo-article-agent",
+    },
+    relatedLinks: [
+      makeRelatedLink("/resources/topic-cluster-strategy", "Turn the pillar concept into a repeatable cluster-planning workflow."),
+      makeRelatedLink("/resources/cornerstone-content", "Compare content pillars with cornerstone content before planning new clusters."),
+      makeRelatedLink("/use-cases/ai-workspace-for-seo-teams", "See how SEO teams keep briefs, drafts, and internal links in one workspace."),
+    ],
+  }),
+  resourcePage({
+    slug: "cornerstone-content",
+    title: "Cornerstone Content Guide for Marketing Teams | AI Marketing",
+    description:
+      "Use cornerstone content to define your most important evergreen pages, strengthen internal links, and support pillar-led SEO planning.",
+    h1: "Cornerstone Content",
+    intro:
+      "Cornerstone content is the set of evergreen pages your team most wants search engines and visitors to understand first. These pages usually carry the clearest strategic positioning, the strongest internal-link support, and the broadest ownership over important topics.",
+    primaryKeyword: "cornerstone content",
+    secondaryKeywords: [
+      "content pillar",
+      "cornerstone content strategy",
+      "topic cluster strategy",
+      "evergreen SEO content",
+    ],
+    audience:
+      "Teams deciding which pages deserve the strongest internal-link support, the broadest topical coverage, and the most careful long-term maintenance.",
+    highlights: [
+      "Cornerstone content defines which evergreen pages deserve the most authority, maintenance, and internal-link support.",
+      "It works best when tied to a content pillar and topic-cluster strategy instead of standing alone.",
+      "Choosing cornerstone pages helps teams stop spreading authority across too many near-duplicate broad pages.",
+    ],
+    sections: [
+      {
+        heading: "What counts as cornerstone content",
+        body: [
+          "Cornerstone content is usually your highest-priority evergreen page on a strategic topic. It should be broad enough to orient readers, strong enough to attract links, and central enough that supporting pages naturally link back to it.",
+          "In many marketing sites, cornerstone pages include major product-use-case pages, strategic guides, and the strongest pillar pages tied to recurring business intent.",
+        ],
+      },
+      {
+        heading: "Why teams need to choose cornerstone pages deliberately",
+        body: [
+          "Without a clear cornerstone strategy, broad-intent pages tend to multiply. Teams end up with several pages covering the same concept, each too weak to become the authoritative version.",
+          "Deliberate cornerstone selection tells the team which pages deserve the clearest brief, the strongest proofs, and the tightest supporting-link structure.",
+        ],
+      },
+      {
+        heading: "How cornerstone content differs from supporting pages",
+        body: [
+          "A supporting page answers a narrower question, showcases an example, or handles a specific decision point. A cornerstone page owns the broader framing and routes users toward those narrower pages when appropriate.",
+          "That means the cornerstone page should explain the concept, define the key sections, and give readers a clear path into related supporting content or product pages.",
+        ],
+      },
+      {
+        heading: "How to choose cornerstone pages",
+        body: [
+          "The best candidates are the pages that match durable business themes and deserve long-term authority.",
+        ],
+        bullets: [
+          "Pick topics that matter to your product story, not just temporary traffic spikes.",
+          "Favor pages that can support multiple related long-tail pages, examples, or comparison angles.",
+          "Connect cornerstone pages to internal links, use cases, and conversion paths before scaling supporting content.",
+          "Review whether the page can stay evergreen with updates instead of needing a full rewrite every few weeks.",
+        ],
+      },
+      {
+        heading: "A practical maintenance rule",
+        body: [
+          "Treat cornerstone pages like owned assets. Refresh them when your product, proof, or topic structure changes, and use them to keep supporting content anchored to the same strategic story.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        question: "Can a content pillar also be cornerstone content?",
+        answer:
+          "Yes. Many cornerstone pages are also pillar pages because they own the broad topic and support a cluster of narrower pages.",
+      },
+      {
+        question: "How many cornerstone pages should a marketing site have?",
+        answer:
+          "Only a limited number. Too many cornerstone pages usually means the team has not decided which broad pages matter most.",
+      },
+      {
+        question: "Should cornerstone content link to pricing or product pages?",
+        answer:
+          "Often yes. If the topic supports a business decision, the page should connect readers to use cases, tools, comparisons, or pricing instead of ending as an isolated guide.",
+      },
+    ],
+    cta: {
+      primaryLabel: "Plan your topic cluster",
+      primaryHref: "/resources/topic-cluster-strategy",
+      secondaryLabel: "See the SEO team use case",
+      secondaryHref: "/use-cases/ai-workspace-for-seo-teams",
+    },
+    relatedLinks: [
+      makeRelatedLink("/resources/what-is-a-content-pillar", "Use pillar planning to decide which pages should become cornerstone assets."),
+      makeRelatedLink("/resources/topic-cluster-strategy", "Translate cornerstone ownership into a clearer internal-link structure."),
+      makeRelatedLink("/tools/content-brief-generator", "Build a repeatable brief before refreshing your cornerstone pages."),
+    ],
+  }),
+  resourcePage({
+    slug: "topic-cluster-strategy",
+    title: "Topic Cluster Strategy for SEO Teams | AI Marketing",
+    description:
+      "Plan topic clusters that connect pillar pages, supporting content, internal links, and conversion pages without creating content silos.",
+    h1: "Topic Cluster Strategy",
+    intro:
+      "A topic cluster strategy organizes one core topic page and a set of supporting pages around distinct search intents. Done well, it improves internal links, clarifies topic ownership, and helps teams turn one strategic brief into multiple connected SEO assets.",
+    primaryKeyword: "topic cluster strategy",
+    secondaryKeywords: [
+      "topic clusters",
+      "content pillar",
+      "internal linking strategy",
+      "cornerstone content",
+    ],
+    audience:
+      "SEO teams and content leads who need a practical way to organize pillar pages, supporting pages, and product-facing internal links.",
+    highlights: [
+      "Topic clusters work best when each page owns a distinct intent and links back into a shared strategic structure.",
+      "A cluster should support both ranking and conversion by connecting guides, examples, tools, and decision pages.",
+      "The strongest cluster plans start from one shared brief rather than drafting each page in isolation.",
+    ],
+    sections: [
+      {
+        heading: "What a topic cluster strategy needs to solve",
+        body: [
+          "The core challenge is not only choosing keywords. It is deciding which page owns the broad topic, which pages serve supporting intents, and how internal links should move readers toward the right next step.",
+          "Without that plan, teams often create overlapping pages that compete with each other and never form a coherent internal-link network.",
+        ],
+      },
+      {
+        heading: "The basic cluster shape",
+        body: [
+          "A strong cluster usually has one central page that defines the topic, then supporting pages that cover examples, comparisons, methods, templates, or tools tied to that same subject.",
+        ],
+        bullets: [
+          "A pillar or cornerstone page for the broadest intent.",
+          "Supporting pages for definitions, examples, workflows, or calculators.",
+          "Decision pages such as compare, use-case, or pricing links when commercial intent becomes relevant.",
+          "A clear internal-link pattern so the pages reinforce each other instead of competing.",
+        ],
+      },
+      {
+        heading: "How to choose supporting pages",
+        body: [
+          "Use the surrounding questions and commercial edges of the topic to decide what deserves its own page. Some pages answer definitions, some show examples, and some convert higher-intent searchers through tools or comparisons.",
+          "The goal is to cover the topic deeply while keeping each page's purpose distinct and easy to explain in one sentence.",
+        ],
+      },
+      {
+        heading: "Why internal links are part of the strategy, not a last step",
+        body: [
+          "Clusters fail when internal links are added after the pages are already live. The links need to reflect the intended flow between concept, execution, examples, and product decision points.",
+          "That means the brief should already know which pages should link to a generator, which ones should link back to the pillar, and where compare or pricing pages belong.",
+        ],
+      },
+      {
+        heading: "A workflow teams can actually repeat",
+        body: [
+          "The easiest way to scale clusters is to reuse one strategic brief and then branch the page-level assets from it.",
+        ],
+        bullets: [
+          "Start with one topic brief covering audience, search intent, proof, and CTA strategy.",
+          "Map the pillar, supporting pages, and internal links before drafting any single page.",
+          "Use AI tools to produce outlines, FAQs, and titles that stay attached to the original brief.",
+          "Review the cluster as a system so content, tools, and decision pages support one another.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        question: "Does every topic need a full cluster?",
+        answer:
+          "No. Clusters are most useful for durable topics that justify a pillar page and several distinct supporting intents.",
+      },
+      {
+        question: "How do topic clusters help conversion?",
+        answer:
+          "They let teams connect educational pages to tools, examples, compare pages, and pricing paths instead of leaving the reader in a content dead end.",
+      },
+      {
+        question: "Can AI help create cluster briefs and internal-link plans?",
+        answer:
+          "Yes. AI is especially useful for turning one strategic brief into multiple outlines, FAQs, and structured linking suggestions.",
+      },
+    ],
+    cta: {
+      primaryLabel: "Generate a cluster-ready brief",
+      primaryHref: "/tools/content-brief-generator",
+      secondaryLabel: "Open the SEO article workflow",
+      secondaryHref: "/agents/seo-article-agent",
+    },
+    relatedLinks: [
+      makeRelatedLink("/resources/what-is-a-content-pillar", "Anchor your cluster strategy in a clearer pillar-page model."),
+      makeRelatedLink("/resources/cornerstone-content", "Choose which pages deserve the most authority before scaling the cluster."),
+      makeRelatedLink("/tools/ai-seo-meta-generator", "Turn one cluster topic into multiple title and description angles faster."),
+    ],
+  }),
+  resourcePage({
+    slug: "content-marketing-roi",
+    title: "Content Marketing ROI: How to Measure, Improve, and Prove It | AI Marketing",
+    description:
+      "Measure content marketing ROI with clearer inputs, realistic formulas, and workflow-aware cost comparisons tied to content, research, and AI tooling decisions.",
+    h1: "Content Marketing ROI",
+    intro:
+      "Content marketing ROI is the measure of how much business value your content creates relative to the time, tools, and budget required to produce it. The hard part is not the formula alone. The hard part is deciding which costs and outcomes belong in the same system.",
+    primaryKeyword: "content marketing roi",
+    secondaryKeywords: [
+      "content marketing tools",
+      "content marketing calculator",
+      "content marketing roi calculator",
+      "measure content marketing roi",
+    ],
+    audience:
+      "Marketing leaders and SEO teams who need a more credible way to explain content spend, software costs, and workflow efficiency.",
+    highlights: [
+      "ROI conversations break down when teams count outputs but ignore workflow cost, approval drag, and duplicated tooling.",
+      "A useful ROI model combines revenue impact, lead quality, production cost, and time-to-publish improvements.",
+      "This page should route directly into calculators, compare pages, and pricing instead of staying theoretical.",
+    ],
+    sections: [
+      {
+        heading: "What content marketing ROI means in practice",
+        body: [
+          "At the simplest level, ROI compares the value created by content against the cost of making and maintaining that content. In practice, marketing teams also need to count strategy time, editing cycles, software subscriptions, approvals, and the cost of scattered workflows.",
+          "That is why content ROI is not only a performance-reporting question. It is also an operating-model question.",
+        ],
+      },
+      {
+        heading: "A basic formula teams can explain",
+        body: [
+          "Many teams start with a simple formula: value created minus total cost, divided by total cost. That works as a starting point as long as the team agrees on what counts as value and what counts as cost.",
+        ],
+        bullets: [
+          "Value can include pipeline, revenue influence, assisted conversions, or qualified leads created by content.",
+          "Cost should include people time, software, editing and approval overhead, and any external production expense.",
+          "For SEO content, value can also include the compounding effect of evergreen traffic and assisted conversion paths.",
+          "For AI-assisted teams, tool consolidation and faster production are often part of the ROI story too.",
+        ],
+      },
+      {
+        heading: "Why ROI calculations often mislead teams",
+        body: [
+          "The most common mistake is measuring only the final article or campaign result while ignoring the system that created it. If teams need too many subscriptions, repeated briefs, and heavy rewrite loops, the cost side is already larger than the dashboard suggests.",
+          "The second mistake is counting traffic without asking whether the content actually moved readers toward a product, use case, or buying step.",
+        ],
+      },
+      {
+        heading: "How to improve content marketing ROI",
+        body: [
+          "The fastest gains usually come from workflow improvements before they come from new traffic alone.",
+        ],
+        bullets: [
+          "Reduce duplicated planning work by reusing briefs, outlines, and review context across pages.",
+          "Consolidate fragmented tools when the same team keeps paying to recreate the same content context.",
+          "Link educational content to calculators, tools, use cases, and pricing paths that move readers forward.",
+          "Focus on evergreen pages that can continue earning traffic and conversions after launch.",
+        ],
+      },
+      {
+        heading: "What to show a stakeholder",
+        body: [
+          "A credible ROI story should show both output performance and operating efficiency. That means combining content outcomes with workflow cost, speed, and software sprawl in one view.",
+          "If AI tools are part of the workflow, show how the team uses them to reduce turnaround time or tool fragmentation rather than only claiming more content volume.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        question: "What metrics should support content marketing ROI?",
+        answer:
+          "The right mix often includes revenue influence, qualified leads, conversion rate, publish velocity, and the real cost of producing and reviewing the work.",
+      },
+      {
+        question: "Should software cost be part of content ROI?",
+        answer:
+          "Yes. If content production depends on multiple AI, writing, design, or research tools, those subscriptions are part of the cost side of the ROI equation.",
+      },
+      {
+        question: "How do teams prove ROI before revenue is fully visible?",
+        answer:
+          "They often use leading indicators such as qualified traffic, pipeline assist, publish speed, and reduced workflow cost while long-term revenue data matures.",
+      },
+    ],
+    cta: {
+      primaryLabel: "Use the AI cost calculator",
+      primaryHref: "/resources/ai-subscription-cost-calculator",
+      secondaryLabel: "Compare workspace options",
+      secondaryHref: "/compare/best-ai-workspace-for-marketing-teams",
+    },
+    relatedLinks: [
+      makeRelatedLink("/resources/ai-subscription-cost-calculator", "Estimate how much separate AI subscriptions add to the cost side of ROI."),
+      makeRelatedLink("/compare/best-ai-workspace-for-marketing-teams", "Compare whether a shared workspace lowers tool sprawl for recurring marketing work."),
+      makeRelatedLink("/pricing", "Review pricing once the ROI model and workflow requirements are clearer."),
+    ],
+  }),
+  resourcePage({
+    slug: "aida-marketing",
+    title: "AIDA Marketing Framework Guide | AI Marketing",
+    description:
+      "Use the AIDA marketing framework to structure campaigns, landing pages, and content flows from attention to action without losing the brief across channels.",
+    h1: "AIDA Marketing",
+    intro:
+      "AIDA stands for attention, interest, desire, and action. It remains useful because it gives teams a simple way to check whether a page or campaign moves the audience from first impression to the next clear step.",
+    primaryKeyword: "aida marketing",
+    secondaryKeywords: [
+      "aida framework",
+      "marketing framework",
+      "landing page copy framework",
+      "conversion copy structure",
+    ],
+    audience:
+      "Marketers who need a simple framework for landing pages, campaigns, and conversion copy without reducing every page to generic formulas.",
+    highlights: [
+      "AIDA is most useful as a review lens for message flow, not as a rigid copy template.",
+      "Teams can use the framework to structure briefs, sections, and CTA flow across multiple assets.",
+      "This page should connect the framework to real copy, SEO, and website workflows instead of treating it as isolated theory.",
+    ],
+    sections: [
+      {
+        heading: "What AIDA stands for",
+        body: [
+          "Attention captures the first hook, interest explains why the topic matters, desire turns that interest into motivation, and action tells the reader what to do next.",
+          "The model is simple, but it still works because most weak marketing pages fail at one of those four transitions.",
+        ],
+      },
+      {
+        heading: "Where AIDA still helps modern marketing teams",
+        body: [
+          "AIDA is most practical when teams need to review whether a landing page, email, or campaign flow moves logically instead of stacking disconnected claims.",
+          "It is especially useful when the same brief needs to become multiple assets and the team wants a shared message structure across them.",
+        ],
+      },
+      {
+        heading: "How to apply AIDA without sounding generic",
+        body: [
+          "The framework should support a specific audience and offer, not replace them. Good AIDA copy still depends on proof, positioning, and a believable next step.",
+        ],
+        bullets: [
+          "Use a specific hook for attention instead of a vague category statement.",
+          "Build interest with evidence, context, or an explained problem, not filler lines.",
+          "Create desire by showing why the offer matters to this audience now.",
+          "End with one clear action that fits the page and the reader stage.",
+        ],
+      },
+      {
+        heading: "How AIDA fits SEO and website workflows",
+        body: [
+          "Even when a page is designed for search traffic, the structure still needs to move from intent match into action. That means the framework can help shape headings, proof order, FAQ logic, and CTA placement after the page wins the click.",
+          "Teams often use AIDA inside content briefs or website-copy reviews so the same framework stays consistent across homepage sections, landing pages, and supporting content.",
+        ],
+      },
+      {
+        heading: "When to use a stronger planning workflow than AIDA alone",
+        body: [
+          "AIDA is not enough for every job. It helps with flow, but it does not replace audience research, offer clarity, internal-link planning, or SEO structure.",
+          "Use it as one review lens inside a broader brief and production workflow rather than as the only planning artifact.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        question: "Is AIDA outdated for modern marketing?",
+        answer:
+          "No, but it is incomplete on its own. It is still useful as a message-flow framework when paired with a better brief, stronger proof, and channel-specific execution.",
+      },
+      {
+        question: "Can AIDA help with landing page copy?",
+        answer:
+          "Yes. It is often used to review the flow from headline to proof to CTA so the page does not stall after capturing attention.",
+      },
+      {
+        question: "Should SEO pages follow AIDA too?",
+        answer:
+          "Often yes. Search pages still need to move from intent match into proof and action after the reader arrives.",
+      },
+    ],
+    cta: {
+      primaryLabel: "Open the website copy workflow",
+      primaryHref: "/agents/website-copy-agent",
+      secondaryLabel: "Generate SEO titles and descriptions",
+      secondaryHref: "/tools/seo-title-generator",
+    },
+    relatedLinks: [
+      makeRelatedLink("/agents/website-copy-agent", "Use a structured website-copy workflow when AIDA needs to become publishable copy."),
+      makeRelatedLink("/tools/seo-title-generator", "Turn message angles into title and description variants for real pages."),
+      makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See how teams carry one message framework across recurring campaign work."),
     ],
   }),
 ]

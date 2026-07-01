@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { WorkspaceOutputActions } from "@/components/workspace/workspace-output-actions"
 import { WorkflowNodeOutputPreview } from "@/components/workflows/workflow-node-output-preview"
 import { cn } from "@/lib/utils"
+import { sanitizeWorkflowNodeOutputPayloadForDisplay } from "@/lib/workflows/output-display"
 import type { SerializedWorkflowRunDetail } from "@/lib/workflows/run-detail-serialization"
 import { summarizeWorkflowRunGovernance } from "@/lib/workflows/run-governance"
 import { isWorkflowNodeType, resolveWorkflowNodeTitle } from "@/lib/workflows/schema"
@@ -558,8 +559,7 @@ export function WorkflowRunResultsPage({
                     nodeMeta && isWorkflowNodeType(nodeMeta.type)
                       ? resolveWorkflowNodeTitle(nodeMeta.type, nodeMeta.title, locale)
                       : nodeMeta?.title || execution.nodeKey
-                  const nodeOutput =
-                    execution.outputPayload && Object.keys(execution.outputPayload).length > 0 ? execution.outputPayload : null
+                  const nodeOutput = sanitizeWorkflowNodeOutputPayloadForDisplay(nodeMeta?.type, execution.outputPayload)
                   const isRetrying = retrying?.nodeKey === execution.nodeKey
 
                   return (

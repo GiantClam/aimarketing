@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { dispatchBusinessMarketplaceSelectionUpdated } from "@/lib/platform/business-marketplace-events"
 import { buildAgentPlatformDirectoryGroups } from "@/lib/platform/agent-platform-directory"
 import type { CustomAgentView } from "@/lib/platform/custom-agents"
+import type { ImportedAgencyAgentPlatformCard } from "@/lib/platform/imported-agency-agents"
 import type { AiEntryAgentCatalogGroup, AiEntryAgentCatalogItem } from "@/lib/ai-entry/agent-catalog"
 
 export function WorkspaceAgentPlatformDirectory({
@@ -16,12 +17,14 @@ export function WorkspaceAgentPlatformDirectory({
   builtinAgents,
   builtinGroups,
   customAgents,
+  importedAgents,
   initialSelectedBusinessMenuAgentIds,
 }: {
   locale: "zh" | "en"
   builtinAgents: AiEntryAgentCatalogItem[]
   builtinGroups: AiEntryAgentCatalogGroup[]
   customAgents: CustomAgentView[]
+  importedAgents: ImportedAgencyAgentPlatformCard[]
   initialSelectedBusinessMenuAgentIds: string[]
 }) {
   const router = useRouter()
@@ -30,6 +33,7 @@ export function WorkspaceAgentPlatformDirectory({
     builtinAgents,
     builtinGroups,
     customAgents,
+    importedAgents,
   })
   const [selectedBusinessMenuAgentIds, setSelectedBusinessMenuAgentIds] = useState<string[]>(
     initialSelectedBusinessMenuAgentIds,
@@ -51,6 +55,7 @@ export function WorkspaceAgentPlatformDirectory({
           editAgent: "编辑 Agent",
           addToBusinessMenu: "添加到业务菜单",
           inBusinessMenu: "已在业务菜单",
+          removeFromBusinessMenu: "从业务菜单中删除",
           configureBusinessMenu: "配置业务菜单",
           noSummary: "暂无简介",
           pending: "处理中…",
@@ -64,6 +69,7 @@ export function WorkspaceAgentPlatformDirectory({
           editAgent: "Edit agent",
           addToBusinessMenu: "Add to business menu",
           inBusinessMenu: "In business menu",
+          removeFromBusinessMenu: "Remove from business menu",
           configureBusinessMenu: "Configure business menu",
           noSummary: "No summary yet.",
           pending: "Working…",
@@ -177,6 +183,7 @@ export function WorkspaceAgentPlatformDirectory({
                     const businessMenuAgentId = card.businessMenuAgentId
                     const isSelected = businessMenuAgentId ? selectedBusinessMenuAgentIdSet.has(businessMenuAgentId) : false
                     const isPending = businessMenuAgentId ? pendingAgentId === businessMenuAgentId : false
+                    const showMetaChip = Boolean(card.meta) && !group.id.startsWith("imported:")
 
                     return (
                       <article key={card.id} className="agent-card">
@@ -191,22 +198,40 @@ export function WorkspaceAgentPlatformDirectory({
                           </div>
                         </div>
 
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          <span className="agent-chip">{card.meta}</span>
-                        </div>
+                        {showMetaChip ? (
+                          <div className="mt-5 flex flex-wrap gap-2">
+                            <span className="agent-chip">{card.meta}</span>
+                          </div>
+                        ) : null}
 
                         {businessMenuAgentId ? (
                           <div className="agent-card-actions">
                             <button
                               type="button"
-                              disabled={isPending}
-                              onClick={() => {
-                                void toggleBusinessMenuAgent(businessMenuAgentId)
-                              }}
+                              disabled={isPending || isSelected}
+                              onClick={
+                                isSelected
+                                  ? undefined
+                                  : () => {
+                                      void toggleBusinessMenuAgent(businessMenuAgentId)
+                                    }
+                              }
                               className={`agent-card-primary-action ${isSelected ? "agent-installed" : ""}`}
                             >
                               {isPending ? copy.pending : isSelected ? copy.inBusinessMenu : copy.addToBusinessMenu}
                             </button>
+                            {isSelected ? (
+                              <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() => {
+                                  void toggleBusinessMenuAgent(businessMenuAgentId)
+                                }}
+                                className="agent-card-secondary-action"
+                              >
+                                {isPending ? copy.pending : copy.removeFromBusinessMenu}
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                       </article>
@@ -259,21 +284,41 @@ export function WorkspaceAgentPlatformDirectory({
 
                         {card.kind === "custom" ? (
                           card.businessMenuEligible ? (
-                            <Button
-                              type="button"
-                              variant={selectedBusinessMenuAgentIdSet.has(card.businessMenuAgentId) ? "secondary" : "default"}
-                              className="h-10 rounded-[9px] px-4 text-sm font-semibold"
-                              disabled={pendingAgentId === card.businessMenuAgentId}
-                              onClick={() => {
-                                void toggleBusinessMenuAgent(card.businessMenuAgentId)
-                              }}
-                            >
-                              {pendingAgentId === card.businessMenuAgentId
-                                ? copy.pending
-                                : selectedBusinessMenuAgentIdSet.has(card.businessMenuAgentId)
-                                  ? copy.inBusinessMenu
-                                  : copy.addToBusinessMenu}
-                            </Button>
+                            selectedBusinessMenuAgentIdSet.has(card.businessMenuAgentId) ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="h-10 rounded-[9px] px-4 text-sm font-semibold"
+                                  disabled
+                                >
+                                  {pendingAgentId === card.businessMenuAgentId ? copy.pending : copy.inBusinessMenu}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-10 rounded-[9px] px-4 text-sm font-semibold"
+                                  disabled={pendingAgentId === card.businessMenuAgentId}
+                                  onClick={() => {
+                                    void toggleBusinessMenuAgent(card.businessMenuAgentId)
+                                  }}
+                                >
+                                  {pendingAgentId === card.businessMenuAgentId ? copy.pending : copy.removeFromBusinessMenu}
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="default"
+                                className="h-10 rounded-[9px] px-4 text-sm font-semibold"
+                                disabled={pendingAgentId === card.businessMenuAgentId}
+                                onClick={() => {
+                                  void toggleBusinessMenuAgent(card.businessMenuAgentId)
+                                }}
+                              >
+                                {pendingAgentId === card.businessMenuAgentId ? copy.pending : copy.addToBusinessMenu}
+                              </Button>
+                            )
                           ) : (
                             <Button variant="outline" className="h-10 rounded-[9px] px-4 text-sm font-semibold" asChild>
                               <Link href={card.editHref}>{copy.configureBusinessMenu}</Link>

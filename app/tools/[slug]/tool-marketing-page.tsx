@@ -12,7 +12,7 @@ import type { AuthUser } from "@/lib/auth/session"
 import type { LeadToolDefinition } from "@/lib/lead-tools/catalog"
 import { getLeadToolExampleHref, getLeadToolExamples } from "@/lib/lead-tools/examples"
 import type { AppLocale } from "@/lib/i18n/config"
-import { localizePublicPath } from "@/lib/i18n/routing"
+import { buildLocalizedPublicUrl, localizePublicPath } from "@/lib/i18n/routing"
 import type { SeoLanguage, SeoPageType } from "@/lib/lead-tools/seo-meta-data"
 import { resolveLocalizedPlatformCapabilitiesFromSnapshot } from "@/lib/platform/capability-resolver"
 import {
@@ -177,6 +177,12 @@ export async function ToolMarketingPage({
           examplesTitle: "可索引示例页",
           examplesBody: "这些页面用固定示例词把工具能力讲清楚，再把用户导回主工具页，是后续程序化 SEO 的标准样板。",
           openExample: "查看示例页",
+          relatedLinksTitle: "继续阅读",
+          relatedLinksBody: "把流量继续导向定义页、示例页、智能体或 use case，而不是停在单页解释里。",
+          primaryCtaLabel: "打开主流程",
+          secondaryCtaLabel: "查看相关页面",
+          workflowContentTitle: "用现有工作流完成这个任务",
+          workflowContentBody: "这些页面先承接搜索意图，再把用户导向已经上线的 AI Chat、SEO Meta 或 Agent 工作流。",
           notOpenTitle: "该工具暂未开放",
           notOpenBody: "当前只落地了 PPT 预览样板页，其余工具已经在 catalog 中占位，后续会复用同一套 Lead Tool Runtime 快速上线。",
           entryTitle: "从公共入口进入正式工作台",
@@ -210,6 +216,12 @@ export async function ToolMarketingPage({
           examplesTitle: "Indexable example pages",
           examplesBody: "These pages explain the tool clearly with fixed example keywords, then route users back to the main tool page. That becomes the standard template for programmatic SEO later.",
           openExample: "Open example page",
+          relatedLinksTitle: "Keep exploring",
+          relatedLinksBody: "Route readers into guides, example pages, agents, or use cases instead of ending on a single explanatory page.",
+          primaryCtaLabel: "Open the main workflow",
+          secondaryCtaLabel: "View related pages",
+          workflowContentTitle: "Use the current workflow stack for this job",
+          workflowContentBody: "These pages capture search intent first, then send users into the shipped AI Chat, SEO Meta, or agent workflows that can actually continue the work.",
           notOpenTitle: "This tool is not open yet",
           notOpenBody: "Only the PPT preview reference page is fully live right now. The remaining tools are already cataloged and will reuse the same Lead Tool Runtime when they launch.",
           deferredEntryTitle: "Deferred module with a real platform entry",
@@ -230,6 +242,30 @@ export async function ToolMarketingPage({
           faqTitle: "FAQ",
           faqDescription: "This section also serves as long-form SEO support content for the tool page.",
         }
+
+  const toolJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: tool.name,
+    description: tool.description,
+    applicationCategory: tool.category,
+    operatingSystem: "Web",
+    url: buildLocalizedPublicUrl(tool.href, locale),
+  }
+  const faqJsonLd = tool.faqs.length > 0
+    ? {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: tool.faqs.map((faq) => ({
+          "@type": "Question",
+          name: faq.question,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: faq.answer,
+          },
+        })),
+      }
+    : null
 
   const mediaWorkbenchSpec =
     tool.slug === "ai-image"
@@ -276,6 +312,10 @@ export async function ToolMarketingPage({
         </div>
       }
     >
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(toolJsonLd) }} />
+      {faqJsonLd ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+      ) : null}
       {tool.slug === "ai-seo-meta-generator" ? (
         <>
           <SeoMetaWorkbench
@@ -523,6 +563,106 @@ export async function ToolMarketingPage({
               ))}
             </div>
           </section>
+        </>
+      ) : tool.contentSections?.length || examplePages.length || tool.relatedLinks?.length || tool.primaryCta || tool.secondaryCta ? (
+        <>
+          {tool.contentSections?.length ? (
+            <section className="grid gap-4 md:grid-cols-2">
+              {tool.contentSections.map((section) => (
+                <Card key={section.heading} className="border-border/70 bg-card/85 text-foreground">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
+                      {section.heading}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
+                    {section.body.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </section>
+          ) : null}
+
+          {(tool.primaryCta || tool.secondaryCta) ? (
+            <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-5">
+              <div className="space-y-2">
+                <h2 className="text-2xl font-semibold text-foreground">{copy.workflowContentTitle}</h2>
+                <p className="text-sm leading-6 text-muted-foreground">{copy.workflowContentBody}</p>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-3">
+                {tool.primaryCta ? (
+                  <Button asChild>
+                    <Link href={localizePublicPath(tool.primaryCta.href, locale)}>
+                      {tool.primaryCta.label || copy.primaryCtaLabel}
+                    </Link>
+                  </Button>
+                ) : null}
+                {tool.secondaryCta ? (
+                  <Button variant="outline" asChild>
+                    <Link href={localizePublicPath(tool.secondaryCta.href, locale)}>
+                      {tool.secondaryCta.label || copy.secondaryCtaLabel}
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {examplePages.length > 0 ? (
+            <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-5">
+              <div className="max-w-3xl space-y-2">
+                <h2 className="text-2xl font-semibold text-foreground">{copy.examplesTitle}</h2>
+                <p className="text-sm leading-6 text-muted-foreground">{copy.examplesBody}</p>
+              </div>
+              <div className="mt-6 grid gap-4 md:grid-cols-3">
+                {examplePages.map((example) => (
+                  <Link
+                    key={example.slug}
+                    href={localizePublicPath(getLeadToolExampleHref(example.toolSlug, example.slug), locale)}
+                    className="rounded-2xl border border-border/70 bg-background/75 p-4 transition hover:border-primary/30 hover:bg-primary/5"
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      {example.tags.slice(0, 2).map((tag) => (
+                        <Badge key={tag} variant="outline" className="border-primary/20 bg-primary/5 text-zinc-200">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                    <h3 className="mt-4 text-lg font-medium text-foreground">{example.title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">{example.summary}</p>
+                    <div className="mt-4 inline-flex items-center gap-2 text-sm text-primary">
+                      {copy.openExample}
+                      <ArrowUpRight className="h-4 w-4" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {tool.relatedLinks?.length ? (
+            <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-5">
+              <div className="max-w-3xl space-y-2">
+                <h2 className="text-2xl font-semibold text-foreground">{copy.relatedLinksTitle}</h2>
+                <p className="text-sm leading-6 text-muted-foreground">{copy.relatedLinksBody}</p>
+              </div>
+              <div className="mt-6 grid gap-4 md:grid-cols-3">
+                {tool.relatedLinks.map((link) => (
+                  <Link
+                    key={`${tool.slug}-${link.href}`}
+                    href={localizePublicPath(link.href, locale)}
+                    className="rounded-2xl border border-border/70 bg-background/75 p-4 transition hover:border-primary/30 hover:bg-primary/5"
+                  >
+                    <h3 className="text-base font-medium text-foreground">{link.label}</h3>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">{link.description}</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </>
       ) : (
         <div className="rounded-[2rem] border border-border/70 bg-card/85 p-8 text-foreground">

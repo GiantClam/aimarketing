@@ -4,6 +4,7 @@ import { POST as aiChatPost } from "@/app/api/ai/chat/route"
 import { POST as imageAssistantGeneratePost } from "@/app/api/image-assistant/generate/route"
 import { GET as imageAssistantSessionGet } from "@/app/api/image-assistant/sessions/[sessionId]/route"
 import { POST as mediaRunPost } from "@/app/api/platform/media/run/route"
+import { GET as platformArtifactDownloadGet } from "@/app/api/platform/artifacts/[artifactId]/download/route"
 import { GET as mediaTaskGet } from "@/app/api/platform/media/tasks/[taskId]/route"
 import { GET as assistantTaskGet } from "@/app/api/tasks/[taskId]/route"
 import { POST as leadToolDownloadPost } from "@/app/api/tools/[slug]/download/route"
@@ -11,7 +12,11 @@ import { POST as leadToolPreviewPost } from "@/app/api/tools/[slug]/preview/rout
 import { POST as videoWorkflowPost } from "@/app/api/video-agent/workflow/route"
 import { POST as writerChatStreamPost } from "@/app/api/writer/chat/stream/route"
 import { isAiEntryAgentId } from "@/lib/ai-entry/agent-catalog"
+import { resolveAiEntryAgentRuntimePolicy } from "@/lib/ai-entry/agent-runtime-policy"
 import { applyInternalServiceAuthHeader, type AuthUser } from "@/lib/auth/session"
+import { extractChatAttachmentText } from "@/lib/chat-attachments/extract"
+import { ChatAttachmentError, type ExtractedChatAttachmentText } from "@/lib/chat-attachments/types"
+import { isSupportedChatDocumentFile } from "@/lib/chat-attachments/validation"
 import { getCustomAgentForUser, type CustomAgentView } from "@/lib/platform/custom-agents"
 import {
   findModelByCapabilityAndAlias,
@@ -66,10 +71,31 @@ const DEFAULT_WORKFLOW_VIDEO_TIMEOUT_MS = 30 * 60_000
 const DEFAULT_WORKFLOW_PPT_TIMEOUT_MS = 300_000
 const DEFAULT_DIGITAL_HUMAN_DURATION_SECONDS = 10
 const DEFAULT_DIGITAL_HUMAN_TIMEOUT_MS_PER_VIDEO_SECOND = 60_000
+const WORKFLOW_TEXT_ASSET_MAX_FILES = 3
+const WORKFLOW_TEXT_ASSET_MAX_TEXT_CHARS = 12_000
+const WORKFLOW_DIRECT_RESPONSE_INSTRUCTION = [
+  "You are running inside an automated workflow node, not a multi-turn chat.",
+  "Do not ask follow-up questions, do not request clarification, and do not hand the task back to the user unless completion is impossible from the provided inputs.",
+  "Use the available inputs, make reasonable assumptions when needed, state those assumptions briefly, and return the most complete answer you can in a single response.",
+  "Prefer structured, execution-ready output that can be consumed by downstream workflow nodes, and avoid conversational filler.",
+].join(" ")
 
 function normalizeOrigin(value: string | undefined) {
   const trimmed = value?.trim()
   return trimmed || "http://127.0.0.1:3000"
+}
+
+function resolveWorkflowAgentEnabledToolNames(input: {
+  builtinAgentId?: string | null
+  webSearchEnabled: boolean
+}) {
+  const policy = resolveAiEntryAgentRuntimePolicy({
+    agentId: input.builtinAgentId ?? null,
+  })
+  const enabledToolNames = policy.allowedToolIds.filter(
+    (toolId) => toolId !== "web_search" || input.webSearchEnabled,
+  )
+  return [...new Set(enabledToolNames)]
 }
 
 function parsePositiveIntegerEnv(name: string) {
@@ -253,6 +279,13 @@ function buildWorkflowCustomAgentSystemPrompt(agent: CustomAgentView) {
   return sections.join("\n\n").trim()
 }
 
+function composeWorkflowExecutionSystemPrompt(...sections: Array<string | null | undefined>) {
+  return [...sections, WORKFLOW_DIRECT_RESPONSE_INSTRUCTION]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join("\n\n")
+    .trim()
+}
+
 function inferMediaMimeType(kind: Exclude<WorkflowValueKind, "text" | "asset">, mimeType: string | null | undefined) {
   if (mimeType?.trim()) return mimeType.trim()
   if (kind === "image") return "image/png"
@@ -290,6 +323,97 @@ function buildSyntheticUploadNodeFiles(input: WorkflowNodeInputBundle) {
   }
 
   return uploadedFiles.filter((item) => item.url || item.storageKey || item.artifactId)
+}
+
+async function downloadWorkflowAssetBytes(input: {
+  asset: WorkflowNodeInputBundle["asset"][number]
+  origin: string
+  cookieHeader?: string | null
+  requestIp?: string
+  currentUser?: AuthUser | null
+}) {
+  if (input.asset.artifactId) {
+    const response = await platformArtifactDownloadGet(
+      createGetRequest({
+        origin: input.origin,
+        path: `/api/platform/artifacts/${input.asset.artifactId}/download`,
+        cookieHeader: input.cookieHeader,
+        requestIp: input.requestIp,
+        currentUser: input.currentUser,
+      }),
+      {
+        params: Promise.resolve({
+          artifactId: String(input.asset.artifactId),
+        }),
+      },
+    )
+    if (!response.ok) {
+      throw new Error(`workflow_asset_download_failed:${input.asset.artifactId}`)
+    }
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
+  const assetUrl = input.asset.url?.trim()
+  if (!assetUrl) {
+    throw new Error("workflow_asset_url_missing")
+  }
+  const response = await fetch(new URL(assetUrl, input.origin), {
+    cache: "no-store",
+  })
+  if (!response.ok) {
+    throw new Error(`workflow_asset_download_failed:${response.status}`)
+  }
+  return new Uint8Array(await response.arrayBuffer())
+}
+
+async function extractWorkflowTextAssets(input: {
+  assets: WorkflowNodeInputBundle["asset"]
+  origin: string
+  cookieHeader?: string | null
+  requestIp?: string
+  currentUser?: AuthUser | null
+}) {
+  const candidates = input.assets
+    .filter((asset) => isSupportedChatDocumentFile(asset.fileName, asset.mimeType))
+    .slice(0, WORKFLOW_TEXT_ASSET_MAX_FILES)
+
+  const extracted = await Promise.all(
+    candidates.map(async (asset) => {
+      try {
+        const bytes = await downloadWorkflowAssetBytes({
+          asset,
+          origin: input.origin,
+          cookieHeader: input.cookieHeader,
+          requestIp: input.requestIp,
+          currentUser: input.currentUser,
+        })
+        return extractChatAttachmentText({
+          fileName: asset.fileName,
+          mediaType: asset.mimeType,
+          bytes,
+          maxTextChars: WORKFLOW_TEXT_ASSET_MAX_TEXT_CHARS,
+        })
+      } catch (error) {
+        if (
+          error instanceof ChatAttachmentError &&
+          (error.code === "unsupported_file_type" ||
+            error.code === "file_too_large" ||
+            error.code === "pdf_no_extractable_text" ||
+            error.code === "extracted_text_empty")
+        ) {
+          return null
+        }
+        console.warn("workflow.asset-text-extract.failed", {
+          fileName: asset.fileName,
+          artifactId: asset.artifactId ?? null,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        return null
+      }
+    }),
+  )
+
+  return extracted.filter((item): item is ExtractedChatAttachmentText => Boolean(item))
 }
 
 function kindToInputName(kind: Exclude<WorkflowValueKind, "asset">): WorkflowNodeInputName {
@@ -472,31 +596,46 @@ function extractWorkflowPptInputImages(input: WorkflowCapabilityInvokeParams["in
   return [...collected.values()]
 }
 
-function buildPromptText(
-  params: WorkflowCapabilityInvokeParams,
-  locale: "zh" | "en",
-  workflowMetadata?: Record<string, unknown> | null,
-) {
+async function buildPromptText(input: {
+  params: WorkflowCapabilityInvokeParams
+  locale: "zh" | "en"
+  workflowMetadata?: Record<string, unknown> | null
+  origin: string
+  cookieHeader?: string | null
+  requestIp?: string
+  currentUser?: AuthUser | null
+}) {
+  const { params, locale, workflowMetadata } = input
   const inheritedText = params.input.text.map((item) => item.trim()).filter(Boolean)
   const configuredPrompt =
-    inheritedText.length > 0
-      ? ""
-      : typeof params.node.config.prompt === "string"
-        ? params.node.config.prompt.trim()
-        : typeof params.node.config.promptTemplate === "string"
-          ? params.node.config.promptTemplate.trim()
-          : ""
+    typeof params.node.config.prompt === "string"
+      ? params.node.config.prompt.trim()
+      : typeof params.node.config.promptTemplate === "string"
+        ? params.node.config.promptTemplate.trim()
+        : ""
   const referenceUrls = extractUrlLikeItems(params.input)
   const includeReferenceUrls = params.capabilitySlug !== "ai-image" && params.capabilitySlug !== "ai-ppt"
   const presetPrompt = buildEnterpriseWorkflowPresetPrompt(
     getDefaultEnterpriseWorkflowPreset(workflowMetadata, locale),
     locale,
   )
+  const extractedAssetTexts = await extractWorkflowTextAssets({
+    assets: params.input.asset,
+    origin: input.origin,
+    cookieHeader: input.cookieHeader,
+    requestIp: input.requestIp,
+    currentUser: input.currentUser,
+  })
 
   const sections = [
     presetPrompt,
     configuredPrompt,
     inheritedText.length > 0 ? inheritedText.join("\n\n") : "",
+    extractedAssetTexts.length > 0
+      ? `Attached file content:\n${extractedAssetTexts
+          .map((item) => `### ${item.fileName}\n${item.text}`)
+          .join("\n\n")}`
+      : "",
     includeReferenceUrls && referenceUrls.length > 0
       ? `Reference URLs:\n${referenceUrls.map((url) => `- ${url}`).join("\n")}`
       : "",
@@ -905,6 +1044,21 @@ function resolveWorkflowVideoModelId(params: WorkflowCapabilityInvokeParams, fea
   )
 }
 
+function resolveWorkflowAudioModelId(params: WorkflowCapabilityInvokeParams, capability: "audio.generate" | "audio.voice_synthesis") {
+  const configuredModel = normalizeOptionalText(params.node.config.model)
+  const matchingModel = findModelByCapabilityAndAlias({
+    capability,
+    value: configuredModel,
+  })
+
+  return (
+    matchingModel?.id ||
+    getModelDefinition(getDefaultModelId(capability) || "")?.id ||
+    listModels({ capability })[0]?.id ||
+    undefined
+  )
+}
+
 export function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokeParams, prompt: string) {
   const featureId = resolveWorkflowVideoFeatureId(params)
 
@@ -963,7 +1117,7 @@ export function buildVideoGenerateRequestBody(params: WorkflowCapabilityInvokePa
   }
 }
 
-function buildAudioGenerateRequestBody(params: WorkflowCapabilityInvokeParams, prompt: string) {
+export function buildAudioGenerateRequestBody(params: WorkflowCapabilityInvokeParams, prompt: string) {
   const configuredFeatureId = normalizeOptionalText(params.node.config.featureId)
   const featureId =
     params.nodeType === "voice_synthesis" || params.action === "voice-synthesis" || configuredFeatureId === "voice-synthesis"
@@ -971,12 +1125,14 @@ function buildAudioGenerateRequestBody(params: WorkflowCapabilityInvokeParams, p
       : "ai-music"
 
   if (featureId === "voice-synthesis") {
+    const selectedModel = resolveWorkflowAudioModelId(params, "audio.voice_synthesis")
     return {
       featureId,
+      modelId: selectedModel,
       params: {
         prompt,
         voiceId: normalizeOptionalText(params.node.config.voiceId) || undefined,
-        model: normalizeOptionalText(params.node.config.model) || "speech-2.8-hd",
+        model: selectedModel,
         languageBoost: normalizeOptionalText(params.node.config.languageBoost) || "auto",
         speed: normalizeOptionalNumber(params.node.config.speed) ?? 1,
         volume: normalizeOptionalNumber(params.node.config.volume) ?? 1,
@@ -985,9 +1141,12 @@ function buildAudioGenerateRequestBody(params: WorkflowCapabilityInvokeParams, p
     }
   }
 
+  const selectedModel = resolveWorkflowAudioModelId(params, "audio.generate")
   return {
     featureId: "ai-music",
+    modelId: selectedModel,
     params: {
+      model: selectedModel,
       stylePrompt: prompt,
       lyricsSource: normalizeOptionalText(params.node.config.lyricsSource) || "ai_generate",
       lyricsPrompt: prompt,
@@ -1059,7 +1218,15 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
   ): Promise<WorkflowNodeExecutionResult> {
     const locale = options.locale || "en"
     const origin = normalizeOrigin(options.requestOrigin)
-    const prompt = buildPromptText(params, options.locale ?? "en", options.workflowMetadata)
+    const prompt = await buildPromptText({
+      params,
+      locale: options.locale ?? "en",
+      workflowMetadata: options.workflowMetadata,
+      origin,
+      cookieHeader: options.cookieHeader,
+      requestIp: options.requestIp,
+      currentUser: options.currentUser,
+    })
     const executionState =
       params.capabilitySlug === "content-repurpose"
         ? await getPlatformBindingTargetExecutionState(params.capabilitySlug, locale, options.currentUser)
@@ -1104,6 +1271,8 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
           const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
           const selectedModelId = normalizeOptionalText(params.node.config.selectedModelId)
           const configuredSystemPrompt = normalizeOptionalText(params.node.config.systemPrompt)
+          const workflowExecutionSystemPrompt = composeWorkflowExecutionSystemPrompt(configuredSystemPrompt)
+          const workflowAgentWebSearchEnabled = params.node.config.webSearchEnabled === true
 
           if (params.capabilitySlug === "agent-platform") {
             if (!options.currentUser.enterpriseId) {
@@ -1134,7 +1303,13 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
                     agentConfig: {
                       agentId: builtinAgentId,
                     },
-                    ...(configuredSystemPrompt ? { systemPrompt: configuredSystemPrompt } : {}),
+                    skillConfig: {
+                      enabledToolNames: resolveWorkflowAgentEnabledToolNames({
+                        builtinAgentId,
+                        webSearchEnabled: workflowAgentWebSearchEnabled,
+                      }),
+                    },
+                    ...(workflowExecutionSystemPrompt ? { systemPrompt: workflowExecutionSystemPrompt } : {}),
                     ...(selectedProviderId
                       ? {
                           modelConfig: {
@@ -1256,11 +1431,8 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
 
             const systemPrompt = [
               buildWorkflowCustomAgentSystemPrompt(customAgent),
-              configuredSystemPrompt,
-            ]
-              .filter(Boolean)
-              .join("\n\n")
-              .trim()
+              workflowExecutionSystemPrompt,
+            ].filter(Boolean).join("\n\n").trim()
             const response = await aiChatPost(
               createJsonRequest({
                 origin,
@@ -1268,6 +1440,11 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
                 body: {
                   message: prompt,
                   stream: false,
+                  skillConfig: {
+                    enabledToolNames: resolveWorkflowAgentEnabledToolNames({
+                      webSearchEnabled: workflowAgentWebSearchEnabled,
+                    }),
+                  },
                   ...(systemPrompt ? { systemPrompt } : {}),
                   ...(selectedProviderId
                     ? {
@@ -1314,7 +1491,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               body: {
                 message: prompt,
                 stream: false,
-                ...(configuredSystemPrompt ? { systemPrompt: configuredSystemPrompt } : {}),
+                ...(workflowExecutionSystemPrompt ? { systemPrompt: workflowExecutionSystemPrompt } : {}),
                 ...(selectedProviderId
                   ? {
                       modelConfig: {
@@ -1350,6 +1527,8 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
         }
 
         if (params.capabilitySlug === "content-repurpose") {
+          const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
+          const selectedModelId = normalizeOptionalText(params.node.config.selectedModelId)
           const response = await writerChatStreamPost(
             createJsonRequest({
               origin,
@@ -1359,6 +1538,14 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
                 platform: normalizeOptionalText(params.node.config.platform) || "generic",
                 mode: normalizeOptionalText(params.node.config.mode) || "article",
                 language: normalizeOptionalText(params.node.config.language) || "auto",
+                ...(selectedProviderId
+                  ? {
+                      modelConfig: {
+                        providerId: selectedProviderId,
+                        ...(selectedModelId ? { modelId: selectedModelId } : {}),
+                      },
+                    }
+                  : {}),
               },
               cookieHeader: options.cookieHeader,
               requestIp: options.requestIp,
@@ -1375,8 +1562,8 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
             output: {
               text: [message],
             },
-            providerId: "writer",
-            modelId: "writer-skills",
+            providerId: selectedProviderId || "writer",
+            modelId: selectedModelId || "writer-skills",
           }
         }
 
@@ -1387,6 +1574,8 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
             scenario: typeof params.node.config.scenario === "string" ? params.node.config.scenario : "marketing-campaign",
             language: typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN",
             model: typeof params.node.config.model === "string" ? params.node.config.model : undefined,
+            previewRuntime:
+              typeof params.node.config.previewRuntime === "string" ? params.node.config.previewRuntime : undefined,
             templateMode: typeof params.node.config.templateMode === "string" ? params.node.config.templateMode : "auto-4",
             templateId: typeof params.node.config.templateId === "string" ? params.node.config.templateId : undefined,
             pageCount: typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined,

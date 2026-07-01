@@ -325,6 +325,24 @@ test("ppt preview delegates to the configured preview engine and preserves respo
   assert.equal(result.meta.exportRuntime, "ppt-master-agent")
 })
 
+test("ppt preview forwards an explicit preview runtime selection", async () => {
+  await buildLeadToolPreview("ai-ppt-preview", {
+    prompt: "先用快速预览看结构",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    previewRuntime: "frontend-slides-agent",
+  })
+
+  assert.equal(previewCalls.length, 1)
+  assert.deepEqual(previewCalls[0]?.[0], {
+    prompt: "先用快速预览看结构",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    previewRuntime: "frontend-slides-agent",
+    templateMode: "auto-4",
+  })
+})
+
 test("ppt preview forwards researchBrief to the preview engine", async () => {
   await buildLeadToolPreview("ai-ppt-preview", {
     prompt: "做一份霍尔木兹海峡现状汇报",

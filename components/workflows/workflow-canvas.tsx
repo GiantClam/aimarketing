@@ -7,6 +7,7 @@ import {
   Bot,
   ArrowDownToLine,
   Copy,
+  FileText,
   FileUp,
   Film,
   ImageIcon,
@@ -30,6 +31,7 @@ import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/co
 import { WorkflowNodeEditorFields } from "@/components/workflows/workflow-node-editor-fields"
 import { WorkflowNodeOutputPreview } from "@/components/workflows/workflow-node-output-preview"
 import { cn } from "@/lib/utils"
+import { sanitizeWorkflowNodeOutputPayloadForDisplay } from "@/lib/workflows/output-display"
 import { buildWorkflowImagePromptReferenceEntries, buildWorkflowImagePromptReferenceTokens } from "@/lib/workflows/image-prompt-references"
 import { resolveClickConnectInputName } from "@/lib/workflows/connect"
 import {
@@ -74,6 +76,11 @@ const NODE_VISUALS: Record<
     icon: Type,
     accentClassName: "border-sky-300/80 bg-sky-100 text-sky-800",
     glowClassName: "from-sky-200/80 via-sky-100/20 to-transparent",
+  },
+  file_create: {
+    icon: FileText,
+    accentClassName: "border-lime-300/80 bg-lime-100 text-lime-800",
+    glowClassName: "from-lime-200/80 via-lime-100/20 to-transparent",
   },
   writer: {
     icon: PenSquare,
@@ -1299,7 +1306,7 @@ export function WorkflowCanvas({
                       <WorkflowNodeOutputPreview
                         locale={locale}
                         status={executionSnapshot.status}
-                        outputPayload={executionSnapshot.outputPayload}
+                        outputPayload={sanitizeWorkflowNodeOutputPayloadForDisplay(node.type, executionSnapshot.outputPayload)}
                         errorMessage={executionSnapshot.errorMessage}
                       />
                     </div>

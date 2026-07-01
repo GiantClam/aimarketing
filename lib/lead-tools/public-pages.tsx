@@ -246,6 +246,16 @@ export async function renderLeadToolExamplePage(locale: AppLocale, slug: string,
   const relatedExamples = getLeadToolExamples(slug)
     .filter((item) => item.slug !== example.slug)
     .slice(0, 3)
+  const itemListJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: example.title,
+    itemListElement: example.sections.map((section, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: section.title,
+    })),
+  }
 
   return (
     <ToolShell
@@ -279,6 +289,7 @@ export async function renderLeadToolExamplePage(locale: AppLocale, slug: string,
         </div>
       }
     >
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }} />
       <section className="grid gap-4 md:grid-cols-3">
         {example.kind === "seo-meta" ? (
           <>
@@ -380,6 +391,27 @@ export async function renderLeadToolExamplePage(locale: AppLocale, slug: string,
           </Card>
         ))}
       </section>
+
+      {example.relatedLinks?.length ? (
+        <section className="mt-10 rounded-[2rem] border border-white/10 bg-white/5 p-6">
+          <div className="max-w-3xl space-y-2">
+            <h2 className="text-2xl font-semibold text-white">继续阅读</h2>
+            <p className="text-sm leading-6 text-zinc-400">把示例页继续导向主工具页、相关 agent 或更适合承接下一步动作的页面。</p>
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {example.relatedLinks.map((link) => (
+              <Link
+                key={`${example.slug}-${link.href}`}
+                href={localizePublicPath(link.href, locale)}
+                className="rounded-2xl border border-white/10 bg-black/25 p-5 transition hover:border-primary/30 hover:bg-black/35"
+              >
+                <h3 className="text-lg font-medium text-white">{link.label}</h3>
+                <p className="mt-3 text-sm leading-6 text-zinc-400">{link.description}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {relatedExamples.length > 0 ? (
         <section className="mt-10 rounded-[2rem] border border-white/10 bg-white/5 p-6">

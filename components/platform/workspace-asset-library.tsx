@@ -105,6 +105,16 @@ function isPdfAsset(item: WorkspaceAssetLibraryItem) {
   return mime === "application/pdf" || item.title.toLowerCase().endsWith(".pdf")
 }
 
+function isTextPreviewableAsset(item: WorkspaceAssetLibraryItem) {
+  const mime = item.mimeType?.toLowerCase() || ""
+  const title = item.title.toLowerCase()
+  return mime.startsWith("text/") || mime.includes("json") || /\.(md|markdown|txt|json|csv|log)$/i.test(title)
+}
+
+function hasInlineTextPreview(item: WorkspaceAssetLibraryItem) {
+  return Boolean(item.inlinePreviewText && isTextPreviewableAsset(item))
+}
+
 function getAssetSourceBucket(item: WorkspaceAssetLibraryItem): AssetSourceBucket {
   const source = item.sourceType?.toLowerCase() || ""
   if (source.includes("workflow") || item.hasWorkItem) return "workflow"
@@ -245,7 +255,14 @@ function getAssetSourceMeta(item: WorkspaceAssetLibraryItem, locale: "zh" | "en"
   }
 }
 
-function getStatusMeta(locale: "zh" | "en") {
+function getStatusMeta(item: WorkspaceAssetLibraryItem, locale: "zh" | "en") {
+  if (item.status === "unavailable") {
+    return {
+      label: locale === "zh" ? "源文件缺失" : "Unavailable",
+      className: "border-[#f0d0d0] bg-[#fff1f1] text-[#d93025]",
+    }
+  }
+
   return {
     label: locale === "zh" ? "Ready" : "Ready",
     className: "border-[#ccefd7] bg-[#eefaf2] text-[#23a55a]",
@@ -452,6 +469,7 @@ export function WorkspaceAssetLibrary({
   const [previewItem, setPreviewItem] = useState<WorkspaceAssetLibraryItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<WorkspaceAssetLibraryItem | null>(null)
   const [submittingDelete, setSubmittingDelete] = useState(false)
+  const [cleaningUnavailable, setCleaningUnavailable] = useState(false)
   const [reusingRunId, setReusingRunId] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -477,6 +495,7 @@ export function WorkspaceAssetLibrary({
           metricsVideos: "视频",
           metricsDocuments: "文档",
           metricsWorkflow: "工作流产物",
+          metricsUnavailable: "无源资产",
           metricsUpdated: "最近更新",
           tabsAll: "全部资产",
           tabsWorkflow: "工作流产物",
@@ -492,6 +511,7 @@ export function WorkspaceAssetLibrary({
           allTypes: "全部类型",
           allSources: "全部来源",
           allStatus: "全部状态",
+          unavailable: "源文件缺失",
           allDates: "全部时间",
           last7d: "最近 7 天",
           last30d: "最近 30 天",
@@ -504,7 +524,11 @@ export function WorkspaceAssetLibrary({
           percentOfTotal: (count: number, total: number) =>
             total > 0 ? `占总量 ${(count / total * 100).toFixed(1)}%` : "暂无数据",
           workflowOutputsDetail: (count: number) => `${count} 个资产带有 workflow / work-library 引用`,
+          unavailableAssetsDetail: (count: number) => `${count} 个资产缺少可访问的底层文件源`,
           lastUpdatedDetail: "最近一个资产的更新时间",
+          unavailableBanner: (count: number) => `当前有 ${count} 个历史资产缺少底层文件源，不能预览、下载或复制链接。`,
+          filterUnavailable: "筛出无源资产",
+          clearStatusFilter: "清除状态筛选",
           panelTitle: "ASSET LIBRARY",
           panelDescription: "统一查看上传、生成和 workflow 产物，支持搜索、筛选、收藏、预览和下载。",
           emptyTitle: "还没有资产",
@@ -529,12 +553,17 @@ export function WorkspaceAssetLibrary({
           confirmDelete: "确认删除",
           deleting: "删除中...",
           deleteFailed: "删除失败，请稍后重试。",
+          cleanupUnavailable: "批量清理记录",
+          cleanupUnavailablePending: "清理中...",
+          cleanupUnavailableSuccess: (count: number) => `已清理 ${count} 条无源资产记录。`,
+          cleanupUnavailableFailed: "批量清理无源资产失败，请稍后重试。",
           copySuccess: "已复制资产链接。",
           copyFailed: "复制失败，请检查浏览器权限。",
+          copyUnavailable: "该资产缺少可访问的底层文件源，暂时无法复制可用链接。",
           uploadSuccess: (count: number) => `已上传 ${count} 个资产。`,
           uploadFailed: "上传失败，请稍后重试。",
           nothingSelected: "当前页没有可选择的资产。",
-          fileMissing: "该资产暂时没有可预览的源文件。",
+          fileMissing: "该资产缺少可访问的底层文件源，可能是历史遗留记录。",
           favoritesOnly: "收藏",
         }
       : {
@@ -553,6 +582,7 @@ export function WorkspaceAssetLibrary({
           metricsVideos: "Videos",
           metricsDocuments: "Documents",
           metricsWorkflow: "Workflow outputs",
+          metricsUnavailable: "Unavailable",
           metricsUpdated: "Last updated",
           tabsAll: "All assets",
           tabsWorkflow: "Workflow outputs",
@@ -568,6 +598,7 @@ export function WorkspaceAssetLibrary({
           allTypes: "All types",
           allSources: "All sources",
           allStatus: "All status",
+          unavailable: "Unavailable",
           allDates: "All dates",
           last7d: "Last 7 days",
           last30d: "Last 30 days",
@@ -580,7 +611,11 @@ export function WorkspaceAssetLibrary({
           percentOfTotal: (count: number, total: number) =>
             total > 0 ? `${(count / total * 100).toFixed(1)}% of total` : "No data yet",
           workflowOutputsDetail: (count: number) => `${count} assets with workflow / work-library references`,
+          unavailableAssetsDetail: (count: number) => `${count} assets no longer have an accessible backing file`,
           lastUpdatedDetail: "Freshness of the most recently stored asset",
+          unavailableBanner: (count: number) => `${count} legacy assets no longer have backing files, so they cannot be previewed, downloaded, or copied.`,
+          filterUnavailable: "Filter unavailable",
+          clearStatusFilter: "Clear status filter",
           panelTitle: "ASSET LIBRARY",
           panelDescription: "Search, filter, favorite, preview, and download uploaded files, AI output, and workflow results from one library.",
           emptyTitle: "No assets yet",
@@ -605,12 +640,17 @@ export function WorkspaceAssetLibrary({
           confirmDelete: "Confirm delete",
           deleting: "Deleting...",
           deleteFailed: "Delete failed. Please retry.",
+          cleanupUnavailable: "Cleanup records",
+          cleanupUnavailablePending: "Cleaning...",
+          cleanupUnavailableSuccess: (count: number) => `Removed ${count} unavailable asset records.`,
+          cleanupUnavailableFailed: "Failed to clean unavailable asset records. Please retry.",
           copySuccess: "Asset link copied.",
           copyFailed: "Copy failed. Check browser permissions.",
+          copyUnavailable: "This asset no longer has an accessible backing file, so there is no usable link to copy.",
           uploadSuccess: (count: number) => `Uploaded ${count} assets.`,
           uploadFailed: "Upload failed. Please retry.",
           nothingSelected: "No assets are selectable on this page.",
-          fileMissing: "This asset does not currently expose a previewable file.",
+          fileMissing: "This asset no longer exposes an accessible backing file. It is likely a legacy record.",
           favoritesOnly: "Favorite",
         }
 
@@ -645,6 +685,7 @@ export function WorkspaceAssetLibrary({
     const videos = items.filter((item) => item.formatGroup === "video").length
     const documents = items.filter((item) => item.formatGroup === "document").length
     const workflowOutputs = items.filter((item) => item.hasWorkItem).length
+    const unavailable = items.filter((item) => item.status === "unavailable").length
     const latestAsset = items[0]
 
     return {
@@ -653,6 +694,7 @@ export function WorkspaceAssetLibrary({
       videos,
       documents,
       workflowOutputs,
+      unavailable,
       lastUpdated: latestAsset ? formatRelativeTime(latestAsset.createdAt, locale) : "—",
     }
   }, [items, locale])
@@ -744,6 +786,15 @@ export function WorkspaceAssetLibrary({
     setNotice({ tone: "error", message })
   }
 
+  function openPreview(item: WorkspaceAssetLibraryItem) {
+    if (!item.hasAccessibleContent) {
+      setErrorNotice(copy.fileMissing)
+      return
+    }
+
+    setPreviewItem(item)
+  }
+
   function toggleFavorite(artifactId: number) {
     setFavoriteIds((current) =>
       current.includes(artifactId) ? current.filter((id) => id !== artifactId) : [...current, artifactId],
@@ -817,6 +868,11 @@ export function WorkspaceAssetLibrary({
   }
 
   async function handleCopyLink(item: WorkspaceAssetLibraryItem) {
+    if (!item.hasAccessibleContent) {
+      setErrorNotice(copy.copyUnavailable)
+      return
+    }
+
     try {
       await navigator.clipboard.writeText(item.sourceUrl || item.downloadUrl)
       setSuccessNotice(copy.copySuccess)
@@ -849,6 +905,58 @@ export function WorkspaceAssetLibrary({
       setErrorNotice(copy.deleteFailed)
     } finally {
       setSubmittingDelete(false)
+    }
+  }
+
+  async function handleCleanupUnavailable() {
+    if (assetMetrics.unavailable <= 0 || cleaningUnavailable) return
+
+    const confirmed = window.confirm(copy.unavailableBanner(assetMetrics.unavailable))
+    if (!confirmed) return
+
+    setCleaningUnavailable(true)
+    setNotice(null)
+
+    try {
+      const response = await fetch("/api/platform/artifacts/cleanup-unavailable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({}),
+      })
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            data?: {
+              deletedArtifactIds?: number[]
+              deletedCount?: number
+            }
+            error?: string
+          }
+        | null
+
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "cleanup_unavailable_artifacts_failed")
+      }
+
+      const deletedArtifactIds = Array.isArray(payload?.data?.deletedArtifactIds)
+        ? payload.data.deletedArtifactIds.filter((id): id is number => typeof id === "number")
+        : []
+      const deletedSet = new Set(deletedArtifactIds)
+
+      if (deletedSet.size > 0) {
+        setItems((current) => current.filter((item) => !deletedSet.has(item.artifactId)))
+        setSelectedIds((current) => current.filter((id) => !deletedSet.has(id)))
+        setFavoriteIds((current) => current.filter((id) => !deletedSet.has(id)))
+        setPreviewItem((current) => (current && deletedSet.has(current.artifactId) ? null : current))
+        setDeleteItem((current) => (current && deletedSet.has(current.artifactId) ? null : current))
+      }
+
+      setSuccessNotice(copy.cleanupUnavailableSuccess(payload?.data?.deletedCount ?? deletedSet.size))
+    } catch {
+      setErrorNotice(copy.cleanupUnavailableFailed)
+    } finally {
+      setCleaningUnavailable(false)
     }
   }
 
@@ -911,7 +1019,7 @@ export function WorkspaceAssetLibrary({
   const tableRows = pagedItems.map((item) => {
     const typeMeta = getAssetTypeMeta(item, locale)
     const sourceMeta = getAssetSourceMeta(item, locale)
-    const statusMeta = getStatusMeta(locale)
+    const statusMeta = getStatusMeta(item, locale)
     const tags = buildAssetTags(item, locale)
     const favorite = favoriteIds.includes(item.artifactId)
     const selected = selectedIds.includes(item.artifactId)
@@ -932,8 +1040,9 @@ export function WorkspaceAssetLibrary({
           <div className="flex min-w-[260px] items-center gap-3">
             <button
               type="button"
-              onClick={() => setPreviewItem(item)}
-              className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[#ecece3] bg-[#fafaf7]"
+              onClick={() => openPreview(item)}
+              disabled={!item.hasAccessibleContent}
+              className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[#ecece3] bg-[#fafaf7] disabled:cursor-not-allowed disabled:opacity-45"
             >
               {item.previewKind === "image" ? (
                 <img src={item.previewUrl} alt={item.title} className="h-full w-full object-cover" />
@@ -984,8 +1093,9 @@ export function WorkspaceAssetLibrary({
               type="button"
               title={copy.preview}
               aria-label={copy.preview}
-              onClick={() => setPreviewItem(item)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+              onClick={() => openPreview(item)}
+              disabled={!item.hasAccessibleContent}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[#deded6] disabled:hover:bg-white"
             >
               <Eye className="h-4 w-4" />
             </button>
@@ -1008,18 +1118,31 @@ export function WorkspaceAssetLibrary({
               title={copy.copyLink}
               aria-label={copy.copyLink}
               onClick={() => void handleCopyLink(item)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+              disabled={!item.hasAccessibleContent}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[#deded6] disabled:hover:bg-white"
             >
               <Link2 className="h-4 w-4" />
             </button>
-            <a
-              href={item.downloadUrl}
-              title={copy.download}
-              aria-label={copy.download}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
-            >
-              <Download className="h-4 w-4" />
-            </a>
+            {item.hasAccessibleContent ? (
+              <a
+                href={item.downloadUrl}
+                title={copy.download}
+                aria-label={copy.download}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+              >
+                <Download className="h-4 w-4" />
+              </a>
+            ) : (
+              <button
+                type="button"
+                title={copy.download}
+                aria-label={copy.download}
+                disabled
+                className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] opacity-45"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
             {item.hasWorkItem || getAssetSourceBucket(item) === "workflow" ? (
               <>
                 <Link
@@ -1144,6 +1267,13 @@ export function WorkspaceAssetLibrary({
               accentClassName="bg-[#eefaf2]"
             />
             <AssetMetricCard
+              icon={FileArchive}
+              label={copy.metricsUnavailable}
+              value={String(assetMetrics.unavailable)}
+              detail={copy.unavailableAssetsDetail(assetMetrics.unavailable)}
+              accentClassName="bg-[#fff1f1]"
+            />
+            <AssetMetricCard
               icon={RefreshCw}
               label={copy.metricsUpdated}
               value={assetMetrics.lastUpdated}
@@ -1228,6 +1358,9 @@ export function WorkspaceAssetLibrary({
                   >
                     <option value="all">{copy.allStatus}</option>
                     <option value="ready">{copy.ready}</option>
+                    {items.some((item) => item.status === "unavailable") ? (
+                      <option value="unavailable">{copy.unavailable}</option>
+                    ) : null}
                   </select>
 
                   <select
@@ -1283,6 +1416,39 @@ export function WorkspaceAssetLibrary({
                 </button>
               ) : null}
             </div>
+
+            {assetMetrics.unavailable > 0 ? (
+              <div className="mt-4 flex flex-col gap-3 rounded-[12px] border border-[#ffd6d6] bg-[#fff5f5] px-4 py-3 text-sm text-[#8f2c2c] lg:flex-row lg:items-center lg:justify-between">
+                <div>{copy.unavailableBanner(assetMetrics.unavailable)}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleCleanupUnavailable()}
+                    disabled={cleaningUnavailable}
+                    className="inline-flex h-9 items-center rounded-[8px] border border-[#f0b3b3] bg-white px-3 text-sm font-extrabold text-[#8f2c2c] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {cleaningUnavailable ? copy.cleanupUnavailablePending : copy.cleanupUnavailable}
+                  </button>
+                  {statusFilter !== "unavailable" ? (
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("unavailable")}
+                      className="inline-flex h-9 items-center rounded-[8px] border border-[#f0b3b3] bg-white px-3 text-sm font-extrabold text-[#8f2c2c]"
+                    >
+                      {copy.filterUnavailable}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("all")}
+                      className="inline-flex h-9 items-center rounded-[8px] border border-[#f0b3b3] bg-white px-3 text-sm font-extrabold text-[#8f2c2c]"
+                    >
+                      {copy.clearStatusFilter}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             {notice ? (
               <div
@@ -1352,7 +1518,7 @@ export function WorkspaceAssetLibrary({
                       className="overflow-hidden rounded-[14px] border border-[#e7e7df] bg-white shadow-[0_10px_28px_rgba(0,0,0,0.045)]"
                     >
                       <div className="relative aspect-[16/10] bg-[#f3f3ef]">
-                        <AssetThumbnail item={item} onOpenPreview={setPreviewItem} />
+                        <AssetThumbnail item={item} onOpenPreview={openPreview} />
                         <div className="absolute left-3 top-3 flex items-center gap-2">
                           <button
                             type="button"
@@ -1392,7 +1558,8 @@ export function WorkspaceAssetLibrary({
                           <button
                             type="button"
                             onClick={() => void handleCopyLink(item)}
-                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+                            disabled={!item.hasAccessibleContent}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[#deded6] disabled:hover:bg-white"
                             aria-label={copy.copyLink}
                           >
                             <Copy className="h-4 w-4" />
@@ -1420,19 +1587,31 @@ export function WorkspaceAssetLibrary({
                         <div className="mt-4 flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => setPreviewItem(item)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+                            onClick={() => openPreview(item)}
+                            disabled={!item.hasAccessibleContent}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[#deded6] disabled:hover:bg-white"
                             aria-label={copy.preview}
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <a
-                            href={item.downloadUrl}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
-                            aria-label={copy.download}
-                          >
-                            <Download className="h-4 w-4" />
-                          </a>
+                          {item.hasAccessibleContent ? (
+                            <a
+                              href={item.downloadUrl}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] transition hover:border-[#b89100] hover:bg-[#ffd000]"
+                              aria-label={copy.download}
+                            >
+                              <Download className="h-4 w-4" />
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-[8px] border border-[#deded6] bg-white text-[#111] opacity-45"
+                              aria-label={copy.download}
+                            >
+                              <Download className="h-4 w-4" />
+                            </button>
+                          )}
                           {item.hasWorkItem || getAssetSourceBucket(item) === "workflow" ? (
                             <>
                               <Link
@@ -1547,7 +1726,17 @@ export function WorkspaceAssetLibrary({
             </div>
           ) : null}
           {previewItem && previewItem.previewKind === "file" ? (
-            isPdfAsset(previewItem) ? (
+            hasInlineTextPreview(previewItem) ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <FileText className="h-5 w-5" />
+                  <span>{previewItem.title}</span>
+                </div>
+                <pre className="max-h-[80vh] overflow-auto rounded-[10px] border border-border bg-[#fafaf7] p-4 text-sm leading-6 text-[#222] whitespace-pre-wrap break-words">
+                  {previewItem.inlinePreviewText}
+                </pre>
+              </div>
+            ) : isPdfAsset(previewItem) || isTextPreviewableAsset(previewItem) ? (
               <iframe title={previewItem.title} src={previewItem.previewUrl} className="h-[80vh] w-full rounded-[10px] border border-border" />
             ) : (
               <div className="space-y-4">
@@ -1556,9 +1745,9 @@ export function WorkspaceAssetLibrary({
                   <span>{previewItem.title}</span>
                 </div>
                 <div className="rounded-[10px] border border-[#ecece3] bg-[#fafaf7] p-4 text-sm text-[#666]">
-                  {previewItem.sourceUrl ? (
+                  {previewItem.hasAccessibleContent ? (
                     <a
-                      href={previewItem.sourceUrl}
+                      href={previewItem.sourceUrl || previewItem.previewUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center rounded-md border border-[#deded6] px-3 py-2 text-sm font-semibold text-[#111]"

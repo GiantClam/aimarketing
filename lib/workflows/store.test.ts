@@ -34,6 +34,33 @@ test("workflow store persists nodes and edges for one workflow", async () => {
   assert.equal(loaded?.slug, "workflow")
 })
 
+test("workflow store migrates legacy text-to-asset-library edges through a file node", async () => {
+  const store = createInMemoryWorkflowStore()
+
+  const created = await createWorkflowDefinition(
+    {
+      enterpriseId: 1,
+      ownerUserId: 1,
+      title: "Legacy text store",
+      nodes: [
+        { nodeKey: "llm-1", type: "llm_generate", title: "LLM", positionX: 80, positionY: 120, config: {} },
+        { nodeKey: "store-1", type: "product_store", title: "Asset Library", positionX: 400, positionY: 120, config: {} },
+      ],
+      edges: [{ sourceNodeKey: "llm-1", targetNodeKey: "store-1", inputName: "text" }],
+    },
+    store,
+  )
+
+  assert.equal(created.nodes.some((node) => node.type === "file_create"), true)
+  assert.deepEqual(
+    created.edges.map((edge) => [edge.sourceNodeKey, edge.targetNodeKey, edge.inputName]),
+    [
+      ["llm-1", created.nodes.find((node) => node.type === "file_create")?.nodeKey, "text"],
+      [created.nodes.find((node) => node.type === "file_create")?.nodeKey, "store-1", "assets"],
+    ],
+  )
+})
+
 test("workflow store lists enterprise-scoped definitions in newest-first order", async () => {
   const store = createInMemoryWorkflowStore()
 
@@ -197,6 +224,54 @@ test("workflow store clears legacy llm tuning fields on load", async () => {
     selectedModelId: "gpt-5.4",
     systemPrompt: "keep this",
   })
+})
+
+test("workflow store upgrades legacy content-repurpose agent prompts on load", async () => {
+  const store = createInMemoryWorkflowStore()
+
+  const created = await createWorkflowDefinition(
+    {
+      enterpriseId: 18,
+      ownerUserId: 6,
+      title: "Content Repurpose",
+      metadata: {
+        source: "workflow_template",
+        templateKey: "content-repurpose",
+      },
+      nodes: [
+        {
+          nodeKey: "seo-agent",
+          type: "agent_execute",
+          title: "SEO 复用智能体",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            agentId: "business-seo-repurpose",
+            prompt: "抽取关键词、问题簇、文章结构改写建议和复用方向。",
+          },
+        },
+        {
+          nodeKey: "distribution-agent",
+          type: "agent_execute",
+          title: "内容增长智能体",
+          positionX: 260,
+          positionY: 0,
+          config: {
+            agentId: "business-content-growth",
+            prompt: "把上游内容改写成分发节奏、渠道改编和下一步实验建议。",
+          },
+        },
+      ],
+    },
+    store,
+  )
+
+  const loaded = await getWorkflowDefinition(created.id, 18, store)
+  const seoAgent = loaded?.nodes.find((node) => node.nodeKey === "seo-agent")
+  const distributionAgent = loaded?.nodes.find((node) => node.nodeKey === "distribution-agent")
+
+  assert.match(String(seoAgent?.config.prompt), /直接使用的 SEO 复用 brief/)
+  assert.match(String(distributionAgent?.config.prompt), /可执行的分发计划/)
 })
 
 test("workflow store clears legacy image sizing fields on load", async () => {

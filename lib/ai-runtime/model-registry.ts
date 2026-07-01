@@ -448,6 +448,55 @@ const models: ModelDefinition[] = [
       featureId: "voice-synthesis",
     },
   },
+  {
+    id: "minimax:audio:speech-2.8-turbo",
+    provider: "minimax",
+    capability: "audio.voice_synthesis",
+    label: "MiniMax Speech 2.8 Turbo",
+    async: true,
+    outputKind: "audio",
+    defaultTimeoutMs: 30 * 60_000,
+    parameterSchema: [
+      { id: "prompt", label: "Text content", type: "textarea", required: true },
+      { id: "voiceId", label: "Voice ID", type: "text", required: true },
+      selectParameter("languageBoost", "Language boost", "auto", [
+        { label: "Auto", value: "auto" },
+        { label: "Chinese", value: "Chinese" },
+        { label: "English", value: "English" },
+      ]),
+      {
+        id: "speed",
+        label: "Speed",
+        type: "number",
+        defaultValue: 1,
+        min: 0.5,
+        max: 2,
+        step: 0.1,
+      },
+      {
+        id: "volume",
+        label: "Volume",
+        type: "number",
+        defaultValue: 1,
+        min: 0,
+        max: 10,
+        step: 0.1,
+      },
+      {
+        id: "pitch",
+        label: "Pitch",
+        type: "number",
+        defaultValue: 1,
+        min: 0.5,
+        max: 2,
+        step: 0.1,
+      },
+    ],
+    providerMetadata: {
+      nativeModel: "speech-2.8-turbo",
+      featureId: "voice-synthesis",
+    },
+  },
 ]
 
 const modelById = new Map(models.map((model) => [model.id, model]))

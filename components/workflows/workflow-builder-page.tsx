@@ -16,6 +16,7 @@ import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palett
 import { type WorkflowRunResultsDetail } from "@/components/workflows/workflow-run-results-page"
 import { getWorkflowImageDefaultSize, resolveWorkflowImageModelKind } from "@/lib/image-assistant/model-options"
 import { getDefaultModelId } from "@/lib/ai-runtime/model-registry"
+import { pptPreviewModelOptions, pptPreviewRuntimeOptions } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { buildGovernedImageAssistantModelOptionId } from "@/lib/platform/governed-image-model-option-id"
 import {
   canWorkflowNodeConnectValueKind,
@@ -358,20 +359,33 @@ function buildNode(
   const index = nodes.length
   const column = index % 3
   const row = Math.floor(index / 3)
+  const defaultNodeTitle =
+    type === "ppt_generate"
+      ? locale === "zh"
+        ? "HTML PPT"
+        : "HTML PPT"
+      : getDefaultWorkflowNodeTitle(type, locale)
 
   return {
     nodeKey: buildNodeKey(type, nodes),
     type,
-    title: titleOverride?.trim() || getDefaultWorkflowNodeTitle(type, locale),
+    title: titleOverride?.trim() || defaultNodeTitle,
     positionX: position?.x ?? 96 + column * 320,
     positionY: position?.y ?? 96 + row * 420,
     config:
       type === "text_input"
         ? { text: "" }
+        : type === "file_create"
+          ? {
+              fileName: "",
+              fileFormat: "md",
+            }
         : type === "upload"
           ? { uploadedFiles: [], referencedArtifactIds: [] }
-          : type === "writer"
+        : type === "writer"
             ? {
+                selectedProviderId: llmModelCatalog.defaultProviderId,
+                selectedModelId: llmModelCatalog.defaultModelId,
                 platform: locale === "zh" ? "wechat" : "generic",
                 mode: "article",
                 language: "auto",
@@ -385,7 +399,10 @@ function buildNode(
               ? {
                   customAgentId: customAgents[0]?.id ?? null,
                   agentId: customAgents[0] ? null : builtinAgents[0]?.id ?? null,
+                  selectedProviderId: llmModelCatalog.defaultProviderId,
+                  selectedModelId: llmModelCatalog.defaultModelId,
                   prompt: "",
+                  webSearchEnabled: false,
                 }
             : type === "image_generate"
               ? {
@@ -409,6 +426,7 @@ function buildNode(
                 }
               : type === "video_generate"
                 ? {
+                    model: getDefaultModelId("video.text_to_video") || "minimax:video:text-to-video:MiniMax-Hailuo-2.3",
                     resolution: "720p",
                     duration: "5",
                     ratio: "adaptive",
@@ -423,6 +441,7 @@ function buildNode(
                     }
                 : type === "music_generate"
                   ? {
+                      model: getDefaultModelId("audio.generate") || "minimax:audio:music-2.6",
                       genre: "electronic-pop",
                       mood: "uplifting",
                       vocals: "instrumental",
@@ -431,7 +450,7 @@ function buildNode(
                   : type === "voice_synthesis"
                     ? {
                         voiceId: voiceOptions[0]?.voiceId || "",
-                        model: "speech-2.8-hd",
+                        model: getDefaultModelId("audio.voice_synthesis") || "minimax:audio:speech-2.8-hd",
                         languageBoost: "auto",
                         speed: "1",
                         volume: "1",
@@ -439,6 +458,7 @@ function buildNode(
                       }
                   : type === "audio_generate"
                     ? {
+                        model: getDefaultModelId("audio.generate") || "minimax:audio:music-2.6",
                         genre: "electronic-pop",
                         mood: "uplifting",
                         vocals: "instrumental",
@@ -446,6 +466,8 @@ function buildNode(
                       }
                   : type === "ppt_generate"
                     ? {
+                        previewRuntime: pptPreviewRuntimeOptions[0]?.value || "frontend-slides-agent",
+                        model: pptPreviewModelOptions[0]?.value || "MiniMax-M2.7-highspeed",
                         pageCount: 8,
                         slideCount: 8,
                         language: locale === "zh" ? "zh-CN" : "en-US",

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSessionUser } from "@/lib/auth/session"
 import {
   assertArtifactEnterpriseAccess,
+  normalizePlatformArtifactContentType,
   resolvePlatformArtifactSourceUrl,
 } from "@/lib/platform/artifact-actions"
 import { buildAttachmentContentDisposition, buildInlineContentDisposition } from "@/lib/platform/minimax-audio"
@@ -22,7 +23,22 @@ function readEmbeddedArtifactContent(
 
   return {
     bytes: toUint8Array(Buffer.from(encoded, "base64")),
-    contentType: artifact.mimeType || "application/octet-stream",
+    contentType: normalizePlatformArtifactContentType(artifact.mimeType || "application/octet-stream"),
+  }
+}
+
+function readInlineArtifactTextContent(
+  artifact: Awaited<ReturnType<typeof getPlatformArtifact>>,
+): { bytes: Uint8Array; contentType: string } | null {
+  if (!artifact?.payload || typeof artifact.payload !== "object") return null
+
+  const payload = artifact.payload as Record<string, unknown>
+  const text = typeof payload.text === "string" ? payload.text : null
+  if (!text) return null
+
+  return {
+    bytes: toUint8Array(Buffer.from(text, "utf8")),
+    contentType: normalizePlatformArtifactContentType(artifact.mimeType || "text/plain"),
   }
 }
 
@@ -59,7 +75,10 @@ export async function GET(
         return NextResponse.json({ error: "platform_artifact_download_failed" }, { status: 502 })
       }
 
-      headers.set("Content-Type", artifact.mimeType || response.headers.get("content-type") || "application/octet-stream")
+      headers.set(
+        "Content-Type",
+        normalizePlatformArtifactContentType(artifact.mimeType || response.headers.get("content-type") || "application/octet-stream"),
+      )
 
       return new NextResponse(response.body, {
         status: response.status,
@@ -67,14 +86,14 @@ export async function GET(
       })
     }
 
-    const embeddedContent = readEmbeddedArtifactContent(artifact)
-    if (!embeddedContent) {
+    const localContent = readEmbeddedArtifactContent(artifact) ?? readInlineArtifactTextContent(artifact)
+    if (!localContent) {
       return NextResponse.json({ error: "artifact_source_unavailable" }, { status: 404 })
     }
 
-    headers.set("Content-Type", embeddedContent.contentType)
+    headers.set("Content-Type", localContent.contentType)
 
-    return new NextResponse(embeddedContent.bytes, {
+    return new NextResponse(localContent.bytes, {
       status: 200,
       headers,
     })

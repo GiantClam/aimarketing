@@ -1,6 +1,7 @@
 export const WORKFLOW_NODE_TYPES = [
   "upload",
   "text_input",
+  "file_create",
   "writer",
   "llm_generate",
   "agent_execute",
@@ -55,12 +56,16 @@ const WORKFLOW_NODE_TITLE_CATALOG: Record<WorkflowNodeType, Record<WorkflowLocal
     zh: "文本输入",
     en: "Text Input",
   },
+  file_create: {
+    zh: "文件",
+    en: "File",
+  },
   writer: {
     zh: "文章写作",
     en: "Writer",
   },
   llm_generate: {
-    zh: "大模型",
+    zh: "模型生成",
     en: "LLM Generate",
   },
   agent_execute: {
@@ -104,14 +109,14 @@ const WORKFLOW_NODE_TITLE_CATALOG: Record<WorkflowNodeType, Record<WorkflowLocal
     en: "Knowledge Write",
   },
   product_store: {
-    zh: "素材库存储",
+    zh: "资产库存储",
     en: "Asset Library",
   },
 }
 
 const WORKFLOW_NODE_LEGACY_TITLES: Partial<Record<WorkflowNodeType, string[]>> = {
-  llm_generate: ["文案生成"],
-  product_store: ["作品库存储", "Work Library"],
+  llm_generate: ["文案生成", "大模型"],
+  product_store: ["作品库存储", "素材库存储", "Work Library"],
 }
 
 export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDefinition> = {
@@ -126,6 +131,12 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
     title: "Text Input",
     outputKinds: ["text"],
     acceptedInputKinds: [],
+  },
+  file_create: {
+    type: "file_create",
+    title: "File",
+    outputKinds: ["asset"],
+    acceptedInputKinds: ["text"],
   },
   writer: {
     type: "writer",
@@ -203,7 +214,7 @@ export const WORKFLOW_NODE_DEFINITIONS: Record<WorkflowNodeType, WorkflowNodeDef
     type: "product_store",
     title: "Asset Library",
     outputKinds: [],
-    acceptedInputKinds: ["text", "asset", "image", "video", "audio", "ppt"],
+    acceptedInputKinds: ["asset", "image", "video", "audio", "ppt"],
   },
 }
 

@@ -1,4 +1,5 @@
 import { writerRequestJson } from "@/lib/writer/network"
+import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 
 const AIBERM_API_BASE = (process.env.AIBERM_BASE_URL || "https://aiberm.com/v1").replace(/\/$/, "")
 const AIBERM_API_KEY = process.env.AIBERM_API_KEY || process.env.WRITER_AIBERM_API_KEY || ""
@@ -37,6 +38,7 @@ type AibermTextGenerationOptions = {
   timeoutMs?: number
   totalTimeoutMs?: number
   providerTimeoutMs?: number
+  preferredProviderId?: AiEntryProviderId | null
   signal?: AbortSignal
 }
 
@@ -46,6 +48,7 @@ type WriterStructuredObjectOptions = {
   timeoutMs?: number
   totalTimeoutMs?: number
   providerTimeoutMs?: number
+  preferredProviderId?: AiEntryProviderId | null
   signal?: AbortSignal
 }
 
@@ -106,6 +109,22 @@ export function hasPptokenApiKey() {
 
 export function hasWriterTextProvider() {
   return hasAibermApiKey() || hasCrazyrouteApiKey() || hasPptokenApiKey()
+}
+
+function buildWriterProviderOrder(preferredProviderId?: AiEntryProviderId | null) {
+  const preferred = typeof preferredProviderId === "string" ? preferredProviderId.trim() : ""
+  const providers = [
+    { id: "aiberm" as const, enabled: hasAibermApiKey() },
+    { id: "crazyroute" as const, enabled: hasCrazyrouteApiKey() },
+    { id: "pptoken" as const, enabled: hasPptokenApiKey() },
+  ].filter((provider) => provider.enabled)
+
+  if (!preferred) return providers
+
+  const preferredIndex = providers.findIndex((provider) => provider.id === preferred)
+  if (preferredIndex <= 0) return providers
+
+  return [providers[preferredIndex], ...providers.slice(0, preferredIndex), ...providers.slice(preferredIndex + 1)]
 }
 
 export function extractTextFromOpenAICompatibleResponse(data: any) {
@@ -379,47 +398,30 @@ export async function generateTextWithWriterModel(
   }
 
   let lastError: unknown = null
+  const providerOrder = buildWriterProviderOrder(options.preferredProviderId)
 
-  if (hasAibermApiKey()) {
+  for (let index = 0; index < providerOrder.length; index += 1) {
+    const provider = providerOrder[index]
     try {
-      return await runTextCallWithBudget((scoped) => generateTextWithAiberm(systemPrompt, userPrompt, model, scoped))
-    } catch (error) {
-      if (options.signal?.aborted && isAbortLikeError(error)) {
-        throw error
+      if (provider.id === "aiberm") {
+        return await runTextCallWithBudget((scoped) => generateTextWithAiberm(systemPrompt, userPrompt, model, scoped))
       }
-      lastError = error
-      console.warn("writer.text.aiberm_fallback", {
-        message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : hasPptokenApiKey() ? "pptoken" : null,
-      })
-    }
-  }
-
-  if (hasCrazyrouteApiKey()) {
-    try {
-      return await runTextCallWithBudget((scoped) =>
-        generateTextWithCrazyroute(systemPrompt, userPrompt, model, scoped),
-      )
-    } catch (error) {
-      if (options.signal?.aborted && isAbortLikeError(error)) {
-        throw error
+      if (provider.id === "crazyroute") {
+        return await runTextCallWithBudget((scoped) => generateTextWithCrazyroute(systemPrompt, userPrompt, model, scoped))
       }
-      lastError = error
-      console.warn("writer.text.crazyroute_fallback", {
-        message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasPptokenApiKey() ? "pptoken" : null,
-      })
-    }
-  }
-
-  if (hasPptokenApiKey()) {
-    try {
       return await runTextCallWithBudget((scoped) => generateTextWithPptoken(systemPrompt, userPrompt, model, scoped))
     } catch (error) {
       if (options.signal?.aborted && isAbortLikeError(error)) {
         throw error
       }
       lastError = error
+      const fallbackProvider = providerOrder[index + 1]?.id ?? null
+      if (fallbackProvider) {
+        console.warn(`writer.text.${provider.id}_fallback`, {
+          message: error instanceof Error ? error.message : String(error),
+          fallbackProvider,
+        })
+      }
     }
   }
 
@@ -546,45 +548,30 @@ export async function generateStructuredObjectWithWriterModel(params: WriterStru
   }
 
   let lastError: unknown = null
+  const providerOrder = buildWriterProviderOrder(params.options?.preferredProviderId)
 
-  if (hasAibermApiKey()) {
+  for (let index = 0; index < providerOrder.length; index += 1) {
+    const provider = providerOrder[index]
     try {
-      return await runStructuredCallWithBudget(generateStructuredObjectWithAiberm)
-    } catch (error) {
-      if (params.options?.signal?.aborted && isAbortLikeError(error)) {
-        throw error
+      if (provider.id === "aiberm") {
+        return await runStructuredCallWithBudget(generateStructuredObjectWithAiberm)
       }
-      lastError = error
-      console.warn("writer.structured.aiberm_fallback", {
-        message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasCrazyrouteApiKey() ? "crazyroute" : hasPptokenApiKey() ? "pptoken" : null,
-      })
-    }
-  }
-
-  if (hasCrazyrouteApiKey()) {
-    try {
-      return await runStructuredCallWithBudget(generateStructuredObjectWithCrazyroute)
-    } catch (error) {
-      if (params.options?.signal?.aborted && isAbortLikeError(error)) {
-        throw error
+      if (provider.id === "crazyroute") {
+        return await runStructuredCallWithBudget(generateStructuredObjectWithCrazyroute)
       }
-      lastError = error
-      console.warn("writer.structured.crazyroute_fallback", {
-        message: error instanceof Error ? error.message : String(error),
-        fallbackProvider: hasPptokenApiKey() ? "pptoken" : null,
-      })
-    }
-  }
-
-  if (hasPptokenApiKey()) {
-    try {
       return await runStructuredCallWithBudget(generateStructuredObjectWithPptoken)
     } catch (error) {
       if (params.options?.signal?.aborted && isAbortLikeError(error)) {
         throw error
       }
       lastError = error
+      const fallbackProvider = providerOrder[index + 1]?.id ?? null
+      if (fallbackProvider) {
+        console.warn(`writer.structured.${provider.id}_fallback`, {
+          message: error instanceof Error ? error.message : String(error),
+          fallbackProvider,
+        })
+      }
     }
   }
 

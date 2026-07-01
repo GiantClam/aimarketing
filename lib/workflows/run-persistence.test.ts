@@ -84,6 +84,17 @@ test("persistFinalWorkflowOutputs can fan out artifacts into work library and kn
   const nodes: WorkflowDefinitionNode[] = [
     { nodeKey: "writer-1", type: "writer", title: "Writer", positionX: 0, positionY: 0, config: {} },
     {
+      nodeKey: "file-1",
+      type: "file_create",
+      title: "File",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        fileFormat: "md",
+        fileName: "Launch brief",
+      },
+    },
+    {
       nodeKey: "store-1",
       type: "product_store",
       title: "Asset Library",
@@ -117,9 +128,28 @@ test("persistFinalWorkflowOutputs can fan out artifacts into work library and kn
         finishedAt: new Date("2026-06-29T12:01:10.000Z"),
         creditsConsumed: 3,
       },
+      "file-1": {
+        nodeKey: "file-1",
+        status: "succeeded",
+        attemptCount: 1,
+        output: {
+          asset: [
+            {
+              source: "upload",
+              fileName: "Launch brief.md",
+              mimeType: "text/markdown",
+              embeddedContentBase64: Buffer.from("Launch copy", "utf8").toString("base64"),
+              inlinePreviewText: "Launch copy",
+            },
+          ],
+        },
+        startedAt: new Date("2026-06-29T12:01:00.000Z"),
+        finishedAt: new Date("2026-06-29T12:01:10.000Z"),
+        creditsConsumed: 3,
+      },
     },
     workflowNodes: nodes,
-    persistenceTargets: [{ sourceNodeKey: "writer-1", targetNodeKey: "store-1" }],
+    persistenceTargets: [{ sourceNodeKey: "file-1", targetNodeKey: "store-1" }],
     store,
   })
 

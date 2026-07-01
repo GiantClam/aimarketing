@@ -1,3 +1,4 @@
+import type { LeadToolRelatedLink } from "@/lib/lead-tools/catalog"
 import type { PptLanguage, PptScenario } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import type { SeoLanguage, SeoPageType } from "@/lib/lead-tools/seo-meta-data"
 
@@ -14,6 +15,7 @@ type LeadToolExampleBase = {
   intent: string
   tags: string[]
   sections: LeadToolExampleSection[]
+  relatedLinks?: LeadToolRelatedLink[]
 }
 
 export type LeadToolSeoMetaExample = LeadToolExampleBase & {
@@ -150,6 +152,170 @@ const leadToolExamples: LeadToolExample[] = [
       {
         title: "后续怎么扩更多场景",
         body: "把 scenario 从发布、销售、培训继续扩下去，就能自然长出更多长尾示例页，而不用改整套底层链路。",
+      },
+    ],
+  },
+  {
+    kind: "seo-meta",
+    toolSlug: "press-release-generator",
+    slug: "press-release-examples",
+    title: "Press Release Examples",
+    summary: "Scenario-based press release examples for launches, updates, and partnership announcements.",
+    intent: "Useful when teams need example structures before drafting a final announcement.",
+    tags: ["press release examples", "launch copy", "announcement writing"],
+    request: {
+      topic: "Press release examples",
+      audience: "Marketing teams and communications leads",
+      pageType: "blog-post",
+      language: "en-US",
+    },
+    sections: [
+      {
+        title: "What these examples should teach",
+        body: "Strong press release examples show how the headline, lead, proof, and quote sections work together around one announcement angle.",
+      },
+      {
+        title: "How to use them in a real workflow",
+        body: "Review the example type that matches your scenario, then move into AI Chat or the copy workflow with the same release brief and proof points.",
+      },
+      {
+        title: "What makes release examples more useful",
+        body: "The best examples do more than sound formal. They show which facts matter, how the story is framed, and where the reader should go next.",
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/press-release-generator",
+        label: "Press Release Generator",
+        description: "Return to the main generator page after choosing the right example structure.",
+      },
+      {
+        href: "/agents/growth-marketing-agent",
+        label: "Growth Marketing Agent",
+        description: "Carry the same launch narrative into the rest of the campaign workflow.",
+      },
+    ],
+  },
+  {
+    kind: "seo-meta",
+    toolSlug: "bio-generator",
+    slug: "bio-examples",
+    title: "Bio Examples",
+    summary: "Examples for founder bios, team bios, speaker bios, and short profile introductions.",
+    intent: "Useful when teams need to compare tone, length, and positioning before drafting a final bio.",
+    tags: ["bio examples", "founder bio", "team profile"],
+    request: {
+      topic: "Bio examples",
+      audience: "Founders, operators, and marketing teams",
+      pageType: "blog-post",
+      language: "en-US",
+    },
+    sections: [
+      {
+        title: "What a good bio example proves",
+        body: "A strong bio example shows how to balance role clarity, proof, and tone without turning the person into a list of job titles.",
+      },
+      {
+        title: "How to adapt across channels",
+        body: "Start from the same positioning notes, then shorten or expand the version for website bios, LinkedIn summaries, or speaker intros.",
+      },
+      {
+        title: "What to avoid",
+        body: "Weak bios read like resumes or vague mission statements. The better versions show why this person or team matters to a specific audience.",
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/bio-generator",
+        label: "Bio Generator",
+        description: "Return to the main generator page after reviewing example tones and formats.",
+      },
+      {
+        href: "/agents/brand-strategy-agent",
+        label: "Brand Strategy Agent",
+        description: "Clarify positioning before rewriting bios across multiple channels.",
+      },
+    ],
+  },
+  {
+    kind: "seo-meta",
+    toolSlug: "bio-generator",
+    slug: "linkedin-headline-examples",
+    title: "LinkedIn Headline Examples",
+    summary: "Examples for tighter professional headlines with clearer positioning and proof.",
+    intent: "Useful when teams need short profile hooks rather than full-length bios.",
+    tags: ["linkedin headline examples", "profile positioning", "personal brand copy"],
+    request: {
+      topic: "LinkedIn headline examples",
+      audience: "Founders, consultants, and marketing operators",
+      pageType: "feature-page",
+      language: "en-US",
+    },
+    sections: [
+      {
+        title: "What the best headline examples do",
+        body: "They communicate role, audience, and differentiator quickly enough that the headline still works in limited profile space.",
+      },
+      {
+        title: "How to write shorter without losing meaning",
+        body: "Keep the role and audience clear, then choose the single strongest proof or positioning angle instead of cramming every capability into one line.",
+      },
+      {
+        title: "How to connect this to a longer bio",
+        body: "Treat the headline as the hook. The full bio can carry the deeper proof and narrative once the profile has earned attention.",
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/bio-generator",
+        label: "Bio Generator",
+        description: "Move from short profile hooks into fuller bio drafts when the positioning is clear.",
+      },
+      {
+        href: "/tools/bio-generator/examples/bio-examples",
+        label: "Bio Examples",
+        description: "Compare shorter profile hooks with longer biography formats on the same topic.",
+      },
+    ],
+  },
+  {
+    kind: "seo-meta",
+    toolSlug: "product-description-generator",
+    slug: "product-description-examples",
+    title: "Product Description Examples",
+    summary: "Examples for ecommerce listings, launch pages, and marketing-led product description angles.",
+    intent: "Useful when teams want reference outputs before drafting final product page copy.",
+    tags: ["product description examples", "ecommerce copy", "product page writing"],
+    request: {
+      topic: "Product description examples",
+      audience: "Ecommerce and marketing teams",
+      pageType: "landing-page",
+      language: "en-US",
+    },
+    sections: [
+      {
+        title: "What these examples should reveal",
+        body: "The best product description examples show how features, benefits, and proof change depending on channel, buyer stage, and the action the reader should take next.",
+      },
+      {
+        title: "How to use the examples in production",
+        body: "Choose the structure closest to your product type, then adapt the proof, objections, and CTA to the actual page or marketplace context.",
+      },
+      {
+        title: "Why examples matter before drafting",
+        body: "Examples make it easier to spot whether your current description is too vague, too feature-heavy, or missing the buyer motivation entirely.",
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/product-description-generator",
+        label: "Product Description Generator",
+        description: "Return to the main generator page after choosing the best example angle.",
+      },
+      {
+        href: "/agents/website-copy-agent",
+        label: "Website Copy Agent",
+        description: "Expand product description ideas into fuller page sections and supporting copy.",
       },
     ],
   },

@@ -9,6 +9,15 @@ import { buildCustomAgentRuntimeId } from "@/lib/platform/custom-agent-runtime-i
 import type { CustomAgentView } from "@/lib/platform/custom-agents"
 import { buildDashboardBusinessHref } from "@/lib/platform/workspace-business"
 
+type ImportedAgentDirectoryItem = {
+  agentId: string
+  name: string
+  summary: string
+  sourceCategory: string
+  sourceCategoryLabel: string
+  nativeHref: string
+}
+
 export type AgentPlatformDirectoryCard =
   | {
       kind: "create"
@@ -43,7 +52,7 @@ export type AgentPlatformDirectoryCard =
     }
 
 export type AgentPlatformDirectoryGroup = {
-  id: "custom" | AiEntryAgentCategory | "other"
+  id: "custom" | AiEntryAgentCategory | "other" | `imported:${string}`
   label: string
   cards: AgentPlatformDirectoryCard[]
 }
@@ -122,8 +131,9 @@ export function buildAgentPlatformDirectoryGroups(input: {
   builtinAgents: AiEntryAgentCatalogItem[]
   builtinGroups: AiEntryAgentCatalogGroup[]
   customAgents: CustomAgentView[]
+  importedAgents?: ImportedAgentDirectoryItem[]
 }) {
-  const { locale, builtinAgents, builtinGroups, customAgents } = input
+  const { locale, builtinAgents, builtinGroups, customAgents, importedAgents = [] } = input
 
   const groups: AgentPlatformDirectoryGroup[] = [
     {
@@ -197,6 +207,34 @@ export function buildAgentPlatformDirectoryGroups(input: {
       cards: leftovers,
     })
   }
+
+  const importedGroups = new Map<string, AgentPlatformDirectoryGroup>()
+  for (const agent of importedAgents) {
+    const groupId = `imported:${agent.sourceCategory}` as const
+    const existingGroup = importedGroups.get(groupId)
+    const nextCard: AgentPlatformDirectoryCard = {
+      kind: "builtin",
+      id: agent.agentId,
+      href: agent.nativeHref,
+      title: agent.name,
+      description: agent.summary,
+      meta: locale === "zh" ? "Agency Agents 导入" : "Imported from Agency Agents",
+      businessMenuAgentId: agent.agentId,
+    }
+
+    if (existingGroup) {
+      existingGroup.cards.push(nextCard)
+      continue
+    }
+
+    importedGroups.set(groupId, {
+      id: groupId,
+      label: agent.sourceCategoryLabel,
+      cards: [nextCard],
+    })
+  }
+
+  groups.push(...importedGroups.values())
 
   return groups
 }

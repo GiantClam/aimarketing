@@ -314,6 +314,49 @@ test("ppt-master engine keeps local preview fallback when remote transport is di
   assert.equal(result.meta.previewEngine, "ppt-master")
 })
 
+test("ppt-master engine honors request previewRuntime over the environment default", async () => {
+  let remoteCalled = false
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
+  process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "ppt-master-agent"
+
+  setPptWorkerTransportForTests({
+    preview: async () => {
+      remoteCalled = true
+      throw new Error("remote worker should not be called for frontend runtime")
+    },
+  })
+
+  setPptMasterEngineLocalDepsForTests({
+    generateStoryDeck: async () => ({
+      ...htmlDeck,
+      previewEngine: "frontend-slides-html",
+      previewSessionId: "session-frontend-explicit",
+    }) as any,
+  })
+
+  const engines = getPptMasterEngines()
+  const result = await engines.preview.buildPreview(
+    {
+      prompt: "Use explicit frontend preview runtime",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      previewRuntime: "frontend-slides-agent",
+      templateMode: "auto-4",
+    } as any,
+    {
+      allowMockFallback: false,
+      resolvedModels: {
+        previewModel: "gpt-5.4",
+        finalModel: "gpt-5.4",
+      },
+    },
+  )
+
+  assert.equal(remoteCalled, false)
+  assert.equal(result.meta.previewRuntime, "frontend-slides-agent")
+  assert.equal(result.meta.mode, "html-fast-preview")
+})
+
 test("ppt-master engine keeps local export fallback when remote transport is disabled", async () => {
   let remoteCalled = false
   process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"

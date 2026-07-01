@@ -88,3 +88,19 @@ test("positioning remediation pages exist with marketing-team-focused keywords",
   assert.equal(aiCostComparePage.primaryKeyword, "compare AI tool costs")
   assert.equal(aiCostComparePage.sections.some((section) => section.heading === "Why cost comparisons fail without workflow context"), true)
 })
+
+test("resource SEO remediation pages exist and point into tools and workflows", () => {
+  const briefPage = getSeoPage("resources", "what-is-a-content-brief")
+  const pillarPage = getSeoPage("resources", "what-is-a-content-pillar")
+  const roiPage = getSeoPage("resources", "content-marketing-roi")
+
+  assert.ok(briefPage)
+  assert.ok(pillarPage)
+  assert.ok(roiPage)
+
+  assert.equal(briefPage.primaryKeyword, "what is a content brief")
+  assert.equal(briefPage.relatedLinks.some((link) => link.href === "/tools/content-brief-generator"), true)
+  assert.equal(pillarPage.relatedLinks.some((link) => link.href === "/resources/topic-cluster-strategy"), true)
+  assert.equal(roiPage.relatedLinks.some((link) => link.href === "/pricing"), true)
+  assert.equal(roiPage.sections.some((section) => section.heading === "How to improve content marketing ROI"), true)
+})

@@ -115,7 +115,7 @@ test("tool registry only exposes tools that survive the allowlist", async () => 
       },
     ],
     skillsEnabled: true,
-    enabledToolNames: [],
+    enabledToolNames: null,
     auditContext: {
       traceId: "trace-1",
       conversationId: "conv-1",
@@ -156,7 +156,7 @@ test("tool registry includes web_search when ppt-master skill and policy both al
       },
     ],
     skillsEnabled: true,
-    enabledToolNames: [],
+    enabledToolNames: null,
     auditContext: {
       traceId: "trace-2",
       conversationId: "conv-2",
@@ -209,7 +209,7 @@ test("tool registry injects a research brief from web_search into preview_ppt_de
       },
     ],
     skillsEnabled: true,
-    enabledToolNames: [],
+    enabledToolNames: null,
     auditContext: {
       traceId: "trace-3",
       conversationId: "conv-3",
@@ -246,4 +246,45 @@ test("tool registry injects a research brief from web_search into preview_ppt_de
       "- Shipping insurers reprice Gulf exposure - https://example.com/insurers",
     ].join("\n"),
   })
+})
+
+test("tool registry honors an explicit empty allowlist and does not auto-add web_search", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "general",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Use web_search before preview when facts matter, then preview and export.",
+        toolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: [],
+    auditContext: {
+      traceId: "trace-4",
+      conversationId: "conv-4",
+      agentId: "general",
+    },
+  })
+
+  assert.deepEqual(result.selectedToolIds, [])
 })

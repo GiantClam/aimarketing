@@ -16,6 +16,7 @@ test("workflow schema exposes the fixed V1 node types", () => {
   const nodeTypes: WorkflowNodeType[] = [
     "upload",
     "text_input",
+    "file_create",
     "writer",
     "llm_generate",
     "agent_execute",
@@ -53,6 +54,7 @@ test("digital_human accepts script image and audio inputs", () => {
 test("workflow schema exposes strong output kinds for fixed nodes", () => {
   assert.deepEqual(getWorkflowNodeOutputKinds("upload"), ["asset"])
   assert.deepEqual(getWorkflowNodeOutputKinds("text_input"), ["text"])
+  assert.deepEqual(getWorkflowNodeOutputKinds("file_create"), ["asset"])
   assert.deepEqual(getWorkflowNodeOutputKinds("writer"), ["text"])
   assert.deepEqual(getWorkflowNodeOutputKinds("agent_execute"), ["text"])
   assert.deepEqual(getWorkflowNodeOutputKinds("image_generate"), ["image"])
@@ -72,6 +74,8 @@ test("input type helpers reject incompatible node connections", () => {
   assert.equal(canWorkflowNodeAcceptValueKind("agent_execute", "ppt"), true)
   assert.equal(canWorkflowNodeAcceptValueKind("image_generate", "text"), true)
   assert.equal(canWorkflowNodeAcceptValueKind("image_generate", "image"), true)
+  assert.equal(canWorkflowNodeAcceptValueKind("file_create", "text"), true)
+  assert.equal(canWorkflowNodeAcceptValueKind("file_create", "asset"), false)
   assert.equal(canWorkflowNodeAcceptValueKind("image_generate", "asset"), false)
   assert.equal(canWorkflowNodeAcceptValueKind("ppt_generate", "video"), false)
   assert.equal(canWorkflowNodeAcceptValueKind("music_generate", "audio"), true)
@@ -84,7 +88,7 @@ test("input type helpers reject incompatible node connections", () => {
   assert.equal(canWorkflowNodeAcceptValueKind("knowledge_retrieve", "asset"), true)
   assert.equal(canWorkflowNodeAcceptValueKind("knowledge_write", "image"), true)
   assert.equal(canWorkflowNodeAcceptValueKind("product_store", "video"), true)
-  assert.equal(canWorkflowNodeAcceptValueKind("product_store", "text"), true)
+  assert.equal(canWorkflowNodeAcceptValueKind("product_store", "text"), false)
 })
 
 test("connection helpers allow upload asset outputs to connect into typed file inputs", () => {
@@ -102,19 +106,22 @@ test("connection helpers allow upload asset outputs to connect into typed file i
 test("default workflow node titles resolve to the active locale while preserving custom names", () => {
   assert.equal(getDefaultWorkflowNodeTitle("upload", "zh"), "上传")
   assert.equal(resolveWorkflowNodeTitle("text_input", "Text Input", "zh"), "文本输入")
+  assert.equal(getDefaultWorkflowNodeTitle("file_create", "zh"), "文件")
   assert.equal(getDefaultWorkflowNodeTitle("writer", "zh"), "文章写作")
-  assert.equal(getDefaultWorkflowNodeTitle("llm_generate", "zh"), "大模型")
+  assert.equal(getDefaultWorkflowNodeTitle("llm_generate", "zh"), "模型生成")
   assert.equal(getDefaultWorkflowNodeTitle("agent_execute", "zh"), "智能体")
   assert.equal(getDefaultWorkflowNodeTitle("digital_human", "zh"), "口播数字人")
   assert.equal(getDefaultWorkflowNodeTitle("music_generate", "zh"), "音乐生成")
   assert.equal(getDefaultWorkflowNodeTitle("voice_synthesis", "zh"), "语音合成")
   assert.equal(getDefaultWorkflowNodeTitle("knowledge_retrieve", "zh"), "知识检索")
   assert.equal(getDefaultWorkflowNodeTitle("knowledge_write", "en"), "Knowledge Write")
-  assert.equal(getDefaultWorkflowNodeTitle("product_store", "zh"), "素材库存储")
+  assert.equal(getDefaultWorkflowNodeTitle("product_store", "zh"), "资产库存储")
   assert.equal(getDefaultWorkflowNodeTitle("product_store", "en"), "Asset Library")
-  assert.equal(resolveWorkflowNodeTitle("product_store", "作品库存储", "zh"), "素材库存储")
+  assert.equal(resolveWorkflowNodeTitle("product_store", "作品库存储", "zh"), "资产库存储")
+  assert.equal(resolveWorkflowNodeTitle("product_store", "素材库存储", "zh"), "资产库存储")
   assert.equal(resolveWorkflowNodeTitle("product_store", "Work Library", "en"), "Asset Library")
-  assert.equal(resolveWorkflowNodeTitle("llm_generate", "文案生成", "zh"), "大模型")
+  assert.equal(resolveWorkflowNodeTitle("llm_generate", "文案生成", "zh"), "模型生成")
+  assert.equal(resolveWorkflowNodeTitle("llm_generate", "大模型", "zh"), "模型生成")
   assert.equal(resolveWorkflowNodeTitle("llm_generate", "文案生成", "en"), "LLM Generate")
   assert.equal(resolveWorkflowNodeTitle("image_generate", "Hero Visual", "zh"), "Hero Visual")
 })

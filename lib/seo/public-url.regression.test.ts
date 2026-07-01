@@ -184,6 +184,25 @@ test("localized tool pages emit locale-prefixed canonical and language alternate
   )
 })
 
+test("localized resource pages emit locale-prefixed canonical and language alternates", () => {
+  const page = getSeoPage("resources", "what-is-a-content-brief")
+  assert.ok(page)
+
+  withAppUrlEnv(
+    {
+      APP_URL: "https://aimarketingsite.com",
+    },
+    () => {
+      const metadata = metadataForSeoPage(page, "zh")
+
+      assert.equal(metadata.alternates?.canonical, "https://www.aimarketingsite.com/zh/resources/what-is-a-content-brief")
+      assert.equal(metadata.alternates?.languages?.en, "https://www.aimarketingsite.com/en/resources/what-is-a-content-brief")
+      assert.equal(metadata.alternates?.languages?.zh, "https://www.aimarketingsite.com/zh/resources/what-is-a-content-brief")
+      assert.equal(metadata.alternates?.languages?.["x-default"], "https://www.aimarketingsite.com/en/resources/what-is-a-content-brief")
+    },
+  )
+})
+
 test("robots and sitemap share the same www canonical host", () => {
   withAppUrlEnv(
     {
@@ -202,8 +221,11 @@ test("robots and sitemap share the same www canonical host", () => {
       const localizedMcpEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/mcp-services\/document-parsing-mcp$/.test(entry.url))
       const localizedWorkflowEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/workflows\/campaign-launch$/.test(entry.url))
       const localizedPromptEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/prompts\/seo-article-prompts$/.test(entry.url))
+      const localizedResourceEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/resources\/what-is-a-content-brief$/.test(entry.url))
       const toolEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools\/(ai-chat|ai-image|ai-video|ai-ppt-preview)$/.test(entry.url))
       const toolExampleEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools\/ai-ppt-preview\/examples\/product-launch-deck$/.test(entry.url))
+      const newToolEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools\/content-brief-generator$/.test(entry.url))
+      const newExampleEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools\/press-release-generator\/examples\/press-release-examples$/.test(entry.url))
       const toolsHubEntries = sitemapEntries.filter((entry) => /\/(en|zh)\/tools$/.test(entry.url))
 
       assert.equal(robotsMetadata.sitemap, "https://www.aimarketingsite.com/sitemap.xml")
@@ -217,9 +239,12 @@ test("robots and sitemap share the same www canonical host", () => {
       assert.equal(localizedMcpEntries.length, 2)
       assert.equal(localizedWorkflowEntries.length, 2)
       assert.equal(localizedPromptEntries.length, 2)
+      assert.equal(localizedResourceEntries.length, 2)
       assert.equal(toolsHubEntries.length, 2)
       assert.equal(toolEntries.length, 8)
       assert.equal(toolExampleEntries.length, 2)
+      assert.equal(newToolEntries.length, 2)
+      assert.equal(newExampleEntries.length, 2)
     },
   )
 })

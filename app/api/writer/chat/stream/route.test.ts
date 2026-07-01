@@ -12,6 +12,7 @@ let reserveShouldThrow = false
 let finalizeCalls = 0
 let releaseCalls = 0
 let emitLateProgressAfterResolve = false
+let lastWriterRunInput: Record<string, unknown> | null = null
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -78,6 +79,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       loadWriterSkillRunner: () => ({
         runBlocking: async (input?: { onProgress?: (event: { type: string; label: string; status: string }) => Promise<void> | void }) => {
+          lastWriterRunInput = (input || null) as Record<string, unknown> | null
           if (emitLateProgressAfterResolve) {
             setTimeout(() => {
               void input?.onProgress?.({
@@ -129,6 +131,7 @@ test.beforeEach(() => {
   finalizeCalls = 0
   releaseCalls = 0
   emitLateProgressAfterResolve = false
+  lastWriterRunInput = null
 })
 
 test.after(() => {
@@ -180,4 +183,20 @@ test("writer chat stream route ignores late progress events after the stream clo
   assert.doesNotMatch(text, /"event":"error"/)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("writer chat stream route forwards workflow model preferences to the runner", async () => {
+  const response = await POST({
+    json: async () => ({
+      query: "write a launch post",
+      modelConfig: {
+        providerId: "pptoken",
+        modelId: "gpt-5.4",
+      },
+    }),
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  assert.equal(lastWriterRunInput?.selectedProviderId, "pptoken")
+  assert.equal(lastWriterRunInput?.selectedModelId, "gpt-5.4")
 })

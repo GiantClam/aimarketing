@@ -21,6 +21,9 @@ test("resolveClickConnectInputName resolves compatible source->target pairs", ()
   assert.equal(resolveClickConnectInputName("llm_generate", "image_generate"), "text")
   // Upload (asset) feeds the asset library.
   assert.equal(resolveClickConnectInputName("upload", "product_store"), "assets")
+  // Text should be materialized as a file before entering the asset library.
+  assert.equal(resolveClickConnectInputName("llm_generate", "file_create"), "text")
+  assert.equal(resolveClickConnectInputName("file_create", "product_store"), "assets")
   // Image feeds digital human (avatar).
   assert.equal(resolveClickConnectInputName("image_generate", "digital_human"), "images")
 })

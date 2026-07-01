@@ -43,6 +43,8 @@ export function SeoLandingPage({
       ? "alternatives"
       : page.group === "compare"
         ? "compare"
+        : page.group === "resources"
+          ? "resources"
         : page.group === "solutions" || page.group === "use-cases"
           ? "solutions"
           : undefined

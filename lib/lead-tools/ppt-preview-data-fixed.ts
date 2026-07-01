@@ -47,6 +47,7 @@ export type PptPreviewTemplateMode = "auto-4" | "single-template"
 export type PptFrontendTemplateId = "long-table" | "playful" | "broadside" | "neo-grid-bold"
 export type PptPreviewPageCount = number
 export type PptPreviewNarrativeAngle = "executive-brief" | "campaign-story" | "data-proof" | "action-plan"
+export type PptPreviewRuntimeValue = "ppt-master-agent" | "frontend-slides-agent"
 
 export const MIN_PPT_PREVIEW_PAGE_COUNT = 4
 export const MAX_PPT_PREVIEW_PAGE_COUNT = 20
@@ -68,6 +69,7 @@ export type PptPreviewRequest = {
   scenario: PptScenario
   language: PptLanguage
   model?: PptPreviewModelValue
+  previewRuntime?: PptPreviewRuntimeValue
   templateMode?: PptPreviewTemplateMode
   templateId?: PptFrontendTemplateId
   narrativeAngle?: PptPreviewNarrativeAngle
@@ -753,6 +755,23 @@ export const pptPreviewModelOptions: Array<{
     label: "Step 3.7 Flash",
     provider: "stepfun",
     description: "通过阶跃星辰直连路由，适合并发生成耗时测试。",
+  },
+]
+
+export const pptPreviewRuntimeOptions: Array<{
+  value: PptPreviewRuntimeValue
+  label: string
+  description: string
+}> = [
+  {
+    value: "frontend-slides-agent",
+    label: "HTML PPT",
+    description: "输出 HTML 版 PPT，适合预览、分享和快速确认版式。",
+  },
+  {
+    value: "ppt-master-agent",
+    label: "Editable PPT",
+    description: "输出可编辑 PPT，适合正式交付和继续修改。",
   },
 ]
 

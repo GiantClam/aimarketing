@@ -17,11 +17,13 @@ import {
 } from "@/lib/platform/task-run-store"
 import {
   getDefaultWorkflowNodeTitle,
+  getWorkflowNodeOutputKinds,
   isWorkflowNodeType,
   type WorkflowDefinitionEdge,
   type WorkflowDefinitionNode,
   type WorkflowNodeType,
 } from "@/lib/workflows/schema"
+import { reconcileWorkflowTemplateNodeConfig } from "@/lib/workflows/template-definitions"
 
 export type WorkflowDefinitionStatus = "draft" | "live" | "archived"
 export type WorkflowDefinitionTriggerType = "manual"
@@ -134,8 +136,84 @@ function sanitizeWorkflowNodeConfig(type: WorkflowNodeType, config: WorkflowDefi
     delete normalizedConfig.sizePreset
     delete normalizedConfig.resolution
   }
+  if (type === "file_create") {
+    normalizedConfig.fileName = typeof normalizedConfig.fileName === "string" ? normalizedConfig.fileName : ""
+    normalizedConfig.fileFormat =
+      typeof normalizedConfig.fileFormat === "string" &&
+      ["md", "txt", "html", "json"].includes(normalizedConfig.fileFormat.trim().toLowerCase())
+        ? normalizedConfig.fileFormat.trim().toLowerCase()
+        : "md"
+  }
 
   return normalizedConfig
+}
+
+function migrateLegacyTextStoreConnections(input: {
+  nodes: WorkflowDefinitionNode[]
+  edges: WorkflowDefinitionEdge[]
+}) {
+  const nodeMap = new Map(input.nodes.map((node) => [node.nodeKey, node] as const))
+  const usedNodeKeys = new Set(input.nodes.map((node) => node.nodeKey))
+  const nextNodes = [...input.nodes]
+  const nextEdges: WorkflowDefinitionEdge[] = []
+
+  const createFileNodeKey = (baseNodeKey: string) => {
+    const normalizedBase = `${baseNodeKey}-file`.replace(/[^a-zA-Z0-9-_]/g, "-")
+    let counter = 1
+    let candidate = normalizedBase
+    while (usedNodeKeys.has(candidate)) {
+      counter += 1
+      candidate = `${normalizedBase}-${counter}`
+    }
+    usedNodeKeys.add(candidate)
+    return candidate
+  }
+
+  for (const edge of input.edges) {
+    const sourceNode = nodeMap.get(edge.sourceNodeKey)
+    const targetNode = nodeMap.get(edge.targetNodeKey)
+    const edgeUsesText =
+      edge.inputName === "text" ||
+      (edge.inputName == null &&
+        sourceNode != null &&
+        getWorkflowNodeOutputKinds(sourceNode.type).includes("text"))
+
+    if (!sourceNode || !targetNode || targetNode.type !== "product_store" || !edgeUsesText) {
+      nextEdges.push(edge)
+      continue
+    }
+
+    const fileNodeKey = createFileNodeKey(`${sourceNode.nodeKey}-${targetNode.nodeKey}`)
+    const midpointX = Math.round((sourceNode.positionX + targetNode.positionX) / 2)
+    const midpointY = Math.round((sourceNode.positionY + targetNode.positionY) / 2)
+
+    nextNodes.push({
+      nodeKey: fileNodeKey,
+      type: "file_create",
+      title: getDefaultWorkflowNodeTitle("file_create"),
+      positionX: midpointX,
+      positionY: midpointY,
+      config: sanitizeWorkflowNodeConfig("file_create", {
+        fileFormat: "md",
+      }),
+    })
+
+    nextEdges.push({
+      sourceNodeKey: edge.sourceNodeKey,
+      targetNodeKey: fileNodeKey,
+      inputName: "text",
+    })
+    nextEdges.push({
+      sourceNodeKey: fileNodeKey,
+      targetNodeKey: edge.targetNodeKey,
+      inputName: "assets",
+    })
+  }
+
+  return {
+    nodes: nextNodes,
+    edges: nextEdges,
+  }
 }
 
 export type CreateWorkflowNodeExecutionInput = {
@@ -481,6 +559,35 @@ function toWorkflowDefinition(
   nodes: WorkflowNodeRecord[],
   edges: WorkflowEdgeRecord[],
 ): WorkflowDefinition {
+  const templateKey =
+    workflow.metadata &&
+    typeof workflow.metadata === "object" &&
+    typeof (workflow.metadata as Record<string, unknown>).templateKey === "string"
+      ? ((workflow.metadata as Record<string, unknown>).templateKey as string)
+      : null
+  const migrated = migrateLegacyTextStoreConnections({
+    nodes: nodes.map((node) => {
+      const normalizedType = normalizeNodeType(node.type)
+      return {
+        nodeKey: node.nodeKey,
+        type: normalizedType,
+        title: node.title,
+        positionX: node.positionX,
+        positionY: node.positionY,
+        config: reconcileWorkflowTemplateNodeConfig({
+          templateKey,
+          nodeKey: node.nodeKey,
+          config: sanitizeWorkflowNodeConfig(normalizedType, node.config ?? {}),
+        }),
+      }
+    }),
+    edges: edges.map((edge) => ({
+      sourceNodeKey: edge.sourceNodeKey,
+      targetNodeKey: edge.targetNodeKey,
+      inputName: edge.inputName ?? null,
+    })),
+  })
+
   return {
     id: workflow.id,
     enterpriseId: workflow.enterpriseId,
@@ -493,19 +600,8 @@ function toWorkflowDefinition(
     metadata: workflow.metadata ?? null,
     createdAt: workflow.createdAt,
     updatedAt: workflow.updatedAt,
-    nodes: nodes.map((node) => ({
-      nodeKey: node.nodeKey,
-      type: normalizeNodeType(node.type),
-      title: node.title,
-      positionX: node.positionX,
-      positionY: node.positionY,
-      config: sanitizeWorkflowNodeConfig(normalizeNodeType(node.type), node.config ?? {}),
-    })),
-    edges: edges.map((edge) => ({
-      sourceNodeKey: edge.sourceNodeKey,
-      targetNodeKey: edge.targetNodeKey,
-      inputName: edge.inputName ?? null,
-    })),
+    nodes: migrated.nodes,
+    edges: migrated.edges,
   }
 }
 
@@ -616,9 +712,13 @@ const dbWorkflowStore: WorkflowStore = {
 
     const title = normalizeTitle(input.title, "Untitled workflow")
     const description = normalizeOptionalText(input.description, 10_000)
-    const nodes = normalizeWorkflowNodes(input.nodes)
-    const nodeKeys = new Set(nodes.map((node) => node.nodeKey))
-    const edges = normalizeWorkflowEdges(input.edges, nodeKeys)
+    const normalizedNodes = normalizeWorkflowNodes(input.nodes)
+    const normalizedNodeKeys = new Set(normalizedNodes.map((node) => node.nodeKey))
+    const normalizedEdges = normalizeWorkflowEdges(input.edges, normalizedNodeKeys)
+    const { nodes, edges } = migrateLegacyTextStoreConnections({
+      nodes: normalizedNodes,
+      edges: normalizedEdges,
+    })
     const slug = await buildUniqueWorkflowSlug(input.enterpriseId, title)
     const now = new Date()
 
@@ -709,9 +809,13 @@ const dbWorkflowStore: WorkflowStore = {
     const title = normalizeTitle(input.title ?? existing.title, existing.title)
     const description =
       input.description !== undefined ? normalizeOptionalText(input.description, 10_000) : existing.description
-    const nodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
-    const nodeKeys = new Set(nodes.map((node) => node.nodeKey))
-    const edges = normalizeWorkflowEdges(input.edges ?? existing.edges, nodeKeys)
+    const normalizedNodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
+    const normalizedNodeKeys = new Set(normalizedNodes.map((node) => node.nodeKey))
+    const normalizedEdges = normalizeWorkflowEdges(input.edges ?? existing.edges, normalizedNodeKeys)
+    const { nodes, edges } = migrateLegacyTextStoreConnections({
+      nodes: normalizedNodes,
+      edges: normalizedEdges,
+    })
     const status = normalizeStatus(input.status ?? existing.status)
     const triggerType = normalizeTriggerType(input.triggerType ?? existing.triggerType)
     const metadata = input.metadata !== undefined ? input.metadata : existing.metadata
@@ -887,13 +991,38 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
   let nextWorkflowId = 1
 
   const workflows = new Map<number, WorkflowDefinition>()
+  const cloneWorkflow = (workflow: WorkflowDefinition): WorkflowDefinition => {
+    const templateKey =
+      workflow.metadata &&
+      typeof workflow.metadata === "object" &&
+      typeof (workflow.metadata as Record<string, unknown>).templateKey === "string"
+        ? ((workflow.metadata as Record<string, unknown>).templateKey as string)
+        : null
+
+    return {
+      ...workflow,
+      nodes: workflow.nodes.map((node) => ({
+        ...node,
+        config: reconcileWorkflowTemplateNodeConfig({
+          templateKey,
+          nodeKey: node.nodeKey,
+          config: { ...node.config },
+        }),
+      })),
+      edges: workflow.edges.map((edge) => ({ ...edge })),
+    }
+  }
 
   return {
     async createWorkflowDefinition(input) {
       const title = normalizeTitle(input.title, "Untitled workflow")
-      const nodes = normalizeWorkflowNodes(input.nodes)
-      const nodeKeys = new Set(nodes.map((node) => node.nodeKey))
-      const edges = normalizeWorkflowEdges(input.edges, nodeKeys)
+      const normalizedNodes = normalizeWorkflowNodes(input.nodes)
+      const normalizedNodeKeys = new Set(normalizedNodes.map((node) => node.nodeKey))
+      const normalizedEdges = normalizeWorkflowEdges(input.edges, normalizedNodeKeys)
+      const { nodes, edges } = migrateLegacyTextStoreConnections({
+        nodes: normalizedNodes,
+        edges: normalizedEdges,
+      })
       const slugBase = normalizeSlug(title)
       let slug = slugBase
       let counter = 2
@@ -922,32 +1051,20 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
 
       workflows.set(workflow.id, workflow)
       nextWorkflowId += 1
-      return {
-        ...workflow,
-        nodes: workflow.nodes.map((node) => ({ ...node, config: { ...node.config } })),
-        edges: workflow.edges.map((edge) => ({ ...edge })),
-      }
+      return cloneWorkflow(workflow)
     },
 
     async listWorkflowDefinitionsForEnterprise(enterpriseId) {
       return [...workflows.values()]
         .filter((workflow) => workflow.enterpriseId === enterpriseId)
         .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime() || right.id - left.id)
-        .map((workflow) => ({
-          ...workflow,
-          nodes: workflow.nodes.map((node) => ({ ...node, config: { ...node.config } })),
-          edges: workflow.edges.map((edge) => ({ ...edge })),
-        }))
+        .map(cloneWorkflow)
     },
 
     async getWorkflowDefinition(workflowId, enterpriseId) {
       const workflow = workflows.get(workflowId)
       if (!workflow || workflow.enterpriseId !== enterpriseId) return null
-      return {
-        ...workflow,
-        nodes: workflow.nodes.map((node) => ({ ...node, config: { ...node.config } })),
-        edges: workflow.edges.map((edge) => ({ ...edge })),
-      }
+      return cloneWorkflow(workflow)
     },
 
     async updateWorkflowDefinition(input) {
@@ -957,9 +1074,13 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
       }
 
       const title = normalizeTitle(input.title ?? existing.title, existing.title)
-      const nodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
-      const nodeKeys = new Set(nodes.map((node) => node.nodeKey))
-      const edges = normalizeWorkflowEdges(input.edges ?? existing.edges, nodeKeys)
+      const normalizedNodes = normalizeWorkflowNodes(input.nodes ?? existing.nodes)
+      const normalizedNodeKeys = new Set(normalizedNodes.map((node) => node.nodeKey))
+      const normalizedEdges = normalizeWorkflowEdges(input.edges ?? existing.edges, normalizedNodeKeys)
+      const { nodes, edges } = migrateLegacyTextStoreConnections({
+        nodes: normalizedNodes,
+        edges: normalizedEdges,
+      })
       const status = normalizeStatus(input.status ?? existing.status)
       const now = new Date()
       const workflow: WorkflowDefinition = {
@@ -985,11 +1106,7 @@ export function createInMemoryWorkflowStore(options: CreateInMemoryWorkflowStore
           enterpriseId: workflow.enterpriseId,
         })
       }
-      return {
-        ...workflow,
-        nodes: workflow.nodes.map((node) => ({ ...node, config: { ...node.config } })),
-        edges: workflow.edges.map((edge) => ({ ...edge })),
-      }
+      return cloneWorkflow(workflow)
     },
 
     async deleteWorkflowDefinition(workflowId, enterpriseId) {

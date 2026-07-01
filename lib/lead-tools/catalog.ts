@@ -34,6 +34,22 @@ export type LeadToolFaq = {
   answer: string
 }
 
+export type LeadToolContentSection = {
+  heading: string
+  body: string[]
+}
+
+export type LeadToolRelatedLink = {
+  href: string
+  label: string
+  description: string
+}
+
+export type LeadToolCta = {
+  label: string
+  href: string
+}
+
 export type LeadToolDefinition = {
   slug: string
   name: string
@@ -55,6 +71,10 @@ export type LeadToolDefinition = {
   finalModel: string
   proofPoints: string[]
   faqs: LeadToolFaq[]
+  contentSections?: LeadToolContentSection[]
+  relatedLinks?: LeadToolRelatedLink[]
+  primaryCta?: LeadToolCta
+  secondaryCta?: LeadToolCta
 }
 
 export const leadToolsCatalog: LeadToolDefinition[] = [
@@ -222,6 +242,357 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
         answer: "不同页面目标需要不同表达角度，多个版本更适合做 SEO 迭代、A/B 测试和程序化页面扩展。",
       },
     ],
+  },
+  {
+    slug: "content-brief-generator",
+    name: "Content Brief Generator",
+    shortName: "Content Brief",
+    tagline: "Turn one topic, audience, and goal into a structured SEO-ready content brief.",
+    description:
+      "Create a reusable content brief with sections, proof points, FAQs, CTA direction, and internal-link ideas before the draft starts.",
+    category: "SEO",
+    icon: "seo",
+    media: "seo",
+    scenes: ["seo_growth", "content_creation", "research_analysis"],
+    href: "/tools/content-brief-generator",
+    status: "live",
+    accessMode: "guest",
+    previewEnabled: false,
+    downloadRequiresLogin: false,
+    finalizeRequiresLogin: false,
+    previewModel: getLeadToolPreviewModel("ai-seo-meta-generator"),
+    finalModel: "ai-seo-meta-generator + AI chat workflow",
+    proofPoints: ["Build briefs before drafting", "Plan sections, FAQs, and internal links", "Route directly into SEO production workflows"],
+    faqs: [
+      {
+        question: "Does this replace the writer or the article workflow?",
+        answer: "No. This page is the planning layer. It helps teams create a stronger brief before moving into drafting or SEO review.",
+      },
+      {
+        question: "What should I prepare before using a content brief generator?",
+        answer: "The main topic, search intent, audience, business goal, and any proof or internal links the page should include.",
+      },
+    ],
+    contentSections: [
+      {
+        heading: "What this generator should produce",
+        body: [
+          "A good content brief should capture the keyword, audience, intent, page angle, required sections, proof, FAQs, and CTA path before the team starts drafting.",
+          "That makes the brief useful for outlines, title ideas, SEO reviews, and internal-link planning instead of acting like a simple note.",
+        ],
+      },
+      {
+        heading: "How teams use it inside the current product",
+        body: [
+          "Use the brief as the shared context, then move into the AI SEO Meta Generator for title and description directions or into AI Chat and the SEO article workflow for a fuller draft.",
+        ],
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/resources/what-is-a-content-brief",
+        label: "What Is a Content Brief?",
+        description: "Read the guide before turning the concept into a reusable template or workflow.",
+      },
+      {
+        href: "/tools/ai-seo-meta-generator",
+        label: "AI SEO Meta Generator",
+        description: "Generate title and description variants from the same brief once the page structure is clear.",
+      },
+      {
+        href: "/agents/seo-article-agent",
+        label: "SEO Article Agent",
+        description: "Move from planning into a more structured article workflow with review context.",
+      },
+    ],
+    primaryCta: {
+      label: "Generate meta from your brief",
+      href: "/tools/ai-seo-meta-generator",
+    },
+    secondaryCta: {
+      label: "Open the SEO workflow",
+      href: "/use-cases/ai-workspace-for-seo-teams",
+    },
+  },
+  {
+    slug: "product-description-generator",
+    name: "Product Description Generator",
+    shortName: "Product Description",
+    tagline: "Create sharper ecommerce and marketing product descriptions from one product brief.",
+    description:
+      "Turn product details, audience, and offer positioning into product descriptions for ecommerce pages, campaigns, and launch assets.",
+    category: "SEO",
+    icon: "seo",
+    media: "seo",
+    scenes: ["content_creation", "lead_generation", "brand_strategy"],
+    href: "/tools/product-description-generator",
+    status: "live",
+    accessMode: "workspace_entry",
+    previewEnabled: false,
+    downloadRequiresLogin: false,
+    finalizeRequiresLogin: false,
+    previewModel: "AI chat + copy workflow",
+    finalModel: "website-copy-agent",
+    proofPoints: ["Built for ecommerce and landing pages", "Connects product proof to clearer copy", "Works with examples and website-copy workflows"],
+    faqs: [
+      {
+        question: "Can this help with ecommerce product pages and ads?",
+        answer: "Yes. The same product context can be used for marketplace descriptions, landing-page sections, and campaign copy variants.",
+      },
+      {
+        question: "What input matters most?",
+        answer: "Use product facts, audience pain points, proof, tone, and the action the reader should take next.",
+      },
+    ],
+    contentSections: [
+      {
+        heading: "What a strong product description needs",
+        body: [
+          "The best descriptions explain what the product is, why it matters to the buyer, and what proof supports the claim. They should also match the channel, whether the copy is for ecommerce, a landing page, or a launch email.",
+        ],
+      },
+      {
+        heading: "How to use the current product stack",
+        body: [
+          "Use AI Chat or the website-copy workflow to draft multiple variants, then compare them against examples and the final page goal before publishing.",
+        ],
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/product-description-generator/examples/product-description-examples",
+        label: "Product Description Examples",
+        description: "Review example angles before drafting your own ecommerce or campaign version.",
+      },
+      {
+        href: "/agents/website-copy-agent",
+        label: "Website Copy Agent",
+        description: "Turn product notes into a more structured page-level copy workflow.",
+      },
+      {
+        href: "/use-cases/ai-workspace-for-marketing-teams",
+        label: "AI Workspace for Marketing Teams",
+        description: "See how teams keep product messaging, proof, and review context in one place.",
+      },
+    ],
+    primaryCta: {
+      label: "Open AI Chat for copy drafting",
+      href: "/tools/ai-chat",
+    },
+    secondaryCta: {
+      label: "See product description examples",
+      href: "/tools/product-description-generator/examples/product-description-examples",
+    },
+  },
+  {
+    slug: "press-release-generator",
+    name: "Press Release Generator",
+    shortName: "Press Release",
+    tagline: "Draft structured press releases with launch context, proof, and a stronger narrative arc.",
+    description:
+      "Use one release brief to generate launch announcements, product updates, funding stories, and campaign-led press release drafts.",
+    category: "SEO",
+    icon: "seo",
+    media: "seo",
+    scenes: ["content_creation", "campaign_launch", "brand_strategy"],
+    href: "/tools/press-release-generator",
+    status: "live",
+    accessMode: "workspace_entry",
+    previewEnabled: false,
+    downloadRequiresLogin: false,
+    finalizeRequiresLogin: false,
+    previewModel: "AI chat + website copy workflow",
+    finalModel: "growth-marketing-agent",
+    proofPoints: ["Structured for launch narratives", "Supports examples, templates, and final copy", "Routes into broader campaign workflows"],
+    faqs: [
+      {
+        question: "Is this best for launch news only?",
+        answer: "No. The same structure can support product updates, partnerships, executive announcements, and campaign-led releases.",
+      },
+      {
+        question: "What makes press release drafts stronger?",
+        answer: "A clear announcement angle, supporting proof, audience context, quotes, and a realistic next step for the reader.",
+      },
+    ],
+    contentSections: [
+      {
+        heading: "What this page should help teams do",
+        body: [
+          "A press release generator should help the team move from announcement context into a structured narrative that includes the key angle, supporting evidence, and quote-ready points.",
+        ],
+      },
+      {
+        heading: "How to turn the page into real output",
+        body: [
+          "Use the examples first, then draft inside AI Chat or a copy workflow so the same announcement context can continue into the final campaign assets.",
+        ],
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/press-release-generator/examples/press-release-examples",
+        label: "Press Release Examples",
+        description: "Use scenario-based examples to choose the right release structure before writing.",
+      },
+      {
+        href: "/agents/growth-marketing-agent",
+        label: "Growth Marketing Agent",
+        description: "Carry the same launch context into channel plans, campaign copy, and follow-up assets.",
+      },
+      {
+        href: "/agents/website-copy-agent",
+        label: "Website Copy Agent",
+        description: "Reuse the announcement narrative in landing pages and product messaging after the release is drafted.",
+      },
+    ],
+    primaryCta: {
+      label: "Draft with AI Chat",
+      href: "/tools/ai-chat",
+    },
+    secondaryCta: {
+      label: "Browse press release examples",
+      href: "/tools/press-release-generator/examples/press-release-examples",
+    },
+  },
+  {
+    slug: "bio-generator",
+    name: "Bio Generator",
+    shortName: "Bio Generator",
+    tagline: "Generate personal, founder, team, and speaker bios with clearer positioning.",
+    description:
+      "Create bios for websites, social profiles, speaker pages, and brand introductions using the same positioning brief.",
+    category: "SEO",
+    icon: "seo",
+    media: "seo",
+    scenes: ["content_creation", "brand_strategy", "lead_generation"],
+    href: "/tools/bio-generator",
+    status: "live",
+    accessMode: "workspace_entry",
+    previewEnabled: false,
+    downloadRequiresLogin: false,
+    finalizeRequiresLogin: false,
+    previewModel: "AI chat + brand workflow",
+    finalModel: "brand-strategy-agent",
+    proofPoints: ["Works for founder, team, and speaker bios", "Keeps positioning and tone consistent", "Supports examples for profile rewrites"],
+    faqs: [
+      {
+        question: "Can one bio brief support different channels?",
+        answer: "Yes. Teams often reuse the same positioning notes for website bios, LinkedIn summaries, and speaker intros with channel-specific length changes.",
+      },
+      {
+        question: "What improves bio quality the most?",
+        answer: "Use role context, proof, target audience, differentiators, and the tone the bio should project.",
+      },
+    ],
+    contentSections: [
+      {
+        heading: "What makes a bio useful",
+        body: [
+          "A strong bio quickly explains who the person or team is, why their work matters, and what proof or differentiator supports the claim. The format changes by channel, but the positioning logic should stay consistent.",
+        ],
+      },
+      {
+        heading: "Where this fits in the current workflow",
+        body: [
+          "Start with the positioning brief, review examples, then use AI Chat or a brand workflow to create channel-specific versions without rewriting the whole story from zero.",
+        ],
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/bio-generator/examples/bio-examples",
+        label: "Bio Examples",
+        description: "Review short, medium, and profile-style bio patterns before drafting your own.",
+      },
+      {
+        href: "/tools/bio-generator/examples/linkedin-headline-examples",
+        label: "LinkedIn Headline Examples",
+        description: "Use tighter examples when the profile needs a stronger hook in fewer words.",
+      },
+      {
+        href: "/agents/brand-strategy-agent",
+        label: "Brand Strategy Agent",
+        description: "Turn raw background notes into clearer positioning before drafting the final bio.",
+      },
+    ],
+    primaryCta: {
+      label: "Open AI Chat for bio drafting",
+      href: "/tools/ai-chat",
+    },
+    secondaryCta: {
+      label: "See bio examples",
+      href: "/tools/bio-generator/examples/bio-examples",
+    },
+  },
+  {
+    slug: "seo-title-generator",
+    name: "SEO Title Generator",
+    shortName: "SEO Title",
+    tagline: "Generate multiple SEO title directions from one keyword and page goal.",
+    description:
+      "Create title ideas for resource pages, tools, landing pages, and comparison pages without losing the original search intent.",
+    category: "SEO",
+    icon: "seo",
+    media: "seo",
+    scenes: ["seo_growth", "content_creation", "research_analysis"],
+    href: "/tools/seo-title-generator",
+    status: "live",
+    accessMode: "guest",
+    previewEnabled: false,
+    downloadRequiresLogin: false,
+    finalizeRequiresLogin: false,
+    previewModel: getLeadToolPreviewModel("ai-seo-meta-generator"),
+    finalModel: getLeadToolFinalModel("ai-seo-meta-generator"),
+    proofPoints: ["Multiple title angles per keyword", "Fits resource, tool, and compare pages", "Pairs directly with meta and outline workflows"],
+    faqs: [
+      {
+        question: "How is this different from a generic headline generator?",
+        answer: "SEO titles need to balance search intent, clarity, and click appeal while still fitting the page type and business goal.",
+      },
+      {
+        question: "Should teams generate titles before or after the outline?",
+        answer: "Usually after the brief is clear but before the draft is finalized, so the title still reflects the intended structure and CTA.",
+      },
+    ],
+    contentSections: [
+      {
+        heading: "What a strong SEO title should do",
+        body: [
+          "A strong title should match the searcher's intent, signal the page angle quickly, and avoid overpromising what the content will deliver. The best variants also reflect the page type, such as a guide, generator, comparison, or examples page.",
+        ],
+      },
+      {
+        heading: "How to use this with existing tools",
+        body: [
+          "Use the AI SEO Meta Generator when you want titles and descriptions together, or start here when your team specifically needs title variants for programmatic pages and landing pages.",
+        ],
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/tools/ai-seo-meta-generator",
+        label: "AI SEO Meta Generator",
+        description: "Expand title ideas into descriptions and structural page guidance in the same workflow.",
+      },
+      {
+        href: "/resources/aida-marketing",
+        label: "AIDA Marketing",
+        description: "Use message-flow logic when title variations need stronger positioning and CTA relevance.",
+      },
+      {
+        href: "/resources/what-is-a-content-brief",
+        label: "What Is a Content Brief?",
+        description: "Start from the brief when the page angle is still unclear and titles feel too generic.",
+      },
+    ],
+    primaryCta: {
+      label: "Generate titles and meta",
+      href: "/tools/ai-seo-meta-generator",
+    },
+    secondaryCta: {
+      label: "Plan the content brief first",
+      href: "/tools/content-brief-generator",
+    },
   },
   {
     slug: "sentiment-monitoring",
@@ -414,6 +785,46 @@ const localizedLeadToolCopy: Record<
       description: "适合从搜索流量切入的通用工具，复用相同的预览、登录门槛和埋点框架。",
       proofPoints: ["适合长尾 SEO 页面", "低输入门槛", "一次生成多组 Meta 方向"],
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-seo-meta-generator")?.faqs ?? [],
+    },
+    "content-brief-generator": {
+      name: "内容简报生成器",
+      shortName: "内容简报",
+      tagline: "把主题、受众和目标整理成可执行的 SEO 内容简报。",
+      description: "先产出结构化 brief，再继续生成标题、描述、FAQ 和内链方向。",
+      proofPoints: ["写作前先统一 brief", "支持章节、FAQ 与内链规划", "可直接导向 SEO 生产流程"],
+      faqs: leadToolsCatalog.find((tool) => tool.slug === "content-brief-generator")?.faqs ?? [],
+    },
+    "product-description-generator": {
+      name: "产品描述生成器",
+      shortName: "产品描述",
+      tagline: "基于产品信息快速生成电商与营销场景的描述文案。",
+      description: "把产品卖点、受众和证据整理成适合商品页、落地页和活动页的描述。",
+      proofPoints: ["适合电商与落地页", "让产品证据更清楚", "可衔接示例页与文案工作流"],
+      faqs: leadToolsCatalog.find((tool) => tool.slug === "product-description-generator")?.faqs ?? [],
+    },
+    "press-release-generator": {
+      name: "新闻稿生成器",
+      shortName: "新闻稿",
+      tagline: "围绕发布背景、证据和叙事线生成结构化新闻稿草案。",
+      description: "适合产品发布、合作公告、融资动态和活动传播场景的新闻稿起草。",
+      proofPoints: ["适合发布型叙事", "支持示例与模板回看", "可继续导向 campaign 工作流"],
+      faqs: leadToolsCatalog.find((tool) => tool.slug === "press-release-generator")?.faqs ?? [],
+    },
+    "bio-generator": {
+      name: "个人简介生成器",
+      shortName: "个人简介",
+      tagline: "生成适合官网、社媒、演讲者介绍和团队页的 bio 文案。",
+      description: "用同一份定位 brief 生成个人、创始人、团队和 speaker bio。",
+      proofPoints: ["适合个人与团队介绍", "保持定位与语气一致", "支持示例页改写"],
+      faqs: leadToolsCatalog.find((tool) => tool.slug === "bio-generator")?.faqs ?? [],
+    },
+    "seo-title-generator": {
+      name: "SEO 标题生成器",
+      shortName: "SEO 标题",
+      tagline: "围绕关键词和页面目标快速生成多组 SEO 标题方向。",
+      description: "适合资源页、工具页、落地页和对比页的标题规划。",
+      proofPoints: ["一个关键词多种标题角度", "适合资源页与工具页", "可直接衔接 meta 工作流"],
+      faqs: leadToolsCatalog.find((tool) => tool.slug === "seo-title-generator")?.faqs ?? [],
     },
     "ai-image": {
       name: "AI 绘图与设计助手入口",

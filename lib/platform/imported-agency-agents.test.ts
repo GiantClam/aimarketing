@@ -30,10 +30,11 @@ test("imported agency agents stay runnable and mapped to supported business lane
   const agents = listImportedAgencyAgents("en")
   const sourceMap = getImportedAgencyAgentSkillSourceMap()
 
-  assert.equal(agents.length, 217)
+  assert.equal(agents.length, 212)
   assert.equal(new Set(agents.map((agent) => agent.agentId)).size, agents.length)
   assert.equal(Object.keys(sourceMap).length, agents.length)
-  assert.ok(new Set(agents.map((agent) => agent.businessSlug)).size >= 16)
+  assert.ok(new Set(agents.map((agent) => agent.businessSlug)).size >= 15)
+  assert.ok(agents.every((agent) => agent.businessSlug !== "game-development"))
 
   for (const agent of agents) {
     assert.ok(agent.agentId.startsWith("agency-"))

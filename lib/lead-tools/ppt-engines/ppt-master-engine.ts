@@ -32,8 +32,8 @@ function shouldUseRemoteWorkerTransport() {
   return getLeadToolPptExecutionTransport() === "remote-worker"
 }
 
-function getPreviewRuntime(): LeadToolPptPreviewRuntime {
-  const runtimeId = getLeadToolPptPreviewRuntime("ai-ppt-preview")
+function getPreviewRuntime(requestedRuntimeId?: LeadToolPptPreviewRuntime["id"] | null): LeadToolPptPreviewRuntime {
+  const runtimeId = requestedRuntimeId || getLeadToolPptPreviewRuntime("ai-ppt-preview")
 
   if (runtimeId === "ppt-master-agent") {
     return pptMasterPreviewRuntime
@@ -62,7 +62,7 @@ function getPreviewEngineMeta(runtime: LeadToolPptPreviewRuntime) {
 
 const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
   async buildPreview(request, options) {
-    const runtime = getPreviewRuntimeImpl()
+    const runtime = getPreviewRuntimeImpl(request.previewRuntime)
     const previewMeta = getPreviewEngineMeta(runtime)
 
     if (runtime.id === "ppt-master-agent" && shouldUseRemoteWorkerTransport()) {

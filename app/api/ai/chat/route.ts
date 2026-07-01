@@ -136,7 +136,7 @@ function modelSupportsImageInput(modelId: string | null | undefined) {
 }
 
 function parseEnabledToolNames(input: unknown) {
-  if (!Array.isArray(input)) return []
+  if (!Array.isArray(input)) return null
   return input
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean)

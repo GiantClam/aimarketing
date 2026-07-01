@@ -21,6 +21,14 @@ function normalizeCollectionItem(item: unknown) {
     storageKey: typeof record.storageKey === "string" ? record.storageKey : undefined,
     mimeType: typeof record.mimeType === "string" ? record.mimeType : undefined,
     url: typeof record.url === "string" ? record.url : null,
+    embeddedContentBase64:
+      typeof record.embeddedContentBase64 === "string" && record.embeddedContentBase64.trim()
+        ? record.embeddedContentBase64.trim()
+        : null,
+    inlinePreviewText:
+      typeof record.inlinePreviewText === "string" && record.inlinePreviewText.trim()
+        ? record.inlinePreviewText
+        : null,
     title:
       typeof record.title === "string"
         ? record.title
@@ -312,49 +320,6 @@ export async function persistFinalWorkflowOutputs(input: {
     const configuredStoredTitle = normalizeWorkflowStoredTitle(storeNode?.config.storedFileName)
     if (!state || state.status !== "succeeded") continue
 
-    const textOutputs = state.output.text ?? []
-    for (const [index, value] of textOutputs.entries()) {
-      const title = resolveStoredOutputTitle({
-        configuredTitle: configuredStoredTitle,
-        fallbackTitle: `${input.workflowTitle} text output ${index + 1}`,
-        outputIndex: index,
-      })
-
-      if (configuredStoredTitle) {
-        await overwriteAssetLibraryTitleIfNeeded(title)
-      }
-
-      const artifact = await store.savePlatformArtifact({
-        runId: input.runId,
-        enterpriseId: input.enterpriseId,
-        ownerUserId: input.ownerUserId,
-        kind: "text",
-        title,
-        mimeType: "text/plain",
-        source: "workflow",
-        payload: buildWorkflowGeneratedArtifactPayload({
-          workflowId: input.workflowId,
-          workflowSlug: input.workflowSlug,
-          workflowTitle: input.workflowTitle,
-          workflowRunId: input.runId,
-          workflowVersionAt,
-          text: value,
-          workflowNodeKey: target.sourceNodeKey,
-          workflowStoreNodeKey: target.targetNodeKey,
-        }),
-      })
-      createdArtifacts.push(artifact.id)
-      await persistArtifactSideEffects({
-        artifact,
-        title,
-        outputKind: "text",
-        sourceNodeKey: target.sourceNodeKey,
-        targetNodeKey: target.targetNodeKey,
-        storeNode,
-      })
-      reserveStoredTitle(title)
-    }
-
     const collections: Array<["asset" | "image" | "video" | "audio" | "ppt", unknown[]]> = [
       ["asset", state.output.asset ?? []],
       ["image", state.output.image ?? []],
@@ -381,7 +346,7 @@ export async function persistFinalWorkflowOutputs(input: {
           runId: input.runId,
           enterpriseId: input.enterpriseId,
           ownerUserId: input.ownerUserId,
-          kind: item.url ? "link" : "json",
+          kind: item.storageKey || item.embeddedContentBase64 ? "file" : item.url ? "link" : "json",
           title,
           mimeType: item.mimeType || "application/octet-stream",
           externalUrl: item.url || null,
@@ -394,6 +359,8 @@ export async function persistFinalWorkflowOutputs(input: {
             workflowRunId: input.runId,
             workflowVersionAt,
             artifactId: item.artifactId ?? null,
+            embeddedContentBase64: item.embeddedContentBase64,
+            text: item.inlinePreviewText,
             workflowNodeKey: target.sourceNodeKey,
             workflowStoreNodeKey: target.targetNodeKey,
             outputKind: kind,

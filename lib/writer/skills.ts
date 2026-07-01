@@ -1,4 +1,5 @@
 import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
+import type { AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 /* eslint-disable no-useless-escape */
 import { z } from "zod"
 import {
@@ -2125,6 +2126,8 @@ async function extractWriterBriefWithModel(params: {
   preferredLanguage: WriterLanguage
   briefingGuide: WriterBriefingSkillDocument
   conversationStatus?: WriterConversationStatus
+  selectedProviderId?: AiEntryProviderId | null
+  selectedModelId?: string | null
 }): Promise<WriterBriefExtractionResult | null> {
   if (shouldUseWriterE2EFixtures()) {
     return extractWriterBriefWithFixture(params)
@@ -2136,12 +2139,13 @@ async function extractWriterBriefWithModel(params: {
 
   try {
     const { systemPrompt, userPrompt } = buildWriterBriefExtractionPrompt(params)
-    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_SKILL_MODEL, {
+    const raw = await generateTextWithWriterModel(systemPrompt, userPrompt, params.selectedModelId || WRITER_SKILL_MODEL, {
       temperature: 0,
       maxTokens: 900,
       timeoutMs: WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS,
       totalTimeoutMs: WRITER_BRIEF_EXTRACTION_TIMEOUT_MS,
       providerTimeoutMs: WRITER_BRIEF_EXTRACTION_PROVIDER_TIMEOUT_MS,
+      preferredProviderId: params.selectedProviderId,
     })
     const parsed = WRITER_BRIEF_EXTRACTION_SCHEMA.safeParse(JSON.parse(extractJsonObjectFromText(raw)))
     if (!parsed.success) {
@@ -4133,6 +4137,8 @@ export async function generateWriterDraftWithSkills(
     soulCardVersion?: string | null
     soulCardConfidence?: number | null
     memoryScope?: string | null
+    selectedProviderId?: AiEntryProviderId | null
+    selectedModelId?: string | null
   },
 ): Promise<WriterDraftGenerationResult> {
   const contextQuery = options?.researchQuery?.trim() || query
@@ -4190,10 +4196,11 @@ export async function generateWriterDraftWithSkills(
     buildSystemPrompt(query, routing, language.instruction, research, enterpriseKnowledge, options?.personalizationBlock),
     buildUserPrompt(query, routing, research, language.instruction, enterpriseKnowledge),
   ])
-  const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, WRITER_TEXT_MODEL, {
+  const answer = await generateTextWithWriterModel(systemPrompt, userPrompt, options?.selectedModelId || WRITER_TEXT_MODEL, {
     timeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
     totalTimeoutMs: WRITER_DRAFT_GENERATION_TIMEOUT_MS,
     providerTimeoutMs: WRITER_DRAFT_PROVIDER_TIMEOUT_MS,
+    preferredProviderId: options?.selectedProviderId,
   })
 
   return {
@@ -4337,6 +4344,8 @@ export async function runWriterSkillsTurnWithRuntime(
     history?: WriterHistoryEntry[]
     conversationStatus?: WriterConversationStatus
     enterpriseId?: number | null
+    selectedProviderId?: AiEntryProviderId | null
+    selectedModelId?: string | null
   },
   runtime: WriterSkillsRuntime,
 ): Promise<WriterSkillsTurnResult> {
@@ -4368,6 +4377,8 @@ export async function runWriterSkillsTurnWithRuntime(
     preferredLanguage,
     briefingGuide,
     conversationStatus: params.conversationStatus,
+    selectedProviderId: params.selectedProviderId,
+    selectedModelId: params.selectedModelId,
   })
   const mergedBrief =
     structuredExtraction && structuredExtraction.confidence >= 0.45
@@ -4622,6 +4633,8 @@ export async function runWriterSkillsTurnWithRuntime(
     soulCardVersion,
     soulCardConfidence,
     memoryScope,
+    selectedProviderId: params.selectedProviderId,
+    selectedModelId: params.selectedModelId,
   })
   const finalAnswer = enforceWriterHardLengthTarget(draftResult.answer, routing)
 
@@ -4655,6 +4668,8 @@ export async function runWriterSkillsTurn(params: {
   history?: WriterHistoryEntry[]
   conversationStatus?: WriterConversationStatus
   enterpriseId?: number | null
+  selectedProviderId?: AiEntryProviderId | null
+  selectedModelId?: string | null
 }): Promise<WriterSkillsTurnResult> {
   return runWriterSkillsTurnWithRuntime(params, defaultWriterSkillsRuntime)
 }

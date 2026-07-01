@@ -39,6 +39,21 @@ test("template graph builder returns lead-to-outreach workflow blueprint", () =>
   assert.equal(blueprint.metadata?.templateKey, "lead-to-outreach")
 })
 
+test("content-repurpose template agents emit downstream-usable briefs instead of generic advice", () => {
+  const blueprint = buildWorkflowFromTemplate({
+    key: "content-repurpose",
+    locale: "zh",
+  })
+
+  const seoAgent = blueprint.nodes.find((node) => node.nodeKey === "seo-agent")
+  const distributionAgent = blueprint.nodes.find((node) => node.nodeKey === "distribution-agent")
+
+  assert.match(String(seoAgent?.config.prompt), /直接使用的 SEO 复用 brief/)
+  assert.match(String(seoAgent?.config.prompt), /不要先做点评/)
+  assert.match(String(distributionAgent?.config.prompt), /可执行的分发计划/)
+  assert.match(String(distributionAgent?.config.prompt), /不要评价文章好坏/)
+})
+
 test("seo-aeo template exposes explicit knowledge and search steps", () => {
   const presentation = getWorkflowTemplatePresentation({
     locale: "en",

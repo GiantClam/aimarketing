@@ -60,12 +60,73 @@ export function resolvePlatformArtifactSourceUrl(artifact: PlatformArtifactRecor
   return null
 }
 
+export function hasPlatformArtifactAccessibleContent(
+  artifact: Pick<PlatformArtifactRecord, "externalUrl" | "storageKey" | "payload">,
+) {
+  if (resolvePlatformArtifactSourceUrl(artifact as PlatformArtifactRecord)) {
+    return true
+  }
+
+  if (!artifact.payload || typeof artifact.payload !== "object") {
+    return false
+  }
+
+  const payload = artifact.payload as Record<string, unknown>
+  if (typeof payload.embeddedContentBase64 === "string" && payload.embeddedContentBase64.trim()) {
+    return true
+  }
+
+  return typeof payload.text === "string" && payload.text.trim().length > 0
+}
+
+export function isPlatformArtifactAssetLibraryEligible(
+  artifact: Pick<PlatformArtifactRecord, "externalUrl" | "storageKey" | "payload">,
+) {
+  if (resolvePlatformArtifactSourceUrl(artifact as PlatformArtifactRecord)) {
+    return true
+  }
+
+  if (!artifact.payload || typeof artifact.payload !== "object") {
+    return false
+  }
+
+  const payload = artifact.payload as Record<string, unknown>
+  return typeof payload.embeddedContentBase64 === "string" && payload.embeddedContentBase64.trim().length > 0
+}
+
 export function getPlatformArtifactPreviewKind(artifact: Pick<PlatformArtifactRecord, "mimeType" | "kind">) {
   const mimeType = artifact.mimeType?.toLowerCase() || ""
   if (mimeType.startsWith("image/")) return "image" as const
   if (mimeType.startsWith("video/")) return "video" as const
   if (mimeType.startsWith("audio/")) return "audio" as const
   return "file" as const
+}
+
+export function isPlatformArtifactTextPreviewable(artifact: Pick<PlatformArtifactRecord, "mimeType" | "title">) {
+  const mimeType = artifact.mimeType?.toLowerCase() || ""
+  const title = artifact.title.toLowerCase()
+  return mimeType.startsWith("text/") || mimeType.includes("json") || /\.(md|markdown|txt|json|csv|log)$/i.test(title)
+}
+
+export function normalizePlatformArtifactContentType(contentType: string | null | undefined) {
+  const normalized = typeof contentType === "string" ? contentType.trim() : ""
+  if (!normalized) return "application/octet-stream"
+
+  const lower = normalized.toLowerCase()
+  if (lower.includes("charset=")) return normalized
+
+  if (
+    lower.startsWith("text/") ||
+    lower === "application/json" ||
+    lower.endsWith("+json") ||
+    lower === "application/xml" ||
+    lower.endsWith("+xml") ||
+    lower === "image/svg+xml"
+  ) {
+    return `${normalized}; charset=utf-8`
+  }
+
+  return normalized
 }
 
 export function getPlatformArtifactFormatGroup(artifact: Pick<PlatformArtifactRecord, "mimeType" | "title">) {

@@ -19,12 +19,14 @@ let workflowImageGenerateBodies: Record<string, unknown>[] = []
 let leadToolPreviewBodies: Record<string, unknown>[] = []
 let leadToolDownloadBodies: Record<string, unknown>[] = []
 let aiChatBodies: Record<string, unknown>[] = []
+let writerChatBodies: Record<string, unknown>[] = []
 let taskPollCount = 0
 let taskPollResponses: Array<Record<string, unknown>> = []
 let sessionDetailCount = 0
 let sessionDetailResponses: Record<string, unknown>[] = []
 let enterpriseKnowledgeLoadCount = 0
 let personalKnowledgeLoadCount = 0
+let artifactDownloadTextById = new Map<number, string>()
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "server-only" || request === "client-only") {
@@ -68,6 +70,29 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         )
+      },
+    }
+  }
+
+  if (request === "@/app/api/platform/artifacts/[artifactId]/download/route") {
+    return {
+      GET: async (
+        _req: unknown,
+        context: { params: Promise<{ artifactId: string }> },
+      ) => {
+        const { artifactId } = await context.params
+        const numericArtifactId = Number(artifactId)
+        const text = artifactDownloadTextById.get(numericArtifactId)
+        if (!text) {
+          return new Response(JSON.stringify({ error: "artifact_not_found" }), {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          })
+        }
+        return new Response(text, {
+          status: 200,
+          headers: { "content-type": "text/markdown; charset=utf-8" },
+        })
       },
     }
   }
@@ -381,11 +406,30 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/app/api/writer/chat/stream/route") {
+    return {
+      POST: async (req: { json: () => Promise<Record<string, unknown>> }) => {
+        writerChatBodies.push(await req.json())
+        return new Response(
+          [
+            `data: ${JSON.stringify({ event: "message", answer: "Writer draft" })}`,
+            "",
+            `data: ${JSON.stringify({ event: "message_end", answer: "Writer draft" })}`,
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream; charset=utf-8" },
+          },
+        )
+      },
+    }
+  }
+
   if (
     request === "@/app/api/platform/media/run/route" ||
     request === "@/app/api/platform/media/tasks/[taskId]/route" ||
-    request === "@/app/api/video-agent/workflow/route" ||
-    request === "@/app/api/writer/chat/stream/route"
+    request === "@/app/api/video-agent/workflow/route"
   ) {
     return {
       POST: async () =>
@@ -407,6 +451,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 let createWorkflowCapabilityInvoker: typeof import("./capability-invoker").createWorkflowCapabilityInvoker
 let resolveWorkflowCapabilityCallTimeoutMs: typeof import("./capability-invoker").resolveWorkflowCapabilityCallTimeoutMs
 let buildVideoGenerateRequestBody: typeof import("./capability-invoker").buildVideoGenerateRequestBody
+let buildAudioGenerateRequestBody: typeof import("./capability-invoker").buildAudioGenerateRequestBody
 
 function createImageParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): WorkflowCapabilityInvokeParams {
   return {
@@ -463,10 +508,40 @@ function createPptParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): W
       config: {
         scenario: "marketing-campaign",
         language: "zh-CN",
+        previewRuntime: "frontend-slides-agent",
       },
     },
     input: {
       text: ["做一份增长复盘幻灯片"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+    ...overrides,
+  }
+}
+
+function createWriterParams(overrides?: Partial<WorkflowCapabilityInvokeParams>): WorkflowCapabilityInvokeParams {
+  return {
+    nodeType: "writer",
+    capabilitySlug: "content-repurpose",
+    action: "generate",
+    node: {
+      nodeKey: "writer-1",
+      type: "writer",
+      title: "内容改写",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        platform: "wechat",
+        mode: "article",
+        language: "zh",
+      },
+    },
+    input: {
+      text: ["把这段研究整理成公众号文章"],
       asset: [],
       image: [],
       video: [],
@@ -680,12 +755,75 @@ test("video capability request automatically uses image-to-video when image inpu
   assert.equal(body.params.modelId, "minimax:video:image-to-video:MiniMax-Hailuo-2.3")
 })
 
+test("audio capability request resolves the selected music model id", () => {
+  const body = buildAudioGenerateRequestBody({
+    nodeType: "music_generate",
+    capabilitySlug: "ai-music",
+    action: "generate",
+    node: {
+      nodeKey: "music-1",
+      type: "music_generate",
+      title: "音乐生成",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        model: "minimax:audio:music-2.6",
+        genre: "electronic-pop",
+      },
+    },
+    input: {
+      text: ["生成品牌主题曲"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  }, "生成品牌主题曲")
+
+  assert.equal(body.featureId, "ai-music")
+  assert.equal(body.modelId, "minimax:audio:music-2.6")
+  assert.equal(body.params.model, "minimax:audio:music-2.6")
+})
+
+test("audio capability request resolves the selected voice synthesis model id", () => {
+  const body = buildAudioGenerateRequestBody({
+    nodeType: "voice_synthesis",
+    capabilitySlug: "ai-music",
+    action: "voice-synthesis",
+    node: {
+      nodeKey: "voice-1",
+      type: "voice_synthesis",
+      title: "语音合成",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        model: "speech-2.8-turbo",
+        voiceId: "voice-123",
+      },
+    },
+    input: {
+      text: ["请播报这段文案"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  }, "请播报这段文案")
+
+  assert.equal(body.featureId, "voice-synthesis")
+  assert.equal(body.modelId, "minimax:audio:speech-2.8-turbo")
+  assert.equal(body.params.model, "minimax:audio:speech-2.8-turbo")
+})
+
 test.before(async () => {
   const module = await import("./capability-invoker")
   const resolvedModule = ("default" in module ? module.default : module) as typeof import("./capability-invoker")
   createWorkflowCapabilityInvoker = resolvedModule.createWorkflowCapabilityInvoker
   resolveWorkflowCapabilityCallTimeoutMs = resolvedModule.resolveWorkflowCapabilityCallTimeoutMs
   buildVideoGenerateRequestBody = resolvedModule.buildVideoGenerateRequestBody
+  buildAudioGenerateRequestBody = resolvedModule.buildAudioGenerateRequestBody
 })
 
 test.beforeEach(() => {
@@ -693,6 +831,7 @@ test.beforeEach(() => {
   leadToolPreviewBodies = []
   leadToolDownloadBodies = []
   aiChatBodies = []
+  writerChatBodies = []
   taskPollCount = 0
   taskPollResponses = []
   sessionDetailCount = 0
@@ -710,6 +849,9 @@ test.beforeEach(() => {
   }]
   enterpriseKnowledgeLoadCount = 0
   personalKnowledgeLoadCount = 0
+  artifactDownloadTextById = new Map([
+    [141, "# 屿算智能\n主卖点：企业级 AI 营销工作台。\n核心任务：提炼 SEO 关键词和复用结构。"],
+  ])
 })
 
 test.after(() => {
@@ -1014,6 +1156,74 @@ test("workflow ppt capability forwards structured image inputs to preview genera
   ])
 })
 
+test("workflow ppt capability forwards the selected preview model", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+  })
+
+  await invoke(createPptParams({
+    node: {
+      nodeKey: "ppt-1",
+      type: "ppt_generate",
+      title: "PPT",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        scenario: "marketing-campaign",
+        language: "zh-CN",
+        previewRuntime: "ppt-master-agent",
+        model: "step-3.7-flash",
+      },
+    },
+  }))
+
+  assert.equal(leadToolPreviewBodies.length, 1)
+  assert.equal(leadToolPreviewBodies[0]?.model, "step-3.7-flash")
+  assert.equal(leadToolPreviewBodies[0]?.previewRuntime, "ppt-master-agent")
+})
+
+test("workflow writer capability forwards the selected model config", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+  })
+
+  const result = await invoke(createWriterParams({
+    node: {
+      nodeKey: "writer-1",
+      type: "writer",
+      title: "内容改写",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        platform: "wechat",
+        mode: "article",
+        language: "zh",
+        selectedProviderId: "pptoken",
+        selectedModelId: "gpt-5.4",
+      },
+    },
+  }))
+
+  assert.equal(writerChatBodies.length, 1)
+  assert.deepEqual(writerChatBodies[0]?.modelConfig, {
+    providerId: "pptoken",
+    modelId: "gpt-5.4",
+  })
+  assert.deepEqual(result.output.text, ["Writer draft"])
+  assert.equal(result.providerId, "pptoken")
+  assert.equal(result.modelId, "gpt-5.4")
+})
+
 test("agent-platform direct agent forwards composed system prompt to ai chat", async () => {
   const invoke = createWorkflowCapabilityInvoker({
     currentUser: {
@@ -1056,8 +1266,67 @@ test("agent-platform direct agent forwards composed system prompt to ai chat", a
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Stay on brand."), true)
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not mention pricing."), true)
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Append compliance footer."), true)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
+  assert.deepEqual(
+    (aiChatBodies[0]?.skillConfig as { enabledToolNames?: string[] } | undefined)?.enabledToolNames,
+    ["preview_ppt_deck", "export_ppt_deck"],
+  )
   assert.deepEqual(result.output.text, ["agent:Write a launch headline"])
   assert.equal(result.metadata?.customAgentId, 41)
+})
+
+test("agent-platform direct agent injects readable asset text into the chat message", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 17,
+  })
+
+  await invoke({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    node: {
+      nodeKey: "seo-agent",
+      type: "agent_execute",
+      title: "SEO 复用智能体",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        agentId: "business-seo-repurpose",
+        prompt: "抽取关键词、问题簇、文章结构改写建议和复用方向。",
+      },
+    },
+    input: {
+      text: ["说明你要复用到 X、小红书、linkedin、facebook。"],
+      asset: [
+        {
+          source: "upload",
+          artifactId: 141,
+          fileName: "屿算智能_ppt信息提取.md",
+          mimeType: "text/markdown",
+          url: "/api/platform/artifacts/141/download",
+        },
+      ],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(aiChatBodies.length, 1)
+  assert.match(String(aiChatBodies[0]?.message), /抽取关键词、问题簇、文章结构改写建议和复用方向。/)
+  assert.match(String(aiChatBodies[0]?.message), /Attached file content:/)
+  assert.match(String(aiChatBodies[0]?.message), /屿算智能_ppt信息提取\.md/)
+  assert.match(String(aiChatBodies[0]?.message), /企业级 AI 营销工作台/)
+  assert.match(String(aiChatBodies[0]?.message), /提炼 SEO 关键词和复用结构/)
 })
 
 test("agent-platform direct agent does not auto-query knowledge when no knowledge_retrieve node exists", async () => {
@@ -1141,10 +1410,151 @@ test("agent-platform builtin ai-entry agent routes through ai chat with agent co
 
   assert.equal(aiChatBodies.length, 1)
   assert.equal((aiChatBodies[0]?.agentConfig as { agentId?: string } | undefined)?.agentId, "executive-brand")
-  assert.equal(aiChatBodies[0]?.systemPrompt, "Use a concise executive tone.")
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Use a concise executive tone."), true)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
+  assert.deepEqual(
+    (aiChatBodies[0]?.skillConfig as { enabledToolNames?: string[] } | undefined)?.enabledToolNames,
+    ["preview_ppt_deck", "export_ppt_deck"],
+  )
   assert.deepEqual(result.output.text, ["agent:Position our spring launch"])
   assert.equal(result.metadata?.builtinAgentId, "executive-brand")
   assert.equal(result.metadata?.executionMode, "ai_entry_agent")
+})
+
+test("agent-platform forwards the selected model config for builtin agents", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  await invoke({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    node: {
+      nodeKey: "agent-builtin-model-1",
+      type: "agent_execute",
+      title: "Brand Strategy Advisor",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        agentId: "executive-brand",
+        selectedProviderId: "openrouter",
+        selectedModelId: "gpt-5.4",
+      },
+    },
+    input: {
+      text: ["Position our spring launch"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(aiChatBodies.length, 1)
+  assert.deepEqual(aiChatBodies[0]?.modelConfig, {
+    providerId: "openrouter",
+    modelId: "gpt-5.4",
+  })
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
+})
+
+test("ai-chat workflow nodes default to single-turn direct answers", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 17,
+  })
+
+  await invoke({
+    nodeType: "llm_generate",
+    capabilitySlug: "ai-chat",
+    action: "chat",
+    node: {
+      nodeKey: "ai-chat-1",
+      type: "llm_generate",
+      title: "通用问答",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        systemPrompt: "请用中文输出，并优先给出可执行方案。",
+      },
+    },
+    input: {
+      text: ["给我一个下周上线的 SEO 内容复用执行计划。"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(aiChatBodies.length, 1)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("请用中文输出，并优先给出可执行方案。"), true)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
+  assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("single response"), true)
+})
+
+test("agent-platform builtin ai-entry agent only enables web_search when selected in node config", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  const result = await invoke({
+    nodeType: "agent_execute",
+    capabilitySlug: "agent-platform",
+    action: "chat",
+    node: {
+      nodeKey: "agent-builtin-search-1",
+      type: "agent_execute",
+      title: "Brand Strategy Advisor",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        agentId: "executive-brand",
+        webSearchEnabled: true,
+      },
+    },
+    input: {
+      text: ["Position our spring launch with current market signals"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  })
+
+  assert.equal(aiChatBodies.length, 1)
+  assert.deepEqual(
+    (aiChatBodies[0]?.skillConfig as { enabledToolNames?: string[] } | undefined)?.enabledToolNames,
+    ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+  )
+  assert.deepEqual(result.output.text, ["agent:Position our spring launch with current market signals"])
 })
 
 test("agent-platform workflow-backed agent delegates into the linked workflow graph", async () => {
@@ -1186,7 +1596,7 @@ test("agent-platform workflow-backed agent delegates into the linked workflow gr
     },
   })
 
-  assert.deepEqual(result.output.text, ["Use upstream brief"])
+  assert.deepEqual(result.output.text, ["Summarize the workflow input\n\nUse upstream brief"])
   assert.equal(result.metadata?.linkedWorkflowId, 501)
 })
 

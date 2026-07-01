@@ -4,6 +4,7 @@ import { requireServerSessionUser } from "@/lib/auth/server-session"
 import { getRequestLocale } from "@/lib/i18n/request-locale"
 import { getBusinessMarketplaceSelection } from "@/lib/platform/business-marketplace-selection"
 import { listCustomAgentsForUser } from "@/lib/platform/custom-agents"
+import { listImportedAgencyAgents } from "@/lib/platform/imported-agency-agents"
 
 export default async function DashboardAgentPlatformPage() {
   const locale = await getRequestLocale()
@@ -19,6 +20,7 @@ export default async function DashboardAgentPlatformPage() {
       : []
   const marketplaceSelection = await getBusinessMarketplaceSelection(currentUser.id).catch(() => null)
   const myCustomAgents = customAgents.filter((agent) => agent.ownerUserId === currentUser.id && agent.status !== "archived")
+  const importedAgents = listImportedAgencyAgents(displayLocale)
 
   return (
     <WorkspaceAgentPlatformDirectory
@@ -26,6 +28,7 @@ export default async function DashboardAgentPlatformPage() {
       builtinAgents={getAiEntryAgentCatalog()}
       builtinGroups={getAiEntryAgentGroups()}
       customAgents={myCustomAgents}
+      importedAgents={importedAgents}
       initialSelectedBusinessMenuAgentIds={marketplaceSelection?.selectedAgentIds || []}
     />
   )

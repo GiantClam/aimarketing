@@ -349,7 +349,7 @@ export async function buildAiEntryToolRegistry(input: {
   policy: AiEntryAgentRuntimePolicy
   selectedSkills: AiEntrySkillDefinition[]
   skillsEnabled: boolean
-  enabledToolNames: string[]
+  enabledToolNames: string[] | null
   auditContext: {
     traceId: string
     conversationId: string
@@ -359,7 +359,7 @@ export async function buildAiEntryToolRegistry(input: {
   const toolLoadWarnings: string[] = []
   const policyAllowedToolIds = new Set(input.policy.allowedToolIds)
   const explicitToolAllowlist =
-    input.enabledToolNames.length > 0 ? new Set(input.enabledToolNames) : null
+    input.enabledToolNames ? new Set(input.enabledToolNames) : null
   const selectedSkillToolIds = getSelectedSkillToolIds(input.selectedSkills)
   const firstPartyDesiredToolIds = new Set<string>()
 
@@ -398,7 +398,7 @@ export async function buildAiEntryToolRegistry(input: {
     if (allowedDefinitions.length > 0) {
       const loaded = await loadAiEntryMcpTools({
         serverDefinitions: allowedDefinitions as AiEntryMcpServerDefinition[],
-        allowedToolNames: input.enabledToolNames,
+        allowedToolNames: input.enabledToolNames ?? undefined,
       })
       loadedMcpTools = loaded.tools
       closeTools = loaded.close

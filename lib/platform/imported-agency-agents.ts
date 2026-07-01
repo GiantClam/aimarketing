@@ -199,7 +199,11 @@ const CATEGORY_BLUEPRINTS: Record<string, CategoryBlueprint> = {
   },
 }
 
-const COMPATIBLE_SOURCE_CATEGORIES = Object.keys(CATEGORY_BLUEPRINTS).sort()
+const EXCLUDED_SOURCE_CATEGORIES = new Set(["game-development"])
+
+const COMPATIBLE_SOURCE_CATEGORIES = Object.keys(CATEGORY_BLUEPRINTS)
+  .filter((category) => !EXCLUDED_SOURCE_CATEGORIES.has(category))
+  .sort()
 
 function localizeText(locale: AppLocale, text: LocalizedText) {
   return locale === "zh" ? text.zh : text.en
@@ -232,11 +236,30 @@ function startCaseFromSlug(value: string) {
     .join(" ")
 }
 
-function buildImportedAgentId(sourceCategory: string, sourceFileName: string) {
-  const fileSlug = sourceFileName.replace(/\.md$/i, "")
+function buildImportedAgentId(sourceCategory: string, sourceFilePath: string) {
+  const fileSlug = sourceFilePath
+    .replace(/\.md$/i, "")
+    .replace(/[\\/]+/g, "-")
   return fileSlug.startsWith(`${sourceCategory}-`)
     ? `agency-${fileSlug}`
     : `agency-${sourceCategory}-${fileSlug}`
+}
+
+function listMarkdownFilesRecursive(dirPath: string) {
+  const markdownFiles: string[] = []
+
+  for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+    const nextPath = path.join(dirPath, entry.name)
+    if (entry.isDirectory()) {
+      markdownFiles.push(...listMarkdownFilesRecursive(nextPath))
+      continue
+    }
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      markdownFiles.push(nextPath)
+    }
+  }
+
+  return markdownFiles.sort()
 }
 
 function buildCategorySamplePrompts(locale: AppLocale, categoryLabel: string, agentName: string) {
@@ -422,21 +445,19 @@ function discoverImportedAgencyAgentDefinitions() {
 
   for (const sourceCategory of COMPATIBLE_SOURCE_CATEGORIES) {
     const categoryDir = path.join(IMPORTED_AGENT_BASE_DIR, sourceCategory)
-    const fileNames = readdirSync(categoryDir, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-      .map((entry) => entry.name)
-      .sort()
+    const filePaths = listMarkdownFilesRecursive(categoryDir)
 
-    for (const fileName of fileNames) {
-      const sourcePath = `${sourceCategory}/${fileName}`
-      const content = readFileSync(path.join(categoryDir, fileName), "utf8")
+    for (const filePath of filePaths) {
+      const relativeFilePath = path.relative(categoryDir, filePath).replace(/\\/g, "/")
+      const sourcePath = `${sourceCategory}/${relativeFilePath}`
+      const content = readFileSync(filePath, "utf8")
       const meta = parseFrontmatter(content)
       const enName =
         meta.name_en?.trim() ||
         meta.nameEn?.trim() ||
         meta.enName?.trim() ||
         meta.name?.trim() ||
-        startCaseFromSlug(fileName.replace(/\.md$/i, ""))
+        startCaseFromSlug(relativeFilePath.replace(/\.md$/i, "").replace(/[\\/]+/g, "-"))
       const zhName =
         meta.name_zh?.trim() ||
         meta.nameZh?.trim() ||
@@ -444,7 +465,7 @@ function discoverImportedAgencyAgentDefinitions() {
         localizeImportedAgentName("zh", enName)
       const description = meta.description?.trim() || `${enName} agent`
       definitions.push({
-        agentId: buildImportedAgentId(sourceCategory, fileName),
+        agentId: buildImportedAgentId(sourceCategory, relativeFilePath),
         businessSlug: sourceCategory,
         sourceCategory,
         sourcePath,
