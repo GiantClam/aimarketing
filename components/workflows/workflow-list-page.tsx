@@ -307,12 +307,12 @@ function WorkflowNodePreview({
   items: WorkflowNodePreviewItem[]
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       {items.map((item, index) => (
-        <div key={`${item.label}-${index}`} className="flex items-center gap-3">
+        <div key={`${item.label}-${index}`} className="flex items-center gap-2">
           <div
             className={cn(
-              "flex h-12 items-center rounded-[10px] border px-[18px] text-sm font-extrabold text-[#111]",
+              "flex h-10 items-center rounded-[10px] border px-4 text-[13px] font-extrabold text-[#111]",
               item.tone === "start" && "border-[#ccefd7] bg-[#eefaf2]",
               item.tone === "upload" && "border-[#d8c9ff] bg-[#f2ecff]",
               item.tone === "process" && "border-[#efe6a8] bg-[#fffbe5]",
@@ -321,7 +321,7 @@ function WorkflowNodePreview({
           >
             {item.label}
           </div>
-          {index < items.length - 1 ? <span className="text-lg font-black text-[#111]">→</span> : null}
+          {index < items.length - 1 ? <span className="text-base font-black text-[#111]">→</span> : null}
         </div>
       ))}
     </div>
@@ -891,8 +891,8 @@ export function WorkflowListPage({
               <div className="text-sm font-semibold text-[#666]">{workflows.length}</div>
             </div>
 
-            <div className="mt-6 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-              <article className={cn("relative overflow-hidden rounded-2xl border border-[#e7e7df] bg-white p-7", submitting && "pointer-events-none opacity-70")}>
+            <div className="mt-6 grid gap-4 xl:grid-cols-3">
+              <article className={cn("relative overflow-hidden rounded-xl border border-[#e7e7df] bg-white p-5", submitting && "pointer-events-none opacity-70")}>
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 opacity-10"
@@ -903,14 +903,14 @@ export function WorkflowListPage({
                   }}
                 />
                 <div className="relative flex h-full flex-col">
-                  <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[14px] bg-primary text-primary-foreground">
-                    <Plus className="h-8 w-8" />
+                  <div className="flex h-14 w-14 items-center justify-center rounded-[12px] bg-primary text-primary-foreground">
+                    <Plus className="h-6 w-6" />
                   </div>
-                  <h3 className="mt-6 font-display text-[30px] font-black uppercase leading-none text-[#111]">{copy.createTitle}</h3>
-                  <p className="mt-4 max-w-[28rem] text-sm leading-6 text-[#666]">{copy.createDescription}</p>
-                  <div className="mt-auto pt-8">
+                  <h3 className="mt-5 font-display text-[24px] font-black uppercase leading-none text-[#111]">{copy.createTitle}</h3>
+                  <p className="mt-3 max-w-[28rem] text-sm leading-6 text-[#666]">{copy.createDescription}</p>
+                  <div className="mt-auto pt-6">
                     <Button
-                      className="h-[46px] w-full rounded-[9px] border border-primary/50 bg-primary text-sm font-black text-[#111] hover:bg-primary/90"
+                      className="h-11 w-full rounded-[9px] border border-primary/50 bg-primary text-sm font-black text-[#111] hover:bg-primary/90"
                       onClick={() => void handleCreate()}
                       disabled={submitting}
                       data-agent-new-workflow
@@ -935,85 +935,90 @@ export function WorkflowListPage({
                 return (
                   <article
                     key={workflow.id}
-                    className="min-h-[260px] rounded-2xl border border-[#e7e7df] bg-white p-7 shadow-[0_10px_28px_rgba(0,0,0,0.045)]"
+                    className="h-full min-h-[228px] rounded-xl border border-[#e7e7df] bg-white p-5 shadow-[0_10px_24px_rgba(0,0,0,0.04)]"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <h3 className="truncate font-display text-[28px] font-black uppercase leading-none text-[#111]">
-                          {workflow.title}
-                        </h3>
-                        <div className="mt-3 text-sm text-[#666]">
-                          {copy.updatedBy} {formatRelativeTime(workflow.updatedAt, locale)} · {copy.ownerBy} {currentUserName}
+                    <div className="flex h-full flex-col">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="line-clamp-2 font-display text-[22px] font-black uppercase leading-[1.02] text-[#111]">
+                            {workflow.title}
+                          </h3>
+                          <div className="mt-2 text-[13px] text-[#666]">
+                            {copy.updatedBy} {formatRelativeTime(workflow.updatedAt, locale)} · {copy.ownerBy} {currentUserName}
+                          </div>
+                        </div>
+                        <WorkflowStatusBadge label={status.label} className={status.className} />
+                      </div>
+
+                      <p className="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-[#666]">
+                        {hasDescription ? workflow.description : workflow.slug}
+                      </p>
+
+                      <div className="mt-4">
+                        <WorkflowNodePreview items={nodePreview} />
+                      </div>
+
+                      <div className="mt-4 rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
+                        <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.latestRunLabel}</div>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-[#111]">
+                            {latestRun ? `#${latestRun.id} · ${formatRelativeTime(latestRun.createdAt, locale)}` : copy.latestRunNone}
+                          </div>
+                          {latestRun ? (
+                            <RunStatusBadge {...getRunStatusMeta(latestRun.status, locale)} />
+                          ) : null}
                         </div>
                       </div>
-                      <WorkflowStatusBadge label={status.label} className={status.className} />
-                    </div>
 
-                    <p className="mt-4 min-h-[44px] text-sm leading-6 text-[#666]">
-                      {hasDescription ? workflow.description : workflow.slug}
-                    </p>
-
-                    <div className="mt-5">
-                      <WorkflowNodePreview items={nodePreview} />
-                    </div>
-
-                    <div className="mt-5 rounded-[12px] border border-[#ededE7] bg-[#fafaf7] px-4 py-3">
-                      <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">{copy.latestRunLabel}</div>
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold text-[#111]">
-                          {latestRun ? `#${latestRun.id} · ${formatRelativeTime(latestRun.createdAt, locale)}` : copy.latestRunNone}
-                        </div>
-                        {latestRun ? (
-                          <RunStatusBadge {...getRunStatusMeta(latestRun.status, locale)} />
-                        ) : null}
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                          {copy.qualityGateCount}: {qualityGates.length}
+                        </span>
+                        <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                          {copy.reviewRuleCount}: {defaultPreset?.reviewRules.length ?? 0}
+                        </span>
+                        <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
+                          {copy.knowledgeNodes}: {knowledgeReadNodeCount}/{knowledgeWriteNodeCount}
+                        </span>
                       </div>
-                    </div>
 
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                        {copy.qualityGateCount}: {qualityGates.length}
-                      </span>
-                      <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                        {copy.reviewRuleCount}: {defaultPreset?.reviewRules.length ?? 0}
-                      </span>
-                      <span className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                        {copy.knowledgeNodes}: {knowledgeReadNodeCount}/{knowledgeWriteNodeCount}
-                      </span>
-                    </div>
-
-                    <div className="mt-6 flex flex-wrap items-center gap-2">
-                      <Button
-                        className="h-[42px] rounded-[9px] border border-primary/50 bg-primary px-[22px] text-sm font-black text-[#111] hover:bg-primary/90"
-                        asChild
-                      >
-                        <Link href={`/dashboard/workflows/${workflow.id}`}>{copy.openAction}</Link>
-                      </Button>
-                      <button
-                        type="button"
-                        className="h-10 px-[14px] text-sm font-extrabold text-[#111]"
-                        onClick={() => void handleDuplicate(workflow)}
-                        disabled={duplicatingWorkflowId === workflow.id}
-                      >
-                        {duplicatingWorkflowId === workflow.id ? copy.duplicatePending : copy.duplicateAction}
-                      </button>
-                      <Link href={latestRun ? `/dashboard/workflows/runs/${latestRun.id}` : `/dashboard/workflows/${workflow.id}`} className="h-10 px-[14px] text-sm font-extrabold text-[#111]">
-                        {latestRun ? copy.viewRunsAction : copy.noRunsForWorkflow}
-                      </Link>
-                      <button
-                        type="button"
-                        className="h-10 px-[14px] text-sm font-extrabold text-[#d93025]"
-                        onClick={() => void handleDeleteWorkflow(workflow)}
-                        disabled={deletingWorkflowId === workflow.id}
-                      >
-                        {deletingWorkflowId === workflow.id ? copy.deletePending : copy.deleteAction}
-                      </button>
-                      <Link
-                        href={`/dashboard/workflows/${workflow.id}`}
-                        className="ml-auto flex h-10 w-10 items-center justify-center rounded-[9px] text-[#111] hover:bg-[#f7f7f2]"
-                        aria-label={copy.moreAction}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Link>
+                      <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-5">
+                        <Button
+                          className="h-10 rounded-[9px] border border-primary/50 bg-primary px-4 text-sm font-black text-[#111] hover:bg-primary/90"
+                          asChild
+                        >
+                          <Link href={`/dashboard/workflows/${workflow.id}`}>{copy.openAction}</Link>
+                        </Button>
+                        <button
+                          type="button"
+                          className="h-10 rounded-[9px] px-3 text-sm font-extrabold text-[#111] hover:bg-[#f7f7f2]"
+                          onClick={() => void handleDuplicate(workflow)}
+                          disabled={duplicatingWorkflowId === workflow.id}
+                        >
+                          {duplicatingWorkflowId === workflow.id ? copy.duplicatePending : copy.duplicateAction}
+                        </button>
+                        <Link
+                          href={latestRun ? `/dashboard/workflows/runs/${latestRun.id}` : `/dashboard/workflows/${workflow.id}`}
+                          className="h-10 rounded-[9px] px-3 text-sm font-extrabold text-[#111] hover:bg-[#f7f7f2]"
+                        >
+                          {latestRun ? copy.viewRunsAction : copy.noRunsForWorkflow}
+                        </Link>
+                        <button
+                          type="button"
+                          className="h-10 rounded-[9px] px-3 text-sm font-extrabold text-[#d93025] hover:bg-[#fff3f2]"
+                          onClick={() => void handleDeleteWorkflow(workflow)}
+                          disabled={deletingWorkflowId === workflow.id}
+                        >
+                          {deletingWorkflowId === workflow.id ? copy.deletePending : copy.deleteAction}
+                        </button>
+                        <Link
+                          href={`/dashboard/workflows/${workflow.id}`}
+                          className="ml-auto flex h-10 w-10 items-center justify-center rounded-[9px] text-[#111] hover:bg-[#f7f7f2]"
+                          aria-label={copy.moreAction}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Link>
+                      </div>
                     </div>
                   </article>
                 )
@@ -1096,16 +1101,6 @@ export function WorkflowListPage({
                           <div className="mt-2 text-sm font-semibold text-[#111]">{template.bindingTarget}</div>
                         </div>
                       )}
-
-                      {template.notes.length > 0 ? (
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          {template.notes.slice(0, 3).map((note) => (
-                            <span key={note} className="inline-flex rounded-full border border-[#e2e2da] bg-[#fafaf7] px-3 py-1 text-[11px] font-bold text-[#555]">
-                              {note}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
 
                       {presentation?.suitableTeams.length ? (
                         <div className="mt-5">
