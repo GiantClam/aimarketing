@@ -4,6 +4,9 @@ import test from "node:test"
 import { executeAiEntryWithProviderFailover } from "./provider-routing"
 
 const PROVIDER_ENV_KEYS = [
+  "AI_ENTRY_DEEPSEEK_API_KEY",
+  "AI_ENTRY_DEEPSEEK_BASE_URL",
+  "AI_ENTRY_DEEPSEEK_MODEL",
   "AI_ENTRY_PPTOKEN_API_KEY",
   "AI_ENTRY_PPTOKEN_BASE_URL",
   "AI_ENTRY_PPTOKEN_MODEL",
@@ -22,6 +25,9 @@ const PROVIDER_ENV_KEYS = [
   "PPTOKEN_API_KEY",
   "PPTOKEN_BASE_URL",
   "PPTOKEN_MODEL",
+  "DEEPSEEK_API_KEY",
+  "DEEPSEEK_BASE_URL",
+  "DEEPSEEK_MODEL",
   "OPENROUTER_API_KEY",
   "OPENROUTER_BASE_URL",
   "OPENROUTER_MODEL",
@@ -32,6 +38,32 @@ const PROVIDER_ENV_KEYS = [
   "CRAZYROUTE_BASE_URL",
   "CRAZYROUTER_BASE_URL",
 ] as const
+
+test("provider order: non-openai defaults prefer deepseek when it is configured", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_DEEPSEEK_API_KEY: "deepseek-key",
+      AI_ENTRY_DEEPSEEK_BASE_URL: "https://api.deepseek.example",
+      AI_ENTRY_DEEPSEEK_MODEL: "deepseek-v4-pro",
+      AI_ENTRY_AIBERM_API_KEY: "aiberm-key",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "gpt-5.4",
+      AI_ENTRY_NORMAL_DEFAULT_MODEL: "deepseek-v4-pro",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(async (params) => {
+        attempts.push(`${params.providerId}:${params.model}`)
+        return params.providerId
+      })
+
+      assert.equal(result.providerId, "deepseek")
+      assert.deepEqual(attempts, ["deepseek:deepseek-v4-pro"])
+      assert.deepEqual(result.providerOrder, ["deepseek", "aiberm"])
+    },
+  )
+})
 
 function resetRoutingState() {
   ;(globalThis as { __aiEntryProviderRoutingStateV1__?: unknown }).__aiEntryProviderRoutingStateV1__ =

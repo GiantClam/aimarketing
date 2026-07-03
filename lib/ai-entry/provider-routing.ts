@@ -1,6 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai"
 
 export type AiEntryProviderId =
+  | "deepseek"
   | "pptoken"
   | "openrouter"
   | "aiberm"
@@ -76,6 +77,7 @@ type ProviderModelsApiResponse = {
 }
 
 const DEFAULT_AIBERM_BASE_URL = "https://aiberm.com/v1"
+const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 const DEFAULT_PPTOKEN_BASE_URL = "https://api.pptoken.org/v1"
 const DEFAULT_MODEL = "openai/gpt-5.4-mini"
 const PROVIDER_MODEL_LIST_CACHE_TTL_MS = parsePositiveInt(
@@ -133,6 +135,7 @@ function inferProviderPrefixFromModel(modelId: string) {
     return "openai"
   }
   if (text.includes("gemini") || text.includes("google")) return "google"
+  if (text.includes("deepseek")) return "deepseek"
   if (text.includes("qwen") || text.includes("qwq")) return "qwen"
   if (text.includes("minimax") || text.includes("abab")) return "minimax"
   if (text.includes("glm") || text.includes("chatglm") || text.includes("zhipu")) return "zhipu"
@@ -486,6 +489,20 @@ function getRawProviderConfigs(): AiEntryProviderConfig[] {
 
   return [
     {
+      id: "deepseek",
+      apiKey:
+        normalizeText(process.env.AI_ENTRY_DEEPSEEK_API_KEY) ||
+        normalizeText(process.env.DEEPSEEK_API_KEY),
+      baseURL:
+        normalizeText(process.env.AI_ENTRY_DEEPSEEK_BASE_URL) ||
+        normalizeText(process.env.DEEPSEEK_BASE_URL) ||
+        DEFAULT_DEEPSEEK_BASE_URL,
+      model:
+        normalizeText(process.env.AI_ENTRY_DEEPSEEK_MODEL) ||
+        normalizeText(process.env.DEEPSEEK_MODEL) ||
+        fallbackModel,
+    },
+    {
       id: "pptoken",
       apiKey:
         normalizeText(process.env.AI_ENTRY_PPTOKEN_API_KEY) ||
@@ -585,8 +602,8 @@ async function buildProviderRuntimes(
 
   if (!explicitProviderConfigs) {
     const defaultOrder: AiEntryProviderId[] = allowPptoken
-      ? ["pptoken", "aiberm", "crazyroute", "openrouter"]
-      : ["aiberm", "crazyroute", "openrouter"]
+      ? ["pptoken", "deepseek", "aiberm", "crazyroute", "openrouter"]
+      : ["deepseek", "aiberm", "crazyroute", "openrouter"]
     configs.sort((a, b) => {
       const aRank = defaultOrder.indexOf(a.id)
       const bRank = defaultOrder.indexOf(b.id)

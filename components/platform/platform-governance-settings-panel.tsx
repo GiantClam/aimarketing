@@ -422,6 +422,7 @@ type RunningHubRouteOption = {
 }
 
 function getRuntimeProviderLabel(provider: PlatformProviderRuntime) {
+  if (provider.id === "deepseek") return "DeepSeek"
   if (provider.id === "pptoken") return "PPToken"
   if (provider.id === "openrouter") return "OpenRouter"
   if (provider.id === "aiberm") return "AIBERM"

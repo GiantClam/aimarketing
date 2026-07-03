@@ -12,10 +12,25 @@ let finalizeCalls = 0
 let releaseCalls = 0
 let toolRegistryWarnings: string[] = []
 let toolRegistryToolIds: string[] = []
+let toolRegistryToolChoice: Record<string, unknown> | undefined
 let emitArtifactFlow = false
+let emitToolFailureFlow = false
+let emitClosedControllerErrorFlow = false
 let lastStreamingSystemPrompt = ""
+let lastStreamingToolChoice: Record<string, unknown> | undefined
 let customAgentExecutionMode: "direct_agent" | "workflow_backed" = "direct_agent"
 let customAgentStatus: "published" | "disabled" | "archived" | "draft" = "published"
+let ensureConversationArgs:
+  | {
+      fallbackTitle?: string
+      agentId?: string | null
+    }
+  | null = null
+let appendMessageCalls: Array<{
+  agentId?: string | null
+  role?: "user" | "assistant"
+  content?: string
+}> = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "next/server") {
@@ -59,8 +74,27 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/ai-entry/repository") {
     return {
-      ensureAiEntryConversation: async () => ({ id: "conv-1" }),
-      appendAiEntryTurn: async () => {},
+      ensureAiEntryConversation: async (
+        _userId: number,
+        _conversationId: string | null | undefined,
+        fallbackTitle?: string,
+        _currentModelId?: string | null,
+        _scope?: string,
+        agentId?: string | null,
+      ) => {
+        ensureConversationArgs = {
+          fallbackTitle,
+          agentId,
+        }
+        return { id: "conv-1" }
+      },
+      appendAiEntryMessage: async (input: {
+        agentId?: string | null
+        role?: "user" | "assistant"
+        content?: string
+      }) => {
+        appendMessageCalls.push(input)
+      },
     }
   }
 
@@ -71,7 +105,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/ai-entry/agent-catalog") {
     return {
       isAiEntryAgentId: (value: string | null | undefined) =>
-        typeof value === "string" && (value === "general" || value.startsWith("business-")),
+        typeof value === "string" &&
+        (value === "general" || value.startsWith("business-") || value.startsWith("executive-")),
     }
   }
 
@@ -105,6 +140,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/ai-entry/model-policy") {
     return {
       AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT: "gpt-5.4",
+      isAiEntryPptAgentId: (value: string | null | undefined) =>
+        value === "executive-ppt" || value === "executive-presentation-ppt",
       pickConsultingModelId: () => "gpt-5.4",
       resolveConsultingModelMode: () => "quality",
       shouldLockConsultingAdvisorModel: () => false,
@@ -164,7 +201,15 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/ai-entry/ppt-tool-result-message") {
     return {
+      buildPptTemplateRecommendationMessage: () => null,
       buildPptToolResultMessage: () => null,
+      extractLatestPptTemplateRecommendationContext: () => null,
+      resolvePptTemplateSelectionFromUserText: () => null,
+      resolveLatestPptConversationState: () => ({
+        latestPreview: null,
+        latestExport: null,
+        phase: "idle",
+      }),
       stripPptArtifactRelativeLinks: (value: string) => value,
     }
   }
@@ -218,6 +263,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       buildAiEntryToolRegistry: async () => ({
         selectedTools: {},
         selectedToolIds: toolRegistryToolIds,
+        toolChoice: toolRegistryToolChoice,
         closeTools: null,
         toolLoadWarnings: toolRegistryWarnings,
         selectedMcpServerIds: [],
@@ -229,12 +275,14 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       runAiEntryConsultingStreaming: async (input: {
         systemPrompt?: string
+        toolChoice?: Record<string, unknown>
         onProviderSelected?: (payload: Record<string, unknown>) => void
         onTextDelta?: (delta: string) => void
         onToolCall?: (payload: Record<string, unknown>) => void
         onToolResult?: (payload: Record<string, unknown>) => void
       }) => {
         lastStreamingSystemPrompt = input.systemPrompt || ""
+        lastStreamingToolChoice = input.toolChoice
         input.onProviderSelected?.({
           providerId: "pptoken",
           model: "gpt-5.4",
@@ -242,7 +290,30 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           providerOrder: ["pptoken"],
           upgradeProbe: false,
         })
-        if (emitArtifactFlow) {
+        if (emitClosedControllerErrorFlow) {
+          throw new Error("Invalid state: Controller is already closed")
+        }
+        if (emitToolFailureFlow) {
+          input.onToolCall?.({
+            toolName: "export_ppt_deck",
+            toolCallId: "tool-fail-1",
+            args: {
+              previewSessionId: "preview-session-missing",
+              selectedVariantKey: "variant-a",
+            },
+          })
+          input.onToolResult?.({
+            toolName: "export_ppt_deck",
+            toolCallId: "tool-fail-1",
+            result: {
+              ok: false,
+              error: {
+                code: "missing_preview_session",
+                message: "Preview session is no longer available. Generate the PPT preview again before export.",
+              },
+            },
+          })
+        } else if (emitArtifactFlow) {
           input.onToolCall?.({
             toolName: "export_ppt_deck",
             toolCallId: "tool-1",
@@ -282,10 +353,17 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
             },
           })
         }
-        input.onTextDelta?.(emitArtifactFlow ? "PPT ready." : "Normal chat reply.")
+        const accumulatedText = emitArtifactFlow
+          ? "PPT ready."
+          : emitToolFailureFlow
+            ? ""
+            : "Normal chat reply."
+        if (accumulatedText) {
+          input.onTextDelta?.(accumulatedText)
+        }
         return {
           result: {
-            accumulated: emitArtifactFlow ? "PPT ready." : "Normal chat reply.",
+            accumulated: accumulatedText,
           },
           providerId: "pptoken",
           model: "gpt-5.4",
@@ -359,10 +437,16 @@ test.beforeEach(() => {
   releaseCalls = 0
   toolRegistryWarnings = []
   toolRegistryToolIds = []
+  toolRegistryToolChoice = undefined
   emitArtifactFlow = false
+  emitToolFailureFlow = false
+  emitClosedControllerErrorFlow = false
   lastStreamingSystemPrompt = ""
+  lastStreamingToolChoice = undefined
   customAgentExecutionMode = "direct_agent"
   customAgentStatus = "published"
+  ensureConversationArgs = null
+  appendMessageCalls = []
 })
 
 test.after(() => {
@@ -414,6 +498,183 @@ test("ai chat route preserves business-agent streaming and emits artifact-create
   assert.match(text, /message_end/)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("ai chat route synthesizes a readable fallback when tools fail without any model text", async () => {
+  emitToolFailureFlow = true
+  toolRegistryToolIds = ["export_ppt_deck"]
+  toolRegistryToolChoice = {
+    type: "tool",
+    toolName: "export_ppt_deck",
+  }
+
+  const response = await POST({
+    json: async () => ({
+      messages: [
+        {
+          role: "assistant",
+          content:
+            "已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-session-missing\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+        },
+        { role: "user", content: "导出 Playful" },
+      ],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  const text = await response.text()
+  assert.match(text, /工具执行失败，当前还没有拿到可用结果/)
+  assert.match(text, /export_ppt_deck/)
+  assert.match(text, /Preview session is no longer available/)
+})
+
+test("ai chat route does not force export toolChoice for ppt turns and lets model decide from context", async () => {
+  toolRegistryToolIds = ["preview_ppt_deck", "export_ppt_deck"]
+  toolRegistryToolChoice = undefined
+
+  const response = await POST({
+    json: async () => ({
+      messages: [
+        {
+          role: "assistant",
+          content:
+            "已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-session-1\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\",\"variant-b\"]} -->",
+        },
+        { role: "user", content: "导出 Playful" },
+      ],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  await response.text()
+  assert.equal(lastStreamingToolChoice, undefined)
+})
+
+test("ai chat route uses the first user prompt as conversation title fallback", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我规划下个月的增长实验。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-growth",
+        agentName: "增长顾问",
+        entryMode: "consulting-advisor",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  await response.text()
+  assert.deepEqual(ensureConversationArgs, {
+    fallbackTitle: "帮我规划下个月的增长实验。",
+    agentId: "executive-growth",
+  })
+  assert.deepEqual(
+    appendMessageCalls.map((call) => ({ role: call.role, agentId: call.agentId })),
+    [
+      { role: "user", agentId: "executive-growth" },
+      { role: "assistant", agentId: "executive-growth" },
+    ],
+  )
+})
+
+test("ai chat route persists the user prompt before assistant completion", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我生成一份董事会汇报 PPT。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  await response.text()
+  assert.deepEqual(
+    appendMessageCalls.map((call) => ({
+      role: call.role,
+      content: call.content,
+      agentId: call.agentId,
+    })),
+    [
+      {
+        role: "user",
+        content: "帮我生成一份董事会汇报 PPT。",
+        agentId: "executive-ppt",
+      },
+      {
+        role: "assistant",
+        content: "Normal chat reply.",
+        agentId: "executive-ppt",
+      },
+    ],
+  )
+})
+
+test("ai chat route does not persist closed stream transport errors as assistant replies", async () => {
+  emitClosedControllerErrorFlow = true
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我生成一份董事会汇报 PPT。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  const text = await response.text()
+  assert.doesNotMatch(text, /Controller is already closed/)
+  assert.deepEqual(
+    appendMessageCalls.map((call) => ({
+      role: call.role,
+      content: call.content,
+      agentId: call.agentId,
+    })),
+    [
+      {
+        role: "user",
+        content: "帮我生成一份董事会汇报 PPT。",
+        agentId: "executive-ppt",
+      },
+    ],
+  )
+  assert.equal(finalizeCalls, 0)
+  assert.equal(releaseCalls, 1)
+})
+
+test("ai chat route skips ppt brief gating instructions for workflow execution context", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "做一份公司发布会 PPT" }],
+      stream: true,
+      executionContext: "workflow",
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  await response.text()
+  assert.doesNotMatch(lastStreamingSystemPrompt, /## PPT brief state/)
+  assert.doesNotMatch(lastStreamingSystemPrompt, /ask only 1 to 3 short confirmation questions/i)
 })
 
 test("ai chat route supports published direct custom agents in streaming chat", async () => {

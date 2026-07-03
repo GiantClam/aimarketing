@@ -5,9 +5,11 @@ import type {
   PptPreviewAsset,
   PptPreviewDeck,
   PptPreviewSlide,
+  PptPreviewStyleArchetype,
   PptPreviewStyleKey,
   PptPreviewVariant,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { resolvePptPreviewStyleArchetype } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 const PREVIEW_WIDTH = 1600
 const PREVIEW_HEIGHT = 900
@@ -51,7 +53,7 @@ type OverlayFrame = {
   footer?: { leftX: number; rightX: number; y: number; fontSize: number }
 }
 
-const themeAssets: Record<PptPreviewStyleKey, AssetTheme> = {
+const themeAssets: Record<PptPreviewStyleArchetype, AssetTheme> = {
   "ppt169_brutalist_ai_newspaper_2026": {
     directory: "neo-brutalism",
     files: ["01_cover.svg", "02_issue_at_a_glance.svg", "03_revenue_league.svg", "08_three_rulebooks.svg", "10_closing_read.svg"],
@@ -260,13 +262,14 @@ function sanitizeBaseSvg(svg: string) {
 }
 
 function getAssetDataUrl(styleKey: PptPreviewStyleKey, fileName: string) {
-  const cacheKey = `${styleKey}/${fileName}`
+  const archetype = resolvePptPreviewStyleArchetype(styleKey)
+  const cacheKey = `${archetype}/${fileName}`
   const cached = assetCache.get(cacheKey)
   if (cached) {
     return cached
   }
 
-  const assetTheme = themeAssets[styleKey]
+  const assetTheme = themeAssets[archetype]
   const filePath = path.join(process.cwd(), "lib", "lead-tools", "ppt-master-assets", assetTheme.directory, fileName)
 
   try {
@@ -277,6 +280,7 @@ function getAssetDataUrl(styleKey: PptPreviewStyleKey, fileName: string) {
   } catch (error) {
     console.warn("ppt-preview.asset_missing", {
       styleKey,
+      archetype,
       fileName,
       filePath,
       message: error instanceof Error ? error.message : String(error),
@@ -303,7 +307,9 @@ function renderFallbackBackdrop(variant: PptPreviewVariant, index: number) {
 }
 
 function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): OverlayFrame {
-  if (variant.styleKey === "ppt169_swiss_grid_systems") {
+  const archetype = resolvePptPreviewStyleArchetype(variant.styleKey)
+
+  if (archetype === "ppt169_swiss_grid_systems") {
     switch (slide.layout) {
       case "cover":
         return {
@@ -338,7 +344,7 @@ function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): Ov
     }
   }
 
-  if (variant.styleKey === "ppt169_pritzker_2026") {
+  if (archetype === "ppt169_pritzker_2026") {
     switch (slide.layout) {
       case "cover":
         return {
@@ -363,7 +369,7 @@ function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): Ov
     }
   }
 
-  if (variant.styleKey === "ppt169_brutalist_ai_newspaper_2026") {
+  if (archetype === "ppt169_brutalist_ai_newspaper_2026") {
     switch (slide.layout) {
       case "cover":
         return {
@@ -412,6 +418,18 @@ function getOverlayFrame(variant: PptPreviewVariant, slide: PptPreviewSlide): Ov
   }
 }
 
+function resolveOverlayTheme(variant: PptPreviewVariant) {
+  const baseTheme = themeAssets[resolvePptPreviewStyleArchetype(variant.styleKey)].overlay
+  return {
+    ...baseTheme,
+    panelFill: variant.palette.panel,
+    panelStroke: variant.palette.border,
+    textColor: variant.palette.foreground,
+    mutedTextColor: variant.palette.border,
+    accentColor: variant.palette.accent,
+  }
+}
+
 function renderPanelDecor(frame: OverlayFrame, variant: PptPreviewVariant, overlay: AssetTheme["overlay"]) {
   const { panel, accent } = frame
   const blurFilter = overlay.shadow
@@ -429,7 +447,7 @@ function renderPanelDecor(frame: OverlayFrame, variant: PptPreviewVariant, overl
 }
 
 function renderOverlay(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: PptPreviewSlide, index: number) {
-  const overlay = themeAssets[variant.styleKey].overlay
+  const overlay = resolveOverlayTheme(variant)
   const frame = getOverlayFrame(variant, slide)
 
   return [
@@ -492,7 +510,7 @@ function renderOverlay(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: 
 }
 
 function renderSlide(deck: PptPreviewDeck, variant: PptPreviewVariant, slide: PptPreviewSlide, index: number) {
-  const assetTheme = themeAssets[variant.styleKey]
+  const assetTheme = themeAssets[resolvePptPreviewStyleArchetype(variant.styleKey)]
   const fileName = assetTheme.files[Math.min(index, assetTheme.files.length - 1)]
   const baseAssetDataUrl = getAssetDataUrl(variant.styleKey, fileName)
 

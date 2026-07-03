@@ -174,6 +174,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const brandAdvisorHref = "/dashboard/ai?agent=executive-brand&entry=consulting-advisor"
   const growthAdvisorHref = "/dashboard/ai?agent=executive-growth&entry=consulting-advisor"
   const pptAssistantHref = "/dashboard/ai?agent=executive-ppt"
+  const presentationPptAssistantHref = "/dashboard/ai?agent=executive-presentation-ppt"
   const businessSectionLabel = locale === "zh" ? "业务入口" : "Business"
   const currentBusinessAgentId = (searchParams.get("agent") || "").trim()
   const requestedBusinessView = searchParams.get("view")
@@ -423,24 +424,45 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
                     )}
                     {showPptAssistantEntry ? (
                       sidebarCollapsed ? (
-                        <Link href={pptAssistantHref}>
-                          <Button
-                            variant="ghost"
-                            className="mt-1 w-full justify-center"
-                            size="sm"
-                            title={messages.dashboardLayout.pptAssistant}
-                            aria-label={messages.dashboardLayout.pptAssistant}
-                          >
-                            <Presentation className="h-4 w-4" />
-                          </Button>
-                        </Link>
+                        <>
+                          <Link href={pptAssistantHref}>
+                            <Button
+                              variant="ghost"
+                              className="mt-1 w-full justify-center"
+                              size="sm"
+                              title={messages.dashboardLayout.pptAssistant}
+                              aria-label={messages.dashboardLayout.pptAssistant}
+                            >
+                              <Presentation className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                          <Link href={presentationPptAssistantHref}>
+                            <Button
+                              variant="ghost"
+                              className="mt-1 w-full justify-center"
+                              size="sm"
+                              title={messages.dashboardLayout.presentationPptAssistant}
+                              aria-label={messages.dashboardLayout.presentationPptAssistant}
+                            >
+                              <Presentation className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        </>
                       ) : (
-                        <AiEntrySidebarItem
-                          title={messages.dashboardLayout.pptAssistant}
-                          icon={Presentation}
-                          entryHref={pptAssistantHref}
-                          activeAgentId="executive-ppt"
-                        />
+                        <>
+                          <AiEntrySidebarItem
+                            title={messages.dashboardLayout.pptAssistant}
+                            icon={Presentation}
+                            entryHref={pptAssistantHref}
+                            activeAgentId="executive-ppt"
+                          />
+                          <AiEntrySidebarItem
+                            title={messages.dashboardLayout.presentationPptAssistant}
+                            icon={Presentation}
+                            entryHref={presentationPptAssistantHref}
+                            activeAgentId="executive-presentation-ppt"
+                          />
+                        </>
                       )
                     ) : null}
                   </div>

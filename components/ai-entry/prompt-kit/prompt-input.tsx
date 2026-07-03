@@ -133,7 +133,7 @@ function PromptInputTextarea({
   }, [value, disableAutosize, textareaRef])
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault()
       if (!isLoading && !disabled) {
         onSubmit?.()

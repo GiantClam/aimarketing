@@ -17,10 +17,11 @@ import {
 
 const CACHE_TTL_MS = 30 * 60 * 1000
 const CATALOG_FILTER_CACHE_VERSION = "v7"
-const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "gemini", "minimax"] as const
+const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "deepseek", "gemini", "minimax"] as const
 const ALLOWED_PROVIDER_FAMILIES = [
   "anthropic",
   "openai",
+  "deepseek",
   "gemini",
   "minimax",
 ] as const
@@ -33,6 +34,7 @@ const ALLOWED_DISPLAY_MODEL_IDS = [
   "gpt-5.5",
   "gpt-5.4",
   "gpt-5.4-mini",
+  "deepseek-v4-pro",
   "gemini-3.1-pro-preview",
   "gemini-3-flash-preview",
   "MiniMax-M2.7",
@@ -67,6 +69,7 @@ const PROVIDER_FAMILY_ALIASES: Record<string, string> = {
   anthropic: "anthropic",
   claude: "anthropic",
   openai: "openai",
+  deepseek: "deepseek",
   google: "gemini",
   gemini: "gemini",
   deepmind: "gemini",
@@ -90,6 +93,7 @@ const PROVIDER_FAMILY_ALIASES: Record<string, string> = {
 const PROVIDER_FAMILY_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
+  deepseek: "DeepSeek",
   gemini: "Gemini",
   qwen: "Qwen",
   minimax: "MiniMax",
@@ -178,6 +182,9 @@ type RecentFilterResult = {
 }
 
 const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> = {
+  deepseek: [
+    "deepseek-v4-pro",
+  ],
   pptoken: [
     "gpt-5.4",
     "gpt-5.4-mini",
@@ -278,6 +285,12 @@ function inferFamilyFromLooseText(raw: unknown) {
     compact.startsWith("o5")
   ) {
     return "openai"
+  }
+  if (
+    /\b(deepseek)\b/.test(text) ||
+    compact.startsWith("deepseek")
+  ) {
+    return "deepseek"
   }
   if (
     /\b(google|gemini)\b/.test(text) ||

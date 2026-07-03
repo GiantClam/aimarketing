@@ -29,8 +29,14 @@ import {
   MessageContent,
 } from "@/components/ai-entry/prompt-kit/message"
 import { MessagePartViewList } from "@/components/ai-entry/message-parts/message-part-view"
+import { PptPreviewReportCard } from "@/components/ai-entry/ppt-preview-report-card"
 import { applySseEvent } from "@/lib/ai-entry/message-parts/reducer"
 import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
+import {
+  findAiEntryPendingTask,
+  removePendingAssistantTask,
+  savePendingAssistantTask,
+} from "@/lib/assistant-task-store"
 import {
   PromptInput,
   PromptInputAction,
@@ -56,19 +62,50 @@ import { TextMorph } from "@/components/ui/text-morph"
 import { TypingIndicator } from "@/components/ui/typing-indicator"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
-import type { PendingTaskEvent } from "@/lib/assistant-task-events"
+import {
+  normalizePendingTaskEvents,
+  type PendingTaskEvent,
+} from "@/lib/assistant-task-events"
+import {
+  getAiEntryQuickPrompts,
+  resolveAiEntryAgentName,
+  resolveAiEntryRequestedAgentId,
+  resolveAiEntryWorkspaceKicker,
+  resolveAiEntryWorkspacePlaceholder,
+  resolveAiEntryWorkspaceSubtitle,
+  resolveAiEntryWorkspaceTitle,
+} from "@/lib/ai-entry/agent-ui"
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
   AI_ENTRY_CONSULTING_ENTRY_MODE,
+  isAiEntryPptAgentId,
   isConsultingAdvisorEntryMode,
   pickConsultingModelId,
   pickPptAssistantDefaultModelId,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
-import { buildPptToolResultMessage } from "@/lib/ai-entry/ppt-tool-result-message"
+import { renderAiEntryDisplayErrorMessage } from "@/lib/ai-entry/error-display"
+import {
+  buildPptToolResultMessage,
+  extractLatestPptPreviewContext,
+} from "@/lib/ai-entry/ppt-tool-result-message"
+import {
+  buildPendingConversationEnvelope,
+  readFreshPendingConversationMessages,
+} from "@/lib/ai-entry/pending-conversation-store"
+import {
+  resolveAiEntryBootstrapMessages,
+  resolveAiEntryRestoredMessages,
+  shouldShowAiEntryConversationRestore,
+} from "@/lib/ai-entry/message-restore"
+import { resolveAiEntryTargetConversationId } from "@/lib/ai-entry/route-sync"
 import type { KnowledgeScope } from "@/lib/knowledge/types"
 import { cn } from "@/lib/utils"
+
+const AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS = 1500
+const AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS = 5
+const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 25 * 60 * 1000
 
 type ChatAttachment = {
   id: string
@@ -158,7 +195,6 @@ type ModelOption = {
 }
 type ModelGroupOption = { family: string; label: string; models: ModelOption[] }
 type AgentOption = { id: string; category: string; name: string; description: string }
-type AgentGroupOption = { id: string; label: string; agents: AgentOption[] }
 type ParsedArtifactRow = {
   label: string
   value: string
@@ -174,6 +210,21 @@ type ParsedArtifactResult = {
 
 type MessageApiResponse = {
   data?: Array<{ id?: string; role?: "user" | "assistant"; content?: string; created_at?: number }>
+  conversation_state?: {
+    ppt?: {
+      phase?: "idle" | "preview-ready" | "preview-invalidated" | "exported"
+      latestPreview?: {
+        previewSessionId?: string | null
+        defaultVariantKey?: string | null
+        variantKeys?: string[]
+      } | null
+      latestExport?: {
+        previewSessionId?: string | null
+        selectedVariantKey?: string | null
+        artifactId?: number | null
+      } | null
+    } | null
+  } | null
   conversation?: {
     current_model_id?: string | null
   } | null
@@ -213,8 +264,16 @@ type ChatStreamApiResponse = {
     }
     result?: {
       ok?: boolean
+      status?: string
+      message?: string
       query?: string
       results?: Array<{ title?: string; url?: string; snippet?: string; provider?: string }>
+      backgroundTask?: {
+        taskId?: string
+        conversationId?: string | null
+        toolName?: string
+        status?: string
+      }
       error?: {
         code?: string
         message?: string
@@ -403,8 +462,20 @@ function readPendingConversationMessages(conversationId: string | null) {
   try {
     const raw = window.sessionStorage.getItem(getPendingConversationStorageKey(conversationId))
     const parsed = raw ? JSON.parse(raw) : null
-    if (!Array.isArray(parsed)) return []
-    return parsed
+    const pendingMessages = readFreshPendingConversationMessages<{
+      id?: unknown
+      role?: unknown
+      content?: unknown
+      attachments?: unknown
+      parts?: unknown
+    }>(parsed)
+    if (pendingMessages.length === 0) {
+      if (raw) {
+        window.sessionStorage.removeItem(getPendingConversationStorageKey(conversationId))
+      }
+      return []
+    }
+    return pendingMessages
       .map((item) => {
         const id = typeof item?.id === "string" && item.id.trim() ? item.id : `cached-${Date.now()}`
         const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
@@ -425,7 +496,7 @@ function savePendingConversationMessages(conversationId: string | null, messages
   try {
     window.sessionStorage.setItem(
       getPendingConversationStorageKey(conversationId),
-      JSON.stringify(messages),
+      JSON.stringify(buildPendingConversationEnvelope(messages)),
     )
   } catch {
     // sessionStorage is a best-effort bridge across the first route transition.
@@ -439,20 +510,6 @@ function clearPendingConversationMessages(conversationId: string | null) {
   } catch {
     // ignore storage cleanup failures
   }
-}
-
-function readInitialAgentFromLocation() {
-  if (typeof window === "undefined") return null
-  const raw = new URLSearchParams(window.location.search).get("agent")
-  if (!raw) return null
-  const normalized = raw.trim()
-  return normalized.length > 0 ? normalized : null
-}
-
-function readInitialDraftFromLocation() {
-  if (typeof window === "undefined") return ""
-  const raw = new URLSearchParams(window.location.search).get("draft")
-  return typeof raw === "string" ? raw.trim() : ""
 }
 
 function readPersistedSelectedModelId() {
@@ -754,10 +811,13 @@ function consumeSseBuffer<T extends object>(buffer: string) {
 function renderAiEntryErrorMessage(
   value: unknown,
   copy: { unknownError: string },
+  isZh: boolean,
 ) {
-  const raw = typeof value === "string" ? value.trim() : ""
-  if (!raw) return copy.unknownError
-  return raw
+  return renderAiEntryDisplayErrorMessage({
+    value,
+    unknownError: copy.unknownError,
+    isZh,
+  })
 }
 
 export function AiEntryWorkspace({
@@ -789,6 +849,10 @@ export function AiEntryWorkspace({
   const searchParams = useSearchParams()
   const isZh = locale === "zh"
   const displayLocale = isZh ? "zh" : "en"
+  const search = searchParams.toString()
+  const routeAgentId = forcedAgentId || (searchParams.get("agent") || "").trim() || null
+  const routeDraft = embedded ? draftSeed.trim() : (searchParams.get("draft") || "").trim()
+  const routeEntryMode = (searchParams.get("entry") || "").trim()
 
   const copy = useMemo(
     () =>
@@ -870,30 +934,23 @@ export function AiEntryWorkspace({
     [isZh],
   )
 
-  const quickPrompts = useMemo(
-    () =>
-      isZh
-        ? [
-            "先调研市场，再给我 30 天执行计划",
-            "给我一套高转化落地页文案框架",
-            "请用专家顾问模式给出经营诊断与优先动作",
-          ]
-        : [
-            "Research this market first, then give me a 30-day plan",
-            "Create a conversion-focused landing page copy framework",
-            "Use executive advisor mode and provide diagnosis plus top priorities",
-          ],
-    [isZh],
-  )
-
-  const initialMessages = readPendingConversationMessages(initialConversationId)
+  const initialResolvedAgentId =
+    resolveAiEntryRequestedAgentId({
+      forcedAgentId,
+      routeAgentId,
+    })
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    resolveAiEntryBootstrapMessages({
+      conversationId: initialConversationId,
+      pendingMessages: readPendingConversationMessages(initialConversationId),
+    }),
+  )
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isPreparingAttachments, setIsPreparingAttachments] = useState(false)
-  const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId) && initialMessages.length === 0)
+  const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [pendingTaskEvents, setPendingTaskEvents] = useState<PendingTaskEvent[]>([])
@@ -911,27 +968,32 @@ export function AiEntryWorkspace({
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
 
-  const [agentLoading, setAgentLoading] = useState(true)
   const [agents, setAgents] = useState<AgentOption[]>([])
-  const [agentGroups, setAgentGroups] = useState<AgentGroupOption[]>([])
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
-  const [isAgentSelectionExplicit, setIsAgentSelectionExplicit] = useState(false)
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(initialResolvedAgentId)
+  const [isAgentSelectionExplicit, setIsAgentSelectionExplicit] = useState(Boolean(initialResolvedAgentId))
   const [agentQueryReady, setAgentQueryReady] = useState(false)
-  const [initialAgentFromQuery] = useState<string | null>(() => readInitialAgentFromLocation())
-  const [initialDraftFromQuery] = useState<string>(() => readInitialDraftFromLocation())
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
-  const previousMessageCountRef = useRef(initialMessages.length)
+  const previousMessageCountRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
   const isLoadingRef = useRef(false)
   const onConversationIdChangeRef = useRef<typeof onConversationIdChange>(onConversationIdChange)
   const pendingFirstConversationRouteRef = useRef(false)
-  const search = searchParams.toString()
-  const routeAgentId = forcedAgentId || (searchParams.get("agent") || "").trim() || null
-  const routeDraft = embedded ? draftSeed.trim() : (searchParams.get("draft") || "").trim()
-  const routeEntryMode = (searchParams.get("entry") || "").trim()
-  const isPptAssistantRoute = routeAgentId === "executive-ppt"
+  const isPptAssistantRoute = isAiEntryPptAgentId(routeAgentId)
+  const resolvedRequestAgentId = resolveAiEntryRequestedAgentId({
+    forcedAgentId,
+    selectedAgentId,
+    routeAgentId,
+  })
+  const quickPrompts = useMemo(
+    () =>
+      getAiEntryQuickPrompts({
+        agentId: resolvedRequestAgentId,
+        locale: isZh ? "zh" : "en",
+      }),
+    [isZh, resolvedRequestAgentId],
+  )
   const isConsultingEntry = useMemo(
     () => isConsultingAdvisorEntryMode(routeEntryMode) && !isPptAssistantRoute,
     [isPptAssistantRoute, routeEntryMode],
@@ -945,12 +1007,28 @@ export function AiEntryWorkspace({
       }),
     [effectiveEntryMode, routeAgentId],
   )
-  const workspaceTitle = isConsultingEntry
-    ? (isZh ? "咨询专家" : "Consulting Advisor")
-    : copy.title
-  const workspaceSubtitle = isConsultingEntry
-    ? (isZh ? "企业咨询专家对话入口" : "Enterprise consulting advisor entry")
-    : copy.subtitle
+  const workspaceTitle = resolveAiEntryWorkspaceTitle({
+    agentId: resolvedRequestAgentId,
+    locale: isZh ? "zh" : "en",
+    isConsultingEntry,
+    defaultTitle: copy.title,
+  })
+  const workspaceSubtitle = resolveAiEntryWorkspaceSubtitle({
+    agentId: resolvedRequestAgentId,
+    locale: isZh ? "zh" : "en",
+    isConsultingEntry,
+    defaultSubtitle: copy.subtitle,
+  })
+  const workspaceKicker = resolveAiEntryWorkspaceKicker({
+    agentId: resolvedRequestAgentId,
+    locale: isZh ? "zh" : "en",
+    defaultKicker: "AI Workspace",
+  })
+  const activePendingAgentId = routeAgentId || resolvedRequestAgentId || forcedAgentId || null
+  const showConversationRestoreState = shouldShowAiEntryConversationRestore({
+    isConversationLoading,
+    messages,
+  })
   const lockedConsultingModelId = useMemo(
     () =>
       pickConsultingModelId(models) ||
@@ -1069,6 +1147,22 @@ export function AiEntryWorkspace({
     () => agents.find((item) => item.id === selectedAgentId) || null,
     [agents, selectedAgentId],
   )
+  const resolvedRequestAgentName = useMemo(
+    () =>
+      selectedAgent?.name ||
+      resolveAiEntryAgentName(resolvedRequestAgentId, isZh ? "zh" : "en"),
+    [isZh, resolvedRequestAgentId, selectedAgent?.name],
+  )
+  const workspacePlaceholder = useMemo(
+    () =>
+      resolveAiEntryWorkspacePlaceholder({
+        agentId: resolvedRequestAgentId,
+        agentName: resolvedRequestAgentName,
+        locale: isZh ? "zh" : "en",
+        defaultPlaceholder: copy.placeholder,
+      }),
+    [copy.placeholder, isZh, resolvedRequestAgentId, resolvedRequestAgentName],
+  )
   const selectedKnowledgeDatasets = useMemo(
     () =>
       selectedKnowledgeDatasetIds
@@ -1081,11 +1175,6 @@ export function AiEntryWorkspace({
     if (selectedKnowledgeDatasets.length === 0) return copy.knowledgeAllEnabled
     return `${copy.knowledgeSelectedCount} ${selectedKnowledgeDatasets.length}`
   }, [copy.knowledgeAllEnabled, copy.knowledgeDisabled, copy.knowledgeSelectedCount, knowledgeEnabled, selectedKnowledgeDatasets.length])
-  const handleAgentSelectionChange = useCallback((nextAgentId: string | null) => {
-    setSelectedAgentId(nextAgentId)
-    setIsAgentSelectionExplicit(Boolean(nextAgentId))
-  }, [])
-
   useEffect(() => {
     let cancelled = false
 
@@ -1163,28 +1252,16 @@ export function AiEntryWorkspace({
     }
   }, [copy.loading, pendingTaskEvents])
 
-  const recommendedAgents = useMemo(() => {
-    if (agentGroups.length > 0) {
-      const seen = new Set<string>()
-      const merged: AgentOption[] = []
-      for (const group of agentGroups) {
-        for (const agent of group.agents) {
-          if (seen.has(agent.id)) continue
-          seen.add(agent.id)
-          merged.push(agent)
-        }
-      }
-      return merged
-    }
-
-    return agents
-  }, [agentGroups, agents])
-
   useEffect(() => {
     if (embedded) return
-    const targetPath = conversationId ? `/dashboard/ai/${conversationId}` : "/dashboard/ai"
+    const targetConversationId = resolveAiEntryTargetConversationId({
+      initialConversationId,
+      localConversationId: conversationId,
+      pendingFirstConversationRoute: pendingFirstConversationRouteRef.current,
+    })
+    const targetPath = targetConversationId ? `/dashboard/ai/${targetConversationId}` : "/dashboard/ai"
     const params = new URLSearchParams(search)
-    if (conversationId) {
+    if (targetConversationId) {
       params.delete("draft")
     }
     const nextSearch = params.toString()
@@ -1210,10 +1287,10 @@ export function AiEntryWorkspace({
   useEffect(() => {
     if (initialConversationId) return
     if (messages.length > 0) return
-    const nextDraft = routeDraft || (!embedded ? initialDraftFromQuery : "")
+    const nextDraft = routeDraft
     if (!nextDraft) return
     setInput((current) => (current.trim() ? current : nextDraft))
-  }, [embedded, initialConversationId, initialDraftFromQuery, messages.length, routeDraft])
+  }, [initialConversationId, messages.length, routeDraft])
 
   useEffect(() => {
     if (embedded) return
@@ -1408,7 +1485,6 @@ export function AiEntryWorkspace({
   useEffect(() => {
     let cancelled = false
     const loadAgents = async () => {
-      setAgentLoading(true)
       try {
         const response = await fetch("/api/ai/agents", { cache: "no-store", credentials: "same-origin" })
         const payload = (await response.json().catch(() => null)) as AgentApiResponse | null
@@ -1426,49 +1502,26 @@ export function AiEntryWorkspace({
           })
           .filter((item): item is AgentOption => Boolean(item))
 
-        const normalizedGroups = (payload?.groups || [])
-          .map((group) => {
-            const id = typeof group?.id === "string" ? group.id.trim() : ""
-            if (!id) return null
-            const label = (isZh ? group?.label?.zh : group?.label?.en) || group?.label?.en || group?.label?.zh || id
-            return { id, label: String(label) }
-          })
-          .filter((item): item is { id: string; label: string } => Boolean(item))
-
-        const groups: AgentGroupOption[] = normalizedGroups
-          .map((group) => {
-            const list = normalizedAgents.filter((agent) => agent.category === group.id)
-            if (list.length === 0) return null
-            return { id: group.id, label: group.label, agents: list } as AgentGroupOption
-          })
-          .filter((item): item is AgentGroupOption => Boolean(item))
-
-        const leftovers = normalizedAgents.filter((agent) => !normalizedGroups.some((group) => group.id === agent.category))
-        if (leftovers.length > 0) groups.push({ id: "other", label: "Other", agents: leftovers })
-
         const validIds = new Set(normalizedAgents.map((item) => item.id))
         const fromForcedAgent =
           forcedAgentId && validIds.has(forcedAgentId) ? forcedAgentId : null
         const fromQuery =
-          !embedded && initialAgentFromQuery && validIds.has(initialAgentFromQuery)
-            ? initialAgentFromQuery
+          !embedded && routeAgentId && validIds.has(routeAgentId)
+            ? routeAgentId
             : null
         const nextSelectedAgentId = fromForcedAgent || fromQuery
 
         setAgents(normalizedAgents)
-        setAgentGroups(groups)
         setSelectedAgentId(nextSelectedAgentId)
         setIsAgentSelectionExplicit(Boolean(nextSelectedAgentId))
       } catch (error) {
         if (cancelled) return
         console.error("ai-entry.agents.load.failed", error)
         setAgents([])
-        setAgentGroups([])
         setSelectedAgentId(null)
         setIsAgentSelectionExplicit(false)
       } finally {
         if (!cancelled) {
-          setAgentLoading(false)
           setAgentQueryReady(true)
         }
       }
@@ -1478,7 +1531,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [embedded, forcedAgentId, initialAgentFromQuery, isZh, shouldLockModel])
+  }, [embedded, forcedAgentId, isZh, routeAgentId, shouldLockModel])
 
   useEffect(() => {
     if (shouldLockModel) {
@@ -1536,6 +1589,11 @@ export function AiEntryWorkspace({
     setConversationId(initialConversationId)
     latestConversationIdRef.current = initialConversationId
     let cancelled = false
+    const pendingMessages = readPendingConversationMessages(initialConversationId)
+    setMessages(resolveAiEntryBootstrapMessages({
+      conversationId: initialConversationId,
+      pendingMessages,
+    }))
     const loadMessages = async () => {
       setIsConversationLoading(true)
       try {
@@ -1575,8 +1633,15 @@ export function AiEntryWorkspace({
           })
           .filter((item): item is ChatMessage => Boolean(item))
 
-        setMessages(restored)
-        clearPendingConversationMessages(initialConversationId)
+        const resolvedMessages = resolveAiEntryRestoredMessages({
+          pendingMessages,
+          persistedMessages: restored,
+        })
+
+        setMessages(resolvedMessages)
+        if (resolvedMessages === restored) {
+          clearPendingConversationMessages(initialConversationId)
+        }
 
         const conversationModelId =
           typeof payload?.conversation?.current_model_id === "string" &&
@@ -1595,6 +1660,7 @@ export function AiEntryWorkspace({
           `${copy.errorPrefix}${renderAiEntryErrorMessage(
             error instanceof Error ? error.message : error,
             copy,
+            isZh,
           )}`,
         )
       } finally {
@@ -1606,7 +1672,210 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [copy, effectiveEntryMode, initialConversationId, models, preferredUnlockedModelId, routeAgentId, shouldLockModel])
+  }, [copy, effectiveEntryMode, initialConversationId, isZh, models, preferredUnlockedModelId, routeAgentId, shouldLockModel])
+
+  useEffect(() => {
+    const pendingTask = findAiEntryPendingTask({
+      conversationId,
+      agentId: activePendingAgentId,
+    })
+    if (!pendingTask) {
+      setPendingTaskEvents([])
+      return
+    }
+
+    let cancelled = false
+    let consecutivePollErrors = 0
+    const pollStartedAt = Date.now()
+    setIsLoading(true)
+
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const response = await fetch(`/api/tasks/${pendingTask.taskId}`, {
+            cache: "no-store",
+            credentials: "same-origin",
+          })
+          if (!response.ok) {
+            throw new Error(response.status === 404 ? "task_not_found" : `http_${response.status}`)
+          }
+          const payload = (await response.json().catch(() => null)) as {
+            data?: {
+              status?: string
+              result?: {
+                conversation_id?: string | null
+                toolName?: string
+                toolCallId?: string
+                toolResult?: NonNullable<NonNullable<ChatStreamApiResponse["data"]>["result"]> | null
+                assistantMessage?: string
+                error?: string | null
+                events?: unknown
+              } | null
+            } | null
+          } | null
+          consecutivePollErrors = 0
+          const status = payload?.data?.status
+          const taskResult = payload?.data?.result || null
+          const normalizedEvents = normalizePendingTaskEvents(taskResult?.events)
+          if (normalizedEvents.length > 0) {
+            setPendingTaskEvents(normalizedEvents)
+          }
+
+          if (status === "success" || status === "failed") {
+            const resolvedConversationId =
+              typeof taskResult?.conversation_id === "string" && taskResult.conversation_id.trim()
+                ? taskResult.conversation_id.trim()
+                : conversationId
+            const assistantText =
+              typeof taskResult?.assistantMessage === "string"
+                ? taskResult.assistantMessage.trim()
+                : ""
+            const toolName =
+              typeof taskResult?.toolName === "string" ? taskResult.toolName : "preview_ppt_deck"
+            const toolCallId =
+              typeof taskResult?.toolCallId === "string"
+                ? taskResult.toolCallId
+                : `background-${pendingTask.taskId}`
+            const toolResult = taskResult?.toolResult ?? null
+
+            setMessages((current) => {
+              let next = [...current]
+              const normalizedAssistantText = assistantText.trim()
+              const existingIndex = normalizedAssistantText
+                ? next.findIndex(
+                    (message) =>
+                      message.role === "assistant" &&
+                      message.content.trim() === normalizedAssistantText,
+                  )
+                : -1
+              const resultParts =
+                toolResult && toolName
+                  ? applySseEvent([], {
+                      event: "tool_result",
+                      conversation_id: resolvedConversationId || undefined,
+                      data: {
+                        toolName,
+                        toolCallId,
+                        result: toolResult,
+                      },
+                    })
+                  : []
+
+              if (existingIndex >= 0) {
+                next[existingIndex] = {
+                  ...next[existingIndex],
+                  parts:
+                    resultParts.length > 0
+                      ? resultParts
+                      : next[existingIndex].parts,
+                }
+              } else if (assistantText || resultParts.length > 0) {
+                next = [
+                  ...next,
+                  {
+                    id: `assistant-background-${pendingTask.taskId}`,
+                    role: "assistant",
+                    content:
+                      assistantText ||
+                      buildPptToolResultMessage({
+                        toolName,
+                        result: toolResult,
+                        isZh,
+                      })?.trim() ||
+                      "",
+                    parts: resultParts.length > 0 ? resultParts : undefined,
+                  },
+                ]
+              }
+
+              if (resolvedConversationId) {
+                savePendingConversationMessages(resolvedConversationId, next)
+              }
+              return next
+            })
+            if (resolvedConversationId) {
+              latestConversationIdRef.current = resolvedConversationId
+              setConversationId((current) =>
+                current === resolvedConversationId ? current : resolvedConversationId,
+              )
+            }
+
+            removePendingAssistantTask(pendingTask.taskId)
+            if (!cancelled) {
+              setIsLoading(false)
+            }
+            return
+          }
+        } catch (error) {
+          console.error("ai-entry.pending-task.poll.failed", error)
+          consecutivePollErrors += 1
+          const errorMessage =
+            error instanceof Error && error.message ? error.message : "pending_task_poll_failed"
+          const pollTimedOut = Date.now() - pollStartedAt > AI_ENTRY_PENDING_TASK_MAX_AGE_MS
+          const shouldStopPolling =
+            errorMessage === "task_not_found" ||
+            consecutivePollErrors >= AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS ||
+            pollTimedOut
+
+          if (shouldStopPolling) {
+            removePendingAssistantTask(pendingTask.taskId)
+            if (!cancelled) {
+              setIsLoading(false)
+              setPendingTaskEvents((current) =>
+                [
+                  ...current,
+                  {
+                    type: "background_generation_failed",
+                    label:
+                      errorMessage === "task_not_found"
+                        ? isZh
+                          ? "后台任务不存在或已失效"
+                          : "Background task was not found or has expired"
+                        : pollTimedOut
+                          ? isZh
+                            ? "后台任务轮询超时"
+                            : "Background task polling timed out"
+                          : isZh
+                            ? "后台任务轮询失败"
+                            : "Background task polling failed",
+                    detail:
+                      errorMessage === "task_not_found"
+                        ? undefined
+                        : renderAiEntryErrorMessage(errorMessage, copy, isZh),
+                    status: "failed" as const,
+                    at: Date.now(),
+                  },
+                ].slice(-12),
+              )
+              setErrorMessage(
+                `${copy.errorPrefix}${
+                  errorMessage === "task_not_found"
+                    ? isZh
+                      ? "后台任务不存在或已失效。"
+                      : "The background task was not found or has expired."
+                    : pollTimedOut
+                      ? isZh
+                        ? "后台任务轮询超时，请刷新会话确认最终状态。"
+                        : "Background task polling timed out. Refresh the conversation to confirm the final state."
+                      : renderAiEntryErrorMessage(errorMessage, copy, isZh)
+                }`,
+              )
+            }
+            return
+          }
+        }
+
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS),
+        )
+      }
+    }
+
+    void poll()
+    return () => {
+      cancelled = true
+    }
+  }, [activePendingAgentId, conversationId, isZh])
 
   const renderModelSelectContent = useCallback(() => {
     if (modelsLoading) return <SelectItem value="__loading" disabled>{copy.modelLoading}</SelectItem>
@@ -1756,6 +2025,18 @@ export function AiEntryWorkspace({
       }
     }
 
+    const persistPendingConversationDraft = (nextConversationId: string | null) => {
+      if (!nextConversationId) return
+      latestConversationIdRef.current = nextConversationId
+      savePendingConversationMessages(nextConversationId, [...baseMessages, userMessage, assistantDraft])
+    }
+
+    const promoteConversationRoute = (nextConversationId: string | null) => {
+      if (!nextConversationId) return
+      persistPendingConversationDraft(nextConversationId)
+      setConversationId((current) => (current === nextConversationId ? current : nextConversationId))
+    }
+
     setInput("")
     setAttachments([])
     setErrorMessage(null)
@@ -1779,13 +2060,17 @@ export function AiEntryWorkspace({
     }
 
     try {
-      const effectiveRequestAgentId =
-        embedded && forcedAgentId
-          ? forcedAgentId
-          : selectedAgentId
+      const effectiveRequestAgentId = resolveAiEntryRequestedAgentId({
+        forcedAgentId: embedded ? forcedAgentId : null,
+        selectedAgentId,
+        routeAgentId,
+      })
       const shouldSendAgentConfig =
         isConsultingEntry ||
-        Boolean(effectiveRequestAgentId && (embedded || isAgentSelectionExplicit))
+        Boolean(
+          effectiveRequestAgentId &&
+          (embedded || isAgentSelectionExplicit || Boolean(routeAgentId)),
+        )
 
       const response = await fetch("/api/ai/chat", {
         method: "POST",
@@ -1824,7 +2109,12 @@ export function AiEntryWorkspace({
             shouldSendAgentConfig
               ? {
                   ...(effectiveRequestAgentId
-                    ? { agentId: effectiveRequestAgentId }
+                    ? {
+                        agentId: effectiveRequestAgentId,
+                        ...(resolvedRequestAgentName
+                          ? { agentName: resolvedRequestAgentName }
+                          : {}),
+                      }
                     : {}),
                   ...(isConsultingEntry
                     ? {
@@ -1871,9 +2161,7 @@ export function AiEntryWorkspace({
               ? event.conversation_id.trim()
               : null
           if (streamConversationId) {
-            latestConversationIdRef.current = streamConversationId
-            savePendingConversationMessages(streamConversationId, [...baseMessages, userMessage, assistantDraft])
-            setConversationId(streamConversationId)
+            persistPendingConversationDraft(streamConversationId)
           }
 
           const currentParts = assistantDraft.parts ?? []
@@ -1951,6 +2239,7 @@ export function AiEntryWorkspace({
             const toolName = event.data?.toolName || "tool"
             const toolId = event.data?.toolCallId || toolName
             const isWebSearch = toolName === "web_search"
+            promoteConversationRoute(streamConversationId)
             upsertTaskEvent({
               type: `tool:${toolId}`,
               label: isWebSearch ? (isZh ? "\u6b63\u5728\u641c\u7d22\u7f51\u9875" : "Searching the web") : `Tool: ${toolName}`,
@@ -1965,7 +2254,17 @@ export function AiEntryWorkspace({
             const toolName = event.data?.toolName || "tool"
             const toolId = event.data?.toolCallId || toolName
             const isWebSearch = toolName === "web_search"
-            const isToolFailure = event.data?.result?.ok === false
+            const toolResultPayload =
+              event.data?.result &&
+              typeof event.data.result === "object"
+                ? (event.data.result as NonNullable<NonNullable<ChatStreamApiResponse["data"]>["result"]>)
+                : null
+            const isToolFailure = toolResultPayload?.ok === false
+            const backgroundTaskId =
+              typeof toolResultPayload?.backgroundTask?.taskId === "string" &&
+              toolResultPayload.backgroundTask.taskId.trim()
+                ? toolResultPayload.backgroundTask.taskId.trim()
+                : null
             const sources = Array.isArray(event.data?.result?.results)
               ? event.data.result.results.filter((source) => typeof source?.url === "string" && source.url.trim())
               : []
@@ -1987,15 +2286,36 @@ export function AiEntryWorkspace({
               })
             }
 
+            promoteConversationRoute(streamConversationId)
+            if (backgroundTaskId && streamConversationId) {
+              savePendingAssistantTask({
+                taskId: backgroundTaskId,
+                scope: "ai_entry",
+                conversationId: streamConversationId,
+                agentId: routeAgentId || resolvedRequestAgentId || null,
+                prompt: userMessage.content,
+                taskType: toolName,
+                createdAt: Date.now(),
+              })
+            }
             upsertTaskEvent({
               type: `tool:${toolId}`,
-              label: isWebSearch ? (isZh ? "\u7f51\u9875\u641c\u7d22\u5b8c\u6210" : "Web search completed") : `Tool: ${toolName}`,
+              label:
+                backgroundTaskId && toolName === "preview_ppt_deck"
+                  ? isZh
+                    ? "\u53ef\u7f16\u8f91 PPT \u5df2\u8f6c\u5165\u540e\u53f0\u751f\u6210"
+                    : "Editable PPT moved to background generation"
+                  : isWebSearch
+                    ? (isZh ? "\u7f51\u9875\u641c\u7d22\u5b8c\u6210" : "Web search completed")
+                    : `Tool: ${toolName}`,
               detail: isToolFailure
                 ? event.data?.result?.error?.message || "failed"
+                : backgroundTaskId
+                  ? event.data?.result?.message || undefined
                 : isWebSearch
                   ? sourceDetail
                   : undefined,
-              status: isToolFailure ? "failed" : "completed",
+              status: isToolFailure ? "failed" : backgroundTaskId ? "running" : "completed",
               at: now,
             })
             return
@@ -2003,6 +2323,7 @@ export function AiEntryWorkspace({
 
           if (event.event === "artifact_created") {
             const fileName = event.artifact?.fileName || event.artifact?.title || "artifact"
+            promoteConversationRoute(streamConversationId)
             upsertTaskEvent({
               type: `artifact:${event.artifact?.artifactId || fileName}`,
               label: isZh ? "\u5df2\u751f\u6210\u53ef\u4e0b\u8f7d\u4ea4\u4ed8\u7269" : "Downloadable artifact created",
@@ -2036,6 +2357,7 @@ export function AiEntryWorkspace({
               ...assistantDraft,
               content: `${streamedText}${streamedToolAppendix}`,
             })
+            promoteConversationRoute(streamConversationId)
             return
           }
 
@@ -2079,11 +2401,13 @@ export function AiEntryWorkspace({
               ...assistantDraft,
               content: resolvedTextWithTools || (assistantDraft.parts?.length ? "" : copy.unknownError),
             })
+            promoteConversationRoute(streamConversationId)
             return
           }
 
           if (event.event === "error") {
-            streamError = renderAiEntryErrorMessage(event.error, copy)
+            streamError = renderAiEntryErrorMessage(event.error, copy, isZh)
+            promoteConversationRoute(streamConversationId)
             upsertTaskEvent({
               type: "request_start",
               label: "Request sent",
@@ -2147,6 +2471,7 @@ export function AiEntryWorkspace({
       const renderedError = `${copy.errorPrefix}${renderAiEntryErrorMessage(
         error instanceof Error ? error.message : error,
         copy,
+        isZh,
       )}`
       const failedEvent: PendingTaskEvent = {
         type: "request_failed",
@@ -2188,6 +2513,8 @@ export function AiEntryWorkspace({
     selectedKnowledgeDatasetIds,
     isConsultingEntry,
     isAgentSelectionExplicit,
+    resolvedRequestAgentName,
+    routeAgentId,
     selectedAgentId,
     selectedModel,
     selectedModelId,
@@ -2402,54 +2729,6 @@ export function AiEntryWorkspace({
     </Popover>
   )
 
-  const renderRecommendedAgents = (size: "landing" | "inline") => {
-    const containerClassName = size === "landing" ? "mx-auto mt-8 max-w-5xl" : "mt-3"
-    const tabClassName =
-      size === "landing"
-        ? "h-9 rounded-full px-4 text-sm"
-        : "h-8 rounded-full px-3 text-xs"
-
-    return (
-      <div className={containerClassName}>
-        <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-          {copy.agentRecommended}
-        </div>
-        {agentLoading ? (
-          <div className="text-xs text-muted-foreground">{copy.agentLoading}</div>
-        ) : recommendedAgents.length === 0 ? (
-          <div className="text-xs text-muted-foreground">{copy.agentEmpty}</div>
-        ) : (
-          <div className="dashboard-panel rounded-[10px] px-3 py-3">
-            <div className="flex flex-wrap gap-2">
-              {recommendedAgents.map((agent) => {
-                const isSelected = selectedAgentId === agent.id
-                return (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    onClick={() =>
-                      handleAgentSelectionChange(selectedAgentId === agent.id ? null : agent.id)
-                    }
-                    className={cn(
-                      "dashboard-kicker inline-flex items-center rounded-[4px] border px-4 transition",
-                      tabClassName,
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-foreground hover:border-primary/60 hover:bg-primary/5",
-                    )}
-                    title={agent.description}
-                  >
-                    {agent.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   if (showLanding) {
     return (
       <TooltipProvider>
@@ -2461,13 +2740,11 @@ export function AiEntryWorkspace({
                   <div className="mx-auto max-w-4xl text-center">
                     <div className="mb-3 inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-1">
                       <span className="public-signal" aria-hidden="true" />
-                      <span className="dashboard-kicker text-muted-foreground">AI Workspace</span>
+                      <span className="dashboard-kicker text-muted-foreground">{workspaceKicker}</span>
                     </div>
                     <h1 className="dashboard-title text-5xl tracking-tight text-foreground lg:text-6xl">{workspaceTitle}</h1>
-                    <p className="mt-4 text-lg text-muted-foreground">{copy.landingHint}</p>
+                    <p className="mt-4 text-lg text-muted-foreground">{resolvedRequestAgentId ? workspaceSubtitle : copy.landingHint}</p>
                   </div>
-
-                  {!embedded && !shouldLockModel ? renderRecommendedAgents("landing") : null}
 
                   <div className="mx-auto mt-10 grid max-w-5xl gap-3 lg:grid-cols-3">
                     {quickPrompts.map((prompt) => (
@@ -2501,7 +2778,7 @@ export function AiEntryWorkspace({
                     onChange={(event) => void handleAttachmentFiles(event.target.files)}
                   />
                   {renderSelectedAttachments()}
-                  <PromptInputTextarea placeholder={copy.placeholder} className="min-h-[120px] text-base" />
+                  <PromptInputTextarea placeholder={workspacePlaceholder} className="min-h-[120px] text-base" />
                   <PromptInputActions>
                     <div className="flex items-center gap-2">
                       {renderAttachmentPicker()}
@@ -2531,25 +2808,10 @@ export function AiEntryWorkspace({
       <div className="chat-canvas flex h-full min-h-0 justify-center">
         <section className="flex h-full min-h-0 w-full max-w-[1320px] flex-col overflow-hidden">
           {!embedded || !compactEmbedded ? (
-            <header className="chat-page-header px-4 pt-6 lg:px-8">
+            <header className="chat-page-header px-4 pt-4 lg:px-8">
               <div>
-                <div className="dashboard-kicker text-muted-foreground">AI CHAT</div>
-                <h1 className="chat-page-title mt-2 text-foreground">{workspaceTitle}</h1>
-                <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">{workspaceSubtitle}</p>
-              </div>
-              <div className="grid shrink-0 gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                <div className="chat-status-card">
-                  <div className="chat-status-label">{isZh ? "作品库" : "Work Library"}</div>
-                  <div className="chat-status-value">247</div>
-                </div>
-                <div className="chat-status-card">
-                  <div className="chat-status-label">{isZh ? "今日会话" : "Active Conversations"}</div>
-                  <div className="chat-status-value">12</div>
-                </div>
-                <div className="chat-status-card">
-                  <div className="chat-status-label">{copy.modelLabel}</div>
-                  <div className="chat-status-value truncate text-[1.15rem]">{selectedModel?.name || "Active"}</div>
-                </div>
+                <h1 className="chat-page-title text-foreground">{workspaceTitle}</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{workspaceSubtitle}</p>
               </div>
             </header>
           ) : null}
@@ -2562,7 +2824,7 @@ export function AiEntryWorkspace({
                 embedded && compactEmbedded ? "min-h-[280px] sm:min-h-[320px]" : undefined,
               )}
             >
-              {isConversationLoading && messages.length === 0 ? <div className="dashboard-panel rounded-[10px] p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
+              {showConversationRestoreState ? <div className="dashboard-panel rounded-[10px] p-4 text-sm text-muted-foreground"><div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{copy.restoring}</div></div> : null}
 
               {shouldShowEmbeddedGuide && embeddedGuideContent ? (
                 <article className="message-card">
@@ -2589,12 +2851,13 @@ export function AiEntryWorkspace({
                   !message.parts?.length
                 const shouldShowLoadingDetails = isPendingAssistant
                 const parsedArtifact = isAssistant ? parseArtifactResult(message.content) : null
+                const parsedPptPreview = isAssistant ? extractLatestPptPreviewContext(message.content) : null
                 const bodyContent = parsedArtifact?.body ?? message.content
                 const hasParts = Boolean(message.parts?.length)
                 const parts = hasParts ? message.parts ?? [] : []
                 const processParts = parts.filter((part) => part.type !== "text" && part.type !== "source" && part.type !== "artifact" && part.type !== "report")
                 const artifactParts = parts.filter((part): part is ArtifactPart => part.type === "artifact")
-                const reportParts = parts.filter((part) => part.type === "report")
+                const reportParts = parsedPptPreview ? parts.filter((part) => part.type === "report" && part.reportType !== "ppt-preview") : parts.filter((part) => part.type === "report")
                 const referenceParts = parts.filter((part) => part.type === "source")
                 const artifactPart = artifactParts[0] ?? null
                 return isAssistant ? (
@@ -2643,13 +2906,21 @@ export function AiEntryWorkspace({
                           <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} className="pl-0" />
                         </div>
                       ) : null}
-                      {((artifactParts.length > 0) || reportParts.length > 0 || (parsedArtifact && !hasParts)) ? (
+                      {((artifactParts.length > 0) || reportParts.length > 0 || Boolean(parsedPptPreview) || (parsedArtifact && !hasParts)) ? (
                         <section className="assistant-section">
                           <div className="artifact-section-title">
                             <Sparkles className="h-3.5 w-3.5 text-primary" />
                             <span>{isZh ? "生成产物" : "Generated artifacts"}</span>
                           </div>
                           <div className="artifact-grid">
+                            {parsedPptPreview ? (
+                              <PptPreviewReportCard
+                                previewSessionId={parsedPptPreview.previewSessionId}
+                                defaultVariantKey={parsedPptPreview.defaultVariantKey}
+                                variantKeys={parsedPptPreview.variantKeys}
+                                isZh={isZh}
+                              />
+                            ) : null}
                             {artifactParts.length ? <MessagePartViewList parts={artifactParts} isZh={isZh} className="space-y-0" /> : null}
                             {reportParts.length ? <MessagePartViewList parts={reportParts} isZh={isZh} className="space-y-3" /> : null}
                             {parsedArtifact && !hasParts ? <ArtifactResultBlock artifact={parsedArtifact} /> : null}
@@ -2776,7 +3047,7 @@ export function AiEntryWorkspace({
                 onChange={(event) => void handleAttachmentFiles(event.target.files)}
               />
               {renderSelectedAttachments()}
-              <PromptInputTextarea placeholder={copy.placeholder} className={cn("composer-input", compactEmbedded ? "min-h-[88px]" : undefined)} />
+              <PromptInputTextarea placeholder={workspacePlaceholder} className={cn("composer-input", compactEmbedded ? "min-h-[88px]" : undefined)} />
               <PromptInputActions className="items-end gap-3 p-0">
                 <div className="flex items-center gap-2">
                   {renderAttachmentPicker()}
@@ -2793,10 +3064,6 @@ export function AiEntryWorkspace({
                 </div>
               </PromptInputActions>
             </PromptInput>
-
-            {!embedded && !shouldLockModel && !isConversationLoading && messages.length === 0
-              ? renderRecommendedAgents("inline")
-              : null}
           </div>
         </div>
         </section>

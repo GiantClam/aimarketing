@@ -4,7 +4,8 @@ export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "gpt-5.4"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT = "gpt-5.4"
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"
-export const AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS = ["executive-ppt"] as const
+export const AI_ENTRY_PPT_AGENT_IDS = ["executive-ppt", "executive-presentation-ppt"] as const
+export const AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS = AI_ENTRY_PPT_AGENT_IDS
 
 export type AiEntryConsultingModelMode = "quality"
 
@@ -34,6 +35,13 @@ function isConsultingModelLockExemptAgent(agentId: unknown) {
   )
 }
 
+export function isAiEntryPptAgentId(agentId: unknown) {
+  const normalizedAgentId = normalizeText(agentId)
+  return AI_ENTRY_PPT_AGENT_IDS.includes(
+    normalizedAgentId as (typeof AI_ENTRY_PPT_AGENT_IDS)[number],
+  )
+}
+
 function isThinkingModelFingerprint(fingerprint: string) {
   return fingerprint.includes("thinking")
 }
@@ -59,11 +67,12 @@ function isModelHintMatch(item: ModelCandidate, modelHint: string) {
 
 function pickModelByHint(models: ModelCandidate[], modelHint: string) {
   const getProviderScore = (providerId: string) => {
-    if (providerId === "pptoken") return 0
-    if (providerId === "aiberm") return 1
-    if (providerId === "crazyroute") return 2
-    if (providerId === "openrouter") return 3
-    return 4
+    if (providerId === "deepseek") return 0
+    if (providerId === "pptoken") return 1
+    if (providerId === "aiberm") return 2
+    if (providerId === "crazyroute") return 3
+    if (providerId === "openrouter") return 4
+    return 5
   }
 
   const candidates = models
@@ -164,11 +173,12 @@ export function pickPptAssistantDefaultModelId(models: ModelCandidate[]) {
 
   matched.sort((a, b) => {
     const getProviderScore = (providerId: string) => {
-      if (providerId === "pptoken") return 0
-      if (providerId === "aiberm") return 1
-      if (providerId === "crazyroute") return 2
-      if (providerId === "openrouter") return 3
-      return 4
+      if (providerId === "deepseek") return 0
+      if (providerId === "pptoken") return 1
+      if (providerId === "aiberm") return 2
+      if (providerId === "crazyroute") return 3
+      if (providerId === "openrouter") return 4
+      return 5
     }
 
     const aProviderScore = getProviderScore(a.providerId)

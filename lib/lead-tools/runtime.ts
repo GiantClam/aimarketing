@@ -11,6 +11,8 @@ import {
 import {
   MAX_PPT_PREVIEW_PAGE_COUNT,
   MIN_PPT_PREVIEW_PAGE_COUNT,
+  isKnownPptFrontendTemplateId,
+  isKnownPptPreviewStyleKey,
   resolvePptPreviewDeckPageCount,
   type PptPreviewDeck,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
@@ -28,7 +30,7 @@ const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
 const pptPreviewModelSchema = z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"])
 const pptPreviewRuntimeSchema = z.enum(["ppt-master-agent", "frontend-slides-agent"])
 const pptPreviewTemplateModeSchema = z.enum(["auto-4", "single-template"])
-const pptFrontendTemplateIdSchema = z.enum(["long-table", "playful", "broadside", "neo-grid-bold"])
+const pptFrontendTemplateIdSchema = z.string().trim().refine(isKnownPptFrontendTemplateId, "Unknown PPT template")
 const pptPreviewPageCountSchema = z
   .number()
   .int("Page count must be an integer")
@@ -135,15 +137,14 @@ const pptPreviewAssetSchema = z.object({
   height: z.number(),
   dataUrl: z.string(),
 })
+const pptPreviewStyleKeySchema = z.custom<import("@/lib/lead-tools/ppt-preview-data-fixed").PptPreviewStyleKey>(
+  (value) => isKnownPptPreviewStyleKey(value),
+  "Unknown PPT preview style",
+)
 
 const pptPreviewVariantSchema = z.object({
   key: z.string(),
-  styleKey: z.enum([
-    "ppt169_brutalist_ai_newspaper_2026",
-    "ppt169_sugar_rush_memphis",
-    "ppt169_pritzker_2026",
-    "ppt169_swiss_grid_systems",
-  ]),
+  styleKey: pptPreviewStyleKeySchema,
   templateId: pptFrontendTemplateIdSchema.optional(),
   narrativeAngle: pptPreviewNarrativeAngleSchema.optional(),
   slotLabel: z.enum(["A", "B", "C", "D"]).optional(),

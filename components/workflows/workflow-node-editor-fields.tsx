@@ -23,6 +23,7 @@ import {
   resolveWorkflowImageModelKind,
 } from "@/lib/image-assistant/model-options"
 import {
+  pptFrontendTemplateOptions,
   pptPreviewModelOptions,
   pptPreviewRuntimeOptions,
   type PptPreviewRuntimeValue,
@@ -170,7 +171,7 @@ function parseWorkflowModelSelectionValue(value: string) {
   return { providerId, modelId }
 }
 
-const WRITER_SUPPORTED_PROVIDER_IDS = new Set(["aiberm", "crazyroute", "pptoken"])
+const WRITER_SUPPORTED_PROVIDER_IDS = new Set(["deepseek", "aiberm", "crazyroute", "pptoken"])
 
 function getWorkflowPptRuntimeTitle(locale: "zh" | "en", runtime: PptPreviewRuntimeValue) {
   if (locale === "zh") {
@@ -359,6 +360,7 @@ export function WorkflowNodeEditorFields({
           webSearchHint: "默认关闭。仅在当前 Agent 需要联网检索最新信息时再开启。",
           noBuiltinAgents: "还没有可选内置 Agent。",
           noCustomAgents: "还没有可选企业 Agent。",
+          workflowUnsupportedAgent: "当前 Agent 不适用于 workflow 普通节点，请改用专门的 PPT 节点。",
           agentMode: "执行模式",
           agentCategory: "类别",
           general: "通用",
@@ -415,6 +417,9 @@ export function WorkflowNodeEditorFields({
           pageCount: "页数",
           pptAgent: "PPT 类型",
           pptAgentHint: "HTML PPT 输出网页化演示稿；可编辑 PPT 输出可继续修改的 PPT 成品。",
+          pptTemplate: "模板",
+          pptTemplateHint: "可编辑 PPT 不会自动生成 4 个模板预览。先选择模板，再运行生成。",
+          pptTemplatePending: "先返回模板建议",
           scenario: "场景",
           language: "语言",
           fileName: "文件名称",
@@ -456,6 +461,7 @@ export function WorkflowNodeEditorFields({
           webSearchHint: "Off by default. Turn it on only when this agent needs fresh external information.",
           noBuiltinAgents: "No built-in agents available yet.",
           noCustomAgents: "No enterprise agents available yet.",
+          workflowUnsupportedAgent: "This agent is not supported inside a standard workflow agent node. Use the dedicated PPT node instead.",
           agentMode: "Execution mode",
           agentCategory: "Category",
           general: "General",
@@ -512,6 +518,9 @@ export function WorkflowNodeEditorFields({
           pageCount: "Pages",
           pptAgent: "PPT type",
           pptAgentHint: "HTML PPT outputs a web-based deck; Editable PPT outputs a deck that can keep being edited.",
+          pptTemplate: "Template",
+          pptTemplateHint: "Editable PPT will not auto-generate four preview decks. Choose one template first, then run generation.",
+          pptTemplatePending: "Show recommendations first",
           scenario: "Scenario",
           language: "Language",
           fileName: "File name",
@@ -850,6 +859,13 @@ export function WorkflowNodeEditorFields({
   const speechVolumeOptions: OptionItem[] = ["0.8", "1", "1.2"].map((value) => ({ value, label: `${value}x` }))
   const speechPitchOptions: OptionItem[] = ["0.8", "1", "1.2"].map((value) => ({ value, label: `${value}x` }))
   const pageCountOptions: OptionItem[] = ["6", "8", "10", "12"].map((value) => ({ value, label: value }))
+  const editablePptTemplateOptions: OptionItem[] = [
+    { value: "", label: copy.pptTemplatePending },
+    ...pptFrontendTemplateOptions.map((option) => ({
+      value: option.id,
+      label: locale === "zh" ? option.label.zh : option.label.en,
+    })),
+  ]
   const fileFormatOptions: OptionItem[] = [
     { value: "md", label: "MD" },
     { value: "txt", label: "TXT" },
@@ -1406,6 +1422,11 @@ export function WorkflowNodeEditorFields({
               className="h-10 w-full rounded-[10px] border border-border/80 bg-background/80 px-3 text-sm text-foreground outline-none transition focus:border-primary/50"
             >
               {builtinAgents.length === 0 && customAgents.length === 0 ? <option value="">{copy.noBuiltinAgents}</option> : null}
+              {!selectedCustomAgentId && selectedBuiltinAgentId && !selectedBuiltinAgent ? (
+                <option value={buildAgentSelectValue("builtin", selectedBuiltinAgentId)}>
+                  {copy.workflowUnsupportedAgent}
+                </option>
+              ) : null}
               {builtinAgents.length > 0 ? (
                 <optgroup label={copy.builtinAgents}>
                   {builtinAgents.map((agent) => (
@@ -1426,6 +1447,12 @@ export function WorkflowNodeEditorFields({
               ) : null}
             </select>
           </div>
+
+          {!selectedCustomAgentId && selectedBuiltinAgentId && !selectedBuiltinAgent ? (
+            <div className="rounded-[10px] border border-amber-300/80 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+              {copy.workflowUnsupportedAgent}
+            </div>
+          ) : null}
 
           {selectedBuiltinAgent ? (
             <div className="rounded-[10px] border border-border/80 bg-background/60 p-3 text-sm text-foreground">
@@ -2087,6 +2114,8 @@ export function WorkflowNodeEditorFields({
                   config: {
                     ...node.config,
                     previewRuntime: nextRuntime,
+                    templateMode: nextRuntime === "ppt-master-agent" ? "single-template" : "auto-4",
+                    selectedVariantKey: nextRuntime === "ppt-master-agent" ? undefined : node.config.selectedVariantKey,
                   },
                 })
               }}
@@ -2127,6 +2156,22 @@ export function WorkflowNodeEditorFields({
               }
             />
           </div>
+          {currentPptRuntimeId === "ppt-master-agent" ? (
+            <div className="space-y-2">
+              <SectionLabel>{copy.pptTemplate}</SectionLabel>
+              <OptionChips
+                options={editablePptTemplateOptions}
+                value={asString(node.config.templateId)}
+                onChange={(value) =>
+                  updateConfig({
+                    templateId: value || undefined,
+                    templateMode: "single-template",
+                  })
+                }
+              />
+              <div className="text-xs leading-5 text-muted-foreground">{copy.pptTemplateHint}</div>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <SectionLabel>{copy.language}</SectionLabel>
             <OptionChips

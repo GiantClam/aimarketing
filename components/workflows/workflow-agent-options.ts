@@ -1,3 +1,5 @@
+import { isWorkflowBuiltinAgentSelectable } from "@/lib/workflows/builtin-agent-policy"
+
 export type WorkflowBuiltinAgentOption = {
   id: string
   name: string
@@ -14,3 +16,5 @@ export type WorkflowCustomAgentOption = {
   linkedWorkflowId: number | null
   linkedWorkflowTitle: string | null
 }
+
+export { isWorkflowBuiltinAgentSelectable }

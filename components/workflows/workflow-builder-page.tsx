@@ -9,7 +9,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import type { WorkflowBuiltinAgentOption, WorkflowCustomAgentOption } from "@/components/workflows/workflow-agent-options"
+import {
+  isWorkflowBuiltinAgentSelectable,
+  type WorkflowBuiltinAgentOption,
+  type WorkflowCustomAgentOption,
+} from "@/components/workflows/workflow-agent-options"
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas"
 import { WorkflowNodeConfigPanel } from "@/components/workflows/workflow-node-config-panel"
 import { WorkflowNodePalette } from "@/components/workflows/workflow-node-palette"
@@ -356,6 +360,7 @@ function buildNode(
   initialConfig?: Record<string, unknown>,
   titleOverride?: string,
 ) {
+  const selectableBuiltinAgents = builtinAgents.filter((agent) => isWorkflowBuiltinAgentSelectable(agent.id))
   const index = nodes.length
   const column = index % 3
   const row = Math.floor(index / 3)
@@ -398,7 +403,7 @@ function buildNode(
             : type === "agent_execute"
               ? {
                   customAgentId: customAgents[0]?.id ?? null,
-                  agentId: customAgents[0] ? null : builtinAgents[0]?.id ?? null,
+                  agentId: customAgents[0] ? null : selectableBuiltinAgents[0]?.id ?? null,
                   selectedProviderId: llmModelCatalog.defaultProviderId,
                   selectedModelId: llmModelCatalog.defaultModelId,
                   prompt: "",
@@ -568,6 +573,10 @@ export function WorkflowBuilderPage({
   initialLatestRunDetail?: WorkflowRunResultsDetail | null
   initialLatestRunId?: number | null
 }) {
+  const selectableBuiltinAgents = useMemo(
+    () => builtinAgents.filter((agent) => isWorkflowBuiltinAgentSelectable(agent.id)),
+    [builtinAgents],
+  )
   const router = useRouter()
   const canvasShellRef = useRef<HTMLDivElement | null>(null)
   const dragMovedRef = useRef<Record<FloatingControlKey, boolean>>({
@@ -1315,7 +1324,7 @@ export function WorkflowBuilderPage({
         llmModelCatalog,
         workflowImageProviderOptions,
         voiceOptions,
-        builtinAgents,
+        selectableBuiltinAgents,
         customAgents,
         position,
         initialConfig,
@@ -1343,7 +1352,7 @@ export function WorkflowBuilderPage({
   }
 
   const addBuiltinAgentNode = (builtinAgentId: string, position?: { x: number; y: number }) => {
-    const builtinAgent = builtinAgents.find((item) => item.id === builtinAgentId)
+    const builtinAgent = selectableBuiltinAgents.find((item) => item.id === builtinAgentId)
     addNode(
       "agent_execute",
       position,
@@ -2048,7 +2057,7 @@ export function WorkflowBuilderPage({
                 llmModelCatalog={llmModelCatalog}
                 workflowImageProviderOptions={workflowImageProviderOptions}
                 voiceOptions={voiceOptions}
-                builtinAgents={builtinAgents}
+                builtinAgents={selectableBuiltinAgents}
                 customAgents={customAgents}
                 selectedNodeKey={selectedNodeKey}
                 pendingConnectionSourceKey={pendingConnectionSourceKey}
@@ -2094,7 +2103,7 @@ export function WorkflowBuilderPage({
                     <WorkflowNodePalette
                       className="flex-1 overflow-y-auto rounded-none border-0 bg-transparent shadow-none"
                       locale={locale}
-                      builtinAgents={builtinAgents}
+                      builtinAgents={selectableBuiltinAgents}
                       customAgents={customAgents}
                       onAddNode={(type) => addNode(type)}
                       onAddBuiltinAgent={(builtinAgentId) => addBuiltinAgentNode(builtinAgentId)}

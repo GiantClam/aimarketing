@@ -14,8 +14,12 @@ import {
   reserveFeatureCredits,
   type BillingReservation,
 } from "@/lib/billing/runtime"
+import { appendAiEntryMessage, type AiEntryConversationScope } from "@/lib/ai-entry/repository"
+import { buildPptToolResultMessage } from "@/lib/ai-entry/ppt-tool-result-message"
+import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { buildDifyMemoryBridge, mergeDifyInputsWithMemoryBridge } from "@/lib/dify/memory-bridge"
+import { getUserAuthPayload } from "@/lib/enterprise/server"
 import {
   createImageAssistantSession,
   createImageAssistantMessage,
@@ -134,7 +138,22 @@ type AdvisorTurnTaskPayload = {
   enterpriseCode?: string | null
 }
 
-export type AssistantTaskPayload = WriterTurnTaskPayload | ImageTurnTaskPayload | AdvisorTurnTaskPayload
+type AiEntryPptPreviewTaskPayload = {
+  kind: "ai_entry_ppt_preview"
+  userId: number
+  conversationId: string
+  conversationScope: AiEntryConversationScope
+  agentId: string
+  toolCallId: string
+  input: Record<string, unknown>
+  isZh?: boolean
+}
+
+export type AssistantTaskPayload =
+  | WriterTurnTaskPayload
+  | ImageTurnTaskPayload
+  | AdvisorTurnTaskPayload
+  | AiEntryPptPreviewTaskPayload
 
 type ParsedTaskRow = Awaited<ReturnType<typeof getTaskById>> & {
   parsedPayload?: AssistantTaskPayload | null
@@ -176,6 +195,12 @@ const WRITER_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_TASK_TIMEOUT_MS
 const WRITER_MEMORY_EXTRACT_TIMEOUT_MS = parseTimeoutMs(process.env.WRITER_MEMORY_EXTRACT_TIMEOUT_MS, 2_000, 100, 10_000)
 const IMAGE_ASSISTANT_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.IMAGE_ASSISTANT_TASK_TIMEOUT_MS, 300_000)
 const ADVISOR_TASK_TIMEOUT_MS = parseTimeoutMs(process.env.ADVISOR_TASK_TIMEOUT_MS, 240_000, 30_000, 300_000)
+const AI_ENTRY_PPT_PREVIEW_TASK_TIMEOUT_MS = parseTimeoutMs(
+  process.env.AI_ENTRY_PPT_PREVIEW_TASK_TIMEOUT_MS,
+  1_200_000,
+  30_000,
+  1_200_000,
+)
 const ASSISTANT_STALE_TASK_MS = parseTimeoutMs(process.env.ASSISTANT_STALE_TASK_MS, 45_000, 10_000, 600_000)
 const ADVISOR_RECOVERY_CHECK_MS = parseTimeoutMs(
   process.env.ADVISOR_RECOVERY_CHECK_MS,
@@ -1071,6 +1096,151 @@ async function handleExecutiveAdvisorSkillTurn(
   })
 }
 
+function buildAiEntryPptPreviewFailureMessage(errorMessage: string, isZh: boolean) {
+  if (isZh) {
+    return `可编辑 PPT 后台生成失败：${errorMessage || "未知错误"}`
+  }
+  return `Editable PPT background generation failed: ${errorMessage || "unknown error"}`
+}
+
+async function handleAiEntryPptPreviewTask(
+  taskId: number,
+  payload: AiEntryPptPreviewTaskPayload,
+) {
+  const progressEvents: AssistantTaskProgressEvent[] = []
+  const persistProgress = async (force = false) => {
+    if (!force && progressEvents.length === 0) return
+    await updateTaskStatus(taskId, {
+      status: "running",
+      result: {
+        conversation_id: payload.conversationId,
+        toolName: "preview_ppt_deck",
+        toolCallId: payload.toolCallId,
+        events: progressEvents,
+      },
+    })
+  }
+  const isZh = payload.isZh !== false
+
+  pushTaskProgressEvent(progressEvents, {
+    type: "background_task_queued",
+    label: isZh ? "后台任务已创建" : "Background task queued",
+    status: "running",
+    at: Date.now(),
+  })
+  await persistProgress(true)
+
+  pushTaskProgressEvent(progressEvents, {
+    type: "background_generation_running",
+    label: isZh ? "正在后台生成可编辑 PPT" : "Generating editable PPT in background",
+    status: "running",
+    at: Date.now(),
+  })
+  await persistProgress(true)
+  try {
+    const currentUser = await getUserAuthPayload(payload.userId)
+    if (!currentUser) {
+      throw new Error("ai_entry_user_not_found")
+    }
+
+    const previewTools = buildAiEntryPptTools({
+      currentUser: currentUser as never,
+      agentId: payload.agentId,
+    }) as Record<string, { execute?: (input: Record<string, unknown>) => Promise<Record<string, unknown>> }>
+    const previewTool = previewTools.preview_ppt_deck
+    if (typeof previewTool?.execute !== "function") {
+      throw new Error("ai_entry_ppt_preview_tool_unavailable")
+    }
+
+    const toolResult = await withTaskTimeout(
+      Promise.resolve(previewTool.execute(payload.input)),
+      AI_ENTRY_PPT_PREVIEW_TASK_TIMEOUT_MS,
+      "ai_entry_ppt_preview_timeout",
+    )
+    const toolErrorRecord =
+      toolResult && typeof toolResult === "object"
+        ? ((toolResult as { error?: unknown }).error as { message?: unknown } | undefined)
+        : undefined
+
+    const resultError =
+      toolResult?.ok === false
+        ? typeof toolErrorRecord?.message === "string" && toolErrorRecord.message.trim()
+          ? toolErrorRecord.message.trim()
+          : "ppt_preview_failed"
+        : null
+
+    const assistantMessage =
+      resultError
+        ? buildAiEntryPptPreviewFailureMessage(resultError, isZh)
+        : buildPptToolResultMessage({
+            toolName: "preview_ppt_deck",
+            result: toolResult,
+            isZh,
+          })?.trim() ||
+          (isZh ? "后台预览已完成。" : "Background preview completed.")
+
+    if (assistantMessage.trim()) {
+      const persisted = await appendAiEntryMessage({
+        userId: payload.userId,
+        conversationId: payload.conversationId,
+        role: "assistant",
+        content: assistantMessage,
+        scope: payload.conversationScope,
+        agentId: payload.agentId,
+      })
+      if (!persisted) {
+        throw new Error("ai_entry_conversation_not_found")
+      }
+    }
+
+    pushTaskProgressEvent(progressEvents, {
+      type: "background_generation_finished",
+      label: resultError
+        ? isZh
+          ? "后台生成失败"
+          : "Background generation failed"
+        : isZh
+          ? "后台生成完成"
+          : "Background generation completed",
+      detail: resultError || undefined,
+      status: resultError ? "failed" : "completed",
+      at: Date.now(),
+    })
+
+    await updateTaskStatus(taskId, {
+      status: resultError ? "failed" : "success",
+      result: {
+        conversation_id: payload.conversationId,
+        toolName: "preview_ppt_deck",
+        toolCallId: payload.toolCallId,
+        toolResult,
+        assistantMessage,
+        error: resultError,
+        events: progressEvents,
+      },
+    })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "ai_entry_ppt_preview_failed"
+    pushTaskProgressEvent(progressEvents, {
+      type: "background_generation_finished",
+      label: isZh ? "后台生成失败" : "Background generation failed",
+      detail: errorMessage,
+      status: "failed",
+      at: Date.now(),
+    })
+    await updateTaskStatus(taskId, {
+      status: "failed",
+      result: {
+        conversation_id: payload.conversationId,
+        toolName: "preview_ppt_deck",
+        toolCallId: payload.toolCallId,
+        error: errorMessage,
+        events: progressEvents,
+      },
+    })
+  }
+}
+
 async function handleAdvisorTurn(taskId: number, payload: AdvisorTurnTaskPayload) {
   const difyUser = buildDifyUserIdentity(payload.userEmail, payload.advisorType)
   const normalizedLeadHunterType = normalizeLeadHunterAdvisorType(payload.advisorType)
@@ -1275,6 +1445,11 @@ async function runTask(taskId: number) {
 
   if (task.parsedPayload.kind === "image_turn") {
     await handleImageTurn(taskId, task.parsedPayload)
+    return
+  }
+
+  if (task.parsedPayload.kind === "ai_entry_ppt_preview") {
+    await handleAiEntryPptPreviewTask(taskId, task.parsedPayload)
     return
   }
 

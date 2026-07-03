@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { getPptPreviewSessionDeck, storePptPreviewSessionDeck } from "./ppt-preview-session-store"
+import { getPptPreviewSessionDeck, getPptPreviewSessionRootDir, storePptPreviewSessionDeck } from "./ppt-preview-session-store"
 
 const tempRoot = path.join(os.tmpdir(), `aimarketing-ppt-preview-test-${Date.now()}`)
 
@@ -85,4 +85,8 @@ test("preview session store persists and reloads a frontend slides deck", async 
   assert.equal(reloadedDeck.previewEngine, "frontend-slides-html")
   assert.equal(reloadedDeck.variants[0]?.preview?.htmlDocument?.fileName, "html-preview-deck.html")
   assert.equal(reloadedDeck.variants[0]?.preview?.slides[0]?.mimeType, "image/svg+xml")
+})
+
+test("preview session store prefers an explicit root directory override", () => {
+  assert.equal(getPptPreviewSessionRootDir(), tempRoot)
 })

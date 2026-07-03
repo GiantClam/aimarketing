@@ -40,6 +40,13 @@ let sendMessagePlan: Array<
   | { kind: "error"; status?: number; body: string }
   | { kind: "success"; body: Record<string, unknown> }
 > = []
+let aiEntryPreviewToolResult: Record<string, unknown> = {
+  ok: true,
+  previewSessionId: "preview-session-1",
+  variants: [{ key: "variant-a", name: "Variant A" }],
+}
+let aiEntryPreviewAppendError: string | null = null
+let appendedAiEntryMessages: Array<{ conversationId: string | number | null | undefined; content: string }> = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "@/lib/services/tasks") {
@@ -102,6 +109,57 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       buildDifyMemoryBridge: async () => ({ agentType: null, memoryContext: null, soulCard: null, memoryAppliedIds: [] }),
       mergeDifyInputsWithMemoryBridge: (inputs: Record<string, unknown>) => inputs,
+    }
+  }
+
+  if (request === "@/lib/ai-entry/repository") {
+    return {
+      appendAiEntryMessage: async (input: {
+        conversationId: string | number | null | undefined
+        content: string
+      }) => {
+        if (aiEntryPreviewAppendError) {
+          throw new Error(aiEntryPreviewAppendError)
+        }
+        appendedAiEntryMessages.push({
+          conversationId: input.conversationId,
+          content: input.content,
+        })
+        return { id: String(input.conversationId || "conv") }
+      },
+    }
+  }
+
+  if (request === "@/lib/ai-entry/ppt-tool-result-message") {
+    return {
+      buildPptToolResultMessage: () => "PPT preview generated.",
+    }
+  }
+
+  if (request === "@/lib/ai-entry/ppt-tools") {
+    return {
+      buildAiEntryPptTools: () => ({
+        preview_ppt_deck: {
+          execute: async () => aiEntryPreviewToolResult,
+        },
+      }),
+    }
+  }
+
+  if (request === "@/lib/enterprise/server") {
+    return {
+      getUserAuthPayload: async (userId: number) => ({
+        id: userId,
+        email: "lingchuang.admin@example.com",
+        name: "Test User",
+        isDemo: false,
+        enterpriseId: 88,
+        enterpriseCode: "ent-88",
+        enterpriseName: "Test Enterprise",
+        enterpriseRole: "admin",
+        enterpriseStatus: "active",
+        permissions: {},
+      }),
     }
   }
 
@@ -215,6 +273,45 @@ function buildAdvisorTask(input: {
   }
 }
 
+function buildAiEntryPptPreviewTask(input: {
+  id: number
+  status: "pending" | "running" | "success" | "failed"
+  updatedAtMsAgo: number
+}) {
+  const now = Date.now()
+  return {
+    id: input.id,
+    userId: 60,
+    connectionId: null,
+    workflowName: "ai_entry_ppt_preview",
+    webhookPath: "assistant/async",
+    executionId: null,
+    payload: JSON.stringify({
+      kind: "ai_entry_ppt_preview",
+      userId: 60,
+      conversationId: "chat-conv-1",
+      conversationScope: "consulting",
+      agentId: "executive-ppt",
+      toolCallId: "preview_ppt_deck",
+      input: {
+        prompt: "请生成董事会汇报 PPT",
+        audience: "管理层",
+        goal: "经营同步",
+      },
+      isZh: true,
+    }),
+    result: null,
+    status: input.status,
+    workerId: input.status === "running" ? "w-1" : null,
+    attempts: 1,
+    startedAt: new Date(now - input.updatedAtMsAgo - 1_000),
+    leaseExpiresAt: null,
+    relatedStorageKey: null,
+    createdAt: new Date(now - input.updatedAtMsAgo - 2_000),
+    updatedAt: new Date(now - input.updatedAtMsAgo),
+  } satisfies TaskRow
+}
+
 test.before(async () => {
   ;({ runAssistantTaskRecoveryPass } = await import("./assistant-async"))
 })
@@ -227,6 +324,13 @@ test.beforeEach(() => {
   advisorConfigEnabled = true
   sendMessageCallCount = 0
   sendMessagePlan = []
+  aiEntryPreviewToolResult = {
+    ok: true,
+    previewSessionId: "preview-session-1",
+    variants: [{ key: "variant-a", name: "Variant A" }],
+  }
+  aiEntryPreviewAppendError = null
+  appendedAiEntryMessages = []
 })
 
 test.after(() => {
@@ -325,4 +429,63 @@ test("retries transient upstream SSL errors and succeeds without marking task fa
   assert.ok(terminal)
   assert.equal((terminal?.data.result as { conversation_id?: string } | undefined)?.conversation_id, "c-retry-1")
   assert.equal((terminal?.data.result as { answer?: string } | undefined)?.answer, "retried answer")
+})
+
+test("completes ai-entry background ppt preview only after assistant message persistence succeeds", async () => {
+  const taskId = 1101
+  tasksById.set(
+    taskId,
+    buildAiEntryPptPreviewTask({
+      id: taskId,
+      status: "pending",
+      updatedAtMsAgo: 1_000,
+    }),
+  )
+  claimResultById.set(taskId, { id: taskId })
+
+  const result = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(result.inspected, 1)
+  assert.equal(result.failed, 0)
+  assert.equal(appendedAiEntryMessages.length, 1)
+  assert.equal(appendedAiEntryMessages[0]?.conversationId, "chat-conv-1")
+  assert.equal(appendedAiEntryMessages[0]?.content, "PPT preview generated.")
+  const terminal = updateStatusCalls.find((entry) => entry.taskId === taskId && entry.data.status === "success")
+  assert.ok(terminal)
+  assert.equal((terminal?.data.result as { conversation_id?: string } | undefined)?.conversation_id, "chat-conv-1")
+})
+
+test("fails ai-entry background ppt preview when assistant message persistence fails", async () => {
+  const taskId = 1102
+  tasksById.set(
+    taskId,
+    buildAiEntryPptPreviewTask({
+      id: taskId,
+      status: "pending",
+      updatedAtMsAgo: 1_000,
+    }),
+  )
+  claimResultById.set(taskId, { id: taskId })
+  aiEntryPreviewAppendError = "db_write_failed"
+
+  const result = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(result.inspected, 1)
+  assert.equal(result.failed, 0)
+  assert.equal(appendedAiEntryMessages.length, 0)
+  const terminal = updateStatusCalls.find((entry) => entry.taskId === taskId && entry.data.status === "failed")
+  assert.ok(terminal)
+  assert.equal((terminal?.data.result as { error?: string } | undefined)?.error, "db_write_failed")
+  assert.equal(
+    ((terminal?.data.result as { events?: Array<{ type?: string; status?: string }> } | undefined)?.events || []).at(-1)?.status,
+    "failed",
+  )
 })

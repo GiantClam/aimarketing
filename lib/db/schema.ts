@@ -270,6 +270,7 @@ export const conversations = pgTable(withPrefix("conversations"), {
     .references(() => users.id),
   title: varchar("title", { length: 255 }).notNull(),
   currentModelId: varchar("current_model_id", { length: 255 }),
+  metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
   createdAt: timestamp("created_at").defaultNow(),
 })
 

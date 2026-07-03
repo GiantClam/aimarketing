@@ -17,6 +17,7 @@ import {
 } from "@/lib/platform/model-governance"
 
 function getProviderLabel(providerId: string) {
+  if (providerId === "deepseek") return "DeepSeek"
   if (providerId === "pptoken") return "PPTOKEN"
   if (providerId === "openrouter") return "OpenRouter"
   if (providerId === "aiberm") return "Aiberm"

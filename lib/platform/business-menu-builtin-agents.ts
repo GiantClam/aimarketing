@@ -46,6 +46,14 @@ const EXECUTIVE_BUSINESS_MENU_BINDINGS: Record<string, ExecutiveBusinessMenuBind
       en: ["Turn this business brief into a proposal structure that can be used to generate a PPT deck."],
     },
   },
+  "executive-presentation-ppt": {
+    businessSlug: "brand-creative",
+    artifactKinds: ["brief", "asset", "report"],
+    samplePrompts: {
+      zh: ["根据这个发布 brief，给我一版适合现场演讲展示的演示稿结构与讲述节奏。"],
+      en: ["Turn this launch brief into a presentation deck structure and speaking flow optimized for live delivery."],
+    },
+  },
   "executive-sales-strategy": {
     businessSlug: "sales-close",
     artifactKinds: ["brief", "plan", "report"],

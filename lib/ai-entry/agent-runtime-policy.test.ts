@@ -59,3 +59,23 @@ test("runtime policy denies ppt-master for compliance-style agents", () => {
   assert.equal(policy.allowedToolIds.includes("export_ppt_deck"), false)
   assert.equal(policy.canCreateArtifacts, false)
 })
+
+test("runtime policy allows ppt tools for presentation ppt agent", () => {
+  const policy = resolveAiEntryAgentRuntimePolicy({
+    agentId: "executive-presentation-ppt",
+  })
+
+  assert.ok(policy.allowedSkillIds.includes("ppt-master"))
+  assert.ok(policy.allowedToolIds.includes("preview_ppt_deck"))
+  assert.ok(policy.allowedToolIds.includes("export_ppt_deck"))
+  assert.equal(policy.canCreateArtifacts, true)
+  assert.equal(policy.maxRuntimeMs, 20 * 60 * 1000)
+})
+
+test("runtime policy keeps default runtime budget for non-ppt agents", () => {
+  const policy = resolveAiEntryAgentRuntimePolicy({
+    agentId: "general",
+  })
+
+  assert.equal(policy.maxRuntimeMs, 5 * 60 * 1000)
+})

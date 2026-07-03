@@ -11,6 +11,9 @@ export type AiEntryAgentRuntimePolicy = {
   approvalRequiredToolIds: string[]
 }
 
+const DEFAULT_AGENT_RUNTIME_MS = 5 * 60 * 1000
+const PPT_AGENT_RUNTIME_MS = 20 * 60 * 1000
+
 function getApprovedMcpServerIds() {
   return getAiEntryMcpServerDefinitions()
     .filter((server) => server.enabled)
@@ -24,7 +27,7 @@ function buildDefaultPolicy(agentId: string): AiEntryAgentRuntimePolicy {
     allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
     allowedMcpServerIds: getApprovedMcpServerIds(),
     maxToolCalls: 8,
-    maxRuntimeMs: 5 * 60 * 1000,
+    maxRuntimeMs: DEFAULT_AGENT_RUNTIME_MS,
     canCreateArtifacts: true,
     approvalRequiredToolIds: [],
   }
@@ -44,11 +47,15 @@ export function resolveAiEntryAgentRuntimePolicy(input: {
   const effectiveAgentId = input.agentId?.trim() || "general"
   const policy = buildDefaultPolicy(effectiveAgentId)
 
-  if (effectiveAgentId === "executive-ppt") {
+  if (
+    effectiveAgentId === "executive-ppt" ||
+    effectiveAgentId === "executive-presentation-ppt"
+  ) {
     return {
       ...policy,
       allowedSkillIds: ["ppt-master", "executive-consulting"],
       allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+      maxRuntimeMs: PPT_AGENT_RUNTIME_MS,
       canCreateArtifacts: true,
     }
   }

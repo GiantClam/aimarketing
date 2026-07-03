@@ -37,6 +37,7 @@ type GovernedTextProviderOption = {
 }
 
 const AI_ENTRY_PROVIDER_IDS = new Set<AiEntryProviderId>([
+  "deepseek",
   "pptoken",
   "openrouter",
   "aiberm",
@@ -108,6 +109,7 @@ function filterAssignedItems<T>(params: {
 }
 
 export function getRuntimeProviderLabel(providerId: string) {
+  if (providerId === "deepseek") return "DeepSeek"
   if (providerId === "pptoken") return "PPToken"
   if (providerId === "openrouter") return "OpenRouter"
   if (providerId === "aiberm") return "AIBERM"
@@ -122,6 +124,10 @@ export function getRuntimeProviderLabel(providerId: string) {
   if (providerId === "minimax-video") return "MiniMax Hailuo Video"
   if (providerId === "minimax-audio") return "MiniMax Audio"
   return providerId
+}
+
+function getPreferredTextProviderModelHint() {
+  return normalizeText(process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL) || normalizeText(process.env.AI_ENTRY_MODEL)
 }
 
 function buildCatalogModel(provider: GovernedTextProviderOption): AiEntryModelOption {
@@ -179,8 +185,14 @@ export function buildGovernedAiEntryModelCatalog(params: {
     params.requestedProviderId
       ? accessibleProviders.find((provider) => provider.providerId === params.requestedProviderId) || null
       : null
+  const preferredModelHint = getPreferredTextProviderModelHint()
+  const preferredProviderByModel =
+    preferredModelHint
+      ? accessibleProviders.find((provider) => normalizeText(provider.modelId) === preferredModelHint) || null
+      : null
   const selectedProvider =
     requestedProvider ||
+    preferredProviderByModel ||
     accessibleProviders.find((provider) => provider.active) ||
     accessibleProviders[0] ||
     null

@@ -1,11 +1,17 @@
 import assert from "node:assert/strict"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import test from "node:test"
 
+import { getPptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
 import {
   getPptMasterEngines,
   setPptMasterEngineLocalDepsForTests,
   setPptWorkerTransportForTests,
 } from "./ppt-master-engine"
+
+let testSessionRootDir: string | null = null
 
 const htmlDocument = {
   fileName: "ai-growth-deck-5p-long-table.html",
@@ -75,7 +81,18 @@ test.afterEach(() => {
   delete process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
   delete process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME
   delete process.env.PPT_WORKER_BASE_URL
+  delete process.env.LEAD_TOOLS_PPT_SESSION_ROOT_DIR
+  if (testSessionRootDir) {
+    fs.rmSync(testSessionRootDir, { recursive: true, force: true })
+    testSessionRootDir = null
+  }
 })
+
+function createSessionRootDir() {
+  testSessionRootDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimarketing-ppt-preview-"))
+  process.env.LEAD_TOOLS_PPT_SESSION_ROOT_DIR = testSessionRootDir
+  return testSessionRootDir
+}
 
 test("frontend-slides finalize returns html export plan", async () => {
   const engines = getPptMasterEngines()
@@ -127,6 +144,7 @@ test("frontend-slides download returns html artifact", async () => {
 })
 
 test("ppt-master engine uses remote worker for preview when configured", async () => {
+  createSessionRootDir()
   process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
   process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "ppt-master-agent"
   let seenAllowMockFallback: boolean | null = null
@@ -187,6 +205,9 @@ test("ppt-master engine uses remote worker for preview when configured", async (
   })
   assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
   assert.equal(seenModel, "gpt-5.4")
+  const storedDeck = await getPptPreviewSessionDeck("session-remote-1")
+  assert.equal(storedDeck.previewSessionId, "session-remote-1")
+  assert.equal(storedDeck.previewEngine, "ppt-master-project")
 })
 
 test("ppt-master engine auto-selects remote worker preview when worker base url is configured", async () => {
@@ -269,6 +290,7 @@ test("ppt-master engine uses remote worker for download when configured", async 
 })
 
 test("ppt-master engine keeps local preview fallback when remote transport is disabled", async () => {
+  createSessionRootDir()
   let remoteCalled = false
   process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
 
@@ -312,6 +334,9 @@ test("ppt-master engine keeps local preview fallback when remote transport is di
   assert.equal(remoteCalled, false)
   assert.equal(result.previewSessionId, "session-local-preview")
   assert.equal(result.meta.previewEngine, "ppt-master")
+  const storedDeck = await getPptPreviewSessionDeck("session-local-preview")
+  assert.equal(storedDeck.previewSessionId, "session-local-preview")
+  assert.equal(storedDeck.previewEngine, "ppt-master-project")
 })
 
 test("ppt-master engine honors request previewRuntime over the environment default", async () => {

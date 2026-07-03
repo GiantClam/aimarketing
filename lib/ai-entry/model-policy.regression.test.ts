@@ -7,7 +7,9 @@ import {
   AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS,
   AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT,
   AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT,
+  AI_ENTRY_PPT_AGENT_IDS,
   AI_ENTRY_SONNET_46_MODEL_HINT,
+  isAiEntryPptAgentId,
   isConsultingAdvisorEntryMode,
   pickConsultingModelId,
   pickPptAssistantDefaultModelId,
@@ -93,7 +95,8 @@ test("consulting entry mode detection and lock flag", () => {
     }),
     false,
   )
-  assert.deepEqual(AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS, ["executive-ppt"])
+  assert.deepEqual(AI_ENTRY_PPT_AGENT_IDS, ["executive-ppt", "executive-presentation-ppt"])
+  assert.deepEqual(AI_ENTRY_CONSULTING_MODEL_LOCK_EXEMPT_AGENT_IDS, ["executive-ppt", "executive-presentation-ppt"])
   assert.equal(
     shouldLockConsultingAdvisorModel({
       entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
@@ -101,6 +104,16 @@ test("consulting entry mode detection and lock flag", () => {
     }),
     false,
   )
+  assert.equal(
+    shouldLockConsultingAdvisorModel({
+      entryMode: AI_ENTRY_CONSULTING_ENTRY_MODE,
+      agentId: "executive-presentation-ppt",
+    }),
+    false,
+  )
+  assert.equal(isAiEntryPptAgentId("executive-ppt"), true)
+  assert.equal(isAiEntryPptAgentId("executive-presentation-ppt"), true)
+  assert.equal(isAiEntryPptAgentId("executive-brand"), false)
   assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "gpt-5.4")
   assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, "claude-sonnet-4.6")

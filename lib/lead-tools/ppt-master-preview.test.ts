@@ -19,7 +19,7 @@ test("renderPptPreviewDeckAssets materializes mock deck assets for every preview
   for (const variant of rendered.variants) {
     assert.ok(variant.preview)
     assert.equal(variant.preview?.format, "svg")
-    assert.equal(variant.preview?.themeId, variant.key)
+    assert.equal(variant.preview?.themeId, variant.styleKey)
     assert.equal(variant.preview?.slides.length, variant.slides.length)
     assert.match(variant.preview?.cover.dataUrl ?? "", /^data:image\/svg\+xml;base64,/)
   }

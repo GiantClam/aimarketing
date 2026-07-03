@@ -13,6 +13,7 @@ import type { LeadToolPptPreviewRuntime } from "@/lib/lead-tools/ppt-engines/pre
 import { pptMasterPreviewRuntime } from "@/lib/lead-tools/ppt-engines/ppt-master-preview-runtime"
 import { frontendSlidesPreviewRuntime } from "@/lib/lead-tools/ppt-engines/frontend-slides-preview-runtime"
 import { exportPptMasterSessionVariant, getPptMasterSessionVariant } from "@/lib/lead-tools/ppt-master-runtime"
+import { storePptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
 import {
   getLeadToolPptExecutionTransport,
   getLeadToolPptExportRuntime,
@@ -27,6 +28,7 @@ let getPptMasterSessionVariantImpl = getPptMasterSessionVariant
 let exportPptMasterSessionVariantImpl = exportPptMasterSessionVariant
 let generateLeadToolPptStoryDeckImpl = generateLeadToolPptStoryDeck
 let getPreviewRuntimeImpl = getPreviewRuntime
+let storePptPreviewSessionDeckImpl = storePptPreviewSessionDeck
 
 function shouldUseRemoteWorkerTransport() {
   return getLeadToolPptExecutionTransport() === "remote-worker"
@@ -80,11 +82,16 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
         images: request.images,
         allowMockFallback: options.allowMockFallback,
       })
+      const remoteDeck = remote.deck as LeadToolPptPreviewResponse["deck"]
+      const storedDeck = await storePptPreviewSessionDeckImpl({
+        ...remoteDeck,
+        previewSessionId: remote.previewSessionId,
+      })
 
       return {
-        previewSessionId: remote.previewSessionId,
+        previewSessionId: storedDeck.previewSessionId!,
         generatedAt: remote.generatedAt,
-        deck: remote.deck as LeadToolPptPreviewResponse["deck"],
+        deck: storedDeck as LeadToolPptPreviewResponse["deck"],
         meta: {
           previewEngine: "ppt-master",
           exportEngine: "ppt-master",
@@ -108,23 +115,24 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
 
       deck = renderPptPreviewDeckAssets(buildMockPptPreview(request))
     }
+    const storedDeck = await storePptPreviewSessionDeckImpl(deck)
 
     return {
-      previewSessionId: deck.previewSessionId ?? randomUUID(),
-      generatedAt: deck.generatedAt,
-      deck,
+      previewSessionId: storedDeck.previewSessionId!,
+      generatedAt: storedDeck.generatedAt,
+      deck: storedDeck,
       meta: {
         previewEngine: previewMeta.previewEngine,
         exportEngine: "ppt-master",
         previewRuntime: runtime.id,
         exportRuntime: getLeadToolPptExportRuntime("ai-ppt-preview") as "ppt-master-agent",
         mode:
-          deck.previewEngine === "ppt-master-svg"
+          storedDeck.previewEngine === "ppt-master-svg"
             ? "ppt-master-svg-preview"
-            : deck.previewEngine === "ppt-master-project"
+            : storedDeck.previewEngine === "ppt-master-project"
               ? "ppt-master-project-preview"
               : previewMeta.mode,
-        mockFallback: deck.source === "mock",
+        mockFallback: storedDeck.source === "mock",
       },
     } satisfies LeadToolPptPreviewResponse
   },
@@ -262,6 +270,7 @@ export function setPptMasterEngineLocalDepsForTests(
         getSessionVariant?: typeof getPptMasterSessionVariant
         exportSessionVariant?: typeof exportPptMasterSessionVariant
         generateStoryDeck?: typeof generateLeadToolPptStoryDeck
+        storePreviewSessionDeck?: typeof storePptPreviewSessionDeck
       }
     | null,
 ) {
@@ -269,4 +278,5 @@ export function setPptMasterEngineLocalDepsForTests(
   getPptMasterSessionVariantImpl = deps?.getSessionVariant ?? getPptMasterSessionVariant
   exportPptMasterSessionVariantImpl = deps?.exportSessionVariant ?? exportPptMasterSessionVariant
   generateLeadToolPptStoryDeckImpl = deps?.generateStoryDeck ?? generateLeadToolPptStoryDeck
+  storePptPreviewSessionDeckImpl = deps?.storePreviewSessionDeck ?? storePptPreviewSessionDeck
 }

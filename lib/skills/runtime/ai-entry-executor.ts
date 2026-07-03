@@ -2,6 +2,7 @@ import {
   generateText,
   streamText,
   type CoreMessage,
+  type ToolChoice,
   type ToolSet,
 } from "ai"
 
@@ -161,6 +162,7 @@ export async function runAiEntryConsultingBlocking(params: {
   systemPrompt: string
   messages: CoreMessage[]
   selectedTools: ToolSet
+  toolChoice?: ToolChoice<ToolSet>
   stopWhen: unknown
   providerOptions?: ProviderOptions
   onProviderAttempt?: (info: ProviderRunInfo) => void
@@ -189,6 +191,7 @@ export async function runAiEntryConsultingBlocking(params: {
             ...(providerInput.system ? { system: providerInput.system } : {}),
             messages: providerInput.messages,
             tools: params.selectedTools,
+            ...(params.toolChoice ? { toolChoice: params.toolChoice } : {}),
             stopWhen: params.stopWhen as any,
           })
           const resolvedText = (result.text || "").trim()
@@ -214,6 +217,7 @@ export async function runAiEntryConsultingStreaming(params: {
   systemPrompt: string
   messages: CoreMessage[]
   selectedTools: ToolSet
+  toolChoice?: ToolChoice<ToolSet>
   stopWhen: unknown
   providerOptions?: ProviderOptions
   onProviderAttempt?: (info: ProviderRunInfo) => void
@@ -256,11 +260,13 @@ export async function runAiEntryConsultingStreaming(params: {
             ...(providerInput.system ? { system: providerInput.system } : {}),
             messages: providerInput.messages,
             tools: params.selectedTools,
+            ...(params.toolChoice ? { toolChoice: params.toolChoice } : {}),
             stopWhen: params.stopWhen as any,
           })
 
           let accumulated = ""
           let hasStreamOutput = false
+          let hasToolSignal = false
           try {
             for await (const part of result.fullStream) {
               const streamPart = part as FullStreamPart
@@ -295,6 +301,7 @@ export async function runAiEntryConsultingStreaming(params: {
               }
 
               if (eventType === "tool-result") {
+                hasToolSignal = true
                 params.onToolResult?.({
                   toolName: streamPart.toolName || "",
                   toolCallId: streamPart.toolCallId || "",
@@ -318,7 +325,7 @@ export async function runAiEntryConsultingStreaming(params: {
             }
 
             const resolvedText = accumulated.trim()
-            if (!resolvedText) {
+            if (!resolvedText && !hasToolSignal) {
               throw toAiEntryExecutionError(new Error(AI_ENTRY_EMPTY_RESPONSE_ERROR), true)
             }
 

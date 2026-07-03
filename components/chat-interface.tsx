@@ -285,7 +285,7 @@ export function ChatInterface() {
   }
 
   const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === "Enter" && !event.shiftKey && !showKnowledgeMenu) {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !showKnowledgeMenu) {
       event.preventDefault()
       void handleSend()
     }
@@ -442,7 +442,7 @@ export function ChatInterface() {
                 ref={inputRef}
                 value={input}
                 onChange={handleInputChange}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyPress}
                 placeholder={t("请输入你的营销需求...", "Enter your marketing request...")}
                 className="pr-12 font-manrope"
                 disabled={isLoading}

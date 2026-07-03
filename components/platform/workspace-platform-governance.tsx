@@ -69,6 +69,7 @@ function getCustomerRuntimeStatusLabel(
 }
 
 function getRuntimeProviderLabel(provider: PlatformGovernanceSnapshot["runtime"]["providers"][number]) {
+  if (provider.id === "deepseek") return "DeepSeek"
   if (provider.id === "pptoken") return "PPToken"
   if (provider.id === "openrouter") return "OpenRouter"
   if (provider.id === "aiberm") return "AIBERM"

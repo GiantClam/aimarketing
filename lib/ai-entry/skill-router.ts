@@ -1,4 +1,5 @@
 import { getAiEntrySkillById, isAiEntrySkillId, type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
+import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 
 const PPT_INTENT_PATTERN =
   /(?:\bpptx?\b|\bdeck\b|\bslide(?:s| deck)?\b|\bpresentation\b|\bpitch deck\b|\bproposal deck\b|演示文稿|幻灯片|汇报(?:材料|PPT)?|路演|提案PPT|方案汇报)/iu
@@ -41,7 +42,7 @@ export function routeAiEntrySkills(input: {
     }
   }
 
-  if (input.requestedAgentId === "executive-ppt" && !selected.has("ppt-master")) {
+  if (isAiEntryPptAgentId(input.requestedAgentId) && !selected.has("ppt-master")) {
     selected.add("ppt-master")
     reasons.push({ skillId: "ppt-master", reason: "agent_default" })
   }

@@ -4,6 +4,9 @@ import test from "node:test"
 import { getAiEntryModelCatalog } from "./model-catalog"
 
 const PROVIDER_ENV_KEYS = [
+  "AI_ENTRY_DEEPSEEK_API_KEY",
+  "AI_ENTRY_DEEPSEEK_BASE_URL",
+  "AI_ENTRY_DEEPSEEK_MODEL",
   "AI_ENTRY_PPTOKEN_API_KEY",
   "AI_ENTRY_PPTOKEN_BASE_URL",
   "AI_ENTRY_PPTOKEN_MODEL",
@@ -19,6 +22,9 @@ const PROVIDER_ENV_KEYS = [
   "PPTOKEN_API_KEY",
   "PPTOKEN_BASE_URL",
   "PPTOKEN_MODEL",
+  "DEEPSEEK_API_KEY",
+  "DEEPSEEK_BASE_URL",
+  "DEEPSEEK_MODEL",
   "AIBERM_API_KEY",
   "AIBERM_BASE_URL",
   "CRAZYROUTE_API_KEY",
@@ -26,6 +32,43 @@ const PROVIDER_ENV_KEYS = [
   "CRAZYROUTE_BASE_URL",
   "CRAZYROUTER_BASE_URL",
 ] as const
+
+test("model catalog keeps deepseek-v4-pro visible for the deepseek provider", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_DEEPSEEK_API_KEY: "deepseek-key",
+      AI_ENTRY_DEEPSEEK_BASE_URL: "https://api.deepseek.example",
+      AI_ENTRY_DEEPSEEK_MODEL: "deepseek-v4-pro",
+    },
+    async () => {
+      const originalFetch = globalThis.fetch
+      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.startsWith("https://api.deepseek.example/models")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{ id: "deepseek-v4-pro", owned_by: "deepseek" }],
+            }),
+          } as Response
+        }
+
+        throw new Error(`unexpected url: ${url}`)
+      }) as unknown as typeof fetch
+
+      try {
+        const catalog = await getAiEntryModelCatalog({ providerId: "deepseek" })
+        assert.equal(catalog.providerId, "deepseek")
+        assert.equal(catalog.selectedProviderId, "deepseek")
+        assert.equal(catalog.selectedModelId, "deepseek-v4-pro")
+        assert.equal(catalog.models.some((item) => item.id === "deepseek-v4-pro"), true)
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    },
+  )
+})
 
 function resetCatalogState() {
   ;(globalThis as { __aiEntryModelCatalogCacheV2__?: unknown }).__aiEntryModelCatalogCacheV2__ =
@@ -928,4 +971,3 @@ test("model catalog falls back to configured default when aiberm and crazyroute 
     },
   )
 })
-

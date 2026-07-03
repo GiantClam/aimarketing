@@ -11,8 +11,12 @@ const originalLoad = nodeModule._load
 
 let previewShouldFail = false
 let exportShouldFail = false
+let previewFailureMessage = "ppt_master_repo_missing"
 let storedDeck: Record<string, unknown> | null = null
 let previewInputs: Array<Record<string, unknown>> = []
+let mockedDownloadDeckPreviewEngine: "ppt-master-project" | "frontend-slides-html" = "ppt-master-project"
+let mockedDownloadContentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+let mockedDownloadFileName = "ai-marketing-workbench.pptx"
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "server-only") {
@@ -30,7 +34,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       buildLeadToolPreview: async (_slug: string, input: Record<string, unknown>) => {
         previewInputs.push(input)
         if (previewShouldFail) {
-          throw new Error("ppt_master_repo_missing")
+          throw new Error(previewFailureMessage)
         }
         return {
           previewSessionId: "preview-session-1",
@@ -64,14 +68,14 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         return {
           artifact: {
             buffer: Buffer.from("pptx"),
-            contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            fileName: "ai-marketing-workbench.pptx",
+            contentType: mockedDownloadContentType,
+            fileName: mockedDownloadFileName,
           },
           deck: {
             title: "AI Marketing Workbench",
             pageCount: 5,
             resolvedPageCount: 5,
-            previewEngine: "ppt-master-project",
+            previewEngine: mockedDownloadDeckPreviewEngine,
           },
           variant: {
             key: "variant-a",
@@ -115,6 +119,47 @@ type TestToolSet = Record<
   }
 >
 
+const DEFAULT_PPT_BRIEF_INPUT = {
+  audience: "管理层汇报",
+  goal: "经营汇报与决策同步",
+  scenario: "marketing-campaign",
+  language: "zh-CN",
+} as const
+
+function buildStructuredPrompt(
+  prompt: string,
+  input: Partial<{
+    audience: string
+    goal: string
+    scenario: string
+    language: string
+  }> & {
+    pageCount?: number
+    tone?: string
+    mustInclude?: string[]
+  } = {},
+) {
+  const brief = {
+    ...DEFAULT_PPT_BRIEF_INPUT,
+    ...input,
+  }
+
+  return [
+    prompt,
+    "",
+    "Structured brief:",
+    `Audience: ${brief.audience}`,
+    `Goal: ${brief.goal}`,
+    `Scenario: ${brief.scenario}`,
+    `Language: ${brief.language}`,
+    typeof input.pageCount === "number" ? `Page count: ${input.pageCount}` : null,
+    input.tone ? `Tone: ${input.tone}` : null,
+    input.mustInclude?.length ? `Must include: ${input.mustInclude.join("; ")}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n")
+}
+
 test.before(async () => {
   const mod = await import("./ppt-tools")
   buildAiEntryPptTools = mod.buildAiEntryPptTools
@@ -123,7 +168,11 @@ test.before(async () => {
 test.beforeEach(() => {
   previewShouldFail = false
   exportShouldFail = false
+  previewFailureMessage = "ppt_master_repo_missing"
   previewInputs = []
+  mockedDownloadDeckPreviewEngine = "ppt-master-project"
+  mockedDownloadContentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  mockedDownloadFileName = "ai-marketing-workbench.pptx"
   storedDeck = {
     title: "AI Marketing Workbench",
     pageCount: 5,
@@ -155,6 +204,7 @@ test("ppt tools return preview metadata and export a downloadable PPTX artifact"
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "做一份 AI Marketing Workbench 的汇报 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
   })
   const exported = await tools.export_ppt_deck.execute({
     previewSessionId: "preview-session-1",
@@ -171,10 +221,11 @@ test("ppt tools return preview metadata and export a downloadable PPTX artifact"
   )
   assert.equal("artifact" in preview, false)
   assert.deepEqual(previewInputs[0], {
-    prompt: "做一份 AI Marketing Workbench 的汇报 PPT",
+    prompt: buildStructuredPrompt("做一份 AI Marketing Workbench 的汇报 PPT"),
     researchBrief: undefined,
     scenario: "marketing-campaign",
     language: "zh-CN",
+    previewRuntime: undefined,
     templateMode: "auto-4",
     templateId: undefined,
     narrativeAngle: undefined,
@@ -191,6 +242,45 @@ test("ppt tools return preview metadata and export a downloadable PPTX artifact"
   assert.equal(exported.downloadUrl, "/api/platform/artifacts/401/download?download=1")
 })
 
+test("editable ppt agent keeps template recommendations visible without auto-selecting a template", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划",
+    audience: "董事会",
+    goal: "管理层决策同步",
+    scenario: "sales-deck",
+    language: "zh-CN",
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(preview.selectedTemplateId, null)
+  assert.equal(Array.isArray(preview.recommendedTemplates), true)
+  assert.equal(preview.recommendedTemplates?.length, 4)
+  assert.deepEqual(previewInputs[0], {
+    prompt: buildStructuredPrompt("做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划", {
+      audience: "董事会",
+      goal: "管理层决策同步",
+      scenario: "sales-deck",
+      language: "zh-CN",
+    }),
+    researchBrief: undefined,
+    scenario: "sales-deck",
+    language: "zh-CN",
+    previewRuntime: "ppt-master-agent",
+    templateMode: "auto-4",
+    templateId: undefined,
+    narrativeAngle: undefined,
+    pageCount: undefined,
+  })
+})
+
 test("ppt tools forward researchBrief into preview generation", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
@@ -201,6 +291,7 @@ test("ppt tools forward researchBrief into preview generation", async () => {
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "做一份霍尔木兹海峡现状汇报 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
     researchBrief:
       "主题：霍尔木兹海峡现状。关键事实：保险成本上升，航运风险溢价扩大，买方库存前移。结论：运输成本和交付周期同步受压。",
   })
@@ -223,16 +314,18 @@ test("ppt tools pin a single narrative angle for single-template preview generat
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "做一份董事会摘要 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
     templateMode: "single-template",
     templateId: "broadside",
   })
 
   assert.equal(preview.ok, true)
   assert.deepEqual(previewInputs[0], {
-    prompt: "做一份董事会摘要 PPT",
+    prompt: buildStructuredPrompt("做一份董事会摘要 PPT"),
     researchBrief: undefined,
     scenario: "marketing-campaign",
     language: "zh-CN",
+    previewRuntime: undefined,
     templateMode: "single-template",
     templateId: "broadside",
     narrativeAngle: "executive-brief",
@@ -250,6 +343,7 @@ test("ppt tools forward structured researchBrief objects into preview generation
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "做一份霍尔木兹海峡现状汇报 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
     researchBrief: {
       topic: "霍尔木兹海峡现状",
       keyFacts: ["保险成本上升", "航运风险溢价扩大"],
@@ -281,6 +375,7 @@ test("ppt tools can preview and export a deck from the yusuan attachment markdow
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "基于附件文档生成一份屿算智能企业 AI 业务工具介绍 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
     researchBrief: yusuanAttachmentMarkdown,
     templateMode: "single-template",
     templateId: "broadside",
@@ -297,10 +392,11 @@ test("ppt tools can preview and export a deck from the yusuan attachment markdow
   assert.equal(preview.ok, true)
   assert.equal(exported.ok, true)
   assert.deepEqual(forwardedInput, {
-    prompt: "基于附件文档生成一份屿算智能企业 AI 业务工具介绍 PPT",
+    prompt: buildStructuredPrompt("基于附件文档生成一份屿算智能企业 AI 业务工具介绍 PPT"),
     researchBrief: yusuanAttachmentMarkdown,
     scenario: "marketing-campaign",
     language: "zh-CN",
+    previewRuntime: undefined,
     templateMode: "single-template",
     templateId: "broadside",
     narrativeAngle: "executive-brief",
@@ -326,10 +422,51 @@ test("ppt tools return a safe runtime error when ppt-master is unavailable", asy
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "做一份董事会 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
   })
 
   assert.equal(preview.ok, false)
   assert.equal(preview.error?.code, "ppt_master_runtime_unavailable")
+})
+
+test("ppt tools separate upstream quota failures from workspace billing failures", async () => {
+  previewShouldFail = true
+  previewFailureMessage = "Your account quota is insufficient. Please recharge. (request id: req_123)"
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份董事会 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+  })
+
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "upstream_provider_quota_exceeded")
+  assert.match(String(preview.error?.message || ""), /separate from workspace credits/i)
+})
+
+test("ppt tools explain unsupported remote worker models clearly", async () => {
+  previewShouldFail = true
+  previewFailureMessage = "invalid params, unknown model 'gpt-5.4' (2013)"
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份董事会 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+  })
+
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_runtime_model_unsupported")
+  assert.match(String(preview.error?.message || ""), /MiniMax-M3/)
 })
 
 test("ppt tools require a researchBrief for factual decks before preview", async () => {
@@ -342,6 +479,7 @@ test("ppt tools require a researchBrief for factual decks before preview", async
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "做一份霍尔木兹海峡现状和对全球能源运输影响的 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
   })
 
   assert.equal(preview.ok, false)
@@ -359,11 +497,59 @@ test("ppt tools allow factual decks to preview after a researchBrief is provided
 
   const preview = await tools.preview_ppt_deck.execute({
     prompt: "做一份霍尔木兹海峡现状和对全球能源运输影响的 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
     researchBrief: "关键事实：霍尔木兹海峡风险抬升导致保费和运输成本上升。",
   })
 
   assert.equal(preview.ok, true)
   assert.equal(previewInputs.length, 1)
+})
+
+test("presentation ppt agent pins frontend runtime and accepts html export artifacts", async () => {
+  mockedDownloadDeckPreviewEngine = "frontend-slides-html"
+  mockedDownloadContentType = "text/html; charset=utf-8"
+  mockedDownloadFileName = "ai-marketing-workbench.html"
+  storedDeck = {
+    title: "AI Marketing Workbench",
+    pageCount: 5,
+    resolvedPageCount: 5,
+    previewEngine: "frontend-slides-html",
+    variants: [
+      {
+        key: "variant-a",
+        name: "Variant A",
+        summary: "Summary",
+        styleKey: "ppt169_brutalist_ai_newspaper_2026",
+        slides: [{ title: "Cover" }, {}, {}, {}, {}],
+      },
+    ],
+  }
+
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-presentation-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份适合现场演讲的发布会 PPT",
+    audience: "发布会现场观众",
+    goal: "现场演讲与品牌传播",
+    scenario: "product-launch",
+    language: "zh-CN",
+  })
+  const exported = await tools.export_ppt_deck.execute({
+    previewSessionId: "preview-session-1",
+    selectedVariantKey: "variant-a",
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs[0]?.previewRuntime, "frontend-slides-agent")
+  assert.equal(exported.ok, true)
+  assert.equal(exported.fileName, "ai-marketing-workbench.html")
+  assert.equal(exported.contentType, "text/html; charset=utf-8")
 })
 
 test("ppt tools return an explainable error when the selected variant is missing", async () => {
@@ -382,4 +568,24 @@ test("ppt tools return an explainable error when the selected variant is missing
   assert.equal(exported.ok, false)
   assert.equal(exported.error?.code, "ppt_variant_not_found")
   assert.equal(Array.isArray(exported.availableVariants), true)
+})
+
+test("ppt tools return an explainable error when the preview session is missing", async () => {
+  storedDeck = null
+
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const exported = await tools.export_ppt_deck.execute({
+    previewSessionId: "preview-session-missing",
+    selectedVariantKey: "variant-a",
+  })
+
+  assert.equal(exported.ok, false)
+  assert.equal(exported.error?.code, "missing_preview_session")
+  assert.equal(exported.previewSessionId, "preview-session-missing")
 })

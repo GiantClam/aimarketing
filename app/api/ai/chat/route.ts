@@ -7,16 +7,18 @@ import {
 import { requireSessionUser } from "@/lib/auth/guards"
 import { isSessionDbUnavailableError } from "@/lib/auth/session"
 import {
-  appendAiEntryTurn,
+  appendAiEntryMessage,
   ensureAiEntryConversation,
   type AiEntryConversationScope,
 } from "@/lib/ai-entry/repository"
+import { resolveAiEntryConversationStateFromContents } from "@/lib/ai-entry/conversation-state"
 import { type AiEntryProviderId } from "@/lib/ai-entry/provider-routing"
 import {
   isAiEntryAgentId,
 } from "@/lib/ai-entry/agent-catalog"
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
+  isAiEntryPptAgentId,
   pickConsultingModelId,
   resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
@@ -51,6 +53,8 @@ import {
   type IncomingMessage,
 } from "@/lib/ai-entry/chat-attachments"
 import { buildAiEntryToolRegistry } from "@/lib/ai-entry/tool-registry"
+import { maybeAutoRunPptPreview } from "@/lib/ai-entry/ppt-auto-preview"
+import { buildPptBriefPromptSection, extractPptBriefState } from "@/lib/ai-entry/ppt-brief"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "@/lib/ai-entry/ppt-tool-result-message"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
@@ -70,11 +74,15 @@ import { getGovernedAiEntryModelCatalogForUser } from "@/lib/platform/model-gove
 import { getEnterpriseTextRuntimeProviderConfigsForUser } from "@/lib/platform/enterprise-runtime-config"
 
 export const runtime = "nodejs"
+export const maxDuration = 1200
+
+const AUTO_PPT_PREVIEW_TOOL_CALL_ID = "auto-preview-ppt"
 
 type ChatRequestBody = {
   messages?: IncomingMessage[]
   message?: string
   systemPrompt?: string
+  executionContext?: "chat" | "workflow"
   attachments?: IncomingAttachment[]
   conversationId?: string | null
   conversationScope?: "chat" | "consulting"
@@ -90,6 +98,7 @@ type ChatRequestBody = {
   }
   agentConfig?: {
     agentId?: string
+    agentName?: string
     entryMode?: string
   }
   skillConfig?: {
@@ -125,6 +134,10 @@ function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
 }
 
+function isClosedStreamControllerError(error: unknown) {
+  return error instanceof Error && /controller is already closed/i.test(error.message)
+}
+
 function modelSupportsImageInput(modelId: string | null | undefined) {
   const normalized = typeof modelId === "string" ? modelId.toLowerCase() : ""
   if (!normalized) return false
@@ -147,6 +160,10 @@ function parseEnabledSkillIds(input: unknown) {
   return input
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean)
+}
+
+function parseExecutionContext(input: ChatRequestBody["executionContext"]) {
+  return input === "workflow" ? "workflow" : "chat"
 }
 
 function extractErrorMessage(error: unknown) {
@@ -197,6 +214,50 @@ function inferAiEntryPreferredKnowledgeScopes(query: string): EnterpriseKnowledg
   }
 
   return undefined
+}
+
+type ToolFailureSummary = {
+  toolName: string
+  message: string
+}
+
+function buildToolFailureFallbackMessage(input: {
+  failures: ToolFailureSummary[]
+  isZh: boolean
+}) {
+  if (input.failures.length === 0) return ""
+
+  const grouped = new Map<string, { toolName: string; message: string; count: number }>()
+  for (const failure of input.failures) {
+    const toolName = failure.toolName.trim() || "tool"
+    const message = failure.message.trim() || "tool_execution_failed"
+    const key = `${toolName}::${message}`
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.count += 1
+      continue
+    }
+    grouped.set(key, { toolName, message, count: 1 })
+  }
+
+  const entries = [...grouped.values()]
+  if (entries.length === 0) return ""
+
+  if (input.isZh) {
+    const lines = ["工具执行失败，当前还没有拿到可用结果："]
+    for (const entry of entries.slice(0, 3)) {
+      lines.push(`- ${entry.toolName}: ${entry.message}${entry.count > 1 ? `（重复 ${entry.count} 次）` : ""}`)
+    }
+    lines.push("我不会继续用相同参数盲目重试；需要根据上面的失败原因调整后再继续。")
+    return lines.join("\n")
+  }
+
+  const lines = ["The tool run failed before a usable result was produced:"]
+  for (const entry of entries.slice(0, 3)) {
+    lines.push(`- ${entry.toolName}: ${entry.message}${entry.count > 1 ? ` (repeated ${entry.count} times)` : ""}`)
+  }
+  lines.push("I will not keep retrying the same parameters until the failure cause is addressed.")
+  return lines.join("\n")
 }
 
 type KnowledgeQueryProgress = {
@@ -553,9 +614,12 @@ function parseAgentConfig(input: ChatRequestBody["agentConfig"]) {
     agentId: consultingAgentId,
   })
   const consultingModelMode = resolveConsultingModelMode()
+  const rawAgentName =
+    typeof input?.agentName === "string" ? input.agentName.trim() : ""
 
   return {
     agentId: resolvedAgentId,
+    agentName: rawAgentName || null,
     lockModelToConsultingModel,
     consultingModelMode,
   }
@@ -607,20 +671,52 @@ function buildCustomAgentInstruction(agent: {
 async function persistAiEntryTurnSafe(params: {
   userId: number
   conversationId: string
-  userPrompt: string
   assistantMessage: string
-  knowledgeSource: "industry_kb" | "personal_kb"
   scope: AiEntryConversationScope
   agentId?: string | null
 }) {
-  if (!params.userPrompt.trim() || !params.assistantMessage.trim()) return
+  if (!params.assistantMessage.trim()) return
   try {
-    await appendAiEntryTurn(params)
+    await appendAiEntryMessage({
+      userId: params.userId,
+      conversationId: params.conversationId,
+      role: "assistant",
+      content: params.assistantMessage,
+      scope: params.scope,
+      agentId: params.agentId,
+    })
   } catch (error) {
     console.error("ai-entry.chat.persist.failed", {
       conversationId: params.conversationId,
       message: error instanceof Error ? error.message : String(error),
     })
+  }
+}
+
+async function persistAiEntryUserPromptSafe(params: {
+  userId: number
+  conversationId: string
+  userPrompt: string
+  scope: AiEntryConversationScope
+  agentId?: string | null
+}) {
+  if (!params.userPrompt.trim()) return false
+  try {
+    await appendAiEntryMessage({
+      userId: params.userId,
+      conversationId: params.conversationId,
+      role: "user",
+      content: params.userPrompt,
+      scope: params.scope,
+      agentId: params.agentId,
+    })
+    return true
+  } catch (error) {
+    console.error("ai-entry.chat.user-persist.failed", {
+      conversationId: params.conversationId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return false
   }
 }
 
@@ -706,8 +802,8 @@ export async function POST(request: NextRequest) {
     }
 
     const stream = body.stream !== false
-    const knowledgeSource =
-      body.knowledgeSource === "personal_kb" ? "personal_kb" : "industry_kb"
+    const executionContext = parseExecutionContext(body.executionContext)
+    let userPromptPersisted = false
 
     const enterpriseId = currentUser.enterpriseId
     const enterpriseName = normalizeEnterpriseName(currentUser.enterpriseName)
@@ -724,6 +820,16 @@ export async function POST(request: NextRequest) {
       enterpriseId > 0 &&
       latestUserPrompt.trim().length > 0
     let shouldQueryEnterpriseKnowledgeForRequest = false
+
+    if (persistenceEnabled) {
+      userPromptPersisted = await persistAiEntryUserPromptSafe({
+        userId: currentUser.id,
+        conversationId,
+        userPrompt: latestUserPrompt,
+        scope: conversationScope,
+        agentId: agentConfig.agentId,
+      })
+    }
 
     const loadEnterpriseKnowledge = async (
       notifyProgress?: (progress: KnowledgeQueryProgress) => void,
@@ -825,12 +931,34 @@ export async function POST(request: NextRequest) {
       canQueryEnterpriseKnowledge,
       effectiveAgentId,
     })
+    const normalizedMessageContents = normalizedMessages.map((message) => normalizeCoreMessageContent(message.content))
+    const pptBriefState = executionContext !== "workflow" && isAiEntryPptAgentId(effectiveAgentId)
+      ? extractPptBriefState({
+          userMessages: normalizedMessages
+            .filter((message) => message.role === "user")
+            .map((message) => normalizeCoreMessageContent(message.content))
+            .filter(Boolean),
+        })
+      : null
+    const conversationState = resolveAiEntryConversationStateFromContents(normalizedMessageContents)
+    if (pptBriefState) {
+      resolvedInstruction = [resolvedInstruction, buildPptBriefPromptSection(pptBriefState)]
+        .map((section) => section.trim())
+        .filter(Boolean)
+        .join("\n\n")
+    }
     const toolRegistry = await buildAiEntryToolRegistry({
       currentUser,
       policy: runtimePolicy,
       selectedSkills,
       skillsEnabled,
       enabledToolNames,
+      executionContext,
+      conversationScope,
+      pptBriefState,
+      conversationState,
+      latestUserPrompt,
+      messageContents: normalizedMessageContents,
       auditContext: {
         traceId,
         conversationId,
@@ -975,9 +1103,10 @@ export async function POST(request: NextRequest) {
       const execution = await runAiEntryConsultingBlocking({
         systemPrompt,
         messages: normalizedMessages,
-        selectedTools: effectiveSelectedTools,
-        stopWhen,
-        providerOptions,
+      selectedTools: effectiveSelectedTools,
+      toolChoice: toolRegistry.toolChoice,
+      stopWhen,
+      providerOptions,
         onProviderAttempt: (providerRun) => {
           console.info("ai-entry.chat.provider.attempt", {
             traceId,
@@ -1013,14 +1142,37 @@ export async function POST(request: NextRequest) {
         latestUserPrompt,
         forcedReplyLanguage,
       )
+      const blockingToolCalls =
+        execution.result.toolCalls?.map((call: { toolCallId: string; toolName: string }) => ({
+          toolCallId: call.toolCallId,
+          toolName: call.toolName,
+        })) ?? []
+      const autoPreview = await maybeAutoRunPptPreview({
+        agentId: effectiveAgentId,
+        executionContext,
+        latestUserPrompt,
+        assistantMessage: normalizedAssistantMessage,
+        briefState: pptBriefState,
+        previewAlreadyExecuted: blockingToolCalls.some((call) => call.toolName === "preview_ppt_deck"),
+        messageContents: normalizedMessageContents,
+        previewTool:
+          effectiveSelectedTools.preview_ppt_deck &&
+          typeof effectiveSelectedTools.preview_ppt_deck === "object"
+            ? (effectiveSelectedTools.preview_ppt_deck as { execute?: (input: unknown) => Promise<unknown> | unknown })
+            : null,
+        origin: requestOrigin,
+        isZh,
+      })
+      const resolvedAssistantMessage = autoPreview.assistantMessage
+      const resolvedBlockingToolCalls = autoPreview.autoPreviewExecuted
+        ? [...blockingToolCalls, { toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID, toolName: "preview_ppt_deck" }]
+        : blockingToolCalls
 
       if (persistenceEnabled) {
         await persistAiEntryTurnSafe({
           userId: currentUser.id,
           conversationId,
-          userPrompt: latestUserPrompt,
-          assistantMessage: normalizedAssistantMessage,
-          knowledgeSource,
+          assistantMessage: resolvedAssistantMessage,
           scope: conversationScope,
           agentId: agentConfig.agentId,
         })
@@ -1029,7 +1181,7 @@ export async function POST(request: NextRequest) {
       const usageTokens = getAiEntryUsageTokens(
         (execution.result as { usage?: unknown }).usage,
         normalizedMessages.map((message) => normalizeCoreMessageContent(message.content)).join("\n"),
-        normalizedAssistantMessage,
+        resolvedAssistantMessage,
       )
       const actualCost = estimateTextCredits({
         featureKey: "ai_entry_chat",
@@ -1068,7 +1220,7 @@ export async function POST(request: NextRequest) {
       })
 
       return NextResponse.json({
-        message: normalizedAssistantMessage,
+        message: resolvedAssistantMessage,
         conversationId,
         persisted: persistenceEnabled,
         provider: execution.providerId,
@@ -1076,24 +1228,34 @@ export async function POST(request: NextRequest) {
         agentId: effectiveAgentId,
         agentRoute: routeDecision,
         providerOrder: execution.providerOrder,
-        toolCalls: execution.result.toolCalls?.map((call: { toolCallId: string; toolName: string }) => ({
-          toolCallId: call.toolCallId,
-          toolName: call.toolName,
-        })),
+        toolCalls: resolvedBlockingToolCalls,
       })
     }
 
     const encoder = new TextEncoder()
     const responseStream = new ReadableStream({
       async start(controller) {
+        let streamClosed = false
         let knowledgeQueryStartedAtMs: number | null = null
         let knowledgeQueryCompletedAtMs: number | null = null
         let providerSelectedAtMs: number | null = null
         let firstTextDeltaAtMs: number | null = null
         let lastTextDeltaAtMs: number | null = null
+        let previewToolExecutedInTurn = false
         let streamedToolAppendix = ""
+        const toolFailures: ToolFailureSummary[] = []
         const sendEvent = (payload: Record<string, unknown>) => {
-          controller.enqueue(encoder.encode(buildSseEvent(payload)))
+          if (streamClosed) return false
+          try {
+            controller.enqueue(encoder.encode(buildSseEvent(payload)))
+            return true
+          } catch (error) {
+            if (isClosedStreamControllerError(error)) {
+              streamClosed = true
+              return false
+            }
+            throw error
+          }
         }
 
         try {
@@ -1143,6 +1305,7 @@ export async function POST(request: NextRequest) {
             systemPrompt,
             messages: normalizedMessages,
             selectedTools: effectiveSelectedTools,
+            toolChoice: toolRegistry.toolChoice,
             stopWhen,
             providerOptions,
             onProviderAttempt: (providerRun) => {
@@ -1223,6 +1386,9 @@ export async function POST(request: NextRequest) {
               })
             },
             onToolCall: (payload) => {
+              if (payload.toolName === "preview_ppt_deck") {
+                previewToolExecutedInTurn = true
+              }
               sendEvent({
                 event: "tool_call",
                 conversation_id: conversationId,
@@ -1243,6 +1409,9 @@ export async function POST(request: NextRequest) {
               })
             },
             onToolResult: (payload) => {
+              if (payload.toolName === "preview_ppt_deck") {
+                previewToolExecutedInTurn = true
+              }
               streamedToolAppendix = appendUniqueToolAppendix(
                 streamedToolAppendix,
                 buildPptToolResultMessage({
@@ -1258,6 +1427,18 @@ export async function POST(request: NextRequest) {
                 toolName: payload.toolName,
                 result: payload.result,
               })
+              if (isErrorResult) {
+                const toolFailureMessage =
+                  payload.result &&
+                  typeof payload.result === "object" &&
+                  typeof (payload.result as { error?: { message?: unknown } }).error?.message === "string"
+                    ? String((payload.result as { error?: { message?: unknown } }).error?.message).trim()
+                    : "tool_execution_failed"
+                toolFailures.push({
+                  toolName: payload.toolName,
+                  message: toolFailureMessage || "tool_execution_failed",
+                })
+              }
               sendEvent({
                 event: "tool_result",
                 conversation_id: conversationId,
@@ -1311,10 +1492,89 @@ export async function POST(request: NextRequest) {
             latestUserPrompt,
             forcedReplyLanguage,
           )
+          const fallbackToolFailureMessage =
+            normalizedStreamedAnswer.trim() || streamedToolAppendix.trim()
+              ? ""
+              : buildToolFailureFallbackMessage({
+                  failures: toolFailures,
+                  isZh,
+                })
           const sanitizedStreamedAnswer = streamedToolAppendix
             ? stripPptArtifactRelativeLinks(normalizedStreamedAnswer)
             : normalizedStreamedAnswer
-          const resolvedStreamedAnswerWithTools = `${sanitizedStreamedAnswer}${streamedToolAppendix}`.trim()
+          const provisionalStreamedAnswer = `${sanitizedStreamedAnswer}${streamedToolAppendix}${fallbackToolFailureMessage ? `\n\n${fallbackToolFailureMessage}` : ""}`.trim()
+          const autoPreview = await maybeAutoRunPptPreview({
+            agentId: effectiveAgentId,
+            executionContext,
+            latestUserPrompt,
+            assistantMessage: provisionalStreamedAnswer,
+            briefState: pptBriefState,
+            previewAlreadyExecuted: previewToolExecutedInTurn,
+            messageContents: normalizedMessageContents,
+            previewTool:
+              effectiveSelectedTools.preview_ppt_deck &&
+              typeof effectiveSelectedTools.preview_ppt_deck === "object"
+                ? (effectiveSelectedTools.preview_ppt_deck as { execute?: (input: unknown) => Promise<unknown> | unknown })
+                : null,
+            origin: requestOrigin,
+            isZh,
+          })
+          if (autoPreview.autoPreviewExecuted) {
+            previewToolExecutedInTurn = true
+            const autoPreviewValidation = getAiEntryValidationResult(autoPreview.previewResult)
+            sendEvent({
+              event: "tool_call",
+              conversation_id: conversationId,
+              data: {
+                toolName: "preview_ppt_deck",
+                toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID,
+                args: {
+                  prompt: latestUserPrompt,
+                },
+              },
+            })
+            sendEvent({
+              event: "tool_call_start",
+              conversation_id: conversationId,
+              data: {
+                toolName: "preview_ppt_deck",
+                toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID,
+                args: {
+                  prompt: latestUserPrompt,
+                },
+              },
+            })
+            sendEvent({
+              event: "tool_result",
+              conversation_id: conversationId,
+              data: {
+                toolName: "preview_ppt_deck",
+                toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID,
+                result: autoPreview.previewResult,
+              },
+            })
+            sendEvent({
+              event: isAiEntryToolErrorResult(autoPreview.previewResult) ? "tool_call_error" : "tool_call_done",
+              conversation_id: conversationId,
+              data: {
+                toolName: "preview_ppt_deck",
+                toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID,
+                result: autoPreview.previewResult,
+              },
+            })
+            if (autoPreviewValidation) {
+              sendEvent({
+                event: "validation_result",
+                conversation_id: conversationId,
+                data: {
+                  toolName: "preview_ppt_deck",
+                  toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID,
+                  validation: autoPreviewValidation,
+                },
+              })
+            }
+          }
+          const resolvedStreamedAnswerWithTools = autoPreview.assistantMessage
           sendEvent({
             event: "reasoning_end",
             conversation_id: conversationId,
@@ -1334,9 +1594,7 @@ export async function POST(request: NextRequest) {
             await persistAiEntryTurnSafe({
               userId: currentUser.id,
               conversationId,
-              userPrompt: latestUserPrompt,
               assistantMessage: resolvedStreamedAnswerWithTools,
-              knowledgeSource,
               scope: conversationScope,
               agentId: agentConfig.agentId,
             })
@@ -1399,6 +1657,16 @@ export async function POST(request: NextRequest) {
                 : firstTextDeltaAtMs - providerSelectedAtMs,
           })
         } catch (error) {
+          const closedStream = isClosedStreamControllerError(error)
+          if (persistenceEnabled && userPromptPersisted && !closedStream) {
+            await persistAiEntryTurnSafe({
+              userId: currentUser.id,
+              conversationId,
+              assistantMessage: extractErrorMessage(error),
+              scope: conversationScope,
+              agentId: agentConfig.agentId,
+            })
+          }
           if (aiEntryCreditReservation && !aiEntryCreditFinalized) {
             await releaseReservedCredits({
               reservation: aiEntryCreditReservation,
@@ -1419,16 +1687,31 @@ export async function POST(request: NextRequest) {
             message: extractErrorMessage(error),
             elapsedMs: Date.now() - startedAtMs,
           })
-          sendEvent({
-            event: "error",
-            conversation_id: conversationId,
-            error: extractErrorMessage(error),
-          })
+          if (!closedStream) {
+            sendEvent({
+              event: "error",
+              conversation_id: conversationId,
+              error: extractErrorMessage(error),
+            })
+          }
         } finally {
           try {
             if (closeTools) await closeTools()
           } finally {
-            controller.close()
+            if (!streamClosed) {
+              streamClosed = true
+              try {
+                controller.close()
+              } catch (error) {
+                if (!isClosedStreamControllerError(error)) {
+                  console.warn("ai-entry.chat.stream_close_failed", {
+                    traceId,
+                    conversationId,
+                    message: extractErrorMessage(error),
+                  })
+                }
+              }
+            }
           }
         }
       },

@@ -13,15 +13,19 @@ type StoredPreviewSession = {
   deck: PptPreviewDeck
 }
 
-function getSessionRootDir() {
-  return (
-    process.env.LEAD_TOOLS_PPT_SESSION_ROOT_DIR ||
-    path.join(os.tmpdir(), "aimarketing-ppt-preview-sessions")
-  )
+export function getPptPreviewSessionRootDir() {
+  const explicitRoot = process.env.LEAD_TOOLS_PPT_SESSION_ROOT_DIR?.trim()
+  if (explicitRoot) return explicitRoot
+
+  if (process.env.NODE_ENV !== "production") {
+    return path.join(process.cwd(), ".cache", "ppt-preview-sessions")
+  }
+
+  return path.join(os.tmpdir(), "aimarketing-ppt-preview-sessions")
 }
 
 function getSessionDir(sessionId: string) {
-  return path.join(getSessionRootDir(), sessionId)
+  return path.join(getPptPreviewSessionRootDir(), sessionId)
 }
 
 function getManifestPath(sessionId: string) {
@@ -29,7 +33,7 @@ function getManifestPath(sessionId: string) {
 }
 
 async function cleanupExpiredSessions() {
-  const rootDir = getSessionRootDir()
+  const rootDir = getPptPreviewSessionRootDir()
 
   try {
     const entries = await fs.readdir(rootDir, { withFileTypes: true })
@@ -76,7 +80,14 @@ export async function storePptPreviewSessionDeck(deck: PptPreviewDeck) {
 }
 
 export async function getPptPreviewSessionDeck(sessionId: string) {
-  const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
-  const payload = JSON.parse(manifest) as StoredPreviewSession
-  return payload.deck
+  try {
+    const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
+    const payload = JSON.parse(manifest) as StoredPreviewSession
+    return payload.deck
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+      throw new Error(`missing_preview_session:${sessionId}`)
+    }
+    throw error
+  }
 }

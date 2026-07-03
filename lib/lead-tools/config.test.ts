@@ -124,6 +124,30 @@ test("ppt worker config reads base url token and runtime profile", () => {
   }
 })
 
+test("ppt worker runtime profile infers railway-linux from a railway worker url", () => {
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousProfile = process.env.PPT_WORKER_RUNTIME_PROFILE
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-master-worker-production.up.railway.app"
+    delete process.env.PPT_WORKER_RUNTIME_PROFILE
+
+    assert.equal(getPptWorkerRuntimeProfile(), "railway-linux")
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+
+    if (previousProfile === undefined) {
+      delete process.env.PPT_WORKER_RUNTIME_PROFILE
+    } else {
+      process.env.PPT_WORKER_RUNTIME_PROFILE = previousProfile
+    }
+  }
+})
+
 test("ppt worker base url upgrades preview runtime and transport defaults", () => {
   const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
   const previousTransport = process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT

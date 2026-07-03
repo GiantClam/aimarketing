@@ -1,5 +1,11 @@
 import { and, desc, eq, lt, sql } from "drizzle-orm"
 
+import {
+  applyAiEntryConversationStateDelta,
+  createEmptyAiEntryConversationState,
+  mergeAiEntryConversationState,
+  type AiEntryConversationState,
+} from "@/lib/ai-entry/conversation-state"
 import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
 import { conversations, messages } from "@/lib/db/schema"
@@ -25,6 +31,7 @@ type AiEntryConversationRow = {
   id: number
   title: string
   currentModelId?: string | null
+  metadata?: Record<string, unknown> | null
   createdAt?: Date | string | number | null
   latestMessageCreatedAt?: Date | string | number | null
 }
@@ -67,6 +74,11 @@ export type AiEntryMessagePage = {
   limit: number
   has_more: boolean
   conversation: AiEntryConversationSummary | null
+  conversation_state: AiEntryConversationState
+}
+
+function normalizeConversationMetadata(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null
 }
 
 const isRetryableAiEntryDbError = createRetryableDbErrorMatcher()
@@ -212,6 +224,26 @@ function buildConversationTitleFromPrompt(
   )
 }
 
+export function resolveAiEntryConversationTitleUpdate(input: {
+  currentTitle: string
+  userPrompt: string
+  existingMessageCount: number
+  scope: AiEntryConversationScope
+  agentId?: string | null
+}) {
+  const shouldRetitle =
+    input.existingMessageCount === 0 ||
+    isGenericConversationTitle(input.currentTitle)
+
+  if (!shouldRetitle) return null
+
+  return buildConversationTitleFromPrompt(
+    input.userPrompt,
+    input.scope,
+    input.agentId,
+  )
+}
+
 function isGenericConversationTitle(title: string) {
   const normalized = stripTitlePrefix(title).toLowerCase()
   return (
@@ -275,6 +307,7 @@ export async function getAiEntryConversation(
         id: conversations.id,
         title: conversations.title,
         currentModelId: conversations.currentModelId,
+        metadata: conversations.metadata,
         createdAt: conversations.createdAt,
       })
       .from(conversations)
@@ -314,11 +347,15 @@ export async function createAiEntryConversation(
           agentId,
         ),
         currentModelId: normalizedModelId,
+        metadata: {
+          aiEntryConversationState: createEmptyAiEntryConversationState(),
+        },
       })
       .returning({
         id: conversations.id,
         title: conversations.title,
         currentModelId: conversations.currentModelId,
+        metadata: conversations.metadata,
         createdAt: conversations.createdAt,
       }),
   )
@@ -421,6 +458,7 @@ export async function listAiEntryConversations(
         id: conversations.id,
         title: conversations.title,
         currentModelId: conversations.currentModelId,
+        metadata: conversations.metadata,
         createdAt: conversations.createdAt,
         latestMessageCreatedAt: sql<Date | null>`max(${messages.createdAt})`,
       })
@@ -536,6 +574,35 @@ export async function appendAiEntryTurn(params: {
   scope?: AiEntryConversationScope
   agentId?: string | null
 }) {
+  const userResult = await appendAiEntryMessage({
+    userId: params.userId,
+    conversationId: params.conversationId,
+    role: "user",
+    content: params.userPrompt,
+    scope: params.scope,
+    agentId: params.agentId,
+  })
+
+  await appendAiEntryMessage({
+    userId: params.userId,
+    conversationId: params.conversationId,
+    role: "assistant",
+    content: params.assistantMessage,
+    scope: params.scope,
+    agentId: params.agentId,
+  })
+
+  return userResult
+}
+
+export async function appendAiEntryMessage(params: {
+  userId: number
+  conversationId: string | number | null | undefined
+  role: "user" | "assistant"
+  content: string
+  scope?: AiEntryConversationScope
+  agentId?: string | null
+}) {
   const scope = params.scope || "chat"
   const conversation = await getAiEntryConversation(
     params.userId,
@@ -547,40 +614,75 @@ export async function appendAiEntryTurn(params: {
     return null
   }
 
-  const messageCountRows = await withAiEntryDbRetry("count-ai-entry-messages", () =>
-    db
-      .select({
-        count: sql<number>`count(*)`,
-      })
-      .from(messages)
-      .where(eq(messages.conversationId, conversation.id))
-      .limit(1),
-  )
+  const normalizedContent = params.content.trim()
+  if (!normalizedContent) {
+    return mapConversationSummary({
+      id: conversation.id,
+      title: conversation.title,
+      currentModelId: conversation.currentModelId,
+      createdAt: conversation.createdAt,
+    })
+  }
 
-  const existingMessageCount = Number(messageCountRows[0]?.count || 0)
-  const shouldRetitle = existingMessageCount === 0 || isGenericConversationTitle(conversation.title)
-  const nextTitle = shouldRetitle
-    ? buildConversationTitleFromPrompt(params.userPrompt, scope, params.agentId)
-    : conversation.title
+  let nextTitle = conversation.title
 
-  if (shouldRetitle) {
+  if (params.role === "user") {
+    const messageCountRows = await withAiEntryDbRetry("count-ai-entry-messages", () =>
+      db
+        .select({
+          count: sql<number>`count(*)`,
+        })
+        .from(messages)
+        .where(eq(messages.conversationId, conversation.id))
+        .limit(1),
+    )
+
+    const existingMessageCount = Number(messageCountRows[0]?.count || 0)
+    nextTitle =
+      resolveAiEntryConversationTitleUpdate({
+        currentTitle: conversation.title,
+        userPrompt: normalizedContent,
+        existingMessageCount,
+        scope,
+        agentId: params.agentId,
+      }) || conversation.title
+  }
+
+  if (nextTitle !== conversation.title) {
     await withAiEntryDbRetry("retitle-ai-entry-conversation", () =>
       db
         .update(conversations)
-        .set({
-          title: nextTitle,
-        })
+          .set({
+            title: nextTitle,
+          })
         .where(eq(conversations.id, conversation.id)),
     )
   }
 
-  await withAiEntryDbRetry("insert-ai-entry-turn", () =>
+  await withAiEntryDbRetry(`insert-ai-entry-message:${params.role}`, () =>
     db.execute(sql`
       INSERT INTO ${messages} ("conversation_id", "role", "content")
-      VALUES
-        (${conversation.id}, ${"user"}, ${params.userPrompt}),
-        (${conversation.id}, ${"assistant"}, ${params.assistantMessage})
+      VALUES (${conversation.id}, ${params.role}, ${normalizedContent})
     `),
+  )
+
+  const previousState = normalizeConversationMetadata(conversation.metadata)?.aiEntryConversationState
+  const nextConversationState = applyAiEntryConversationStateDelta({
+    previousState,
+    messageContent: normalizedContent,
+  })
+  const nextMetadata = {
+    ...(normalizeConversationMetadata(conversation.metadata) || {}),
+    aiEntryConversationState: nextConversationState,
+  }
+
+  await withAiEntryDbRetry("update-ai-entry-conversation-metadata", () =>
+    db
+      .update(conversations)
+      .set({
+        metadata: nextMetadata,
+      })
+      .where(eq(conversations.id, conversation.id)),
   )
 
   return mapConversationSummary({
@@ -626,11 +728,16 @@ export async function listAiEntryMessages(
       knowledge_source: null,
       created_at: toEpochSeconds(row.createdAt),
     }))
+  const conversationState = mergeAiEntryConversationState({
+    storedState: normalizeConversationMetadata(conversation.metadata)?.aiEntryConversationState,
+    messageContents: data.map((message) => message.content),
+  })
 
   return {
     data,
     limit: safeLimit,
     has_more: false,
+    conversation_state: conversationState,
     conversation: mapConversationSummary({
       id: conversation.id,
       title: conversation.title,

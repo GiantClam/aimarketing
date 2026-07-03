@@ -10,6 +10,7 @@ const BUSINESS_AGENT_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skill
 const IMPORTED_AGENCY_AGENT_SKILL_BASE_DIR = path.join(process.cwd(), "content", "skills", "agency-agents")
 
 const skillCache = new Map<string, Promise<string>>()
+const shouldBypassSkillCache = process.env.NODE_ENV === "development"
 
 function getSkillDocumentPath(baseDir: string, relativePath: string) {
   return path.join(baseDir, relativePath)
@@ -17,6 +18,9 @@ function getSkillDocumentPath(baseDir: string, relativePath: string) {
 
 async function readSkillDocument(baseDir: string, relativePath: string) {
   const cacheKey = `${baseDir}:${relativePath}`
+  if (shouldBypassSkillCache) {
+    return readFile(getSkillDocumentPath(baseDir, relativePath), "utf8")
+  }
   const existing = skillCache.get(cacheKey)
   if (existing) {
     return existing
@@ -48,6 +52,10 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
   ],
   "executive-ppt": [
     "references/domains/ppt-generation.md",
+    "references/diagnostic-core.md",
+  ],
+  "executive-presentation-ppt": [
+    "references/domains/presentation-ppt-generation.md",
     "references/diagnostic-core.md",
   ],
   "executive-sales-strategy": [

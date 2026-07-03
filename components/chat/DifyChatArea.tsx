@@ -1149,7 +1149,7 @@ export function DifyChatArea({ user, advisorType, initialConversationId }: { use
   };
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       void handleSend();
     }

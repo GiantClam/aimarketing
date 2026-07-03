@@ -10,6 +10,14 @@ import {
 
 const runtimeProviders: RuntimeProviderLike[] = [
   {
+    id: "deepseek",
+    scope: "text",
+    configured: true,
+    active: false,
+    model: "deepseek-v4-pro",
+    baseURL: "https://api.deepseek.com",
+  },
+  {
     id: "pptoken",
     scope: "text",
     configured: true,
@@ -59,8 +67,12 @@ test("buildGovernedAiEntryModelCatalog keeps only account-visible runtime models
 
   assert.equal(catalog.selectedProviderId, "pptoken")
   assert.equal(catalog.selectedModelId, "pptoken::gpt-5.4-mini")
-  assert.deepEqual(catalog.providers.map((item) => item.id), ["pptoken", "aiberm"])
-  assert.deepEqual(catalog.models.map((item) => item.id), ["pptoken::gpt-5.4-mini", "aiberm::gpt-5.4"])
+  assert.deepEqual(catalog.providers.map((item) => item.id), ["deepseek", "pptoken", "aiberm"])
+  assert.deepEqual(catalog.models.map((item) => item.id), [
+    "deepseek::deepseek-v4-pro",
+    "pptoken::gpt-5.4-mini",
+    "aiberm::gpt-5.4",
+  ])
 })
 
 test("buildGovernedAiEntryModelCatalog falls back when requested provider is not accessible", () => {
@@ -78,6 +90,33 @@ test("buildGovernedAiEntryModelCatalog falls back when requested provider is not
 
   assert.equal(catalog.selectedProviderId, "pptoken")
   assert.equal(catalog.selectedModelId, "pptoken::gpt-5.4-mini")
+})
+
+test("buildGovernedAiEntryModelCatalog prefers the configured default-model provider when present", () => {
+  const previous = process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL
+  process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL = "deepseek-v4-pro"
+
+  try {
+    const catalog = buildGovernedAiEntryModelCatalog({
+      user: {
+        id: 11,
+        enterpriseId: 2,
+        enterpriseRole: "member",
+        enterpriseStatus: "active",
+      },
+      runtimeProviders,
+      assignments: [],
+    })
+
+    assert.equal(catalog.selectedProviderId, "deepseek")
+    assert.equal(catalog.selectedModelId, "deepseek::deepseek-v4-pro")
+  } finally {
+    if (typeof previous === "string") {
+      process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL = previous
+    } else {
+      delete process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL
+    }
+  }
 })
 
 test("buildGovernedWorkflowImageProviderOptions respects account assignments", () => {

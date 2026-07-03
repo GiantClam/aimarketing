@@ -26,10 +26,7 @@ import {
 import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
 import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
-import {
-  AI_ENTRY_CONSULTING_ENTRY_MODE,
-  isConsultingAdvisorEntryMode,
-} from "@/lib/ai-entry/model-policy"
+import { resolveAiEntrySidebarEntryState } from "@/lib/ai-entry/sidebar-entry-state"
 
 type AiEntryConversationSummary = {
   id: string
@@ -79,33 +76,21 @@ export function AiEntrySidebarItem({
   const [deletingConvId, setDeletingConvId] = useState<string | null>(null)
   const [pendingDeleteConversation, setPendingDeleteConversation] =
     useState<AiEntryConversationSummary | null>(null)
-
-  const [entryPath, entryQuery = ""] = entryHref.split("?")
-  const basePath = entryPath || "/dashboard/ai"
-  const entryQueryParams = new URLSearchParams(entryQuery)
-  const entryModeRaw = entryQueryParams.get("entry")
-  const entryAgentIdRaw = entryQueryParams.get("agent")
-  const isConsultingEntry = isConsultingAdvisorEntryMode(entryModeRaw)
-  const entryMode =
-    isConsultingEntry ? AI_ENTRY_CONSULTING_ENTRY_MODE : null
-  const scopeCacheKeySuffix = entryMode || "chat"
-  const entryAgentId =
-    typeof entryAgentIdRaw === "string" && entryAgentIdRaw.trim()
-      ? entryAgentIdRaw.trim()
-      : null
   const currentAgentId = (searchParams.get("agent") || "").trim() || null
-  const effectiveAgentId = isConsultingEntry ? entryAgentId : (entryAgentId || currentAgentId)
-  const cacheKeySuffix = effectiveAgentId
-    ? `${scopeCacheKeySuffix}:${effectiveAgentId}`
-    : scopeCacheKeySuffix
-  const hrefQueryParams = new URLSearchParams(entryQuery)
-  if (effectiveAgentId) {
-    hrefQueryParams.set("agent", effectiveAgentId)
-  } else {
-    hrefQueryParams.delete("agent")
-  }
-  const hrefSuffix = hrefQueryParams.toString() ? `?${hrefQueryParams.toString()}` : ""
-  const isMatchedAgent = !activeAgentId || currentAgentId === activeAgentId
+  const currentEntryMode = (searchParams.get("entry") || "").trim() || null
+  const {
+    basePath,
+    entryMode,
+    effectiveAgentId,
+    hrefSuffix,
+    cacheKeySuffix,
+    isMatchedAgent,
+  } = resolveAiEntrySidebarEntryState({
+    entryHref,
+    activeAgentId,
+    currentAgentId,
+    currentEntryMode,
+  })
   const isAiRoute = pathname.startsWith(basePath)
   const routeConversationId = pathname.startsWith(`${basePath}/`)
     ? pathname.slice(basePath.length + 1).split("/")[0] || null

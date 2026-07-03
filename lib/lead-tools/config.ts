@@ -97,6 +97,18 @@ export function getPptWorkerRuntimeProfile() {
     return runtimeProfile
   }
 
+  const workerBaseUrl = getPptWorkerBaseUrl()
+  if (workerBaseUrl) {
+    try {
+      const hostname = new URL(workerBaseUrl).hostname.toLowerCase()
+      if (hostname.endsWith(".railway.app")) {
+        return "railway-linux" as const
+      }
+    } catch {
+      // Ignore malformed worker URLs and fall back to the default local profile.
+    }
+  }
+
   return "local-dev" as const
 }
 

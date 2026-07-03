@@ -1506,7 +1506,7 @@ export function VideoChat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                   e.preventDefault()
                   handleSend()
                 }

@@ -1,11 +1,15 @@
+import fs from "node:fs"
 import assert from "node:assert/strict"
+import path from "node:path"
 import test from "node:test"
 
 import {
+  buildPptRecommendedTemplateSummaries,
   buildPptPreviewDeckFromPlans,
   buildPptPreviewVariantDescriptors,
   getPptPreviewLayoutSequence,
   getPptPreviewStyleSummary,
+  pptPreviewStyles,
   resolveOptionalPptPreviewPageCount,
 } from "./ppt-preview-data-fixed"
 
@@ -54,6 +58,85 @@ test("single-template variants can be narrowed to one narrative angle", () => {
   assert.equal(variants[0]?.key, "broadside-executive-brief")
   assert.equal(variants[0]?.narrativeAngle, "executive-brief")
   assert.equal(variants[0]?.slotLabel, "A")
+})
+
+test("auto-4 recommends structured boardroom templates first for executive review prompts", () => {
+  const variants = buildPptPreviewVariantDescriptors({
+    prompt: "董事会经营复盘与风险诊断汇报，包含财务预算、关键决策与下一步计划",
+    scenario: "sales-deck",
+    language: "zh-CN",
+  })
+
+  assert.equal(variants.length, 4)
+  assert.equal(
+    ["ppt169_cangzhuo", "ppt169_brutalist_ai_newspaper_2026", "ppt169_global_ai_capital_2026"].includes(
+      variants[0]?.style.key ?? "",
+    ),
+    true,
+  )
+  assert.equal(
+    ["ppt169_cangzhuo", "ppt169_brutalist_ai_newspaper_2026", "ppt169_global_ai_capital_2026", "ppt169_swiss_grid_systems"].includes(
+      variants[1]?.style.key ?? "",
+    ),
+    true,
+  )
+  assert.equal(new Set(variants.map((variant) => variant.style.key)).size, 4)
+})
+
+test("auto-4 recommends analytical grid templates first for product strategy prompts", () => {
+  const variants = buildPptPreviewVariantDescriptors({
+    prompt: "SaaS 产品策略分析，包含市场对比、漏斗指标、路线图和 workflow 设计",
+    scenario: "product-launch",
+    language: "zh-CN",
+    researchBrief: {
+      topic: "SaaS 产品策略",
+      keyFacts: ["现有产品存在转化漏斗断层", "竞品在中型企业更强"],
+      numericEvidence: ["试用转付费率 8.2%", "销售周期 47 天"],
+    },
+  })
+
+  assert.equal(variants.length, 4)
+  assert.equal(variants[0]?.templateId, "swiss-grid")
+  assert.equal(variants[0]?.style.key, "ppt169_swiss_grid_systems")
+  assert.equal(variants[1]?.style.key, "ppt169_building_effective_agents")
+})
+
+test("auto-4 recommends expressive poster-like templates first for manifesto prompts", () => {
+  const variants = buildPptPreviewVariantDescriptors({
+    prompt: "品牌发布宣言海报，强调 big idea、视觉冲击、口号和 keynote 级别的主张表达",
+    scenario: "marketing-campaign",
+    language: "en-US",
+  })
+
+  assert.equal(variants.length, 4)
+  assert.equal(variants[0]?.templateId, "editorial-poster")
+  assert.equal(variants[0]?.style.key, "ppt169_pritzker_2026")
+})
+
+test("recommended template summaries can surface imported ppt-master templates for matching prompts", () => {
+  const templates = buildPptRecommendedTemplateSummaries({
+    prompt: "学术答辩汇报，包含研究问题、方法、实验结果与结论证明",
+    scenario: "training",
+    language: "zh-CN",
+  })
+
+  assert.equal(templates.length, 4)
+  assert.equal(templates.some((item) => item.templateId === "academic-defense"), true)
+  assert.equal(templates.some((item) => item.templateId === "global-ai-capital-2026"), true)
+})
+
+test("ppt preview styles cover every local ppt-master upstream example directory", () => {
+  const examplesDir = path.join(process.cwd(), ".cache", "ppt-master-upstream", "examples")
+  const upstreamStyleKeys = fs
+    .readdirSync(examplesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("ppt169_"))
+    .map((entry) => entry.name)
+    .sort()
+
+  const importedStyleKeys = new Set(pptPreviewStyles.map((style) => style.key))
+  const missing = upstreamStyleKeys.filter((styleKey) => !importedStyleKeys.has(styleKey as (typeof pptPreviewStyles)[number]["key"]))
+
+  assert.deepEqual(missing, [])
 })
 
 test("ppt preview deck assigns structured request images to cover and supported content layouts", () => {

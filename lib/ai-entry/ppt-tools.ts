@@ -5,10 +5,14 @@ import { z } from "zod"
 
 import type { AuthUser } from "@/lib/auth/session"
 import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
+import { preparePptPreviewInput } from "@/lib/ai-entry/ppt-brief"
 import type {
   PptPreviewDeck,
+  PptPreviewResearchBrief,
+  PptPreviewRuntimeValue,
   PptPreviewVariant,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import type {
   LeadToolPptDownloadResponse,
   LeadToolPptPreviewResponse,
@@ -17,6 +21,7 @@ import { getPptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-s
 import { buildLeadToolDownload, buildLeadToolPreview } from "@/lib/lead-tools/runtime"
 
 const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+const HTML_MIME_TYPE_PREFIX = "text/html"
 const FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN =
   /(?:现状|最新|趋势|市场|行业|竞品|政策|法规|关税|融资|财报|业绩|地缘|战争|制裁|供应链|进出口|油价|运价|汇率|\bcompany\b|\bmarket\b|\bindustry\b|\bcompetitor\b|\bpolicy\b|\bregulation\b|\btariff\b|\bearnings\b|\bgeopolitical\b|\bsupply chain\b|\blatest\b|\bcurrent state\b)/iu
 
@@ -46,6 +51,18 @@ const previewPptDeckInputSchema = z
       .trim()
       .min(1)
       .describe("The complete deck brief, including topic, audience, goal, tone, and any must-include points."),
+    audience: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Target audience for the deck. Required before preview when the user asks for a generated PPT."),
+    goal: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Presentation goal such as executive review, client proposal, fundraising pitch, or training."),
     researchBrief: z
       .union([
         z.string().trim().min(1),
@@ -80,6 +97,17 @@ const previewPptDeckInputSchema = z
       .max(20)
       .optional()
       .describe("Optional requested slide count."),
+    tone: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Tone or style direction for the deck."),
+    mustInclude: z
+      .array(z.string().trim().min(1))
+      .max(12)
+      .optional()
+      .describe("Must-include sections, facts, or messages that need to appear in the deck."),
   })
   .superRefine((value, context) => {
     if (value.templateMode === "single-template" && !value.templateId) {
@@ -101,11 +129,17 @@ const exportPptDeckInputSchema = z.object({
     .string()
     .trim()
     .optional()
-    .describe("Variant key chosen from preview_ppt_deck. If omitted, the first variant is exported."),
+    .describe("Variant key chosen from preview_ppt_deck. If omitted, the latest recommended variant is exported when available."),
 })
 
 type PreviewPptDeckInput = z.infer<typeof previewPptDeckInputSchema>
 type ExportPptDeckInput = z.infer<typeof exportPptDeckInputSchema>
+
+function resolveDefaultPreviewRuntime(agentId: string | null | undefined): PptPreviewRuntimeValue | undefined {
+  if (agentId === "executive-ppt") return "ppt-master-agent"
+  if (agentId === "executive-presentation-ppt") return "frontend-slides-agent"
+  return undefined
+}
 
 function buildArtifactDownloadUrl(artifactId: number, download = false) {
   return `/api/platform/artifacts/${artifactId}/download${download ? "?download=1" : ""}`
@@ -177,11 +211,41 @@ function normalizePptToolError(error: unknown) {
     }
   }
 
+  if (/missing_preview_session/iu.test(message)) {
+    const sessionId = message.includes(":") ? message.split(":").slice(1).join(":") : null
+    return {
+      code: "missing_preview_session",
+      message: sessionId
+        ? `Preview session "${sessionId}" is no longer available. Generate the PPT preview again before export.`
+        : "Preview session is no longer available. Generate the PPT preview again before export.",
+    }
+  }
+
   if (/ppt_research_brief_required/iu.test(message)) {
     return {
       code: "ppt_research_brief_required",
       message:
         "This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+    }
+  }
+
+  if (
+    /your account quota is insufficient|insufficient_quota|provider_quota_exceeded|quota exceeded|please recharge/iu.test(
+      message,
+    )
+  ) {
+    return {
+      code: "upstream_provider_quota_exceeded",
+      message:
+        "The upstream PPT model or remote worker account is out of quota. This is separate from workspace credits. Check the provider or PPT worker account before retrying.",
+    }
+  }
+
+  const unknownModelMatch = message.match(/unknown model ['"]?([^'"]+)['"]?/iu)
+  if (unknownModelMatch?.[1]) {
+    return {
+      code: "ppt_runtime_model_unsupported",
+      message: `The current PPT runtime does not support model "${unknownModelMatch[1].trim()}". Switch to MiniMax-M3, MiniMax-M2.7-highspeed, or step-3.7-flash.`,
     }
   }
 
@@ -240,8 +304,10 @@ function selectDeckVariant(deck: PptPreviewDeck, selectedVariantKey?: string | n
 
 export function buildAiEntryPptTools(input: {
   currentUser: AuthUser
+  agentId?: string | null
 }): ToolSet {
   const { currentUser } = input
+  const defaultPreviewRuntime = resolveDefaultPreviewRuntime(input.agentId)
 
   return {
     preview_ppt_deck: tool<unknown, Record<string, unknown>>({
@@ -251,32 +317,73 @@ export function buildAiEntryPptTools(input: {
       execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
         const {
           prompt,
+          audience,
+          goal,
           researchBrief,
           scenario = "marketing-campaign",
           language = "zh-CN",
           templateMode = "auto-4",
           templateId,
           pageCount,
+          tone,
+          mustInclude,
         } = rawInput as PreviewPptDeckInput
         try {
-          if (requiresResearchBrief(prompt) && !hasUsableResearchBrief(researchBrief)) {
-            throw new Error("ppt_research_brief_required")
-          }
-
-          const result = (await buildLeadToolPreview(
-            "ai-ppt-preview",
-            {
+          const prepared = preparePptPreviewInput({
+            rawInput: {
               prompt,
+              audience,
+              goal,
               researchBrief,
               scenario,
               language,
               templateMode,
               templateId,
-              narrativeAngle:
-                templateMode === "single-template" && templateId
-                  ? DEFAULT_SINGLE_TEMPLATE_NARRATIVE_ANGLE
-                  : undefined,
               pageCount,
+              tone,
+              mustInclude,
+            },
+            briefState: null,
+          })
+          if (!prepared.ok) {
+            return {
+              ok: false,
+              error: prepared.error,
+              missingFields: prepared.missingFields,
+              suggestedBrief: prepared.suggestedBrief,
+            }
+          }
+
+          if (requiresResearchBrief(prompt) && !hasUsableResearchBrief(researchBrief)) {
+            throw new Error("ppt_research_brief_required")
+          }
+
+          const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+            prompt: prepared.input.prompt,
+            researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
+            scenario: prepared.input.scenario,
+            language: prepared.input.language,
+            pageCount: prepared.input.pageCount ?? undefined,
+          })
+          const effectiveTemplateMode = prepared.input.templateMode ?? templateMode
+          const effectiveTemplateId = prepared.input.templateId ?? templateId
+          const effectiveNarrativeAngle =
+            effectiveTemplateMode === "single-template" && effectiveTemplateId
+              ? DEFAULT_SINGLE_TEMPLATE_NARRATIVE_ANGLE
+              : undefined
+
+          const result = (await buildLeadToolPreview(
+            "ai-ppt-preview",
+            {
+              prompt: prepared.input.prompt,
+              researchBrief: prepared.input.researchBrief,
+              scenario: prepared.input.scenario,
+              language: prepared.input.language,
+              previewRuntime: defaultPreviewRuntime,
+              templateMode: effectiveTemplateMode,
+              templateId: effectiveTemplateId,
+              narrativeAngle: effectiveNarrativeAngle,
+              pageCount: prepared.input.pageCount,
             },
             currentUser,
           )) as LeadToolPptPreviewResponse & {
@@ -312,6 +419,10 @@ export function buildAiEntryPptTools(input: {
             ok: true,
             previewSessionId: result.previewSessionId,
             generatedAt: result.generatedAt,
+            recommendedVariantKey: result.deck.variants[0]?.key ?? null,
+            recommendedVariantName: result.deck.variants[0]?.name ?? null,
+            recommendedTemplates,
+            selectedTemplateId: effectiveTemplateId ?? null,
             ...summarizeDeck(result.deck),
             validation,
             platform: {
@@ -329,12 +440,13 @@ export function buildAiEntryPptTools(input: {
                   : null,
             },
             nextStep:
-              "Choose the best variant key, then call export_ppt_deck to save the downloadable PPTX artifact to the work library.",
+              "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library.",
           }
         } catch (error) {
+          const normalizedError = normalizePptToolError(error)
           return {
             ok: false,
-            error: normalizePptToolError(error),
+            error: normalizedError,
           }
         }
       },
@@ -384,6 +496,11 @@ export function buildAiEntryPptTools(input: {
               result.deck.previewEngine === "frontend-slides-html" ? "html" : "pptx",
             )
           const contentType = result.artifact?.contentType || null
+          const expectsHtmlArtifact = result.deck.previewEngine === "frontend-slides-html"
+          const artifactKind = expectsHtmlArtifact ? "html" : "pptx"
+          const resolvedContentType = expectsHtmlArtifact
+            ? contentType || "text/html; charset=utf-8"
+            : contentType || PPTX_MIME_TYPE
           const validation = buildValidationResult([
             {
               code: "buffer_non_empty",
@@ -394,20 +511,32 @@ export function buildAiEntryPptTools(input: {
                   : "Exported artifact buffer is empty.",
             },
             {
-              code: "file_name_pptx",
-              ok: fileName.trim().toLowerCase().endsWith(".pptx"),
+              code: expectsHtmlArtifact ? "file_name_html" : "file_name_pptx",
+              ok: expectsHtmlArtifact
+                ? fileName.trim().toLowerCase().endsWith(".html")
+                : fileName.trim().toLowerCase().endsWith(".pptx"),
               message:
-                fileName.trim().toLowerCase().endsWith(".pptx")
-                  ? "Exported artifact file name ends with .pptx."
-                  : "Exported artifact file name must end with .pptx.",
+                expectsHtmlArtifact
+                  ? fileName.trim().toLowerCase().endsWith(".html")
+                    ? "Exported artifact file name ends with .html."
+                    : "Exported artifact file name must end with .html."
+                  : fileName.trim().toLowerCase().endsWith(".pptx")
+                    ? "Exported artifact file name ends with .pptx."
+                    : "Exported artifact file name must end with .pptx.",
             },
             {
-              code: "mime_is_pptx",
-              ok: contentType === PPTX_MIME_TYPE,
+              code: expectsHtmlArtifact ? "mime_is_html" : "mime_is_pptx",
+              ok: expectsHtmlArtifact
+                ? typeof contentType === "string" && contentType.toLowerCase().startsWith(HTML_MIME_TYPE_PREFIX)
+                : contentType === PPTX_MIME_TYPE,
               message:
-                contentType === PPTX_MIME_TYPE
-                  ? "Exported artifact MIME type is PPTX."
-                  : "Exported artifact MIME type must be PPTX.",
+                expectsHtmlArtifact
+                  ? typeof contentType === "string" && contentType.toLowerCase().startsWith(HTML_MIME_TYPE_PREFIX)
+                    ? "Exported artifact MIME type is HTML."
+                    : "Exported artifact MIME type must be HTML."
+                  : contentType === PPTX_MIME_TYPE
+                    ? "Exported artifact MIME type is PPTX."
+                    : "Exported artifact MIME type must be PPTX.",
             },
           ])
 
@@ -437,7 +566,7 @@ export function buildAiEntryPptTools(input: {
               result.deck.pageCount ??
               result.variant.slides.length,
             fileName,
-            contentType: PPTX_MIME_TYPE,
+            contentType: resolvedContentType,
             artifactId,
             workItemId,
             toolRunId,
@@ -447,10 +576,10 @@ export function buildAiEntryPptTools(input: {
               ? buildArtifactDownloadUrl(artifactId, true)
               : null,
             artifact: {
-              kind: "pptx",
+              kind: artifactKind,
               title: result.deck.title,
               fileName,
-              mimeType: PPTX_MIME_TYPE,
+              mimeType: resolvedContentType,
               artifactId,
               previewUrl: artifactId ? buildArtifactDownloadUrl(artifactId) : null,
               downloadUrl: artifactId
@@ -470,6 +599,7 @@ export function buildAiEntryPptTools(input: {
           return {
             ok: false,
             error: normalizedError,
+            ...(normalizedError.code === "missing_preview_session" ? { previewSessionId } : {}),
             availableVariants: deck ? deck.variants.map(summarizeVariant) : [],
           }
         }

@@ -7,10 +7,11 @@ import {
 
 export type PendingAssistantTask = {
   taskId: string
-  scope: "writer" | "image" | "advisor"
+  scope: "writer" | "image" | "advisor" | "ai_entry"
   conversationId?: string | null
   sessionId?: string | null
   advisorType?: string | null
+  agentId?: string | null
   prompt?: string
   taskType?: string | null
   createdAt: number
@@ -87,6 +88,29 @@ export function findAdvisorPendingTask(input: { advisorType: string; conversatio
 
   if (input.conversationId) {
     return tasks.find((task) => task.conversationId === input.conversationId) || null
+  }
+
+  return tasks.find((task) => !task.conversationId) || null
+}
+
+export function findAiEntryPendingTask(input: {
+  conversationId?: string | null
+  agentId?: string | null
+}) {
+  const tasks = Object.values(readStore())
+    .filter((task) => task.scope === "ai_entry")
+    .sort((a, b) => b.createdAt - a.createdAt)
+
+  if (input.conversationId) {
+    const byConversation = tasks.filter((task) => task.conversationId === input.conversationId)
+    if (input.agentId) {
+      return byConversation.find((task) => task.agentId === input.agentId) || byConversation[0] || null
+    }
+    return byConversation[0] || null
+  }
+
+  if (input.agentId) {
+    return tasks.find((task) => task.agentId === input.agentId && !task.conversationId) || null
   }
 
   return tasks.find((task) => !task.conversationId) || null

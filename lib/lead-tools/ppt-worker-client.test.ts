@@ -89,7 +89,7 @@ test("ppt worker preview posts runtime profile, fallback mode, and auth token", 
     assert.match(seen[0]?.body || "", /"runtimeProfile":"railway-linux"/)
     assert.match(seen[0]?.body || "", /"allowMockFallback":true/)
     assert.match(seen[0]?.body || "", /"researchBrief":\{"topic":"Hormuz Strait shipping risk 2026"/)
-    assert.match(seen[0]?.body || "", /"model":"gpt-5\.4"/)
+    assert.match(seen[0]?.body || "", /"model":"MiniMax-M3"/)
     assert.match(seen[0]?.body || "", /"narrativeAngle":"executive-brief"/)
     assert.match(seen[0]?.body || "", /"images":\[\{"url":"https:\/\/example.com\/cover\.png","role":"cover"\}\]/)
     assert.equal(seen[0]?.auth, "Bearer secret-token")
@@ -114,6 +114,78 @@ test("ppt worker preview posts runtime profile, fallback mode, and auth token", 
       delete process.env.PPT_WORKER_RUNTIME_PROFILE
     } else {
       process.env.PPT_WORKER_RUNTIME_PROFILE = previousProfile
+    }
+
+    if (previousPollInterval === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = previousPollInterval
+    }
+
+    if (previousTimeout === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+  }
+})
+
+test("ppt worker preview preserves supported worker models", async () => {
+  const originalFetch = global.fetch
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousPollInterval = process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+  const previousTimeout = process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com"
+    process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = "1"
+    process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = "1000"
+
+    let requestBody = ""
+    global.fetch = (async (input, init) => {
+      if (String(input).endsWith("/preview")) {
+        requestBody = String(init?.body || "")
+        return {
+          ok: true,
+          status: 202,
+          json: async () => ({
+            jobId: "job_2",
+            status: "queued",
+          }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          jobId: "job_2",
+          status: "completed",
+          previewSessionId: "session_2",
+          generatedAt: "2026-06-24T00:00:00.000Z",
+          deck: { title: "Deck" },
+        }),
+      } as Response
+    }) as typeof fetch
+
+    await requestPptWorkerPreview({
+      requestId: "req_supported_model",
+      prompt: "Build deck",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      model: "MiniMax-M2.7-highspeed",
+      templateMode: "auto-4",
+      allowMockFallback: false,
+    })
+
+    assert.match(requestBody, /"model":"MiniMax-M2\.7-highspeed"/)
+  } finally {
+    global.fetch = originalFetch
+
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
     }
 
     if (previousPollInterval === undefined) {

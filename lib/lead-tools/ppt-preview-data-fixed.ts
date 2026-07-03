@@ -42,9 +42,31 @@ export type PptPreviewStyleKey =
   | "ppt169_sugar_rush_memphis"
   | "ppt169_pritzker_2026"
   | "ppt169_swiss_grid_systems"
+  | "ppt169_glassmorphism_demo"
+  | "ppt169_attention_is_all_you_need"
+  | "ppt169_building_effective_agents"
+  | "ppt169_cangzhuo"
+  | "ppt169_fashion_weekly_digest"
+  | "ppt169_general_dark_tech_claude_code_auto_mode"
+  | "ppt169_global_ai_capital_2026"
+  | "ppt169_high_rise_renewal"
+  | "ppt169_home_design_trends_2026"
+  | "ppt169_image_text_showcase"
+  | "ppt169_indie_bookstore_zine_guide"
+  | "ppt169_kimsoong_loyalty_programme"
+  | "ppt169_kubernetes_blueprint_2026"
+  | "ppt169_lin_huiyin_architect"
+  | "ppt169_lin_huiyin_architect_revised"
+  | "ppt169_liziqi_plant_dye_colors"
+  | "ppt169_lora_hu_2021"
+export type PptPreviewStyleArchetype =
+  | "ppt169_brutalist_ai_newspaper_2026"
+  | "ppt169_sugar_rush_memphis"
+  | "ppt169_pritzker_2026"
+  | "ppt169_swiss_grid_systems"
 export type PptPreviewModelValue = "MiniMax-M2.7-highspeed" | "MiniMax-M3" | "gpt-5.4" | "step-3.7-flash"
 export type PptPreviewTemplateMode = "auto-4" | "single-template"
-export type PptFrontendTemplateId = "long-table" | "playful" | "broadside" | "neo-grid-bold"
+export type PptFrontendTemplateId = string
 export type PptPreviewPageCount = number
 export type PptPreviewNarrativeAngle = "executive-brief" | "campaign-story" | "data-proof" | "action-plan"
 export type PptPreviewRuntimeValue = "ppt-master-agent" | "frontend-slides-agent"
@@ -215,9 +237,60 @@ export type PptPreviewVariantDescriptor = {
   narrativeAngle?: PptPreviewNarrativeAngle
 }
 
-export const pptPreviewStyleIntentMap: Readonly<
-  Record<PptPreviewStyleKey, Record<PptPreviewLayout, PptPreviewPageIntent>>
-> = {
+export type PptRecommendedTemplateSummary = {
+  rank: number
+  templateId: PptFrontendTemplateId
+  templateLabel: string
+  styleKey: PptPreviewStyleKey
+  styleName: string
+  summary: string
+}
+
+export type PptFrontendTemplateOption = {
+  id: PptFrontendTemplateId
+  label: { zh: string; en: string }
+  styleKey: PptPreviewStyleKey
+  summary: { zh: string; en: string }
+  matchKeywords?: readonly string[]
+  scenarioHints?: readonly PptScenario[]
+  priority?: number
+}
+
+const pptPreviewStyleArchetypeMap: Readonly<Record<PptPreviewStyleKey, PptPreviewStyleArchetype>> = {
+  "ppt169_brutalist_ai_newspaper_2026": "ppt169_brutalist_ai_newspaper_2026",
+  "ppt169_sugar_rush_memphis": "ppt169_sugar_rush_memphis",
+  "ppt169_pritzker_2026": "ppt169_pritzker_2026",
+  "ppt169_swiss_grid_systems": "ppt169_swiss_grid_systems",
+  "ppt169_glassmorphism_demo": "ppt169_sugar_rush_memphis",
+  "ppt169_attention_is_all_you_need": "ppt169_swiss_grid_systems",
+  "ppt169_building_effective_agents": "ppt169_swiss_grid_systems",
+  "ppt169_cangzhuo": "ppt169_brutalist_ai_newspaper_2026",
+  "ppt169_fashion_weekly_digest": "ppt169_pritzker_2026",
+  "ppt169_general_dark_tech_claude_code_auto_mode": "ppt169_pritzker_2026",
+  "ppt169_global_ai_capital_2026": "ppt169_brutalist_ai_newspaper_2026",
+  "ppt169_high_rise_renewal": "ppt169_pritzker_2026",
+  "ppt169_home_design_trends_2026": "ppt169_pritzker_2026",
+  "ppt169_image_text_showcase": "ppt169_swiss_grid_systems",
+  "ppt169_indie_bookstore_zine_guide": "ppt169_pritzker_2026",
+  "ppt169_kimsoong_loyalty_programme": "ppt169_sugar_rush_memphis",
+  "ppt169_kubernetes_blueprint_2026": "ppt169_swiss_grid_systems",
+  "ppt169_lin_huiyin_architect": "ppt169_pritzker_2026",
+  "ppt169_lin_huiyin_architect_revised": "ppt169_pritzker_2026",
+  "ppt169_liziqi_plant_dye_colors": "ppt169_sugar_rush_memphis",
+  "ppt169_lora_hu_2021": "ppt169_sugar_rush_memphis",
+} as const
+
+const knownPptPreviewStyleKeys = new Set<PptPreviewStyleKey>(Object.keys(pptPreviewStyleArchetypeMap) as PptPreviewStyleKey[])
+
+export function isKnownPptPreviewStyleKey(value: unknown): value is PptPreviewStyleKey {
+  return typeof value === "string" && knownPptPreviewStyleKeys.has(value as PptPreviewStyleKey)
+}
+
+export function resolvePptPreviewStyleArchetype(styleKey: PptPreviewStyleKey): PptPreviewStyleArchetype {
+  return pptPreviewStyleArchetypeMap[styleKey]
+}
+
+const basePptPreviewStyleIntentMap: Readonly<Record<PptPreviewStyleArchetype, Record<PptPreviewLayout, PptPreviewPageIntent>>> = {
   "ppt169_brutalist_ai_newspaper_2026": {
     cover: "cover",
     agenda: "contents",
@@ -264,6 +337,29 @@ export const pptPreviewStyleIntentMap: Readonly<
   },
 } as const
 
+export const pptPreviewStyleIntentMap: Readonly<
+  Record<PptPreviewStyleKey, Record<PptPreviewLayout, PptPreviewPageIntent>>
+> = {
+  ...basePptPreviewStyleIntentMap,
+  "ppt169_glassmorphism_demo": basePptPreviewStyleIntentMap["ppt169_sugar_rush_memphis"],
+  "ppt169_attention_is_all_you_need": basePptPreviewStyleIntentMap["ppt169_swiss_grid_systems"],
+  "ppt169_building_effective_agents": basePptPreviewStyleIntentMap["ppt169_swiss_grid_systems"],
+  "ppt169_cangzhuo": basePptPreviewStyleIntentMap["ppt169_brutalist_ai_newspaper_2026"],
+  "ppt169_fashion_weekly_digest": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
+  "ppt169_general_dark_tech_claude_code_auto_mode": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
+  "ppt169_global_ai_capital_2026": basePptPreviewStyleIntentMap["ppt169_brutalist_ai_newspaper_2026"],
+  "ppt169_high_rise_renewal": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
+  "ppt169_home_design_trends_2026": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
+  "ppt169_image_text_showcase": basePptPreviewStyleIntentMap["ppt169_swiss_grid_systems"],
+  "ppt169_indie_bookstore_zine_guide": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
+  "ppt169_kimsoong_loyalty_programme": basePptPreviewStyleIntentMap["ppt169_sugar_rush_memphis"],
+  "ppt169_kubernetes_blueprint_2026": basePptPreviewStyleIntentMap["ppt169_swiss_grid_systems"],
+  "ppt169_lin_huiyin_architect": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
+  "ppt169_lin_huiyin_architect_revised": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
+  "ppt169_liziqi_plant_dye_colors": basePptPreviewStyleIntentMap["ppt169_sugar_rush_memphis"],
+  "ppt169_lora_hu_2021": basePptPreviewStyleIntentMap["ppt169_sugar_rush_memphis"],
+} as const
+
 const pptPreviewStructuredFieldsByIntent: Readonly<Record<PptPreviewPageIntent, readonly PptPreviewStructuredField[]>> = {
   cover: ["bullets"],
   contents: ["contentsItems"],
@@ -293,7 +389,7 @@ function createTemplateSlot(
   }
 }
 
-export const pptPreviewTemplateCapabilities: Readonly<Record<PptPreviewStyleKey, PptPreviewTemplateCapability>> = {
+const basePptPreviewTemplateCapabilities: Readonly<Record<PptPreviewStyleArchetype, PptPreviewTemplateCapability>> = {
   "ppt169_brutalist_ai_newspaper_2026": {
     templateId: "long-table",
     summary: "Long Table prioritizes agenda clarity, ledger structures, moderated comparisons, and service-style closing blocks.",
@@ -356,44 +452,475 @@ export const pptPreviewTemplateCapabilities: Readonly<Record<PptPreviewStyleKey,
   },
 } as const
 
-export const pptPreviewStyleCapabilities: Readonly<Record<PptPreviewStyleKey, readonly PptPreviewPageIntent[]>> = {
-  "ppt169_brutalist_ai_newspaper_2026": pptPreviewTemplateCapabilities["ppt169_brutalist_ai_newspaper_2026"].slots.map((slot) => slot.intent),
-  "ppt169_sugar_rush_memphis": pptPreviewTemplateCapabilities["ppt169_sugar_rush_memphis"].slots.map((slot) => slot.intent),
-  "ppt169_pritzker_2026": pptPreviewTemplateCapabilities["ppt169_pritzker_2026"].slots.map((slot) => slot.intent),
-  "ppt169_swiss_grid_systems": pptPreviewTemplateCapabilities["ppt169_swiss_grid_systems"].slots.map((slot) => slot.intent),
+function inheritTemplateCapability(
+  archetype: PptPreviewStyleArchetype,
+  templateId: PptFrontendTemplateId,
+  summary: string,
+): PptPreviewTemplateCapability {
+  return {
+    templateId,
+    summary,
+    slots: basePptPreviewTemplateCapabilities[archetype].slots,
+  }
+}
+
+export const pptPreviewTemplateCapabilities: Readonly<Record<PptPreviewStyleKey, PptPreviewTemplateCapability>> = {
+  ...basePptPreviewTemplateCapabilities,
+  "ppt169_glassmorphism_demo": inheritTemplateCapability(
+    "ppt169_sugar_rush_memphis",
+    "glassmorphism-demo",
+    "Glassmorphism Demo keeps the bright launch rhythm but shifts it into translucent product panels and layered signal cards.",
+  ),
+  "ppt169_attention_is_all_you_need": inheritTemplateCapability(
+    "ppt169_swiss_grid_systems",
+    "attention-is-all-you-need",
+    "Attention Is All You Need favors research proof, diagrams, and disciplined academic sequencing for thesis-style decks.",
+  ),
+  "ppt169_building_effective_agents": inheritTemplateCapability(
+    "ppt169_swiss_grid_systems",
+    "building-effective-agents",
+    "Building Effective Agents leans into orchestration maps, capability rails, and implementation sequencing for agent-system decks.",
+  ),
+  "ppt169_cangzhuo": inheritTemplateCapability(
+    "ppt169_brutalist_ai_newspaper_2026",
+    "cangzhuo",
+    "Cangzhuo keeps the ledger-like business review structure and is suited to Chinese management briefings and meeting-grade execution notes.",
+  ),
+  "ppt169_fashion_weekly_digest": inheritTemplateCapability(
+    "ppt169_pritzker_2026",
+    "fashion-weekly-digest",
+    "Fashion Weekly Digest behaves like an editorial poster issue with curation rhythm, visual headlines, and culture-led sequencing.",
+  ),
+  "ppt169_general_dark_tech_claude_code_auto_mode": inheritTemplateCapability(
+    "ppt169_pritzker_2026",
+    "general-dark-tech-claude-code-auto-mode",
+    "General Dark Tech favors high-contrast technical storytelling, dark product narrative, and system-level declaration boards.",
+  ),
+  "ppt169_global_ai_capital_2026": inheritTemplateCapability(
+    "ppt169_brutalist_ai_newspaper_2026",
+    "global-ai-capital-2026",
+    "Global AI Capital 2026 frames market shifts as a capital-markets briefing with board memo structure and high-signal decision notes.",
+  ),
+  "ppt169_high_rise_renewal": inheritTemplateCapability(
+    "ppt169_pritzker_2026",
+    "high-rise-renewal",
+    "High Rise Renewal frames urban transformation and architectural proposals with editorial declaration pages and supporting poster notes.",
+  ),
+  "ppt169_home_design_trends_2026": inheritTemplateCapability(
+    "ppt169_pritzker_2026",
+    "home-design-trends-2026",
+    "Home Design Trends 2026 uses a magazine-style editorial frame for lifestyle trend decks and curated visual storytelling.",
+  ),
+  "ppt169_image_text_showcase": inheritTemplateCapability(
+    "ppt169_swiss_grid_systems",
+    "image-text-showcase",
+    "Image Text Showcase emphasizes modular image-caption pairings, balanced information rails, and portfolio-like content sequencing.",
+  ),
+  "ppt169_indie_bookstore_zine_guide": inheritTemplateCapability(
+    "ppt169_pritzker_2026",
+    "indie-bookstore-zine-guide",
+    "Indie Bookstore Zine Guide behaves like an editorial culture zine with poster rhythm, curation notes, and large-format declarations.",
+  ),
+  "ppt169_kimsoong_loyalty_programme": inheritTemplateCapability(
+    "ppt169_sugar_rush_memphis",
+    "kimsoong-loyalty-programme",
+    "Kimsoong Loyalty Programme keeps a friendly brand-program tone with polished campaign cards, offers, and member-journey pacing.",
+  ),
+  "ppt169_kubernetes_blueprint_2026": inheritTemplateCapability(
+    "ppt169_swiss_grid_systems",
+    "kubernetes-blueprint-2026",
+    "Kubernetes Blueprint 2026 leans into technical architecture, infrastructure modules, and platform blueprint sequencing.",
+  ),
+  "ppt169_lin_huiyin_architect": inheritTemplateCapability(
+    "ppt169_pritzker_2026",
+    "lin-huiyin-architect",
+    "Lin Huiyin Architect behaves like an architectural editorial profile with poster layouts, biography notes, and cultural context panels.",
+  ),
+  "ppt169_lin_huiyin_architect_revised": inheritTemplateCapability(
+    "ppt169_pritzker_2026",
+    "lin-huiyin-architect-revised",
+    "Lin Huiyin Architect Revised keeps the editorial architecture framing while tightening the support panels and cultural proof blocks.",
+  ),
+  "ppt169_liziqi_plant_dye_colors": inheritTemplateCapability(
+    "ppt169_sugar_rush_memphis",
+    "liziqi-plant-dye-colors",
+    "Liziqi Plant Dye Colors emphasizes softer storytelling, tactile palettes, and a guided reveal better suited to lifestyle and craft decks.",
+  ),
+  "ppt169_lora_hu_2021": inheritTemplateCapability(
+    "ppt169_sugar_rush_memphis",
+    "lora-hu-2021",
+    "Lora Hu 2021 carries a softer creator-brand rhythm with personal portfolio energy, lifestyle notes, and warmer story pacing.",
+  ),
 } as const
 
+export const pptPreviewStyleCapabilities = Object.fromEntries(
+  (Object.keys(pptPreviewTemplateCapabilities) as PptPreviewStyleKey[]).map((styleKey) => [
+    styleKey,
+    pptPreviewTemplateCapabilities[styleKey].slots.map((slot) => slot.intent),
+  ]),
+) as unknown as Readonly<Record<PptPreviewStyleKey, readonly PptPreviewPageIntent[]>>
+
+function createFrontendTemplateOption(option: PptFrontendTemplateOption) {
+  return option
+}
+
 export const pptFrontendTemplateOptions = [
+  createFrontendTemplateOption({
+    id: "aurora-glass",
+    label: { zh: "极光玻璃", en: "Aurora Glass" },
+    styleKey: "ppt169_glassmorphism_demo",
+    summary: { zh: "偏 AI 系统、玻璃质感和指标面板。", en: "AI-system leaning, glassy, dashboard-heavy." },
+    matchKeywords: ["ai", "agent", "ops", "dashboard", "系统", "智能体", "平台", "指标", "架构"],
+    scenarioHints: ["product-launch", "sales-deck"],
+    priority: 0,
+  }),
+  createFrontendTemplateOption({
+    id: "glassmorphism-demo",
+    label: { zh: "玻璃拟态演示", en: "Glassmorphism Demo" },
+    styleKey: "ppt169_glassmorphism_demo",
+    summary: { zh: "半透明卡片、柔和光感和产品演示气质。", en: "Translucent panels, soft glow, and polished product-demo energy." },
+    matchKeywords: ["glass", "glassmorphism", "仪表盘", "dashboard", "saas", "产品演示", "agent", "workspace"],
+    scenarioHints: ["product-launch", "sales-deck"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "editorial-poster",
+    label: { zh: "编辑海报", en: "Editorial Poster" },
+    styleKey: "ppt169_pritzker_2026",
+    summary: { zh: "偏封面大片、宣言页和编辑排版。", en: "Editorial poster energy with declaration pages." },
+    matchKeywords: ["海报", "宣言", "发布", "keynote", "poster", "manifesto", "campaign", "launch"],
+    scenarioHints: ["marketing-campaign"],
+    priority: 0,
+  }),
+  createFrontendTemplateOption({
+    id: "neo-brutalism",
+    label: { zh: "新野蛮主义", en: "Neo Brutalism" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "偏硬朗标题、编辑栅格和纪要感。", en: "Sharp titles, editorial grids, board memo feel." },
+    matchKeywords: ["brutal", "editorial", "board", "纪要", "复盘", "决策", "newspaper"],
+    scenarioHints: ["sales-deck", "product-launch"],
+    priority: 0,
+  }),
+  createFrontendTemplateOption({
+    id: "swiss-grid",
+    label: { zh: "瑞士网格", en: "Swiss Grid" },
+    styleKey: "ppt169_swiss_grid_systems",
+    summary: { zh: "偏理性咨询、强网格和模块化信息。", en: "Consulting-grade grids and modular signals." },
+    matchKeywords: ["strategy", "consulting", "analysis", "grid", "策略", "咨询", "分析", "汇报"],
+    scenarioHints: ["product-launch", "sales-deck"],
+    priority: 0,
+  }),
   {
     id: "long-table",
     label: { zh: "长桌纪要", en: "Long Table" },
     styleKey: "ppt169_brutalist_ai_newspaper_2026",
     summary: { zh: "规则线、分栏和议题感最强。", en: "Ruled, structured, boardroom-style." },
+    priority: 2,
   },
   {
     id: "playful",
     label: { zh: "轻快玩味", en: "Playful" },
     styleKey: "ppt169_sugar_rush_memphis",
     summary: { zh: "圆角、贴纸和高亮色块最强。", en: "Rounded, bright, energetic." },
+    priority: 2,
   },
   {
     id: "broadside",
     label: { zh: "告示海报", en: "Broadside" },
     styleKey: "ppt169_pritzker_2026",
     summary: { zh: "大字号、强栏位和宣言感最强。", en: "Poster-like, bold, declarative." },
+    priority: 2,
   },
   {
     id: "neo-grid-bold",
     label: { zh: "新网格粗体", en: "Neo Grid Bold" },
     styleKey: "ppt169_swiss_grid_systems",
     summary: { zh: "可见网格、强对比模块和策略界面感最强。", en: "Visible grids, modular, strategic." },
+    priority: 2,
   },
-] as const satisfies ReadonlyArray<{
-  id: PptFrontendTemplateId
-  label: { zh: string; en: string }
-  styleKey: PptPreviewStyleKey
-  summary: { zh: string; en: string }
-}>
+  createFrontendTemplateOption({
+    id: "google-brand",
+    label: { zh: "Google 品牌", en: "Google Brand" },
+    styleKey: "ppt169_sugar_rush_memphis",
+    summary: { zh: "偏轻快品牌、产品发布和友好配色。", en: "Friendly product-brand launch tone." },
+    matchKeywords: ["google", "workspace", "ads", "brand", "谷歌", "品牌"],
+    scenarioHints: ["marketing-campaign", "product-launch"],
+  }),
+  createFrontendTemplateOption({
+    id: "anthropic-brand",
+    label: { zh: "Anthropic 品牌", en: "Anthropic Brand" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "偏研究型 AI 品牌、克制和判断清晰。", en: "Restrained AI research brand tone." },
+    matchKeywords: ["anthropic", "claude", "safety", "research", "模型", "安全", "研究"],
+    scenarioHints: ["product-launch", "sales-deck"],
+  }),
+  createFrontendTemplateOption({
+    id: "academic-defense",
+    label: { zh: "学术答辩", en: "Academic Defense" },
+    styleKey: "ppt169_attention_is_all_you_need",
+    summary: { zh: "偏论文答辩、研究汇报和结论证明。", en: "Thesis defense and research proof format." },
+    matchKeywords: ["答辩", "学术", "论文", "研究", "课题", "defense", "academic", "thesis", "research"],
+    scenarioHints: ["sales-deck", "training"],
+  }),
+  createFrontendTemplateOption({
+    id: "attention-is-all-you-need",
+    label: { zh: "Attention 研究型", en: "Attention Research" },
+    styleKey: "ppt169_attention_is_all_you_need",
+    summary: { zh: "偏研究论文、方法图解和实验结论证明。", en: "Research-paper structure with method diagrams and evidence-led conclusions." },
+    matchKeywords: ["transformer", "attention", "论文", "research", "method", "实验", "模型", "academic"],
+    scenarioHints: ["training", "sales-deck"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "ai-ops",
+    label: { zh: "AI 运维", en: "AI Ops" },
+    styleKey: "ppt169_building_effective_agents",
+    summary: { zh: "偏平台架构、Agent 编排和运维指标。", en: "Platform architecture, agent orchestration, ops metrics." },
+    matchKeywords: ["ai ops", "ops", "infra", "agent", "architecture", "运维", "架构", "智能体", "平台"],
+    scenarioHints: ["product-launch", "sales-deck"],
+  }),
+  createFrontendTemplateOption({
+    id: "building-effective-agents",
+    label: { zh: "高效 Agent 构建", en: "Building Effective Agents" },
+    styleKey: "ppt169_building_effective_agents",
+    summary: { zh: "偏 Agent 系统设计、编排链路和能力拆解。", en: "Agent-system architecture, orchestration flow, and capability breakdown." },
+    matchKeywords: ["agent", "agents", "orchestration", "workflow", "工具链", "编排", "智能体", "架构"],
+    scenarioHints: ["product-launch", "sales-deck"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "cangzhuo",
+    label: { zh: "苍桌纪要", en: "Cangzhuo" },
+    styleKey: "ppt169_cangzhuo",
+    summary: { zh: "偏中文管理层纪要、议题清单和执行部署。", en: "Chinese executive memo framing with agenda-led review and rollout notes." },
+    matchKeywords: ["纪要", "汇报", "管理层", "经营", "执行", "复盘", "meeting", "review", "board"],
+    scenarioHints: ["sales-deck", "training"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "fashion-weekly-digest",
+    label: { zh: "美学周鉴", en: "Fashion Weekly Digest" },
+    styleKey: "ppt169_fashion_weekly_digest",
+    summary: { zh: "偏时尚编辑、趋势策展和杂志节奏。", en: "Editorial fashion and trend-curation pacing." },
+    matchKeywords: ["fashion", "trend", "digest", "时尚", "潮流", "策展", "brand story", "editorial"],
+    scenarioHints: ["marketing-campaign", "training"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "general-dark-tech-claude-code-auto-mode",
+    label: { zh: "暗色科技", en: "General Dark Tech" },
+    styleKey: "ppt169_general_dark_tech_claude_code_auto_mode",
+    summary: { zh: "偏深色科技、技术系统和高对比表达。", en: "Dark-tech product framing with high-contrast system storytelling." },
+    matchKeywords: ["dark tech", "claude code", "技术", "system", "infra", "platform", "engineering", "ai"],
+    scenarioHints: ["product-launch", "sales-deck"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "global-ai-capital-2026",
+    label: { zh: "全球 AI 资本 2026", en: "Global AI Capital 2026" },
+    styleKey: "ppt169_global_ai_capital_2026",
+    summary: { zh: "偏资本市场、行业格局和高层判断纪要。", en: "Capital-markets framing for industry shifts and board-level judgment." },
+    matchKeywords: ["capital", "融资", "估值", "基金", "投资", "ai", "market", "capital market", "board"],
+    scenarioHints: ["sales-deck", "product-launch"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "high-rise-renewal",
+    label: { zh: "高楼更新", en: "High Rise Renewal" },
+    styleKey: "ppt169_high_rise_renewal",
+    summary: { zh: "偏城市更新、建筑方案和空间叙事。", en: "Urban renewal and architectural proposal framing." },
+    matchKeywords: ["建筑", "城市更新", "renewal", "urban", "architecture", "地产", "空间"],
+    scenarioHints: ["product-launch", "sales-deck"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "home-design-trends-2026",
+    label: { zh: "家居设计趋势 2026", en: "Home Design Trends 2026" },
+    styleKey: "ppt169_home_design_trends_2026",
+    summary: { zh: "偏家居生活方式、趋势洞察和审美策展。", en: "Home and lifestyle trend curation with editorial pacing." },
+    matchKeywords: ["home", "design", "家具", "家居", "trend", "lifestyle", "interior", "审美"],
+    scenarioHints: ["marketing-campaign", "training"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "image-text-showcase",
+    label: { zh: "图文陈列", en: "Image Text Showcase" },
+    styleKey: "ppt169_image_text_showcase",
+    summary: { zh: "偏作品展示、图文并置和画册式节奏。", en: "Portfolio-like image-text sequencing and showcase grids." },
+    matchKeywords: ["showcase", "portfolio", "画册", "图文", "案例展示", "lookbook", "gallery"],
+    scenarioHints: ["marketing-campaign", "training"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "indie-bookstore-zine-guide",
+    label: { zh: "独立书店 Zine", en: "Indie Bookstore Zine" },
+    styleKey: "ppt169_indie_bookstore_zine_guide",
+    summary: { zh: "偏文化策展、编辑海报和杂志叙事。", en: "Editorial culture-zine framing with curation and poster rhythm." },
+    matchKeywords: ["zine", "bookstore", "文化", "策展", "editorial", "magazine", "poster", "品牌故事"],
+    scenarioHints: ["marketing-campaign", "training"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "kimsoong-loyalty-programme",
+    label: { zh: "会员忠诚计划", en: "Kimsoong Loyalty Programme" },
+    styleKey: "ppt169_kimsoong_loyalty_programme",
+    summary: { zh: "偏会员体系、活动权益和品牌运营方案。", en: "Membership-program and brand-retention storytelling." },
+    matchKeywords: ["loyalty", "membership", "会员", "积分", "retention", "crm", "运营", "campaign"],
+    scenarioHints: ["marketing-campaign", "sales-deck"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "kubernetes-blueprint-2026",
+    label: { zh: "Kubernetes 蓝图 2026", en: "Kubernetes Blueprint 2026" },
+    styleKey: "ppt169_kubernetes_blueprint_2026",
+    summary: { zh: "偏云原生架构、平台蓝图和技术治理。", en: "Cloud-native architecture, platform blueprints, and technical governance." },
+    matchKeywords: ["kubernetes", "cloud native", "platform", "infra", "blueprint", "架构", "云原生", "技术治理"],
+    scenarioHints: ["product-launch", "sales-deck"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "lin-huiyin-architect",
+    label: { zh: "林徽因建筑", en: "Lin Huiyin Architect" },
+    styleKey: "ppt169_lin_huiyin_architect",
+    summary: { zh: "偏建筑人物、文化叙事和编辑式传记。", en: "Architect profile with editorial biography and cultural storytelling." },
+    matchKeywords: ["lin huiyin", "建筑", "architect", "传记", "文化", "人物", "history"],
+    scenarioHints: ["training", "marketing-campaign"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "lin-huiyin-architect-revised",
+    label: { zh: "林徽因建筑·修订", en: "Lin Huiyin Architect Revised" },
+    styleKey: "ppt169_lin_huiyin_architect_revised",
+    summary: { zh: "偏建筑人物专题的修订版表达。", en: "Revised architecture-profile treatment with tighter editorial support." },
+    matchKeywords: ["lin huiyin", "architect", "revised", "建筑", "文化人物", "专题"],
+    scenarioHints: ["training", "marketing-campaign"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "liziqi-plant-dye-colors",
+    label: { zh: "植物染色", en: "Plant Dye Colors" },
+    styleKey: "ppt169_liziqi_plant_dye_colors",
+    summary: { zh: "偏生活方式、手作主题和柔和叙事表达。", en: "Lifestyle storytelling with tactile craft cues and softer pacing." },
+    matchKeywords: ["lifestyle", "craft", "颜色", "色彩", "生活方式", "手作", "品牌故事", "温和"],
+    scenarioHints: ["marketing-campaign", "training"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "lora-hu-2021",
+    label: { zh: "Lora Hu 2021", en: "Lora Hu 2021" },
+    styleKey: "ppt169_lora_hu_2021",
+    summary: { zh: "偏个人品牌、创作者作品集和温和生活方式叙事。", en: "Creator-portfolio and personal-brand storytelling with a softer lifestyle tone." },
+    matchKeywords: ["creator", "portfolio", "个人品牌", "作品集", "lifestyle", "创作者", "brand"],
+    scenarioHints: ["marketing-campaign", "training"],
+    priority: 1,
+  }),
+  createFrontendTemplateOption({
+    id: "government-blue",
+    label: { zh: "政务蓝", en: "Government Blue" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "偏正式政务汇报、政策解读和工作部署。", en: "Formal government reporting and policy rollout." },
+    matchKeywords: ["政府", "政务", "政策", "汇报", "部署", "government", "policy", "public sector"],
+    scenarioHints: ["sales-deck", "training"],
+  }),
+  createFrontendTemplateOption({
+    id: "government-red",
+    label: { zh: "政务红", en: "Government Red" },
+    styleKey: "ppt169_pritzker_2026",
+    summary: { zh: "偏强主张政务表达和主题宣导。", en: "High-emphasis policy communication and thematic rollout." },
+    matchKeywords: ["党建", "宣导", "政策", "主题", "government", "policy", "campaign"],
+    scenarioHints: ["sales-deck", "training"],
+  }),
+  createFrontendTemplateOption({
+    id: "medical-university",
+    label: { zh: "医学院", en: "Medical University" },
+    styleKey: "ppt169_swiss_grid_systems",
+    summary: { zh: "偏医学研究、临床结构和证据展示。", en: "Medical research, clinical structure, evidence-led." },
+    matchKeywords: ["医疗", "医院", "医学院", "临床", "medical", "clinical", "healthcare"],
+    scenarioHints: ["sales-deck", "training"],
+  }),
+  createFrontendTemplateOption({
+    id: "pixel-retro",
+    label: { zh: "像素复古", en: "Pixel Retro" },
+    styleKey: "ppt169_sugar_rush_memphis",
+    summary: { zh: "偏游戏、年轻化和复古像素表达。", en: "Retro, youth, and game-adjacent presentation." },
+    matchKeywords: ["像素", "复古", "游戏", "pixel", "retro", "gaming", "youthful"],
+    scenarioHints: ["marketing-campaign", "training"],
+  }),
+  createFrontendTemplateOption({
+    id: "psychology-attachment",
+    label: { zh: "心理依恋", en: "Psychology Attachment" },
+    styleKey: "ppt169_sugar_rush_memphis",
+    summary: { zh: "偏心理主题、情绪表达和温和叙事。", en: "Gentle psychology and emotion-led storytelling." },
+    matchKeywords: ["心理", "情绪", "咨询", "therapy", "psychology", "emotion"],
+    scenarioHints: ["training", "marketing-campaign"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-chongqing-university",
+    label: { zh: "重庆大学", en: "Chongqing University" },
+    styleKey: "ppt169_swiss_grid_systems",
+    summary: { zh: "偏高校研究汇报和答辩感。", en: "University presentation and defense framing." },
+    matchKeywords: ["重庆大学", "高校", "大学", "研究", "university", "academic"],
+    scenarioHints: ["sales-deck", "training"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-china-telecom",
+    label: { zh: "中国电信", en: "China Telecom" },
+    styleKey: "ppt169_swiss_grid_systems",
+    summary: { zh: "偏通信平台、网络体系和企业级汇报。", en: "Telecom platform and enterprise systems framing." },
+    matchKeywords: ["电信", "通信", "运营商", "telecom", "network", "enterprise"],
+    scenarioHints: ["product-launch", "sales-deck"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-china-construction-modern",
+    label: { zh: "中国电建·现代", en: "Power Construction Modern" },
+    styleKey: "ppt169_swiss_grid_systems",
+    summary: { zh: "偏工程项目、现代企业信息和结构化汇报。", en: "Modern infrastructure and project reporting." },
+    matchKeywords: ["电建", "工程", "基建", "construction", "infrastructure", "energy"],
+    scenarioHints: ["sales-deck", "product-launch"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-china-construction-classic",
+    label: { zh: "中国电建·常规", en: "Power Construction Classic" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "偏工程汇报、条线清晰和执行部署。", en: "Clear infrastructure reporting and execution planning." },
+    matchKeywords: ["电建", "工程", "基建", "施工", "construction", "delivery"],
+    scenarioHints: ["sales-deck", "training"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-cmb",
+    label: { zh: "招商银行", en: "China Merchants Bank" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "偏金融经营、风险和管理层复盘。", en: "Finance, risk, and board review framing." },
+    matchKeywords: ["银行", "金融", "风险", "bank", "finance", "budget", "audit"],
+    scenarioHints: ["sales-deck"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-catarc-classic",
+    label: { zh: "中汽研·常规", en: "CATARC Classic" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "偏汽车研究、评测汇报和常规企业版式。", en: "Automotive research and enterprise review framing." },
+    matchKeywords: ["汽车", "车企", "研究院", "auto", "mobility", "research"],
+    scenarioHints: ["sales-deck", "product-launch"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-catarc-modern",
+    label: { zh: "中汽研·现代", en: "CATARC Modern" },
+    styleKey: "ppt169_swiss_grid_systems",
+    summary: { zh: "偏汽车平台、现代指标和技术汇报。", en: "Modern automotive platform and metrics framing." },
+    matchKeywords: ["汽车", "车企", "技术", "auto", "mobility", "platform"],
+    scenarioHints: ["product-launch", "sales-deck"],
+  }),
+  createFrontendTemplateOption({
+    id: "deck-catarc-business",
+    label: { zh: "中汽研·商务", en: "CATARC Business" },
+    styleKey: "ppt169_brutalist_ai_newspaper_2026",
+    summary: { zh: "偏商务评审、经营纪要和决策支持。", en: "Business review and decision-support framing." },
+    matchKeywords: ["商务", "评审", "经营", "business", "review", "decision"],
+    scenarioHints: ["sales-deck"],
+  }),
+] as const satisfies ReadonlyArray<PptFrontendTemplateOption>
+
+const knownPptFrontendTemplateIds = new Set(pptFrontendTemplateOptions.map((option) => option.id))
 
 export const pptPreviewNarrativeAngles = [
   {
@@ -604,6 +1131,10 @@ export function resolvePptPreviewTemplateMode(request: Pick<PptPreviewRequest, "
   return "auto-4" as const
 }
 
+export function isKnownPptFrontendTemplateId(templateId: unknown): templateId is PptFrontendTemplateId {
+  return typeof templateId === "string" && knownPptFrontendTemplateIds.has(templateId)
+}
+
 export function getPptFrontendTemplateOption(templateId: PptFrontendTemplateId) {
   return pptFrontendTemplateOptions.find((option) => option.id === templateId)
 }
@@ -634,6 +1165,310 @@ export function getPptPreviewNarrativeAnglePrompt(angle: PptPreviewNarrativeAngl
   return language === "zh-CN" ? option.prompt.zh : option.prompt.en
 }
 
+function normalizeTemplateMatchText(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function collectPptTemplateMatchText(request: PptPreviewRequest) {
+  const segments = [request.prompt]
+
+  if (typeof request.researchBrief === "string") {
+    segments.push(request.researchBrief)
+  } else if (request.researchBrief && typeof request.researchBrief === "object") {
+    const research = request.researchBrief
+    segments.push(research.topic)
+    segments.push(...(research.keyFacts || []))
+    segments.push(...(research.numericEvidence || []))
+    segments.push(...(research.risks || []))
+    segments.push(...(research.implications || []))
+    segments.push(...(research.sourceNotes || []))
+    if (research.rawSummary) {
+      segments.push(research.rawSummary)
+    }
+  }
+
+  return normalizeTemplateMatchText(segments.filter(Boolean).join("\n"))
+}
+
+function includesAnyKeyword(text: string, keywords: readonly string[]) {
+  return keywords.some((keyword) => text.includes(keyword))
+}
+
+function scorePptPreviewStyleForRequest(
+  request: PptPreviewRequest,
+  styleKey: PptPreviewStyleKey,
+  text: string,
+) {
+  let score = 0
+  const archetype = resolvePptPreviewStyleArchetype(styleKey)
+
+  const addIfMatched = (keywords: readonly string[], points: number) => {
+    if (includesAnyKeyword(text, keywords)) {
+      score += points
+    }
+  }
+
+  const scenarioWeights: Record<PptScenario, Record<PptPreviewStyleArchetype, number>> = {
+    "marketing-campaign": {
+      "ppt169_brutalist_ai_newspaper_2026": 1,
+      "ppt169_sugar_rush_memphis": 3,
+      "ppt169_pritzker_2026": 4,
+      "ppt169_swiss_grid_systems": 2,
+    },
+    "product-launch": {
+      "ppt169_brutalist_ai_newspaper_2026": 1,
+      "ppt169_sugar_rush_memphis": 2,
+      "ppt169_pritzker_2026": 3,
+      "ppt169_swiss_grid_systems": 4,
+    },
+    "sales-deck": {
+      "ppt169_brutalist_ai_newspaper_2026": 3,
+      "ppt169_sugar_rush_memphis": 1,
+      "ppt169_pritzker_2026": 2,
+      "ppt169_swiss_grid_systems": 4,
+    },
+    training: {
+      "ppt169_brutalist_ai_newspaper_2026": 3,
+      "ppt169_sugar_rush_memphis": 3,
+      "ppt169_pritzker_2026": 1,
+      "ppt169_swiss_grid_systems": 2,
+    },
+  }
+
+  score += scenarioWeights[request.scenario]?.[archetype] ?? 0
+
+  const executiveKeywords = [
+    "董事会",
+    "管理层",
+    "高层",
+    "复盘",
+    "汇报",
+    "经营",
+    "诊断",
+    "审计",
+    "合规",
+    "风险",
+    "财务",
+    "预算",
+    "纪要",
+    "决策",
+    "board",
+    "executive",
+    "leadership",
+    "review",
+    "retro",
+    "retrospective",
+    "memo",
+    "diagnosis",
+    "audit",
+    "compliance",
+    "risk",
+    "finance",
+    "budget",
+    "decision",
+    "briefing",
+  ] as const
+  const analyticalKeywords = [
+    "产品",
+    "策略",
+    "咨询",
+    "分析",
+    "数据",
+    "指标",
+    "市场",
+    "行业",
+    "竞品",
+    "路线图",
+    "流程",
+    "平台",
+    "saas",
+    "product",
+    "strategy",
+    "consulting",
+    "analysis",
+    "metric",
+    "metrics",
+    "kpi",
+    "benchmark",
+    "comparison",
+    "market",
+    "industry",
+    "competitor",
+    "roadmap",
+    "workflow",
+    "dashboard",
+    "platform",
+    "funnel",
+  ] as const
+  const playfulKeywords = [
+    "品牌",
+    "活动",
+    "教育",
+    "培训",
+    "课程",
+    "社区",
+    "年轻",
+    "亲和",
+    "故事",
+    "内容",
+    "社媒",
+    "小红书",
+    "抖音",
+    "节日",
+    "创作者",
+    "brand",
+    "event",
+    "education",
+    "training",
+    "community",
+    "story",
+    "content",
+    "social",
+    "launch",
+    "friendly",
+    "playful",
+    "festival",
+    "creator",
+    "campaign",
+  ] as const
+  const broadsideKeywords = [
+    "宣言",
+    "主张",
+    "海报",
+    "发布",
+    "战役",
+    "引爆",
+    "视觉",
+    "口号",
+    "演讲",
+    "主题发布",
+    "英雄",
+    "宣发",
+    "manifesto",
+    "poster",
+    "announcement",
+    "declaration",
+    "hero",
+    "slogan",
+    "speech",
+    "keynote",
+    "big idea",
+    "rally",
+  ] as const
+  const factualKeywords = [
+    "现状",
+    "最新",
+    "趋势",
+    "政策",
+    "法规",
+    "融资",
+    "财报",
+    "业绩",
+    "地缘",
+    "战争",
+    "制裁",
+    "供应链",
+    "油价",
+    "汇率",
+    "latest",
+    "current state",
+    "policy",
+    "regulation",
+    "earnings",
+    "geopolitical",
+    "supply chain",
+    "tariff",
+    "market",
+  ] as const
+  const seriousToneKeywords = [
+    "正式",
+    "严肃",
+    "理性",
+    "专业",
+    "商务",
+    "稳重",
+    "formal",
+    "serious",
+    "professional",
+    "business",
+    "boardroom",
+  ] as const
+  const energeticToneKeywords = [
+    "活泼",
+    "轻松",
+    "明亮",
+    "年轻化",
+    "有趣",
+    "冲击",
+    "energetic",
+    "bright",
+    "youthful",
+    "fun",
+    "bold",
+    "impactful",
+  ] as const
+
+  if (archetype === "ppt169_brutalist_ai_newspaper_2026") {
+    addIfMatched(executiveKeywords, 6)
+    addIfMatched(analyticalKeywords, 2)
+    addIfMatched(factualKeywords, 4)
+    addIfMatched(seriousToneKeywords, 3)
+  }
+
+  if (archetype === "ppt169_swiss_grid_systems") {
+    addIfMatched(analyticalKeywords, 6)
+    addIfMatched(executiveKeywords, 3)
+    addIfMatched(factualKeywords, 4)
+    addIfMatched(seriousToneKeywords, 2)
+  }
+
+  if (archetype === "ppt169_sugar_rush_memphis") {
+    addIfMatched(playfulKeywords, 6)
+    addIfMatched(energeticToneKeywords, 4)
+    addIfMatched(broadsideKeywords, 1)
+  }
+
+  if (archetype === "ppt169_pritzker_2026") {
+    addIfMatched(broadsideKeywords, 6)
+    addIfMatched(playfulKeywords, 2)
+    addIfMatched(energeticToneKeywords, 3)
+  }
+
+  if (request.researchBrief && typeof request.researchBrief === "object") {
+    const research = request.researchBrief
+    const numericSignalCount = (research.numericEvidence?.length ?? 0) + (research.keyFacts?.length ?? 0)
+    if (numericSignalCount > 0) {
+      if (archetype === "ppt169_swiss_grid_systems") score += 3
+      if (archetype === "ppt169_brutalist_ai_newspaper_2026") score += 2
+    }
+  }
+
+  return score
+}
+
+function countMatchedTemplateKeywords(text: string, keywords: readonly string[] | undefined) {
+  if (!keywords?.length) return 0
+  let matches = 0
+  for (const keyword of keywords) {
+    if (text.includes(keyword.toLowerCase())) {
+      matches += 1
+    }
+  }
+  return matches
+}
+
+function scorePptFrontendTemplateOptionForRequest(
+  request: PptPreviewRequest,
+  option: PptFrontendTemplateOption,
+  text: string,
+) {
+  const styleScore = scorePptPreviewStyleForRequest(request, option.styleKey, text)
+  const keywordMatches = countMatchedTemplateKeywords(text, option.matchKeywords)
+  const scenarioBonus = option.scenarioHints?.includes(request.scenario) ? 2 : 0
+  const keywordBonus = keywordMatches > 0 ? keywordMatches * 6 : 0
+  return styleScore * 4 + keywordBonus + scenarioBonus + (option.priority ?? 0)
+}
+
 export function buildPptPreviewVariantDescriptors(request: PptPreviewRequest): PptPreviewVariantDescriptor[] {
   const templateMode = resolvePptPreviewTemplateMode(request)
 
@@ -655,13 +1490,94 @@ export function buildPptPreviewVariantDescriptors(request: PptPreviewRequest): P
     }
   }
 
+  const matchText = collectPptTemplateMatchText(request)
   const slotLabels: Array<"A" | "B" | "C" | "D"> = ["A", "B", "C", "D"]
-  return pptPreviewStyles.map((style, index) => ({
-    key: style.key,
-    slotLabel: slotLabels[index] ?? "D",
-    style,
-    templateId: pptPreviewTemplateCapabilities[style.key].templateId as PptFrontendTemplateId,
-  }))
+  const ranked = pptFrontendTemplateOptions
+    .map((option, index) => ({
+      option,
+      score: scorePptFrontendTemplateOptionForRequest(request, option, matchText),
+      originalIndex: index,
+    }))
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score
+      }
+      return left.originalIndex - right.originalIndex
+    })
+
+  const selected: typeof ranked = []
+  const usedStyleKeys = new Set<PptPreviewStyleKey>()
+  for (const candidate of ranked) {
+    if (usedStyleKeys.has(candidate.option.styleKey)) continue
+    selected.push(candidate)
+    usedStyleKeys.add(candidate.option.styleKey)
+    if (selected.length === 4) break
+  }
+
+  if (selected.length < 4) {
+    for (const candidate of ranked) {
+      if (selected.some((item) => item.option.id === candidate.option.id)) continue
+      selected.push(candidate)
+      if (selected.length === 4) break
+    }
+  }
+
+  return selected.map(({ option }, index) => {
+      const style = getPptPreviewStyleByKey(option.styleKey)
+      if (!style) {
+        throw new Error(`ppt_preview_style_missing:${option.styleKey}`)
+      }
+
+      return {
+        key: option.id,
+      slotLabel: slotLabels[index] ?? "D",
+      style,
+        templateId: option.id,
+      }
+    })
+}
+
+export function buildPptRecommendedTemplateSummaries(request: PptPreviewRequest): PptRecommendedTemplateSummary[] {
+  const matchText = collectPptTemplateMatchText(request)
+  const ranked = pptFrontendTemplateOptions
+    .map((option, index) => ({
+      option,
+      index,
+      score: scorePptFrontendTemplateOptionForRequest(request, option, matchText),
+    }))
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score
+      return left.index - right.index
+    })
+
+  const selected: typeof ranked = []
+  const usedStyleKeys = new Set<PptPreviewStyleKey>()
+  for (const candidate of ranked) {
+    if (usedStyleKeys.has(candidate.option.styleKey)) continue
+    selected.push(candidate)
+    usedStyleKeys.add(candidate.option.styleKey)
+    if (selected.length === 4) break
+  }
+
+  if (selected.length < 4) {
+    for (const candidate of ranked) {
+      if (selected.some((item) => item.option.id === candidate.option.id)) continue
+      selected.push(candidate)
+      if (selected.length === 4) break
+    }
+  }
+
+  return selected.map(({ option }, index) => {
+    const style = getPptPreviewStyleByKey(option.styleKey)
+    return {
+      rank: index + 1,
+      templateId: option.id,
+      templateLabel: getPptPreviewTemplateLabel(option.id, request.language),
+      styleKey: option.styleKey,
+      styleName: style?.name ?? option.label.en,
+      summary: request.language === "zh-CN" ? option.summary.zh : option.summary.en,
+    }
+  })
 }
 
 export function buildPptPreviewIntentSequenceLabel(
@@ -836,6 +1752,261 @@ export const pptPreviewStyles: readonly PptPreviewVariantStyle[] = [
     },
     strengths: ["可见网格", "现代策略感", "粗体模块"],
   },
+  {
+    key: "ppt169_glassmorphism_demo",
+    name: "Glassmorphism Demo",
+    summary: "来自 ppt-master 的玻璃拟态演示风格，半透明面板、柔和高光和产品级仪表盘感更强，适合 AI 工具、SaaS 和系统能力展示。",
+    stylePrompt:
+      "Use the Glassmorphism Demo preset. Write with translucent product panels, layered signal cards, clear product framing, and polished AI-tool launch language.",
+    palette: {
+      background: "#EAF4FF",
+      foreground: "#132033",
+      accent: "#5E8BFF",
+      panel: "#F8FBFF",
+      border: "#BFD3F6",
+    },
+    strengths: ["玻璃面板", "产品演示", "AI 工具感"],
+  },
+  {
+    key: "ppt169_attention_is_all_you_need",
+    name: "Attention Research",
+    summary: "来自 ppt-master 的研究论文风格，更强调方法图解、实验结果和学术答辩式证明链路，适合论文、研究汇报和技术分享。",
+    stylePrompt:
+      "Use the Attention Research preset. Write like a research defense with method framing, experiment logic, evidence-first sequencing, and restrained academic confidence.",
+    palette: {
+      background: "#F2F1EC",
+      foreground: "#111111",
+      accent: "#C63F1C",
+      panel: "#FBFAF6",
+      border: "#D7D1C4",
+    },
+    strengths: ["研究证明", "方法图解", "答辩结构"],
+  },
+  {
+    key: "ppt169_building_effective_agents",
+    name: "Effective Agents",
+    summary: "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制，适合智能体平台、工作流和架构型 deck。",
+    stylePrompt:
+      "Use the Effective Agents preset. Write with orchestration clarity, capability layers, system decomposition, and operator-friendly execution language.",
+    palette: {
+      background: "#EEF2EC",
+      foreground: "#101418",
+      accent: "#B7F36B",
+      panel: "#F9FBF6",
+      border: "#CED8C2",
+    },
+    strengths: ["Agent 编排", "能力拆解", "架构叙事"],
+  },
+  {
+    key: "ppt169_cangzhuo",
+    name: "Cangzhuo",
+    summary: "来自 ppt-master 的中文管理层纪要风格，议题清单、条线复盘和执行部署感更强，适合经营复盘、工作汇报和会议纪要型 deck。",
+    stylePrompt:
+      "Use the Cangzhuo preset. Write with Chinese executive memo discipline, agenda-led reasoning, compact action notes, and meeting-grade clarity.",
+    palette: {
+      background: "#F7F1E8",
+      foreground: "#7A3123",
+      accent: "#B14B32",
+      panel: "#FFF8EF",
+      border: "#D7BEAA",
+    },
+    strengths: ["中文纪要", "经营复盘", "执行部署"],
+  },
+  {
+    key: "ppt169_fashion_weekly_digest",
+    name: "Fashion Weekly Digest",
+    summary: "来自 ppt-master 的美学周鉴风格，编辑感、趋势策展和杂志节奏更强，适合时尚、品牌和内容策划型 deck。",
+    stylePrompt:
+      "Use the Fashion Weekly Digest preset. Write like an editorial trend issue with curation rhythm, visual hooks, and fashion-forward story pacing.",
+    palette: {
+      background: "#171412",
+      foreground: "#F7E7D8",
+      accent: "#FF8B61",
+      panel: "#231D19",
+      border: "#43362E",
+    },
+    strengths: ["潮流策展", "杂志节奏", "时尚编辑"],
+  },
+  {
+    key: "ppt169_general_dark_tech_claude_code_auto_mode",
+    name: "General Dark Tech",
+    summary: "来自 ppt-master 的暗色科技风格，适合技术系统、开发者产品和深色高对比表达。",
+    stylePrompt:
+      "Use the General Dark Tech preset. Write with technical confidence, dark product contrast, system decomposition, and engineering-facing clarity.",
+    palette: {
+      background: "#0D0F12",
+      foreground: "#F2F2F0",
+      accent: "#F06C3B",
+      panel: "#171B21",
+      border: "#2B3139",
+    },
+    strengths: ["暗色科技", "系统拆解", "开发者气质"],
+  },
+  {
+    key: "ppt169_global_ai_capital_2026",
+    name: "Global AI Capital",
+    summary: "来自 ppt-master 的全球 AI 资本风格，更偏行业格局、融资判断和管理层纪要，适合市场、投资和高层决策型汇报。",
+    stylePrompt:
+      "Use the Global AI Capital preset. Write like a board-facing capital markets brief with market structure, investment logic, and explicit strategic implications.",
+    palette: {
+      background: "#F7F0E3",
+      foreground: "#772919",
+      accent: "#C84A23",
+      panel: "#FFF8EE",
+      border: "#D9BEA5",
+    },
+    strengths: ["资本叙事", "行业格局", "高层纪要"],
+  },
+  {
+    key: "ppt169_high_rise_renewal",
+    name: "High Rise Renewal",
+    summary: "来自 ppt-master 的高楼更新风格，适合建筑方案、城市更新和空间叙事类 deck。",
+    stylePrompt:
+      "Use the High Rise Renewal preset. Write like an urban-renewal proposal with architectural framing, transformation logic, and editorial support panels.",
+    palette: {
+      background: "#12100F",
+      foreground: "#F1E6D8",
+      accent: "#D96E45",
+      panel: "#211B18",
+      border: "#3E332D",
+    },
+    strengths: ["城市更新", "建筑方案", "空间叙事"],
+  },
+  {
+    key: "ppt169_home_design_trends_2026",
+    name: "Home Design Trends",
+    summary: "来自 ppt-master 的家居趋势风格，适合生活方式内容、审美趋势和家居设计策展。",
+    stylePrompt:
+      "Use the Home Design Trends preset. Write with lifestyle curation, trend interpretation, and interior-design storytelling that feels polished and editorial.",
+    palette: {
+      background: "#F5EFE7",
+      foreground: "#2E2722",
+      accent: "#B98053",
+      panel: "#FCF8F2",
+      border: "#D9C8B8",
+    },
+    strengths: ["家居趋势", "生活方式", "审美策展"],
+  },
+  {
+    key: "ppt169_image_text_showcase",
+    name: "Image Text Showcase",
+    summary: "来自 ppt-master 的图文陈列风格，更强调作品展示、图文并置和 portfolio 节奏。",
+    stylePrompt:
+      "Use the Image Text Showcase preset. Write with portfolio discipline, image-caption balance, modular showcase structure, and concise explanatory text.",
+    palette: {
+      background: "#F1F0EB",
+      foreground: "#141414",
+      accent: "#D44B2B",
+      panel: "#FBFAF5",
+      border: "#D2CEC3",
+    },
+    strengths: ["图文并置", "作品展示", "Portfolio 节奏"],
+  },
+  {
+    key: "ppt169_indie_bookstore_zine_guide",
+    name: "Indie Bookstore Zine",
+    summary: "来自 ppt-master 的独立书店 zine 风格，编辑感、策展节奏和海报化排版更强，适合文化品牌、策展内容和故事型发布。",
+    stylePrompt:
+      "Use the Indie Bookstore Zine preset. Write like a curated editorial zine with culture-led framing, poster tension, and guided but intimate storytelling.",
+    palette: {
+      background: "#181512",
+      foreground: "#F3E8D7",
+      accent: "#D96C3D",
+      panel: "#221D19",
+      border: "#3A3029",
+    },
+    strengths: ["编辑策展", "杂志叙事", "文化品牌"],
+  },
+  {
+    key: "ppt169_kimsoong_loyalty_programme",
+    name: "Loyalty Programme",
+    summary: "来自 ppt-master 的会员忠诚计划风格，适合 CRM、会员体系、活动权益和品牌运营方案。",
+    stylePrompt:
+      "Use the Loyalty Programme preset. Write with member-journey clarity, campaign warmth, branded offer framing, and retention-focused action steps.",
+    palette: {
+      background: "#F5D8B6",
+      foreground: "#1E1B19",
+      accent: "#D96C3F",
+      panel: "#FBE8D0",
+      border: "#D2A57A",
+    },
+    strengths: ["会员运营", "品牌活动", "留存叙事"],
+  },
+  {
+    key: "ppt169_kubernetes_blueprint_2026",
+    name: "Kubernetes Blueprint",
+    summary: "来自 ppt-master 的 Kubernetes 蓝图风格，更适合云原生平台、基础设施架构和技术治理型 deck。",
+    stylePrompt:
+      "Use the Kubernetes Blueprint preset. Write with platform architecture clarity, infrastructure modules, governance rails, and technical rollout sequencing.",
+    palette: {
+      background: "#EEF1EF",
+      foreground: "#11161B",
+      accent: "#88C0FF",
+      panel: "#F8FBF9",
+      border: "#C8D3CF",
+    },
+    strengths: ["云原生架构", "平台蓝图", "技术治理"],
+  },
+  {
+    key: "ppt169_lin_huiyin_architect",
+    name: "Lin Huiyin Architect",
+    summary: "来自 ppt-master 的林徽因建筑人物风格，适合建筑人物、文化专题和编辑式传记叙事。",
+    stylePrompt:
+      "Use the Lin Huiyin Architect preset. Write as an editorial cultural profile with architectural context, biography rhythm, and poster-like emphasis.",
+    palette: {
+      background: "#161311",
+      foreground: "#F3E8DC",
+      accent: "#C67248",
+      panel: "#231C18",
+      border: "#42352E",
+    },
+    strengths: ["建筑人物", "文化专题", "传记编辑感"],
+  },
+  {
+    key: "ppt169_lin_huiyin_architect_revised",
+    name: "Lin Huiyin Architect Revised",
+    summary: "来自 ppt-master 的林徽因建筑修订版风格，保留文化人物叙事，但支撑页更紧凑。",
+    stylePrompt:
+      "Use the Lin Huiyin Architect Revised preset. Keep the editorial architecture biography framing while tightening supporting context and evidence blocks.",
+    palette: {
+      background: "#191513",
+      foreground: "#F1E7DA",
+      accent: "#D17B55",
+      panel: "#261F1A",
+      border: "#453730",
+    },
+    strengths: ["文化修订版", "建筑传记", "支撑页更紧"],
+  },
+  {
+    key: "ppt169_liziqi_plant_dye_colors",
+    name: "Plant Dye Colors",
+    summary: "来自 ppt-master 的植物染色风格，色彩温和、叙事柔软、手作质感明显，适合生活方式品牌、文化内容和审美表达。",
+    stylePrompt:
+      "Use the Plant Dye Colors preset. Write with gentle craft storytelling, tactile lifestyle cues, calm pacing, and a color-led sense of refinement.",
+    palette: {
+      background: "#F4E8D8",
+      foreground: "#2B241E",
+      accent: "#7F9A5D",
+      panel: "#FBF6EE",
+      border: "#D9C7B5",
+    },
+    strengths: ["生活方式", "柔和色彩", "手作气质"],
+  },
+  {
+    key: "ppt169_lora_hu_2021",
+    name: "Lora Hu 2021",
+    summary: "来自 ppt-master 的创作者作品集风格，适合个人品牌、作品展示和温和生活方式叙事。",
+    stylePrompt:
+      "Use the Lora Hu 2021 preset. Write with creator-portfolio pacing, softer personal-brand storytelling, and intimate but polished lifestyle framing.",
+    palette: {
+      background: "#F3E4D8",
+      foreground: "#2A221E",
+      accent: "#B86D59",
+      panel: "#FBF3EC",
+      border: "#D6C0B3",
+    },
+    strengths: ["个人品牌", "作品集", "创作者叙事"],
+  },
 ] as const
 
 const pptPreviewStyleSummaries: Record<PptPreviewStyleKey, { zh: string; en: string }> = {
@@ -854,6 +2025,74 @@ const pptPreviewStyleSummaries: Record<PptPreviewStyleKey, { zh: string; en: str
   "ppt169_swiss_grid_systems": {
     zh: "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
     en: "A frontend-slides neo-grid preset with visible rails, high-contrast modules, and a contemporary strategy-interface feel for analytical decks.",
+  },
+  "ppt169_glassmorphism_demo": {
+    zh: "来自 ppt-master 的玻璃拟态演示风格，半透明面板、柔和高光和产品级仪表盘感更强，适合 AI 工具和 SaaS 展示。",
+    en: "A ppt-master glassmorphism preset with translucent panels, soft glow, and polished product-demo energy for AI tools and SaaS decks.",
+  },
+  "ppt169_attention_is_all_you_need": {
+    zh: "来自 ppt-master 的研究论文风格，更强调方法图解、实验结果和学术答辩式证明链路。",
+    en: "A ppt-master research preset that emphasizes method diagrams, experiment proof, and academic-defense sequencing.",
+  },
+  "ppt169_building_effective_agents": {
+    zh: "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制。",
+    en: "A ppt-master agent-systems preset centered on capability layers, orchestration flow, and operating-model clarity.",
+  },
+  "ppt169_cangzhuo": {
+    zh: "来自 ppt-master 的中文管理层纪要风格，议题清单、条线复盘和执行部署感更强。",
+    en: "A ppt-master Chinese executive memo preset with agenda-led review, business-line recap, and rollout-oriented execution notes.",
+  },
+  "ppt169_fashion_weekly_digest": {
+    zh: "来自 ppt-master 的美学周鉴风格，编辑感、趋势策展和杂志节奏更强。",
+    en: "A ppt-master editorial trend digest preset with curation rhythm, fashion cues, and magazine-style sequencing.",
+  },
+  "ppt169_general_dark_tech_claude_code_auto_mode": {
+    zh: "来自 ppt-master 的暗色科技风格，适合技术系统、开发者产品和高对比表达。",
+    en: "A ppt-master dark-tech preset for technical systems, developer products, and high-contrast product storytelling.",
+  },
+  "ppt169_global_ai_capital_2026": {
+    zh: "来自 ppt-master 的全球 AI 资本风格，更偏行业格局、融资判断和管理层纪要。",
+    en: "A ppt-master capital-markets preset for industry shifts, investment framing, and board-facing AI market briefs.",
+  },
+  "ppt169_high_rise_renewal": {
+    zh: "来自 ppt-master 的高楼更新风格，适合建筑方案、城市更新和空间叙事类 deck。",
+    en: "A ppt-master urban-renewal preset for architectural proposals, city transformation, and spatial storytelling.",
+  },
+  "ppt169_home_design_trends_2026": {
+    zh: "来自 ppt-master 的家居趋势风格，适合生活方式内容、审美趋势和家居设计策展。",
+    en: "A ppt-master home-design trend preset for lifestyle content, aesthetic curation, and interior-design storytelling.",
+  },
+  "ppt169_image_text_showcase": {
+    zh: "来自 ppt-master 的图文陈列风格，更强调作品展示、图文并置和 portfolio 节奏。",
+    en: "A ppt-master image-text showcase preset that emphasizes portfolio pacing, image-caption balance, and modular gallery structure.",
+  },
+  "ppt169_indie_bookstore_zine_guide": {
+    zh: "来自 ppt-master 的独立书店 zine 风格，编辑感、策展节奏和海报化排版更强。",
+    en: "A ppt-master editorial zine preset with curation rhythm, poster tension, and culture-led storytelling.",
+  },
+  "ppt169_kimsoong_loyalty_programme": {
+    zh: "来自 ppt-master 的会员忠诚计划风格，适合 CRM、会员体系和品牌运营方案。",
+    en: "A ppt-master loyalty-program preset for CRM, membership systems, and branded retention planning.",
+  },
+  "ppt169_kubernetes_blueprint_2026": {
+    zh: "来自 ppt-master 的 Kubernetes 蓝图风格，更适合云原生平台、基础设施架构和技术治理型 deck。",
+    en: "A ppt-master Kubernetes blueprint preset for cloud-native platforms, infrastructure architecture, and technical governance.",
+  },
+  "ppt169_lin_huiyin_architect": {
+    zh: "来自 ppt-master 的林徽因建筑人物风格，适合建筑人物、文化专题和编辑式传记叙事。",
+    en: "A ppt-master architectural profile preset for cultural biography, editorial framing, and architecture-led storytelling.",
+  },
+  "ppt169_lin_huiyin_architect_revised": {
+    zh: "来自 ppt-master 的林徽因建筑修订版风格，保留文化人物叙事，但支撑页更紧凑。",
+    en: "A revised ppt-master architectural profile preset with tighter support panels and a more compact editorial biography rhythm.",
+  },
+  "ppt169_liziqi_plant_dye_colors": {
+    zh: "来自 ppt-master 的植物染色风格，色彩温和、叙事柔软、手作质感明显。",
+    en: "A ppt-master lifestyle preset with soft plant-dye palettes, gentle storytelling, and tactile craft cues.",
+  },
+  "ppt169_lora_hu_2021": {
+    zh: "来自 ppt-master 的创作者作品集风格，适合个人品牌、作品展示和温和生活方式叙事。",
+    en: "A ppt-master creator-portfolio preset for personal brands, project showcases, and softer lifestyle storytelling.",
   },
 }
 

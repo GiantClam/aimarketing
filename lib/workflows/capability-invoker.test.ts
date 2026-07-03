@@ -1178,6 +1178,7 @@ test("workflow ppt capability forwards the selected preview model", async () => 
         language: "zh-CN",
         previewRuntime: "ppt-master-agent",
         model: "step-3.7-flash",
+        templateId: "neo-grid-bold",
       },
     },
   }))
@@ -1185,6 +1186,49 @@ test("workflow ppt capability forwards the selected preview model", async () => 
   assert.equal(leadToolPreviewBodies.length, 1)
   assert.equal(leadToolPreviewBodies[0]?.model, "step-3.7-flash")
   assert.equal(leadToolPreviewBodies[0]?.previewRuntime, "ppt-master-agent")
+  assert.equal(leadToolPreviewBodies[0]?.templateMode, "single-template")
+  assert.equal(leadToolPreviewBodies[0]?.templateId, "neo-grid-bold")
+})
+
+test("workflow editable ppt returns template recommendations before any preview generation when no template is selected", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+    } as never,
+    locale: "zh",
+    requestOrigin: "http://127.0.0.1:3000",
+  })
+
+  const result = await invoke(createPptParams({
+    node: {
+      nodeKey: "ppt-editable-1",
+      type: "ppt_generate",
+      title: "可编辑 PPT",
+      positionX: 0,
+      positionY: 0,
+      config: {
+        scenario: "sales-proposal",
+        language: "zh-CN",
+        previewRuntime: "ppt-master-agent",
+        pageCount: 10,
+      },
+    },
+    input: {
+      text: ["请整理一份面向管理层的销售提案复盘，重点突出预算、风险和关键决策。"],
+      asset: [],
+      image: [],
+      video: [],
+      audio: [],
+      ppt: [],
+    },
+  }))
+
+  assert.equal(leadToolPreviewBodies.length, 0)
+  assert.equal(leadToolDownloadBodies.length, 0)
+  assert.match(result.output.text?.[0] || "", /推荐模板/)
+  assert.match(result.output.text?.[0] || "", /新野蛮主义 \(neo-brutalism\)/)
+  assert.equal(result.metadata?.templateSelectionRequired, true)
 })
 
 test("workflow writer capability forwards the selected model config", async () => {
@@ -1267,9 +1311,10 @@ test("agent-platform direct agent forwards composed system prompt to ai chat", a
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not mention pricing."), true)
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Append compliance footer."), true)
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
+  assert.equal(aiChatBodies[0]?.executionContext, "workflow")
   assert.deepEqual(
     (aiChatBodies[0]?.skillConfig as { enabledToolNames?: string[] } | undefined)?.enabledToolNames,
-    ["preview_ppt_deck", "export_ppt_deck"],
+    [],
   )
   assert.deepEqual(result.output.text, ["agent:Write a launch headline"])
   assert.equal(result.metadata?.customAgentId, 41)
@@ -1412,13 +1457,58 @@ test("agent-platform builtin ai-entry agent routes through ai chat with agent co
   assert.equal((aiChatBodies[0]?.agentConfig as { agentId?: string } | undefined)?.agentId, "executive-brand")
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Use a concise executive tone."), true)
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
+  assert.equal(aiChatBodies[0]?.executionContext, "workflow")
   assert.deepEqual(
     (aiChatBodies[0]?.skillConfig as { enabledToolNames?: string[] } | undefined)?.enabledToolNames,
-    ["preview_ppt_deck", "export_ppt_deck"],
+    [],
   )
   assert.deepEqual(result.output.text, ["agent:Position our spring launch"])
   assert.equal(result.metadata?.builtinAgentId, "executive-brand")
   assert.equal(result.metadata?.executionMode, "ai_entry_agent")
+})
+
+test("agent-platform rejects ppt chat agents inside workflow agent nodes", async () => {
+  const invoke = createWorkflowCapabilityInvoker({
+    currentUser: {
+      id: 96,
+      enterpriseId: 151,
+      enterpriseRole: "admin",
+      enterpriseStatus: "active",
+    } as never,
+    locale: "en",
+    requestOrigin: "http://127.0.0.1:3000",
+    activeWorkflowId: 9,
+  })
+
+  await assert.rejects(
+    () =>
+      invoke({
+        nodeType: "agent_execute",
+        capabilitySlug: "agent-platform",
+        action: "chat",
+        node: {
+          nodeKey: "agent-ppt-legacy-1",
+          type: "agent_execute",
+          title: "Legacy PPT Agent",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            agentId: "executive-ppt",
+          },
+        },
+        input: {
+          text: ["Generate a deck from this brief"],
+          asset: [],
+          image: [],
+          video: [],
+          audio: [],
+          ppt: [],
+        },
+      }),
+    /workflow_builtin_agent_unsupported/,
+  )
+
+  assert.equal(aiChatBodies.length, 0)
 })
 
 test("agent-platform forwards the selected model config for builtin agents", async () => {
@@ -1465,6 +1555,7 @@ test("agent-platform forwards the selected model config for builtin agents", asy
     providerId: "openrouter",
     modelId: "gpt-5.4",
   })
+  assert.equal(aiChatBodies[0]?.executionContext, "workflow")
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
 })
 
@@ -1506,6 +1597,7 @@ test("ai-chat workflow nodes default to single-turn direct answers", async () =>
   })
 
   assert.equal(aiChatBodies.length, 1)
+  assert.equal(aiChatBodies[0]?.executionContext, "workflow")
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("请用中文输出，并优先给出可执行方案。"), true)
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("Do not ask follow-up questions"), true)
   assert.equal(String(aiChatBodies[0]?.systemPrompt).includes("single response"), true)
@@ -1550,9 +1642,10 @@ test("agent-platform builtin ai-entry agent only enables web_search when selecte
   })
 
   assert.equal(aiChatBodies.length, 1)
+  assert.equal(aiChatBodies[0]?.executionContext, "workflow")
   assert.deepEqual(
     (aiChatBodies[0]?.skillConfig as { enabledToolNames?: string[] } | undefined)?.enabledToolNames,
-    ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+    ["web_search"],
   )
   assert.deepEqual(result.output.text, ["agent:Position our spring launch with current market signals"])
 })

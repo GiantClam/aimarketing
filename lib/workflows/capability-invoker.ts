@@ -35,6 +35,10 @@ import { shouldChargeSharedCreditsForCapability } from "@/lib/platform/shared-cr
 import { buildWorkflowImageGenerateRequestBody } from "@/lib/workflows/image-capability-request"
 import { buildEnterpriseWorkflowPresetPrompt, getDefaultEnterpriseWorkflowPreset } from "@/lib/workflows/presets"
 import {
+  buildPptRecommendedTemplateSummaries,
+  getPptPreviewTemplateLabel,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
+import {
   createWorkflowNodeInputBundle,
   mergeWorkflowNodeOutputBundles,
 } from "@/lib/workflows/node-executors"
@@ -49,6 +53,7 @@ import type {
 } from "@/lib/workflows/node-executors"
 import { runWorkflowDefinition, type WorkflowNodeRunState } from "@/lib/workflows/execution"
 import { getWorkflowDefinition } from "@/lib/workflows/store"
+import { isWorkflowBuiltinAgentSelectable } from "@/lib/workflows/builtin-agent-policy"
 import { getAllowedWorkflowTargetInputKinds, type WorkflowDefinitionEdge, type WorkflowDefinitionNode, type WorkflowNodeInputName, type WorkflowValueKind } from "@/lib/workflows/schema"
 
 type WorkflowCapabilityInvokerOptions = {
@@ -89,13 +94,13 @@ function resolveWorkflowAgentEnabledToolNames(input: {
   builtinAgentId?: string | null
   webSearchEnabled: boolean
 }) {
+  if (!input.webSearchEnabled) return []
+
   const policy = resolveAiEntryAgentRuntimePolicy({
     agentId: input.builtinAgentId ?? null,
   })
-  const enabledToolNames = policy.allowedToolIds.filter(
-    (toolId) => toolId !== "web_search" || input.webSearchEnabled,
-  )
-  return [...new Set(enabledToolNames)]
+
+  return policy.allowedToolIds.includes("web_search") ? ["web_search"] : []
 }
 
 function parsePositiveIntegerEnv(name: string) {
@@ -107,6 +112,42 @@ function parsePositiveIntegerEnv(name: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function buildWorkflowEditablePptTemplateSelectionMessage(input: {
+  locale: "zh" | "en"
+  scenario: string
+  language: string
+  pageCount?: number
+  prompt: string
+}) {
+  const isZh = input.locale === "zh"
+  const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+    prompt: input.prompt,
+    scenario: input.scenario as never,
+    language: input.language as never,
+    pageCount: input.pageCount,
+  })
+
+  const lines = [
+    isZh
+      ? "当前节点使用可编辑 PPT 模式。请先在节点参数中选择一个模板，再重新运行生成。"
+      : "This node is in editable PPT mode. Select a template in the node settings, then run again.",
+    "",
+    isZh ? "推荐模板：" : "Recommended templates:",
+    ...recommendedTemplates.map((item, index) => {
+      const label = getPptPreviewTemplateLabel(item.templateId, input.language as never)
+      const summary = typeof item.summary === "string" ? item.summary.trim() : ""
+      return summary
+        ? `${index + 1}. ${label} (${item.templateId}) - ${summary}`
+        : `${index + 1}. ${label} (${item.templateId})`
+    }),
+  ]
+
+  return {
+    text: lines.join("\n"),
+    recommendedTemplates,
+  }
 }
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutError: string) {
@@ -1292,6 +1333,9 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               if (!builtinAgentId) {
                 throw new Error("workflow_custom_agent_required")
               }
+              if (!isWorkflowBuiltinAgentSelectable(builtinAgentId)) {
+                throw new Error("workflow_builtin_agent_unsupported")
+              }
 
               const response = await aiChatPost(
                 createJsonRequest({
@@ -1300,6 +1344,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
                   body: {
                     message: prompt,
                     stream: false,
+                    executionContext: "workflow",
                     agentConfig: {
                       agentId: builtinAgentId,
                     },
@@ -1437,12 +1482,13 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               createJsonRequest({
                 origin,
                 path: "/api/ai/chat",
-                body: {
-                  message: prompt,
-                  stream: false,
-                  skillConfig: {
-                    enabledToolNames: resolveWorkflowAgentEnabledToolNames({
-                      webSearchEnabled: workflowAgentWebSearchEnabled,
+                  body: {
+                    message: prompt,
+                    stream: false,
+                    executionContext: "workflow",
+                    skillConfig: {
+                      enabledToolNames: resolveWorkflowAgentEnabledToolNames({
+                        webSearchEnabled: workflowAgentWebSearchEnabled,
                     }),
                   },
                   ...(systemPrompt ? { systemPrompt } : {}),
@@ -1491,6 +1537,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               body: {
                 message: prompt,
                 stream: false,
+                executionContext: "workflow",
                 ...(workflowExecutionSystemPrompt ? { systemPrompt: workflowExecutionSystemPrompt } : {}),
                 ...(selectedProviderId
                   ? {
@@ -1569,16 +1616,51 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
 
         if (params.capabilitySlug === "ai-ppt") {
           const inputImages = extractWorkflowPptInputImages(params.input)
+          const previewRuntime =
+            typeof params.node.config.previewRuntime === "string" ? params.node.config.previewRuntime : "frontend-slides-agent"
+          const scenario = typeof params.node.config.scenario === "string" ? params.node.config.scenario : "marketing-campaign"
+          const language = typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN"
+          const pageCount = typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined
+          const selectedTemplateId =
+            typeof params.node.config.templateId === "string" && params.node.config.templateId.trim()
+              ? params.node.config.templateId.trim()
+              : null
+
+          if (previewRuntime === "ppt-master-agent" && !selectedTemplateId) {
+            const selection = buildWorkflowEditablePptTemplateSelectionMessage({
+              locale,
+              scenario,
+              language,
+              pageCount,
+              prompt,
+            })
+
+            return {
+              output: {
+                text: [selection.text],
+              },
+              metadata: {
+                templateSelectionRequired: true,
+                recommendedTemplates: selection.recommendedTemplates,
+                previewRuntime,
+              },
+            }
+          }
+
           const previewBody = {
             prompt,
-            scenario: typeof params.node.config.scenario === "string" ? params.node.config.scenario : "marketing-campaign",
-            language: typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN",
+            scenario,
+            language,
             model: typeof params.node.config.model === "string" ? params.node.config.model : undefined,
-            previewRuntime:
-              typeof params.node.config.previewRuntime === "string" ? params.node.config.previewRuntime : undefined,
-            templateMode: typeof params.node.config.templateMode === "string" ? params.node.config.templateMode : "auto-4",
-            templateId: typeof params.node.config.templateId === "string" ? params.node.config.templateId : undefined,
-            pageCount: typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined,
+            previewRuntime,
+            templateMode:
+              previewRuntime === "ppt-master-agent"
+                ? "single-template"
+                : typeof params.node.config.templateMode === "string"
+                  ? params.node.config.templateMode
+                  : "auto-4",
+            templateId: selectedTemplateId ?? undefined,
+            pageCount,
             images:
               inputImages.length > 0
                 ? inputImages.map((image, index) => ({

@@ -15,7 +15,14 @@ import {
   restorePptMasterSessionArchive,
 } from "@/lib/lead-tools/ppt-master-session-store"
 import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
-import type { PptPreviewAsset, PptPreviewDeck, PptPreviewSlide, PptPreviewVariant } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import type {
+  PptPreviewAsset,
+  PptPreviewDeck,
+  PptPreviewSlide,
+  PptPreviewStyleArchetype,
+  PptPreviewVariant,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { resolvePptPreviewStyleArchetype } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 const execFileAsync = promisify(execFile)
 const CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -267,7 +274,7 @@ function toSpecLockKey(index: number) {
 }
 
 function getRuntimeTypography(variantKey: PptPreviewVariant["styleKey"]): RuntimeTypography {
-  switch (variantKey) {
+  switch (resolvePptPreviewStyleArchetype(variantKey)) {
     case "ppt169_brutalist_ai_newspaper_2026":
       return {
         fontFamily: "\"Arial Black\", Arial, \"Microsoft YaHei\", sans-serif",
@@ -804,6 +811,7 @@ function renderBulletItems(params: {
 
 function buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext) {
   const { slide, variant } = context
+  const archetype = resolvePptPreviewStyleArchetype(variant.styleKey)
   const titleLines = splitTextSmart(slide.title, slide.layout === "cover" ? 12 : 18).slice(0, slide.layout === "cover" ? 2 : 3)
   const bodyLines = splitTextSmart(slide.body, slide.layout === "comparison" ? 18 : 26).slice(0, 4)
   const kicker = escapeXml(getKickerText(context).toUpperCase())
@@ -813,7 +821,7 @@ function buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext) 
   const foreground = variant.palette.foreground
   const background = variant.palette.background
 
-  const backgroundBlockByStyle: Record<PptPreviewVariant["key"], string> = {
+  const backgroundBlockByStyle: Record<PptPreviewStyleArchetype, string> = {
     "ppt169_brutalist_ai_newspaper_2026": [
       `<rect width="${PREVIEW_WIDTH}" height="${PREVIEW_HEIGHT}" fill="${background}"/>`,
       `<rect x="64" y="56" width="1152" height="74" fill="none" stroke="${border}" stroke-width="3"/>`,
@@ -848,7 +856,7 @@ function buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext) 
 
   return buildEmergencyRuntimeSvgDocument({
     context,
-    innerBackground: backgroundBlockByStyle[variant.styleKey],
+    innerBackground: backgroundBlockByStyle[archetype],
     titleLines,
     bodyLines,
     kicker,
@@ -873,10 +881,14 @@ function buildEmergencyRuntimeSvgDocument(params: {
   background: string
 }) {
   const { context, innerBackground, titleLines, bodyLines, kicker, accent, border, panel, foreground, background } = params
+  const archetype = resolvePptPreviewStyleArchetype(context.variant.styleKey)
+  const isLongTable = archetype === "ppt169_brutalist_ai_newspaper_2026"
+  const isPlayful = archetype === "ppt169_sugar_rush_memphis"
+  const isBroadside = archetype === "ppt169_pritzker_2026"
   const titleFont =
-    context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026"
+    isLongTable
       ? 52
-      : context.variant.styleKey === "ppt169_sugar_rush_memphis"
+      : isPlayful
         ? 46
         : context.slide.layout === "cover"
           ? 42
@@ -918,7 +930,7 @@ function buildEmergencyRuntimeSvgDocument(params: {
       }),
       renderTextBlock({
         color: foreground,
-        family: context.variant.styleKey === "ppt169_pritzker_2026" ? "Georgia, \"Microsoft YaHei\", serif" : "Arial, \"Microsoft YaHei\", sans-serif",
+        family: isBroadside ? "Georgia, \"Microsoft YaHei\", serif" : "Arial, \"Microsoft YaHei\", sans-serif",
         fontSize: titleFont,
         fontWeight: 800,
         lineHeight: titleFont + 8,
@@ -945,8 +957,8 @@ function buildEmergencyRuntimeSvgDocument(params: {
         lineHeight: 24,
         maxCharsPerLine: 24,
       }),
-      `<rect x="900" y="148" width="220" height="220" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 28}" fill="${accent}" fill-opacity="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? "1" : "0.18"}"/>`,
-      `<rect x="968" y="390" width="150" height="150" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="900" y="148" width="220" height="220" rx="${isLongTable ? 0 : 28}" fill="${accent}" fill-opacity="${isLongTable ? "1" : "0.18"}"/>`,
+      `<rect x="968" y="390" width="150" height="150" rx="${isLongTable ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
     ].join(""),
     agenda: [
       renderTextBlock({
@@ -973,7 +985,7 @@ function buildEmergencyRuntimeSvgDocument(params: {
         const rowY = 248 + index * 92
         return [
           `<g id="agenda-row-${index + 1}">`,
-          `<rect x="136" y="${rowY - 34}" width="880" height="70" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 18}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+          `<rect x="136" y="${rowY - 34}" width="880" height="70" rx="${isLongTable ? 0 : 18}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
           renderTextBlock({
             color: accent,
             family: "Arial, \"Microsoft YaHei\", sans-serif",
@@ -1009,12 +1021,12 @@ function buildEmergencyRuntimeSvgDocument(params: {
         x: 136,
         y: 112,
       }),
-      `<rect x="136" y="154" width="1008" height="430" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 28}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
-      `<rect x="782" y="154" width="362" height="430" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 28}" fill="${background}" stroke="${border}" stroke-width="2"/>`,
-      `<rect x="180" y="${insightBannerY}" width="420" height="${insightBannerHeight}" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 8}" fill="${accent}"/>`,
+      `<rect x="136" y="154" width="1008" height="430" rx="${isLongTable ? 0 : 28}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="782" y="154" width="362" height="430" rx="${isLongTable ? 0 : 28}" fill="${background}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="180" y="${insightBannerY}" width="420" height="${insightBannerHeight}" rx="${isLongTable ? 0 : 8}" fill="${accent}"/>`,
       renderTextBlock({
         color: foreground,
-        family: context.variant.styleKey === "ppt169_pritzker_2026" ? "Georgia, \"Microsoft YaHei\", serif" : "Arial, \"Microsoft YaHei\", sans-serif",
+        family: isBroadside ? "Georgia, \"Microsoft YaHei\", serif" : "Arial, \"Microsoft YaHei\", sans-serif",
         fontSize: 56,
         fontWeight: 800,
         lineHeight: insightHeadlineLineHeight,
@@ -1042,7 +1054,7 @@ function buildEmergencyRuntimeSvgDocument(params: {
         x: 204,
         y: insightBannerY + 40,
       }),
-      `<rect x="180" y="${insightVerdictY}" width="520" height="${insightVerdictHeight}" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 12}" fill="none" stroke="${foreground}" stroke-width="2"/>`,
+      `<rect x="180" y="${insightVerdictY}" width="520" height="${insightVerdictHeight}" rx="${isLongTable ? 0 : 12}" fill="none" stroke="${foreground}" stroke-width="2"/>`,
       renderTextBlock({
         color: accent,
         family: "Arial, \"Microsoft YaHei\", sans-serif",
@@ -1094,7 +1106,7 @@ function buildEmergencyRuntimeSvgDocument(params: {
         x: 826,
         y: 390,
       }),
-      `<rect x="826" y="444" width="260" height="108" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 12}" fill="${accent}" fill-opacity="0.14" stroke="${accent}" stroke-width="2"/>`,
+      `<rect x="826" y="444" width="260" height="108" rx="${isLongTable ? 0 : 12}" fill="${accent}" fill-opacity="0.14" stroke="${accent}" stroke-width="2"/>`,
       renderTextBlock({
         color: accent,
         family: "Arial, \"Microsoft YaHei\", sans-serif",
@@ -1137,8 +1149,8 @@ function buildEmergencyRuntimeSvgDocument(params: {
         x: 136,
         y: 168,
       }),
-      `<rect x="136" y="228" width="456" height="314" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
-      `<rect x="688" y="228" width="456" height="314" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="136" y="228" width="456" height="314" rx="${isLongTable ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="688" y="228" width="456" height="314" rx="${isLongTable ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
       renderTextBlock({
         color: accent,
         family: "Arial, \"Microsoft YaHei\", sans-serif",
@@ -1190,10 +1202,10 @@ function buildEmergencyRuntimeSvgDocument(params: {
         x: 136,
         y: 112,
       }),
-      `<rect x="136" y="154" width="1008" height="378" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 28}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="136" y="154" width="1008" height="378" rx="${isLongTable ? 0 : 28}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
       renderTextBlock({
         color: foreground,
-        family: context.variant.styleKey === "ppt169_pritzker_2026" ? "Georgia, \"Microsoft YaHei\", serif" : "Arial, \"Microsoft YaHei\", sans-serif",
+        family: isBroadside ? "Georgia, \"Microsoft YaHei\", serif" : "Arial, \"Microsoft YaHei\", sans-serif",
         fontSize: 34,
         fontWeight: 800,
         lineHeight: 42,
@@ -1243,9 +1255,9 @@ function buildEmergencyRuntimeSvgDocument(params: {
         x: 136,
         y: 168,
       }),
-      `<rect x="136" y="228" width="316" height="314" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
-      `<rect x="492" y="228" width="316" height="314" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
-      `<rect x="848" y="228" width="296" height="314" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="136" y="228" width="316" height="314" rx="${isLongTable ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="492" y="228" width="316" height="314" rx="${isLongTable ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="848" y="228" width="296" height="314" rx="${isLongTable ? 0 : 24}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
       ...context.slide.bullets.slice(0, 3).flatMap((item, index) => {
         const x = index === 0 ? 168 : index === 1 ? 524 : 880
         const bigFont = index === 2 ? 44 : 52
@@ -1366,7 +1378,7 @@ function buildEmergencyRuntimeSvgDocument(params: {
         return [
           `<g id="process-stop-${index + 1}">`,
           `<circle cx="${x}" cy="368" r="12" fill="${accent}"/>`,
-          `<rect x="${x - 60}" y="408" width="170" height="94" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 18}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+          `<rect x="${x - 60}" y="408" width="170" height="94" rx="${isLongTable ? 0 : 18}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
           renderTextBlock({
             color: foreground,
             family: "Arial, \"Microsoft YaHei\", sans-serif",
@@ -1417,7 +1429,7 @@ function buildEmergencyRuntimeSvgDocument(params: {
         return [
           `<g id="timeline-stop-${index + 1}">`,
           `<circle cx="${x}" cy="368" r="12" fill="${accent}"/>`,
-          `<rect x="${x - 60}" y="408" width="170" height="94" rx="${context.variant.styleKey === "ppt169_brutalist_ai_newspaper_2026" ? 0 : 18}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
+          `<rect x="${x - 60}" y="408" width="170" height="94" rx="${isLongTable ? 0 : 18}" fill="${panel}" stroke="${border}" stroke-width="2"/>`,
           renderTextBlock({
             color: foreground,
             family: "Arial, \"Microsoft YaHei\", sans-serif",

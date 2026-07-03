@@ -81,6 +81,15 @@ const CORE_AGENTS: AiEntryAgentCatalogItem[] = [
     },
   },
   {
+    id: "executive-presentation-ppt",
+    category: "executive",
+    name: { zh: "演讲型 PPT 助手", en: "Presentation PPT Assistant" },
+    description: {
+      zh: "通过对话生成适合演讲展示的 HTML 演示稿，强调叙事节奏、现场表达与视觉张力。",
+      en: "Use conversation to generate a presentation-first HTML deck optimized for live delivery, narrative flow, and visual momentum.",
+    },
+  },
+  {
     id: "executive-sales-strategy",
     category: "executive",
     name: { zh: "销售策略顾问", en: "Sales Strategy Advisor" },

@@ -243,7 +243,12 @@ export default function WebsiteGeneratorPage() {
                 <Input
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => event.key === "Enter" && handleSend()}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                      event.preventDefault()
+                      handleSend()
+                    }
+                  }}
                   placeholder={t("描述你想要的网站需求...", "Describe your website requirements...")}
                   className="h-12 border-0 bg-transparent px-3 shadow-none focus-visible:ring-0"
                   disabled={isGenerating}

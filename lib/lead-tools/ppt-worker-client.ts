@@ -7,6 +7,7 @@ import {
 } from "@/lib/lead-tools/config"
 import type {
   PptWorkerExportRequest,
+  PptWorkerModelValue,
   PptWorkerExportResponse,
   PptWorkerPreviewRequest,
   PptWorkerPreviewResponse,
@@ -14,8 +15,45 @@ import type {
   PptWorkerPreviewSubmitResponse,
 } from "@/lib/lead-tools/ppt-worker-types"
 
+const PPT_WORKER_SUPPORTED_MODELS: PptWorkerModelValue[] = [
+  "MiniMax-M2.7-highspeed",
+  "MiniMax-M3",
+  "step-3.7-flash",
+]
+
 function normalizeWorkerBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, "")
+}
+
+function normalizeWorkerModelValue(value: unknown) {
+  if (typeof value !== "string") return ""
+  return value.trim()
+}
+
+function isSupportedPptWorkerModel(value: string): value is PptWorkerModelValue {
+  return PPT_WORKER_SUPPORTED_MODELS.includes(value as PptWorkerModelValue)
+}
+
+function resolvePptWorkerFallbackModel() {
+  const configuredCandidates = [
+    process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL,
+    process.env.LEAD_TOOLS_MINIMAX_MODEL,
+    "MiniMax-M3",
+  ]
+
+  for (const candidate of configuredCandidates) {
+    const normalized = normalizeWorkerModelValue(candidate)
+    if (isSupportedPptWorkerModel(normalized)) return normalized
+  }
+
+  return "MiniMax-M3" as const
+}
+
+export function normalizePptWorkerPreviewModel(model: unknown) {
+  const normalized = normalizeWorkerModelValue(model)
+  if (!normalized) return undefined
+  if (isSupportedPptWorkerModel(normalized)) return normalized
+  return resolvePptWorkerFallbackModel()
 }
 
 function buildWorkerHeaders() {
@@ -65,6 +103,7 @@ export async function requestPptWorkerPreview(
     method: "POST",
     body: {
       ...input,
+      model: normalizePptWorkerPreviewModel(input.model),
       runtimeProfile: getPptWorkerRuntimeProfile(),
     },
   })

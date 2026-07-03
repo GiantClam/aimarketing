@@ -1,14 +1,30 @@
 import "server-only"
 
-import { tool, type ToolSet } from "ai"
+import { tool, type ToolChoice, type ToolSet } from "ai"
 
 import type { AuthUser } from "@/lib/auth/session"
+import { enqueueAssistantTask } from "@/lib/assistant-async"
+import { type AiEntryConversationScope } from "@/lib/ai-entry/repository"
 import { type AiEntryAgentRuntimePolicy } from "@/lib/ai-entry/agent-runtime-policy"
 import { extractAiEntryArtifactsFromToolResult } from "@/lib/ai-entry/artifact-runtime"
+import { type AiEntryConversationState, resolveAiEntryConversationStateFromContents } from "@/lib/ai-entry/conversation-state"
 import { type AiEntryMcpServerDefinition, getAiEntryMcpServerDefinitions, loadAiEntryMcpTools } from "@/lib/ai-entry/mcp-tools"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
+import {
+  buildPptTemplateRecommendationSource,
+  type PptBriefState,
+  preparePptPreviewInput,
+} from "@/lib/ai-entry/ppt-brief"
+import {
+  extractLatestPptPreviewContext,
+  extractLatestPptTemplateRecommendationContext,
+  type PptPreviewContext,
+  resolvePptTemplateSelectionFromUserText,
+} from "@/lib/ai-entry/ppt-tool-result-message"
 import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
+import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
+import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 type AiSdkToolLike = {
   description?: string
@@ -23,6 +39,7 @@ type AiSdkToolLike = {
 export type AiEntryToolRegistryResult = {
   selectedTools: ToolSet
   selectedToolIds: string[]
+  toolChoice?: ToolChoice<ToolSet>
   closeTools: (() => Promise<void>) | null
   toolLoadWarnings: string[]
   selectedMcpServerIds: string[]
@@ -32,6 +49,7 @@ type ToolSource = "first_party" | "mcp"
 
 const DEFAULT_TOOL_TIMEOUT_MS = 60_000
 const MAX_RESEARCH_BRIEF_CHARS = 2_000
+const AI_ENTRY_BACKGROUND_PPT_AGENT_ID = "executive-ppt"
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   return new Promise<T>((resolve, reject) => {
@@ -75,6 +93,13 @@ function normalizeToolError(error: unknown) {
     return {
       code: "ppt_variant_not_found",
       message: "The selected PPT variant could not be found. Use a variant key returned by preview_ppt_deck.",
+    }
+  }
+
+  if (/missing_preview_session/iu.test(message)) {
+    return {
+      code: "missing_preview_session",
+      message: "The PPT preview session is no longer available. Generate the preview again before export.",
     }
   }
 
@@ -233,6 +258,215 @@ function maybeInjectResearchBrief(
   }
 }
 
+function maybeInjectPptExportContext(
+  toolId: string,
+  input: unknown,
+  latestPreviewContext: ReturnType<typeof extractLatestPptPreviewContext>,
+) {
+  if (toolId !== "export_ppt_deck" || !latestPreviewContext) {
+    return input
+  }
+
+  const record = input && typeof input === "object" ? (input as Record<string, unknown>) : {}
+  const previewSessionId = readOptionalString(record.previewSessionId) ?? latestPreviewContext.previewSessionId
+  const selectedVariantKey = readOptionalString(record.selectedVariantKey) ?? latestPreviewContext.defaultVariantKey
+
+  return {
+    ...record,
+    previewSessionId,
+    ...(selectedVariantKey ? { selectedVariantKey } : {}),
+  }
+}
+
+function maybeInjectPptTemplateSelection(input: {
+  toolId: string
+  rawInput: unknown
+  latestTemplateRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
+  latestUserPrompt: string | null | undefined
+  agentId: string | null
+  executionContext?: "chat" | "workflow"
+}) {
+  if (
+    input.toolId !== "preview_ppt_deck" ||
+    input.agentId !== "executive-ppt" ||
+    input.executionContext === "workflow"
+  ) {
+    return input.rawInput
+  }
+
+  const record = input.rawInput && typeof input.rawInput === "object" ? (input.rawInput as Record<string, unknown>) : {}
+  const existingTemplateId = readOptionalString(record.templateId)
+  if (existingTemplateId) {
+    return {
+      ...record,
+      templateMode: readOptionalString(record.templateMode) ?? "single-template",
+      templateId: existingTemplateId,
+    }
+  }
+
+  const selectedTemplateId = resolvePptTemplateSelectionFromUserText(
+    input.latestUserPrompt,
+    input.latestTemplateRecommendationContext,
+  )
+  if (!selectedTemplateId) {
+    return input.rawInput
+  }
+
+  return {
+    ...record,
+    templateMode: "single-template",
+    templateId: selectedTemplateId,
+  }
+}
+
+function extractPreviewContextFromToolResult(result: unknown): PptPreviewContext | null {
+  if (!result || typeof result !== "object" || (result as { ok?: unknown }).ok === false) {
+    return null
+  }
+
+  const previewSessionId = readOptionalString((result as { previewSessionId?: unknown }).previewSessionId)
+  const variants = Array.isArray((result as { variants?: unknown }).variants)
+    ? ((result as { variants?: unknown }).variants as unknown[])
+        .map((variant) =>
+          variant && typeof variant === "object"
+            ? readOptionalString((variant as { key?: unknown }).key)
+            : null,
+        )
+        .filter((value): value is string => Boolean(value))
+    : []
+
+  if (!previewSessionId || variants.length === 0) {
+    return null
+  }
+
+  const recommendedVariantKey = readOptionalString(
+    (result as { recommendedVariantKey?: unknown }).recommendedVariantKey,
+  )
+
+  return {
+    previewSessionId,
+    defaultVariantKey: recommendedVariantKey ?? variants[0] ?? null,
+    variantKeys: variants,
+  }
+}
+
+function isMissingPreviewSessionResult(result: unknown) {
+  if (!result || typeof result !== "object" || (result as { ok?: unknown }).ok !== false) {
+    return false
+  }
+
+  const error = (result as { error?: { code?: unknown } }).error
+  return readOptionalString(error?.code) === "missing_preview_session"
+}
+
+function maybePreparePptPreviewInput(
+  toolId: string,
+  input: unknown,
+  briefState: PptBriefState | null,
+  options?: {
+    agentId: string | null
+    executionContext?: "chat" | "workflow"
+    latestUserPrompt?: string | null
+    latestTemplateRecommendationContext?: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
+  },
+) {
+  if (toolId !== "preview_ppt_deck") {
+    return {
+      ok: true as const,
+      input,
+    }
+  }
+
+  if (
+    options?.agentId === "executive-ppt" &&
+    options?.executionContext !== "workflow" &&
+    briefState?.readyForPreview
+  ) {
+    const record = input && typeof input === "object" ? (input as Record<string, unknown>) : {}
+    const templateId = readOptionalString(record.templateId)
+    if (!templateId) {
+      const recommendationPrompt = buildPptTemplateRecommendationSource({
+        briefState,
+        latestUserPrompt: readOptionalString(record.prompt) || options?.latestUserPrompt || null,
+      })
+      const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+        prompt: recommendationPrompt,
+        scenario: briefState.scenario!,
+        language: briefState.language!,
+        pageCount: briefState.pageCount,
+      })
+      return {
+        ok: false as const,
+        error: {
+          code: "ppt_template_selection_required",
+          message: "Select one recommended template before generating the editable PPT preview.",
+        },
+        missingFields: [],
+        suggestedBrief: null,
+        recommendedTemplates,
+      }
+    }
+  }
+
+  return preparePptPreviewInput({
+    rawInput: input,
+    briefState,
+  })
+}
+
+function shouldRunPptPreviewInBackground(input: {
+  toolId: string
+  source: ToolSource
+  executionContext?: "chat" | "workflow"
+  agentId: string | null
+}) {
+  return (
+    input.toolId === "preview_ppt_deck" &&
+    input.source === "first_party" &&
+    input.executionContext !== "workflow" &&
+    input.agentId === AI_ENTRY_BACKGROUND_PPT_AGENT_ID
+  )
+}
+
+async function enqueueBackgroundPptPreviewTask(input: {
+  user: AuthUser
+  conversationId: string
+  conversationScope: AiEntryConversationScope
+  agentId: string
+  toolCallId: string
+  preparedInput: Record<string, unknown>
+  isZh: boolean
+}) {
+  const task = await enqueueAssistantTask({
+    userId: input.user.id,
+    workflowName: "ai_entry_ppt_preview",
+    payload: {
+      kind: "ai_entry_ppt_preview",
+      userId: input.user.id,
+      conversationId: input.conversationId,
+      conversationScope: input.conversationScope,
+      agentId: input.agentId,
+      toolCallId: input.toolCallId,
+      input: input.preparedInput,
+      isZh: input.isZh,
+    },
+  })
+
+  return {
+    ok: true,
+    status: "queued",
+    message: input.isZh
+      ? "可编辑 PPT 已切换为后台生成，系统会继续轮询并在完成后回填预览结果。"
+      : "The editable PPT preview has been moved to background generation and will be filled back in when it completes.",
+    backgroundTask: {
+      taskId: String(task.id),
+      conversationId: input.conversationId,
+      toolName: "preview_ppt_deck",
+      status: "queued",
+    },
+  }
+}
+
 function filterToolSet(tools: ToolSet, allowedIds: Set<string>) {
   const selected: Record<string, unknown> = {}
 
@@ -247,8 +481,15 @@ function filterToolSet(tools: ToolSet, allowedIds: Set<string>) {
 function wrapToolSet(params: {
   tools: ToolSet
   source: ToolSource
+  currentUser: AuthUser
   selectedSkills: AiEntrySkillDefinition[]
   timeoutMs: number
+  conversationScope: AiEntryConversationScope
+  pptBriefState: PptBriefState | null
+  latestPreviewContext: ReturnType<typeof extractLatestPptPreviewContext>
+  latestTemplateRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
+  latestUserPrompt?: string | null
+  executionContext?: "chat" | "workflow"
   auditContext: {
     traceId: string
     conversationId: string
@@ -259,6 +500,8 @@ function wrapToolSet(params: {
 }): ToolSet {
   const skillByToolId = new Map<string, string>()
   let lastResearchBrief: StructuredResearchBrief | null = null
+  let latestPreviewContextForTurn = params.latestPreviewContext
+  const latestTemplateRecommendationContextForTurn = params.latestTemplateRecommendationContext
 
   for (const skill of params.selectedSkills) {
     for (const toolId of skill.toolIds) {
@@ -281,22 +524,103 @@ function wrapToolSet(params: {
       execute: async (input: unknown, options: unknown) => {
         const startedAt = Date.now()
         const skillId = skillByToolId.get(toolId) || null
-        const effectiveInput = maybeInjectResearchBrief(toolId, input, lastResearchBrief)
+        const exportReadyInput = maybeInjectPptExportContext(toolId, input, latestPreviewContextForTurn)
+        const templateReadyInput = maybeInjectPptTemplateSelection({
+          toolId,
+          rawInput: exportReadyInput,
+          latestTemplateRecommendationContext: latestTemplateRecommendationContextForTurn,
+          latestUserPrompt: params.latestUserPrompt,
+          agentId: params.auditContext.agentId,
+          executionContext: params.executionContext,
+        })
+        const effectiveInput = maybeInjectResearchBrief(toolId, templateReadyInput, lastResearchBrief)
+        const preparedPreviewInput = maybePreparePptPreviewInput(
+          toolId,
+          effectiveInput,
+          params.pptBriefState,
+          {
+            agentId: params.auditContext.agentId,
+            executionContext: params.executionContext,
+            latestUserPrompt: params.latestUserPrompt,
+            latestTemplateRecommendationContext: latestTemplateRecommendationContextForTurn,
+          },
+        )
         console.info("ai-entry.tool.audit.start", {
           ...params.auditContext,
           toolId,
           source: params.source,
           skillId,
-          inputSummary: summarizeToolInput(effectiveInput),
+          inputSummary: summarizeToolInput(preparedPreviewInput.ok ? preparedPreviewInput.input : effectiveInput),
         })
 
         try {
+          if (!preparedPreviewInput.ok) {
+            console.warn("ai-entry.tool.audit.blocked", {
+              ...params.auditContext,
+              toolId,
+              source: params.source,
+              skillId,
+              elapsedMs: Date.now() - startedAt,
+              errorCode: preparedPreviewInput.error.code,
+              missingFields: preparedPreviewInput.missingFields,
+            })
+            return {
+              ok: false,
+              error: preparedPreviewInput.error,
+              missingFields: preparedPreviewInput.missingFields,
+              suggestedBrief: preparedPreviewInput.suggestedBrief,
+              ...(preparedPreviewInput && "recommendedTemplates" in preparedPreviewInput
+                ? { recommendedTemplates: (preparedPreviewInput as { recommendedTemplates?: unknown }).recommendedTemplates }
+                : {}),
+            }
+          }
+          if (
+            shouldRunPptPreviewInBackground({
+              toolId,
+              source: params.source,
+              executionContext: params.executionContext,
+              agentId: params.auditContext.agentId,
+            })
+          ) {
+            const backgroundResult = await enqueueBackgroundPptPreviewTask({
+              user: params.currentUser,
+              conversationId: params.auditContext.conversationId,
+              conversationScope: params.conversationScope,
+              agentId: params.auditContext.agentId || AI_ENTRY_BACKGROUND_PPT_AGENT_ID,
+              toolCallId:
+                readOptionalString(
+                  options && typeof options === "object"
+                    ? (options as { toolCallId?: unknown }).toolCallId
+                    : null,
+                ) || toolId,
+              preparedInput: preparedPreviewInput.input as Record<string, unknown>,
+              isZh: /[\u4e00-\u9fff]/u.test(
+                typeof params.latestUserPrompt === "string" ? params.latestUserPrompt : "",
+              ),
+            })
+            console.info("ai-entry.tool.audit.queued", {
+              ...params.auditContext,
+              toolId,
+              source: params.source,
+              skillId,
+              elapsedMs: Date.now() - startedAt,
+              taskId: backgroundResult.backgroundTask.taskId,
+            })
+            return backgroundResult
+          }
           const result = await withTimeout(
-            Promise.resolve(sourceTool.execute?.(effectiveInput, options)),
+            Promise.resolve(sourceTool.execute?.(preparedPreviewInput.input, options)),
             Math.max(params.timeoutMs, DEFAULT_TOOL_TIMEOUT_MS),
           )
           if (toolId === "web_search") {
             lastResearchBrief = buildResearchBriefFromWebSearchResult(result)
+          }
+          if (toolId === "preview_ppt_deck") {
+            latestPreviewContextForTurn =
+              extractPreviewContextFromToolResult(result) ?? latestPreviewContextForTurn
+          }
+          if (toolId === "export_ppt_deck" && isMissingPreviewSessionResult(result)) {
+            latestPreviewContextForTurn = null
           }
           const artifacts = extractAiEntryArtifactsFromToolResult({
             toolName: toolId,
@@ -339,6 +663,33 @@ function getSelectedSkillToolIds(selectedSkills: AiEntrySkillDefinition[]) {
   return new Set(selectedSkills.flatMap((skill) => skill.toolIds))
 }
 
+function resolvePptToolAccess(input: {
+  agentId: string | null
+  executionContext?: "chat" | "workflow"
+  conversationState?: AiEntryConversationState | null
+}) {
+  if (!isAiEntryPptAgentId(input.agentId)) {
+    return {
+      exportEnabled: true,
+    }
+  }
+
+  if (input.executionContext === "workflow") {
+    return {
+      exportEnabled: true,
+    }
+  }
+
+  const state = input.conversationState?.ppt
+
+  return {
+    exportEnabled:
+      state?.phase === "preview-ready" ||
+      state?.phase === "preview-invalidated" ||
+      state?.phase === "exported",
+  }
+}
+
 function getAllowedMcpDefinitions(policy: AiEntryAgentRuntimePolicy) {
   const allowedServerIds = new Set(policy.allowedMcpServerIds)
   return getAiEntryMcpServerDefinitions().filter((definition) => allowedServerIds.has(definition.id))
@@ -350,6 +701,12 @@ export async function buildAiEntryToolRegistry(input: {
   selectedSkills: AiEntrySkillDefinition[]
   skillsEnabled: boolean
   enabledToolNames: string[] | null
+  executionContext?: "chat" | "workflow"
+  conversationScope?: AiEntryConversationScope
+  pptBriefState?: PptBriefState | null
+  conversationState?: AiEntryConversationState | null
+  latestUserPrompt?: string | null
+  messageContents?: string[]
   auditContext: {
     traceId: string
     conversationId: string
@@ -362,6 +719,20 @@ export async function buildAiEntryToolRegistry(input: {
     input.enabledToolNames ? new Set(input.enabledToolNames) : null
   const selectedSkillToolIds = getSelectedSkillToolIds(input.selectedSkills)
   const firstPartyDesiredToolIds = new Set<string>()
+  const conversationState =
+    input.conversationState ??
+    resolveAiEntryConversationStateFromContents(input.messageContents)
+  const pptConversationState = conversationState.ppt
+  const latestPreviewContext = pptConversationState.latestPreview
+  const latestTemplateRecommendationContext = (input.messageContents || [])
+    .map((content) => extractLatestPptTemplateRecommendationContext(content))
+    .filter((value): value is NonNullable<typeof value> => Boolean(value))
+    .at(-1) ?? null
+  const pptToolAccess = resolvePptToolAccess({
+    agentId: input.auditContext.agentId,
+    executionContext: input.executionContext ?? "chat",
+    conversationState,
+  })
 
   if (!explicitToolAllowlist && policyAllowedToolIds.has("web_search")) {
     firstPartyDesiredToolIds.add("web_search")
@@ -371,6 +742,9 @@ export async function buildAiEntryToolRegistry(input: {
     for (const toolId of selectedSkillToolIds) {
       if (!policyAllowedToolIds.has(toolId)) continue
       if (explicitToolAllowlist && !explicitToolAllowlist.has(toolId)) continue
+      if (toolId === "export_ppt_deck" && !pptToolAccess.exportEnabled) {
+        continue
+      }
       firstPartyDesiredToolIds.add(toolId)
     }
   }
@@ -384,6 +758,7 @@ export async function buildAiEntryToolRegistry(input: {
       ...buildAiEntryWebSearchTools(),
       ...buildAiEntryPptTools({
         currentUser: input.currentUser,
+        agentId: input.auditContext.agentId,
       }),
     },
     firstPartyDesiredToolIds,
@@ -410,8 +785,15 @@ export async function buildAiEntryToolRegistry(input: {
   const wrappedFirstPartyTools = wrapToolSet({
     tools: firstPartyTools,
     source: "first_party",
+    currentUser: input.currentUser,
     selectedSkills: input.selectedSkills,
     timeoutMs: input.policy.maxRuntimeMs,
+    conversationScope: input.conversationScope ?? "chat",
+    pptBriefState: input.pptBriefState ?? null,
+    latestPreviewContext,
+    latestTemplateRecommendationContext,
+    latestUserPrompt: input.latestUserPrompt,
+    executionContext: input.executionContext,
     auditContext: {
       ...input.auditContext,
       userId: input.currentUser.id,
@@ -421,8 +803,15 @@ export async function buildAiEntryToolRegistry(input: {
   const wrappedMcpTools = wrapToolSet({
     tools: loadedMcpTools,
     source: "mcp",
+    currentUser: input.currentUser,
     selectedSkills: input.selectedSkills,
     timeoutMs: input.policy.maxRuntimeMs,
+    conversationScope: input.conversationScope ?? "chat",
+    pptBriefState: input.pptBriefState ?? null,
+    latestPreviewContext,
+    latestTemplateRecommendationContext,
+    latestUserPrompt: input.latestUserPrompt,
+    executionContext: input.executionContext,
     auditContext: {
       ...input.auditContext,
       userId: input.currentUser.id,
@@ -438,6 +827,7 @@ export async function buildAiEntryToolRegistry(input: {
   return {
     selectedTools,
     selectedToolIds: Object.keys(selectedTools),
+    toolChoice: undefined,
     closeTools,
     toolLoadWarnings,
     selectedMcpServerIds,

@@ -2,8 +2,10 @@ import type {
   PptPreviewRequest,
   PptPreviewResearchBrief,
   PptPreviewSlide,
+  PptPreviewStyleArchetype,
   PptPreviewStyleKey,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { resolvePptPreviewStyleArchetype } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 export function trimPreviewTerminalPunctuation(value: string) {
   return value.trim().replace(/[。！？.!?]+$/u, "")
@@ -146,7 +148,8 @@ export function buildPreviewStyleKicker(
   layout: PptPreviewSlide["layout"],
   language: PptPreviewRequest["language"],
 ) {
-  const zhMap: Record<PptPreviewStyleKey, Record<PptPreviewSlide["layout"], string>> = {
+  const archetype = resolvePptPreviewStyleArchetype(styleKey)
+  const zhMap: Record<PptPreviewStyleArchetype, Record<PptPreviewSlide["layout"], string>> = {
     "ppt169_brutalist_ai_newspaper_2026": {
       cover: "长桌主议题",
       agenda: "议程清单",
@@ -193,7 +196,7 @@ export function buildPreviewStyleKicker(
     },
   }
 
-  const enMap: Record<PptPreviewStyleKey, Record<PptPreviewSlide["layout"], string>> = {
+  const enMap: Record<PptPreviewStyleArchetype, Record<PptPreviewSlide["layout"], string>> = {
     "ppt169_brutalist_ai_newspaper_2026": {
       cover: "LONG TABLE",
       agenda: "AGENDA",
@@ -240,7 +243,7 @@ export function buildPreviewStyleKicker(
     },
   }
 
-  return language === "zh-CN" ? zhMap[styleKey][layout] : enMap[styleKey][layout]
+  return language === "zh-CN" ? zhMap[archetype][layout] : enMap[archetype][layout]
 }
 
 export function buildPreviewStyleTitle(

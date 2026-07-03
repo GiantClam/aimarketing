@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { frontendSlidesPreviewRuntime } from "./frontend-slides-preview-runtime"
+import { getCustomFrontendSlidesRendererKeys } from "./frontend-slides-preview-runtime"
+import { pptPreviewStyles } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 const baseSlides = [
   {
@@ -211,6 +213,271 @@ const sampleDeck = {
   ],
 }
 
+const importedTemplateDeck = {
+  ...sampleDeck,
+  variants: [
+    {
+      key: "ppt169_kubernetes_blueprint_2026" as const,
+      styleKey: "ppt169_kubernetes_blueprint_2026" as const,
+      name: "Kubernetes Blueprint",
+      summary: "云原生蓝图与技术治理结构最强。",
+      stylePrompt: "Cloud-native platform blueprint deck.",
+      outline: ["Control Plane", "Module Map", "Platform Thesis", "Lane Compare", "Governance Signals", "Reliability Metrics", "Dependency Chart", "Rollout Sequence", "Operating Guardrails"],
+      palette: {
+        background: "#EEF1EF",
+        foreground: "#11161B",
+        accent: "#88C0FF",
+        panel: "#F8FBF9",
+        border: "#C8D3CF",
+      },
+      strengths: ["技术治理", "架构蓝图"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_image_text_showcase" as const,
+      styleKey: "ppt169_image_text_showcase" as const,
+      name: "Image Text Showcase",
+      summary: "图文并置与案例陈列节奏最强。",
+      stylePrompt: "Portfolio-like showcase deck.",
+      outline: ["Hero Spread", "Contact Sheet", "Editor Note", "Side by Side", "Gallery Signals", "Metric Ribbon", "Caption Board", "Sequence Board", "Closing Spread"],
+      palette: {
+        background: "#F1F0EB",
+        foreground: "#141414",
+        accent: "#D44B2B",
+        panel: "#FBFAF5",
+        border: "#D2CEC3",
+      },
+      strengths: ["案例展示", "图文节奏"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_fashion_weekly_digest" as const,
+      styleKey: "ppt169_fashion_weekly_digest" as const,
+      name: "Fashion Weekly Digest",
+      summary: "杂志策展与趋势周报节奏最强。",
+      stylePrompt: "Editorial fashion digest deck.",
+      outline: ["Issue Cover", "Editorial Spread", "Main Column", "Trend Compare", "Editorial Strip", "Metric Column", "Trend Board", "Run of Show", "Editor Closing"],
+      palette: {
+        background: "#171412",
+        foreground: "#F7E7D8",
+        accent: "#FF8B61",
+        panel: "#231D19",
+        border: "#43362E",
+      },
+      strengths: ["杂志编辑", "趋势策展"],
+      slides: baseSlides,
+    },
+  ],
+}
+
+const importedTemplateDeckBatchTwo = {
+  ...sampleDeck,
+  variants: [
+    {
+      key: "ppt169_glassmorphism_demo" as const,
+      styleKey: "ppt169_glassmorphism_demo" as const,
+      name: "Glassmorphism Demo",
+      summary: "玻璃面板与产品演示感最强。",
+      stylePrompt: "Glass dashboard demo deck.",
+      outline: ["Glass Cover", "Panel Grid", "Insight Split", "Compare Grid", "Spotlight Strip", "Metric Board", "Chart Board", "Process Lane", "Closing Panel"],
+      palette: {
+        background: "#E9F5FF",
+        foreground: "#152433",
+        accent: "#4AA8FF",
+        panel: "#F5FBFF",
+        border: "#BFDCEF",
+      },
+      strengths: ["产品演示", "玻璃面板"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_attention_is_all_you_need" as const,
+      styleKey: "ppt169_attention_is_all_you_need" as const,
+      name: "Attention Research",
+      summary: "研究答辩与方法证明结构最强。",
+      stylePrompt: "Research defense deck.",
+      outline: ["Abstract", "Outline", "Method", "Compare", "Evidence", "Metrics", "Results", "Procedure", "Conclusion"],
+      palette: {
+        background: "#F8F6F0",
+        foreground: "#111111",
+        accent: "#B86A2A",
+        panel: "#FFFCF5",
+        border: "#D6CAB7",
+      },
+      strengths: ["研究汇报", "答辩结构"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_indie_bookstore_zine_guide" as const,
+      styleKey: "ppt169_indie_bookstore_zine_guide" as const,
+      name: "Indie Bookstore Zine",
+      summary: "文化 zine 与策展叙事节奏最强。",
+      stylePrompt: "Editorial zine deck.",
+      outline: ["Zine Cover", "Index Board", "Split Spread", "Compare Board", "Quote Wall", "Number Row", "Ledger List", "Runway Board", "Closing Notes"],
+      palette: {
+        background: "#181512",
+        foreground: "#F3E8D7",
+        accent: "#D96C3D",
+        panel: "#221D19",
+        border: "#3A3029",
+      },
+      strengths: ["文化编辑", "策展节奏"],
+      slides: baseSlides,
+    },
+  ],
+}
+
+const importedTemplateDeckBatchThree = {
+  ...sampleDeck,
+  variants: [
+    {
+      key: "ppt169_global_ai_capital_2026" as const,
+      styleKey: "ppt169_global_ai_capital_2026" as const,
+      name: "Global AI Capital 2026",
+      summary: "资本简报与董事会判断节奏最强。",
+      stylePrompt: "Board-facing capital brief deck.",
+      outline: ["Capital Cover", "Brief Grid", "Quote Panel", "Compare Board", "Evidence List", "Metric Strip", "Market Bars", "Runway Grid", "Closing Board"],
+      palette: {
+        background: "#F7F0E3",
+        foreground: "#772919",
+        accent: "#C84A23",
+        panel: "#FFF8EE",
+        border: "#D9BEA5",
+      },
+      strengths: ["资本叙事", "董事会简报"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_home_design_trends_2026" as const,
+      styleKey: "ppt169_home_design_trends_2026" as const,
+      name: "Home Design Trends 2026",
+      summary: "生活方式趋势与审美策展节奏最强。",
+      stylePrompt: "Lifestyle trend curation deck.",
+      outline: ["Hero Spread", "Tile Grid", "Story Spread", "Compare Grid", "Curation Strip", "Metric Row", "Trend Rows", "Sequence Grid", "Closing Card"],
+      palette: {
+        background: "#F5EFE7",
+        foreground: "#2E2722",
+        accent: "#B98053",
+        panel: "#FCF8F2",
+        border: "#D9C8B8",
+      },
+      strengths: ["生活方式", "审美策展"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_lin_huiyin_architect" as const,
+      styleKey: "ppt169_lin_huiyin_architect" as const,
+      name: "Lin Huiyin Architect",
+      summary: "人物传记与建筑文化叙事节奏最强。",
+      stylePrompt: "Architect biography deck.",
+      outline: ["Hero Spread", "Index Columns", "Story Board", "Compare Columns", "Evidence Stack", "Metric Columns", "Ledger Lines", "Runway Columns", "Closing Card"],
+      palette: {
+        background: "#161311",
+        foreground: "#F3E8DC",
+        accent: "#C67248",
+        panel: "#231C18",
+        border: "#42352E",
+      },
+      strengths: ["人物传记", "文化叙事"],
+      slides: baseSlides,
+    },
+  ],
+}
+
+const importedTemplateDeckBatchFour = {
+  ...sampleDeck,
+  variants: [
+    {
+      key: "ppt169_building_effective_agents" as const,
+      styleKey: "ppt169_building_effective_agents" as const,
+      name: "Building Effective Agents",
+      summary: "智能体编排与能力分层结构最强。",
+      stylePrompt: "Agent orchestration deck.",
+      outline: ["Hero", "Module Grid", "Thesis", "Compare", "Signals", "Metrics", "Graph", "Runway", "Close"],
+      palette: { background: "#EEF2EC", foreground: "#101418", accent: "#B7F36B", panel: "#F9FBF6", border: "#CED8C2" },
+      strengths: ["编排", "能力分层"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_cangzhuo" as const,
+      styleKey: "ppt169_cangzhuo" as const,
+      name: "Cangzhuo",
+      summary: "中文经营纪要与执行备忘结构最强。",
+      stylePrompt: "Chinese executive memo deck.",
+      outline: ["封面", "议题", "决策", "对照", "风险", "指标", "图示", "动作", "收束"],
+      palette: { background: "#F7F1E8", foreground: "#7A3123", accent: "#B14B32", panel: "#FFF8EF", border: "#D7BEAA" },
+      strengths: ["纪要", "执行"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_general_dark_tech_claude_code_auto_mode" as const,
+      styleKey: "ppt169_general_dark_tech_claude_code_auto_mode" as const,
+      name: "General Dark Tech",
+      summary: "暗色科技系统感最强。",
+      stylePrompt: "Dark system deck.",
+      outline: ["Hero", "Nodes", "Thesis", "Compare", "Alerts", "Metrics", "Scan", "Run", "Close"],
+      palette: { background: "#0D0F12", foreground: "#F2F2F0", accent: "#F06C3B", panel: "#171B21", border: "#2B3139" },
+      strengths: ["科技", "系统"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_high_rise_renewal" as const,
+      styleKey: "ppt169_high_rise_renewal" as const,
+      name: "High Rise Renewal",
+      summary: "城市更新与建筑方案结构最强。",
+      stylePrompt: "Urban renewal deck.",
+      outline: ["Hero", "Plan", "Thesis", "Material", "Evidence", "Metrics", "Ledger", "Phase", "Close"],
+      palette: { background: "#12100F", foreground: "#F1E6D8", accent: "#D96E45", panel: "#211B18", border: "#3E332D" },
+      strengths: ["建筑", "更新"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_kimsoong_loyalty_programme" as const,
+      styleKey: "ppt169_kimsoong_loyalty_programme" as const,
+      name: "Kimsoong Loyalty Programme",
+      summary: "会员体系与留存运营结构最强。",
+      stylePrompt: "Membership deck.",
+      outline: ["Hero", "Members", "Story", "Tiers", "Proof", "Metrics", "Chart", "Journey", "Close"],
+      palette: { background: "#F5D8B6", foreground: "#1E1B19", accent: "#D96C3F", panel: "#FBE8D0", border: "#D2A57A" },
+      strengths: ["会员", "留存"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_lin_huiyin_architect_revised" as const,
+      styleKey: "ppt169_lin_huiyin_architect_revised" as const,
+      name: "Lin Huiyin Architect Revised",
+      summary: "修订版建筑人物叙事结构最强。",
+      stylePrompt: "Revised architecture profile deck.",
+      outline: ["Hero", "Index", "Story", "Compare", "Evidence", "Metrics", "Ledger", "Runway", "Close"],
+      palette: { background: "#161311", foreground: "#F3E8DC", accent: "#C67248", panel: "#231C18", border: "#42352E" },
+      strengths: ["修订", "人物"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_liziqi_plant_dye_colors" as const,
+      styleKey: "ppt169_liziqi_plant_dye_colors" as const,
+      name: "Plant Dye Colors",
+      summary: "手作生活方式与柔和叙事结构最强。",
+      stylePrompt: "Craft lifestyle deck.",
+      outline: ["Hero", "Cards", "Story", "Compare", "Spotlight", "Metrics", "Trend", "Phase", "Close"],
+      palette: { background: "#F4E8D8", foreground: "#2B241E", accent: "#7F9A5D", panel: "#FBF6EE", border: "#D9C7B5" },
+      strengths: ["手作", "生活方式"],
+      slides: baseSlides,
+    },
+    {
+      key: "ppt169_lora_hu_2021" as const,
+      styleKey: "ppt169_lora_hu_2021" as const,
+      name: "Lora Hu 2021",
+      summary: "创作者作品集节奏最强。",
+      stylePrompt: "Creator portfolio deck.",
+      outline: ["Hero", "Sheets", "Story", "Compare", "Showcase", "Metrics", "Ledger", "Sequence", "Close"],
+      palette: { background: "#F3E4D8", foreground: "#2A221E", accent: "#B86D59", panel: "#FBF3EC", border: "#D6C0B3" },
+      strengths: ["作品集", "个人品牌"],
+      slides: baseSlides,
+    },
+  ],
+}
+
 test("frontend slides runtime materializes HTML documents and poster previews", async () => {
   const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(sampleDeck)
   const variant = deck.variants[0]
@@ -227,6 +494,17 @@ test("frontend slides runtime materializes HTML documents and poster previews", 
   assert.match(html, /PresentationController/)
   assert.match(html, /aspect-ratio:\s*16\s*\/\s*9/)
   assert.match(html, /width:\s*min\(/)
+})
+
+test("frontend slides runtime registers a dedicated renderer for every ppt169 template style", () => {
+  const expected = pptPreviewStyles
+    .map((style) => style.key)
+    .filter((styleKey) => styleKey.startsWith("ppt169_"))
+    .sort()
+
+  const actual = getCustomFrontendSlidesRendererKeys().slice().sort()
+
+  assert.deepEqual(actual, expected)
 })
 
 test("frontend slides runtime renders materially different HTML structures per variant style", async () => {
@@ -252,6 +530,103 @@ test("frontend slides runtime renders materially different HTML structures per v
   assert.match(htmlByKey.get("ppt169_swiss_grid_systems") ?? "", /CHOOSE|打开 HTML 成品页做最终判断/)
   assert.doesNotMatch(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /⚡|🚢|📈/)
   assert.doesNotMatch(htmlByKey.get("ppt169_sugar_rush_memphis") ?? "", /sticker-band|playful-doodle-frame|doodle-flow/)
+})
+
+test("frontend slides runtime gives selected imported ppt-master templates their own html structures", async () => {
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(importedTemplateDeck)
+  const htmlByKey = new Map(
+    deck.variants.map((variant) => [variant.key, variant.preview?.htmlDocument?.html ?? ""]),
+  )
+
+  const kubernetesHtml = htmlByKey.get("ppt169_kubernetes_blueprint_2026") ?? ""
+  const showcaseHtml = htmlByKey.get("ppt169_image_text_showcase") ?? ""
+  const fashionHtml = htmlByKey.get("ppt169_fashion_weekly_digest") ?? ""
+
+  assert.match(kubernetesHtml, /kube-control-plane|kube-node-matrix|kube-governance-lane|kube-rollout-board/)
+  assert.doesNotMatch(kubernetesHtml, /<div class="neo-grid-ruler">|<aside class="module-strip panel">/)
+
+  assert.match(showcaseHtml, /showcase-contact-sheet|showcase-caption-board|showcase-sequence-board|showcase-editor-note/)
+  assert.doesNotMatch(showcaseHtml, /<div class="neo-grid-ruler">|<aside class="module-strip panel">/)
+
+  assert.match(fashionHtml, /digest-masthead|digest-spread-grid|digest-trend-board|digest-run-of-show/)
+  assert.doesNotMatch(fashionHtml, /<div class="broadside-top-chrome">|<div class="market-barboard">/)
+
+  assert.match(kubernetesHtml, /Step 3\.7 Flash 的叙事架构/)
+  assert.match(showcaseHtml, /HTML 预览 vs 可编辑 PPTX/)
+  assert.match(fashionHtml, /9 页结构带来的信息密度/)
+})
+
+test("frontend slides runtime gives another three imported ppt-master templates dedicated html structures", async () => {
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(importedTemplateDeckBatchTwo)
+  const htmlByKey = new Map(
+    deck.variants.map((variant) => [variant.key, variant.preview?.htmlDocument?.html ?? ""]),
+  )
+
+  const glassHtml = htmlByKey.get("ppt169_glassmorphism_demo") ?? ""
+  const paperHtml = htmlByKey.get("ppt169_attention_is_all_you_need") ?? ""
+  const zineHtml = htmlByKey.get("ppt169_indie_bookstore_zine_guide") ?? ""
+
+  assert.match(glassHtml, /glass-hero-grid|glass-panel-grid|glass-chart-board|glass-closing-panel/)
+  assert.doesNotMatch(glassHtml, /<section class="slide playful-cover">|<div class="playful-orbit">/)
+
+  assert.match(paperHtml, /paper-abstract|paper-outline-board|paper-chart-column|paper-conclusion/)
+  assert.doesNotMatch(paperHtml, /<div class="neo-grid-ruler">|<div class="signal-grid-board panel">/)
+
+  assert.match(zineHtml, /zine-masthead|zine-index-board|zine-ledger-list|zine-closing-block/)
+  assert.doesNotMatch(zineHtml, /<div class="broadside-top-chrome">|<div class="market-barboard">/)
+
+  assert.match(glassHtml, /Step 3\.7 Flash 的叙事架构/)
+  assert.match(paperHtml, /HTML 预览 vs 可编辑 PPTX|速度不是唯一优势/)
+  assert.match(zineHtml, /Step 3\.7 Flash 的叙事架构|速度不是唯一优势/)
+})
+
+test("frontend slides runtime gives a third imported batch dedicated html structures", async () => {
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(importedTemplateDeckBatchThree)
+  const htmlByKey = new Map(
+    deck.variants.map((variant) => [variant.key, variant.preview?.htmlDocument?.html ?? ""]),
+  )
+
+  const capitalHtml = htmlByKey.get("ppt169_global_ai_capital_2026") ?? ""
+  const homeHtml = htmlByKey.get("ppt169_home_design_trends_2026") ?? ""
+  const heritageHtml = htmlByKey.get("ppt169_lin_huiyin_architect") ?? ""
+
+  assert.match(capitalHtml, /capital-masthead|capital-brief-grid|capital-market-bars|capital-closing-board/)
+  assert.doesNotMatch(capitalHtml, /<section class="slide long-table-cover">|<div class="ledger-grid">/)
+
+  assert.match(homeHtml, /home-hero-spread|home-tile-grid|home-curation-strip|home-closing-card/)
+  assert.doesNotMatch(homeHtml, /<div class="broadside-top-chrome">|<div class="poster-columns">/)
+
+  assert.match(heritageHtml, /heritage-masthead|heritage-index-columns|heritage-story-board|heritage-closing-card/)
+  assert.doesNotMatch(heritageHtml, /<div class="broadside-top-chrome">|<div class="poster-columns">/)
+
+  assert.match(capitalHtml, /Step 3\.7 Flash 的叙事架构/)
+  assert.match(homeHtml, /速度不是唯一优势|为什么预览值得优先交付/)
+  assert.match(heritageHtml, /HTML 预览 vs 可编辑 PPTX|9 页结构带来的信息密度/)
+})
+
+test("frontend slides runtime covers the remaining imported templates with dedicated html structures", async () => {
+  const deck = await frontendSlidesPreviewRuntime.materializeStoryDeck(importedTemplateDeckBatchFour)
+  const htmlByKey = new Map(
+    deck.variants.map((variant) => [variant.key, variant.preview?.htmlDocument?.html ?? ""]),
+  )
+
+  assert.match(htmlByKey.get("ppt169_building_effective_agents") ?? "", /agents-ruler|agents-module-grid|agents-graph-stack|agents-closing-card/)
+  assert.match(htmlByKey.get("ppt169_cangzhuo") ?? "", /memo-header|memo-list-board|memo-chart-list|memo-closing-card/)
+  assert.match(htmlByKey.get("ppt169_general_dark_tech_claude_code_auto_mode") ?? "", /darktech-topbar|darktech-node-grid|darktech-scan-list|darktech-close-card/)
+  assert.match(htmlByKey.get("ppt169_high_rise_renewal") ?? "", /renewal-topbar|renewal-plan-grid|renewal-ledger-rows|renewal-closing-card/)
+  assert.match(htmlByKey.get("ppt169_kimsoong_loyalty_programme") ?? "", /loyalty-header|loyalty-member-grid|loyalty-chart-list|loyalty-closing-card/)
+  assert.match(htmlByKey.get("ppt169_lin_huiyin_architect_revised") ?? "", /heritage-revised-masthead|heritage-revised-index-columns|heritage-revised-ledger-lines|heritage-revised-closing-card/)
+  assert.match(htmlByKey.get("ppt169_liziqi_plant_dye_colors") ?? "", /dye-masthead|dye-card-grid|dye-trend-list|dye-closing-card/)
+  assert.match(htmlByKey.get("ppt169_lora_hu_2021") ?? "", /creator-masthead|creator-sheet-grid|creator-ledger-list|creator-closing-card/)
+
+  assert.doesNotMatch(htmlByKey.get("ppt169_building_effective_agents") ?? "", /<div class="neo-grid-ruler">/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_cangzhuo") ?? "", /<section class="slide long-table-cover">/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_general_dark_tech_claude_code_auto_mode") ?? "", /<div class="neo-grid-ruler">/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_high_rise_renewal") ?? "", /<div class="broadside-top-chrome">/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_kimsoong_loyalty_programme") ?? "", /<div class="playful-orbit">/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_lin_huiyin_architect_revised") ?? "", /<div class="broadside-top-chrome">/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_liziqi_plant_dye_colors") ?? "", /<div class="playful-orbit">/)
+  assert.doesNotMatch(htmlByKey.get("ppt169_lora_hu_2021") ?? "", /<div class="playful-orbit">/)
 })
 
 test("frontend slides runtime renders workflow input images as structured slide media", async () => {
