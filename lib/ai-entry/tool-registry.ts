@@ -21,10 +21,17 @@ import {
   type PptPreviewContext,
   resolvePptTemplateSelectionFromUserText,
 } from "@/lib/ai-entry/ppt-tool-result-message"
+import {
+  buildResearchBriefFromWebSearchResult,
+  extractLatestResearchBriefContextFromContents,
+  type StructuredResearchBrief,
+} from "@/lib/ai-entry/research-brief-context"
 import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
+import { getPptWorkerSupportedTemplateIds } from "@/lib/lead-tools/ppt-worker-capabilities"
 
 type AiSdkToolLike = {
   description?: string
@@ -48,7 +55,6 @@ export type AiEntryToolRegistryResult = {
 type ToolSource = "first_party" | "mcp"
 
 const DEFAULT_TOOL_TIMEOUT_MS = 60_000
-const MAX_RESEARCH_BRIEF_CHARS = 2_000
 const AI_ENTRY_BACKGROUND_PPT_AGENT_ID = "executive-ppt"
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
@@ -132,109 +138,8 @@ function summarizeToolOutput(output: unknown) {
   }
 }
 
-function normalizeWhitespace(value: string) {
-  return value.replace(/\s+/g, " ").trim()
-}
-
-function trimToLength(value: string, maxChars: number) {
-  if (value.length <= maxChars) return value
-  return `${value.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`
-}
-
 function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
-}
-
-type SearchResultLike = {
-  title?: unknown
-  url?: unknown
-  snippet?: unknown
-}
-
-type WebSearchResultLike = {
-  query?: unknown
-  intent?: unknown
-  results?: unknown
-}
-
-type StructuredResearchBrief = {
-  topic: string
-  keyFacts: string[]
-  numericEvidence?: string[]
-  risks?: string[]
-  implications?: string[]
-  sourceNotes?: string[]
-  rawSummary?: string
-}
-
-function buildResearchBriefSummary(brief: StructuredResearchBrief) {
-  const lines = [
-    `Topic: ${brief.topic}`,
-    brief.keyFacts.length ? `Key facts:\n- ${brief.keyFacts.join("\n- ")}` : null,
-    brief.numericEvidence?.length ? `Numeric evidence:\n- ${brief.numericEvidence.join("\n- ")}` : null,
-    brief.risks?.length ? `Risks:\n- ${brief.risks.join("\n- ")}` : null,
-    brief.implications?.length ? `Implications:\n- ${brief.implications.join("\n- ")}` : null,
-    brief.sourceNotes?.length ? `Source notes:\n- ${brief.sourceNotes.join("\n- ")}` : null,
-  ]
-    .filter((line): line is string => Boolean(line))
-    .join("\n")
-
-  return trimToLength(lines, MAX_RESEARCH_BRIEF_CHARS)
-}
-
-function buildResearchBriefFromWebSearchResult(result: unknown): StructuredResearchBrief | null {
-  if (!result || typeof result !== "object") return null
-
-  const payload = result as WebSearchResultLike
-  const query = readOptionalString(payload.query)
-  const intent = readOptionalString(payload.intent)
-  const results = Array.isArray(payload.results) ? payload.results : []
-
-  if (!query || results.length === 0) {
-    return null
-  }
-
-  const normalizedResults = results
-    .map((item) => {
-      const row = item as SearchResultLike
-      return {
-        title: readOptionalString(row?.title),
-        url: readOptionalString(row?.url),
-        snippet: readOptionalString(row?.snippet),
-      }
-    })
-    .filter((item) => item.title || item.url || item.snippet)
-    .slice(0, 4)
-
-  if (normalizedResults.length === 0) {
-    return null
-  }
-
-  const keyFacts = normalizedResults
-    .map((item) => normalizeWhitespace(item.snippet || item.title || ""))
-    .filter(Boolean)
-    .slice(0, 4)
-
-  const sourceNotes = normalizedResults
-    .map((item) => {
-      const title = item.title || "Untitled source"
-      return item.url ? `${title} - ${item.url}` : title
-    })
-    .slice(0, 4)
-
-  const brief: StructuredResearchBrief = {
-    topic: query,
-    keyFacts,
-    sourceNotes,
-  }
-
-  if (intent) {
-    brief.implications = [intent]
-  }
-
-  brief.rawSummary = buildResearchBriefSummary(brief)
-
-  return brief
 }
 
 function maybeInjectResearchBrief(
@@ -295,28 +200,45 @@ function maybeInjectPptTemplateSelection(input: {
   }
 
   const record = input.rawInput && typeof input.rawInput === "object" ? (input.rawInput as Record<string, unknown>) : {}
-  const existingTemplateId = readOptionalString(record.templateId)
-  if (existingTemplateId) {
+  const suppliedTemplateId = readOptionalString(record.templateId)
+  const suppliedTemplateMode = readOptionalString(record.templateMode)
+  const selectedTemplateId =
+    suppliedTemplateId &&
+    suppliedTemplateMode === "single-template" &&
+    input.latestTemplateRecommendationContext?.templateIds.includes(suppliedTemplateId)
+      ? suppliedTemplateId
+      : resolvePptTemplateSelectionFromUserText(
+          input.latestUserPrompt,
+          input.latestTemplateRecommendationContext,
+        )
+  if (selectedTemplateId) {
     return {
       ...record,
-      templateMode: readOptionalString(record.templateMode) ?? "single-template",
-      templateId: existingTemplateId,
+      templateMode: "single-template",
+      templateId: selectedTemplateId,
     }
   }
 
-  const selectedTemplateId = resolvePptTemplateSelectionFromUserText(
-    input.latestUserPrompt,
-    input.latestTemplateRecommendationContext,
-  )
-  if (!selectedTemplateId) {
-    return input.rawInput
-  }
+  const rest = { ...record }
+  delete rest.templateId
+  delete rest.templateMode
+  return rest
+}
 
-  return {
-    ...record,
-    templateMode: "single-template",
-    templateId: selectedTemplateId,
-  }
+function hasConfirmedEditablePptTemplate(input: {
+  record: Record<string, unknown>
+  latestTemplateRecommendationContext?: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
+  allowedTemplateIds?: readonly string[]
+}) {
+  const templateId = readOptionalString(input.record.templateId)
+  const templateMode = readOptionalString(input.record.templateMode)
+  const allowedTemplateIds = input.allowedTemplateIds?.length ? new Set(input.allowedTemplateIds) : null
+  return Boolean(
+    templateId &&
+    templateMode === "single-template" &&
+    (!allowedTemplateIds || allowedTemplateIds.has(templateId)) &&
+    input.latestTemplateRecommendationContext?.templateIds.includes(templateId),
+  )
 }
 
 function extractPreviewContextFromToolResult(result: unknown): PptPreviewContext | null {
@@ -377,24 +299,62 @@ function maybePreparePptPreviewInput(
     }
   }
 
+  const prepared = preparePptPreviewInput({
+    rawInput: input,
+    briefState,
+  })
+  if (!prepared.ok) {
+    return prepared
+  }
+
   if (
     options?.agentId === "executive-ppt" &&
-    options?.executionContext !== "workflow" &&
-    briefState?.readyForPreview
+    options?.executionContext !== "workflow"
   ) {
-    const record = input && typeof input === "object" ? (input as Record<string, unknown>) : {}
-    const templateId = readOptionalString(record.templateId)
-    if (!templateId) {
-      const recommendationPrompt = buildPptTemplateRecommendationSource({
-        briefState,
-        latestUserPrompt: readOptionalString(record.prompt) || options?.latestUserPrompt || null,
-      })
+    const record = prepared.input as Record<string, unknown>
+    const allowedTemplateIds = getEditablePptAllowedTemplateIds({
+      agentId: options.agentId,
+      executionContext: options.executionContext,
+    })
+    if (!hasConfirmedEditablePptTemplate({
+      record,
+      latestTemplateRecommendationContext: options.latestTemplateRecommendationContext,
+      allowedTemplateIds,
+    })) {
+      const recordMustInclude = Array.isArray(record.mustInclude)
+        ? record.mustInclude.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        : []
+      const fallbackRecommendationPrompt = [
+        readOptionalString(record.prompt) ? `Topic: ${readOptionalString(record.prompt)}` : null,
+        readOptionalString(record.audience) ? `Audience: ${readOptionalString(record.audience)}` : null,
+        readOptionalString(record.goal) ? `Goal: ${readOptionalString(record.goal)}` : null,
+        readOptionalString(record.scenario) ? `Scenario: ${readOptionalString(record.scenario)}` : null,
+        readOptionalString(record.language) ? `Language: ${readOptionalString(record.language)}` : null,
+        typeof record.pageCount === "number" && Number.isFinite(record.pageCount)
+          ? `Page count: ${record.pageCount}`
+          : null,
+        readOptionalString(record.tone) ? `Tone: ${readOptionalString(record.tone)}` : null,
+        recordMustInclude.length > 0 ? `Must include: ${recordMustInclude.join("; ")}` : null,
+        options?.latestUserPrompt ? `Latest request: ${options.latestUserPrompt}` : null,
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join("\n")
+      const recommendationPrompt = briefState
+        ? buildPptTemplateRecommendationSource({
+            briefState,
+            latestUserPrompt: readOptionalString(record.prompt) || options?.latestUserPrompt || null,
+          })
+        : fallbackRecommendationPrompt
       const recommendedTemplates = buildPptRecommendedTemplateSummaries({
         prompt: recommendationPrompt,
-        scenario: briefState.scenario!,
-        language: briefState.language!,
-        pageCount: briefState.pageCount,
-      })
+        researchBrief: record.researchBrief as Parameters<typeof buildPptRecommendedTemplateSummaries>[0]["researchBrief"],
+        scenario: readOptionalString(record.scenario) as Parameters<typeof buildPptRecommendedTemplateSummaries>[0]["scenario"],
+        language: readOptionalString(record.language) as Parameters<typeof buildPptRecommendedTemplateSummaries>[0]["language"],
+        pageCount:
+          typeof record.pageCount === "number" && Number.isFinite(record.pageCount)
+            ? record.pageCount
+            : undefined,
+      }, allowedTemplateIds ? { allowedTemplateIds } : undefined)
       return {
         ok: false as const,
         error: {
@@ -408,10 +368,7 @@ function maybePreparePptPreviewInput(
     }
   }
 
-  return preparePptPreviewInput({
-    rawInput: input,
-    briefState,
-  })
+  return prepared
 }
 
 function shouldRunPptPreviewInBackground(input: {
@@ -426,6 +383,21 @@ function shouldRunPptPreviewInBackground(input: {
     input.executionContext !== "workflow" &&
     input.agentId === AI_ENTRY_BACKGROUND_PPT_AGENT_ID
   )
+}
+
+function getEditablePptAllowedTemplateIds(input: {
+  agentId: string | null
+  executionContext?: "chat" | "workflow"
+}) {
+  if (
+    input.agentId === AI_ENTRY_BACKGROUND_PPT_AGENT_ID &&
+    input.executionContext !== "workflow" &&
+    getLeadToolPptExecutionTransport() === "remote-worker"
+  ) {
+    return getPptWorkerSupportedTemplateIds()
+  }
+
+  return undefined
 }
 
 async function enqueueBackgroundPptPreviewTask(input: {
@@ -484,6 +456,7 @@ function wrapToolSet(params: {
   currentUser: AuthUser
   selectedSkills: AiEntrySkillDefinition[]
   timeoutMs: number
+  messageContents?: string[]
   conversationScope: AiEntryConversationScope
   pptBriefState: PptBriefState | null
   latestPreviewContext: ReturnType<typeof extractLatestPptPreviewContext>
@@ -499,7 +472,7 @@ function wrapToolSet(params: {
   }
 }): ToolSet {
   const skillByToolId = new Map<string, string>()
-  let lastResearchBrief: StructuredResearchBrief | null = null
+  let lastResearchBrief = extractLatestResearchBriefContextFromContents(params.messageContents)
   let latestPreviewContextForTurn = params.latestPreviewContext
   const latestTemplateRecommendationContextForTurn = params.latestTemplateRecommendationContext
 
@@ -685,7 +658,6 @@ function resolvePptToolAccess(input: {
   return {
     exportEnabled:
       state?.phase === "preview-ready" ||
-      state?.phase === "preview-invalidated" ||
       state?.phase === "exported",
   }
 }
@@ -788,6 +760,7 @@ export async function buildAiEntryToolRegistry(input: {
     currentUser: input.currentUser,
     selectedSkills: input.selectedSkills,
     timeoutMs: input.policy.maxRuntimeMs,
+    messageContents: input.messageContents,
     conversationScope: input.conversationScope ?? "chat",
     pptBriefState: input.pptBriefState ?? null,
     latestPreviewContext,
@@ -806,6 +779,7 @@ export async function buildAiEntryToolRegistry(input: {
     currentUser: input.currentUser,
     selectedSkills: input.selectedSkills,
     timeoutMs: input.policy.maxRuntimeMs,
+    messageContents: input.messageContents,
     conversationScope: input.conversationScope ?? "chat",
     pptBriefState: input.pptBriefState ?? null,
     latestPreviewContext,

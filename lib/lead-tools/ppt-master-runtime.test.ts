@@ -144,6 +144,49 @@ For the Broadside style with agenda layout:
   assert.equal(normalized.match(/<svg/gu)?.length, 1)
 })
 
+test("runtime svg preparation removes placeholder ellipses from the svg opening tag", () => {
+  const normalized = __testables__.prepareGeneratedSvg(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" ... width="1280" height="720">
+  <rect width="1280" height="720" fill="#ffffff"/>
+</svg>
+  `)
+
+  assert.match(normalized, /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 1280 720" width="1280" height="720">/u)
+  assert.doesNotMatch(normalized, /<svg[^>]*\.\.\./u)
+})
+
+test("runtime svg preparation removes bare prose leaked inside svg documents", () => {
+  const normalized = __testables__.prepareGeneratedSvg(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">. It is recommended but not required.
+
+Now final answer: Provide SVG as described.
+
+But check constraints: "不要使用 <style>、class、mask、foreignObject、textPath、symbol、script、animate、iframe，也不要使用 <g opacity>。"
+  <rect width="1280" height="720" fill="#ffffff"/>
+  <text x="60" y="80">可编辑 PPT 回归</text>
+</svg>
+  `)
+
+  assert.match(normalized, /<rect width="1280" height="720"/u)
+  assert.match(normalized, /可编辑 PPT 回归/u)
+  assert.doesNotMatch(normalized, /It is recommended|Now final answer|不要使用 <style>|<g opacity>/u)
+})
+
+test("runtime svg preparation removes orphan think tags leaked before the svg root", () => {
+  const normalized = __testables__.prepareGeneratedSvg(`
+</think>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#ffffff"/>
+  <text x="60" y="80">课堂结论</text>
+</svg>
+  `)
+
+  assert.match(normalized, /<svg/u)
+  assert.match(normalized, /课堂结论/u)
+  assert.doesNotMatch(normalized, /<\/?think>/u)
+})
+
 test("runtime deck normalization preserves insight and timeline copy for slide generation", () => {
   const normalized = __testables__.normalizeRuntimeDeckCopy({
     title: "霍尔木兹海峡风险如何改写全球油运成本",
@@ -265,6 +308,67 @@ test("runtime svg validator does not replace generated slides for soft duplicate
   )
 
   assert.equal(reason, null)
+})
+
+test("runtime svg validator rejects multiple svg roots and inline shape prose", () => {
+  const context = {
+    deck: {
+      title: "deck",
+      scenario: "marketing-campaign",
+      language: "zh-CN",
+      generatedAt: "2026-06-24T00:00:00.000Z",
+      outline: [],
+      variants: [],
+    } as any,
+    variant: {
+      key: "variant-a",
+      styleKey: "ppt169_pritzker_2026",
+      name: "Pritzker Editorial",
+      summary: "summary",
+      stylePrompt: "editorial poster",
+      palette: {
+        background: "#f6efe8",
+        foreground: "#171312",
+        accent: "#ff6436",
+        panel: "#f1e5d8",
+        border: "#5f4b40",
+      },
+      strengths: ["editorial"],
+      slides: [],
+    } as any,
+    slide: {
+      id: "s1",
+      layout: "insight",
+      intent: "statement",
+      kicker: "判断",
+      title: "title",
+      body: "body",
+      bullets: ["a", "b"],
+      accent: "#ff6436",
+    } as any,
+    slideIndex: 0,
+    projectDir: "/tmp/project",
+    slideFileBaseName: "01_insight",
+    designSpecPath: "/tmp/project/design_spec.md",
+    specLockPath: "/tmp/project/spec_lock.json",
+    sourceBriefPath: "/tmp/project/source_brief.md",
+    previousSlides: [],
+  } as any
+
+  assert.equal(
+    __testables__.shouldFallbackForGeneratedSvg(
+      context,
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/> stray copy<svg xmlns="http://www.w3.org/2000/svg"></svg></svg>',
+    ),
+    "svg_multiple_roots",
+  )
+  assert.equal(
+    __testables__.shouldFallbackForGeneratedSvg(
+      context,
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/> stray copy</svg>',
+    ),
+    "svg_inline_prose_after_shape",
+  )
 })
 
 test("runtime keeps original generated svg instead of deterministic replacement", () => {

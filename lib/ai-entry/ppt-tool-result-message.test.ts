@@ -9,9 +9,13 @@ import {
   extractLatestPptPreviewInvalidationContext,
   extractLatestPptPreviewContext,
   extractLatestPptTemplateRecommendationContext,
+  extractPptTemplateRecommendationContexts,
+  isQueuedPptBackgroundStatusMessage,
   resolvePptTemplateSelectionFromUserText,
   resolveLatestPptConversationState,
   stripPptArtifactRelativeLinks,
+  stripPptHiddenContextMarkers,
+  stripPptTemplateRecommendationContextMarkers,
 } from "./ppt-tool-result-message"
 
 test("ppt tool result message expands relative export links into absolute URLs", () => {
@@ -131,6 +135,23 @@ test("preview ppt tool result message explains background generation when previe
   assert.match(message || "", /已切换为后台生成：/)
   assert.match(message || "", /任务 ID: 901/)
   assert.match(message || "", /后台生成/)
+  assert.equal(isQueuedPptBackgroundStatusMessage(message), true)
+})
+
+test("queued background status detector ignores real preview messages", () => {
+  const message = buildPptToolResultMessage({
+    toolName: "preview_ppt_deck",
+    isZh: true,
+    result: {
+      ok: true,
+      previewSessionId: "preview-session-1",
+      title: "企业 AI 营销工作台",
+      recommendedVariantKey: "variant-a",
+      variants: [{ key: "variant-a", name: "Variant A" }],
+    },
+  })
+
+  assert.equal(isQueuedPptBackgroundStatusMessage(message), false)
 })
 
 test("template recommendation message includes a hidden template context marker", () => {
@@ -147,22 +168,108 @@ test("template recommendation message includes a hidden template context marker"
 
   assert.match(message || "", /已为这次需求推荐 4 个模板：/)
   assert.match(message || "", /1\. Long Table \(long-table\)/)
-  assert.match(message || "", /回复模板编号或模板名称/)
+  assert.match(message || "", /回复模板 ID 或模板名称/)
   assert.deepEqual(extractLatestPptTemplateRecommendationContext(message), {
     defaultTemplateId: "long-table",
     templateIds: ["long-table", "neo-grid-bold", "broadside", "playful"],
+    templates: [
+      { templateId: "long-table", labels: ["Long Table", "Long Table", "long-table"] },
+      { templateId: "neo-grid-bold", labels: ["Neo Grid Bold", "Neo-Grid Bold", "neo-grid-bold"] },
+      { templateId: "broadside", labels: ["Broadside", "Broadside", "broadside"] },
+      { templateId: "playful", labels: ["Playful", "Playful", "playful"] },
+    ],
   })
 })
 
-test("template selection can be resolved by rank or template name", () => {
+test("template recommendation marker can be extracted and stripped for persisted message rendering", () => {
+  const message = buildPptTemplateRecommendationMessage({
+    recommendedTemplates: [
+      { rank: 1, templateId: "anthropic-brand", templateLabel: "Anthropic 品牌", styleName: "Long Table" },
+      { rank: 2, templateId: "academic-defense", templateLabel: "学术答辩", styleName: "Attention Research" },
+    ],
+    isZh: true,
+  })
+  const content = `正文\n${message}\n结尾`
+
+  assert.equal(extractPptTemplateRecommendationContexts(content).length, 1)
+  assert.deepEqual(extractPptTemplateRecommendationContexts(content)[0]?.templateIds, [
+    "anthropic-brand",
+    "academic-defense",
+  ])
+  assert.doesNotMatch(stripPptTemplateRecommendationContextMarkers(content), /ai-entry-ppt-template-recommendations/)
+  assert.match(stripPptTemplateRecommendationContextMarkers(content), /Anthropic 品牌/)
+})
+
+test("hidden ppt context markers are stripped before markdown rendering", () => {
+  const content = [
+    "正文开始",
+    '<!-- ai-entry-ppt-preview-context:{"previewSessionId":"ps1","defaultVariantKey":"v1","variantKeys":["v1"]} -->',
+    '<!-- ai-entry-ppt-export-context:{"previewSessionId":"ps1","selectedVariantKey":"v1","artifactId":12} -->',
+    '<!-- ai-entry-ppt-preview-invalidated:{"previewSessionId":"ps1"} -->',
+    '<!-- ai-entry-ppt-template-recommendations:{"defaultTemplateId":"government-blue","templateIds":["government-blue"],"templates":[{"templateId":"government-blue","labels":["政务蓝","government-blue"]}]} -->',
+    '<!-- ai-entry-research-brief:{"topic":"Crimea current status military posture 2025 2026","keyFacts":["Crimea remains strategically important."],"rawSummary":"Topic: Crimea current status military posture 2025 2026"} -->',
+    "正文结束",
+  ].join("\n")
+
+  const cleaned = stripPptHiddenContextMarkers(content)
+  assert.equal(cleaned.includes("ai-entry-ppt-"), false)
+  assert.equal(cleaned.includes("ai-entry-research-brief"), false)
+  assert.match(cleaned, /正文开始/)
+  assert.match(cleaned, /正文结束/)
+})
+
+test("template selection resolves explicit template ids and labels from recommendation context", () => {
   const context = {
     defaultTemplateId: "long-table",
     templateIds: ["long-table", "neo-grid-bold", "broadside", "playful"],
+    templates: [
+      { templateId: "long-table", labels: ["长桌纪要", "Long Table", "long-table"] },
+      { templateId: "neo-grid-bold", labels: ["新网格粗体", "Neo Grid Bold", "neo-grid-bold"] },
+      { templateId: "broadside", labels: ["告示海报", "Broadside", "broadside"] },
+      { templateId: "playful", labels: ["轻快玩味", "Playful", "playful"] },
+    ],
   }
 
-  assert.equal(resolvePptTemplateSelectionFromUserText("用第2个模板生成", context), "neo-grid-bold")
+  assert.equal(resolvePptTemplateSelectionFromUserText("用 neo-grid-bold 模板生成", context), "neo-grid-bold")
   assert.equal(resolvePptTemplateSelectionFromUserText("改用 broadside", context), "broadside")
   assert.equal(resolvePptTemplateSelectionFromUserText("试试长桌纪要", context), "long-table")
+  assert.equal(resolvePptTemplateSelectionFromUserText("选择新网格粗体", context), "neo-grid-bold")
+  assert.equal(resolvePptTemplateSelectionFromUserText("用第一个模板生成", context), null)
+})
+
+test("preview failure with recommended templates produces selectable template context", () => {
+  const message = buildPptToolResultMessage({
+    toolName: "preview_ppt_deck",
+    isZh: true,
+    result: {
+      ok: false,
+      error: {
+        code: "ppt_template_selection_required",
+        message: "Select one recommended template before generating the editable PPT preview.",
+      },
+      recommendedTemplates: [
+        {
+          rank: 1,
+          templateId: "general-dark-tech-claude-code-auto-mode",
+          templateLabel: "暗色科技",
+          styleName: "General Dark Tech",
+        },
+        {
+          rank: 2,
+          templateId: "swiss-grid",
+          templateLabel: "瑞士网格",
+          styleName: "Swiss Grid",
+        },
+      ],
+    },
+  })
+
+  assert.match(message || "", /暗色科技 \(general-dark-tech-claude-code-auto-mode\)/)
+  const context = extractLatestPptTemplateRecommendationContext(message)
+  assert.equal(
+    resolvePptTemplateSelectionFromUserText("选择暗色科技", context),
+    "general-dark-tech-claude-code-auto-mode",
+  )
 })
 
 test("ppt conversation state resolves preview-ready and exported phases from hidden markers", () => {

@@ -71,3 +71,43 @@ export function resolveAiEntryRestoredMessages<T extends RestorableMessage>(inpu
 
   return persistedMessages
 }
+
+export function resolveAiEntryCompletedConversationMessages<T extends RestorableMessage>(input: {
+  currentMessages: T[]
+  persistedMessages: T[]
+  backgroundAssistantMessage?: T | null
+  matchesBackgroundAssistantMessage?: (message: T) => boolean
+}) {
+  const currentMessages = Array.isArray(input.currentMessages) ? input.currentMessages : []
+  const persistedMessages = Array.isArray(input.persistedMessages) ? input.persistedMessages : []
+  const backgroundAssistantMessage = input.backgroundAssistantMessage || null
+
+  const resolvedMessages =
+    getMeaningfulMessageCount(persistedMessages) > 0 ? persistedMessages : currentMessages
+
+  if (!backgroundAssistantMessage || !hasMeaningfulMessageContent(backgroundAssistantMessage)) {
+    return resolvedMessages
+  }
+
+  const backgroundContent =
+    typeof backgroundAssistantMessage.content === "string"
+      ? backgroundAssistantMessage.content.trim()
+      : ""
+  const matchesBackgroundAssistantMessage =
+    typeof input.matchesBackgroundAssistantMessage === "function"
+      ? input.matchesBackgroundAssistantMessage
+      : null
+
+  const alreadyIncluded = resolvedMessages.some((message) => {
+    if (message?.role !== "assistant") return false
+    if (matchesBackgroundAssistantMessage?.(message)) return true
+    const messageContent = typeof message.content === "string" ? message.content.trim() : ""
+    return Boolean(backgroundContent && messageContent === backgroundContent)
+  })
+
+  if (alreadyIncluded) {
+    return resolvedMessages
+  }
+
+  return [...resolvedMessages, backgroundAssistantMessage]
+}

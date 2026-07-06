@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, ChevronDown, ListTree, Loader2, TriangleAlert } from "lucide-react"
+import { Check, ChevronDown, Clock3, ListTree, Loader2, TriangleAlert } from "lucide-react"
 
 import type { TaskProgressPart, TaskProgressStep } from "@/lib/ai-entry/message-parts/types"
 import { cn } from "@/lib/utils"
@@ -25,6 +25,7 @@ export function TaskProgressPartView({ part, isZh }: { part: TaskProgressPart; i
   const completedCount = part.steps.filter((step) => step.status === "completed").length
   const failedCount = part.steps.filter((step) => step.status === "failed").length
   const runningCount = part.steps.filter((step) => step.status === "running").length
+  const waitingCount = part.steps.filter((step) => step.status === "waiting").length
   const summary = failedCount > 0
     ? isZh
       ? `${failedCount} 个步骤失败`
@@ -33,6 +34,10 @@ export function TaskProgressPartView({ part, isZh }: { part: TaskProgressPart; i
       ? isZh
         ? `${runningCount} 个步骤进行中`
         : `${runningCount} steps running`
+      : waitingCount > 0
+        ? isZh
+          ? `${waitingCount} 个步骤等待继续`
+          : `${waitingCount} steps waiting`
       : isZh
         ? `${completedCount} 个步骤已完成`
         : `${completedCount} steps completed`
@@ -53,7 +58,8 @@ export function TaskProgressPartView({ part, isZh }: { part: TaskProgressPart; i
         <span className="process-trailing">
           {failedCount > 0 ? <TriangleAlert className="h-3.5 w-3.5 text-destructive" /> : null}
           {failedCount === 0 && runningCount > 0 ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : null}
-          {failedCount === 0 && runningCount === 0 ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : null}
+          {failedCount === 0 && runningCount === 0 && waitingCount > 0 ? <Clock3 className="h-3.5 w-3.5 text-amber-600" /> : null}
+          {failedCount === 0 && runningCount === 0 && waitingCount === 0 ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : null}
           <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
         </span>
       </button>
@@ -68,6 +74,8 @@ export function TaskProgressPartView({ part, isZh }: { part: TaskProgressPart; i
                     ? "bg-destructive"
                     : step.status === "completed"
                       ? "bg-emerald-500"
+                      : step.status === "waiting"
+                        ? "bg-amber-500"
                       : step.status === "running"
                         ? "bg-primary"
                         : "bg-muted-foreground",

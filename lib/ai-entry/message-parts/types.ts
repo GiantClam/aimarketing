@@ -13,6 +13,13 @@ export type AiEntryStreamVariantResult = {
   summary?: string | null
 }
 
+export type AiEntryStreamRecommendedTemplateResult = {
+  rank?: number | null
+  templateId?: string
+  templateLabel?: string | null
+  styleName?: string | null
+}
+
 /** SSE 事件在 reducer 输入侧的宽松类型（镜像 ai-entry-workspace.tsx 的 ChatStreamApiResponse + PPT 防御字段）。 */
 export type AiEntryStreamEvent = {
   event?: string
@@ -44,12 +51,14 @@ export type AiEntryStreamEvent = {
       error?: { code?: string; message?: string }
       previewSessionId?: string
       title?: string
+      recommendedVariantKey?: string | null
       fileName?: string
       artifactId?: number | null
       workLibraryHref?: string
       previewUrl?: string | null
       downloadUrl?: string | null
       variants?: AiEntryStreamVariantResult[]
+      recommendedTemplates?: AiEntryStreamRecommendedTemplateResult[]
     } | null
     validation?: {
       ok?: boolean
@@ -71,7 +80,7 @@ export type ToolCallPart = {
   toolName: string
   toolCallId: string
   args: unknown
-  state: "input-streaming" | "output-available" | "output-error"
+  state: "input-streaming" | "output-available" | "output-error" | "output-blocked"
   output?: unknown
 }
 
@@ -101,8 +110,18 @@ export type ReportPart = {
   type: "report"
   id: string
   reportType: "ppt-preview" | "seo"
+  previewSessionId?: string | null
+  defaultVariantKey?: string | null
+  variantKeys?: string[]
   title: string | null
   variants: Array<{ key: string; name: string; summary: string | null }>
+}
+
+export type TemplateRecommendationPart = {
+  type: "template-recommendation"
+  id: string
+  defaultTemplateId: string | null
+  templates: Array<{ templateId: string; labels: string[] }>
 }
 
 export type ValidationPart = {
@@ -124,7 +143,7 @@ export type WorkflowStatusPart = {
 export type TaskProgressStep = {
   type: string
   toolName?: string
-  status: "running" | "completed" | "failed" | "info"
+  status: "running" | "completed" | "failed" | "waiting" | "info"
   detail?: string | null
   at: number
 }
@@ -146,6 +165,7 @@ export type MessagePart =
   | SourcePart
   | ArtifactPart
   | ReportPart
+  | TemplateRecommendationPart
   | ValidationPart
   | WorkflowStatusPart
   | TaskProgressPart

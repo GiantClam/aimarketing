@@ -57,6 +57,10 @@ import { maybeAutoRunPptPreview } from "@/lib/ai-entry/ppt-auto-preview"
 import { buildPptBriefPromptSection, extractPptBriefState } from "@/lib/ai-entry/ppt-brief"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "@/lib/ai-entry/ppt-tool-result-message"
+import {
+  buildResearchBriefContextMarker,
+  buildResearchBriefFromWebSearchResult,
+} from "@/lib/ai-entry/research-brief-context"
 import { prepareAiEntryConsultingRuntime } from "@/lib/skills/runtime/ai-entry-consulting"
 import {
   type ProviderOptions,
@@ -136,6 +140,31 @@ function buildSseEvent(payload: Record<string, unknown>) {
 
 function isClosedStreamControllerError(error: unknown) {
   return error instanceof Error && /controller is already closed/i.test(error.message)
+}
+
+function isPreviewActionRequiredResult(toolName: string, result: unknown) {
+  if (toolName !== "preview_ppt_deck" || !isAiEntryToolErrorResult(result)) return false
+  const errorCode =
+    result &&
+    typeof result === "object" &&
+    typeof (result as { error?: { code?: unknown } }).error?.code === "string"
+      ? String((result as { error?: { code?: unknown } }).error?.code).trim()
+      : ""
+
+  return errorCode === "ppt_template_selection_required" || errorCode === "ppt_brief_incomplete"
+}
+
+function isQueuedBackgroundPreviewResult(toolName: string, result: unknown) {
+  if (toolName !== "preview_ppt_deck" || !result || typeof result !== "object") return false
+  const status =
+    typeof (result as { status?: unknown }).status === "string"
+      ? String((result as { status?: unknown }).status).trim()
+      : ""
+  const taskId =
+    typeof (result as { backgroundTask?: { taskId?: unknown } }).backgroundTask?.taskId === "string"
+      ? String((result as { backgroundTask?: { taskId?: unknown } }).backgroundTask?.taskId).trim()
+      : ""
+  return status === "queued" && Boolean(taskId)
 }
 
 function modelSupportsImageInput(modelId: string | null | undefined) {
@@ -1412,22 +1441,37 @@ export async function POST(request: NextRequest) {
               if (payload.toolName === "preview_ppt_deck") {
                 previewToolExecutedInTurn = true
               }
+              const shouldPersistToolAppendix = !isQueuedBackgroundPreviewResult(
+                payload.toolName,
+                payload.result,
+              )
+              const researchBriefMarker =
+                payload.toolName === "web_search"
+                  ? buildResearchBriefFromWebSearchResult(payload.result)
+                  : null
               streamedToolAppendix = appendUniqueToolAppendix(
                 streamedToolAppendix,
-                buildPptToolResultMessage({
-                  toolName: payload.toolName,
-                  result: payload.result,
-                  origin: requestOrigin,
-                  isZh,
-                }),
+                researchBriefMarker ? buildResearchBriefContextMarker(researchBriefMarker) : null,
               )
+              if (shouldPersistToolAppendix) {
+                streamedToolAppendix = appendUniqueToolAppendix(
+                  streamedToolAppendix,
+                  buildPptToolResultMessage({
+                    toolName: payload.toolName,
+                    result: payload.result,
+                    origin: requestOrigin,
+                    isZh,
+                  }),
+                )
+              }
               const isErrorResult = isAiEntryToolErrorResult(payload.result)
+              const isActionRequiredPreview = isPreviewActionRequiredResult(payload.toolName, payload.result)
               const validation = getAiEntryValidationResult(payload.result)
               const artifacts = extractAiEntryArtifactsFromToolResult({
                 toolName: payload.toolName,
                 result: payload.result,
               })
-              if (isErrorResult) {
+              if (isErrorResult && !isActionRequiredPreview) {
                 const toolFailureMessage =
                   payload.result &&
                   typeof payload.result === "object" &&
@@ -1448,15 +1492,17 @@ export async function POST(request: NextRequest) {
                   result: payload.result,
                 },
               })
-              sendEvent({
-                event: isErrorResult ? "tool_call_error" : "tool_call_done",
-                conversation_id: conversationId,
-                data: {
-                  toolName: payload.toolName,
-                  toolCallId: payload.toolCallId,
-                  result: payload.result,
-                },
-              })
+              if (!isActionRequiredPreview) {
+                sendEvent({
+                  event: isErrorResult ? "tool_call_error" : "tool_call_done",
+                  conversation_id: conversationId,
+                  data: {
+                    toolName: payload.toolName,
+                    toolCallId: payload.toolCallId,
+                    result: payload.result,
+                  },
+                })
+              }
               if (validation) {
                 sendEvent({
                   event: "validation_result",
@@ -1522,6 +1568,10 @@ export async function POST(request: NextRequest) {
           if (autoPreview.autoPreviewExecuted) {
             previewToolExecutedInTurn = true
             const autoPreviewValidation = getAiEntryValidationResult(autoPreview.previewResult)
+            const autoPreviewNeedsAction = isPreviewActionRequiredResult(
+              "preview_ppt_deck",
+              autoPreview.previewResult,
+            )
             sendEvent({
               event: "tool_call",
               conversation_id: conversationId,
@@ -1553,15 +1603,17 @@ export async function POST(request: NextRequest) {
                 result: autoPreview.previewResult,
               },
             })
-            sendEvent({
-              event: isAiEntryToolErrorResult(autoPreview.previewResult) ? "tool_call_error" : "tool_call_done",
-              conversation_id: conversationId,
-              data: {
-                toolName: "preview_ppt_deck",
-                toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID,
-                result: autoPreview.previewResult,
-              },
-            })
+            if (!autoPreviewNeedsAction) {
+              sendEvent({
+                event: isAiEntryToolErrorResult(autoPreview.previewResult) ? "tool_call_error" : "tool_call_done",
+                conversation_id: conversationId,
+                data: {
+                  toolName: "preview_ppt_deck",
+                  toolCallId: AUTO_PPT_PREVIEW_TOOL_CALL_ID,
+                  result: autoPreview.previewResult,
+                },
+              })
+            }
             if (autoPreviewValidation) {
               sendEvent({
                 event: "validation_result",

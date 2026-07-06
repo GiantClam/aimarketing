@@ -29,6 +29,7 @@ const CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentation
 const PREVIEW_WIDTH = 1280
 const PREVIEW_HEIGHT = 720
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6
+const SVG_REGENERATION_RETRY_LIMIT = 2
 
 type StoredVariant = {
   key: string
@@ -190,6 +191,15 @@ async function restoreStoredSession(sessionId: string) {
   return persisted.manifest as StoredSession
 }
 
+async function hasStoredVariantProjectFiles(variant: StoredVariant) {
+  try {
+    const entries = await fs.readdir(path.join(variant.projectDir, "svg_final"))
+    return entries.some((entry) => entry.endsWith(".svg"))
+  } catch {
+    return false
+  }
+}
+
 async function readManifest(sessionId: string) {
   try {
     const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
@@ -252,6 +262,15 @@ async function runPythonScript(repoDir: string, scriptRelativePath: string, args
 
   if (commandNotFound) {
     throw new Error("ppt_master_python_missing")
+  }
+}
+
+async function runPptMasterSvgQualityCheck(repoDir: string, targetPath: string) {
+  try {
+    await runPythonScript(repoDir, "svg_quality_checker.py", [targetPath])
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "unknown_error"
+    throw new Error(`ppt_master_quality_check_failed:${targetPath}:${detail}`)
   }
 }
 
@@ -513,7 +532,35 @@ function isRecoverableRuntimeSlideFailure(detail: string) {
   )
 }
 
+function countPatternMatches(value: string, pattern: RegExp) {
+  return Array.from(value.matchAll(pattern)).length
+}
+
+function extractSvgOpeningTag(svg: string) {
+  const match = svg.match(/<svg\b([^>]*)>/i)
+  return match?.[0] ?? null
+}
+
 function shouldFallbackForGeneratedSvg(_context: PptMasterPreviewRuntimeSlideContext, _svg: string) {
+  const svg = _svg.trim()
+  const openingTag = extractSvgOpeningTag(svg)
+
+  if (!openingTag) {
+    return "svg_root_missing"
+  }
+
+  if (/\.\.\.|…/u.test(openingTag)) {
+    return "svg_opening_tag_placeholder"
+  }
+
+  if (countPatternMatches(svg, /<svg\b/gi) !== 1 || countPatternMatches(svg, /<\/svg>/gi) !== 1) {
+    return "svg_multiple_roots"
+  }
+
+  if (/<(?:rect|line|circle|ellipse|path|polygon|polyline|image|use|stop)\b[^>]*\/>\s+[^<\s]/u.test(svg)) {
+    return "svg_inline_prose_after_shape"
+  }
+
   return null
 }
 
@@ -538,8 +585,14 @@ function escapeUnknownAmpersands(svg: string) {
   return svg.replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);)/gi, "&amp;")
 }
 
+function stripReasoningTags(raw: string) {
+  return raw
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
+    .replace(/<\/?think\b[^>]*>/gi, "")
+}
+
 function extractSvgDocument(raw: string) {
-  const withoutCodeFence = raw.replace(/```svg|```xml|```/gi, "").trim()
+  const withoutCodeFence = stripReasoningTags(raw).replace(/```svg|```xml|```/gi, "").trim()
   const matches = Array.from(withoutCodeFence.matchAll(/<svg[\s\S]*?<\/svg>/gi), (match) => match[0].trim()).filter(Boolean)
 
   if (!matches.length) {
@@ -547,6 +600,55 @@ function extractSvgDocument(raw: string) {
   }
 
   return matches.sort((left, right) => right.length - left.length)[0] ?? matches[0]
+}
+
+function sanitizeSvgOpeningTag(svg: string) {
+  return svg.replace(/<svg\b([^>]*)>/i, (_fullMatch, attrs: string) => {
+    const nextAttrs = attrs
+      .replace(/\s+(?:\.{3}|…)(?=\s|>)/gu, "")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+
+    return `<svg${nextAttrs ? ` ${nextAttrs}` : ""}>`
+  })
+}
+
+function stripBareSvgProseLines(svg: string) {
+  let seenRootOpen = false
+  let seenRootClose = false
+
+  return svg
+    .split(/\r?\n/)
+    .map((line) => {
+      const indentation = line.match(/^\s*/u)?.[0] ?? ""
+      const trimmed = line.trim()
+
+      if (!trimmed) return line
+      if (trimmed.startsWith("<svg")) {
+        if (seenRootOpen) {
+          return ""
+        }
+        seenRootOpen = true
+        const closeIndex = trimmed.indexOf(">")
+        return closeIndex >= 0 ? `${indentation}${trimmed.slice(0, closeIndex + 1)}` : line
+      }
+      if (trimmed.startsWith("</svg")) {
+        if (seenRootClose) {
+          return ""
+        }
+        seenRootClose = true
+        return `${indentation}</svg>`
+      }
+      if (seenRootClose) {
+        return ""
+      }
+      if (trimmed.startsWith("<")) {
+        return line
+      }
+
+      return ""
+    })
+    .join("\n")
 }
 
 function ensureCanvasAttributes(svg: string) {
@@ -574,11 +676,29 @@ function ensureCanvasAttributes(svg: string) {
 }
 
 function prepareGeneratedSvg(raw: string) {
-  return ensureCanvasAttributes(escapeUnknownAmpersands(normalizeNamedEntities(extractSvgDocument(raw))))
+  return ensureCanvasAttributes(
+    stripBareSvgProseLines(sanitizeSvgOpeningTag(escapeUnknownAmpersands(normalizeNamedEntities(extractSvgDocument(raw))))),
+  )
 }
 
 function postprocessGeneratedSvg(_context: PptMasterPreviewRuntimeSlideContext, svg: string) {
   return svg
+}
+
+async function repairStoredSvgFinalDirectory(svgDir: string) {
+  const slideFiles = (await fs.readdir(svgDir))
+    .filter((file) => file.endsWith(".svg"))
+    .sort((left, right) => left.localeCompare(right, "en"))
+
+  for (const fileName of slideFiles) {
+    const filePath = path.join(svgDir, fileName)
+    const rawSvg = await fs.readFile(filePath, "utf8")
+    const repairedSvg = prepareGeneratedSvg(rawSvg)
+
+    if (repairedSvg !== rawSvg) {
+      await fs.writeFile(filePath, repairedSvg, "utf8")
+    }
+  }
 }
 
 function escapeXml(value: string) {
@@ -1514,70 +1634,118 @@ async function materializeVariantProject(params: {
     } satisfies PptMasterPreviewRuntimeSlideContext
 
     const slideStartedAt = Date.now()
-    let result: PptMasterPreviewRuntimeSlideResult
+    const slideOutputPath = path.join(projectDir, "svg_output", `${slideFileBaseName}.svg`)
+    let result: PptMasterPreviewRuntimeSlideResult | null = null
     let fallbackReason: string | null = null
-    if (shouldUseDeterministicRuntimeSvg(slideContext)) {
-      fallbackReason = "deterministic_runtime_svg"
-      result = {
-        provider: "ppt-master-emergency-svg",
-        model: deck.previewModel ?? "emergency-svg",
-        svg: buildEmergencyRuntimeSvg(slideContext),
-      }
-    } else {
-      try {
-        result = await options.generateSlideSvg(slideContext)
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : "unknown_error"
-        if (!isRecoverableRuntimeSlideFailure(detail)) {
-          throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
-        }
-        if (!allowEmergencyFallback) {
-          throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
-        }
 
-        fallbackReason = detail
-        result = {
+    for (let attempt = 0; attempt <= SVG_REGENERATION_RETRY_LIMIT; attempt += 1) {
+      let attemptResult: PptMasterPreviewRuntimeSlideResult
+      let attemptFallbackReason: string | null = null
+
+      if (shouldUseDeterministicRuntimeSvg(slideContext)) {
+        attemptFallbackReason = "deterministic_runtime_svg"
+        attemptResult = {
           provider: "ppt-master-emergency-svg",
           model: deck.previewModel ?? "emergency-svg",
           svg: buildEmergencyRuntimeSvg(slideContext),
         }
+      } else {
+        try {
+          attemptResult = await options.generateSlideSvg(slideContext)
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : "unknown_error"
+          if (!isRecoverableRuntimeSlideFailure(detail)) {
+            throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+          }
+          if (attempt < SVG_REGENERATION_RETRY_LIMIT) {
+            continue
+          }
+          if (!allowEmergencyFallback) {
+            throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+          }
+
+          attemptFallbackReason = detail
+          attemptResult = {
+            provider: "ppt-master-emergency-svg",
+            model: deck.previewModel ?? "emergency-svg",
+            svg: buildEmergencyRuntimeSvg(slideContext),
+          }
+        }
+      }
+
+      let attemptSvg: string
+      try {
+        attemptSvg = postprocessGeneratedSvg(slideContext, prepareGeneratedSvg(attemptResult.svg))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "svg_postprocess_failed"
+        if (attempt < SVG_REGENERATION_RETRY_LIMIT) {
+          continue
+        }
+        if (!allowEmergencyFallback) {
+          throw new Error(`ppt_master_runtime_slide_postprocess_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+        }
+
+        attemptFallbackReason = attemptFallbackReason ?? detail
+        attemptResult = {
+          provider: "ppt-master-emergency-svg",
+          model: deck.previewModel ?? "emergency-svg",
+          svg: buildEmergencyRuntimeSvg(slideContext),
+        }
+        attemptSvg = prepareGeneratedSvg(attemptResult.svg)
+      }
+
+      const svgFallbackReason = shouldFallbackForGeneratedSvg(slideContext, attemptSvg)
+      if (svgFallbackReason) {
+        if (attempt < SVG_REGENERATION_RETRY_LIMIT) {
+          continue
+        }
+        if (!allowEmergencyFallback) {
+          throw new Error(`ppt_master_runtime_slide_validation_failed:${variant.key}:${slideFileBaseName}:${svgFallbackReason}`)
+        }
+
+        attemptFallbackReason = attemptFallbackReason ?? svgFallbackReason
+        attemptResult = {
+          provider: "ppt-master-emergency-svg",
+          model: deck.previewModel ?? "emergency-svg",
+          svg: buildEmergencyRuntimeSvg(slideContext),
+        }
+        attemptSvg = prepareGeneratedSvg(attemptResult.svg)
+      }
+
+      await fs.writeFile(slideOutputPath, attemptSvg, "utf8")
+
+      try {
+        await runPptMasterSvgQualityCheck(repoDir, slideOutputPath)
+        result = attemptResult
+        fallbackReason = attemptFallbackReason
+        break
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "ppt_master_quality_check_failed"
+        if (attempt < SVG_REGENERATION_RETRY_LIMIT) {
+          continue
+        }
+        if (!allowEmergencyFallback) {
+          throw new Error(`ppt_master_runtime_slide_quality_check_failed:${variant.key}:${slideFileBaseName}:${detail}`)
+        }
+
+        const emergencyResult = {
+          provider: "ppt-master-emergency-svg",
+          model: deck.previewModel ?? "emergency-svg",
+          svg: buildEmergencyRuntimeSvg(slideContext),
+        } satisfies PptMasterPreviewRuntimeSlideResult
+        const emergencySvg = prepareGeneratedSvg(emergencyResult.svg)
+        await fs.writeFile(slideOutputPath, emergencySvg, "utf8")
+        await runPptMasterSvgQualityCheck(repoDir, slideOutputPath)
+        result = emergencyResult
+        fallbackReason = attemptFallbackReason ?? detail
+        break
       }
     }
 
-    let normalizedSvg: string
-    try {
-      normalizedSvg = postprocessGeneratedSvg(slideContext, prepareGeneratedSvg(result.svg))
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "svg_postprocess_failed"
-      if (!allowEmergencyFallback) {
-        throw new Error(`ppt_master_runtime_slide_postprocess_failed:${variant.key}:${slideFileBaseName}:${detail}`)
-      }
-
-      fallbackReason = fallbackReason ?? detail
-      result = {
-        provider: "ppt-master-emergency-svg",
-        model: deck.previewModel ?? "emergency-svg",
-        svg: buildEmergencyRuntimeSvg(slideContext),
-      }
-      normalizedSvg = prepareGeneratedSvg(result.svg)
+    if (!result) {
+      throw new Error(`ppt_master_runtime_slide_unresolved:${variant.key}:${slideFileBaseName}`)
     }
 
-    const svgFallbackReason = shouldFallbackForGeneratedSvg(slideContext, normalizedSvg)
-    if (svgFallbackReason) {
-      if (!allowEmergencyFallback) {
-        throw new Error(`ppt_master_runtime_slide_validation_failed:${variant.key}:${slideFileBaseName}:${svgFallbackReason}`)
-      }
-
-      fallbackReason = fallbackReason ?? svgFallbackReason
-      result = {
-        provider: "ppt-master-emergency-svg",
-        model: deck.previewModel ?? "emergency-svg",
-        svg: buildEmergencyRuntimeSvg(slideContext),
-      }
-      normalizedSvg = prepareGeneratedSvg(result.svg)
-    }
-
-    await fs.writeFile(path.join(projectDir, "svg_output", `${slideFileBaseName}.svg`), normalizedSvg, "utf8")
     await fs.writeFile(path.join(projectDir, "notes", `${slideFileBaseName}.md`), buildNoteMarkdown(slide.title, slide.body, slide.bullets), "utf8")
 
     normalizedSlides.push(slide)
@@ -1594,7 +1762,9 @@ async function materializeVariantProject(params: {
     })
   }
 
+  await runPptMasterSvgQualityCheck(repoDir, projectDir)
   await runPythonScript(repoDir, "finalize_svg.py", [projectDir])
+  await runPptMasterSvgQualityCheck(repoDir, path.join(projectDir, "svg_final"))
 
   const slideFiles = (await fs.readdir(path.join(projectDir, "svg_final")))
     .filter((file) => file.endsWith(".svg"))
@@ -1693,8 +1863,20 @@ export async function getPptMasterSessionDeck(sessionId: string) {
 }
 
 export async function getPptMasterSessionVariant(sessionId: string, variantKey: string) {
-  const manifest = await readManifest(sessionId)
-  const variant = manifest.variants.find((item) => item.key === variantKey)
+  let manifest = await readManifest(sessionId)
+  let variant = manifest.variants.find((item) => item.key === variantKey)
+
+  if (!variant) {
+    throw new Error("ppt_master_variant_missing")
+  }
+
+  if (!(await hasStoredVariantProjectFiles(variant))) {
+    const restored = await restoreStoredSession(sessionId)
+    if (restored) {
+      manifest = restored
+      variant = manifest.variants.find((item) => item.key === variantKey)
+    }
+  }
 
   if (!variant) {
     throw new Error("ppt_master_variant_missing")
@@ -1709,7 +1891,10 @@ export async function getPptMasterSessionVariant(sessionId: string, variantKey: 
 export async function exportPptMasterSessionVariant(sessionId: string, variantKey: string) {
   const { variant, session } = await getPptMasterSessionVariant(sessionId, variantKey)
   const repoDir = await resolvePptMasterRepoDir()
+  const svgFinalDir = path.join(variant.projectDir, "svg_final")
 
+  await repairStoredSvgFinalDirectory(svgFinalDir)
+  await runPptMasterSvgQualityCheck(repoDir, svgFinalDir)
   await runPythonScript(repoDir, "svg_to_pptx.py", [variant.projectDir, "-s", "final"])
 
   const exportDir = path.join(variant.projectDir, "exports")
@@ -1749,4 +1934,6 @@ export const __testables__ = {
   shouldFallbackForGeneratedSvg,
   shouldUseDeterministicRuntimeSvg,
   isRecoverableRuntimeSlideFailure,
+  getPptMasterSessionVariant,
+  runPptMasterSvgQualityCheck,
 }

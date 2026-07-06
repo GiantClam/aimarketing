@@ -15,6 +15,8 @@ let toolRegistryToolIds: string[] = []
 let toolRegistryToolChoice: Record<string, unknown> | undefined
 let emitArtifactFlow = false
 let emitToolFailureFlow = false
+let emitPreviewSelectionRequiredFlow = false
+let emitQueuedPreviewFlow = false
 let emitClosedControllerErrorFlow = false
 let lastStreamingSystemPrompt = ""
 let lastStreamingToolChoice: Record<string, unknown> | undefined
@@ -214,6 +216,16 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     }
   }
 
+  if (request === "@/lib/ai-entry/ppt-auto-preview") {
+    return {
+      maybeAutoRunPptPreview: async (input: { assistantMessage?: string }) => ({
+        assistantMessage: input.assistantMessage || "",
+        autoPreviewExecuted: false,
+        previewResult: null,
+      }),
+    }
+  }
+
   if (request === "@/lib/skills/runtime/ai-entry-consulting") {
     return {
       prepareAiEntryConsultingRuntime: async (input: { requestedAgentId?: string | null }) => ({
@@ -293,7 +305,56 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         if (emitClosedControllerErrorFlow) {
           throw new Error("Invalid state: Controller is already closed")
         }
-        if (emitToolFailureFlow) {
+        if (emitQueuedPreviewFlow) {
+          input.onToolCall?.({
+            toolName: "preview_ppt_deck",
+            toolCallId: "tool-preview-queued-1",
+            args: {
+              prompt: "帮我生成董事会汇报预览",
+            },
+          })
+          input.onToolResult?.({
+            toolName: "preview_ppt_deck",
+            toolCallId: "tool-preview-queued-1",
+            result: {
+              ok: true,
+              status: "queued",
+              message: "可编辑 PPT 已切换为后台生成，系统会继续轮询并在完成后回填预览结果。",
+              backgroundTask: {
+                taskId: "901",
+                conversationId: "conv-1",
+                toolName: "preview_ppt_deck",
+                status: "queued",
+              },
+            },
+          })
+        } else if (emitPreviewSelectionRequiredFlow) {
+          input.onToolCall?.({
+            toolName: "preview_ppt_deck",
+            toolCallId: "tool-preview-1",
+            args: {
+              prompt: "帮我做一份董事会汇报",
+            },
+          })
+          input.onToolResult?.({
+            toolName: "preview_ppt_deck",
+            toolCallId: "tool-preview-1",
+            result: {
+              ok: false,
+              error: {
+                code: "ppt_template_selection_required",
+                message: "Select one recommended template before generating the editable PPT preview.",
+              },
+              recommendedTemplates: [
+                {
+                  templateId: "anthropic-brand",
+                  templateLabel: "Anthropic 品牌",
+                  styleName: "Long Table",
+                },
+              ],
+            },
+          })
+        } else if (emitToolFailureFlow) {
           input.onToolCall?.({
             toolName: "export_ppt_deck",
             toolCallId: "tool-fail-1",
@@ -355,6 +416,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
         }
         const accumulatedText = emitArtifactFlow
           ? "PPT ready."
+          : emitQueuedPreviewFlow
+            ? "我会先准备预览所需内容。"
+          : emitPreviewSelectionRequiredFlow
+            ? "请先选一个模板。"
           : emitToolFailureFlow
             ? ""
             : "Normal chat reply."
@@ -440,6 +505,8 @@ test.beforeEach(() => {
   toolRegistryToolChoice = undefined
   emitArtifactFlow = false
   emitToolFailureFlow = false
+  emitPreviewSelectionRequiredFlow = false
+  emitQueuedPreviewFlow = false
   emitClosedControllerErrorFlow = false
   lastStreamingSystemPrompt = ""
   lastStreamingToolChoice = undefined
@@ -530,6 +597,59 @@ test("ai chat route synthesizes a readable fallback when tools fail without any 
   assert.match(text, /工具执行失败，当前还没有拿到可用结果/)
   assert.match(text, /export_ppt_deck/)
   assert.match(text, /Preview session is no longer available/)
+})
+
+test("ai chat route keeps preview template-selection in waiting state instead of emitting tool error completion", async () => {
+  emitPreviewSelectionRequiredFlow = true
+  toolRegistryToolIds = ["preview_ppt_deck"]
+  toolRegistryToolChoice = {
+    type: "tool",
+    toolName: "preview_ppt_deck",
+  }
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我生成一份董事会汇报 PPT 预览。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  const text = await response.text()
+  assert.match(text, /"event":"tool_result"/)
+  assert.match(text, /ppt_template_selection_required/)
+  assert.doesNotMatch(text, /"event":"tool_call_error".*"tool-preview-1"/)
+  assert.doesNotMatch(text, /"event":"tool_call_done".*"tool-preview-1"/)
+})
+
+test("ai chat route does not persist queued background preview status as a second assistant artifact message", async () => {
+  emitQueuedPreviewFlow = true
+  toolRegistryToolIds = ["preview_ppt_deck"]
+  toolRegistryToolChoice = {
+    type: "tool",
+    toolName: "preview_ppt_deck",
+  }
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "帮我先生成一个可编辑 PPT 预览。" }],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  const text = await response.text()
+  assert.match(text, /"event":"tool_result"/)
+  assert.match(text, /"taskId":"901"/)
+  assert.ok(appendMessageCalls.at(-1))
+  assert.equal(appendMessageCalls.at(-1)?.role, "assistant")
+  assert.equal(appendMessageCalls.at(-1)?.content, "我会先准备预览所需内容。")
 })
 
 test("ai chat route does not force export toolChoice for ppt turns and lets model decide from context", async () => {

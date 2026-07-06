@@ -30,7 +30,10 @@ import {
 } from "@/components/ai-entry/prompt-kit/message"
 import { MessagePartViewList } from "@/components/ai-entry/message-parts/message-part-view"
 import { PptPreviewReportCard } from "@/components/ai-entry/ppt-preview-report-card"
-import { applySseEvent } from "@/lib/ai-entry/message-parts/reducer"
+import {
+  applySseEvent,
+  buildTemplateRecommendationPartFromContext,
+} from "@/lib/ai-entry/message-parts/reducer"
 import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
 import {
   findAiEntryPendingTask,
@@ -89,12 +92,21 @@ import { renderAiEntryDisplayErrorMessage } from "@/lib/ai-entry/error-display"
 import {
   buildPptToolResultMessage,
   extractLatestPptPreviewContext,
+  extractPptTemplateRecommendationContexts,
+  isQueuedPptBackgroundStatusMessage,
+  stripPptHiddenContextMarkers,
 } from "@/lib/ai-entry/ppt-tool-result-message"
+import { dispatchAiEntrySidebarRefresh } from "@/lib/ai-entry/sidebar-refresh-event"
+import {
+  formatMessageTime,
+  resolveBrowserTimeZone,
+} from "@/lib/ai-entry/message-time"
 import {
   buildPendingConversationEnvelope,
   readFreshPendingConversationMessages,
 } from "@/lib/ai-entry/pending-conversation-store"
 import {
+  resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
   resolveAiEntryRestoredMessages,
   shouldShowAiEntryConversationRestore,
@@ -210,6 +222,14 @@ type ParsedArtifactResult = {
 
 type MessageApiResponse = {
   data?: Array<{ id?: string; role?: "user" | "assistant"; content?: string; created_at?: number }>
+  pending_task?: {
+    task_id?: string
+    status?: "pending" | "running"
+    task_type?: string | null
+    conversation_id?: string | null
+    agent_id?: string | null
+    created_at?: number
+  } | null
   conversation_state?: {
     ppt?: {
       phase?: "idle" | "preview-ready" | "preview-invalidated" | "exported"
@@ -228,6 +248,15 @@ type MessageApiResponse = {
   conversation?: {
     current_model_id?: string | null
   } | null
+}
+type AiEntryConversationStatePayload = NonNullable<MessageApiResponse["conversation_state"]>
+type MessageApiPendingTask = {
+  task_id: string
+  status?: "pending" | "running"
+  task_type?: string | null
+  conversation_id?: string | null
+  agent_id?: string | null
+  created_at?: number
 }
 type ChatApiResponse = {
   message?: string
@@ -288,16 +317,6 @@ type ChatStreamApiResponse = {
       }>
     }
   } | null
-}
-
-function formatMessageTime(timestamp: number | undefined, locale: "zh" | "en") {
-  if (!timestamp) return locale === "zh" ? "刚刚" : "Just now"
-  const date = new Date(timestamp * 1000)
-  if (Number.isNaN(date.getTime())) return locale === "zh" ? "刚刚" : "Just now"
-  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
 }
 
 function parseMarkdownLink(value: string) {
@@ -449,6 +468,7 @@ type AgentApiResponse = {
 }
 
 const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
+const SHOULD_PREFER_CATALOG_MODEL_DEFAULT = process.env.NODE_ENV === "development"
 const AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-pending-conversation-v1:"
 const AI_ENTRY_MAX_ATTACHMENTS = 4
 const AI_ENTRY_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
@@ -549,6 +569,68 @@ function resolveDisplayModelId(
   return mapped?.optionId || null
 }
 
+function mapPersistedAiEntryMessages(
+  payload: MessageApiResponse | null | undefined,
+) {
+  const hasResolvedPptPreview =
+    payload?.conversation_state?.ppt?.phase === "preview-ready" ||
+    payload?.conversation_state?.ppt?.phase === "exported" ||
+    (payload?.data || []).some((item) =>
+      item?.role === "assistant" &&
+      typeof item.content === "string" &&
+      Boolean(extractLatestPptPreviewContext(item.content)),
+    )
+
+  return (payload?.data || [])
+    .map((item) => {
+      const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : null
+      const content = typeof item.content === "string" ? item.content : ""
+      const id = typeof item.id === "string" ? item.id : `${role || "msg"}-${Math.random()}`
+      const createdAt =
+        typeof item.created_at === "number" && Number.isFinite(item.created_at)
+          ? item.created_at
+          : undefined
+      if (!role) return null
+      if (role === "assistant" && hasResolvedPptPreview && isQueuedPptBackgroundStatusMessage(content)) {
+        return null
+      }
+
+      const templateRecommendationParts =
+        role === "assistant"
+          ? extractPptTemplateRecommendationContexts(content)
+              .map((context, index) =>
+                buildTemplateRecommendationPartFromContext(context, `template-recommendation:${id}:${index}`),
+              )
+              .filter((part): part is NonNullable<typeof part> => Boolean(part))
+          : []
+      const visibleContent =
+        role === "assistant" ? stripPptHiddenContextMarkers(content) : content
+
+      if (!visibleContent.trim() && templateRecommendationParts.length === 0) return null
+      return {
+        id,
+        role,
+        content,
+        createdAt,
+        ...(templateRecommendationParts.length ? { parts: templateRecommendationParts } : {}),
+      } as ChatMessage
+    })
+    .filter((item): item is ChatMessage => Boolean(item))
+}
+
+function mapPendingAiEntryTask(
+  payload: MessageApiResponse | null | undefined,
+): MessageApiPendingTask | null {
+  const pendingTask = payload?.pending_task
+  if (!pendingTask || typeof pendingTask.task_id !== "string" || !pendingTask.task_id.trim()) {
+    return null
+  }
+  return {
+    ...pendingTask,
+    task_id: pendingTask.task_id.trim(),
+  }
+}
+
 function resolveDisplayModelIdForProvider(input: {
   rawModelId: string | null | undefined
   providerId?: string | null | undefined
@@ -579,6 +661,49 @@ function dedupeStringList(values: Array<string | null | undefined>) {
     result.push(normalized)
   }
   return result
+}
+
+function buildBackgroundAssistantCompletionMessage(input: {
+  pendingTaskId: string
+  assistantText: string
+  toolName: string
+  toolResult: NonNullable<NonNullable<ChatStreamApiResponse["data"]>["result"]> | null
+  resultParts: MessagePart[]
+  isZh: boolean
+}): ChatMessage | null {
+  const fallbackContent =
+    input.assistantText ||
+    buildPptToolResultMessage({
+      toolName: input.toolName,
+      result: input.toolResult,
+      isZh: input.isZh,
+    })?.trim() ||
+    ""
+
+  if (!fallbackContent && input.resultParts.length === 0) {
+    return null
+  }
+
+  return {
+    id: `assistant-background-${input.pendingTaskId}`,
+    role: "assistant",
+    content: fallbackContent,
+    parts: input.resultParts.length > 0 ? input.resultParts : undefined,
+  }
+}
+
+function isQueuedBackgroundPreviewResult(input: {
+  toolName: string
+  result: NonNullable<NonNullable<ChatStreamApiResponse["data"]>["result"]> | null
+}) {
+  if (input.toolName !== "preview_ppt_deck" || !input.result) return false
+  const status =
+    typeof input.result.status === "string" ? input.result.status.trim() : ""
+  const taskId =
+    typeof input.result.backgroundTask?.taskId === "string"
+      ? input.result.backgroundTask.taskId.trim()
+      : ""
+  return status === "queued" && Boolean(taskId)
 }
 
 function dedupeModelsById(models: ModelOption[]) {
@@ -954,6 +1079,9 @@ export function AiEntryWorkspace({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [pendingTaskEvents, setPendingTaskEvents] = useState<PendingTaskEvent[]>([])
+  const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0)
+  const [conversationState, setConversationState] = useState<AiEntryConversationStatePayload | null>(null)
+  const [browserTimeZone, setBrowserTimeZone] = useState<string | null>(null)
   const [knowledgeEnabled, setKnowledgeEnabled] = useState(false)
   const [knowledgePickerOpen, setKnowledgePickerOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
@@ -975,6 +1103,7 @@ export function AiEntryWorkspace({
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
   const previousMessageCountRef = useRef(0)
+  const messagesLengthRef = useRef(messages.length)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
   const isLoadingRef = useRef(false)
@@ -1042,11 +1171,42 @@ export function AiEntryWorkspace({
     }
     return models[0]?.id || null
   }, [isPptAssistantRoute, models])
+  const hasMessagePptPreviewContext = useMemo(
+    () =>
+      messages.some((message) =>
+        message.role === "assistant" && Boolean(extractLatestPptPreviewContext(message.content)),
+      ),
+    [messages],
+  )
+  const fetchConversationMessages = useCallback(
+    async (targetConversationId: string) => {
+      const params = new URLSearchParams({ conversation_id: targetConversationId, limit: "200" })
+      if (effectiveEntryMode) params.set("entryMode", effectiveEntryMode)
+      if (routeAgentId) params.set("agent", routeAgentId)
+
+      const response = await fetch(`/api/ai/messages?${params.toString()}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      })
+      const payload = (await response.json().catch(() => null)) as MessageApiResponse | null
+
+      return {
+        response,
+        payload,
+        messages: mapPersistedAiEntryMessages(payload),
+        pendingTask: mapPendingAiEntryTask(payload),
+        conversationState: payload?.conversation_state ?? null,
+      }
+    },
+    [effectiveEntryMode, routeAgentId],
+  )
   const showLanding =
     !embedded &&
+    !initialConversationId &&
+    !conversationId &&
     !isConversationLoading &&
     messages.length === 0 &&
-    !(isConsultingEntry && Boolean(conversationId))
+    !isConsultingEntry
   const selectedModel = useMemo(
     () => models.find((item) => item.id === selectedModelId) || null,
     [models, selectedModelId],
@@ -1094,6 +1254,27 @@ export function AiEntryWorkspace({
 
     return lines.join("\n\n")
   }, [embeddedGuideMessage, isZh, shouldShowEmbeddedGuide])
+
+  useEffect(() => {
+    const syncBrowserTimeZone = () => {
+      setBrowserTimeZone(resolveBrowserTimeZone())
+    }
+
+    syncBrowserTimeZone()
+    window.addEventListener("focus", syncBrowserTimeZone)
+    window.addEventListener("pageshow", syncBrowserTimeZone)
+    document.addEventListener("visibilitychange", syncBrowserTimeZone)
+
+    return () => {
+      window.removeEventListener("focus", syncBrowserTimeZone)
+      window.removeEventListener("pageshow", syncBrowserTimeZone)
+      document.removeEventListener("visibilitychange", syncBrowserTimeZone)
+    }
+  }, [])
+
+  useEffect(() => {
+    messagesLengthRef.current = messages.length
+  }, [messages.length])
 
   useEffect(() => {
     latestConversationIdRef.current = conversationId
@@ -1421,13 +1602,20 @@ export function AiEntryWorkspace({
         )
         const preferredFromCatalog =
           typeof payload?.selectedModelId === "string" ? payload.selectedModelId : null
+        const catalogDefaultModelId = preferredFromCatalog
+          ? resolveDisplayModelId(preferredFromCatalog, normalizedModels)
+          : null
         const preferredFromStorage =
           shouldLockModel || isPptAssistantRoute ? null : readPersistedSelectedModelId()
         const consultingModelFallback =
           pickConsultingModelId(normalizedModels) ||
           AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT
         const pptAssistantDefaultModelId = isPptAssistantRoute
-          ? pickPptAssistantDefaultModelId(normalizedModels)
+          ? (
+              (SHOULD_PREFER_CATALOG_MODEL_DEFAULT ? catalogDefaultModelId : null) ||
+              pickPptAssistantDefaultModelId(normalizedModels) ||
+              catalogDefaultModelId
+            )
           : null
 
         setSelectedModelId((current) => {
@@ -1446,6 +1634,10 @@ export function AiEntryWorkspace({
             if (resolvedCurrent) return resolvedCurrent
           }
 
+          if (SHOULD_PREFER_CATALOG_MODEL_DEFAULT && catalogDefaultModelId) {
+            return catalogDefaultModelId
+          }
+
           if (preferredFromStorage) {
             const resolvedPreferredFromStorage = resolveDisplayModelId(
               preferredFromStorage,
@@ -1454,12 +1646,8 @@ export function AiEntryWorkspace({
             if (resolvedPreferredFromStorage) return resolvedPreferredFromStorage
           }
 
-          if (preferredFromCatalog) {
-            const resolvedPreferred = resolveDisplayModelId(
-              preferredFromCatalog,
-              normalizedModels,
-            )
-            if (resolvedPreferred) return resolvedPreferred
+          if (catalogDefaultModelId) {
+            return catalogDefaultModelId
           }
 
           return normalizedModels[0]?.id || null
@@ -1562,6 +1750,7 @@ export function AiEntryWorkspace({
       setConversationId(null)
       latestConversationIdRef.current = null
       setMessages([])
+      setConversationState(null)
       setIsConversationLoading(false)
       if (!shouldLockModel && models.length > 0) {
         setSelectedModelId((current) => {
@@ -1576,7 +1765,8 @@ export function AiEntryWorkspace({
       isLoadingRef.current ||
       (
         pendingFirstConversationRouteRef.current &&
-        latestConversationIdRef.current === initialConversationId
+        latestConversationIdRef.current === initialConversationId &&
+        messagesLengthRef.current > 0
       )
     ) {
       setConversationId(initialConversationId)
@@ -1597,11 +1787,13 @@ export function AiEntryWorkspace({
     const loadMessages = async () => {
       setIsConversationLoading(true)
       try {
-        const params = new URLSearchParams({ conversation_id: initialConversationId, limit: "200" })
-        if (effectiveEntryMode) params.set("entryMode", effectiveEntryMode)
-        if (routeAgentId) params.set("agent", routeAgentId)
-        const response = await fetch(`/api/ai/messages?${params.toString()}`, { cache: "no-store", credentials: "same-origin" })
-        const payload = (await response.json().catch(() => null)) as MessageApiResponse | null
+        const {
+          response,
+          payload,
+          messages: restored,
+          pendingTask,
+          conversationState: restoredConversationState,
+        } = await fetchConversationMessages(initialConversationId)
         if (cancelled) return
         if (!response.ok) {
           const apiError =
@@ -1613,25 +1805,12 @@ export function AiEntryWorkspace({
             setConversationId(null)
             latestConversationIdRef.current = null
             setMessages([])
+            setConversationState(null)
             setErrorMessage(null)
             return
           }
           throw new Error(`http_${response.status}`)
         }
-
-        const restored = (payload?.data || [])
-          .map((item) => {
-            const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : null
-            const content = typeof item.content === "string" ? item.content : ""
-            const id = typeof item.id === "string" ? item.id : `${role || "msg"}-${Math.random()}`
-            const createdAt =
-              typeof item.created_at === "number" && Number.isFinite(item.created_at)
-                ? item.created_at
-                : undefined
-            if (!role || !content.trim()) return null
-            return { id, role, content, createdAt } as ChatMessage
-          })
-          .filter((item): item is ChatMessage => Boolean(item))
 
         const resolvedMessages = resolveAiEntryRestoredMessages({
           pendingMessages,
@@ -1639,8 +1818,33 @@ export function AiEntryWorkspace({
         })
 
         setMessages(resolvedMessages)
+        setConversationState(restoredConversationState)
         if (resolvedMessages === restored) {
           clearPendingConversationMessages(initialConversationId)
+        }
+
+        if (pendingTask) {
+          savePendingAssistantTask({
+            taskId: pendingTask.task_id.trim(),
+            scope: "ai_entry",
+            conversationId:
+              typeof pendingTask.conversation_id === "string" && pendingTask.conversation_id.trim()
+                ? pendingTask.conversation_id.trim()
+                : initialConversationId,
+            agentId:
+              typeof pendingTask.agent_id === "string" && pendingTask.agent_id.trim()
+                ? pendingTask.agent_id.trim()
+                : routeAgentId || resolvedRequestAgentId || null,
+            taskType:
+              typeof pendingTask.task_type === "string" && pendingTask.task_type.trim()
+                ? pendingTask.task_type.trim()
+                : null,
+            createdAt:
+              typeof pendingTask.created_at === "number" && Number.isFinite(pendingTask.created_at)
+                ? pendingTask.created_at * 1000
+                : Date.now(),
+          })
+          setPendingTaskRefreshKey((current) => current + 1)
         }
 
         const conversationModelId =
@@ -1672,7 +1876,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [copy, effectiveEntryMode, initialConversationId, isZh, models, preferredUnlockedModelId, routeAgentId, shouldLockModel])
+  }, [copy, fetchConversationMessages, initialConversationId, isZh, models, preferredUnlockedModelId, resolvedRequestAgentId, routeAgentId, shouldLockModel])
 
   useEffect(() => {
     const pendingTask = findAiEntryPendingTask({
@@ -1732,67 +1936,123 @@ export function AiEntryWorkspace({
                 : ""
             const toolName =
               typeof taskResult?.toolName === "string" ? taskResult.toolName : "preview_ppt_deck"
-            const toolCallId =
+          const toolCallId =
               typeof taskResult?.toolCallId === "string"
                 ? taskResult.toolCallId
                 : `background-${pendingTask.taskId}`
-            const toolResult = taskResult?.toolResult ?? null
-
-            setMessages((current) => {
-              let next = [...current]
-              const normalizedAssistantText = assistantText.trim()
-              const existingIndex = normalizedAssistantText
-                ? next.findIndex(
-                    (message) =>
-                      message.role === "assistant" &&
-                      message.content.trim() === normalizedAssistantText,
-                  )
-                : -1
-              const resultParts =
-                toolResult && toolName
-                  ? applySseEvent([], {
-                      event: "tool_result",
-                      conversation_id: resolvedConversationId || undefined,
-                      data: {
-                        toolName,
-                        toolCallId,
-                        result: toolResult,
-                      },
-                    })
-                  : []
-
-              if (existingIndex >= 0) {
-                next[existingIndex] = {
-                  ...next[existingIndex],
-                  parts:
-                    resultParts.length > 0
-                      ? resultParts
-                      : next[existingIndex].parts,
-                }
-              } else if (assistantText || resultParts.length > 0) {
-                next = [
-                  ...next,
-                  {
-                    id: `assistant-background-${pendingTask.taskId}`,
-                    role: "assistant",
-                    content:
-                      assistantText ||
-                      buildPptToolResultMessage({
-                        toolName,
-                        result: toolResult,
-                        isZh,
-                      })?.trim() ||
-                      "",
-                    parts: resultParts.length > 0 ? resultParts : undefined,
-                  },
-                ]
-              }
-
-              if (resolvedConversationId) {
-                savePendingConversationMessages(resolvedConversationId, next)
-              }
-              return next
+          const toolResult = taskResult?.toolResult ?? null
+            const resultParts =
+              toolResult && toolName
+                ? applySseEvent([], {
+                    event: "tool_result",
+                    conversation_id: resolvedConversationId || undefined,
+                    data: {
+                      toolName,
+                      toolCallId,
+                      result: toolResult,
+                    },
+                  })
+                : []
+            const backgroundAssistantMessage = buildBackgroundAssistantCompletionMessage({
+              pendingTaskId: pendingTask.taskId,
+              assistantText,
+              toolName,
+              toolResult,
+              resultParts,
+              isZh,
             })
+            const previewSessionId =
+              toolName === "preview_ppt_deck" &&
+              toolResult &&
+              typeof toolResult === "object" &&
+              typeof (toolResult as { previewSessionId?: unknown }).previewSessionId === "string" &&
+              (toolResult as { previewSessionId?: string }).previewSessionId?.trim()
+                ? (toolResult as { previewSessionId: string }).previewSessionId.trim()
+                : null
+
+            if (resolvedConversationId) {
+              try {
+                const {
+                  response,
+                  messages: persistedMessages,
+                  conversationState: refreshedConversationState,
+                } = await fetchConversationMessages(resolvedConversationId)
+                if (response.ok) {
+                  setConversationState(refreshedConversationState)
+                  setMessages((current) => {
+                    const next = resolveAiEntryCompletedConversationMessages({
+                      currentMessages: current,
+                      persistedMessages,
+                      backgroundAssistantMessage,
+                      matchesBackgroundAssistantMessage:
+                        previewSessionId
+                          ? (message) =>
+                              message.role === "assistant" &&
+                              extractLatestPptPreviewContext(message.content)?.previewSessionId === previewSessionId
+                          : undefined,
+                    })
+                    savePendingConversationMessages(resolvedConversationId, next)
+                    return next
+                  })
+                } else {
+                  throw new Error(`http_${response.status}`)
+                }
+              } catch (error) {
+                console.error("ai-entry.pending-task.history-refresh.failed", error)
+                setMessages((current) => {
+                  let next = [...current]
+                  const normalizedAssistantText = assistantText.trim()
+                  const existingIndex = normalizedAssistantText
+                    ? next.findIndex(
+                        (message) =>
+                          message.role === "assistant" &&
+                          message.content.trim() === normalizedAssistantText,
+                      )
+                    : -1
+
+                  if (existingIndex >= 0) {
+                    next[existingIndex] = {
+                      ...next[existingIndex],
+                      parts:
+                        resultParts.length > 0
+                          ? resultParts
+                          : next[existingIndex].parts,
+                    }
+                  } else if (backgroundAssistantMessage) {
+                    next = [...next, backgroundAssistantMessage]
+                  }
+
+                  savePendingConversationMessages(resolvedConversationId, next)
+                  return next
+                })
+              }
+            } else {
+              setMessages((current) => {
+                let next = [...current]
+                const normalizedAssistantText = assistantText.trim()
+                const existingIndex = normalizedAssistantText
+                  ? next.findIndex(
+                      (message) =>
+                        message.role === "assistant" &&
+                        message.content.trim() === normalizedAssistantText,
+                    )
+                  : -1
+
+                if (existingIndex >= 0) {
+                  next[existingIndex] = {
+                    ...next[existingIndex],
+                    parts:
+                      resultParts.length > 0
+                        ? resultParts
+                        : next[existingIndex].parts,
+                  }
+                } else if (backgroundAssistantMessage) {
+                  next = [...next, backgroundAssistantMessage]
+                }
+
+                return next
+              })
+            }
             if (resolvedConversationId) {
               latestConversationIdRef.current = resolvedConversationId
               setConversationId((current) =>
@@ -1875,7 +2135,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [activePendingAgentId, conversationId, isZh])
+  }, [activePendingAgentId, conversationId, fetchConversationMessages, isZh, pendingTaskRefreshKey])
 
   const renderModelSelectContent = useCallback(() => {
     if (modelsLoading) return <SelectItem value="__loading" disabled>{copy.modelLoading}</SelectItem>
@@ -2008,6 +2268,7 @@ export function AiEntryWorkspace({
     ]
     const baseMessages = messages
     let assistantDraft: ChatMessage = { id: assistantMessageId, role: "assistant", content: "" }
+    let sidebarRefreshConversationId: string | null = null
 
     const syncAssistantDraft = (nextDraft: ChatMessage) => {
       if (
@@ -2031,10 +2292,22 @@ export function AiEntryWorkspace({
       savePendingConversationMessages(nextConversationId, [...baseMessages, userMessage, assistantDraft])
     }
 
+    const refreshSidebarForConversation = (nextConversationId: string | null, force = false) => {
+      if (!nextConversationId) return
+      if (!force && sidebarRefreshConversationId === nextConversationId) return
+      sidebarRefreshConversationId = nextConversationId
+      dispatchAiEntrySidebarRefresh({
+        conversationId: nextConversationId,
+        agentId: routeAgentId || resolvedRequestAgentId || null,
+        entryMode: effectiveEntryMode,
+      })
+    }
+
     const promoteConversationRoute = (nextConversationId: string | null) => {
       if (!nextConversationId) return
       persistPendingConversationDraft(nextConversationId)
       setConversationId((current) => (current === nextConversationId ? current : nextConversationId))
+      refreshSidebarForConversation(nextConversationId)
     }
 
     setInput("")
@@ -2278,7 +2551,14 @@ export function AiEntryWorkspace({
               isZh,
             })
 
-            if (toolMessage && !streamedToolAppendix.includes(toolMessage)) {
+            if (
+              toolMessage &&
+              !isQueuedBackgroundPreviewResult({
+                toolName,
+                result: toolResultPayload,
+              }) &&
+              !streamedToolAppendix.includes(toolMessage)
+            ) {
               streamedToolAppendix = `${streamedToolAppendix}${toolMessage}`
               syncAssistantDraft({
                 ...assistantDraft,
@@ -2297,6 +2577,7 @@ export function AiEntryWorkspace({
                 taskType: toolName,
                 createdAt: Date.now(),
               })
+              setPendingTaskRefreshKey((current) => current + 1)
             }
             upsertTaskEvent({
               type: `tool:${toolId}`,
@@ -2402,6 +2683,7 @@ export function AiEntryWorkspace({
               content: resolvedTextWithTools || (assistantDraft.parts?.length ? "" : copy.unknownError),
             })
             promoteConversationRoute(streamConversationId)
+            refreshSidebarForConversation(streamConversationId, true)
             return
           }
 
@@ -2456,6 +2738,7 @@ export function AiEntryWorkspace({
           latestConversationIdRef.current = payload.conversationId
           savePendingConversationMessages(payload.conversationId, completedMessages)
           setConversationId(payload.conversationId)
+          refreshSidebarForConversation(payload.conversationId, true)
         }
         setPendingTaskEvents((current) => [
           ...current.filter((event) => event.type !== "request_start"),
@@ -2832,7 +3115,7 @@ export function AiEntryWorkspace({
                     <div className="ai-avatar">AI</div>
                     <div className="min-w-0 flex-1">
                       <div className="dashboard-kicker text-foreground">AI WORKSPACE</div>
-                      <div className="message-time">{formatMessageTime(undefined, displayLocale)}</div>
+                      <div className="message-time">{formatMessageTime(undefined, displayLocale, browserTimeZone)}</div>
                     </div>
                     <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -2852,14 +3135,56 @@ export function AiEntryWorkspace({
                 const shouldShowLoadingDetails = isPendingAssistant
                 const parsedArtifact = isAssistant ? parseArtifactResult(message.content) : null
                 const parsedPptPreview = isAssistant ? extractLatestPptPreviewContext(message.content) : null
-                const bodyContent = parsedArtifact?.body ?? message.content
+                const isLastAssistantMessage =
+                  isAssistant && !messages.slice(index + 1).some((candidate) => candidate.role === "assistant")
+                const fallbackPptPreview =
+                  !parsedPptPreview &&
+                  !hasMessagePptPreviewContext &&
+                  isLastAssistantMessage &&
+                  conversationState?.ppt?.latestPreview?.previewSessionId
+                    ? {
+                        previewSessionId: conversationState.ppt.latestPreview.previewSessionId,
+                        defaultVariantKey: conversationState.ppt.latestPreview.defaultVariantKey ?? null,
+                        variantKeys: conversationState.ppt.latestPreview.variantKeys ?? [],
+                      }
+                    : null
+                const bodyContent = stripPptHiddenContextMarkers(parsedArtifact?.body ?? message.content)
                 const hasParts = Boolean(message.parts?.length)
                 const parts = hasParts ? message.parts ?? [] : []
-                const processParts = parts.filter((part) => part.type !== "text" && part.type !== "source" && part.type !== "artifact" && part.type !== "report")
+                const hasResolvedPptPreview =
+                  Boolean(parsedPptPreview) ||
+                  conversationState?.ppt?.phase === "preview-ready" ||
+                  conversationState?.ppt?.phase === "exported"
+                const shouldHideQueuedBackgroundPreviewMessage =
+                  isAssistant &&
+                  hasResolvedPptPreview &&
+                  isQueuedPptBackgroundStatusMessage(message.content)
+                if (shouldHideQueuedBackgroundPreviewMessage) {
+                  return null
+                }
+                const processParts = parts.filter((part) => {
+                  if (part.type === "text" || part.type === "source" || part.type === "artifact" || part.type === "report") {
+                    return false
+                  }
+                  if (hasResolvedPptPreview && part.type === "template-recommendation") {
+                    return false
+                  }
+                  return true
+                })
                 const artifactParts = parts.filter((part): part is ArtifactPart => part.type === "artifact")
+                const shouldHideLegacyPptPreviewArtifacts = hasResolvedPptPreview || hasMessagePptPreviewContext
+                const visibleArtifactParts = shouldHideLegacyPptPreviewArtifacts
+                  ? artifactParts.filter((part) => {
+                      const label = `${part.title ?? ""} ${part.fileName ?? ""}`
+                      return !/ppt preview|PPT 预览|PPT preview generated|lead_tool_preview_deck/iu.test(label)
+                    })
+                  : artifactParts
                 const reportParts = parsedPptPreview ? parts.filter((part) => part.type === "report" && part.reportType !== "ppt-preview") : parts.filter((part) => part.type === "report")
                 const referenceParts = parts.filter((part) => part.type === "source")
-                const artifactPart = artifactParts[0] ?? null
+                const artifactPart = visibleArtifactParts[0] ?? null
+                const shouldRenderParsedArtifactBlock = Boolean(
+                  parsedArtifact && !hasParts && !parsedPptPreview && !fallbackPptPreview,
+                )
                 return isAssistant ? (
                   <Message key={message.id} className="items-start">
                     <div className="ai-avatar mt-1 shrink-0">AI</div>
@@ -2867,7 +3192,7 @@ export function AiEntryWorkspace({
                       <div className="message-header assistant-message-header">
                         <div className="min-w-0 flex-1">
                           <div className="dashboard-kicker text-foreground">AI RESPONSE</div>
-                          <div className="message-time">{formatMessageTime(message.createdAt, displayLocale)}</div>
+                          <div className="message-time">{formatMessageTime(message.createdAt, displayLocale, browserTimeZone)}</div>
                         </div>
                       </div>
                       {isPendingAssistant ? (
@@ -2906,24 +3231,24 @@ export function AiEntryWorkspace({
                           <WorkspaceTaskEvents events={pendingTaskEvents} limit={4} className="pl-0" />
                         </div>
                       ) : null}
-                      {((artifactParts.length > 0) || reportParts.length > 0 || Boolean(parsedPptPreview) || (parsedArtifact && !hasParts)) ? (
+                      {((visibleArtifactParts.length > 0) || reportParts.length > 0 || Boolean(parsedPptPreview) || Boolean(fallbackPptPreview) || shouldRenderParsedArtifactBlock) ? (
                         <section className="assistant-section">
                           <div className="artifact-section-title">
                             <Sparkles className="h-3.5 w-3.5 text-primary" />
                             <span>{isZh ? "生成产物" : "Generated artifacts"}</span>
                           </div>
                           <div className="artifact-grid">
-                            {parsedPptPreview ? (
+                            {parsedPptPreview || fallbackPptPreview ? (
                               <PptPreviewReportCard
-                                previewSessionId={parsedPptPreview.previewSessionId}
-                                defaultVariantKey={parsedPptPreview.defaultVariantKey}
-                                variantKeys={parsedPptPreview.variantKeys}
+                                previewSessionId={(parsedPptPreview ?? fallbackPptPreview)!.previewSessionId}
+                                defaultVariantKey={(parsedPptPreview ?? fallbackPptPreview)!.defaultVariantKey}
+                                variantKeys={(parsedPptPreview ?? fallbackPptPreview)!.variantKeys}
                                 isZh={isZh}
                               />
                             ) : null}
-                            {artifactParts.length ? <MessagePartViewList parts={artifactParts} isZh={isZh} className="space-y-0" /> : null}
+                            {visibleArtifactParts.length ? <MessagePartViewList parts={visibleArtifactParts} isZh={isZh} className="space-y-0" /> : null}
                             {reportParts.length ? <MessagePartViewList parts={reportParts} isZh={isZh} className="space-y-3" /> : null}
-                            {parsedArtifact && !hasParts ? <ArtifactResultBlock artifact={parsedArtifact} /> : null}
+                            {shouldRenderParsedArtifactBlock ? <ArtifactResultBlock artifact={parsedArtifact!} /> : null}
                           </div>
                         </section>
                       ) : null}
@@ -2969,7 +3294,7 @@ export function AiEntryWorkspace({
                     <div className="message-card-user">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div className="dashboard-kicker text-primary">{isZh ? "你的指令" : "Your Command"}</div>
-                        <div className="text-xs text-white/55">{formatMessageTime(message.createdAt, displayLocale)}</div>
+                        <div className="text-xs text-white/55">{formatMessageTime(message.createdAt, displayLocale, browserTimeZone)}</div>
                       </div>
                       <MessageContent bare role="user" className="p-0 text-sm leading-7 text-white">{message.content}</MessageContent>
                       {renderMessageAttachments(message.attachments)}

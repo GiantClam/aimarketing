@@ -14,6 +14,7 @@ test("worker preview executor forwards request and preserves session id", async 
   let seenImages: unknown = null
   let seenModel: unknown = null
   let seenNarrativeAngle: unknown = null
+  let seenTemplateId: unknown = null
 
   setPptWorkerExecutorDepsForTests({
     generateLeadToolPptPreviewWithFallback: async (request, allowMockFallback) => {
@@ -23,6 +24,7 @@ test("worker preview executor forwards request and preserves session id", async 
       seenImages = request.images
       seenModel = request.model
       seenNarrativeAngle = request.narrativeAngle
+      seenTemplateId = request.templateId
 
       return {
         title: "Railway Deck",
@@ -49,7 +51,8 @@ test("worker preview executor forwards request and preserves session id", async 
     scenario: "sales-deck",
     language: "zh-CN",
     model: "gpt-5.4",
-    templateMode: "auto-4",
+    templateMode: "single-template",
+    templateId: "academic-defense",
     narrativeAngle: "executive-brief",
     pageCount: 8,
     images: [{ url: "https://example.com/cover.png", role: "cover" }],
@@ -67,6 +70,7 @@ test("worker preview executor forwards request and preserves session id", async 
   assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
   assert.equal(seenModel, "gpt-5.4")
   assert.equal(seenNarrativeAngle, "executive-brief")
+  assert.equal(seenTemplateId, "academic-defense")
   assert.equal(result.previewSessionId, "session_worker_1")
   assert.equal(result.generatedAt, "2026-06-24T08:00:00.000Z")
 })

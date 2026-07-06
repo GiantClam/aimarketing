@@ -8,9 +8,11 @@ import type {
   SourcePart,
   TaskProgressPart,
   TaskProgressStep,
+  TemplateRecommendationPart,
   ToolCallPart,
   ValidationPart,
 } from "./types"
+import type { PptTemplateRecommendationContext } from "@/lib/ai-entry/ppt-tool-result-message"
 
 const REASONING_PART_ID = "reasoning"
 const TASK_PROGRESS_PART_ID = "task-progress"
@@ -34,8 +36,14 @@ function getTaskProgressPart(parts: MessagePart[]): TaskProgressPart | undefined
 function markTaskProgressDone(parts: MessagePart[]): MessagePart[] {
   const existing = getTaskProgressPart(parts)
   if (!existing) return parts
-  if (existing.status === "done") return parts
-  return upsertPart(parts, { ...existing, status: "done" })
+  let changed = existing.status !== "done"
+  const steps = existing.steps.map((step) => {
+    if (step.status !== "running") return step
+    changed = true
+    return { ...step, status: "completed" as const }
+  })
+  if (!changed) return parts
+  return upsertPart(parts, { ...existing, status: "done", steps })
 }
 
 function optionalString(value: unknown): string | null {
@@ -105,6 +113,82 @@ function summarizeSources(results: AiEntryStreamSourceResult[]): string | undefi
   return `${labels.length} sources${preview ? `: ${preview}` : ""}`
 }
 
+function normalizeTemplateLabels(values: Array<string | null | undefined>) {
+  const seen = new Set<string>()
+  return values
+    .map((value) => optionalString(value))
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => {
+      const key = value.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+export function buildTemplateRecommendationPartFromContext(
+  context: PptTemplateRecommendationContext | null | undefined,
+  id = "template-recommendation",
+): TemplateRecommendationPart | null {
+  if (!context?.templateIds.length) return null
+
+  const templateMap = new Map((context.templates || []).map((item) => [item.templateId, item.labels]))
+  const templates = context.templateIds
+    .map((templateId) => {
+      const normalizedId = optionalString(templateId)
+      if (!normalizedId) return null
+      const labels = normalizeTemplateLabels([...(templateMap.get(normalizedId) || []), normalizedId])
+      return {
+        templateId: normalizedId,
+        labels: labels.length ? labels : [normalizedId],
+      }
+    })
+    .filter((item): item is { templateId: string; labels: string[] } => Boolean(item))
+
+  if (!templates.length) return null
+
+  return {
+    type: "template-recommendation",
+    id,
+    defaultTemplateId: optionalString(context.defaultTemplateId) ?? templates[0]?.templateId ?? null,
+    templates,
+  }
+}
+
+export function buildTemplateRecommendationPartFromRecommendedTemplates(
+  value: unknown,
+  id = "template-recommendation",
+): TemplateRecommendationPart | null {
+  if (!Array.isArray(value)) return null
+
+  const templates = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null
+      const record = item as { templateId?: unknown; templateLabel?: unknown; styleName?: unknown }
+      const templateId = optionalString(record.templateId)
+      if (!templateId) return null
+      const labels = normalizeTemplateLabels([
+        optionalString(record.templateLabel),
+        optionalString(record.styleName),
+        templateId,
+      ])
+      return {
+        templateId,
+        labels: labels.length ? labels : [templateId],
+      }
+    })
+    .filter((item): item is { templateId: string; labels: string[] } => Boolean(item))
+
+  if (!templates.length) return null
+
+  return {
+    type: "template-recommendation",
+    id,
+    defaultTemplateId: templates[0]?.templateId ?? null,
+    templates,
+  }
+}
+
 function startOrUpdateTaskProgress(
   parts: MessagePart[],
   step: TaskProgressStep,
@@ -162,6 +246,12 @@ function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): Messa
   const toolCallId = optionalString(event.data?.toolCallId) || toolName
   const result = event.data?.result ?? null
   const isFailure = result?.ok === false
+  const errorCode = optionalString(result?.error?.code)
+  const isActionRequired =
+    toolName === "preview_ppt_deck" &&
+    (errorCode === "ppt_template_selection_required" || errorCode === "ppt_brief_incomplete")
+  const toolCallState = isActionRequired ? "output-blocked" : isFailure ? "output-error" : "output-available"
+  const progressStatus = isActionRequired ? "waiting" : isFailure ? "failed" : "completed"
 
   const existing = getPartById<ToolCallPart>(parts, toolCallId, "tool-call")
   let nextParts = upsertPart(
@@ -170,7 +260,7 @@ function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): Messa
       ? {
           ...existing,
           args: existing.args ?? null,
-          state: isFailure ? "output-error" : "output-available",
+          state: toolCallState,
           output: result,
         }
       : {
@@ -179,7 +269,7 @@ function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): Messa
           toolName,
           toolCallId,
           args: null,
-          state: isFailure ? "output-error" : "output-available",
+          state: toolCallState,
           output: result,
         },
   )
@@ -220,9 +310,22 @@ function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): Messa
       type: "report",
       id: `report:${optionalString(result?.previewSessionId) ?? toolCallId}`,
       reportType: "ppt-preview",
+      previewSessionId: optionalString(result?.previewSessionId),
+      defaultVariantKey: optionalString(result?.recommendedVariantKey) ?? variants[0]?.key ?? null,
+      variantKeys: variants.map((variant) => variant.key),
       title: optionalString(result?.title),
       variants,
     } satisfies ReportPart)
+  }
+
+  if (toolName === "preview_ppt_deck" && result?.ok === false) {
+    const recommendationPart = buildTemplateRecommendationPartFromRecommendedTemplates(
+      result?.recommendedTemplates,
+      `template-recommendation:${toolCallId}`,
+    )
+    if (recommendationPart) {
+      nextParts = upsertPart(nextParts, recommendationPart)
+    }
   }
 
   if (sourceResults.length && toolName === "web_search") {
@@ -231,7 +334,7 @@ function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): Messa
       {
         type: `tool:${toolCallId}`,
         toolName,
-        status: isFailure ? "failed" : "completed",
+        status: progressStatus,
         detail:
           isFailure
             ? optionalString(result?.error?.message) ?? undefined
@@ -245,13 +348,13 @@ function applyToolResult(parts: MessagePart[], event: AiEntryStreamEvent): Messa
 
   return startOrUpdateTaskProgress(
     nextParts,
-    {
-      type: `tool:${toolCallId}`,
-      toolName,
-      status: isFailure ? "failed" : "completed",
-      detail: isFailure ? optionalString(result?.error?.message) ?? undefined : undefined,
-      at: Date.now(),
-    },
+      {
+        type: `tool:${toolCallId}`,
+        toolName,
+        status: progressStatus,
+        detail: isFailure ? optionalString(result?.error?.message) ?? undefined : undefined,
+        at: Date.now(),
+      },
     getTaskProgressPart(nextParts)?.status ?? "running",
   )
 }

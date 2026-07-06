@@ -9,7 +9,7 @@ const nodeModule = require("node:module") as {
 const originalLoad = nodeModule._load
 
 let selectRowsQueue: unknown[][] = []
-let executeRows: unknown[] = []
+let executeRowsQueue: unknown[][] = []
 
 function nextSelectRows() {
   return Promise.resolve(selectRowsQueue.shift() || [])
@@ -41,7 +41,7 @@ const fakeDb = {
     return dbChain
   },
   execute() {
-    return Promise.resolve({ rows: executeRows })
+    return Promise.resolve({ rows: executeRowsQueue.shift() || [] })
   },
 }
 
@@ -126,10 +126,10 @@ test("AI entry message history preserves database timestamps", async () => {
       },
     ],
   ]
-  executeRows = [
+  executeRowsQueue = [[
     { id: 100, role: "user", content: "Need a recruiter scorecard", createdAt: userCreatedAt },
     { id: 101, role: "assistant", content: "Here is a scorecard", createdAt: assistantCreatedAt },
-  ]
+  ], []]
 
   const page = await listAiEntryMessages(
     7,
@@ -154,6 +154,7 @@ test("AI entry message history preserves database timestamps", async () => {
       phase: "idle",
     },
   })
+  assert.equal(page.pending_task, null)
 })
 
 test("AI entry message history returns structured conversation state", async () => {
@@ -169,7 +170,7 @@ test("AI entry message history returns structured conversation state", async () 
       },
     ],
   ]
-  executeRows = [
+  executeRowsQueue = [[
     {
       id: 101,
       role: "assistant",
@@ -184,7 +185,7 @@ test("AI entry message history returns structured conversation state", async () 
         "已生成 PPT 成品：\n<!-- ai-entry-ppt-export-context:{\"previewSessionId\":\"preview-session-1\",\"selectedVariantKey\":\"variant-b\",\"artifactId\":118} -->",
       createdAt: new Date("2024-01-02T03:05:09.000Z"),
     },
-  ]
+  ], []]
 
   const page = await listAiEntryMessages(
     7,
@@ -210,6 +211,126 @@ test("AI entry message history returns structured conversation state", async () 
       phase: "exported",
     },
   })
+  assert.equal(page.pending_task, null)
+})
+
+test("AI entry message history returns latest pending PPT background task", async () => {
+  const { listAiEntryMessages } = await import("./repository")
+
+  selectRowsQueue = [[
+    {
+      id: 42,
+      title: "[ai-entry] [agent:executive-ppt] PPT plan",
+      currentModelId: "gpt-5",
+      createdAt: new Date("2024-01-01T00:00:00.000Z"),
+    },
+  ]]
+  executeRowsQueue = [[
+    {
+      id: 101,
+      role: "assistant",
+      content: "已开始生成 PPT 预览，当前进入后台处理。",
+      createdAt: new Date("2024-01-02T03:04:09.000Z"),
+    },
+  ], [
+    {
+      id: 1074,
+      status: "running",
+      payload: JSON.stringify({
+        kind: "ai_entry_ppt_preview",
+        conversationId: "42",
+        agentId: "executive-ppt",
+      }),
+      createdAt: new Date("2024-01-02T03:05:09.000Z"),
+    },
+  ]]
+
+  const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
+
+  assert.ok(page)
+  assert.deepEqual(page.pending_task, {
+    task_id: "1074",
+    status: "running",
+    task_type: "preview_ppt_deck",
+    conversation_id: "42",
+    agent_id: "executive-ppt",
+    created_at: Math.floor(new Date("2024-01-02T03:05:09.000Z").getTime() / 1000),
+  })
+})
+
+test("AI entry message history falls back to direct conversation lookup when agent prefix no longer matches", async () => {
+  const { listAiEntryMessages } = await import("./repository")
+
+  selectRowsQueue = [
+    [],
+    [
+      {
+        id: 42,
+        title: "[ai-entry] Legacy PPT plan",
+        currentModelId: "gpt-5",
+        createdAt: new Date("2024-01-01T00:00:00.000Z"),
+      },
+    ],
+  ]
+  executeRowsQueue = [[
+    {
+      id: 101,
+      role: "assistant",
+      content: "已生成 PPT 预览。",
+      createdAt: new Date("2024-01-02T03:04:09.000Z"),
+    },
+  ], []]
+
+  const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
+
+  assert.ok(page)
+  assert.equal(page?.conversation?.id, "42")
+  assert.equal(page?.data.length, 1)
+  assert.equal(page?.data[0]?.content, "已生成 PPT 预览。")
+})
+
+test("AI entry message history falls back to pending preview task lookup without agent filter", async () => {
+  const { listAiEntryMessages } = await import("./repository")
+
+  selectRowsQueue = [[
+    {
+      id: 42,
+      title: "[ai-entry] Legacy PPT plan",
+      currentModelId: "gpt-5",
+      createdAt: new Date("2024-01-01T00:00:00.000Z"),
+    },
+  ]]
+  executeRowsQueue = [[
+    {
+      id: 101,
+      role: "assistant",
+      content: "已开始生成 PPT 预览，当前进入后台处理。",
+      createdAt: new Date("2024-01-02T03:04:09.000Z"),
+    },
+  ], [], [
+    {
+      id: 1074,
+      status: "running",
+      payload: JSON.stringify({
+        kind: "ai_entry_ppt_preview",
+        conversationId: "42",
+        agentId: "legacy-executive-ppt",
+      }),
+      createdAt: new Date("2024-01-02T03:05:09.000Z"),
+    },
+  ]]
+
+  const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
+
+  assert.ok(page)
+  assert.deepEqual(page?.pending_task, {
+    task_id: "1074",
+    status: "running",
+    task_type: "preview_ppt_deck",
+    conversation_id: "42",
+    agent_id: "legacy-executive-ppt",
+    created_at: Math.floor(new Date("2024-01-02T03:05:09.000Z").getTime() / 1000),
+  })
 })
 
 test("AI entry conversation history uses latest message time as updated_at", async () => {
@@ -228,7 +349,7 @@ test("AI entry conversation history uses latest message time as updated_at", asy
       },
     ],
   ]
-  executeRows = []
+  executeRowsQueue = []
 
   const page = await listAiEntryConversations(
     7,

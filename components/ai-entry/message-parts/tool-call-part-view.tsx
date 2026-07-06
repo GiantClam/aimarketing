@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, ChevronDown, Code2, Loader2, TriangleAlert, Wrench } from "lucide-react"
+import { Check, ChevronDown, Clock3, Code2, Loader2, TriangleAlert, Wrench } from "lucide-react"
 
 import type { ToolCallPart } from "@/lib/ai-entry/message-parts/types"
 import { cn } from "@/lib/utils"
@@ -19,23 +19,28 @@ function formatJson(value: unknown): string {
 export function ToolCallPartView({ part, isZh }: { part: ToolCallPart; isZh: boolean }) {
   const [open, setOpen] = useState(false)
   const state = part.state
-  const Icon = state === "output-error" ? TriangleAlert : state === "output-available" ? Check : Loader2
+  const Icon =
+    state === "output-error" ? TriangleAlert : state === "output-available" ? Check : state === "output-blocked" ? Clock3 : Loader2
   const label = isZh
     ? state === "output-error"
       ? "工具调用失败"
+      : state === "output-blocked"
+        ? "等待你的操作"
       : state === "output-available"
         ? "工具调用完成"
         : "工具调用中"
     : state === "output-error"
       ? "Tool failed"
+      : state === "output-blocked"
+        ? "Waiting for your action"
       : state === "output-available"
         ? "Tool completed"
         : "Tool running"
   const output = part.output ?? null
   const outputText = output === null ? "" : formatJson(output)
   const summary = isZh
-    ? `${part.toolName} ${state === "output-error" ? "失败" : state === "output-available" ? "完成" : "运行中"}`
-    : `${part.toolName} ${state === "output-error" ? "failed" : state === "output-available" ? "completed" : "running"}`
+    ? `${part.toolName} ${state === "output-error" ? "失败" : state === "output-blocked" ? "待继续" : state === "output-available" ? "完成" : "运行中"}`
+    : `${part.toolName} ${state === "output-error" ? "failed" : state === "output-blocked" ? "waiting" : state === "output-available" ? "completed" : "running"}`
 
   return (
     <div className="process-item">
@@ -54,7 +59,13 @@ export function ToolCallPartView({ part, isZh }: { part: ToolCallPart; isZh: boo
           <Icon
             className={cn(
               "h-3.5 w-3.5",
-              state === "output-error" ? "text-destructive" : state === "output-available" ? "text-emerald-600" : "text-primary",
+              state === "output-error"
+                ? "text-destructive"
+                : state === "output-available"
+                  ? "text-emerald-600"
+                  : state === "output-blocked"
+                    ? "text-amber-600"
+                    : "text-primary",
               state === "input-streaming" && "animate-spin",
             )}
           />
@@ -79,7 +90,14 @@ export function ToolCallPartView({ part, isZh }: { part: ToolCallPart; isZh: boo
                   <span>{isZh ? "结果" : "Output"}</span>
                   <span className="text-[10px] font-normal uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
                 </div>
-                <pre className={cn("overflow-x-auto whitespace-pre-wrap rounded-[8px] p-2 text-[11px] leading-6", state === "output-error" ? "bg-destructive/5 text-destructive" : "bg-muted/40 text-foreground")}>
+                <pre className={cn(
+                  "overflow-x-auto whitespace-pre-wrap rounded-[8px] p-2 text-[11px] leading-6",
+                  state === "output-error"
+                    ? "bg-destructive/5 text-destructive"
+                    : state === "output-blocked"
+                      ? "bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200"
+                      : "bg-muted/40 text-foreground",
+                )}>
                   {outputText}
                 </pre>
               </section>

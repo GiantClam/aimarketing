@@ -119,7 +119,7 @@ export function buildAiEntryProviderMessages(params: {
 }) {
   const { providerId, systemPrompt, messages } = params
 
-  if (providerId !== "aiberm") {
+  if (providerId !== "aiberm" && providerId !== "deepseek") {
     return {
       system: systemPrompt,
       messages,

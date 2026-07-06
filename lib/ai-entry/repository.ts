@@ -75,6 +75,16 @@ export type AiEntryMessagePage = {
   has_more: boolean
   conversation: AiEntryConversationSummary | null
   conversation_state: AiEntryConversationState
+  pending_task: AiEntryPendingTaskSummary | null
+}
+
+export type AiEntryPendingTaskSummary = {
+  task_id: string
+  status: "pending" | "running"
+  task_type: string | null
+  conversation_id: string | null
+  agent_id: string | null
+  created_at: number
 }
 
 function normalizeConversationMetadata(value: unknown) {
@@ -117,6 +127,100 @@ function toEpochSeconds(value: Date | string | number | null | undefined) {
     }
   }
   return Math.floor(Date.now() / 1000)
+}
+
+function safeParseRecord(value: unknown) {
+  if (!value || typeof value !== "object") return null
+  return value as Record<string, unknown>
+}
+
+async function findAiEntryPendingTaskSummary(input: {
+  userId: number
+  conversationId: string
+  agentId?: string | null
+}): Promise<AiEntryPendingTaskSummary | null> {
+  const result = await withAiEntryDbRetry("find-ai-entry-pending-task-summary", () =>
+    db.execute(sql`
+      SELECT
+        id,
+        status,
+        payload,
+        created_at as "createdAt"
+      FROM "AI_MARKETING_tasks"
+      WHERE user_id = ${input.userId}
+        AND workflow_name = 'ai_entry_ppt_preview'
+        AND status IN ('pending', 'running')
+        AND payload IS NOT NULL
+        AND payload::jsonb ->> 'kind' = 'ai_entry_ppt_preview'
+        AND payload::jsonb ->> 'conversationId' = ${input.conversationId}
+        ${input.agentId
+          ? sql`AND payload::jsonb ->> 'agentId' = ${input.agentId}`
+          : sql``}
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `),
+  )
+  const fallbackResult =
+    result.rows.length === 0 && input.agentId
+      ? await withAiEntryDbRetry("find-ai-entry-pending-task-summary-fallback", () =>
+          db.execute(sql`
+            SELECT
+              id,
+              status,
+              payload,
+              created_at as "createdAt"
+            FROM "AI_MARKETING_tasks"
+            WHERE user_id = ${input.userId}
+              AND workflow_name = 'ai_entry_ppt_preview'
+              AND status IN ('pending', 'running')
+              AND payload IS NOT NULL
+              AND payload::jsonb ->> 'kind' = 'ai_entry_ppt_preview'
+              AND payload::jsonb ->> 'conversationId' = ${input.conversationId}
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+          `),
+        )
+      : null
+
+  const row = ((fallbackResult?.rows.length ? fallbackResult.rows : result.rows) as Array<{
+    id?: unknown
+    status?: unknown
+    payload?: unknown
+    createdAt?: Date | string | number | null
+  } | null>)[0]
+  if (!row) return null
+
+  const taskId = parsePositiveInt(
+    typeof row.id === "string" || typeof row.id === "number" ? row.id : null,
+  )
+  const status = row.status === "pending" || row.status === "running" ? row.status : null
+  if (!taskId || !status) return null
+
+  let payloadRecord: Record<string, unknown> | null = null
+  if (typeof row.payload === "string" && row.payload.trim()) {
+    try {
+      payloadRecord = safeParseRecord(JSON.parse(row.payload))
+    } catch {
+      payloadRecord = null
+    }
+  } else {
+    payloadRecord = safeParseRecord(row.payload)
+  }
+
+  return {
+    task_id: String(taskId),
+    status,
+    task_type: "preview_ppt_deck",
+    conversation_id:
+      typeof payloadRecord?.conversationId === "string" && payloadRecord.conversationId.trim()
+        ? payloadRecord.conversationId.trim()
+        : input.conversationId,
+    agent_id:
+      typeof payloadRecord?.agentId === "string" && payloadRecord.agentId.trim()
+        ? payloadRecord.agentId.trim()
+        : input.agentId || null,
+    created_at: toEpochSeconds(row.createdAt),
+  }
 }
 
 function stripTitlePrefix(title: string) {
@@ -300,6 +404,7 @@ export async function getAiEntryConversation(
   const parsedConversationId = parsePositiveInt(conversationId)
   if (!parsedConversationId) return null
   const { titlePrefix, excludeAgentPrefix } = getAiEntryConversationTitleFilters(scope, agentId)
+  const scopeTitlePrefix = getScopeTitlePrefix(scope)
 
   const rows = await withAiEntryDbRetry("get-ai-entry-conversation", () =>
     db
@@ -325,7 +430,31 @@ export async function getAiEntryConversation(
   )
 
   const row = rows[0] as AiEntryConversationRow | undefined
-  return row || null
+  if (row) return row
+
+  // Direct conversation opens should not lose history just because the current
+  // route agent differs from the title prefix used when the conversation was created.
+  const fallbackRows = await withAiEntryDbRetry("get-ai-entry-conversation-fallback", () =>
+    db
+      .select({
+        id: conversations.id,
+        title: conversations.title,
+        currentModelId: conversations.currentModelId,
+        metadata: conversations.metadata,
+        createdAt: conversations.createdAt,
+      })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, parsedConversationId),
+          eq(conversations.userId, userId),
+          sql`${conversations.title} LIKE ${`${scopeTitlePrefix}%`}`,
+        ),
+      )
+      .limit(1),
+  )
+
+  return (fallbackRows[0] as AiEntryConversationRow | undefined) || null
 }
 
 export async function createAiEntryConversation(
@@ -732,12 +861,18 @@ export async function listAiEntryMessages(
     storedState: normalizeConversationMetadata(conversation.metadata)?.aiEntryConversationState,
     messageContents: data.map((message) => message.content),
   })
+  const pendingTask = await findAiEntryPendingTaskSummary({
+    userId,
+    conversationId: String(conversation.id),
+    agentId,
+  })
 
   return {
     data,
     limit: safeLimit,
     has_more: false,
     conversation_state: conversationState,
+    pending_task: pendingTask,
     conversation: mapConversationSummary({
       id: conversation.id,
       title: conversation.title,

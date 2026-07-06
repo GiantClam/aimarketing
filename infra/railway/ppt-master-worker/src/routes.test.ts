@@ -47,11 +47,13 @@ test("worker rejects unauthorized requests when token is configured", async () =
 
 test("worker preview route validates payload and calls preview executor", async () => {
   let seenRequestId = ""
+  let seenTemplateId: string | undefined
 
   setWorkerRouteDepsForTests({
     previewJobStore: createInMemoryPptPreviewJobStore(),
     runPreviewJob: async (request) => {
       seenRequestId = request.requestId
+      seenTemplateId = request.templateId
       return {
         previewSessionId: "session_1",
         generatedAt: "2026-06-24T00:00:00.000Z",
@@ -71,7 +73,8 @@ test("worker preview route validates payload and calls preview executor", async 
         prompt: "Build deck",
         scenario: "sales-deck",
         language: "zh-CN",
-        templateMode: "auto-4",
+        templateMode: "single-template",
+        templateId: "academic-defense",
         allowMockFallback: false,
         runtimeProfile: "railway-linux",
       }),
@@ -85,6 +88,7 @@ test("worker preview route validates payload and calls preview executor", async 
   assert.match(payload.jobId, /^[0-9a-f-]{36}$/u)
 
   assert.equal(seenRequestId, "req_1")
+  assert.equal(seenTemplateId, "academic-defense")
 
   let statusPayload: any = null
   for (let attempt = 0; attempt < 10; attempt += 1) {

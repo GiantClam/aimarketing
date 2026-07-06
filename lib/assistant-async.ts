@@ -222,6 +222,18 @@ const ASSISTANT_TASK_LEASE_MS = 30_000
 const ASSISTANT_TASK_HEARTBEAT_MS = 10_000
 const ASSISTANT_TASK_PROGRESS_LIMIT = 40
 const ASSISTANT_TASK_PROGRESS_PERSIST_INTERVAL_MS = 900
+const AI_ENTRY_PPT_PREVIEW_RETRY_ATTEMPTS = parseIntWithRange(
+  process.env.AI_ENTRY_PPT_PREVIEW_RETRY_ATTEMPTS,
+  3,
+  1,
+  5,
+)
+const AI_ENTRY_PPT_PREVIEW_RETRY_DELAY_MS = parseTimeoutMs(
+  process.env.AI_ENTRY_PPT_PREVIEW_RETRY_DELAY_MS,
+  1_500,
+  100,
+  30_000,
+)
 const LEAD_HUNTER_ASYNC_EVIDENCE_PERSIST = parseBooleanFlag(process.env.LEAD_HUNTER_ASYNC_EVIDENCE_PERSIST, true)
 const LEAD_HUNTER_DEFER_PERSIST_AFTER_SUCCESS = parseBooleanFlag(
   process.env.LEAD_HUNTER_DEFER_PERSIST_AFTER_SUCCESS,
@@ -1103,6 +1115,26 @@ function buildAiEntryPptPreviewFailureMessage(errorMessage: string, isZh: boolea
   return `Editable PPT background generation failed: ${errorMessage || "unknown error"}`
 }
 
+function isRetryableAiEntryPptPreviewError(message: string) {
+  const normalized = message.trim().toLowerCase()
+  if (!normalized) return false
+
+  return (
+    normalized.includes("fetch failed") ||
+    normalized.includes("network") ||
+    normalized.includes("timeout") ||
+    normalized.includes("econnreset") ||
+    normalized.includes("etimedout") ||
+    normalized.includes("und_err_connect_timeout") ||
+    normalized.includes("ppt_worker_http_502") ||
+    normalized.includes("ppt_worker_http_503") ||
+    normalized.includes("ppt_worker_http_504") ||
+    normalized.includes("worker_internal_error") ||
+    normalized.includes("ppt_master_runtime_unavailable") ||
+    normalized.includes("ppt_master_script_failed")
+  )
+}
+
 async function handleAiEntryPptPreviewTask(
   taskId: number,
   payload: AiEntryPptPreviewTaskPayload,
@@ -1152,22 +1184,61 @@ async function handleAiEntryPptPreviewTask(
       throw new Error("ai_entry_ppt_preview_tool_unavailable")
     }
 
-    const toolResult = await withTaskTimeout(
-      Promise.resolve(previewTool.execute(payload.input)),
-      AI_ENTRY_PPT_PREVIEW_TASK_TIMEOUT_MS,
-      "ai_entry_ppt_preview_timeout",
-    )
-    const toolErrorRecord =
-      toolResult && typeof toolResult === "object"
-        ? ((toolResult as { error?: unknown }).error as { message?: unknown } | undefined)
-        : undefined
+    let toolResult: Record<string, unknown> | null = null
+    let resultError: string | null = null
 
-    const resultError =
-      toolResult?.ok === false
-        ? typeof toolErrorRecord?.message === "string" && toolErrorRecord.message.trim()
-          ? toolErrorRecord.message.trim()
-          : "ppt_preview_failed"
-        : null
+    for (let attempt = 1; attempt <= AI_ENTRY_PPT_PREVIEW_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        const attemptResult = await withTaskTimeout(
+          Promise.resolve(previewTool.execute(payload.input)),
+          AI_ENTRY_PPT_PREVIEW_TASK_TIMEOUT_MS,
+          "ai_entry_ppt_preview_timeout",
+        )
+        const toolErrorRecord =
+          attemptResult && typeof attemptResult === "object"
+            ? ((attemptResult as { error?: unknown }).error as { message?: unknown } | undefined)
+            : undefined
+
+        const attemptError =
+          attemptResult?.ok === false
+            ? typeof toolErrorRecord?.message === "string" && toolErrorRecord.message.trim()
+              ? toolErrorRecord.message.trim()
+              : "ppt_preview_failed"
+            : null
+
+        if (!attemptError) {
+          toolResult = attemptResult
+          resultError = null
+          break
+        }
+
+        toolResult = attemptResult
+        resultError = attemptError
+      } catch (error) {
+        resultError = error instanceof Error ? error.message : "ai_entry_ppt_preview_failed"
+        toolResult = null
+      }
+
+      const shouldRetry =
+        attempt < AI_ENTRY_PPT_PREVIEW_RETRY_ATTEMPTS &&
+        Boolean(resultError && isRetryableAiEntryPptPreviewError(resultError))
+
+      if (!shouldRetry) {
+        break
+      }
+
+      pushTaskProgressEvent(progressEvents, {
+        type: "background_generation_retry",
+        label: isZh
+          ? `后台生成失败，正在自动重试（${attempt}/${AI_ENTRY_PPT_PREVIEW_RETRY_ATTEMPTS - 1}）`
+          : `Background generation failed, retrying automatically (${attempt}/${AI_ENTRY_PPT_PREVIEW_RETRY_ATTEMPTS - 1})`,
+        detail: resultError || undefined,
+        status: "running",
+        at: Date.now(),
+      })
+      await persistProgress(true)
+      await sleep(AI_ENTRY_PPT_PREVIEW_RETRY_DELAY_MS)
+    }
 
     const assistantMessage =
       resultError

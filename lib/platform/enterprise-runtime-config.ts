@@ -553,6 +553,7 @@ export async function getEnterpriseTextRuntimeProviderConfigsForUser(
 
 export async function buildEnterpriseTextRuntimeProvidersForCatalog(
   user: ModelGovernanceUser | null | undefined,
+  settingsOverride?: CustomerGovernanceSettings | null,
 ) {
   if (!hasActiveEnterpriseContext(user)) {
     return []
@@ -560,9 +561,11 @@ export async function buildEnterpriseTextRuntimeProvidersForCatalog(
 
   const activeUser = user as ModelGovernanceUser
 
-  const settings = await getCustomerGovernanceSettings(activeUser.enterpriseId!, {
-    includeSecrets: false,
-  }).catch(() => null)
+  const settings =
+    settingsOverride ??
+    await getCustomerGovernanceSettings(activeUser.enterpriseId!, {
+      includeSecrets: false,
+    }).catch(() => null)
   if (!settings) {
     return []
   }

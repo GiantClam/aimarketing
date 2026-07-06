@@ -27,6 +27,10 @@ import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
 import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import { resolveAiEntrySidebarEntryState } from "@/lib/ai-entry/sidebar-entry-state"
+import {
+  AI_ENTRY_SIDEBAR_REFRESH_EVENT,
+  type AiEntrySidebarRefreshDetail,
+} from "@/lib/ai-entry/sidebar-refresh-event"
 
 type AiEntryConversationSummary = {
   id: string
@@ -149,6 +153,27 @@ export function AiEntrySidebarItem({
     readCache,
     fetchItems: fetchConversations,
   })
+
+  useEffect(() => {
+    const handleRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<AiEntrySidebarRefreshDetail>).detail
+      const detailAgentId = typeof detail?.agentId === "string" && detail.agentId.trim()
+        ? detail.agentId.trim()
+        : null
+      const detailEntryMode = typeof detail?.entryMode === "string" && detail.entryMode.trim()
+        ? detail.entryMode.trim()
+        : null
+
+      if (detailAgentId !== effectiveAgentId) return
+      if (detailEntryMode !== entryMode) return
+      if (!isOpen) return
+
+      void fetchConversations({ background: conversations.length > 0 }).catch(() => {})
+    }
+
+    window.addEventListener(AI_ENTRY_SIDEBAR_REFRESH_EVENT, handleRefresh)
+    return () => window.removeEventListener(AI_ENTRY_SIDEBAR_REFRESH_EVENT, handleRefresh)
+  }, [conversations.length, effectiveAgentId, entryMode, fetchConversations, isOpen])
 
   const handleCreateConversation = (
     event: MouseEvent<HTMLButtonElement>,

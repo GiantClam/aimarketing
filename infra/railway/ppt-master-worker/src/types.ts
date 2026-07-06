@@ -1,5 +1,11 @@
 import { z } from "zod"
 
+import * as pptPreviewDataModule from "../../../../lib/lead-tools/ppt-preview-data-fixed.js"
+
+const pptPreviewData = (
+  "default" in pptPreviewDataModule ? pptPreviewDataModule.default : pptPreviewDataModule
+) as typeof pptPreviewDataModule
+
 export const previewRequestSchema = z.object({
   requestId: z.string().min(1),
   prompt: z.string().min(1),
@@ -21,7 +27,11 @@ export const previewRequestSchema = z.object({
   language: z.enum(["zh-CN", "en-US"]),
   model: z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"]).optional(),
   templateMode: z.enum(["auto-4", "single-template"]),
-  templateId: z.enum(["long-table", "playful", "broadside", "neo-grid-bold"]).optional(),
+  templateId: z
+    .string()
+    .trim()
+    .refine(pptPreviewData.isKnownPptFrontendTemplateId, "Unknown PPT template")
+    .optional(),
   narrativeAngle: z.enum(["executive-brief", "campaign-story", "data-proof", "action-plan"]).optional(),
   pageCount: z.number().int().min(4).max(20).nullable().optional(),
   images: z

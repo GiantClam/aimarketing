@@ -1,7 +1,17 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, ArrowRight, Expand, Eye, LayoutTemplate, Loader2 } from "lucide-react"
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  Expand,
+  Eye,
+  LayoutTemplate,
+  LibraryBig,
+  Loader2,
+} from "lucide-react"
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import type { PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
@@ -21,6 +31,19 @@ type PreviewSessionApiResponse = {
   deck?: PptPreviewDeck
 }
 
+type PptExportApiResponse = {
+  ok?: boolean
+  error?: string | { code?: string; message?: string }
+  artifactId?: number | null
+  fileName?: string | null
+  downloadUrl?: string | null
+  previewUrl?: string | null
+  assetLibrary?: {
+    saved?: boolean
+    href?: string
+  } | null
+}
+
 function getPreviewCopy(isZh: boolean) {
   return {
     title: isZh ? "PPT 预览" : "PPT preview",
@@ -35,7 +58,38 @@ function getPreviewCopy(isZh: boolean) {
     open: isZh ? "打开预览" : "Open preview",
     previewTitle: isZh ? "PPT 大图预览" : "PPT large preview",
     slideCount: isZh ? "页数" : "Slides",
+    download: isZh ? "导出并下载 PPTX" : "Export and download PPTX",
+    downloading: isZh ? "导出中..." : "Exporting...",
+    saveToAssets: isZh ? "导出到资产库" : "Export to assets",
+    savingToAssets: isZh ? "存储中..." : "Saving...",
+    savedToAssets: isZh ? "已存入资产库" : "Saved to assets",
+    exportFailed: isZh ? "导出失败，请稍后重试。" : "Export failed. Please try again.",
+    exportSucceeded: isZh ? "PPTX 已生成。" : "PPTX export is ready.",
+    retryDownload: isZh ? "重新下载" : "Download again",
+    openAssetLibrary: isZh ? "打开资产库" : "Open asset library",
+    generatedFile: isZh ? "文件" : "File",
+    exportHint: isZh
+      ? "预览确认后，可导出正式可编辑 PPTX，或直接存入资产库。"
+      : "After reviewing the preview, export the editable PPTX or save it to the asset library.",
   }
+}
+
+function readExportErrorMessage(data: PptExportApiResponse, fallback: string) {
+  if (typeof data.error === "string" && data.error.trim()) return data.error
+  if (data.error && typeof data.error === "object") {
+    if (typeof data.error.message === "string" && data.error.message.trim()) return data.error.message
+    if (typeof data.error.code === "string" && data.error.code.trim()) return data.error.code
+  }
+  return fallback
+}
+
+function openDownloadUrl(downloadUrl: string) {
+  const anchor = document.createElement("a")
+  anchor.href = downloadUrl
+  anchor.rel = "noreferrer"
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
 }
 
 export function PptPreviewReportCard({
@@ -51,6 +105,10 @@ export function PptPreviewReportCard({
   const [selectedVariantKey, setSelectedVariantKey] = useState<string | null>(defaultVariantKey ?? null)
   const [slideIndex, setSlideIndex] = useState(0)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [exportedArtifact, setExportedArtifact] = useState<PptExportApiResponse | null>(null)
+  const [exportAction, setExportAction] = useState<"download" | "assets" | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [isSavedToAssets, setIsSavedToAssets] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -125,12 +183,96 @@ export function PptPreviewReportCard({
   const safeSlideIndex = currentSlideCount > 0 ? Math.min(slideIndex, currentSlideCount - 1) : 0
   const currentSlide = slides[safeSlideIndex] || null
   const coverAsset = selectedVariant?.preview?.cover || null
+  const canExport = Boolean(selectedVariant?.key && !isLoading && !error)
+
+  useEffect(() => {
+    setExportedArtifact(null)
+    setExportError(null)
+    setIsSavedToAssets(false)
+  }, [selectedVariant?.key])
 
   useEffect(() => {
     if (safeSlideIndex !== slideIndex) {
       setSlideIndex(safeSlideIndex)
     }
   }, [safeSlideIndex, slideIndex])
+
+  async function requestExport(saveToAssets: boolean) {
+    const variantKey = selectedVariant?.key || selectedVariantKey || defaultVariantKey || undefined
+    if (!variantKey) {
+      throw new Error(copy.exportFailed)
+    }
+
+    const response = await fetch("/api/ai/ppt-preview/export", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        previewSessionId,
+        selectedVariantKey: variantKey,
+        saveToAssets,
+      }),
+    })
+    const data = (await response.json().catch(() => ({}))) as PptExportApiResponse
+
+    if (!response.ok || data.ok === false) {
+      throw new Error(readExportErrorMessage(data, copy.exportFailed))
+    }
+
+    setExportedArtifact(data)
+    if (data.assetLibrary?.saved) {
+      setIsSavedToAssets(true)
+    }
+    return data
+  }
+
+  async function moveExistingArtifactToAssets(artifactId: number) {
+    const response = await fetch(`/api/platform/artifacts/${artifactId}/move-to-assets`, {
+      method: "POST",
+      credentials: "include",
+    })
+    const data = (await response.json().catch(() => ({}))) as { error?: string; data?: unknown }
+    if (!response.ok) {
+      throw new Error(data.error || copy.exportFailed)
+    }
+    setIsSavedToAssets(true)
+  }
+
+  async function handleDownload() {
+    if (!canExport || exportAction) return
+
+    setExportAction("download")
+    setExportError(null)
+    try {
+      const artifact = exportedArtifact?.downloadUrl ? exportedArtifact : await requestExport(false)
+      if (!artifact.downloadUrl) throw new Error(copy.exportFailed)
+      openDownloadUrl(artifact.downloadUrl)
+    } catch (downloadError) {
+      setExportError(downloadError instanceof Error ? downloadError.message : copy.exportFailed)
+    } finally {
+      setExportAction(null)
+    }
+  }
+
+  async function handleSaveToAssets() {
+    if (!canExport || exportAction || isSavedToAssets) return
+
+    setExportAction("assets")
+    setExportError(null)
+    try {
+      if (typeof exportedArtifact?.artifactId === "number") {
+        await moveExistingArtifactToAssets(exportedArtifact.artifactId)
+      } else {
+        await requestExport(true)
+      }
+    } catch (saveError) {
+      setExportError(saveError instanceof Error ? saveError.message : copy.exportFailed)
+    } finally {
+      setExportAction(null)
+    }
+  }
 
   return (
     <>
@@ -213,15 +355,77 @@ export function PptPreviewReportCard({
                   <Eye className="h-3.5 w-3.5" />
                   <span>{`${copy.slideCount}: ${currentSlideCount}`}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsPreviewOpen(true)}
-                  disabled={!(currentSlide || selectedVariant?.preview?.htmlDocument)}
-                  className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-border bg-background px-3 text-sm font-semibold text-foreground transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Expand className="h-4 w-4" />
-                  <span>{copy.open}</span>
-                </button>
+                <div className="text-xs text-muted-foreground">{copy.exportHint}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPreviewOpen(true)}
+                    disabled={!(currentSlide || selectedVariant?.preview?.htmlDocument)}
+                    className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-border bg-background px-3 text-sm font-semibold text-foreground transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Expand className="h-4 w-4" />
+                    <span>{copy.open}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownload()}
+                    disabled={!canExport || Boolean(exportAction)}
+                    className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-border bg-background px-3 text-sm font-semibold text-foreground transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {exportAction === "download" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    <span>{exportAction === "download" ? copy.downloading : copy.download}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveToAssets()}
+                    disabled={!canExport || Boolean(exportAction) || isSavedToAssets}
+                    className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-border bg-background px-3 text-sm font-semibold text-foreground transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isSavedToAssets ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : exportAction === "assets" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <LibraryBig className="h-4 w-4" />
+                    )}
+                    <span>
+                      {isSavedToAssets
+                        ? copy.savedToAssets
+                        : exportAction === "assets"
+                          ? copy.savingToAssets
+                          : copy.saveToAssets}
+                    </span>
+                  </button>
+                </div>
+                {exportError ? (
+                  <div className="text-xs text-destructive">{exportError}</div>
+                ) : exportedArtifact?.downloadUrl ? (
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div className="font-medium text-foreground">{copy.exportSucceeded}</div>
+                    {exportedArtifact.fileName ? (
+                      <div>
+                        {copy.generatedFile}: {exportedArtifact.fileName}
+                      </div>
+                    ) : null}
+                    <div className="flex flex-wrap gap-3">
+                      <a
+                        href={exportedArtifact.downloadUrl}
+                        className="text-primary underline underline-offset-4"
+                        download
+                      >
+                        {copy.retryDownload}
+                      </a>
+                      {isSavedToAssets || exportedArtifact.assetLibrary?.href ? (
+                        <a
+                          href={exportedArtifact.assetLibrary?.href || "/dashboard/assets"}
+                          className="text-primary underline underline-offset-4"
+                        >
+                          {copy.openAssetLibrary}
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

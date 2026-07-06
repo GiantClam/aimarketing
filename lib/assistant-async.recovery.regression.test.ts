@@ -45,6 +45,11 @@ let aiEntryPreviewToolResult: Record<string, unknown> = {
   previewSessionId: "preview-session-1",
   variants: [{ key: "variant-a", name: "Variant A" }],
 }
+let aiEntryPreviewToolCallCount = 0
+let aiEntryPreviewToolPlan: Array<
+  | { kind: "error"; message: string }
+  | { kind: "success"; result: Record<string, unknown> }
+> = []
 let aiEntryPreviewAppendError: string | null = null
 let appendedAiEntryMessages: Array<{ conversationId: string | number | null | undefined; content: string }> = []
 
@@ -140,7 +145,17 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       buildAiEntryPptTools: () => ({
         preview_ppt_deck: {
-          execute: async () => aiEntryPreviewToolResult,
+          execute: async () => {
+            aiEntryPreviewToolCallCount += 1
+            const next = aiEntryPreviewToolPlan.shift()
+            if (next?.kind === "error") {
+              throw new Error(next.message)
+            }
+            if (next?.kind === "success") {
+              return next.result
+            }
+            return aiEntryPreviewToolResult
+          },
         },
       }),
     }
@@ -329,6 +344,8 @@ test.beforeEach(() => {
     previewSessionId: "preview-session-1",
     variants: [{ key: "variant-a", name: "Variant A" }],
   }
+  aiEntryPreviewToolCallCount = 0
+  aiEntryPreviewToolPlan = []
   aiEntryPreviewAppendError = null
   appendedAiEntryMessages = []
 })
@@ -457,6 +474,46 @@ test("completes ai-entry background ppt preview only after assistant message per
   const terminal = updateStatusCalls.find((entry) => entry.taskId === taskId && entry.data.status === "success")
   assert.ok(terminal)
   assert.equal((terminal?.data.result as { conversation_id?: string } | undefined)?.conversation_id, "chat-conv-1")
+})
+
+test("retries ai-entry background ppt preview fetch failures before exposing failure", async () => {
+  const taskId = 1103
+  tasksById.set(
+    taskId,
+    buildAiEntryPptPreviewTask({
+      id: taskId,
+      status: "pending",
+      updatedAtMsAgo: 1_000,
+    }),
+  )
+  claimResultById.set(taskId, { id: taskId })
+  aiEntryPreviewToolPlan = [
+    { kind: "error", message: "fetch failed" },
+    {
+      kind: "success",
+      result: {
+        ok: true,
+        previewSessionId: "preview-session-after-retry",
+        variants: [{ key: "variant-a", name: "Variant A" }],
+      },
+    },
+  ]
+
+  const result = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(result.inspected, 1)
+  assert.equal(result.failed, 0)
+  assert.equal(aiEntryPreviewToolCallCount, 2)
+  assert.equal(appendedAiEntryMessages.length, 1)
+  assert.equal(appendedAiEntryMessages[0]?.content, "PPT preview generated.")
+  assert.equal(appendedAiEntryMessages[0]?.content.includes("生成失败"), false)
+  const terminal = updateStatusCalls.find((entry) => entry.taskId === taskId && entry.data.status === "success")
+  assert.ok(terminal)
+  assert.equal((terminal?.data.result as { error?: string } | undefined)?.error, null)
 })
 
 test("fails ai-entry background ppt preview when assistant message persistence fails", async () => {

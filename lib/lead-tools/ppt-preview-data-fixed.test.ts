@@ -125,6 +125,26 @@ test("recommended template summaries can surface imported ppt-master templates f
   assert.equal(templates.some((item) => item.templateId === "global-ai-capital-2026"), true)
 })
 
+test("recommended template summaries honor runtime template allowlists", () => {
+  const templates = buildPptRecommendedTemplateSummaries(
+    {
+      prompt: "学术答辩汇报，包含研究问题、方法、实验结果与结论证明",
+      scenario: "training",
+      language: "zh-CN",
+    },
+    {
+      allowedTemplateIds: ["long-table", "playful", "broadside", "neo-grid-bold"],
+    },
+  )
+
+  assert.equal(templates.length, 4)
+  assert.equal(templates.some((item) => item.templateId === "academic-defense"), false)
+  assert.deepEqual(
+    new Set(templates.map((item) => item.templateId)),
+    new Set(["long-table", "playful", "broadside", "neo-grid-bold"]),
+  )
+})
+
 test("ppt preview styles cover every local ppt-master upstream example directory", () => {
   const examplesDir = path.join(process.cwd(), ".cache", "ppt-master-upstream", "examples")
   const upstreamStyleKeys = fs

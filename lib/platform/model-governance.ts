@@ -12,6 +12,7 @@ import {
   buildGovernedWorkflowImageProviderOptions,
   canUserAccessAssignedRoute,
   type ModelGovernanceUser,
+  type RuntimeProviderLike,
 } from "@/lib/platform/model-governance-core"
 import {
   getCustomerGovernanceSettings,
@@ -58,6 +59,42 @@ const IMAGE_ASSISTANT_PROVIDER_ORDER: OpenAiCompatibleImageProviderId[] = [
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function getLocalDevelopmentTextDefaultModelHint() {
+  if (process.env.NODE_ENV !== "development") return ""
+  return normalizeText(process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL) || normalizeText(process.env.AI_ENTRY_MODEL)
+}
+
+function mergeRuntimeProvidersForLocalTextDefault(params: {
+  enterpriseRuntimeProviders: RuntimeProviderLike[]
+  platformRuntimeProviders: RuntimeProviderLike[]
+}) {
+  const { enterpriseRuntimeProviders, platformRuntimeProviders } = params
+  if (enterpriseRuntimeProviders.length === 0) return platformRuntimeProviders
+
+  const preferredModelHint = getLocalDevelopmentTextDefaultModelHint()
+  if (!preferredModelHint) return enterpriseRuntimeProviders
+
+  const preferredPlatformProviders = platformRuntimeProviders.filter(
+    (provider) =>
+      provider.scope === "text" &&
+      provider.configured &&
+      normalizeText(provider.model) === preferredModelHint,
+  )
+  if (preferredPlatformProviders.length === 0) return enterpriseRuntimeProviders
+
+  const merged = new Map<string, RuntimeProviderLike>()
+  for (const provider of [
+    ...preferredPlatformProviders,
+    ...enterpriseRuntimeProviders,
+    ...platformRuntimeProviders.filter((provider) => provider.scope === "text" && provider.configured),
+  ]) {
+    if (!merged.has(provider.id)) {
+      merged.set(provider.id, provider)
+    }
+  }
+  return [...merged.values()]
 }
 
 function hasEnterpriseContext(user: ModelGovernanceUser | null | undefined) {
@@ -150,11 +187,16 @@ export async function getGovernedAiEntryModelCatalogForUser(params: {
       : null
   const enterpriseRuntimeProviders = await buildEnterpriseTextRuntimeProvidersForCatalog(
     params.user,
+    settings,
   )
+  const platformRuntimeProviders = getPlatformRuntimeSnapshot().providers
   const runtimeProviders =
     enterpriseRuntimeProviders.length > 0
-      ? enterpriseRuntimeProviders
-      : getPlatformRuntimeSnapshot().providers
+      ? mergeRuntimeProvidersForLocalTextDefault({
+          enterpriseRuntimeProviders,
+          platformRuntimeProviders,
+        })
+      : platformRuntimeProviders
 
   return buildGovernedAiEntryModelCatalog({
     user: params.user,

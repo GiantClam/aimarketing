@@ -1,8 +1,22 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Download, Eye, LibraryBig, Package } from "lucide-react"
 
+import { PptPreviewReportCard } from "@/components/ai-entry/ppt-preview-report-card"
 import type { ArtifactPart } from "@/lib/ai-entry/message-parts/types"
+
+type ArtifactPreviewContext = {
+  previewSessionId: string
+  defaultVariantKey?: string | null
+  variantKeys?: string[]
+}
+
+type ArtifactDetailResponse = {
+  data?: {
+    previewContext?: ArtifactPreviewContext | null
+  }
+}
 
 function kindLabel(part: ArtifactPart, isZh: boolean): string {
   if (part.artifactType === "html") return isZh ? "HTML 交付物" : "HTML deliverable"
@@ -22,6 +36,59 @@ function extensionLabel(part: ArtifactPart) {
 }
 
 export function ArtifactPartView({ part, isZh }: { part: ArtifactPart; isZh: boolean }) {
+  const [previewContext, setPreviewContext] = useState<ArtifactPreviewContext | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPreviewContext() {
+      if (!part.artifactId || part.downloadUrl) {
+        setPreviewContext(null)
+        return
+      }
+
+      const looksLikePptPreview =
+        /ppt preview|PPT 预览|PPT preview generated|lead_tool_preview_deck/iu.test(part.title || "") ||
+        /ppt preview|PPT 预览|PPT preview generated|lead_tool_preview_deck/iu.test(part.fileName || "")
+      if (!looksLikePptPreview) {
+        setPreviewContext(null)
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/platform/artifacts/${part.artifactId}`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        })
+        const data = (await response.json().catch(() => ({}))) as ArtifactDetailResponse
+        if (!cancelled && response.ok && data.data?.previewContext?.previewSessionId) {
+          setPreviewContext(data.data.previewContext)
+        }
+      } catch {
+        if (!cancelled) {
+          setPreviewContext(null)
+        }
+      }
+    }
+
+    void loadPreviewContext()
+    return () => {
+      cancelled = true
+    }
+  }, [part.artifactId, part.downloadUrl, part.fileName, part.title])
+
+  if (previewContext?.previewSessionId) {
+    return (
+      <PptPreviewReportCard
+        previewSessionId={previewContext.previewSessionId}
+        defaultVariantKey={previewContext.defaultVariantKey ?? previewContext.variantKeys?.[0] ?? null}
+        variantKeys={previewContext.variantKeys}
+        isZh={isZh}
+      />
+    )
+  }
+
   return (
     <div className="artifact-card">
       <div className="artifact-cover">

@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { PptWorkerPreviewRequest } from "./ppt-worker-types"
-import { requestPptWorkerExport, requestPptWorkerPreview } from "./ppt-worker-client"
+import { requestPptWorkerExport, requestPptWorkerPreview, requestPptWorkerPreviewSubmit } from "./ppt-worker-client"
 
 test("ppt worker transport types are importable", () => {
   const request: PptWorkerPreviewRequest = {
@@ -126,6 +126,170 @@ test("ppt worker preview posts runtime profile, fallback mode, and auth token", 
       delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
     } else {
       process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+  }
+})
+
+test("ppt worker preview retries transient fetch failures", async () => {
+  const originalFetch = global.fetch
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousPollInterval = process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+  const previousTimeout = process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+  const previousMaxAttempts = process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS
+  const previousRetryDelay = process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com"
+    process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = "1"
+    process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = "1000"
+    process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS = "2"
+    process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS = "1"
+
+    let calls = 0
+    global.fetch = (async (input) => {
+      calls += 1
+      if (calls === 1) {
+        throw new Error("fetch failed")
+      }
+      if (String(input).endsWith("/preview")) {
+        return {
+          ok: true,
+          status: 202,
+          json: async () => ({ jobId: "job_retry", status: "queued" }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          jobId: "job_retry",
+          status: "completed",
+          previewSessionId: "session_retry",
+          generatedAt: "2026-06-24T00:00:00.000Z",
+          deck: { title: "Retried deck" },
+        }),
+      } as Response
+    }) as typeof fetch
+
+    const result = await requestPptWorkerPreview({
+      requestId: "req_fetch_retry",
+      prompt: "Build deck",
+      scenario: "training",
+      language: "zh-CN",
+      templateMode: "auto-4",
+      allowMockFallback: false,
+    })
+
+    assert.equal(result.previewSessionId, "session_retry")
+    assert.equal(calls, 3)
+  } finally {
+    global.fetch = originalFetch
+
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+    if (previousPollInterval === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = previousPollInterval
+    }
+    if (previousTimeout === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+    if (previousMaxAttempts === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS = previousMaxAttempts
+    }
+    if (previousRetryDelay === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS = previousRetryDelay
+    }
+  }
+})
+
+test("ppt worker preview rejects templates unsupported by the deployed worker before posting", async () => {
+  const originalFetch = global.fetch
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com"
+    let fetchCalled = false
+    global.fetch = (async () => {
+      fetchCalled = true
+      throw new Error("fetch_should_not_be_called")
+    }) as typeof fetch
+
+    await assert.rejects(
+      requestPptWorkerPreview({
+        requestId: "req_unsupported_template",
+        prompt: "Build deck",
+        scenario: "training",
+        language: "zh-CN",
+        templateMode: "single-template",
+        templateId: "worker-unsupported-template",
+        allowMockFallback: false,
+      }),
+      /ppt_worker_template_unsupported:worker-unsupported-template/,
+    )
+    assert.equal(fetchCalled, false)
+  } finally {
+    global.fetch = originalFetch
+
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+  }
+})
+
+test("ppt worker preview surfaces template enum errors from worker bad_request payloads", async () => {
+  const originalFetch = global.fetch
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com"
+    global.fetch = (async () =>
+      ({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          message: "bad_request",
+          issues: [
+            {
+              received: "academic-defense",
+              code: "invalid_enum_value",
+              path: ["templateId"],
+              message: "Invalid enum value.",
+            },
+          ],
+        }),
+      }) as Response) as typeof fetch
+
+    await assert.rejects(
+      requestPptWorkerPreviewSubmit({
+        requestId: "req_worker_bad_request",
+        prompt: "Build deck",
+        scenario: "training",
+        language: "zh-CN",
+        templateMode: "auto-4",
+        allowMockFallback: false,
+      }),
+      /ppt_worker_template_unsupported:academic-defense/,
+    )
+  } finally {
+    global.fetch = originalFetch
+
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
     }
   }
 })
@@ -342,6 +506,117 @@ test("ppt worker preview surfaces failed async jobs", async () => {
       delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
     } else {
       process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+  }
+})
+
+test("ppt worker preview retries transient runtime-unavailable failures once", async () => {
+  const originalFetch = global.fetch
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousPollInterval = process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+  const previousTimeout = process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+  const previousMaxAttempts = process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS
+  const previousRetryDelay = process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com"
+    process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = "1"
+    process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = "1000"
+    process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS = "2"
+    process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS = "1"
+
+    const seen: string[] = []
+    let previewCalls = 0
+
+    global.fetch = (async (input) => {
+      const url = String(input)
+      seen.push(url)
+
+      if (url.endsWith("/preview")) {
+        previewCalls += 1
+        return {
+          ok: true,
+          status: 202,
+          json: async () => ({
+            jobId: `job_${previewCalls}`,
+            status: "queued",
+          }),
+        } as Response
+      }
+
+      if (url.endsWith("/preview-jobs/job_1")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobId: "job_1",
+            status: "failed",
+            message: "ppt_master_runtime_unavailable",
+          }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          jobId: "job_2",
+          status: "completed",
+          previewSessionId: "session_retry_success",
+          generatedAt: "2026-07-03T03:35:39.969Z",
+          deck: { title: "Recovered Deck" },
+        }),
+      } as Response
+    }) as typeof fetch
+
+    const result = await requestPptWorkerPreview({
+      requestId: "req_retry_runtime_unavailable",
+      prompt: "Build deck",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      templateMode: "auto-4",
+      allowMockFallback: false,
+    })
+
+    assert.equal(result.previewSessionId, "session_retry_success")
+    assert.equal(previewCalls, 2)
+    assert.deepEqual(seen, [
+      "https://ppt-worker.example.com/preview",
+      "https://ppt-worker.example.com/preview-jobs/job_1",
+      "https://ppt-worker.example.com/preview",
+      "https://ppt-worker.example.com/preview-jobs/job_2",
+    ])
+  } finally {
+    global.fetch = originalFetch
+
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+
+    if (previousPollInterval === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = previousPollInterval
+    }
+
+    if (previousTimeout === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+
+    if (previousMaxAttempts === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS = previousMaxAttempts
+    }
+
+    if (previousRetryDelay === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS = previousRetryDelay
     }
   }
 })

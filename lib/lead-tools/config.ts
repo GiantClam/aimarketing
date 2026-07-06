@@ -6,6 +6,8 @@ const DEFAULT_PPT_EXPORT_RUNTIME = "ppt-master-agent"
 const DEFAULT_PPT_EXECUTION_TRANSPORT = "local"
 const DEFAULT_PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = 2000
 const DEFAULT_PPT_WORKER_PREVIEW_TIMEOUT_MS = 90 * 60 * 1000
+const DEFAULT_PPT_WORKER_PREVIEW_MAX_ATTEMPTS = 2
+const DEFAULT_PPT_WORKER_PREVIEW_RETRY_DELAY_MS = 3000
 const DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS = 12 * 60 * 1000
 
 function pickFirstNonEmpty(values: Array<string | undefined>, fallback: string) {
@@ -123,6 +125,20 @@ export function getPptWorkerPreviewTimeoutMs() {
   return pickPositiveInt(
     [process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS],
     DEFAULT_PPT_WORKER_PREVIEW_TIMEOUT_MS,
+  )
+}
+
+export function getPptWorkerPreviewMaxAttempts() {
+  return pickPositiveInt(
+    [process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS],
+    DEFAULT_PPT_WORKER_PREVIEW_MAX_ATTEMPTS,
+  )
+}
+
+export function getPptWorkerPreviewRetryDelayMs() {
+  return pickPositiveInt(
+    [process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS],
+    DEFAULT_PPT_WORKER_PREVIEW_RETRY_DELAY_MS,
   )
 }
 

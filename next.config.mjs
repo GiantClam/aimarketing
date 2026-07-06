@@ -1,6 +1,10 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
 /* global process */
 /** @type {import('next').NextConfig} */
 const isVercelBuild = process.env.VERCEL === "1" || process.env.VERCEL === "true"
+const projectRoot = path.dirname(fileURLToPath(import.meta.url))
 
 const nextConfig = {
   // Vercel expects Next build manifests under ".next" unless explicitly configured otherwise.
@@ -20,6 +24,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  outputFileTracingRoot: projectRoot,
   // 增加 API 路由的超时时间
   experimental: {
     serverActions: {

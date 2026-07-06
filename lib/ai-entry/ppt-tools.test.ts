@@ -333,6 +333,58 @@ test("ppt tools pin a single narrative angle for single-template preview generat
   })
 })
 
+test("ppt tools coerce template id preview requests to single-template mode", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份课堂讲解 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+    templateMode: "auto-4",
+    templateId: "neo-grid-bold",
+  })
+
+  assert.equal(preview.ok, true)
+  assert.deepEqual(previewInputs[0], {
+    prompt: buildStructuredPrompt("做一份课堂讲解 PPT"),
+    researchBrief: undefined,
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    previewRuntime: "ppt-master-agent",
+    templateMode: "single-template",
+    templateId: "neo-grid-bold",
+    narrativeAngle: "executive-brief",
+    pageCount: undefined,
+  })
+})
+
+test("ppt tools accept expanded ppt-master template ids for single-template preview", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份军事态势课堂讲解 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+    templateMode: "single-template",
+    templateId: "general-dark-tech-claude-code-auto-mode",
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs[0]?.templateMode, "single-template")
+  assert.equal(previewInputs[0]?.templateId, "general-dark-tech-claude-code-auto-mode")
+  assert.equal(previewInputs[0]?.narrativeAngle, "executive-brief")
+})
+
 test("ppt tools forward structured researchBrief objects into preview generation", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
@@ -413,6 +465,7 @@ test("ppt tools can preview and export a deck from the yusuan attachment markdow
 
 test("ppt tools return a safe runtime error when ppt-master is unavailable", async () => {
   previewShouldFail = true
+  previewFailureMessage = "ppt_master_repo_missing"
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -427,6 +480,28 @@ test("ppt tools return a safe runtime error when ppt-master is unavailable", asy
 
   assert.equal(preview.ok, false)
   assert.equal(preview.error?.code, "ppt_master_runtime_unavailable")
+  assert.equal(preview.error?.rawMessage, "ppt_master_repo_missing")
+})
+
+test("ppt tools surface ppt-master integrity failures as regeneration-required errors", async () => {
+  previewShouldFail = true
+  previewFailureMessage =
+    "ppt_master_quality_check_failed:/tmp/project/svg_output/03_insight.svg:Invalid XML: not well-formed"
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份董事会 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+  })
+
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_master_quality_check_failed")
+  assert.match(String(preview.error?.message || ""), /must be regenerated/i)
 })
 
 test("ppt tools separate upstream quota failures from workspace billing failures", async () => {

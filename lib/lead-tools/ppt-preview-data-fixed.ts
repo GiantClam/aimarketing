@@ -1537,9 +1537,18 @@ export function buildPptPreviewVariantDescriptors(request: PptPreviewRequest): P
     })
 }
 
-export function buildPptRecommendedTemplateSummaries(request: PptPreviewRequest): PptRecommendedTemplateSummary[] {
+export function buildPptRecommendedTemplateSummaries(
+  request: PptPreviewRequest,
+  options?: {
+    allowedTemplateIds?: readonly string[]
+  },
+): PptRecommendedTemplateSummary[] {
   const matchText = collectPptTemplateMatchText(request)
+  const allowedTemplateIds = options?.allowedTemplateIds?.length
+    ? new Set(options.allowedTemplateIds)
+    : null
   const ranked = pptFrontendTemplateOptions
+    .filter((option) => !allowedTemplateIds || allowedTemplateIds.has(option.id))
     .map((option, index) => ({
       option,
       index,

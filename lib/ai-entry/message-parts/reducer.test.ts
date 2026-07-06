@@ -44,7 +44,7 @@ test("task-progress 会 upsert 同类型 step，message_end 会冻结 parts", ()
   assert.equal(taskProgress?.steps[0].status, "completed")
   assert.equal(taskProgress?.steps[1].type, "provider")
   assert.equal(taskProgress?.steps[1].detail, "fallback / gpt-4o-mini")
-  assert.equal(taskProgress?.steps[1].status, "running")
+  assert.equal(taskProgress?.steps[1].status, "completed")
 })
 
 test("tool_call_start / tool_call_done / tool_call_error 会更新 tool-call 和 progress", () => {
@@ -151,6 +151,46 @@ test("preview_ppt_deck tool_result 产生 report part", () => {
     { key: "a", name: "Variant A", summary: "first" },
     { key: "b", name: "Variant B", summary: null },
   ])
+})
+
+test("preview_ppt_deck 需要选择模板时产生 template-recommendation part", () => {
+  const parts = applySseEvent([], {
+    event: "tool_result",
+    data: {
+      toolName: "preview_ppt_deck",
+      toolCallId: "tc-template",
+      result: {
+        ok: false,
+        error: {
+          code: "ppt_template_selection_required",
+          message: "Select one recommended template before generating the editable PPT preview.",
+        },
+        recommendedTemplates: [
+          {
+            templateId: "anthropic-brand",
+            templateLabel: "Anthropic 品牌",
+            styleName: "Long Table",
+          },
+          {
+            templateId: "academic-defense",
+            templateLabel: "学术答辩",
+            styleName: "Attention Research",
+          },
+        ],
+      },
+    },
+  })
+
+  const recommendation = findPart(parts, "template-recommendation")
+  assert.ok(recommendation)
+  assert.equal(recommendation?.defaultTemplateId, "anthropic-brand")
+  assert.deepEqual(recommendation?.templates, [
+    { templateId: "anthropic-brand", labels: ["Anthropic 品牌", "Long Table", "anthropic-brand"] },
+    { templateId: "academic-defense", labels: ["学术答辩", "Attention Research", "academic-defense"] },
+  ])
+  const toolCall = findPart(parts, "tool-call") as ToolCallPart | undefined
+  assert.equal(toolCall?.state, "output-blocked")
+  assert.equal(findTaskStep(parts, "tool:tc-template")?.status, "waiting")
 })
 
 test("export_ppt_deck tool_result + artifact_created 会 upsert artifact part", () => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
   resolveAiEntryRestoredMessages,
   shouldShowAiEntryConversationRestore,
@@ -150,5 +151,68 @@ test("keeps pending assistant drafts with running parts until the server has per
       persistedMessages: persisted,
     }),
     pending,
+  )
+})
+
+test("prefers persisted full history after background task completion when current messages are partial", () => {
+  const current: TestMessage[] = [
+    { role: "assistant", content: "已生成 PPT 预览。" },
+  ]
+  const persisted: TestMessage[] = [
+    { role: "user", content: "做一个克里米亚现状的ppt" },
+    { role: "assistant", content: "已提交生成预览版，当前状态是后台排队生成中。" },
+    { role: "assistant", content: "已生成 PPT 预览。" },
+  ]
+
+  assert.deepEqual(
+    resolveAiEntryCompletedConversationMessages({
+      currentMessages: current,
+      persistedMessages: persisted,
+    }),
+    persisted,
+  )
+})
+
+test("appends background assistant completion when refreshed history has not caught up yet", () => {
+  const current: TestMessage[] = [
+    { role: "user", content: "生成预览" },
+    { role: "assistant", content: "后台生成中..." },
+  ]
+  const persisted: TestMessage[] = [
+    { role: "user", content: "生成预览" },
+    { role: "assistant", content: "后台生成中..." },
+  ]
+  const backgroundAssistantMessage: TestMessage = {
+    role: "assistant",
+    content: "已生成 PPT 预览。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-401\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+  }
+
+  assert.deepEqual(
+    resolveAiEntryCompletedConversationMessages({
+      currentMessages: current,
+      persistedMessages: persisted,
+      backgroundAssistantMessage,
+    }),
+    [...persisted, backgroundAssistantMessage],
+  )
+})
+
+test("does not duplicate background assistant completion when refreshed history already includes it", () => {
+  const backgroundAssistantMessage: TestMessage = {
+    role: "assistant",
+    content: "已生成 PPT 预览。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-401\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+  }
+  const persisted: TestMessage[] = [
+    { role: "user", content: "生成预览" },
+    backgroundAssistantMessage,
+  ]
+
+  assert.deepEqual(
+    resolveAiEntryCompletedConversationMessages({
+      currentMessages: [],
+      persistedMessages: persisted,
+      backgroundAssistantMessage,
+    }),
+    persisted,
   )
 })

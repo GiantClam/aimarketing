@@ -1,0 +1,36 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import { previewRequestSchema } from "./types.js"
+
+test("worker preview schema accepts expanded ppt-master template ids", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_expanded_template",
+    prompt: "Build an academic defense deck",
+    scenario: "training",
+    language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "academic-defense",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.templateId, "academic-defense")
+})
+
+test("worker preview schema still rejects unknown template ids", () => {
+  assert.throws(
+    () =>
+      previewRequestSchema.parse({
+        requestId: "req_unknown_template",
+        prompt: "Build a deck",
+        scenario: "training",
+        language: "zh-CN",
+        templateMode: "single-template",
+        templateId: "not-a-template",
+        allowMockFallback: false,
+        runtimeProfile: "railway-linux",
+      }),
+    /Unknown PPT template/,
+  )
+})

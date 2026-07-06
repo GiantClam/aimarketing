@@ -11,7 +11,9 @@ import {
   getPptMasterSlideTimeoutMs,
   getPptWorkerBaseUrl,
   getPptWorkerInternalToken,
+  getPptWorkerPreviewMaxAttempts,
   getPptWorkerPreviewPollIntervalMs,
+  getPptWorkerPreviewRetryDelayMs,
   getPptWorkerPreviewTimeoutMs,
   getPptWorkerRuntimeProfile,
 } from "./config"
@@ -78,6 +80,8 @@ test("ppt worker config reads base url token and runtime profile", () => {
   const previousProfile = process.env.PPT_WORKER_RUNTIME_PROFILE
   const previousPollInterval = process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
   const previousTimeout = process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+  const previousMaxAttempts = process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS
+  const previousRetryDelay = process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS
 
   try {
     process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com/"
@@ -85,12 +89,16 @@ test("ppt worker config reads base url token and runtime profile", () => {
     process.env.PPT_WORKER_RUNTIME_PROFILE = "railway-linux"
     process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = "1500"
     process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = "120000"
+    process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS = "3"
+    process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS = "750"
 
     assert.equal(getPptWorkerBaseUrl(), "https://ppt-worker.example.com/")
     assert.equal(getPptWorkerInternalToken(), "secret-token")
     assert.equal(getPptWorkerRuntimeProfile(), "railway-linux")
     assert.equal(getPptWorkerPreviewPollIntervalMs(), 1500)
     assert.equal(getPptWorkerPreviewTimeoutMs(), 120000)
+    assert.equal(getPptWorkerPreviewMaxAttempts(), 3)
+    assert.equal(getPptWorkerPreviewRetryDelayMs(), 750)
   } finally {
     if (previousBaseUrl === undefined) {
       delete process.env.PPT_WORKER_BASE_URL
@@ -120,6 +128,18 @@ test("ppt worker config reads base url token and runtime profile", () => {
       delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
     } else {
       process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+
+    if (previousMaxAttempts === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_MAX_ATTEMPTS = previousMaxAttempts
+    }
+
+    if (previousRetryDelay === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_RETRY_DELAY_MS = previousRetryDelay
     }
   }
 })

@@ -8,6 +8,7 @@ function parseProviderId(value: string | null): AiEntryProviderId | null {
   const normalized = (value || "").trim().toLowerCase()
   if (normalized === "crazyrouter") return "crazyroute"
   if (
+    normalized === "deepseek" ||
     normalized === "pptoken" ||
     normalized === "openrouter" ||
     normalized === "aiberm" ||

@@ -11,6 +11,8 @@ import {
   resolvePptTemplateSelectionFromUserText,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
+import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
+import { getPptWorkerSupportedTemplateIds } from "@/lib/lead-tools/ppt-worker-capabilities"
 
 type PptPreviewToolLike = {
   execute?: (input: unknown, options?: unknown) => Promise<unknown> | unknown
@@ -27,6 +29,21 @@ const PPT_AUTO_PREVIEW_INTENT_PATTERN =
 
 function readOptionalText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function getEditablePptAllowedTemplateIds(input: {
+  agentId: string | null | undefined
+  executionContext?: "chat" | "workflow"
+}): string[] | undefined {
+  if (
+    input.agentId === "executive-ppt" &&
+    input.executionContext !== "workflow" &&
+    getLeadToolPptExecutionTransport() === "remote-worker"
+  ) {
+    return getPptWorkerSupportedTemplateIds()
+  }
+
+  return undefined
 }
 
 function buildPreviewFailureNotice(errorMessage: string | null, isZh: boolean) {
@@ -93,6 +110,10 @@ export async function maybeAutoRunPptPreview(input: {
     briefState: input.briefState,
     latestUserPrompt: input.latestUserPrompt,
   })
+  const allowedTemplateIds = getEditablePptAllowedTemplateIds({
+    agentId: input.agentId,
+    executionContext: input.executionContext,
+  })
   const recommendedTemplates =
     input.briefState?.readyForPreview
       ? buildPptRecommendedTemplateSummaries({
@@ -100,12 +121,16 @@ export async function maybeAutoRunPptPreview(input: {
           scenario: input.briefState.scenario!,
           language: input.briefState.language!,
           pageCount: input.briefState.pageCount,
-        })
+        }, allowedTemplateIds ? { allowedTemplateIds } : undefined)
       : []
-  const selectedTemplateId = resolvePptTemplateSelectionFromUserText(
+  const rawSelectedTemplateId = resolvePptTemplateSelectionFromUserText(
     input.latestUserPrompt,
     latestRecommendationContext,
   )
+  const selectedTemplateId =
+    rawSelectedTemplateId && (!allowedTemplateIds || allowedTemplateIds.some((templateId) => templateId === rawSelectedTemplateId))
+      ? rawSelectedTemplateId
+      : null
 
   if (
     input.agentId === "executive-ppt" &&
@@ -179,6 +204,20 @@ export async function maybeAutoRunPptPreview(input: {
   const isZh = input.isZh !== false
 
   if (previewResult && typeof previewResult === "object" && (previewResult as { ok?: unknown }).ok === false) {
+    const previewToolMessage = buildPptToolResultMessage({
+      toolName: "preview_ppt_deck",
+      result: previewResult,
+      origin: input.origin,
+      isZh,
+    })
+    if (previewToolMessage) {
+      return {
+        assistantMessage: [input.assistantMessage.trim(), previewToolMessage.trim()].filter(Boolean).join("\n\n").trim(),
+        autoPreviewExecuted: false,
+        previewResult,
+      }
+    }
+
     const errorMessage = readOptionalText(
       (previewResult as { error?: { message?: unknown } }).error?.message,
     )

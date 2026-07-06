@@ -2,6 +2,9 @@ import assert from "node:assert/strict"
 import { createRequire } from "node:module"
 import test from "node:test"
 
+import { buildResearchBriefContextMarker } from "./research-brief-context"
+import { buildPptTemplateRecommendationMessage } from "./ppt-tool-result-message"
+
 const require = createRequire(import.meta.url)
 const nodeModule = require("node:module") as {
   _load: (request: string, parent: unknown, isMain: boolean) => unknown
@@ -301,6 +304,52 @@ test("tool registry enables export for ppt assistant after preview context exist
   })
 })
 
+test("tool registry disables export for ppt assistant after preview invalidation", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "executive-ppt",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Use preview first, then wait for confirmation before export.",
+        toolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    latestUserPrompt: "继续导出。",
+    messageContents: [
+      "已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-session-stale\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+      "当前 PPT 预览已失效：\n<!-- ai-entry-ppt-preview-invalidated:{\"previewSessionId\":\"preview-session-stale\"} -->",
+    ],
+    auditContext: {
+      traceId: "trace-ppt-export-disabled-after-invalidation",
+      conversationId: "conv-ppt-export-disabled-after-invalidation",
+      agentId: "executive-ppt",
+    },
+  })
+
+  assert.deepEqual(result.selectedToolIds, ["web_search", "preview_ppt_deck"])
+})
+
 test("tool registry keeps export available for ppt assistant rebuild turns after a stale preview context exists", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
@@ -454,7 +503,9 @@ test("tool registry queues executive-ppt preview in the background for chat turn
     enabledToolNames: null,
     conversationScope: "consulting",
     latestUserPrompt: "用第一个模板开始生成",
-    messageContents: ["请生成可编辑 PPT"],
+    messageContents: [
+      "<!-- ai-entry-ppt-template-recommendations:{\"defaultTemplateId\":\"long-table\",\"templateIds\":[\"long-table\",\"neo-grid-bold\",\"broadside\",\"playful\"]} -->",
+    ],
     auditContext: {
       traceId: "trace-background-preview",
       conversationId: "conv-background-preview",
@@ -693,6 +744,121 @@ test("tool registry injects a research brief from web_search into preview_ppt_de
   })
 })
 
+test("tool registry restores a persisted research brief marker from message history", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "executive-ppt",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["preview_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Restore research context from history before preview.",
+        toolIds: ["preview_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    messageContents: [
+      [
+        "历史消息",
+        buildResearchBriefContextMarker({
+          topic: "Crimea military posture 2026",
+          keyFacts: ["Russia dispersed Black Sea Fleet assets after repeated strikes on Crimea bases."],
+          sourceNotes: ["Fleet posture update - https://example.com/fleet"],
+          implications: ["Need current evidence before generating a geopolitical PPT."],
+          rawSummary: [
+            "Topic: Crimea military posture 2026",
+            "Key facts:",
+            "- Russia dispersed Black Sea Fleet assets after repeated strikes on Crimea bases.",
+            "Implications:",
+            "- Need current evidence before generating a geopolitical PPT.",
+            "Source notes:",
+            "- Fleet posture update - https://example.com/fleet",
+          ].join("\n"),
+        }),
+        buildPptTemplateRecommendationMessage({
+          isZh: true,
+          selectedTemplateId: "swiss-grid",
+          recommendedTemplates: [
+            { rank: 1, templateId: "swiss-grid", templateLabel: "瑞士网格", styleName: "Neo-Grid Bold" },
+            { rank: 2, templateId: "government-blue", templateLabel: "政务蓝", styleName: "Long Table" },
+          ],
+        }) || "",
+      ].join("\n"),
+    ],
+    pptBriefState: {
+      topic: "克里米亚现状军事分析",
+      audience: "初级军事爱好者",
+      goal: "课堂讲解",
+      scenario: "training",
+      language: "zh-CN",
+      pageCount: 12,
+      tone: "简洁、专业、结构化",
+      mustInclude: [],
+      missingFields: [],
+      readyForPreview: true,
+      suggestedValues: {
+        audience: "初级军事爱好者",
+        goal: "课堂讲解",
+        scenario: "training",
+        language: "zh-CN",
+        pageCount: 12,
+        tone: "简洁、专业、结构化",
+      },
+    },
+    auditContext: {
+      traceId: "trace-history-research",
+      conversationId: "conv-history-research",
+      agentId: "executive-ppt",
+    },
+  })
+
+  const tools = result.selectedTools as unknown as Record<
+    string,
+    { execute: (input: Record<string, unknown>) => Promise<unknown> }
+  >
+  await tools.preview_ppt_deck.execute({
+    prompt: "按推荐模板继续生成克里米亚课堂 PPT 预览。",
+    templateMode: "single-template",
+    templateId: "swiss-grid",
+  })
+
+  const queuedInput = enqueuedTasks.at(-1)?.payload?.input as Record<string, unknown> | undefined
+  assert.ok(queuedInput)
+  assert.deepEqual(queuedInput?.researchBrief, {
+    topic: "Crimea military posture 2026",
+    keyFacts: ["Russia dispersed Black Sea Fleet assets after repeated strikes on Crimea bases."],
+    sourceNotes: ["Fleet posture update - https://example.com/fleet"],
+    implications: ["Need current evidence before generating a geopolitical PPT."],
+    rawSummary: [
+      "Topic: Crimea military posture 2026",
+      "Key facts:",
+      "- Russia dispersed Black Sea Fleet assets after repeated strikes on Crimea bases.",
+      "Implications:",
+      "- Need current evidence before generating a geopolitical PPT.",
+      "Source notes:",
+      "- Fleet posture update - https://example.com/fleet",
+    ].join("\n"),
+  })
+})
+
 test("tool registry blocks preview_ppt_deck when the ppt brief is incomplete", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
@@ -846,6 +1012,88 @@ test("tool registry blocks editable ppt preview until a recommended template is 
   assert.equal(recommendedTemplates.length, 4)
 })
 
+test("tool registry ignores model-supplied editable ppt template before user selection", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "executive-ppt",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["preview_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Recommend templates first, then preview after selection.",
+        toolIds: ["preview_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    latestUserPrompt: "可以",
+    pptBriefState: {
+      topic: "克里米亚现状军事分析",
+      audience: "初级军事爱好者",
+      goal: "课堂讲解",
+      scenario: "training",
+      language: "zh-CN",
+      pageCount: 12,
+      tone: "简洁、专业、结构化",
+      mustInclude: [],
+      missingFields: [],
+      readyForPreview: true,
+      suggestedValues: {
+        audience: "初级军事爱好者",
+        goal: "课堂讲解",
+        scenario: "training",
+        language: "zh-CN",
+        pageCount: 12,
+        tone: "简洁、专业、结构化",
+      },
+    },
+    messageContents: [],
+    auditContext: {
+      traceId: "trace-model-template-ignored",
+      conversationId: "conv-model-template-ignored",
+      agentId: "executive-ppt",
+    },
+  })
+
+  const tools = result.selectedTools as unknown as Record<
+    string,
+    { execute: (input: Record<string, unknown>) => Promise<Record<string, unknown>> }
+  >
+  const previewResult = await tools.preview_ppt_deck.execute({
+    prompt: "可以",
+    templateMode: "auto-4",
+    templateId: "neo-grid-bold",
+  })
+
+  assert.equal(previewInput, null)
+  assert.equal(enqueuedTasks.length, 0)
+  assert.equal(previewResult.ok, false)
+  assert.deepEqual(previewResult.error, {
+    code: "ppt_template_selection_required",
+    message: "Select one recommended template before generating the editable PPT preview.",
+  })
+  const recommendedTemplates = previewResult.recommendedTemplates as unknown[]
+  assert.equal(Array.isArray(recommendedTemplates), true)
+  assert.equal(recommendedTemplates.length, 4)
+})
+
 test("tool registry injects the user-selected recommended template into editable ppt preview", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
@@ -914,6 +1162,8 @@ test("tool registry injects the user-selected recommended template into editable
   >
   const previewResult = await tools.preview_ppt_deck.execute({
     prompt: "用第2个模板生成可编辑 PPT 预览。",
+    templateMode: "single-template",
+    templateId: "neo-grid-bold",
   })
 
   assert.equal(previewResult.ok, true)

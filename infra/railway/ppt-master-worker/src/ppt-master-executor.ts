@@ -1,15 +1,21 @@
 import { randomUUID } from "node:crypto"
 
-import {
-  generateLeadToolPptPreviewWithFallback,
-} from "../../../../lib/lead-tools/generation-ppt-fixed.js"
-import {
-  exportPptMasterSessionVariant,
-} from "../../../../lib/lead-tools/ppt-master-runtime.js"
+import * as generationModule from "../../../../lib/lead-tools/generation-ppt-fixed.js"
+import * as pptMasterRuntimeModule from "../../../../lib/lead-tools/ppt-master-runtime.js"
 import type { PptPreviewRequest } from "../../../../lib/lead-tools/ppt-preview-data-fixed.js"
-import { toBase64 } from "../../../../lib/utils/binary.js"
+import * as binaryModule from "../../../../lib/utils/binary.js"
 
 import type { ExportRequest, PreviewRequest } from "./types.js"
+
+const generation = ("default" in generationModule ? generationModule.default : generationModule) as typeof generationModule
+const pptMasterRuntime = (
+  "default" in pptMasterRuntimeModule ? pptMasterRuntimeModule.default : pptMasterRuntimeModule
+) as typeof pptMasterRuntimeModule
+const binary = ("default" in binaryModule ? binaryModule.default : binaryModule) as typeof binaryModule
+
+const { generateLeadToolPptPreviewWithFallback } = generation
+const { exportPptMasterSessionVariant } = pptMasterRuntime
+const { toBase64 } = binary
 
 export type PreviewJobResult = {
   previewSessionId: string

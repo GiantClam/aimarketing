@@ -1,10 +1,13 @@
 import {
   getPptWorkerBaseUrl,
   getPptWorkerInternalToken,
+  getPptWorkerPreviewMaxAttempts,
   getPptWorkerPreviewPollIntervalMs,
+  getPptWorkerPreviewRetryDelayMs,
   getPptWorkerPreviewTimeoutMs,
   getPptWorkerRuntimeProfile,
 } from "@/lib/lead-tools/config"
+import { isPptWorkerTemplateSupported } from "@/lib/lead-tools/ppt-worker-capabilities"
 import type {
   PptWorkerExportRequest,
   PptWorkerModelValue,
@@ -69,6 +72,77 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function buildPreviewRequestBody(input: Omit<PptWorkerPreviewRequest, "runtimeProfile">) {
+  if (
+    input.templateMode === "single-template" &&
+    input.templateId &&
+    !isPptWorkerTemplateSupported(input.templateId)
+  ) {
+    throw new Error(`ppt_worker_template_unsupported:${input.templateId}`)
+  }
+
+  return {
+    ...input,
+    model: normalizePptWorkerPreviewModel(input.model),
+    runtimeProfile: getPptWorkerRuntimeProfile(),
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "string" && error.trim()) return error.trim()
+  return "ppt_worker_preview_failed"
+}
+
+function getWorkerPayloadErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return fallback
+
+  const record = payload as {
+    message?: unknown
+    issues?: unknown
+  }
+  const issue = Array.isArray(record.issues)
+    ? record.issues.find((item) => {
+        if (!item || typeof item !== "object") return false
+        const path = (item as { path?: unknown }).path
+        return Array.isArray(path) && path.includes("templateId")
+      })
+    : null
+
+  if (issue && typeof issue === "object") {
+    const received = (issue as { received?: unknown }).received
+    if (typeof received === "string" && received.trim()) {
+      return `ppt_worker_template_unsupported:${received.trim()}`
+    }
+  }
+
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message.trim()
+  }
+
+  return fallback
+}
+
+function shouldRetryPptWorkerPreviewError(message: string) {
+  const normalized = message.toLowerCase()
+
+  return (
+    normalized.includes("fetch failed") ||
+    normalized.includes("network") ||
+    normalized.includes("econnreset") ||
+    normalized.includes("etimedout") ||
+    normalized.includes("und_err_connect_timeout") ||
+    normalized.includes("ppt_master_runtime_unavailable") ||
+    normalized.includes("ppt_master_repo_missing") ||
+    normalized.includes("ppt_master_python_missing") ||
+    normalized.includes("ppt_master_script_failed") ||
+    normalized.includes("worker_internal_error") ||
+    normalized.includes("ppt_worker_http_502") ||
+    normalized.includes("ppt_worker_http_503") ||
+    normalized.includes("ppt_worker_http_504")
+  )
+}
+
 async function requestWorker<T>(path: string, options?: { method?: "GET" | "POST"; body?: unknown }): Promise<T> {
   const baseUrl = normalizeWorkerBaseUrl(getPptWorkerBaseUrl())
 
@@ -86,26 +160,16 @@ async function requestWorker<T>(path: string, options?: { method?: "GET" | "POST
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const message =
-      payload && typeof payload === "object" && "message" in payload && typeof payload.message === "string"
-        ? payload.message
-        : `ppt_worker_http_${response.status}`
-    throw new Error(message)
+    throw new Error(getWorkerPayloadErrorMessage(payload, `ppt_worker_http_${response.status}`))
   }
 
   return payload as T
 }
 
-export async function requestPptWorkerPreview(
-  input: Omit<PptWorkerPreviewRequest, "runtimeProfile">,
-) {
+async function submitPptWorkerPreviewAndPoll(input: Omit<PptWorkerPreviewRequest, "runtimeProfile">) {
   const submitted = await requestWorker<PptWorkerPreviewSubmitResponse>("/preview", {
     method: "POST",
-    body: {
-      ...input,
-      model: normalizePptWorkerPreviewModel(input.model),
-      runtimeProfile: getPptWorkerRuntimeProfile(),
-    },
+    body: buildPreviewRequestBody(input),
   })
 
   const deadline = Date.now() + getPptWorkerPreviewTimeoutMs()
@@ -135,15 +199,41 @@ export async function requestPptWorkerPreview(
   throw new Error("ppt_worker_preview_timeout")
 }
 
+export async function requestPptWorkerPreview(
+  input: Omit<PptWorkerPreviewRequest, "runtimeProfile">,
+) {
+  const maxAttempts = getPptWorkerPreviewMaxAttempts()
+  const retryDelayMs = getPptWorkerPreviewRetryDelayMs()
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await submitPptWorkerPreviewAndPoll(input)
+    } catch (error) {
+      const message = getErrorMessage(error)
+
+      if (attempt >= maxAttempts || !shouldRetryPptWorkerPreviewError(message)) {
+        throw error
+      }
+
+      console.warn("ppt-worker.preview.retry", {
+        requestId: input.requestId,
+        attempt,
+        maxAttempts,
+        message,
+      })
+      await sleep(retryDelayMs)
+    }
+  }
+
+  throw new Error("ppt_worker_preview_failed")
+}
+
 export async function requestPptWorkerPreviewSubmit(
   input: Omit<PptWorkerPreviewRequest, "runtimeProfile">,
 ) {
   return requestWorker<PptWorkerPreviewSubmitResponse>("/preview", {
     method: "POST",
-    body: {
-      ...input,
-      runtimeProfile: getPptWorkerRuntimeProfile(),
-    },
+    body: buildPreviewRequestBody(input),
   })
 }
 

@@ -1,3 +1,5 @@
+import { stripResearchBriefContextMarkers } from "@/lib/ai-entry/research-brief-context"
+
 type ExportPptDeckResult = {
   ok?: unknown
   previewSessionId?: unknown
@@ -43,6 +45,10 @@ export type PptPreviewInvalidationContext = {
 export type PptTemplateRecommendationContext = {
   defaultTemplateId: string | null
   templateIds: string[]
+  templates?: Array<{
+    templateId: string
+    labels: string[]
+  }>
 }
 
 export type PptConversationState = {
@@ -99,6 +105,27 @@ function buildPptTemplateRecommendationContextMarker(context: PptTemplateRecomme
   return `${PPT_TEMPLATE_RECOMMENDATION_CONTEXT_PREFIX}${JSON.stringify(context)} ${PPT_PREVIEW_CONTEXT_SUFFIX}`
 }
 
+export function isQueuedPptBackgroundStatusMessage(content: string | null | undefined) {
+  const normalized = stripPptHiddenContextMarkers(content).trim()
+  if (!normalized) return false
+
+  const zhLines = normalized.split("\n").map((line) => line.trim()).filter(Boolean)
+  if (
+    zhLines[0] === "已切换为后台生成：" &&
+    zhLines.some((line) => line.startsWith("- 任务 ID:")) &&
+    zhLines.some((line) => line.startsWith("- 状态:"))
+  ) {
+    return true
+  }
+
+  const enLines = normalized.split("\n").map((line) => line.trim()).filter(Boolean)
+  return (
+    enLines[0] === "Moved to background generation:" &&
+    enLines.some((line) => line.startsWith("- Task ID:")) &&
+    enLines.some((line) => line.startsWith("- Status:"))
+  )
+}
+
 function parsePreviewVariants(value: unknown) {
   return Array.isArray(value)
     ? value
@@ -133,6 +160,14 @@ function parseRecommendedTemplates(value: unknown) {
     : []
 }
 
+function normalizeTemplateLabels(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((item) => normalizeOptionalText(item))
+        .filter((item): item is string => Boolean(item))
+    : []
+}
+
 function normalizePptTemplateRecommendationContext(value: unknown): PptTemplateRecommendationContext | null {
   const parsed = value as PptTemplateRecommendationContext
   if (!parsed || !Array.isArray(parsed.templateIds)) {
@@ -147,12 +182,26 @@ function normalizePptTemplateRecommendationContext(value: unknown): PptTemplateR
     return null
   }
 
+  const templates = Array.isArray(parsed.templates)
+    ? parsed.templates
+        .map((item) => {
+          const templateId = normalizeOptionalText((item as { templateId?: unknown } | null)?.templateId)
+          if (!templateId || !templateIds.includes(templateId)) return null
+          return {
+            templateId,
+            labels: normalizeTemplateLabels((item as { labels?: unknown }).labels),
+          }
+        })
+        .filter((item): item is { templateId: string; labels: string[] } => Boolean(item))
+    : undefined
+
   return {
     defaultTemplateId:
       typeof parsed.defaultTemplateId === "string" && parsed.defaultTemplateId.trim()
         ? parsed.defaultTemplateId.trim()
         : templateIds[0] ?? null,
     templateIds,
+    ...(templates && templates.length > 0 ? { templates } : {}),
   }
 }
 
@@ -171,43 +220,21 @@ export function resolvePptTemplateSelectionFromUserText(
   context: PptTemplateRecommendationContext | null | undefined,
 ) {
   const normalized = normalizeOptionalText(userText)?.toLowerCase() ?? ""
-  if (!normalized) return null
+  if (!normalized || !context?.templateIds.length) return null
 
-  const explicitTemplatePatterns: Array<{ templateId: string; patterns: RegExp[] }> = [
-    {
-      templateId: "long-table",
-      patterns: [/\blong[\s-]?table\b/u, /长桌纪要/u, /长桌/u],
-    },
-    {
-      templateId: "playful",
-      patterns: [/\bplayful\b/u, /轻快玩味/u, /轻快/u],
-    },
-    {
-      templateId: "broadside",
-      patterns: [/\bbroadside\b/u, /告示海报/u, /海报/u],
-    },
-    {
-      templateId: "neo-grid-bold",
-      patterns: [/\bneo[\s-]?grid(?:\s+bold)?\b/u, /新网格粗体/u, /网格粗体/u],
-    },
-  ]
-
-  for (const item of explicitTemplatePatterns) {
-    if (item.patterns.some((pattern) => pattern.test(normalized))) {
-      return item.templateId
+  for (const templateId of context.templateIds) {
+    const candidate = templateId.trim().toLowerCase()
+    if (candidate && (normalized === candidate || normalized.includes(candidate))) {
+      return templateId
     }
   }
 
-  const ordinalMap: Array<{ pattern: RegExp; rank: number }> = [
-    { pattern: /(?:第\s*1\s*(?:个|号|款|种|版|模板)?|template\s*1|option\s*1|#1|\bfirst\b)/u, rank: 1 },
-    { pattern: /(?:第\s*2\s*(?:个|号|款|种|版|模板)?|template\s*2|option\s*2|#2|\bsecond\b)/u, rank: 2 },
-    { pattern: /(?:第\s*3\s*(?:个|号|款|种|版|模板)?|template\s*3|option\s*3|#3|\bthird\b)/u, rank: 3 },
-    { pattern: /(?:第\s*4\s*(?:个|号|款|种|版|模板)?|template\s*4|option\s*4|#4|\bfourth\b)/u, rank: 4 },
-  ]
-
-  for (const item of ordinalMap) {
-    if (item.pattern.test(normalized)) {
-      return context?.templateIds[item.rank - 1] ?? null
+  for (const template of context.templates || []) {
+    for (const label of template.labels) {
+      const candidate = label.trim().toLowerCase()
+      if (candidate && (normalized === candidate || normalized.includes(candidate))) {
+        return template.templateId
+      }
     }
   }
 
@@ -227,6 +254,12 @@ export function buildPptTemplateRecommendationMessage(input: {
   const context = buildPptTemplateRecommendationContextMarker({
     defaultTemplateId: selectedTemplateId ?? recommendedTemplates[0]?.templateId ?? null,
     templateIds: recommendedTemplates.map((item) => item.templateId),
+    templates: recommendedTemplates.map((item) => ({
+      templateId: item.templateId,
+      labels: [item.templateLabel, item.styleName, item.templateId].filter((label): label is string =>
+        Boolean(label && label.trim()),
+      ),
+    })),
   })
   const lines = [
     isZh ? "已为这次需求推荐 4 个模板：" : "Recommended 4 templates for this request:",
@@ -236,8 +269,8 @@ export function buildPptTemplateRecommendationMessage(input: {
       return `- ${item.rank ?? "?"}. ${label} (${item.templateId})`
     }),
     isZh
-      ? "- 下一步: 直接回复模板编号或模板名称，我会按你选的模板生成可编辑 PPT 预览。"
-      : "- Next step: reply with a template number or template name and I will generate the editable PPT preview with that template.",
+      ? "- 下一步: 直接回复模板 ID 或模板名称，我会按你选的模板生成可编辑 PPT 预览。"
+      : "- Next step: reply with a template ID or template name and I will generate the editable PPT preview with that template.",
     context,
   ]
 
@@ -296,8 +329,21 @@ export function buildPptToolResultMessage(input: {
 }) {
   if (input.toolName === "preview_ppt_deck" && input.result && typeof input.result === "object") {
     const result = input.result as PreviewPptDeckResult
-    if (result.ok === false) return null
     const isZh = input.isZh !== false
+    if (result.ok === false) {
+      const recommendedTemplates = parseRecommendedTemplates(
+        (result as { recommendedTemplates?: unknown }).recommendedTemplates,
+      )
+      if (recommendedTemplates.length > 0) {
+        return buildPptTemplateRecommendationMessage({
+          title: normalizeOptionalText((result as { title?: unknown }).title),
+          recommendedTemplates,
+          selectedTemplateId: null,
+          isZh,
+        })
+      }
+      return null
+    }
     const backgroundStatus = normalizeOptionalText((result as { status?: unknown }).status)
     const backgroundTaskId = normalizeOptionalText(
       (result as { backgroundTask?: { taskId?: unknown } }).backgroundTask?.taskId,
@@ -425,10 +471,19 @@ function extractLatestMarker<T>(
   prefix: string,
   parse: (value: unknown) => T | null,
 ) {
-  const normalized = typeof content === "string" ? content : ""
-  if (!normalized) return null
+  const contexts = extractMarkers(content, prefix, parse)
+  return contexts[contexts.length - 1] ?? null
+}
 
-  let lastContext: T | null = null
+function extractMarkers<T>(
+  content: string | null | undefined,
+  prefix: string,
+  parse: (value: unknown) => T | null,
+) {
+  const normalized = typeof content === "string" ? content : ""
+  if (!normalized) return []
+
+  const contexts: T[] = []
   let searchIndex = 0
 
   while (searchIndex < normalized.length) {
@@ -441,13 +496,42 @@ function extractLatestMarker<T>(
     searchIndex = end + PPT_PREVIEW_CONTEXT_SUFFIX.length
 
     try {
-      lastContext = parse(JSON.parse(rawPayload || "{}")) ?? lastContext
+      const parsed = parse(JSON.parse(rawPayload || "{}"))
+      if (parsed) contexts.push(parsed)
     } catch {
       continue
     }
   }
 
-  return lastContext
+  return contexts
+}
+
+function stripMarkers(content: string | null | undefined, prefix: string) {
+  const normalized = typeof content === "string" ? content : ""
+  if (!normalized) return ""
+
+  let output = ""
+  let searchIndex = 0
+  let didStrip = false
+
+  while (searchIndex < normalized.length) {
+    const start = normalized.indexOf(prefix, searchIndex)
+    if (start < 0) {
+      output += normalized.slice(searchIndex)
+      break
+    }
+    output += normalized.slice(searchIndex, start)
+    const jsonStart = start + prefix.length
+    const end = normalized.indexOf(PPT_PREVIEW_CONTEXT_SUFFIX, jsonStart)
+    if (end < 0) {
+      output += normalized.slice(start)
+      break
+    }
+    didStrip = true
+    searchIndex = end + PPT_PREVIEW_CONTEXT_SUFFIX.length
+  }
+
+  return didStrip ? output.replace(/\n{3,}/g, "\n\n").trim() : normalized
 }
 
 function normalizePptPreviewContext(value: unknown): PptPreviewContext | null {
@@ -516,6 +600,29 @@ export function extractLatestPptPreviewInvalidationContext(
     PPT_PREVIEW_INVALIDATION_CONTEXT_PREFIX,
     normalizePptPreviewInvalidationContext,
   )
+}
+
+export function extractPptTemplateRecommendationContexts(
+  content: string | null | undefined,
+): PptTemplateRecommendationContext[] {
+  return extractMarkers(
+    content,
+    PPT_TEMPLATE_RECOMMENDATION_CONTEXT_PREFIX,
+    normalizePptTemplateRecommendationContext,
+  )
+}
+
+export function stripPptTemplateRecommendationContextMarkers(content: string | null | undefined) {
+  return stripMarkers(content, PPT_TEMPLATE_RECOMMENDATION_CONTEXT_PREFIX)
+}
+
+export function stripPptHiddenContextMarkers(content: string | null | undefined) {
+  return stripResearchBriefContextMarkers([
+    PPT_PREVIEW_CONTEXT_PREFIX,
+    PPT_EXPORT_CONTEXT_PREFIX,
+    PPT_PREVIEW_INVALIDATION_CONTEXT_PREFIX,
+    PPT_TEMPLATE_RECOMMENDATION_CONTEXT_PREFIX,
+  ].reduce((current, prefix) => stripMarkers(current, prefix), content ?? ""))
 }
 
 export function resolveLatestPptConversationState(messageContents: string[] | undefined): PptConversationState {
