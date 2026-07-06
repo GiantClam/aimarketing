@@ -216,3 +216,35 @@ test("does not duplicate background assistant completion when refreshed history 
     persisted,
   )
 })
+
+test("merges background assistant parts into an already persisted completion message", () => {
+  const persisted: TestMessage[] = [
+    {
+      role: "assistant",
+      content:
+        "已生成 PPT 预览。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-401\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+    },
+  ]
+  const backgroundAssistantMessage: TestMessage = {
+    role: "assistant",
+    content:
+      "已生成 PPT 预览。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-401\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+    parts: [{ type: "report", id: "report:preview-401" }],
+  }
+
+  assert.deepEqual(
+    resolveAiEntryCompletedConversationMessages({
+      currentMessages: [],
+      persistedMessages: persisted,
+      backgroundAssistantMessage,
+    }),
+    [
+      {
+        role: "assistant",
+        content:
+          "已生成 PPT 预览。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-401\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+        parts: [{ type: "report", id: "report:preview-401" }],
+      },
+    ],
+  )
+})

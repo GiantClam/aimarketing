@@ -4,7 +4,12 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { getPptPreviewSessionDeck, getPptPreviewSessionRootDir, storePptPreviewSessionDeck } from "./ppt-preview-session-store"
+import {
+  getPptPreviewSessionDeck,
+  getPptPreviewSessionRootDir,
+  setConfiguredPptPreviewSessionStoreForTests,
+  storePptPreviewSessionDeck,
+} from "./ppt-preview-session-store"
 
 const tempRoot = path.join(os.tmpdir(), `aimarketing-ppt-preview-test-${Date.now()}`)
 
@@ -72,6 +77,7 @@ test.before(() => {
 })
 
 test.after(async () => {
+  setConfiguredPptPreviewSessionStoreForTests(null)
   delete process.env.LEAD_TOOLS_PPT_SESSION_ROOT_DIR
   await fs.rm(tempRoot, { recursive: true, force: true })
 })
@@ -89,4 +95,37 @@ test("preview session store persists and reloads a frontend slides deck", async 
 
 test("preview session store prefers an explicit root directory override", () => {
   assert.equal(getPptPreviewSessionRootDir(), tempRoot)
+})
+
+test("preview session store can use a configured non-filesystem backend", async () => {
+  const persisted = new Map<string, typeof sampleDeck & { previewSessionId: string }>()
+
+  setConfiguredPptPreviewSessionStoreForTests({
+    async saveSession(session) {
+      persisted.set(session.sessionId, session.deck as typeof sampleDeck & { previewSessionId: string })
+    },
+    async getSession(sessionId) {
+      const deck = persisted.get(sessionId)
+      if (!deck) return null
+      return {
+        sessionId,
+        createdAt: deck.generatedAt,
+        deck,
+      }
+    },
+  })
+
+  try {
+    const storedDeck = await storePptPreviewSessionDeck({
+      ...sampleDeck,
+      previewSessionId: "shared-preview-session",
+    })
+
+    const reloadedDeck = await getPptPreviewSessionDeck("shared-preview-session")
+    assert.equal(storedDeck.previewSessionId, "shared-preview-session")
+    assert.equal(reloadedDeck.previewSessionId, "shared-preview-session")
+    assert.equal(reloadedDeck.variants[0]?.preview?.htmlDocument?.html, "<!DOCTYPE html><html><body>preview</body></html>")
+  } finally {
+    setConfiguredPptPreviewSessionStoreForTests(null)
+  }
 })

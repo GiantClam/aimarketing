@@ -13,6 +13,28 @@ type StoredPreviewSession = {
   deck: PptPreviewDeck
 }
 
+export interface PptPreviewSessionStore {
+  saveSession(session: StoredPreviewSession): Promise<void>
+  getSession(sessionId: string): Promise<StoredPreviewSession | null>
+}
+
+type GlobalWithPptPreviewSessionStoreState = typeof globalThis & {
+  __aimarketingPptPreviewSessionStorePromise__?: Promise<PptPreviewSessionStore> | null
+}
+
+const previewSessionStoreState = globalThis as GlobalWithPptPreviewSessionStoreState
+let configuredStorePromise = previewSessionStoreState.__aimarketingPptPreviewSessionStorePromise__ ?? null
+let testStoreOverride: PptPreviewSessionStore | null = null
+
+function hasDatabaseConfig() {
+  return Boolean(
+    process.env.AI_MARKETING_DB_POSTGRES_URL?.trim() ||
+      process.env.AI_MARKETING_DB_POSTGRES_URL_NON_POOLING?.trim() ||
+      process.env.DATABASE_URL?.trim() ||
+      process.env.DATABASE_URL_UNPOOLED?.trim(),
+  )
+}
+
 export function getPptPreviewSessionRootDir() {
   const explicitRoot = process.env.LEAD_TOOLS_PPT_SESSION_ROOT_DIR?.trim()
   if (explicitRoot) return explicitRoot
@@ -22,6 +44,27 @@ export function getPptPreviewSessionRootDir() {
   }
 
   return path.join(os.tmpdir(), "aimarketing-ppt-preview-sessions")
+}
+
+export function resolvePptPreviewSessionStoreMode() {
+  const explicit = process.env.PPT_PREVIEW_SESSION_STORE?.trim().toLowerCase()
+  if (explicit === "filesystem" || explicit === "postgres") {
+    return explicit
+  }
+
+  if (process.env.NODE_ENV === "test") {
+    return "filesystem" as const
+  }
+
+  if (process.env.RAILWAY_ENVIRONMENT?.trim()) {
+    return "postgres" as const
+  }
+
+  if (hasDatabaseConfig()) {
+    return "postgres" as const
+  }
+
+  return "filesystem" as const
 }
 
 function getSessionDir(sessionId: string) {
@@ -59,35 +102,92 @@ async function cleanupExpiredSessions() {
   }
 }
 
-export async function storePptPreviewSessionDeck(deck: PptPreviewDeck) {
-  await cleanupExpiredSessions()
+function createFilesystemPptPreviewSessionStore(): PptPreviewSessionStore {
+  return {
+    async saveSession(session) {
+      await cleanupExpiredSessions()
+      const manifestPath = getManifestPath(session.sessionId)
+      await fs.mkdir(path.dirname(manifestPath), { recursive: true })
+      await fs.writeFile(manifestPath, JSON.stringify(session, null, 2), "utf8")
+    },
+    async getSession(sessionId) {
+      try {
+        const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
+        return JSON.parse(manifest) as StoredPreviewSession
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+          return null
+        }
+        throw error
+      }
+    },
+  }
+}
 
+async function createConfiguredStore() {
+  const mode = resolvePptPreviewSessionStoreMode()
+  if (mode === "filesystem") {
+    return createFilesystemPptPreviewSessionStore()
+  }
+
+  if (!hasDatabaseConfig()) {
+    throw new Error("ppt_preview_session_store_db_unavailable")
+  }
+
+  const { createPostgresPptPreviewSessionStore } = await import("@/lib/platform/ppt-preview-session-store")
+  return createPostgresPptPreviewSessionStore()
+}
+
+async function getConfiguredPptPreviewSessionStore() {
+  if (testStoreOverride) {
+    return testStoreOverride
+  }
+
+  if (!configuredStorePromise) {
+    configuredStorePromise = createConfiguredStore().catch((error) => {
+      configuredStorePromise = null
+      previewSessionStoreState.__aimarketingPptPreviewSessionStorePromise__ = null
+      throw error
+    })
+    previewSessionStoreState.__aimarketingPptPreviewSessionStorePromise__ = configuredStorePromise
+  }
+
+  return configuredStorePromise
+}
+
+export function setConfiguredPptPreviewSessionStoreForTests(store: PptPreviewSessionStore | null) {
+  configuredStorePromise = null
+  previewSessionStoreState.__aimarketingPptPreviewSessionStorePromise__ = null
+  testStoreOverride = store
+}
+
+function resolveStoredPreviewSession(deck: PptPreviewDeck): StoredPreviewSession {
   const sessionId = deck.previewSessionId ?? randomUUID()
-  const manifestPath = getManifestPath(sessionId)
-  const session: StoredPreviewSession = {
+  const createdAt =
+    typeof deck.generatedAt === "string" && deck.generatedAt.trim() ? deck.generatedAt : new Date().toISOString()
+
+  return {
     sessionId,
-    createdAt: new Date().toISOString(),
+    createdAt,
     deck: {
       ...deck,
       previewSessionId: sessionId,
     },
   }
+}
 
-  await fs.mkdir(path.dirname(manifestPath), { recursive: true })
-  await fs.writeFile(manifestPath, JSON.stringify(session, null, 2), "utf8")
-
+export async function storePptPreviewSessionDeck(deck: PptPreviewDeck) {
+  const store = await getConfiguredPptPreviewSessionStore()
+  const session = resolveStoredPreviewSession(deck)
+  await store.saveSession(session)
   return session.deck
 }
 
 export async function getPptPreviewSessionDeck(sessionId: string) {
-  try {
-    const manifest = await fs.readFile(getManifestPath(sessionId), "utf8")
-    const payload = JSON.parse(manifest) as StoredPreviewSession
-    return payload.deck
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") {
-      throw new Error(`missing_preview_session:${sessionId}`)
-    }
-    throw error
+  const store = await getConfiguredPptPreviewSessionStore()
+  const session = await store.getSession(sessionId)
+  if (!session) {
+    throw new Error(`missing_preview_session:${sessionId}`)
   }
+  return session.deck
 }

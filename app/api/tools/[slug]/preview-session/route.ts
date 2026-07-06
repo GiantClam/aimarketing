@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { requireAuthenticatedUser } from "@/lib/auth/session"
-import { getPptMasterSessionDeck } from "@/lib/lead-tools/ppt-master-runtime"
 import { getPptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
 
 type ToolRouteContext = {
@@ -28,7 +27,7 @@ export async function GET(request: NextRequest, context: ToolRouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
-    const deck = await getPptPreviewSessionDeck(previewSessionId).catch(() => getPptMasterSessionDeck(previewSessionId))
+    const deck = await getPptPreviewSessionDeck(previewSessionId)
     return NextResponse.json(
       {
         ok: true,

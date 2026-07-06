@@ -96,6 +96,7 @@ import {
   isQueuedPptBackgroundStatusMessage,
   stripPptHiddenContextMarkers,
 } from "@/lib/ai-entry/ppt-tool-result-message"
+import { buildBackgroundAssistantCompletionMessage } from "@/lib/ai-entry/background-assistant-message"
 import { dispatchAiEntrySidebarRefresh } from "@/lib/ai-entry/sidebar-refresh-event"
 import {
   formatMessageTime,
@@ -661,35 +662,6 @@ function dedupeStringList(values: Array<string | null | undefined>) {
     result.push(normalized)
   }
   return result
-}
-
-function buildBackgroundAssistantCompletionMessage(input: {
-  pendingTaskId: string
-  assistantText: string
-  toolName: string
-  toolResult: NonNullable<NonNullable<ChatStreamApiResponse["data"]>["result"]> | null
-  resultParts: MessagePart[]
-  isZh: boolean
-}): ChatMessage | null {
-  const fallbackContent =
-    input.assistantText ||
-    buildPptToolResultMessage({
-      toolName: input.toolName,
-      result: input.toolResult,
-      isZh: input.isZh,
-    })?.trim() ||
-    ""
-
-  if (!fallbackContent && input.resultParts.length === 0) {
-    return null
-  }
-
-  return {
-    id: `assistant-background-${input.pendingTaskId}`,
-    role: "assistant",
-    content: fallbackContent,
-    parts: input.resultParts.length > 0 ? input.resultParts : undefined,
-  }
 }
 
 function isQueuedBackgroundPreviewResult(input: {
@@ -1819,9 +1791,7 @@ export function AiEntryWorkspace({
 
         setMessages(resolvedMessages)
         setConversationState(restoredConversationState)
-        if (resolvedMessages === restored) {
-          clearPendingConversationMessages(initialConversationId)
-        }
+        savePendingConversationMessages(initialConversationId, resolvedMessages)
 
         if (pendingTask) {
           savePendingAssistantTask({

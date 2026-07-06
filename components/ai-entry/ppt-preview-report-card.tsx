@@ -15,6 +15,10 @@ import {
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import type { PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import {
+  resolvePptPreviewDisplayTitle,
+  resolvePptPreviewVariantDisplayLabel,
+} from "@/lib/ai-entry/ppt-preview-display"
 import { cn } from "@/lib/utils"
 
 type PptPreviewReportCardProps = {
@@ -178,6 +182,9 @@ export function PptPreviewReportCard({
 
   const selectedVariant =
     visibleVariants.find((variant) => variant.key === selectedVariantKey) || visibleVariants[0] || null
+  const displayTitle = resolvePptPreviewDisplayTitle(deck?.title, deck?.language || "zh-CN")
+  const displayVariantLabel =
+    resolvePptPreviewVariantDisplayLabel(deck, selectedVariant) || copy.loading
   const slides = selectedVariant?.preview?.slides || []
   const currentSlideCount = slides.length
   const safeSlideIndex = currentSlideCount > 0 ? Math.min(slideIndex, currentSlideCount - 1) : 0
@@ -308,10 +315,8 @@ export function PptPreviewReportCard({
         </button>
         <div className="artifact-meta">
           <div className="artifact-eyebrow">{copy.title}</div>
-          <div className="artifact-title-text">{deck?.title || copy.title}</div>
-          <div className="artifact-subtitle">
-            {selectedVariant?.name || selectedVariant?.key || copy.loading}
-          </div>
+          <div className="artifact-title-text">{displayTitle}</div>
+          <div className="artifact-subtitle">{displayVariantLabel}</div>
 
           {visibleVariants.length > 1 ? (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -332,7 +337,7 @@ export function PptPreviewReportCard({
                         : "border-border bg-background text-foreground hover:border-primary/40",
                     )}
                   >
-                    {variant.name || `${copy.variant} ${variant.key}`}
+                    {resolvePptPreviewVariantDisplayLabel(deck, variant) || `${copy.variant} ${variant.key}`}
                   </button>
                 )
               })}
@@ -437,10 +442,8 @@ export function PptPreviewReportCard({
           <div className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3 pr-10">
               <div>
-                <div className="artifact-title-text">{deck?.title || copy.title}</div>
-                <div className="artifact-subtitle">
-                  {selectedVariant?.name || selectedVariant?.key || copy.title}
-                </div>
+                <div className="artifact-title-text">{displayTitle}</div>
+                <div className="artifact-subtitle">{displayVariantLabel || copy.title}</div>
               </div>
               <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                 <Eye className="h-3.5 w-3.5" />
@@ -465,12 +468,12 @@ export function PptPreviewReportCard({
                         active
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-background text-foreground hover:border-primary/40",
-                      )}
-                    >
-                      {variant.name || `${copy.variant} ${variant.key}`}
-                    </button>
-                  )
-                })}
+                    )}
+                  >
+                    {resolvePptPreviewVariantDisplayLabel(deck, variant) || `${copy.variant} ${variant.key}`}
+                  </button>
+                )
+              })}
               </div>
             ) : null}
 

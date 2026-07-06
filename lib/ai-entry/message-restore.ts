@@ -26,6 +26,40 @@ function getLastMeaningfulMessage(messages: RestorableMessage[]) {
   return null
 }
 
+function mergeBackgroundAssistantMessage<T extends RestorableMessage>(
+  existing: T,
+  backgroundAssistantMessage: T,
+) {
+  const existingParts = Array.isArray(existing.parts) ? existing.parts : []
+  const backgroundParts = Array.isArray(backgroundAssistantMessage.parts)
+    ? backgroundAssistantMessage.parts
+    : []
+  const existingAttachments = Array.isArray(existing.attachments) ? existing.attachments : []
+  const backgroundAttachments = Array.isArray(backgroundAssistantMessage.attachments)
+    ? backgroundAssistantMessage.attachments
+    : []
+  const existingContent = typeof existing.content === "string" ? existing.content.trim() : ""
+  const backgroundContent =
+    typeof backgroundAssistantMessage.content === "string"
+      ? backgroundAssistantMessage.content.trim()
+      : ""
+
+  const needsPartsMerge = existingParts.length === 0 && backgroundParts.length > 0
+  const needsAttachmentMerge = existingAttachments.length === 0 && backgroundAttachments.length > 0
+  const needsContentMerge = !existingContent && Boolean(backgroundContent)
+
+  if (!needsPartsMerge && !needsAttachmentMerge && !needsContentMerge) {
+    return existing
+  }
+
+  return {
+    ...existing,
+    ...(needsContentMerge ? { content: backgroundAssistantMessage.content } : {}),
+    ...(needsPartsMerge ? { parts: backgroundAssistantMessage.parts } : {}),
+    ...(needsAttachmentMerge ? { attachments: backgroundAssistantMessage.attachments } : {}),
+  }
+}
+
 export function resolveAiEntryBootstrapMessages<T extends RestorableMessage>(input: {
   conversationId: string | null
   pendingMessages: T[]
@@ -98,15 +132,25 @@ export function resolveAiEntryCompletedConversationMessages<T extends Restorable
       ? input.matchesBackgroundAssistantMessage
       : null
 
-  const alreadyIncluded = resolvedMessages.some((message) => {
+  const existingIndex = resolvedMessages.findIndex((message) => {
     if (message?.role !== "assistant") return false
     if (matchesBackgroundAssistantMessage?.(message)) return true
     const messageContent = typeof message.content === "string" ? message.content.trim() : ""
     return Boolean(backgroundContent && messageContent === backgroundContent)
   })
 
-  if (alreadyIncluded) {
-    return resolvedMessages
+  if (existingIndex >= 0) {
+    const mergedMessage = mergeBackgroundAssistantMessage(
+      resolvedMessages[existingIndex] as T,
+      backgroundAssistantMessage,
+    )
+    if (mergedMessage === resolvedMessages[existingIndex]) {
+      return resolvedMessages
+    }
+
+    return resolvedMessages.map((message, index) =>
+      index === existingIndex ? mergedMessage : message,
+    )
   }
 
   return [...resolvedMessages, backgroundAssistantMessage]
