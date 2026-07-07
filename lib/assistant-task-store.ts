@@ -25,17 +25,35 @@ function canUseStorage() {
   return typeof window !== "undefined"
 }
 
+function readStoreFromArea(area: "local" | "session") {
+  return readStorageJson<Record<string, PendingAssistantTask>>(area, STORAGE_KEY) || {}
+}
+
 function readStore() {
   if (!canUseStorage()) return {} as Record<string, PendingAssistantTask>
-  return readStorageJson<Record<string, PendingAssistantTask>>("session", STORAGE_KEY) || {}
+  const localStore = readStoreFromArea("local")
+  if (Object.keys(localStore).length > 0) {
+    return localStore
+  }
+
+  const sessionStore = readStoreFromArea("session")
+  return sessionStore
 }
 
 function writeStore(store: Record<string, PendingAssistantTask>) {
   if (!canUseStorage()) return
-  void writeStorageRecordStore("session", STORAGE_KEY, store, {
+  void writeStorageRecordStore("local", STORAGE_KEY, store, {
     maxEntries: MAX_PENDING_TASKS,
-    legacyKeys: [{ area: "local", key: LEGACY_STORAGE_KEY }],
+    legacyKeys: [
+      { area: "local", key: LEGACY_STORAGE_KEY },
+      { area: "session", key: LEGACY_STORAGE_KEY },
+      { area: "session", key: STORAGE_KEY },
+    ],
   })
+}
+
+export function isPendingAssistantTaskStoreStorageKey(key: string | null) {
+  return key === STORAGE_KEY || key === LEGACY_STORAGE_KEY
 }
 
 export function savePendingAssistantTask(task: PendingAssistantTask) {

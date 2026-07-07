@@ -37,6 +37,7 @@ import {
 import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
 import {
   findAiEntryPendingTask,
+  isPendingAssistantTaskStoreStorageKey,
   removePendingAssistantTask,
   savePendingAssistantTask,
 } from "@/lib/assistant-task-store"
@@ -475,6 +476,7 @@ type AgentApiResponse = {
 const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
 const SHOULD_PREFER_CATALOG_MODEL_DEFAULT = process.env.NODE_ENV === "development"
 const AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-pending-conversation-v1:"
+const AI_ENTRY_SHARED_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-shared-pending-conversation-v1:"
 const AI_ENTRY_MAX_ATTACHMENTS = 4
 const AI_ENTRY_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 
@@ -482,11 +484,23 @@ function getPendingConversationStorageKey(conversationId: string) {
   return `${AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX}${conversationId}`
 }
 
-function readPendingConversationMessages(conversationId: string | null) {
-  if (!conversationId || typeof window === "undefined") return []
+function getSharedPendingConversationStorageKey(conversationId: string) {
+  return `${AI_ENTRY_SHARED_PENDING_CONVERSATION_STORAGE_PREFIX}${conversationId}`
+}
+
+function isSharedPendingConversationStorageKey(key: string | null, conversationId: string | null) {
+  return Boolean(
+    key &&
+    conversationId &&
+    key === getSharedPendingConversationStorageKey(conversationId),
+  )
+}
+
+function readPendingConversationMessagesFromStorage(raw: string | null, clear: () => void) {
+  if (!raw) return []
+
   try {
-    const raw = window.sessionStorage.getItem(getPendingConversationStorageKey(conversationId))
-    const parsed = raw ? JSON.parse(raw) : null
+    const parsed = JSON.parse(raw)
     const pendingMessages = readFreshPendingConversationMessages<{
       id?: unknown
       role?: unknown
@@ -495,9 +509,7 @@ function readPendingConversationMessages(conversationId: string | null) {
       parts?: unknown
     }>(parsed)
     if (pendingMessages.length === 0) {
-      if (raw) {
-        window.sessionStorage.removeItem(getPendingConversationStorageKey(conversationId))
-      }
+      clear()
       return []
     }
     return pendingMessages
@@ -512,19 +524,43 @@ function readPendingConversationMessages(conversationId: string | null) {
       })
       .filter((item): item is ChatMessage => Boolean(item))
   } catch {
+    clear()
     return []
   }
 }
 
+function readPendingConversationMessages(conversationId: string | null) {
+  if (!conversationId || typeof window === "undefined") return []
+  const sharedMessages = readPendingConversationMessagesFromStorage(
+    window.localStorage.getItem(getSharedPendingConversationStorageKey(conversationId)),
+    () => {
+      window.localStorage.removeItem(getSharedPendingConversationStorageKey(conversationId))
+    },
+  )
+  if (sharedMessages.length > 0) {
+    return sharedMessages
+  }
+
+  return readPendingConversationMessagesFromStorage(
+    window.sessionStorage.getItem(getPendingConversationStorageKey(conversationId)),
+    () => {
+      window.sessionStorage.removeItem(getPendingConversationStorageKey(conversationId))
+    },
+  )
+}
+
 function savePendingConversationMessages(conversationId: string | null, messages: ChatMessage[]) {
   if (!conversationId || typeof window === "undefined") return
+  const payload = JSON.stringify(buildPendingConversationEnvelope(messages))
   try {
-    window.sessionStorage.setItem(
-      getPendingConversationStorageKey(conversationId),
-      JSON.stringify(buildPendingConversationEnvelope(messages)),
-    )
+    window.sessionStorage.setItem(getPendingConversationStorageKey(conversationId), payload)
   } catch {
     // sessionStorage is a best-effort bridge across the first route transition.
+  }
+  try {
+    window.localStorage.setItem(getSharedPendingConversationStorageKey(conversationId), payload)
+  } catch {
+    // localStorage is a best-effort bridge across tabs.
   }
 }
 
@@ -532,6 +568,11 @@ function clearPendingConversationMessages(conversationId: string | null) {
   if (!conversationId || typeof window === "undefined") return
   try {
     window.sessionStorage.removeItem(getPendingConversationStorageKey(conversationId))
+  } catch {
+    // ignore storage cleanup failures
+  }
+  try {
+    window.localStorage.removeItem(getSharedPendingConversationStorageKey(conversationId))
   } catch {
     // ignore storage cleanup failures
   }
@@ -1895,6 +1936,58 @@ export function AiEntryWorkspace({
       cancelled = true
     }
   }, [copy, fetchConversationMessages, initialConversationId, isZh, models, preferredUnlockedModelId, resolvedRequestAgentId, routeAgentId, shouldLockModel])
+
+  const syncSharedConversationDraft = useCallback(() => {
+    if (!conversationId) return
+    const pendingMessages = readPendingConversationMessages(conversationId)
+    if (pendingMessages.length === 0) return
+
+    setMessages((current) =>
+      resolveAiEntryRestoredMessages({
+        pendingMessages,
+        persistedMessages: current,
+      }),
+    )
+  }, [conversationId])
+
+  useEffect(() => {
+    if (!conversationId || typeof window === "undefined") return
+
+    const refreshFromSharedState = () => {
+      syncSharedConversationDraft()
+      setPendingTaskRefreshKey((current) => current + 1)
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (isSharedPendingConversationStorageKey(event.key, conversationId)) {
+        syncSharedConversationDraft()
+        return
+      }
+
+      if (isPendingAssistantTaskStoreStorageKey(event.key)) {
+        setPendingTaskRefreshKey((current) => current + 1)
+      }
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refreshFromSharedState()
+      }
+    }
+
+    refreshFromSharedState()
+    window.addEventListener("storage", handleStorage)
+    window.addEventListener("focus", refreshFromSharedState)
+    window.addEventListener("pageshow", refreshFromSharedState)
+    document.addEventListener("visibilitychange", handleVisibility)
+
+    return () => {
+      window.removeEventListener("storage", handleStorage)
+      window.removeEventListener("focus", refreshFromSharedState)
+      window.removeEventListener("pageshow", refreshFromSharedState)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [conversationId, syncSharedConversationDraft])
 
   const attemptConversationRecovery = useCallback(async () => {
     const targetConversationId = latestConversationIdRef.current || conversationId
