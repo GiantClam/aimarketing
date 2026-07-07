@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  hasAiEntryPptPreviewMaterialized,
   resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
   resolveAiEntryRestoredMessages,
@@ -246,5 +247,63 @@ test("merges background assistant parts into an already persisted completion mes
         parts: [{ type: "report", id: "report:preview-401" }],
       },
     ],
+  )
+})
+
+test("detects when a background PPT preview has materialized with a new preview session id", () => {
+  assert.equal(
+    hasAiEntryPptPreviewMaterialized({
+      previousPreviewSessionId: "preview-stale",
+      conversationState: {
+        ppt: {
+          phase: "preview-ready",
+          latestPreview: {
+            previewSessionId: "preview-fresh",
+          },
+        },
+      },
+      persistedMessages: [],
+    }),
+    true,
+  )
+})
+
+test("does not treat an unchanged PPT preview session as a newly materialized background result", () => {
+  assert.equal(
+    hasAiEntryPptPreviewMaterialized({
+      previousPreviewSessionId: "preview-stale",
+      conversationState: {
+        ppt: {
+          phase: "preview-ready",
+          latestPreview: {
+            previewSessionId: "preview-stale",
+          },
+        },
+      },
+      persistedMessages: [],
+    }),
+    false,
+  )
+})
+
+test("falls back to hidden preview context markers when refreshed conversation state has not caught up", () => {
+  assert.equal(
+    hasAiEntryPptPreviewMaterialized({
+      previousPreviewSessionId: "preview-stale",
+      conversationState: {
+        ppt: {
+          phase: "preview-invalidated",
+          latestPreview: null,
+        },
+      },
+      persistedMessages: [
+        {
+          role: "assistant",
+          content:
+            "已生成 PPT 预览。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"preview-fresh\",\"defaultVariantKey\":\"variant-a\",\"variantKeys\":[\"variant-a\"]} -->",
+        },
+      ],
+    }),
+    true,
   )
 })

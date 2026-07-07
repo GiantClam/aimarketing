@@ -119,7 +119,16 @@ export function buildAiEntryProviderMessages(params: {
 }) {
   const { providerId, systemPrompt, messages } = params
 
-  if (providerId !== "aiberm" && providerId !== "deepseek") {
+  const shouldInlineSystemPrompt =
+    providerId === "aiberm" ||
+    providerId === "deepseek" ||
+    providerId === "enterprise-openai-compatible" ||
+    providerId === "enterprise-qwen-official" ||
+    providerId === "enterprise-minimax-official" ||
+    providerId === "enterprise-glm-official" ||
+    providerId === "enterprise-volcengine-official"
+
+  if (!shouldInlineSystemPrompt) {
     return {
       system: systemPrompt,
       messages,

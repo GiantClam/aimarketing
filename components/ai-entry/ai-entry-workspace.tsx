@@ -107,6 +107,7 @@ import {
   readFreshPendingConversationMessages,
 } from "@/lib/ai-entry/pending-conversation-store"
 import {
+  hasAiEntryPptPreviewMaterialized,
   resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
   resolveAiEntryRestoredMessages,
@@ -119,6 +120,7 @@ import { cn } from "@/lib/utils"
 const AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS = 1500
 const AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS = 5
 const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 25 * 60 * 1000
+const AI_ENTRY_PENDING_TASK_HISTORY_REFRESH_CADENCE = 4
 
 type ChatAttachment = {
   id: string
@@ -1861,6 +1863,12 @@ export function AiEntryWorkspace({
     let cancelled = false
     let consecutivePollErrors = 0
     const pollStartedAt = Date.now()
+    const initialPreviewSessionId =
+      typeof conversationState?.ppt?.latestPreview?.previewSessionId === "string" &&
+      conversationState.ppt.latestPreview.previewSessionId.trim()
+        ? conversationState.ppt.latestPreview.previewSessionId.trim()
+        : null
+    let historyRefreshPollCount = 0
     setIsLoading(true)
 
     const poll = async () => {
@@ -1893,6 +1901,51 @@ export function AiEntryWorkspace({
           const normalizedEvents = normalizePendingTaskEvents(taskResult?.events)
           if (normalizedEvents.length > 0) {
             setPendingTaskEvents(normalizedEvents)
+          }
+
+          historyRefreshPollCount += 1
+          const resolvedConversationIdForRefresh =
+            typeof taskResult?.conversation_id === "string" && taskResult.conversation_id.trim()
+              ? taskResult.conversation_id.trim()
+              : conversationId
+          const shouldRefreshHistoryWhileRunning =
+            resolvedConversationIdForRefresh &&
+            (pendingTask.taskType === "preview_ppt_deck" || taskResult?.toolName === "preview_ppt_deck") &&
+            historyRefreshPollCount % AI_ENTRY_PENDING_TASK_HISTORY_REFRESH_CADENCE === 0
+
+          if (shouldRefreshHistoryWhileRunning) {
+            try {
+              const {
+                response,
+                messages: persistedMessages,
+                conversationState: refreshedConversationState,
+              } = await fetchConversationMessages(resolvedConversationIdForRefresh)
+              if (
+                response.ok &&
+                hasAiEntryPptPreviewMaterialized({
+                  persistedMessages,
+                  conversationState: refreshedConversationState,
+                  previousPreviewSessionId: initialPreviewSessionId,
+                })
+              ) {
+                setConversationState(refreshedConversationState)
+                setMessages((current) => {
+                  const next = resolveAiEntryCompletedConversationMessages({
+                    currentMessages: current,
+                    persistedMessages,
+                  })
+                  savePendingConversationMessages(resolvedConversationIdForRefresh, next)
+                  return next
+                })
+                removePendingAssistantTask(pendingTask.taskId)
+                if (!cancelled) {
+                  setIsLoading(false)
+                }
+                return
+              }
+            } catch (error) {
+              console.error("ai-entry.pending-task.running-history-refresh.failed", error)
+            }
           }
 
           if (status === "success" || status === "failed") {
@@ -2105,7 +2158,7 @@ export function AiEntryWorkspace({
     return () => {
       cancelled = true
     }
-  }, [activePendingAgentId, conversationId, fetchConversationMessages, isZh, pendingTaskRefreshKey])
+  }, [activePendingAgentId, conversationId, conversationState, copy, fetchConversationMessages, isZh, pendingTaskRefreshKey])
 
   const renderModelSelectContent = useCallback(() => {
     if (modelsLoading) return <SelectItem value="__loading" disabled>{copy.modelLoading}</SelectItem>
@@ -2766,7 +2819,9 @@ export function AiEntryWorkspace({
     selectedKnowledgeDatasetIds,
     isConsultingEntry,
     isAgentSelectionExplicit,
+    effectiveEntryMode,
     resolvedRequestAgentName,
+    resolvedRequestAgentId,
     routeAgentId,
     selectedAgentId,
     selectedModel,

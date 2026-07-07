@@ -1,8 +1,19 @@
+import { extractLatestPptPreviewContext } from "@/lib/ai-entry/ppt-tool-result-message"
+
 type RestorableMessage = {
   role?: "user" | "assistant" | null
   content?: string | null
   parts?: unknown[] | null
   attachments?: unknown[] | null
+}
+
+type PreviewAwareConversationState = {
+  ppt?: {
+    phase?: "idle" | "preview-ready" | "preview-invalidated" | "exported"
+    latestPreview?: {
+      previewSessionId?: string | null
+    } | null
+  } | null
 }
 
 function hasMeaningfulMessageContent(message: RestorableMessage) {
@@ -154,4 +165,39 @@ export function resolveAiEntryCompletedConversationMessages<T extends Restorable
   }
 
   return [...resolvedMessages, backgroundAssistantMessage]
+}
+
+export function hasAiEntryPptPreviewMaterialized<T extends RestorableMessage>(input: {
+  persistedMessages: T[]
+  conversationState?: PreviewAwareConversationState | null
+  previousPreviewSessionId?: string | null
+}) {
+  const latestPreviewSessionIdFromState =
+    typeof input.conversationState?.ppt?.latestPreview?.previewSessionId === "string" &&
+    input.conversationState.ppt.latestPreview.previewSessionId.trim()
+      ? input.conversationState.ppt.latestPreview.previewSessionId.trim()
+      : null
+  const latestPreviewSessionIdFromMessages = [...(input.persistedMessages || [])]
+    .reverse()
+    .map((message) =>
+      message?.role === "assistant" && typeof message.content === "string"
+        ? extractLatestPptPreviewContext(message.content)?.previewSessionId ?? null
+        : null,
+    )
+    .find((previewSessionId): previewSessionId is string => Boolean(previewSessionId))
+  const latestPreviewSessionId =
+    latestPreviewSessionIdFromState || latestPreviewSessionIdFromMessages || null
+
+  if (!latestPreviewSessionId) return false
+
+  const previousPreviewSessionId =
+    typeof input.previousPreviewSessionId === "string" && input.previousPreviewSessionId.trim()
+      ? input.previousPreviewSessionId.trim()
+      : null
+
+  if (previousPreviewSessionId && latestPreviewSessionId === previousPreviewSessionId) {
+    return false
+  }
+
+  return true
 }

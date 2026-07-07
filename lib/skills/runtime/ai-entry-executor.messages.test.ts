@@ -29,3 +29,19 @@ test("OpenAI-family providers keep native system instructions", () => {
   assert.equal(result.system, "Follow the workflow brief.")
   assert.deepEqual(result.messages, [{ role: "user", content: "Create the answer." }])
 })
+
+test("enterprise qwen provider inlines system instructions into the first user message", () => {
+  const result = buildAiEntryProviderMessages({
+    providerId: "enterprise-qwen-official",
+    systemPrompt: "Follow the workflow brief.",
+    messages: [{ role: "user", content: "Create the answer." }],
+  })
+
+  assert.equal(result.system, undefined)
+  assert.deepEqual(result.messages, [
+    {
+      role: "user",
+      content: "System instruction (must follow):\nFollow the workflow brief.\n\nUser request:\nCreate the answer.",
+    },
+  ])
+})
