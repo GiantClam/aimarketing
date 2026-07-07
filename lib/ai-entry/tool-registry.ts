@@ -18,6 +18,7 @@ import {
 import {
   extractLatestPptPreviewContext,
   extractLatestPptTemplateRecommendationContext,
+  type PptTemplateRecommendationContext,
   type PptPreviewContext,
   resolvePptTemplateSelectionFromUserText,
 } from "@/lib/ai-entry/ppt-tool-result-message"
@@ -30,6 +31,7 @@ import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import type { PptRecommendedTemplateSummary } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
 import { getPptWorkerSupportedTemplateIds } from "@/lib/lead-tools/ppt-worker-capabilities"
 
@@ -241,6 +243,22 @@ function hasConfirmedEditablePptTemplate(input: {
   )
 }
 
+function buildTemplateRecommendationContextFromSummaries(
+  recommendedTemplates: PptRecommendedTemplateSummary[],
+): PptTemplateRecommendationContext | null {
+  const templateIds = recommendedTemplates.map((item) => item.templateId).filter(Boolean)
+  if (templateIds.length === 0) return null
+
+  return {
+    defaultTemplateId: templateIds[0] ?? null,
+    templateIds,
+    templates: recommendedTemplates.map((item) => ({
+      templateId: item.templateId,
+      labels: [item.templateLabel, item.styleName, item.templateId].filter(Boolean),
+    })),
+  }
+}
+
 function extractPreviewContextFromToolResult(result: unknown): PptPreviewContext | null {
   if (!result || typeof result !== "object" || (result as { ok?: unknown }).ok === false) {
     return null
@@ -355,6 +373,20 @@ function maybePreparePptPreviewInput(
             ? record.pageCount
             : undefined,
       }, allowedTemplateIds ? { allowedTemplateIds } : undefined)
+      const fallbackSelectedTemplateId = resolvePptTemplateSelectionFromUserText(
+        options?.latestUserPrompt,
+        buildTemplateRecommendationContextFromSummaries(recommendedTemplates),
+      )
+      if (fallbackSelectedTemplateId) {
+        return {
+          ok: true as const,
+          input: {
+            ...record,
+            templateMode: "single-template",
+            templateId: fallbackSelectedTemplateId,
+          },
+        }
+      }
       return {
         ok: false as const,
         error: {

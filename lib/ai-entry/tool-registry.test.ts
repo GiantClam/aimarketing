@@ -1178,6 +1178,88 @@ test("tool registry injects the user-selected recommended template into editable
   )
 })
 
+test("tool registry accepts a direct template id reply before a persisted recommendation marker exists", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "executive-ppt",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["preview_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Recommend templates first, then preview after selection.",
+        toolIds: ["preview_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    latestUserPrompt: "swiss-grid",
+    pptBriefState: {
+      topic: "企业AI营销工作台",
+      audience: "管理层",
+      goal: "帮助管理层快速理解产品价值和落地路径",
+      scenario: "product-launch",
+      language: "zh-CN",
+      pageCount: 4,
+      tone: "简洁、专业、决策导向",
+      mustInclude: [],
+      missingFields: [],
+      readyForPreview: true,
+      suggestedValues: {
+        audience: "管理层",
+        goal: "帮助管理层快速理解产品价值和落地路径",
+        scenario: "product-launch",
+        language: "zh-CN",
+        pageCount: 4,
+        tone: "简洁、专业、决策导向",
+      },
+    },
+    messageContents: [
+      "推荐模板方向：方案 A / 方案 B / 方案 C。确认模板方向后，我立刻生成预览。",
+    ],
+    auditContext: {
+      traceId: "trace-direct-template-before-marker",
+      conversationId: "conv-direct-template-before-marker",
+      agentId: "executive-ppt",
+    },
+  })
+
+  const tools = result.selectedTools as unknown as Record<
+    string,
+    { execute: (input: Record<string, unknown>) => Promise<Record<string, unknown>> }
+  >
+  const previewResult = await tools.preview_ppt_deck.execute({
+    prompt: "企业AI营销工作台",
+  })
+
+  assert.equal(previewResult.ok, true)
+  assert.equal(enqueuedTasks.length, 1)
+  assert.equal(
+    (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
+    "single-template",
+  )
+  assert.equal(
+    (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
+    "swiss-grid",
+  )
+})
+
 test("tool registry honors an explicit empty allowlist and does not auto-add web_search", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
