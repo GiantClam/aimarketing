@@ -333,6 +333,56 @@ test("AI entry message history falls back to pending preview task lookup without
   })
 })
 
+test("AI entry message history recovers a finished preview task from persisted queued task context", async () => {
+  const { listAiEntryMessages } = await import("./repository")
+
+  selectRowsQueue = [[
+    {
+      id: 42,
+      title: "[ai-entry] [agent:executive-ppt] PPT plan",
+      currentModelId: "gpt-5",
+      createdAt: new Date("2024-01-01T00:00:00.000Z"),
+    },
+  ]]
+  executeRowsQueue = [[
+    {
+      id: 101,
+      role: "assistant",
+      content: [
+        "预览正在后台生成中，请稍候片刻 ☕",
+        "",
+        "已切换为后台生成：",
+        "- 任务 ID: 901",
+        "- 状态: 系统会持续轮询，完成后自动回填预览结果。",
+      ].join("\n"),
+      createdAt: new Date("2024-01-02T03:04:09.000Z"),
+    },
+  ], [], [], [
+    {
+      id: 901,
+      status: "failed",
+      payload: JSON.stringify({
+        kind: "ai_entry_ppt_preview",
+        conversationId: "42",
+        agentId: "executive-ppt",
+      }),
+      createdAt: new Date("2024-01-02T03:05:09.000Z"),
+    },
+  ]]
+
+  const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
+
+  assert.ok(page)
+  assert.deepEqual(page?.pending_task, {
+    task_id: "901",
+    status: "failed",
+    task_type: "preview_ppt_deck",
+    conversation_id: "42",
+    agent_id: "executive-ppt",
+    created_at: Math.floor(new Date("2024-01-02T03:05:09.000Z").getTime() / 1000),
+  })
+})
+
 test("AI entry conversation history uses latest message time as updated_at", async () => {
   const { listAiEntryConversations } = await import("./repository")
   const createdAt = new Date("2024-01-01T00:00:00.000Z")

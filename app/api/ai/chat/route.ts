@@ -172,19 +172,6 @@ function isPreviewActionRequiredResult(toolName: string, result: unknown) {
   return errorCode === "ppt_template_selection_required" || errorCode === "ppt_brief_incomplete"
 }
 
-function isQueuedBackgroundPreviewResult(toolName: string, result: unknown) {
-  if (toolName !== "preview_ppt_deck" || !result || typeof result !== "object") return false
-  const status =
-    typeof (result as { status?: unknown }).status === "string"
-      ? String((result as { status?: unknown }).status).trim()
-      : ""
-  const taskId =
-    typeof (result as { backgroundTask?: { taskId?: unknown } }).backgroundTask?.taskId === "string"
-      ? String((result as { backgroundTask?: { taskId?: unknown } }).backgroundTask?.taskId).trim()
-      : ""
-  return status === "queued" && Boolean(taskId)
-}
-
 function modelSupportsImageInput(modelId: string | null | undefined) {
   const normalized = typeof modelId === "string" ? modelId.toLowerCase() : ""
   if (!normalized) return false
@@ -1509,10 +1496,6 @@ export async function POST(request: NextRequest) {
               if (payload.toolName === "preview_ppt_deck") {
                 previewToolExecutedInTurn = true
               }
-              const shouldPersistToolAppendix = !isQueuedBackgroundPreviewResult(
-                payload.toolName,
-                payload.result,
-              )
               const researchBriefMarker =
                 payload.toolName === "web_search"
                   ? buildResearchBriefFromWebSearchResult(payload.result)
@@ -1521,17 +1504,15 @@ export async function POST(request: NextRequest) {
                 streamedToolAppendix,
                 researchBriefMarker ? buildResearchBriefContextMarker(researchBriefMarker) : null,
               )
-              if (shouldPersistToolAppendix) {
-                streamedToolAppendix = appendUniqueToolAppendix(
-                  streamedToolAppendix,
-                  buildPptToolResultMessage({
-                    toolName: payload.toolName,
-                    result: payload.result,
-                    origin: requestOrigin,
-                    isZh,
-                  }),
-                )
-              }
+              streamedToolAppendix = appendUniqueToolAppendix(
+                streamedToolAppendix,
+                buildPptToolResultMessage({
+                  toolName: payload.toolName,
+                  result: payload.result,
+                  origin: requestOrigin,
+                  isZh,
+                }),
+              )
               const isErrorResult = isAiEntryToolErrorResult(payload.result)
               const isActionRequiredPreview = isPreviewActionRequiredResult(payload.toolName, payload.result)
               const validation = getAiEntryValidationResult(payload.result)

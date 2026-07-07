@@ -17,6 +17,7 @@ import {
   parseAiEntryModelSelection,
   serializeAiEntryModelSelection,
 } from "@/lib/ai-entry/model-selection"
+import { extractQueuedPptBackgroundTaskContext } from "@/lib/ai-entry/ppt-tool-result-message"
 
 const AI_ENTRY_CHAT_TITLE_PREFIX = "[ai-entry] "
 const AI_ENTRY_CONSULTING_TITLE_PREFIX = "[ai-consulting] "
@@ -80,7 +81,7 @@ export type AiEntryMessagePage = {
 
 export type AiEntryPendingTaskSummary = {
   task_id: string
-  status: "pending" | "running"
+  status: "pending" | "running" | "success" | "failed"
   task_type: string | null
   conversation_id: string | null
   agent_id: string | null
@@ -193,22 +194,129 @@ async function findAiEntryPendingTaskSummary(input: {
   const taskId = parsePositiveInt(
     typeof row.id === "string" || typeof row.id === "number" ? row.id : null,
   )
-  const status = row.status === "pending" || row.status === "running" ? row.status : null
+  const status: AiEntryPendingTaskSummary["status"] | null =
+    row.status === "pending" || row.status === "running" ? row.status : null
   if (!taskId || !status) return null
 
-  let payloadRecord: Record<string, unknown> | null = null
-  if (typeof row.payload === "string" && row.payload.trim()) {
-    try {
-      payloadRecord = safeParseRecord(JSON.parse(row.payload))
-    } catch {
-      payloadRecord = null
-    }
-  } else {
-    payloadRecord = safeParseRecord(row.payload)
-  }
+  const payloadRecord =
+    typeof row.payload === "string" && row.payload.trim()
+      ? (() => {
+          try {
+            return safeParseRecord(JSON.parse(row.payload))
+          } catch {
+            return null
+          }
+        })()
+      : safeParseRecord(row.payload)
 
   return {
     task_id: String(taskId),
+    status,
+    task_type: "preview_ppt_deck",
+    conversation_id:
+      typeof payloadRecord?.conversationId === "string" && payloadRecord.conversationId.trim()
+        ? payloadRecord.conversationId.trim()
+        : input.conversationId,
+    agent_id:
+      typeof payloadRecord?.agentId === "string" && payloadRecord.agentId.trim()
+        ? payloadRecord.agentId.trim()
+        : input.agentId || null,
+    created_at: toEpochSeconds(row.createdAt),
+  }
+}
+
+async function findAiEntryRecoverableTaskSummary(input: {
+  userId: number
+  conversationId: string
+  agentId?: string | null
+  messages: AiEntryMessageRecord[]
+}) {
+  const latestQueuedContext = [...input.messages]
+    .reverse()
+    .map((message) =>
+      message.role === "assistant"
+        ? extractQueuedPptBackgroundTaskContext(message.content)
+        : null,
+    )
+    .find((context): context is NonNullable<typeof context> => Boolean(context))
+
+  const taskId = parsePositiveInt(latestQueuedContext?.taskId)
+  if (!taskId) return null
+
+  const result = await withAiEntryDbRetry("find-ai-entry-recoverable-task-summary", () =>
+    db.execute(sql`
+      SELECT
+        id,
+        status,
+        payload,
+        created_at as "createdAt"
+      FROM "AI_MARKETING_tasks"
+      WHERE id = ${taskId}
+        AND user_id = ${input.userId}
+        AND workflow_name = 'ai_entry_ppt_preview'
+        AND payload IS NOT NULL
+        AND payload::jsonb ->> 'kind' = 'ai_entry_ppt_preview'
+        AND payload::jsonb ->> 'conversationId' = ${input.conversationId}
+        ${input.agentId
+          ? sql`AND payload::jsonb ->> 'agentId' = ${input.agentId}`
+          : sql``}
+      LIMIT 1
+    `),
+  )
+  const fallbackResult =
+    result.rows.length === 0 && input.agentId
+      ? await withAiEntryDbRetry("find-ai-entry-recoverable-task-summary-fallback", () =>
+          db.execute(sql`
+            SELECT
+              id,
+              status,
+              payload,
+              created_at as "createdAt"
+            FROM "AI_MARKETING_tasks"
+            WHERE id = ${taskId}
+              AND user_id = ${input.userId}
+              AND workflow_name = 'ai_entry_ppt_preview'
+              AND payload IS NOT NULL
+              AND payload::jsonb ->> 'kind' = 'ai_entry_ppt_preview'
+              AND payload::jsonb ->> 'conversationId' = ${input.conversationId}
+            LIMIT 1
+          `),
+        )
+      : null
+
+  const row = ((fallbackResult?.rows.length ? fallbackResult.rows : result.rows) as Array<{
+    id?: unknown
+    status?: unknown
+    payload?: unknown
+    createdAt?: Date | string | number | null
+  } | null>)[0]
+  if (!row) return null
+
+  const resolvedTaskId = parsePositiveInt(
+    typeof row.id === "string" || typeof row.id === "number" ? row.id : null,
+  )
+  const status: AiEntryPendingTaskSummary["status"] | null =
+    row.status === "pending" ||
+    row.status === "running" ||
+    row.status === "success" ||
+    row.status === "failed"
+      ? row.status
+      : null
+  if (!resolvedTaskId || !status) return null
+
+  const payloadRecord =
+    typeof row.payload === "string" && row.payload.trim()
+      ? (() => {
+          try {
+            return safeParseRecord(JSON.parse(row.payload))
+          } catch {
+            return null
+          }
+        })()
+      : safeParseRecord(row.payload)
+
+  return {
+    task_id: String(resolvedTaskId),
     status,
     task_type: "preview_ppt_deck",
     conversation_id:
@@ -861,11 +969,23 @@ export async function listAiEntryMessages(
     storedState: normalizeConversationMetadata(conversation.metadata)?.aiEntryConversationState,
     messageContents: data.map((message) => message.content),
   })
-  const pendingTask = await findAiEntryPendingTaskSummary({
+  let pendingTask = await findAiEntryPendingTaskSummary({
     userId,
     conversationId: String(conversation.id),
     agentId,
   })
+  if (
+    !pendingTask &&
+    conversationState.ppt.phase !== "preview-ready" &&
+    conversationState.ppt.phase !== "exported"
+  ) {
+    pendingTask = await findAiEntryRecoverableTaskSummary({
+      userId,
+      conversationId: String(conversation.id),
+      agentId,
+      messages: data,
+    })
+  }
 
   return {
     data,

@@ -42,6 +42,11 @@ export type PptPreviewInvalidationContext = {
   previewSessionId: string
 }
 
+export type QueuedPptBackgroundTaskContext = {
+  taskId: string
+  statusText: string | null
+}
+
 export type PptTemplateRecommendationContext = {
   defaultTemplateId: string | null
   templateIds: string[]
@@ -124,6 +129,41 @@ export function isQueuedPptBackgroundStatusMessage(content: string | null | unde
     enLines.some((line) => line.startsWith("- Task ID:")) &&
     enLines.some((line) => line.startsWith("- Status:"))
   )
+}
+
+export function extractQueuedPptBackgroundTaskContext(
+  content: string | null | undefined,
+): QueuedPptBackgroundTaskContext | null {
+  const normalized = stripPptHiddenContextMarkers(content)
+  if (!normalized.trim()) return null
+
+  const zhMatch = normalized.match(
+    /(?:^|\n)已切换为后台生成：\s*\n- 任务 ID:\s*([^\n]+)\n- 状态:\s*([^\n]*)/u,
+  )
+  if (zhMatch) {
+    const taskId = zhMatch[1]?.trim()
+    const statusText = zhMatch[2]?.trim() || null
+    if (taskId) {
+      return {
+        taskId,
+        statusText,
+      }
+    }
+  }
+
+  const enMatch = normalized.match(
+    /(?:^|\n)Moved to background generation:\s*\n- Task ID:\s*([^\n]+)\n- Status:\s*([^\n]*)/u,
+  )
+  if (!enMatch) return null
+
+  const taskId = enMatch[1]?.trim()
+  const statusText = enMatch[2]?.trim() || null
+  if (!taskId) return null
+
+  return {
+    taskId,
+    statusText,
+  }
 }
 
 function parsePreviewVariants(value: unknown) {

@@ -5,6 +5,7 @@ import { extractAiEntryArtifactsFromToolResult } from "./artifact-runtime"
 import {
   buildPptTemplateRecommendationMessage,
   buildPptToolResultMessage,
+  extractQueuedPptBackgroundTaskContext,
   extractLatestPptExportContext,
   extractLatestPptPreviewInvalidationContext,
   extractLatestPptPreviewContext,
@@ -152,6 +153,22 @@ test("queued background status detector ignores real preview messages", () => {
   })
 
   assert.equal(isQueuedPptBackgroundStatusMessage(message), false)
+})
+
+test("queued background task context can be extracted from mixed assistant prose", () => {
+  const content = [
+    "预览正在后台生成中，请稍候片刻 ☕",
+    "",
+    "已切换为后台生成：",
+    "- 任务 ID: 901",
+    "- 状态: 系统会持续轮询，完成后自动回填预览结果。",
+  ].join("\n")
+
+  assert.deepEqual(extractQueuedPptBackgroundTaskContext(content), {
+    taskId: "901",
+    statusText: "系统会持续轮询，完成后自动回填预览结果。",
+  })
+  assert.equal(isQueuedPptBackgroundStatusMessage(content), false)
 })
 
 test("template recommendation message includes a hidden template context marker", () => {

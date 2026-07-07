@@ -231,7 +231,7 @@ type MessageApiResponse = {
   data?: Array<{ id?: string; role?: "user" | "assistant"; content?: string; created_at?: number }>
   pending_task?: {
     task_id?: string
-    status?: "pending" | "running"
+    status?: "pending" | "running" | "success" | "failed"
     task_type?: string | null
     conversation_id?: string | null
     agent_id?: string | null
@@ -259,7 +259,7 @@ type MessageApiResponse = {
 type AiEntryConversationStatePayload = NonNullable<MessageApiResponse["conversation_state"]>
 type MessageApiPendingTask = {
   task_id: string
-  status?: "pending" | "running"
+  status?: "pending" | "running" | "success" | "failed"
   task_type?: string | null
   conversation_id?: string | null
   agent_id?: string | null

@@ -204,7 +204,22 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
   if (request === "@/lib/ai-entry/ppt-tool-result-message") {
     return {
       buildPptTemplateRecommendationMessage: () => null,
-      buildPptToolResultMessage: () => null,
+      buildPptToolResultMessage: (input: { toolName?: string; result?: { status?: string; backgroundTask?: { taskId?: string } } | null }) => {
+        if (
+          input?.toolName === "preview_ppt_deck" &&
+          input.result?.status === "queued" &&
+          input.result?.backgroundTask?.taskId
+        ) {
+          return [
+            "",
+            "",
+            "已切换为后台生成：",
+            `- 任务 ID: ${input.result.backgroundTask.taskId}`,
+            "- 状态: 系统会持续轮询，完成后自动回填预览结果。",
+          ].join("\n")
+        }
+        return null
+      },
       extractLatestPptTemplateRecommendationContext: () => null,
       resolvePptTemplateSelectionFromUserText: () => null,
       resolveLatestPptConversationState: () => ({
@@ -625,7 +640,7 @@ test("ai chat route keeps preview template-selection in waiting state instead of
   assert.doesNotMatch(text, /"event":"tool_call_done".*"tool-preview-1"/)
 })
 
-test("ai chat route does not persist queued background preview status as a second assistant artifact message", async () => {
+test("ai chat route persists queued background preview status so refresh can recover the task", async () => {
   emitQueuedPreviewFlow = true
   toolRegistryToolIds = ["preview_ppt_deck"]
   toolRegistryToolChoice = {
@@ -649,7 +664,9 @@ test("ai chat route does not persist queued background preview status as a secon
   assert.match(text, /"taskId":"901"/)
   assert.ok(appendMessageCalls.at(-1))
   assert.equal(appendMessageCalls.at(-1)?.role, "assistant")
-  assert.equal(appendMessageCalls.at(-1)?.content, "我会先准备预览所需内容。")
+  assert.match(appendMessageCalls.at(-1)?.content || "", /我会先准备预览所需内容。/)
+  assert.match(appendMessageCalls.at(-1)?.content || "", /已切换为后台生成：/)
+  assert.match(appendMessageCalls.at(-1)?.content || "", /任务 ID: 901/)
 })
 
 test("ai chat route does not force export toolChoice for ppt turns and lets model decide from context", async () => {
