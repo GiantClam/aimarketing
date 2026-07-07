@@ -128,6 +128,38 @@ test("prefers persisted messages once the server has a completed assistant reply
   )
 })
 
+test("keeps a richer pending assistant draft when persisted assistant history is only a shorter snapshot", () => {
+  const pending: TestMessage[] = [
+    { role: "user", content: "做一个克里米亚现状的ppt" },
+    {
+      role: "assistant",
+      content: "好的，我先搜集克里米亚最新的地缘与战略信息，再做PPT生成。\n\n已完成网页检索，正在推荐模板。",
+      parts: [
+        {
+          type: "task-progress",
+          status: "running",
+          steps: [
+            { type: "tool:web_search", status: "completed", at: 1 },
+            { type: "tool:preview", status: "waiting", at: 2 },
+          ],
+        },
+      ],
+    },
+  ]
+  const persisted: TestMessage[] = [
+    { role: "user", content: "做一个克里米亚现状的ppt" },
+    { role: "assistant", content: "好的，我先搜集克里米亚最新的地缘与战略信息，再做PPT生成。" },
+  ]
+
+  assert.deepEqual(
+    resolveAiEntryRestoredMessages({
+      pendingMessages: pending,
+      persistedMessages: persisted,
+    }),
+    pending,
+  )
+})
+
 test("prefers shared pending messages when another tab has appended newer conversation history", () => {
   const current: TestMessage[] = [
     { role: "user", content: "你好" },

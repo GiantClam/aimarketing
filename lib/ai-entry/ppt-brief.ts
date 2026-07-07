@@ -58,6 +58,67 @@ function readOptionalStringArray(value: unknown) {
     .filter(Boolean)
 }
 
+const EXPLICIT_BRIEF_FIELD_PATTERNS = {
+  audience: /(?:^|[;\n；。]\s*)(?:受众|对象|audience)\s*[:=：]\s*([^\n;；。]+)/giu,
+  goal: /(?:^|[;\n；。]\s*)(?:目标|目的|goal|objective)\s*[:=：]\s*([^\n;；。]+)/giu,
+  scenario: /(?:^|[;\n；。]\s*)(?:场景|用途|scenario|use case)\s*[:=：]\s*([^\n;；。]+)/giu,
+  language: /(?:^|[;\n；。]\s*)(?:语言|lang(?:uage)?)\s*[:=：]\s*([^\n;；。]+)/giu,
+  pageCount: /(?:^|[;\n；。]\s*)(?:页数|页码|slide count|page count|pages?|slides?)\s*[:=：]\s*(\d{1,2})/giu,
+  tone: /(?:^|[;\n；。]\s*)(?:语气|风格|tone|style)\s*[:=：]\s*([^\n;；。]+)/giu,
+  mustInclude: /(?:^|[;\n；。]\s*)(?:必须包含|包括|包含|must include|include)\s*[:=：]\s*([^\n]+)/giu,
+} as const
+
+function readLastExplicitFieldValue(pattern: RegExp, text: string) {
+  const matches = [...text.matchAll(new RegExp(pattern.source, pattern.flags))]
+  const value = matches.at(-1)?.[1]
+  return readOptionalString(value)
+}
+
+function normalizeExplicitLanguage(value: string | null): PptBriefLanguage | null {
+  if (!value) return null
+  if (/(中文|汉语|简体|zh)/iu.test(value)) return "zh-CN"
+  if (/(英文|英语|english|en)/iu.test(value)) return "en-US"
+  return null
+}
+
+function normalizeExplicitPageCount(value: string | null) {
+  if (!value) return null
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 4 || parsed > 20) return null
+  return parsed
+}
+
+function extractExplicitBriefFields(text: string): {
+  audience: string | null
+  goal: string | null
+  scenario: PptBriefScenario | null
+  language: PptBriefLanguage | null
+  pageCount: number | null
+  tone: string | null
+  mustInclude: string[]
+} {
+  const audience = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.audience, text)
+  const goal = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.goal, text)
+  const scenarioText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.scenario, text)
+  const languageText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.language, text)
+  const tone = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.tone, text)
+  const mustIncludeText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.mustInclude, text)
+
+  return {
+    audience,
+    goal,
+    scenario: scenarioText ? inferScenario(scenarioText) : null,
+    language: normalizeExplicitLanguage(languageText),
+    pageCount: normalizeExplicitPageCount(
+      readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.pageCount, text),
+    ),
+    tone,
+    mustInclude: mustIncludeText
+      ? mustIncludeText.split(/[，,、;；]/u).map((item) => item.trim()).filter(Boolean)
+      : [],
+  }
+}
+
 function inferLanguage(text: string): PptBriefLanguage {
   return /[\u4e00-\u9fff]/u.test(text) ? "zh-CN" : "en-US"
 }
@@ -150,8 +211,24 @@ function inferTone(text: string, language: PptBriefLanguage) {
   return null
 }
 
-function inferTopic(latestUserText: string) {
-  const normalized = latestUserText.replace(/\s+/g, " ").trim()
+function stripExplicitBriefFields(text: string) {
+  return Object.values(EXPLICIT_BRIEF_FIELD_PATTERNS)
+    .reduce(
+      (current, pattern) => current.replace(new RegExp(pattern.source, pattern.flags), " "),
+      text,
+    )
+    .replace(/^[\s,，;；。:：\-|/]+|[\s,，;；。:：\-|/]+$/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function inferTopic(userMessages: string[]) {
+  for (let index = userMessages.length - 1; index >= 0; index -= 1) {
+    const normalized = stripExplicitBriefFields(userMessages[index] || "")
+    if (normalized) return normalized.slice(0, 120)
+  }
+
+  const normalized = (userMessages.at(-1) || "").replace(/\s+/g, " ").trim()
   return normalized ? normalized.slice(0, 120) : null
 }
 
@@ -199,17 +276,21 @@ export function extractPptBriefState(input: {
   const userMessages = input.userMessages.map((item) => item.trim()).filter(Boolean)
   const combinedText = userMessages.join("\n")
   const latestUserText = userMessages.at(-1) || ""
-  const language = inferLanguage(combinedText || latestUserText || "")
-  const scenario = inferScenario(combinedText)
-  const audience = inferAudience(combinedText, language)
-  const goal = inferGoal(combinedText, scenario, language)
-  const pageCount = inferPageCount(combinedText)
-  const tone = inferTone(combinedText, language)
-  const mustInclude = readOptionalStringArray(
-    combinedText.match(/(?:必须包含|包括|包含|must include|include)\s*[:：]\s*(.+)$/imu)?.[1]
-      ?.split(/[，,、;；]/u),
-  )
-  const topic = inferTopic(latestUserText)
+  const explicitFields = extractExplicitBriefFields(combinedText)
+  const language = explicitFields.language || inferLanguage(combinedText || latestUserText || "")
+  const scenario = explicitFields.scenario || inferScenario(combinedText)
+  const audience = explicitFields.audience || inferAudience(combinedText, language)
+  const goal = explicitFields.goal || inferGoal(combinedText, scenario, language)
+  const pageCount = explicitFields.pageCount || inferPageCount(combinedText)
+  const tone = explicitFields.tone || inferTone(combinedText, language)
+  const mustInclude =
+    explicitFields.mustInclude.length > 0
+      ? explicitFields.mustInclude
+      : readOptionalStringArray(
+          combinedText.match(/(?:必须包含|包括|包含|must include|include)\s*[:：]\s*(.+)$/imu)?.[1]
+            ?.split(/[，,、;；]/u),
+        )
+  const topic = inferTopic(userMessages)
   const suggestedValues = buildSuggestedValues({
     scenario,
     language,

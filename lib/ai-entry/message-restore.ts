@@ -40,6 +40,54 @@ function getLastMeaningfulMessage(messages: RestorableMessage[]) {
   return null
 }
 
+function getNormalizedMessageContent(message: RestorableMessage | null | undefined) {
+  return typeof message?.content === "string" ? message.content.trim() : ""
+}
+
+function getMessagePartCount(message: RestorableMessage | null | undefined) {
+  return Array.isArray(message?.parts) ? message.parts.length : 0
+}
+
+function getMessageAttachmentCount(message: RestorableMessage | null | undefined) {
+  return Array.isArray(message?.attachments) ? message.attachments.length : 0
+}
+
+function isRicherPendingAssistantDraft(
+  pendingMessage: RestorableMessage | null,
+  persistedMessage: RestorableMessage | null,
+) {
+  if (pendingMessage?.role !== "assistant" || persistedMessage?.role !== "assistant") {
+    return false
+  }
+
+  const pendingContent = getNormalizedMessageContent(pendingMessage)
+  const persistedContent = getNormalizedMessageContent(persistedMessage)
+  const pendingPartCount = getMessagePartCount(pendingMessage)
+  const persistedPartCount = getMessagePartCount(persistedMessage)
+  const pendingAttachmentCount = getMessageAttachmentCount(pendingMessage)
+  const persistedAttachmentCount = getMessageAttachmentCount(persistedMessage)
+
+  if (
+    pendingPartCount === persistedPartCount &&
+    pendingAttachmentCount === persistedAttachmentCount &&
+    pendingContent === persistedContent
+  ) {
+    return false
+  }
+
+  if (pendingPartCount > persistedPartCount || pendingAttachmentCount > persistedAttachmentCount) {
+    if (!persistedContent) return true
+    return !pendingContent || pendingContent.startsWith(persistedContent) || pendingContent === persistedContent
+  }
+
+  if (pendingContent && !persistedContent) return true
+  if (pendingContent.length > persistedContent.length && pendingContent.startsWith(persistedContent)) {
+    return true
+  }
+
+  return false
+}
+
 function mergeBackgroundAssistantMessage<T extends RestorableMessage>(
   existing: T,
   backgroundAssistantMessage: T,
@@ -106,7 +154,11 @@ export function resolveAiEntryRestoredMessages<T extends RestorableMessage>(inpu
   if (persistedMessages.length === 0) return pendingMessages
 
   const lastPersistedMessage = getLastMeaningfulMessage(persistedMessages)
+  const lastPendingMessage = getLastMeaningfulMessage(pendingMessages)
   if (lastPersistedMessage?.role === "assistant") {
+    if (isRicherPendingAssistantDraft(lastPendingMessage, lastPersistedMessage)) {
+      return pendingMessages
+    }
     return persistedMessages
   }
 

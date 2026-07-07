@@ -33,3 +33,35 @@ test("buildPptBriefClarificationMessage asks targeted follow-up questions for mi
   assert.match(message, /这次更接近哪种场景/)
   assert.match(message, /我收到后会继续追问，直到 brief 完整再进入预览/)
 })
+
+test("extractPptBriefState honors explicit follow-up fields and preserves the original topic", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "做一个克里米亚现状的ppt，10页，检索2026年最新的信息",
+      "受众=初级军事爱好者；场景=战略分析；目标=课堂讲解；语言=中文。",
+    ],
+  })
+
+  assert.equal(state.topic, "做一个克里米亚现状的ppt，10页，检索2026年最新的信息")
+  assert.equal(state.audience, "初级军事爱好者")
+  assert.equal(state.scenario, "sales-deck")
+  assert.equal(state.goal, "课堂讲解")
+  assert.equal(state.language, "zh-CN")
+  assert.equal(state.readyForPreview, true)
+})
+
+test("extractPptBriefState prefers the latest explicit field value across turns", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "做一个克里米亚现状的ppt",
+      "受众=管理层；场景=战略汇报；目标=高层同步；语言=中文。",
+      "受众=初级军事爱好者；目标=课堂讲解。",
+    ],
+  })
+
+  assert.equal(state.audience, "初级军事爱好者")
+  assert.equal(state.goal, "课堂讲解")
+  assert.equal(state.scenario, "sales-deck")
+  assert.equal(state.language, "zh-CN")
+  assert.equal(state.readyForPreview, true)
+})
