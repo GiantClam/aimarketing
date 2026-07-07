@@ -161,6 +161,8 @@ export function buildGovernedAiEntryModelCatalog(params: {
   runtimeProviders: RuntimeProviderLike[]
   assignments?: EnterpriseModelRouteAssignment[]
   requestedProviderId?: AiEntryProviderId | null
+  preferredSelectedProviderId?: AiEntryProviderId | null
+  disableEnvDefaultPreference?: boolean
 }) {
   const assignments = params.assignments || []
   const candidateProviders = params.runtimeProviders
@@ -185,13 +187,18 @@ export function buildGovernedAiEntryModelCatalog(params: {
     params.requestedProviderId
       ? accessibleProviders.find((provider) => provider.providerId === params.requestedProviderId) || null
       : null
-  const preferredModelHint = getPreferredTextProviderModelHint()
+  const preferredSelectedProvider =
+    params.preferredSelectedProviderId
+      ? accessibleProviders.find((provider) => provider.providerId === params.preferredSelectedProviderId) || null
+      : null
+  const preferredModelHint = params.disableEnvDefaultPreference ? "" : getPreferredTextProviderModelHint()
   const preferredProviderByModel =
     preferredModelHint
       ? accessibleProviders.find((provider) => normalizeText(provider.modelId) === preferredModelHint) || null
       : null
   const selectedProvider =
     requestedProvider ||
+    preferredSelectedProvider ||
     preferredProviderByModel ||
     accessibleProviders.find((provider) => provider.active) ||
     accessibleProviders[0] ||

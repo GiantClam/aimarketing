@@ -61,37 +61,23 @@ function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
-function getLocalDevelopmentTextDefaultModelHint() {
-  if (process.env.NODE_ENV !== "development") return ""
-  return normalizeText(process.env.AI_ENTRY_NORMAL_DEFAULT_MODEL) || normalizeText(process.env.AI_ENTRY_MODEL)
-}
-
-function mergeRuntimeProvidersForLocalTextDefault(params: {
+function mergeRuntimeProvidersForCatalog(params: {
   enterpriseRuntimeProviders: RuntimeProviderLike[]
   platformRuntimeProviders: RuntimeProviderLike[]
 }) {
   const { enterpriseRuntimeProviders, platformRuntimeProviders } = params
   if (enterpriseRuntimeProviders.length === 0) return platformRuntimeProviders
 
-  const preferredModelHint = getLocalDevelopmentTextDefaultModelHint()
-  if (!preferredModelHint) return enterpriseRuntimeProviders
-
-  const preferredPlatformProviders = platformRuntimeProviders.filter(
-    (provider) =>
-      provider.scope === "text" &&
-      provider.configured &&
-      normalizeText(provider.model) === preferredModelHint,
-  )
-  if (preferredPlatformProviders.length === 0) return enterpriseRuntimeProviders
-
   const merged = new Map<string, RuntimeProviderLike>()
-  for (const provider of [
-    ...preferredPlatformProviders,
-    ...enterpriseRuntimeProviders,
-    ...platformRuntimeProviders.filter((provider) => provider.scope === "text" && provider.configured),
-  ]) {
-    if (!merged.has(provider.id)) {
-      merged.set(provider.id, provider)
+  for (const provider of [...enterpriseRuntimeProviders, ...platformRuntimeProviders]) {
+    const key = [
+      provider.scope,
+      provider.id,
+      normalizeText(provider.model),
+      normalizeText(provider.baseURL),
+    ].join("::")
+    if (!merged.has(key)) {
+      merged.set(key, provider)
     }
   }
   return [...merged.values()]
@@ -190,19 +176,20 @@ export async function getGovernedAiEntryModelCatalogForUser(params: {
     settings,
   )
   const platformRuntimeProviders = getPlatformRuntimeSnapshot().providers
-  const runtimeProviders =
-    enterpriseRuntimeProviders.length > 0
-      ? mergeRuntimeProvidersForLocalTextDefault({
-          enterpriseRuntimeProviders,
-          platformRuntimeProviders,
-        })
-      : platformRuntimeProviders
+  const runtimeProviders = mergeRuntimeProvidersForCatalog({
+    enterpriseRuntimeProviders,
+    platformRuntimeProviders,
+  })
+  const preferredSelectedProviderId =
+    enterpriseRuntimeProviders.find((provider) => provider.scope === "text" && provider.active)?.id || null
 
   return buildGovernedAiEntryModelCatalog({
     user: params.user,
     runtimeProviders,
     assignments: getCategoryAssignments(settings, "text_generation"),
     requestedProviderId: params.requestedProviderId,
+    preferredSelectedProviderId: preferredSelectedProviderId as AiEntryProviderId | null,
+    disableEnvDefaultPreference: Boolean(preferredSelectedProviderId),
   })
 }
 

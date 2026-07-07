@@ -119,6 +119,48 @@ test("buildGovernedAiEntryModelCatalog prefers the configured default-model prov
   }
 })
 
+test("buildGovernedAiEntryModelCatalog keeps platform models visible when enterprise default is selected", () => {
+  const catalog = buildGovernedAiEntryModelCatalog({
+    user: {
+      id: 11,
+      enterpriseId: 2,
+      enterpriseRole: "member",
+      enterpriseStatus: "active",
+    },
+    runtimeProviders: [
+      {
+        id: "enterprise-openai-compatible",
+        scope: "text",
+        configured: true,
+        active: true,
+        model: "deepseek-v4-pro",
+        baseURL: "https://api.deepseek.com",
+      },
+      ...runtimeProviders,
+    ],
+    assignments: [],
+    preferredSelectedProviderId: "enterprise-openai-compatible",
+    disableEnvDefaultPreference: true,
+  })
+
+  assert.equal(catalog.selectedProviderId, "enterprise-openai-compatible")
+  assert.equal(catalog.selectedModelId, "enterprise-openai-compatible::deepseek-v4-pro")
+  assert.deepEqual(catalog.providers.map((item) => item.id), [
+    "enterprise-openai-compatible",
+    "deepseek",
+    "pptoken",
+    "openrouter",
+    "aiberm",
+  ])
+  assert.deepEqual(catalog.models.map((item) => item.id), [
+    "enterprise-openai-compatible::deepseek-v4-pro",
+    "deepseek::deepseek-v4-pro",
+    "pptoken::gpt-5.4-mini",
+    "openrouter::claude-sonnet-4.6",
+    "aiberm::gpt-5.4",
+  ])
+})
+
 test("buildGovernedWorkflowImageProviderOptions respects account assignments", () => {
   const providers = buildGovernedWorkflowImageProviderOptions({
     user: {
