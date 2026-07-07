@@ -478,6 +478,7 @@ const AI_ENTRY_SELECTED_MODEL_STORAGE_KEY = "ai-entry-selected-model-id-v1"
 const SHOULD_PREFER_CATALOG_MODEL_DEFAULT = process.env.NODE_ENV === "development"
 const AI_ENTRY_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-pending-conversation-v1:"
 const AI_ENTRY_SHARED_PENDING_CONVERSATION_STORAGE_PREFIX = "ai-entry-shared-pending-conversation-v1:"
+const AI_ENTRY_SHARED_PENDING_CONVERSATION_EVENT = "ai-entry:shared-pending-conversation-updated"
 const AI_ENTRY_MAX_ATTACHMENTS = 4
 const AI_ENTRY_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 
@@ -550,6 +551,15 @@ function readPendingConversationMessages(conversationId: string | null) {
   )
 }
 
+function dispatchSharedPendingConversationUpdate(conversationId: string) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(
+    new CustomEvent<{ conversationId: string }>(AI_ENTRY_SHARED_PENDING_CONVERSATION_EVENT, {
+      detail: { conversationId },
+    }),
+  )
+}
+
 function savePendingConversationMessages(conversationId: string | null, messages: ChatMessage[]) {
   if (!conversationId || typeof window === "undefined") return
   const payload = JSON.stringify(buildPendingConversationEnvelope(messages))
@@ -563,6 +573,7 @@ function savePendingConversationMessages(conversationId: string | null, messages
   } catch {
     // localStorage is a best-effort bridge across tabs.
   }
+  dispatchSharedPendingConversationUpdate(conversationId)
 }
 
 function clearPendingConversationMessages(conversationId: string | null) {
@@ -577,6 +588,7 @@ function clearPendingConversationMessages(conversationId: string | null) {
   } catch {
     // ignore storage cleanup failures
   }
+  dispatchSharedPendingConversationUpdate(conversationId)
 }
 
 function readPersistedSelectedModelId() {
@@ -1970,6 +1982,21 @@ export function AiEntryWorkspace({
       }
     }
 
+    const handleSharedPendingConversationUpdate = (
+      event: Event,
+    ) => {
+      const detail =
+        event instanceof CustomEvent && event.detail && typeof event.detail === "object"
+          ? (event.detail as { conversationId?: unknown })
+          : null
+      const targetConversationId =
+        typeof detail?.conversationId === "string" && detail.conversationId.trim()
+          ? detail.conversationId.trim()
+          : null
+      if (targetConversationId !== conversationId) return
+      refreshFromSharedState()
+    }
+
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         refreshFromSharedState()
@@ -1978,12 +2005,20 @@ export function AiEntryWorkspace({
 
     refreshFromSharedState()
     window.addEventListener("storage", handleStorage)
+    window.addEventListener(
+      AI_ENTRY_SHARED_PENDING_CONVERSATION_EVENT,
+      handleSharedPendingConversationUpdate,
+    )
     window.addEventListener("focus", refreshFromSharedState)
     window.addEventListener("pageshow", refreshFromSharedState)
     document.addEventListener("visibilitychange", handleVisibility)
 
     return () => {
       window.removeEventListener("storage", handleStorage)
+      window.removeEventListener(
+        AI_ENTRY_SHARED_PENDING_CONVERSATION_EVENT,
+        handleSharedPendingConversationUpdate,
+      )
       window.removeEventListener("focus", refreshFromSharedState)
       window.removeEventListener("pageshow", refreshFromSharedState)
       document.removeEventListener("visibilitychange", handleVisibility)

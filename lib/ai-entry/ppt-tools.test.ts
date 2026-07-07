@@ -580,6 +580,33 @@ test("ppt tools allow factual decks to preview after a researchBrief is provided
   assert.equal(previewInputs.length, 1)
 })
 
+test("ppt tools do not require a researchBrief only because structured brief details mention market pain points", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: [
+      "生成一份4页中文产品方案PPT，主题是企业AI营销工作台。面向企业管理层，用于产品发布场景下的产品介绍。",
+      "",
+      "Structured brief:",
+      "Audience: 企业管理层",
+      "Goal: 产品介绍",
+      "Scenario: product-launch",
+      "Language: zh-CN",
+      "Page count: 4",
+      "Must include: 市场痛点 & 产品定位; 核心功能与竞争优势",
+    ].join("\n"),
+    ...DEFAULT_PPT_BRIEF_INPUT,
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs.length, 1)
+})
+
 test("presentation ppt agent pins frontend runtime and accepts html export artifacts", async () => {
   mockedDownloadDeckPreviewEngine = "frontend-slides-html"
   mockedDownloadContentType = "text/html; charset=utf-8"

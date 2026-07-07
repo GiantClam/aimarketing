@@ -287,8 +287,21 @@ function normalizePptToolError(error: unknown) {
   }
 }
 
+function extractPrimaryPptRequest(prompt: string) {
+  const normalized = prompt.trim()
+  if (!normalized) return ""
+
+  const structuredBriefIndex = normalized.indexOf("\n\nStructured brief:")
+  const primarySegment =
+    structuredBriefIndex >= 0
+      ? normalized.slice(0, structuredBriefIndex).trim()
+      : normalized
+
+  return primarySegment
+}
+
 function requiresResearchBrief(prompt: string) {
-  return FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN.test(prompt)
+  return FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN.test(extractPrimaryPptRequest(prompt))
 }
 
 function hasUsableResearchBrief(value: unknown) {
