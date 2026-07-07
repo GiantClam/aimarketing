@@ -120,6 +120,50 @@ export function resolveAiEntryRestoredMessages<T extends RestorableMessage>(inpu
   return persistedMessages
 }
 
+export function resolveAiEntrySharedPendingMessages<T extends RestorableMessage>(input: {
+  currentMessages: T[]
+  sharedPendingMessages: T[]
+}) {
+  const currentMessages = Array.isArray(input.currentMessages) ? input.currentMessages : []
+  const sharedPendingMessages = Array.isArray(input.sharedPendingMessages) ? input.sharedPendingMessages : []
+
+  if (sharedPendingMessages.length === 0) return currentMessages
+  if (currentMessages.length === 0) return sharedPendingMessages
+
+  const currentMeaningfulCount = getMeaningfulMessageCount(currentMessages)
+  const sharedMeaningfulCount = getMeaningfulMessageCount(sharedPendingMessages)
+
+  if (sharedMeaningfulCount > currentMeaningfulCount) {
+    return sharedPendingMessages
+  }
+
+  if (sharedMeaningfulCount < currentMeaningfulCount) {
+    return currentMessages
+  }
+
+  const lastCurrentMessage = getLastMeaningfulMessage(currentMessages)
+  const lastSharedMessage = getLastMeaningfulMessage(sharedPendingMessages)
+
+  const currentSignature = JSON.stringify({
+    role: lastCurrentMessage?.role ?? null,
+    content: typeof lastCurrentMessage?.content === "string" ? lastCurrentMessage.content.trim() : "",
+    parts: Array.isArray(lastCurrentMessage?.parts) ? lastCurrentMessage.parts : [],
+    attachments: Array.isArray(lastCurrentMessage?.attachments) ? lastCurrentMessage.attachments : [],
+  })
+  const sharedSignature = JSON.stringify({
+    role: lastSharedMessage?.role ?? null,
+    content: typeof lastSharedMessage?.content === "string" ? lastSharedMessage.content.trim() : "",
+    parts: Array.isArray(lastSharedMessage?.parts) ? lastSharedMessage.parts : [],
+    attachments: Array.isArray(lastSharedMessage?.attachments) ? lastSharedMessage.attachments : [],
+  })
+
+  if (sharedSignature !== currentSignature) {
+    return sharedPendingMessages
+  }
+
+  return currentMessages
+}
+
 export function resolveAiEntryCompletedConversationMessages<T extends RestorableMessage>(input: {
   currentMessages: T[]
   persistedMessages: T[]

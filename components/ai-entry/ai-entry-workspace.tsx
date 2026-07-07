@@ -113,6 +113,7 @@ import {
   resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
   resolveAiEntryRestoredMessages,
+  resolveAiEntrySharedPendingMessages,
   shouldShowAiEntryConversationRestore,
 } from "@/lib/ai-entry/message-restore"
 import { resolveAiEntryTargetConversationId } from "@/lib/ai-entry/route-sync"
@@ -1943,9 +1944,9 @@ export function AiEntryWorkspace({
     if (pendingMessages.length === 0) return
 
     setMessages((current) =>
-      resolveAiEntryRestoredMessages({
-        pendingMessages,
-        persistedMessages: current,
+      resolveAiEntrySharedPendingMessages({
+        currentMessages: current,
+        sharedPendingMessages: pendingMessages,
       }),
     )
   }, [conversationId])

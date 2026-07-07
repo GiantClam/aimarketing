@@ -7,6 +7,7 @@ import {
   resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
   resolveAiEntryRestoredMessages,
+  resolveAiEntrySharedPendingMessages,
   shouldShowAiEntryConversationRestore,
 } from "./message-restore"
 
@@ -124,6 +125,65 @@ test("prefers persisted messages once the server has a completed assistant reply
       persistedMessages: persisted,
     }),
     persisted,
+  )
+})
+
+test("prefers shared pending messages when another tab has appended newer conversation history", () => {
+  const current: TestMessage[] = [
+    { role: "user", content: "你好" },
+    { role: "assistant", content: "你好，我可以帮你做什么？" },
+  ]
+  const sharedPending: TestMessage[] = [
+    { role: "user", content: "你好" },
+    { role: "assistant", content: "你好，我可以帮你做什么？" },
+    { role: "user", content: "帮我写一个方案" },
+  ]
+
+  assert.deepEqual(
+    resolveAiEntrySharedPendingMessages({
+      currentMessages: current,
+      sharedPendingMessages: sharedPending,
+    }),
+    sharedPending,
+  )
+})
+
+test("prefers shared pending messages when another tab has newer assistant content with the same message count", () => {
+  const current: TestMessage[] = [
+    { role: "user", content: "继续" },
+    { role: "assistant", content: "正在生成中..." },
+  ]
+  const sharedPending: TestMessage[] = [
+    { role: "user", content: "继续" },
+    { role: "assistant", content: "已生成最新结果。" },
+  ]
+
+  assert.deepEqual(
+    resolveAiEntrySharedPendingMessages({
+      currentMessages: current,
+      sharedPendingMessages: sharedPending,
+    }),
+    sharedPending,
+  )
+})
+
+test("keeps current messages when shared pending history is older than the current tab", () => {
+  const current: TestMessage[] = [
+    { role: "user", content: "继续" },
+    { role: "assistant", content: "已生成最新结果。" },
+    { role: "user", content: "再补一版" },
+  ]
+  const sharedPending: TestMessage[] = [
+    { role: "user", content: "继续" },
+    { role: "assistant", content: "已生成最新结果。" },
+  ]
+
+  assert.deepEqual(
+    resolveAiEntrySharedPendingMessages({
+      currentMessages: current,
+      sharedPendingMessages: sharedPending,
+    }),
+    current,
   )
 })
 
