@@ -31,7 +31,9 @@ import { buildLeadToolDownload, buildLeadToolPreview } from "@/lib/lead-tools/ru
 const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 const HTML_MIME_TYPE_PREFIX = "text/html"
 const FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN =
-  /(?:现状|最新|趋势|市场|行业|竞品|政策|法规|关税|融资|财报|业绩|地缘|战争|制裁|供应链|进出口|油价|运价|汇率|\bcompany\b|\bmarket\b|\bindustry\b|\bcompetitor\b|\bpolicy\b|\bregulation\b|\btariff\b|\bearnings\b|\bgeopolitical\b|\bsupply chain\b|\blatest\b|\bcurrent state\b)/iu
+  /(?:现状|最新|政策|法规|关税|融资|财报|业绩|地缘|战争|制裁|供应链|进出口|油价|运价|汇率|\bpolicy\b|\bregulation\b|\btariff\b|\bearnings\b|\bgeopolitical\b|\bsupply chain\b|\blatest\b|\bcurrent state\b)/iu
+const FACTUAL_PPT_MARKET_RESEARCH_REQUIRED_PATTERN =
+  /(?:(?:最新|当前|近期|202[4-9]|today|latest|current|recent).{0,24}(?:趋势|市场|行业|竞品|\btrend\b|\bmarket\b|\bindustry\b|\bcompetitor\b)|(?:趋势|市场|行业|竞品|\btrend\b|\bmarket\b|\bindustry\b|\bcompetitor\b).{0,24}(?:最新|当前|近期|202[4-9]|today|latest|current|recent))/iu
 
 const pptScenarioSchema = z.enum([
   "marketing-campaign",
@@ -301,7 +303,11 @@ function extractPrimaryPptRequest(prompt: string) {
 }
 
 function requiresResearchBrief(prompt: string) {
-  return FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN.test(extractPrimaryPptRequest(prompt))
+  const primaryRequest = extractPrimaryPptRequest(prompt)
+  return (
+    FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN.test(primaryRequest) ||
+    FACTUAL_PPT_MARKET_RESEARCH_REQUIRED_PATTERN.test(primaryRequest)
+  )
 }
 
 function hasUsableResearchBrief(value: unknown) {

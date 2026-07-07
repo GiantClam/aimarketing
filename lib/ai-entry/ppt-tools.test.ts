@@ -607,6 +607,55 @@ test("ppt tools do not require a researchBrief only because structured brief det
   assert.equal(previewInputs.length, 1)
 })
 
+test("ppt tools do not require a researchBrief for product deck copy with generic market opportunity language", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: [
+      "制作一份4页产品方案PPT，主题为「企业AI营销工作台」。按以下结构展开：",
+      "",
+      "第1页 - 封面：标题「企业AI营销工作台」，副标题「让营销团队效率翻倍的AI工作台」。",
+      "第2页 - 问题与机会：指出当前企业营销三大核心痛点，内容生产效率低、数据洞察滞后、团队协作碎片化。引出AI营销工作台的市场机会和解决方向。",
+      "第3页 - 产品方案与核心价值：展示AI内容引擎、数据决策中心、协同工作流。",
+      "第4页 - 落地路径：试点导入、规模推广、持续优化，并附关键成功指标。",
+      "Structured brief:",
+      "Audience: 管理层",
+      "Goal: 帮助管理层快速理解产品价值和落地路径",
+      "Scenario: product-launch",
+      "Language: zh-CN",
+      "Page count: 4",
+      "Tone: 简洁、专业、决策导向",
+    ].join("\n"),
+    ...DEFAULT_PPT_BRIEF_INPUT,
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs.length, 1)
+})
+
+test("ppt tools still require a researchBrief for latest market trend decks", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份2026年AI营销市场趋势和行业竞争格局PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+  })
+
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_research_brief_required")
+  assert.equal(previewInputs.length, 0)
+})
+
 test("presentation ppt agent pins frontend runtime and accepts html export artifacts", async () => {
   mockedDownloadDeckPreviewEngine = "frontend-slides-html"
   mockedDownloadContentType = "text/html; charset=utf-8"
