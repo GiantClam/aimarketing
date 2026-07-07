@@ -107,6 +107,7 @@ import {
   readFreshPendingConversationMessages,
 } from "@/lib/ai-entry/pending-conversation-store"
 import {
+  hasAiEntryCompletedAssistantMessage,
   hasAiEntryPptPreviewMaterialized,
   resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
@@ -121,6 +122,7 @@ const AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS = 1500
 const AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS = 5
 const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 25 * 60 * 1000
 const AI_ENTRY_PENDING_TASK_HISTORY_REFRESH_CADENCE = 4
+const AI_ENTRY_STREAM_RECOVERY_POLL_INTERVAL_MS = 3000
 
 type ChatAttachment = {
   id: string
@@ -919,6 +921,39 @@ function renderAiEntryErrorMessage(
   })
 }
 
+function isAiEntryRecoverableTransportError(value: unknown) {
+  const normalized =
+    value instanceof Error
+      ? value.message.trim().toLowerCase()
+      : typeof value === "string"
+        ? value.trim().toLowerCase()
+        : ""
+
+  if (!normalized) return false
+
+  return (
+    normalized.includes("network") ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("load failed") ||
+    normalized.includes("fetch failed") ||
+    normalized.includes("econnreset") ||
+    normalized.includes("etimedout") ||
+    normalized.includes("timeout") ||
+    normalized.includes("connection") ||
+    normalized.includes("stream")
+  )
+}
+
+function filterAiEntryRecoverySupersededTaskEvents(events: PendingTaskEvent[]) {
+  return events.filter(
+    (event) =>
+      event.type !== "stream_recovery" &&
+      event.type !== "request_start" &&
+      event.type !== "stream_error" &&
+      event.type !== "request_failed",
+  )
+}
+
 export function AiEntryWorkspace({
   initialConversationId,
   embedded = false,
@@ -1081,6 +1116,7 @@ export function AiEntryWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
   const isLoadingRef = useRef(false)
+  const isStreamRecoveryInFlightRef = useRef(false)
   const onConversationIdChangeRef = useRef<typeof onConversationIdChange>(onConversationIdChange)
   const pendingFirstConversationRouteRef = useRef(false)
   const isPptAssistantRoute = isAiEntryPptAgentId(routeAgentId)
@@ -1184,6 +1220,10 @@ export function AiEntryWorkspace({
   const selectedModel = useMemo(
     () => models.find((item) => item.id === selectedModelId) || null,
     [models, selectedModelId],
+  )
+  const hasStreamRecoveryPending = useMemo(
+    () => pendingTaskEvents.some((event) => event.type === "stream_recovery"),
+    [pendingTaskEvents],
   )
   const composerPromptButtons = useMemo(() => {
     if (embedded && compactEmbedded) {
@@ -1850,6 +1890,122 @@ export function AiEntryWorkspace({
     }
   }, [copy, fetchConversationMessages, initialConversationId, isZh, models, preferredUnlockedModelId, resolvedRequestAgentId, routeAgentId, shouldLockModel])
 
+  const attemptConversationRecovery = useCallback(async () => {
+    const targetConversationId = latestConversationIdRef.current || conversationId
+    if (!targetConversationId || isStreamRecoveryInFlightRef.current) return false
+    if (typeof navigator !== "undefined" && "onLine" in navigator && !navigator.onLine) return false
+
+    isStreamRecoveryInFlightRef.current = true
+
+    try {
+      const {
+        response,
+        messages: persistedMessages,
+        pendingTask,
+        conversationState: refreshedConversationState,
+      } = await fetchConversationMessages(targetConversationId)
+
+      if (!response.ok) {
+        throw new Error(`http_${response.status}`)
+      }
+
+      setConversationState(refreshedConversationState)
+      setMessages((current) => {
+        const next = resolveAiEntryCompletedConversationMessages({
+          currentMessages: current,
+          persistedMessages,
+        })
+        savePendingConversationMessages(targetConversationId, next)
+        return next
+      })
+
+      if (pendingTask) {
+        savePendingAssistantTask({
+          taskId: pendingTask.task_id.trim(),
+          scope: "ai_entry",
+          conversationId:
+            typeof pendingTask.conversation_id === "string" && pendingTask.conversation_id.trim()
+              ? pendingTask.conversation_id.trim()
+              : targetConversationId,
+          agentId:
+            typeof pendingTask.agent_id === "string" && pendingTask.agent_id.trim()
+              ? pendingTask.agent_id.trim()
+              : routeAgentId || resolvedRequestAgentId || null,
+          taskType:
+            typeof pendingTask.task_type === "string" && pendingTask.task_type.trim()
+              ? pendingTask.task_type.trim()
+              : null,
+          createdAt:
+            typeof pendingTask.created_at === "number" && Number.isFinite(pendingTask.created_at)
+              ? pendingTask.created_at * 1000
+              : Date.now(),
+        })
+        setPendingTaskRefreshKey((current) => current + 1)
+      }
+
+      const hasRecoveredConversation =
+        Boolean(pendingTask) ||
+        hasAiEntryCompletedAssistantMessage(persistedMessages) ||
+        hasAiEntryPptPreviewMaterialized({
+          persistedMessages,
+          conversationState: refreshedConversationState,
+        }) ||
+        refreshedConversationState?.ppt?.phase === "preview-ready" ||
+        refreshedConversationState?.ppt?.phase === "exported"
+
+      if (hasRecoveredConversation) {
+        setErrorMessage(null)
+        setPendingTaskEvents([])
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error("ai-entry.stream-recovery.failed", error)
+      return false
+    } finally {
+      isStreamRecoveryInFlightRef.current = false
+    }
+  }, [conversationId, fetchConversationMessages, resolvedRequestAgentId, routeAgentId])
+
+  useEffect(() => {
+    if (!conversationId || isConversationLoading || isLoading || !hasStreamRecoveryPending) {
+      return
+    }
+
+    let cancelled = false
+
+    const tryRecover = async () => {
+      if (cancelled) return
+      await attemptConversationRecovery()
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void tryRecover()
+      }
+    }
+
+    void tryRecover()
+    const intervalId = window.setInterval(() => {
+      void tryRecover()
+    }, AI_ENTRY_STREAM_RECOVERY_POLL_INTERVAL_MS)
+
+    window.addEventListener("online", tryRecover)
+    window.addEventListener("focus", tryRecover)
+    window.addEventListener("pageshow", tryRecover)
+    document.addEventListener("visibilitychange", handleVisibility)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener("online", tryRecover)
+      window.removeEventListener("focus", tryRecover)
+      window.removeEventListener("pageshow", tryRecover)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [attemptConversationRecovery, conversationId, hasStreamRecoveryPending, isConversationLoading, isLoading])
+
   useEffect(() => {
     const pendingTask = findAiEntryPendingTask({
       conversationId,
@@ -2292,6 +2448,8 @@ export function AiEntryWorkspace({
     const baseMessages = messages
     let assistantDraft: ChatMessage = { id: assistantMessageId, role: "assistant", content: "" }
     let sidebarRefreshConversationId: string | null = null
+    let latestStreamConversationId: string | null = conversationId
+    let didReceiveStreamTerminalEvent = false
 
     const syncAssistantDraft = (nextDraft: ChatMessage) => {
       if (
@@ -2457,6 +2615,7 @@ export function AiEntryWorkspace({
               ? event.conversation_id.trim()
               : null
           if (streamConversationId) {
+            latestStreamConversationId = streamConversationId
             persistPendingConversationDraft(streamConversationId)
           }
 
@@ -2666,6 +2825,7 @@ export function AiEntryWorkspace({
           }
 
           if (event.event === "message_end") {
+            didReceiveStreamTerminalEvent = true
             const finalText = typeof event.answer === "string" && event.answer.trim()
               ? event.answer.trim()
               : streamedText.trim()
@@ -2711,6 +2871,7 @@ export function AiEntryWorkspace({
           }
 
           if (event.event === "error") {
+            didReceiveStreamTerminalEvent = true
             streamError = renderAiEntryErrorMessage(event.error, copy, isZh)
             promoteConversationRoute(streamConversationId)
             upsertTaskEvent({
@@ -2742,6 +2903,34 @@ export function AiEntryWorkspace({
         flushed.events.forEach(processEvent)
 
         if (streamError) throw new Error(streamError)
+        if (!didReceiveStreamTerminalEvent) {
+          const recoveryConversationId =
+            latestStreamConversationId || latestConversationIdRef.current || conversationId
+
+          if (recoveryConversationId) {
+            latestConversationIdRef.current = recoveryConversationId
+            setConversationId((current) =>
+              current === recoveryConversationId ? current : recoveryConversationId,
+            )
+            setErrorMessage(
+              isZh
+                ? "连接中断，正在尝试自动恢复会话..."
+                : "Connection interrupted. Attempting to recover the conversation...",
+            )
+            setPendingTaskEvents((current) =>
+              [
+                ...filterAiEntryRecoverySupersededTaskEvents(current),
+                {
+                  type: "stream_recovery",
+                  label: isZh ? "连接中断，正在刷新会话" : "Connection interrupted, refreshing conversation",
+                  status: "info" as const,
+                  at: Date.now(),
+                },
+              ].slice(-12),
+            )
+            return
+          }
+        }
         if (!streamedText.trim()) {
           syncAssistantDraft({
             ...assistantDraft,
@@ -2779,6 +2968,10 @@ export function AiEntryWorkspace({
         copy,
         isZh,
       )}`
+      const recoveryConversationId =
+        latestStreamConversationId || latestConversationIdRef.current || conversationId
+      const shouldAttemptRecovery =
+        Boolean(recoveryConversationId) && isAiEntryRecoverableTransportError(error)
       const failedEvent: PendingTaskEvent = {
         type: "request_failed",
         label: "Request failed",
@@ -2786,16 +2979,48 @@ export function AiEntryWorkspace({
         status: "failed",
         at: Date.now(),
       }
-      setErrorMessage(renderedError)
+      setErrorMessage(
+        shouldAttemptRecovery
+          ? isZh
+            ? "连接中断，正在尝试自动恢复会话..."
+            : "Connection interrupted. Attempting to recover the conversation..."
+          : renderedError,
+      )
       if (!assistantDraft.content.trim() && !(assistantDraft.parts?.length ?? 0)) {
         syncAssistantDraft({
           ...assistantDraft,
-          content: renderedError,
+          content:
+            shouldAttemptRecovery
+              ? assistantDraft.content
+              : renderedError,
         })
       } else if (latestConversationIdRef.current) {
         savePendingConversationMessages(latestConversationIdRef.current, [...baseMessages, userMessage, assistantDraft])
       }
-      setPendingTaskEvents((current) => [...current, failedEvent].slice(-12))
+      setPendingTaskEvents((current) =>
+        shouldAttemptRecovery
+          ? [
+              ...filterAiEntryRecoverySupersededTaskEvents(current),
+              {
+                type: "stream_recovery",
+                label: isZh ? "连接中断，正在刷新会话" : "Connection interrupted, refreshing conversation",
+                detail: renderedError,
+                status: "info" as const,
+                at: Date.now(),
+              },
+            ].slice(-12)
+          : [
+              ...current.filter((event) => event.type !== "request_start"),
+              {
+                type: "request_start",
+                label: "Request sent",
+                detail: renderedError,
+                status: "failed" as const,
+                at: Date.now(),
+              },
+              failedEvent,
+            ].slice(-12),
+      )
     } finally {
       pendingFirstConversationRouteRef.current = false
       isLoadingRef.current = false

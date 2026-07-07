@@ -1,4 +1,7 @@
-import { extractLatestPptPreviewContext } from "@/lib/ai-entry/ppt-tool-result-message"
+import {
+  extractLatestPptPreviewContext,
+  isQueuedPptBackgroundStatusMessage,
+} from "@/lib/ai-entry/ppt-tool-result-message"
 
 type RestorableMessage = {
   role?: "user" | "assistant" | null
@@ -165,6 +168,19 @@ export function resolveAiEntryCompletedConversationMessages<T extends Restorable
   }
 
   return [...resolvedMessages, backgroundAssistantMessage]
+}
+
+export function hasAiEntryCompletedAssistantMessage<T extends RestorableMessage>(messages: T[]) {
+  return [...(Array.isArray(messages) ? messages : [])].reverse().some((message) => {
+    if (message?.role !== "assistant") return false
+    const content = typeof message.content === "string" ? message.content.trim() : ""
+    const hasParts = Array.isArray(message.parts) && message.parts.length > 0
+
+    if (!content && !hasParts) return false
+    if (content && isQueuedPptBackgroundStatusMessage(content)) return false
+
+    return true
+  })
 }
 
 export function hasAiEntryPptPreviewMaterialized<T extends RestorableMessage>(input: {

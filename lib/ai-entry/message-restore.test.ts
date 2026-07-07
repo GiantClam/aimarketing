@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  hasAiEntryCompletedAssistantMessage,
   hasAiEntryPptPreviewMaterialized,
   resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
@@ -247,6 +248,28 @@ test("merges background assistant parts into an already persisted completion mes
         parts: [{ type: "report", id: "report:preview-401" }],
       },
     ],
+  )
+})
+
+test("treats a normal assistant reply as a completed materialized result", () => {
+  assert.equal(
+    hasAiEntryCompletedAssistantMessage([
+      { role: "user", content: "继续" },
+      { role: "assistant", content: "这是最新回复。" },
+    ]),
+    true,
+  )
+})
+
+test("ignores queued PPT background status messages when checking for completed assistant results", () => {
+  assert.equal(
+    hasAiEntryCompletedAssistantMessage([
+      {
+        role: "assistant",
+        content: "已切换为后台生成：\n- 任务 ID: 402\n- 状态: 系统会持续轮询，完成后自动回填预览结果。",
+      },
+    ]),
+    false,
   )
 })
 
