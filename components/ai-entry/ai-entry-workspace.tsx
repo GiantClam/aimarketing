@@ -954,6 +954,12 @@ function filterAiEntryRecoverySupersededTaskEvents(events: PendingTaskEvent[]) {
   )
 }
 
+function buildAiEntryRecoveryEventDetail(isZh: boolean) {
+  return isZh
+    ? "检测到连接中断，系统正在自动同步最新会话进度。"
+    : "The connection was interrupted. Syncing the latest conversation progress automatically."
+}
+
 export function AiEntryWorkspace({
   initialConversationId,
   embedded = false,
@@ -2923,6 +2929,7 @@ export function AiEntryWorkspace({
                 {
                   type: "stream_recovery",
                   label: isZh ? "连接中断，正在刷新会话" : "Connection interrupted, refreshing conversation",
+                  detail: buildAiEntryRecoveryEventDetail(isZh),
                   status: "info" as const,
                   at: Date.now(),
                 },
@@ -3004,7 +3011,7 @@ export function AiEntryWorkspace({
               {
                 type: "stream_recovery",
                 label: isZh ? "连接中断，正在刷新会话" : "Connection interrupted, refreshing conversation",
-                detail: renderedError,
+                detail: buildAiEntryRecoveryEventDetail(isZh),
                 status: "info" as const,
                 at: Date.now(),
               },
