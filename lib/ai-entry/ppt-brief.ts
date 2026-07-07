@@ -65,6 +65,13 @@ function inferLanguage(text: string): PptBriefLanguage {
 function inferScenario(text: string): PptBriefScenario | null {
   if (/(培训|课件|教学|workshop|training|onboarding)/iu.test(text)) return "training"
   if (
+    /(战略汇报|战略分析|研究汇报|分析汇报|现状汇报|briefing|analysis|report|review|军事分析|局势分析|复盘汇报)/iu.test(
+      text,
+    )
+  ) {
+    return "sales-deck"
+  }
+  if (
     /(路演|提案|客户|销售|pitch|proposal|sales|investor|解决方案|产品方案|方案PPT|方案汇报|合作方式)/iu.test(
       text,
     )
@@ -253,6 +260,75 @@ export function buildPptBriefPromptSection(state: PptBriefState) {
     .join("\n")
 
   return lines
+}
+
+export function buildPptBriefClarificationMessage(state: PptBriefState, isZh: boolean) {
+  const suggestedAudience = state.suggestedValues.audience
+  const suggestedGoal = state.suggestedValues.goal
+  const suggestedLanguage = state.suggestedValues.language
+  const suggestedPageCount = state.suggestedValues.pageCount
+  const suggestedTone = state.suggestedValues.tone
+
+  const scenarioHint = isZh
+    ? "可选：战略汇报、营销方案、产品发布、销售提案、培训课件"
+    : "Options: strategic briefing, marketing campaign, product launch, sales deck, training deck"
+  const scenarioReplyHint = isZh
+    ? "如果你回复“战略汇报 / 战略分析 / 研究汇报”，我会按战略汇报型 deck 继续。"
+    : "If you reply with strategic briefing or analysis report, I will continue with a strategic briefing-style deck."
+
+  const questions: string[] = []
+  if (state.missingFields.includes("audience")) {
+    questions.push(
+      isZh
+        ? `1. 这份 PPT 主要给谁看？建议：${suggestedAudience}。`
+        : `1. Who is this deck for? Suggested: ${suggestedAudience}.`,
+    )
+  }
+  if (state.missingFields.includes("goal")) {
+    questions.push(
+      isZh
+        ? `2. 这份 PPT 的核心目标是什么？建议：${suggestedGoal}。`
+        : `2. What is the primary goal of this deck? Suggested: ${suggestedGoal}.`,
+    )
+  }
+  if (state.missingFields.includes("scenario")) {
+    questions.push(
+      isZh
+        ? `${questions.length + 1}. 这次更接近哪种场景？${scenarioHint}。`
+        : `${questions.length + 1}. Which scenario fits best? ${scenarioHint}.`,
+    )
+  }
+  if (state.missingFields.includes("language")) {
+    questions.push(
+      isZh
+        ? `${questions.length + 1}. 最终成稿用中文还是英文？建议：${suggestedLanguage}。`
+        : `${questions.length + 1}. Should the final deck be in Chinese or English? Suggested: ${suggestedLanguage}.`,
+    )
+  }
+
+  const summary = isZh
+    ? [
+        "还不能进入 PPT 预览，brief 还没补完整。",
+        `当前我已确认：目标=${state.goal || suggestedGoal}；页数=${state.pageCount || suggestedPageCount}；语言=${state.language || suggestedLanguage}${state.tone ? `；语气=${state.tone}` : `；建议语气=${suggestedTone}`}`,
+        "请直接补充下面缺失的信息，我收到后会继续追问，直到 brief 完整再进入预览：",
+      ]
+    : [
+        "I cannot start the PPT preview yet because the brief is still incomplete.",
+        `Confirmed so far: goal=${state.goal || suggestedGoal}; page count=${state.pageCount || suggestedPageCount}; language=${state.language || suggestedLanguage}${state.tone ? `; tone=${state.tone}` : `; suggested tone=${suggestedTone}`}`,
+        "Please fill in the missing items below. I will keep asking until the brief is complete, then move into preview:",
+      ]
+
+  const closing = isZh
+    ? [
+        scenarioReplyHint,
+        "你也可以直接按这个格式回复：受众=...；场景=...；目标=...；语言=中文/英文。",
+      ]
+    : [
+        scenarioReplyHint,
+        "You can also reply in one line like: audience=...; scenario=...; goal=...; language=Chinese/English.",
+      ]
+
+  return [...summary, ...questions.slice(0, 3), ...closing].join("\n")
 }
 
 export function buildPptTemplateRecommendationSource(input: {

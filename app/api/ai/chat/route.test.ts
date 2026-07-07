@@ -609,7 +609,7 @@ test("ai chat route keeps preview template-selection in waiting state instead of
 
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我生成一份董事会汇报 PPT 预览。" }],
+      messages: [{ role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT 预览。" }],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -635,7 +635,7 @@ test("ai chat route does not persist queued background preview status as a secon
 
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我先生成一个可编辑 PPT 预览。" }],
+      messages: [{ role: "user", content: "帮我先生成一个给管理层看的产品发布可编辑 PPT 预览。" }],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -711,7 +711,7 @@ test("ai chat route uses the first user prompt as conversation title fallback", 
 test("ai chat route persists the user prompt before assistant completion", async () => {
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我生成一份董事会汇报 PPT。" }],
+      messages: [{ role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。" }],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -731,7 +731,7 @@ test("ai chat route persists the user prompt before assistant completion", async
     [
       {
         role: "user",
-        content: "帮我生成一份董事会汇报 PPT。",
+        content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。",
         agentId: "executive-ppt",
       },
       {
@@ -743,12 +743,41 @@ test("ai chat route persists the user prompt before assistant completion", async
   )
 })
 
+test("ai chat route asks follow-up questions and stops before preview when executive-ppt brief is incomplete", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "做一个克里米亚现状的ppt，10页，检索2026年最新的信息" }],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  const text = await response.text()
+  assert.match(text, /还不能进入 PPT 预览/)
+  assert.match(text, /这份 PPT 主要给谁看/)
+  assert.match(text, /这次更接近哪种场景/)
+  assert.doesNotMatch(text, /Normal chat reply\./)
+  assert.doesNotMatch(text, /"event":"tool_call"/)
+  assert.equal(appendMessageCalls[0]?.role, "user")
+  assert.equal(appendMessageCalls[0]?.agentId, "executive-ppt")
+  assert.equal(appendMessageCalls[0]?.content, "做一个克里米亚现状的ppt，10页，检索2026年最新的信息")
+  assert.equal(appendMessageCalls[1]?.role, "assistant")
+  assert.equal(appendMessageCalls[1]?.agentId, "executive-ppt")
+  assert.match(appendMessageCalls[1]?.content || "", /我收到后会继续追问，直到 brief 完整再进入预览/)
+  assert.equal(finalizeCalls, 0)
+  assert.equal(releaseCalls, 0)
+})
+
 test("ai chat route does not persist closed stream transport errors as assistant replies", async () => {
   emitClosedControllerErrorFlow = true
 
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我生成一份董事会汇报 PPT。" }],
+      messages: [{ role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。" }],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -769,7 +798,7 @@ test("ai chat route does not persist closed stream transport errors as assistant
     [
       {
         role: "user",
-        content: "帮我生成一份董事会汇报 PPT。",
+        content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。",
         agentId: "executive-ppt",
       },
     ],

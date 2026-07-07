@@ -54,7 +54,11 @@ import {
 } from "@/lib/ai-entry/chat-attachments"
 import { buildAiEntryToolRegistry } from "@/lib/ai-entry/tool-registry"
 import { maybeAutoRunPptPreview } from "@/lib/ai-entry/ppt-auto-preview"
-import { buildPptBriefPromptSection, extractPptBriefState } from "@/lib/ai-entry/ppt-brief"
+import {
+  buildPptBriefClarificationMessage,
+  buildPptBriefPromptSection,
+  extractPptBriefState,
+} from "@/lib/ai-entry/ppt-brief"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "@/lib/ai-entry/ppt-tool-result-message"
 import {
@@ -136,6 +140,20 @@ function createChatTraceId() {
 
 function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
+}
+
+function createImmediateSseResponse(events: Record<string, unknown>[]) {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(buildSseEvent(event)))
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(stream, { headers: STREAM_HEADERS })
 }
 
 function isClosedStreamControllerError(error: unknown) {
@@ -970,12 +988,62 @@ export async function POST(request: NextRequest) {
         })
       : null
     const conversationState = resolveAiEntryConversationStateFromContents(normalizedMessageContents)
+    const hasPersistedPptPreviewContext = normalizedMessageContents.some((content) =>
+      content.includes("ai-entry-ppt-preview-context"),
+    )
     if (pptBriefState) {
       resolvedInstruction = [resolvedInstruction, buildPptBriefPromptSection(pptBriefState)]
         .map((section) => section.trim())
         .filter(Boolean)
         .join("\n\n")
     }
+
+    if (
+      executionContext !== "workflow" &&
+      effectiveAgentId === "executive-ppt" &&
+      pptBriefState &&
+      !pptBriefState.readyForPreview &&
+      conversationState.ppt.phase !== "preview-ready" &&
+      conversationState.ppt.phase !== "exported" &&
+      !hasPersistedPptPreviewContext
+    ) {
+      const clarificationMessage = buildPptBriefClarificationMessage(pptBriefState, isZh)
+
+      if (persistenceEnabled) {
+        await persistAiEntryTurnSafe({
+          userId: currentUser.id,
+          conversationId,
+          assistantMessage: clarificationMessage,
+          scope: conversationScope,
+          agentId: agentConfig.agentId,
+        })
+      }
+
+      if (!stream) {
+        return NextResponse.json({
+          conversationId,
+          message: clarificationMessage,
+        })
+      }
+
+      return createImmediateSseResponse([
+        {
+          event: "conversation_init",
+          conversation_id: conversationId,
+        },
+        {
+          event: "message",
+          conversation_id: conversationId,
+          answer: clarificationMessage,
+        },
+        {
+          event: "message_end",
+          conversation_id: conversationId,
+          answer: clarificationMessage,
+        },
+      ])
+    }
+
     const toolRegistry = await buildAiEntryToolRegistry({
       currentUser,
       policy: runtimePolicy,
