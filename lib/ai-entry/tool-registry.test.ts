@@ -548,6 +548,7 @@ test("tool registry queues executive-ppt preview in the background for chat turn
           "Scenario: marketing-campaign",
           "Language: zh-CN",
         ].join("\n"),
+        sourcePrompt: "用第一个模板开始生成",
         audience: "管理层",
         goal: "经营同步",
         scenario: "marketing-campaign",
@@ -1260,6 +1261,86 @@ test("tool registry accepts a direct template id reply before a persisted recomm
   assert.equal(
     (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
     "swiss-grid",
+  )
+})
+
+test("tool registry injects latest user prompt as sourcePrompt for executive-ppt preview tasks", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "executive-ppt",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["preview_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Preview directly.",
+        toolIds: ["preview_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    latestUserPrompt:
+      "请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页。",
+    pptBriefState: {
+      topic: "董事会经营复盘与风险诊断汇报 PPT",
+      audience: "董事会和管理层",
+      goal: "经营汇报与决策同步",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      pageCount: 10,
+      tone: "简洁、专业、决策导向",
+      mustInclude: [],
+      missingFields: [],
+      readyForPreview: true,
+      suggestedValues: {
+        audience: "董事会和管理层",
+        goal: "经营汇报与决策同步",
+        scenario: "sales-deck",
+        language: "zh-CN",
+        pageCount: 10,
+        tone: "简洁、专业、决策导向",
+      },
+    },
+    messageContents: [],
+    auditContext: {
+      traceId: "trace-source-prompt",
+      conversationId: "conv-source-prompt",
+      agentId: "executive-ppt",
+    },
+  })
+
+  const tools = result.selectedTools as unknown as Record<
+    string,
+    { execute: (input: Record<string, unknown>) => Promise<Record<string, unknown>> }
+  >
+  const previewResult = await tools.preview_ppt_deck.execute({
+    prompt: [
+      "请生成董事会经营复盘与风险诊断汇报。",
+      "关键风险诊断（外部） —— 市场、竞争、政策",
+    ].join("\n"),
+  })
+
+  assert.equal(previewResult.ok, true)
+  assert.equal(enqueuedTasks.length, 1)
+  assert.equal(
+    (enqueuedTasks[0]?.payload?.input as { sourcePrompt?: string } | undefined)?.sourcePrompt,
+    "请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页。",
   )
 })
 

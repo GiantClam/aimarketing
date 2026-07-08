@@ -35,6 +35,7 @@ export type PptBriefState = {
 
 type PreparedPreviewInput = {
   prompt: string
+  sourcePrompt?: string
   audience: string
   goal: string
   scenario: PptBriefScenario
@@ -448,6 +449,7 @@ export function preparePptPreviewInput(input: {
     : {}
 
   const prompt = readOptionalString(record.prompt)
+  const sourcePrompt = readOptionalString(record.sourcePrompt)
   const audience = readOptionalString(record.audience) || input.briefState?.audience || null
   const goal = readOptionalString(record.goal) || input.briefState?.goal || null
   const scenario =
@@ -518,6 +520,7 @@ export function preparePptPreviewInput(input: {
     ok: true as const,
     input: {
       prompt: briefLines,
+      ...(sourcePrompt ? { sourcePrompt } : {}),
       audience: resolvedAudience,
       goal: resolvedGoal,
       scenario: resolvedScenario,

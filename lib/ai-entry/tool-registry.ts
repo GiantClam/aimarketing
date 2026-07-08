@@ -217,6 +217,27 @@ function maybeInjectPptTemplateSelection(input: {
   return rest
 }
 
+function maybeInjectPptSourcePrompt(input: {
+  toolId: string
+  rawInput: unknown
+  latestUserPrompt: string | null | undefined
+}) {
+  if (input.toolId !== "preview_ppt_deck") {
+    return input.rawInput
+  }
+
+  const sourcePrompt = readOptionalString(input.latestUserPrompt)
+  if (!sourcePrompt) {
+    return input.rawInput
+  }
+
+  const record = input.rawInput && typeof input.rawInput === "object" ? (input.rawInput as Record<string, unknown>) : {}
+  return {
+    ...record,
+    sourcePrompt,
+  }
+}
+
 function extractPreviewContextFromToolResult(result: unknown): PptPreviewContext | null {
   if (!result || typeof result !== "object" || (result as { ok?: unknown }).ok === false) {
     return null
@@ -484,7 +505,12 @@ function wrapToolSet(params: {
           agentId: params.auditContext.agentId,
           executionContext: params.executionContext,
         })
-        const effectiveInput = maybeInjectResearchBrief(toolId, templateReadyInput, lastResearchBrief)
+        const sourcePromptReadyInput = maybeInjectPptSourcePrompt({
+          toolId,
+          rawInput: templateReadyInput,
+          latestUserPrompt: params.latestUserPrompt,
+        })
+        const effectiveInput = maybeInjectResearchBrief(toolId, sourcePromptReadyInput, lastResearchBrief)
         const preparedPreviewInput = maybePreparePptPreviewInput(
           toolId,
           effectiveInput,

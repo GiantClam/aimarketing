@@ -656,6 +656,41 @@ test("ppt tools still require a researchBrief for latest market trend decks", as
   assert.equal(previewInputs.length, 0)
 })
 
+test("ppt tools use sourcePrompt for research-gate checks when orchestration expands the preview prompt", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: [
+      "请生成一份董事会经营复盘与风险诊断汇报 PPT。",
+      "",
+      "本次 Deck 结构（10 页）",
+      "关键风险诊断（外部） —— 市场、竞争、政策",
+      "",
+      "Structured brief:",
+      "Audience: 董事会和管理层",
+      "Goal: 经营汇报与决策同步",
+      "Scenario: sales-deck",
+      "Language: zh-CN",
+      "Page count: 10",
+    ].join("\n"),
+    sourcePrompt:
+      "请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页，强调财务预算、关键决策与下一步计划。",
+    audience: "董事会和管理层",
+    goal: "经营汇报与决策同步",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    pageCount: 10,
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs.length, 1)
+})
+
 test("presentation ppt agent pins frontend runtime and accepts html export artifacts", async () => {
   mockedDownloadDeckPreviewEngine = "frontend-slides-html"
   mockedDownloadContentType = "text/html; charset=utf-8"

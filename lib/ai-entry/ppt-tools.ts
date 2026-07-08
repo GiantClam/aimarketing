@@ -56,6 +56,12 @@ const previewPptDeckInputSchema = z
       .trim()
       .min(1)
       .describe("The complete deck brief, including topic, audience, goal, tone, and any must-include points."),
+    sourcePrompt: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Internal canonical user request used for research-gate checks when the tool prompt has been expanded by orchestration."),
     audience: z
       .string()
       .trim()
@@ -526,6 +532,7 @@ export function buildAiEntryPptTools(input: {
       execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
         const {
           prompt,
+          sourcePrompt,
           audience,
           goal,
           researchBrief,
@@ -563,7 +570,8 @@ export function buildAiEntryPptTools(input: {
             }
           }
 
-          if (requiresResearchBrief(prompt) && !hasUsableResearchBrief(researchBrief)) {
+          const researchGatePrompt = sourcePrompt ?? prompt
+          if (requiresResearchBrief(researchGatePrompt) && !hasUsableResearchBrief(researchBrief)) {
             throw new Error("ppt_research_brief_required")
           }
 
