@@ -1164,7 +1164,7 @@ async function handleAiEntryPptPreviewTask(
 
   pushTaskProgressEvent(progressEvents, {
     type: "background_generation_running",
-    label: isZh ? "正在后台生成可编辑 PPT" : "Generating editable PPT in background",
+    label: isZh ? "正在后台生成 SVG 预览（导出时再生成 PPTX）" : "Generating SVG preview in background (PPTX on export)",
     status: "running",
     at: Date.now(),
   })

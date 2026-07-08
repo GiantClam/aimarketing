@@ -121,8 +121,10 @@ import type { KnowledgeScope } from "@/lib/knowledge/types"
 import { cn } from "@/lib/utils"
 
 const AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS = 1500
+const AI_ENTRY_PENDING_TASK_SLOW_POLL_INTERVAL_MS = 5000
+const AI_ENTRY_PENDING_TASK_SLOW_POLL_AFTER_MS = 5 * 60 * 1000
 const AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS = 5
-const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 25 * 60 * 1000
+const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 70 * 60 * 1000
 const AI_ENTRY_PENDING_TASK_HISTORY_REFRESH_CADENCE = 4
 const AI_ENTRY_STREAM_RECOVERY_POLL_INTERVAL_MS = 3000
 
@@ -2439,8 +2441,15 @@ export function AiEntryWorkspace({
           }
         }
 
+        const elapsedMs = Date.now() - pollStartedAt
+        const pollIntervalMs =
+          pendingTask.taskType === "preview_ppt_deck" &&
+          elapsedMs >= AI_ENTRY_PENDING_TASK_SLOW_POLL_AFTER_MS
+            ? AI_ENTRY_PENDING_TASK_SLOW_POLL_INTERVAL_MS
+            : AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS
+
         await new Promise((resolve) =>
-          window.setTimeout(resolve, AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS),
+          window.setTimeout(resolve, pollIntervalMs),
         )
       }
     }

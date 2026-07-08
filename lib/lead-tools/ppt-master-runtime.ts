@@ -1845,7 +1845,7 @@ export async function materializePptMasterPreviewDeck(deck: PptPreviewDeck, opti
 
   const materializedDeck = {
     ...runtimeDeck,
-    previewEngine: "ppt-master-project" as const,
+    previewEngine: "ppt-master-svg" as const,
     previewModel: variantResults[0]?.runtimeModel ?? runtimeDeck.previewModel,
     previewSessionId: sessionId,
     provider: variantResults[0]?.runtimeProvider ?? runtimeDeck.provider,

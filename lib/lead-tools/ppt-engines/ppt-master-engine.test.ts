@@ -197,7 +197,7 @@ test("ppt-master engine uses remote worker for preview when configured", async (
 
   assert.equal(result.previewSessionId, "session-remote-1")
   assert.equal(result.meta.previewEngine, "ppt-master")
-  assert.equal(result.meta.mode, "ppt-master-project-preview")
+  assert.equal(result.meta.mode, "ppt-master-svg-preview")
   assert.equal(seenAllowMockFallback, false)
   assert.deepEqual(seenResearchBrief, {
     topic: "Hormuz Strait shipping risk 2026",
@@ -207,7 +207,7 @@ test("ppt-master engine uses remote worker for preview when configured", async (
   assert.equal(seenModel, "gpt-5.4")
   const storedDeck = await getPptPreviewSessionDeck("session-remote-1")
   assert.equal(storedDeck.previewSessionId, "session-remote-1")
-  assert.equal(storedDeck.previewEngine, "ppt-master-project")
+  assert.equal(storedDeck.previewEngine, "ppt-master-svg")
 })
 
 test("ppt-master engine auto-selects remote worker preview when worker base url is configured", async () => {
@@ -334,9 +334,10 @@ test("ppt-master engine keeps local preview fallback when remote transport is di
   assert.equal(remoteCalled, false)
   assert.equal(result.previewSessionId, "session-local-preview")
   assert.equal(result.meta.previewEngine, "ppt-master")
+  assert.equal(result.meta.mode, "ppt-master-svg-preview")
   const storedDeck = await getPptPreviewSessionDeck("session-local-preview")
   assert.equal(storedDeck.previewSessionId, "session-local-preview")
-  assert.equal(storedDeck.previewEngine, "ppt-master-project")
+  assert.equal(storedDeck.previewEngine, "ppt-master-svg")
 })
 
 test("ppt-master engine honors request previewRuntime over the environment default", async () => {

@@ -126,7 +126,8 @@ test("preview ppt tool result message explains background generation when previe
     result: {
       ok: true,
       status: "queued",
-      message: "可编辑 PPT 已切换为后台生成，系统会继续轮询并在完成后回填预览结果。",
+      message:
+        "PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。",
       backgroundTask: {
         taskId: "901",
       },
@@ -161,12 +162,12 @@ test("queued background task context can be extracted from mixed assistant prose
     "",
     "已切换为后台生成：",
     "- 任务 ID: 901",
-    "- 状态: 系统会持续轮询，完成后自动回填预览结果。",
+    "- 状态: 系统会持续轮询，完成后自动回填预览结果；复杂或长页数 deck 可能需要十几分钟。",
   ].join("\n")
 
   assert.deepEqual(extractQueuedPptBackgroundTaskContext(content), {
     taskId: "901",
-    statusText: "系统会持续轮询，完成后自动回填预览结果。",
+    statusText: "系统会持续轮询，完成后自动回填预览结果；复杂或长页数 deck 可能需要十几分钟。",
   })
   assert.equal(isQueuedPptBackgroundStatusMessage(content), false)
 })

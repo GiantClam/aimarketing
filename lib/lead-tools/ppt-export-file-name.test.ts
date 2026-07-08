@@ -41,3 +41,27 @@ test("buildPptExportFileName keeps narrative angle in single-template variants",
 
   assert.equal(fileName, "launch-narrative-9p-neo-grid-bold-executive-brief.pptx")
 })
+
+test("buildPptExportFileName trims overly long pptx names while keeping key export context", () => {
+  const fileName = buildPptExportFileName(
+    {
+      title: "2026 North America enterprise AI marketing transformation board review and budget planning deep dive",
+      pageCount: null,
+      resolvedPageCount: 12,
+    },
+    {
+      key: "academic-defense-executive-brief",
+      styleKey: "ppt169_swiss_grid_systems",
+      templateId: "academic-defense",
+      narrativeAngle: "executive-brief",
+      slides: new Array(12).fill({}),
+    },
+    "pptx",
+  )
+
+  assert.equal(fileName.endsWith(".pptx"), true)
+  assert.equal(fileName.includes("-12p-"), true)
+  assert.equal(fileName.includes("academic-defense"), true)
+  assert.equal(fileName.includes("executive-brief"), false)
+  assert.equal(fileName.length <= 69, true)
+})

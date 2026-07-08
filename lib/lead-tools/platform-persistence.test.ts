@@ -17,7 +17,7 @@ const sampleDeck: PptPreviewDeck = {
   language: "zh-CN",
   generatedAt: "2026-06-11T00:00:00.000Z",
   outline: ["封面", "目录", "洞察", "对比", "结论"],
-  previewEngine: "ppt-master-project" as const,
+  previewEngine: "ppt-master-svg" as const,
   previewSessionId: "preview-session-1",
   provider: "pptoken",
   previewModel: "gpt-5.4",

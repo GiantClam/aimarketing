@@ -460,8 +460,8 @@ async function enqueueBackgroundPptPreviewTask(input: {
     ok: true,
     status: "queued",
     message: input.isZh
-      ? "可编辑 PPT 已切换为后台生成，系统会继续轮询并在完成后回填预览结果。"
-      : "The editable PPT preview has been moved to background generation and will be filled back in when it completes.",
+      ? "PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。"
+      : "PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.",
     backgroundTask: {
       taskId: String(task.id),
       conversationId: input.conversationId,

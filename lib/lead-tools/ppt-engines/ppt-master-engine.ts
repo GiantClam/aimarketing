@@ -58,8 +58,19 @@ function getPreviewEngineMeta(runtime: LeadToolPptPreviewRuntime) {
 
   return {
     previewEngine: "ppt-master" as const,
-    mode: "ppt-master-project-preview" as const,
+    mode: "ppt-master-svg-preview" as const,
   }
+}
+
+function normalizePptMasterPreviewDeck(deck: LeadToolPptPreviewResponse["deck"]): LeadToolPptPreviewResponse["deck"] {
+  if (deck.previewEngine === "ppt-master-project") {
+    return {
+      ...deck,
+      previewEngine: "ppt-master-svg",
+    }
+  }
+
+  return deck
 }
 
 const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
@@ -82,7 +93,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
         images: request.images,
         allowMockFallback: options.allowMockFallback,
       })
-      const remoteDeck = remote.deck as LeadToolPptPreviewResponse["deck"]
+      const remoteDeck = normalizePptMasterPreviewDeck(remote.deck as LeadToolPptPreviewResponse["deck"])
       const storedDeck = await storePptPreviewSessionDeckImpl({
         ...remoteDeck,
         previewSessionId: remote.previewSessionId,
@@ -97,8 +108,8 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
           exportEngine: "ppt-master",
           previewRuntime: "ppt-master-agent",
           exportRuntime: getLeadToolPptExportRuntime("ai-ppt-preview") as "ppt-master-agent",
-          mode: "ppt-master-project-preview",
-          mockFallback: false,
+          mode: "ppt-master-svg-preview",
+          mockFallback: storedDeck.source === "mock",
         },
       } satisfies LeadToolPptPreviewResponse
     }
@@ -107,7 +118,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
 
     try {
       const storyDeck = await generateLeadToolPptStoryDeckImpl(request)
-      deck = await runtime.materializeStoryDeck(storyDeck)
+      deck = normalizePptMasterPreviewDeck(await runtime.materializeStoryDeck(storyDeck))
     } catch (error) {
       if (!options.allowMockFallback) {
         throw error
