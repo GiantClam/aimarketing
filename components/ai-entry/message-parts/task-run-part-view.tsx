@@ -1,9 +1,14 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { CheckCircle2, Clock3, Loader2, TriangleAlert } from "lucide-react"
 
 import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
 import type { TaskRunPart } from "@/lib/ai-entry/message-parts/types"
+import {
+  getAiEntryTaskElapsedSeconds,
+  isAiEntryTaskHeartbeatStale,
+} from "@/lib/ai-entry/task-run-runtime"
 import { cn } from "@/lib/utils"
 
 function formatUpdatedAt(updatedAt: number, isZh: boolean) {
@@ -19,15 +24,47 @@ function formatUpdatedAt(updatedAt: number, isZh: boolean) {
   }
 }
 
+function formatElapsedSeconds(elapsedSeconds: number, isZh: boolean) {
+  if (elapsedSeconds < 60) {
+    return isZh ? `${elapsedSeconds} 秒` : `${elapsedSeconds}s`
+  }
+
+  const hours = Math.floor(elapsedSeconds / 3600)
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60)
+  const seconds = elapsedSeconds % 60
+
+  if (hours > 0) {
+    return isZh
+      ? `${hours} 小时 ${minutes} 分`
+      : `${hours}h ${minutes}m`
+  }
+
+  if (minutes > 0 && seconds > 0) {
+    return isZh ? `${minutes} 分 ${seconds} 秒` : `${minutes}m ${seconds}s`
+  }
+
+  return isZh ? `${minutes} 分钟` : `${minutes}m`
+}
+
 export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boolean }) {
   const { taskRun } = part
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const percent = Math.max(
     0,
     Math.min(100, Math.round((taskRun.progress_current / Math.max(1, taskRun.progress_total)) * 100)),
   )
   const isRunning = taskRun.status === "pending" || taskRun.status === "running"
+  const isHeartbeatStale = isAiEntryTaskHeartbeatStale(taskRun, nowMs)
+  const elapsedLabel = formatElapsedSeconds(
+    getAiEntryTaskElapsedSeconds(taskRun, nowMs),
+    isZh,
+  )
   const statusLabel =
-    taskRun.status === "success"
+    taskRun.status === "pending"
+      ? isZh
+        ? "排队中"
+        : "Queued"
+      : taskRun.status === "success"
       ? isZh
         ? "已完成"
         : "Completed"
@@ -38,6 +75,16 @@ export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boole
         : isZh
           ? "进行中"
           : "Running"
+
+  useEffect(() => {
+    if (!isRunning) return
+
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 30_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [isRunning])
 
   return (
     <div className="rounded-[12px] border border-border bg-background/80 p-3">
@@ -74,10 +121,13 @@ export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boole
 
       <div className="mt-3 rounded-[10px] border border-border/70 bg-muted/20 p-2.5">
         <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>
+          <span className="truncate">
             {taskRun.progress_current}/{taskRun.progress_total}
+            <span className="ml-2">
+              {isZh ? "耗时" : "Elapsed"} {elapsedLabel}
+            </span>
           </span>
-          <span>{formatUpdatedAt(taskRun.updated_at, isZh)}</span>
+          <span className="shrink-0">{formatUpdatedAt(taskRun.updated_at, isZh)}</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div
@@ -95,6 +145,11 @@ export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boole
           <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <Clock3 className="h-3 w-3" />
             <span className="truncate">{`session ${taskRun.preview_session_id}`}</span>
+          </div>
+        ) : null}
+        {isHeartbeatStale ? (
+          <div className="mt-2 text-[11px] text-amber-700">
+            {isZh ? "耗时较长，仍在处理中" : "This is taking longer than usual, but it is still processing."}
           </div>
         ) : null}
       </div>

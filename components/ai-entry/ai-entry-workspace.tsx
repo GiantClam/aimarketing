@@ -89,9 +89,14 @@ import {
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
+import {
+  shouldDeferSyntheticTaskRunMessages,
+  shouldReuseLoadedConversation,
+} from "@/lib/ai-entry/conversation-view-state"
 import { renderAiEntryDisplayErrorMessage } from "@/lib/ai-entry/error-display"
 import {
   buildPptToolResultMessage,
+  collapsePptTemplateRecommendationMessageBlocks,
   extractQueuedPptBackgroundTaskContext,
   extractLatestPptPreviewContext,
   extractPptTemplateRecommendationContexts,
@@ -110,6 +115,7 @@ import {
 import {
   hasAiEntryCompletedAssistantMessage,
   hasAiEntryPptPreviewMaterialized,
+  normalizeConversationMessageOrder,
   resolveAiEntryCompletedConversationMessages,
   resolveAiEntryBootstrapMessages,
   resolveAiEntryRestoredMessages,
@@ -117,12 +123,10 @@ import {
   shouldShowAiEntryConversationRestore,
 } from "@/lib/ai-entry/message-restore"
 import { resolveAiEntryTargetConversationId } from "@/lib/ai-entry/route-sync"
+import { resolveAiEntryTaskPollIntervalMs } from "@/lib/ai-entry/task-run-runtime"
 import type { KnowledgeScope } from "@/lib/knowledge/types"
 import { cn } from "@/lib/utils"
 
-const AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS = 1500
-const AI_ENTRY_PENDING_TASK_SLOW_POLL_INTERVAL_MS = 5000
-const AI_ENTRY_PENDING_TASK_SLOW_POLL_AFTER_MS = 5 * 60 * 1000
 const AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS = 5
 const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 70 * 60 * 1000
 const AI_ENTRY_PENDING_TASK_HISTORY_REFRESH_CADENCE = 4
@@ -527,6 +531,7 @@ function readPendingConversationMessagesFromStorage(raw: string | null, clear: (
       content?: unknown
       attachments?: unknown
       parts?: unknown
+      createdAt?: unknown
     }>(parsed)
     if (pendingMessages.length === 0) {
       clear()
@@ -539,8 +544,12 @@ function readPendingConversationMessagesFromStorage(raw: string | null, clear: (
         const content = typeof item?.content === "string" ? item.content : ""
         const attachments = Array.isArray(item?.attachments) ? item.attachments : undefined
         const parts = Array.isArray(item?.parts) ? item.parts : undefined
+        const createdAt =
+          typeof item?.createdAt === "number" && Number.isFinite(item.createdAt)
+            ? item.createdAt
+            : undefined
         if (!role) return null
-        return { id, role, content, attachments, parts } as ChatMessage
+        return { id, role, content, attachments, parts, createdAt } as ChatMessage
       })
       .filter((item): item is ChatMessage => Boolean(item))
   } catch {
@@ -653,6 +662,10 @@ function mapPersistedAiEntryMessages(
     .map((item) => {
       const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : null
       const content = typeof item.content === "string" ? item.content : ""
+      const normalizedContent =
+        role === "assistant"
+          ? collapsePptTemplateRecommendationMessageBlocks(content)
+          : content
       const id = typeof item.id === "string" ? item.id : `${role || "msg"}-${Math.random()}`
       const createdAt =
         typeof item.created_at === "number" && Number.isFinite(item.created_at)
@@ -662,20 +675,20 @@ function mapPersistedAiEntryMessages(
 
       const templateRecommendationParts =
         role === "assistant"
-          ? extractPptTemplateRecommendationContexts(content)
+          ? extractPptTemplateRecommendationContexts(normalizedContent)
               .map((context, index) =>
                 buildTemplateRecommendationPartFromContext(context, `template-recommendation:${id}:${index}`),
               )
               .filter((part): part is NonNullable<typeof part> => Boolean(part))
           : []
       const visibleContent =
-        role === "assistant" ? stripPptHiddenContextMarkers(content) : content
+        role === "assistant" ? stripPptHiddenContextMarkers(normalizedContent) : normalizedContent
 
       if (!visibleContent.trim() && templateRecommendationParts.length === 0) return null
       return {
         id,
         role,
-        content,
+        content: normalizedContent,
         createdAt,
         ...(templateRecommendationParts.length ? { parts: templateRecommendationParts } : {}),
       } as ChatMessage
@@ -870,8 +883,8 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
       ],
     }))
 
-  return [...nextMessages, ...syntheticTaskRunMessages].sort(
-    (left, right) => (left.createdAt || 0) - (right.createdAt || 0),
+  return normalizeConversationMessageOrder(
+    [...nextMessages, ...syntheticTaskRunMessages],
   )
 }
 
@@ -1472,10 +1485,18 @@ export function AiEntryWorkspace({
       ),
     [messages],
   )
-  const displayMessages = useMemo(
-    () => attachTaskRunsToMessages(messages, taskRuns),
-    [messages, taskRuns],
-  )
+  const displayMessages = useMemo(() => {
+    if (
+      shouldDeferSyntheticTaskRunMessages({
+        isConversationLoading,
+        messageCount: messages.length,
+      })
+    ) {
+      return messages
+    }
+
+    return attachTaskRunsToMessages(messages, taskRuns)
+  }, [isConversationLoading, messages, taskRuns])
   const fetchConversationMessages = useCallback(
     async (targetConversationId: string) => {
       const params = new URLSearchParams({ conversation_id: targetConversationId, limit: "200" })
@@ -2071,11 +2092,12 @@ export function AiEntryWorkspace({
 
     if (
       isLoadingRef.current ||
-      (
-        pendingFirstConversationRouteRef.current &&
-        latestConversationIdRef.current === initialConversationId &&
-        messagesLengthRef.current > 0
-      )
+      shouldReuseLoadedConversation({
+        targetConversationId: initialConversationId,
+        latestConversationId: latestConversationIdRef.current,
+        hasMessages: messagesLengthRef.current > 0,
+        pendingFirstConversationRoute: pendingFirstConversationRouteRef.current,
+      })
     ) {
       setConversationId(initialConversationId)
       latestConversationIdRef.current = initialConversationId
@@ -2379,6 +2401,21 @@ export function AiEntryWorkspace({
     let historyRefreshPollCount = 0
     setIsLoading(true)
 
+    const requestImmediateRepoll = () => {
+      setPendingTaskRefreshKey((current) => current + 1)
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestImmediateRepoll()
+      }
+    }
+
+    window.addEventListener("focus", requestImmediateRepoll)
+    window.addEventListener("online", requestImmediateRepoll)
+    window.addEventListener("pageshow", requestImmediateRepoll)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
     const poll = async () => {
       while (!cancelled) {
         try {
@@ -2541,11 +2578,9 @@ export function AiEntryWorkspace({
           }
         }
 
-        const elapsedMs = Date.now() - pollStartedAt
-        const pollIntervalMs =
-          elapsedMs >= AI_ENTRY_PENDING_TASK_SLOW_POLL_AFTER_MS
-            ? AI_ENTRY_PENDING_TASK_SLOW_POLL_INTERVAL_MS
-            : AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS
+        const pollIntervalMs = resolveAiEntryTaskPollIntervalMs({
+          isDocumentVisible: document.visibilityState === "visible",
+        })
 
         await new Promise((resolve) => {
           window.setTimeout(resolve, pollIntervalMs)
@@ -2556,6 +2591,10 @@ export function AiEntryWorkspace({
     void poll()
     return () => {
       cancelled = true
+      window.removeEventListener("focus", requestImmediateRepoll)
+      window.removeEventListener("online", requestImmediateRepoll)
+      window.removeEventListener("pageshow", requestImmediateRepoll)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [activePendingAgentId, conversationId, conversationState, copy, fetchConversationMessages, isZh, pendingTaskRefreshKey])
 
@@ -2682,14 +2721,26 @@ export function AiEntryWorkspace({
     }
     const sentAttachments = attachments
     const userMessageContent = prompt || (isZh ? "请识别附件内容。" : "Please analyze the attached content.")
-    const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: "user", content: userMessageContent, attachments: sentAttachments }
+    const optimisticCreatedAt = Math.floor(Date.now() / 1000)
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: userMessageContent,
+      attachments: sentAttachments,
+      createdAt: optimisticCreatedAt,
+    }
     const assistantMessageId = `assistant-${Date.now()}`
     const contextMessages = [
       ...messages.filter((message) => message.content.trim()).map((message) => ({ role: message.role, content: message.content })),
       { role: "user" as const, content: userMessageContent },
     ]
     const baseMessages = messages
-    let assistantDraft: ChatMessage = { id: assistantMessageId, role: "assistant", content: "" }
+    let assistantDraft: ChatMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      createdAt: optimisticCreatedAt,
+    }
     let sidebarRefreshConversationId: string | null = null
     let latestStreamConversationId: string | null = conversationId
     let didReceiveStreamTerminalEvent = false
@@ -3214,7 +3265,12 @@ export function AiEntryWorkspace({
         const completedMessages = [
           ...messages,
           userMessage,
-          { id: assistantMessageId, role: "assistant" as const, content: assistantText || copy.unknownError },
+          {
+            id: assistantMessageId,
+            role: "assistant" as const,
+            content: assistantText || copy.unknownError,
+            createdAt: optimisticCreatedAt,
+          },
         ]
         setMessages(completedMessages)
         if (typeof payload?.conversationId === "string" && payload.conversationId) {

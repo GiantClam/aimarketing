@@ -31,6 +31,7 @@ import {
   AI_ENTRY_SIDEBAR_REFRESH_EVENT,
   type AiEntrySidebarRefreshDetail,
 } from "@/lib/ai-entry/sidebar-refresh-event"
+import { resolveAiEntryConversationSummaryPollIntervalMs } from "@/lib/ai-entry/task-run-runtime"
 
 type AiEntryConversationSummary = {
   id: string
@@ -38,6 +39,8 @@ type AiEntryConversationSummary = {
   status: "normal"
   created_at: number
   updated_at: number
+  last_message_at?: number | null
+  last_task_event_at?: number | null
   has_unread: boolean
   unread_count: number
   has_running_ppt_task: boolean
@@ -46,7 +49,6 @@ type AiEntryConversationSummary = {
 
 const AI_ENTRY_CONVERSATION_LIST_CACHE_KEY = "ai-entry-conversations-cache-v2"
 const AI_ENTRY_CONVERSATION_CACHE_TTL_MS = 60_000
-const AI_ENTRY_CONVERSATION_BACKGROUND_REFRESH_MS = 15_000
 
 function mergeConversations(
   current: AiEntryConversationSummary[],
@@ -183,11 +185,49 @@ export function AiEntrySidebarItem({
   useEffect(() => {
     if (!isOpen) return
 
-    const intervalId = window.setInterval(() => {
-      void fetchConversations({ background: conversations.length > 0 }).catch(() => {})
-    }, AI_ENTRY_CONVERSATION_BACKGROUND_REFRESH_MS)
+    let cancelled = false
+    let timeoutId: number | null = null
 
-    return () => window.clearInterval(intervalId)
+    const refresh = () => {
+      void fetchConversations({ background: conversations.length > 0 }).catch(() => {})
+    }
+
+    const scheduleNextRefresh = () => {
+      if (cancelled) return
+      const intervalMs = resolveAiEntryConversationSummaryPollIntervalMs({
+        isDocumentVisible: document.visibilityState === "visible",
+      })
+      timeoutId = window.setTimeout(() => {
+        refresh()
+        scheduleNextRefresh()
+      }, intervalMs)
+    }
+
+    const handleVisibleRefresh = () => {
+      if (document.visibilityState !== "visible") return
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+      refresh()
+      scheduleNextRefresh()
+    }
+
+    scheduleNextRefresh()
+    window.addEventListener("focus", handleVisibleRefresh)
+    window.addEventListener("online", handleVisibleRefresh)
+    window.addEventListener("pageshow", handleVisibleRefresh)
+    document.addEventListener("visibilitychange", handleVisibleRefresh)
+
+    return () => {
+      cancelled = true
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+      window.removeEventListener("focus", handleVisibleRefresh)
+      window.removeEventListener("online", handleVisibleRefresh)
+      window.removeEventListener("pageshow", handleVisibleRefresh)
+      document.removeEventListener("visibilitychange", handleVisibleRefresh)
+    }
   }, [conversations.length, fetchConversations, isOpen])
 
   const handleCreateConversation = (

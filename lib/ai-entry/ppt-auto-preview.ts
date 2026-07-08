@@ -9,6 +9,7 @@ import {
   buildPptToolResultMessage,
   extractLatestPptTemplateRecommendationContext,
   resolvePptTemplateSelectionFromUserText,
+  stripPptTemplateRecommendationMessageBlocks,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
@@ -62,6 +63,21 @@ function buildPreviewFailureNotice(errorMessage: string | null, isZh: boolean) {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n")
+}
+
+function appendCanonicalTemplateRecommendation(
+  assistantMessage: string,
+  recommendationMessage: string | null,
+) {
+  if (!recommendationMessage) return assistantMessage
+
+  return [
+    stripPptTemplateRecommendationMessageBlocks(assistantMessage),
+    recommendationMessage.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim()
 }
 
 export function shouldAutoRunPptPreview(input: {
@@ -146,9 +162,10 @@ export async function maybeAutoRunPptPreview(input: {
       isZh: input.isZh !== false,
     })
     return {
-      assistantMessage: recommendationMessage
-        ? [input.assistantMessage.trim(), recommendationMessage.trim()].filter(Boolean).join("\n\n").trim()
-        : input.assistantMessage,
+      assistantMessage: appendCanonicalTemplateRecommendation(
+        input.assistantMessage,
+        recommendationMessage,
+      ),
       autoPreviewExecuted: false,
       previewResult: null,
     }
@@ -212,7 +229,10 @@ export async function maybeAutoRunPptPreview(input: {
     })
     if (previewToolMessage) {
       return {
-        assistantMessage: [input.assistantMessage.trim(), previewToolMessage.trim()].filter(Boolean).join("\n\n").trim(),
+        assistantMessage: appendCanonicalTemplateRecommendation(
+          input.assistantMessage,
+          previewToolMessage,
+        ),
         autoPreviewExecuted: false,
         previewResult,
       }

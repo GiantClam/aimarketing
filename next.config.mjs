@@ -28,8 +28,10 @@ const nextConfig = {
   outputFileTracingExcludes: {
     "*": [
       "./lib/lead-tools/ppt-master-assets/**/*",
+      "./.cache/**/*",
       "./.cache/ppt-master/**/*",
       "./.cache/ppt-master-hugo/**/*",
+      "./output/playwright/**/*",
     ],
   },
   // 增加 API 路由的超时时间

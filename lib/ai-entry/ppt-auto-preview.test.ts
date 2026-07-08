@@ -67,6 +67,38 @@ test("maybeAutoRunPptPreview appends template recommendations instead of auto-ge
   assert.match(result.assistantMessage, /下一步: 直接回复模板 ID 或模板名称/)
 })
 
+test("maybeAutoRunPptPreview replaces an older generated template recommendation block instead of appending a duplicate", async () => {
+  const readyState = extractPptBriefState({
+    userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
+  })
+
+  const result = await maybeAutoRunPptPreview({
+    agentId: "executive-ppt",
+    executionContext: "chat",
+    latestUserPrompt: "继续，直接生成 PPT 预览。",
+    assistantMessage: [
+      "下面是建议的页结构。",
+      "",
+      "已为这次需求推荐 4 个模板：",
+      "- 1. Long Table (long-table)",
+      "- 2. Playful (playful)",
+      "- 3. Broadside (broadside)",
+      "- 4. Neo Grid Bold (neo-grid-bold)",
+      "<!-- ai-entry-ppt-template-recommendations:{\"defaultTemplateId\":\"long-table\",\"templateIds\":[\"long-table\",\"playful\",\"broadside\",\"neo-grid-bold\"]} -->",
+    ].join("\n"),
+    briefState: readyState,
+    previewAlreadyExecuted: false,
+    messageContents: [],
+    previewTool: null,
+    origin: "https://example.com",
+    isZh: true,
+  })
+
+  assert.equal(result.autoPreviewExecuted, false)
+  assert.equal((result.assistantMessage.match(/已为这次需求推荐 4 个模板：/g) || []).length, 1)
+  assert.equal((result.assistantMessage.match(/ai-entry-ppt-template-recommendations:/g) || []).length, 1)
+})
+
 test("maybeAutoRunPptPreview keeps expanded editable ppt recommendations for the deployed remote worker", async () => {
   const previousTransport = process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
   try {

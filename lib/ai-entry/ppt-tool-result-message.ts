@@ -67,6 +67,8 @@ const PPT_EXPORT_CONTEXT_PREFIX = "<!-- ai-entry-ppt-export-context:"
 const PPT_PREVIEW_INVALIDATION_CONTEXT_PREFIX = "<!-- ai-entry-ppt-preview-invalidated:"
 const PPT_TEMPLATE_RECOMMENDATION_CONTEXT_PREFIX = "<!-- ai-entry-ppt-template-recommendations:"
 const PPT_PREVIEW_CONTEXT_SUFFIX = "-->"
+const PPT_TEMPLATE_RECOMMENDATION_BLOCK_PATTERN =
+  /(?:^|\n)(?:已为这次需求推荐 4 个模板：|Recommended 4 templates for this request:)\n[\s\S]*?<!-- ai-entry-ppt-template-recommendations:[\s\S]*?-->(?=\n|$)/gu
 
 type ArtifactDeliverableKind = "html" | "pptx" | "generic"
 
@@ -326,6 +328,35 @@ export function stripPptArtifactRelativeLinks(content: string) {
     .replace(/(?:^|\n)[^\n]*`\/dashboard\/works`[^\n]*(?=\n|$)/g, "\n")
     .replace(/(?:^|\n)[^\n]*\/dashboard\/works[^\n]*(?=\n|$)/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+export function stripPptTemplateRecommendationMessageBlocks(content: string | null | undefined) {
+  const normalized = typeof content === "string" ? content : ""
+  if (!normalized.trim()) return normalized
+
+  return normalized
+    .replace(PPT_TEMPLATE_RECOMMENDATION_BLOCK_PATTERN, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+export function collapsePptTemplateRecommendationMessageBlocks(content: string | null | undefined) {
+  const normalized = typeof content === "string" ? content : ""
+  if (!normalized.trim()) return normalized
+
+  const blocks = [...normalized.matchAll(PPT_TEMPLATE_RECOMMENDATION_BLOCK_PATTERN)]
+    .map((match) => match[0]?.trim())
+    .filter((block): block is string => Boolean(block))
+
+  if (blocks.length <= 1) return normalized
+
+  return [
+    stripPptTemplateRecommendationMessageBlocks(normalized),
+    blocks.at(-1) || "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
     .trim()
 }
 

@@ -8,6 +8,7 @@ type RestorableMessage = {
   content?: string | null
   parts?: unknown[] | null
   attachments?: unknown[] | null
+  createdAt?: number | null
 }
 
 type PreviewAwareConversationState = {
@@ -28,6 +29,29 @@ function hasMeaningfulMessageContent(message: RestorableMessage) {
 
 function getMeaningfulMessageCount(messages: RestorableMessage[]) {
   return messages.filter((message) => hasMeaningfulMessageContent(message)).length
+}
+
+function hasFiniteCreatedAt(message: RestorableMessage | null | undefined) {
+  return typeof message?.createdAt === "number" && Number.isFinite(message.createdAt)
+}
+
+export function normalizeConversationMessageOrder<T extends RestorableMessage>(messages: T[]) {
+  return [...messages]
+    .map((message, index) => ({ message, index }))
+    .sort((left, right) => {
+      const leftHasCreatedAt = hasFiniteCreatedAt(left.message)
+      const rightHasCreatedAt = hasFiniteCreatedAt(right.message)
+
+      if (leftHasCreatedAt && rightHasCreatedAt) {
+        const delta = (left.message.createdAt as number) - (right.message.createdAt as number)
+        return delta !== 0 ? delta : left.index - right.index
+      }
+
+      if (leftHasCreatedAt) return -1
+      if (rightHasCreatedAt) return 1
+      return left.index - right.index
+    })
+    .map(({ message }) => message)
 }
 
 function getLastMeaningfulMessage(messages: RestorableMessage[]) {
@@ -132,7 +156,9 @@ export function resolveAiEntryBootstrapMessages<T extends RestorableMessage>(inp
       : null
 
   if (!conversationId) return []
-  return Array.isArray(input.pendingMessages) ? input.pendingMessages : []
+  return normalizeConversationMessageOrder(
+    Array.isArray(input.pendingMessages) ? input.pendingMessages : [],
+  )
 }
 
 export function shouldShowAiEntryConversationRestore<T extends RestorableMessage>(input: {
@@ -148,8 +174,12 @@ export function resolveAiEntryRestoredMessages<T extends RestorableMessage>(inpu
   pendingMessages: T[]
   persistedMessages: T[]
 }) {
-  const pendingMessages = Array.isArray(input.pendingMessages) ? input.pendingMessages : []
-  const persistedMessages = Array.isArray(input.persistedMessages) ? input.persistedMessages : []
+  const pendingMessages = normalizeConversationMessageOrder(
+    Array.isArray(input.pendingMessages) ? input.pendingMessages : [],
+  )
+  const persistedMessages = normalizeConversationMessageOrder(
+    Array.isArray(input.persistedMessages) ? input.persistedMessages : [],
+  )
 
   if (persistedMessages.length === 0) return pendingMessages
 
@@ -176,8 +206,12 @@ export function resolveAiEntrySharedPendingMessages<T extends RestorableMessage>
   currentMessages: T[]
   sharedPendingMessages: T[]
 }) {
-  const currentMessages = Array.isArray(input.currentMessages) ? input.currentMessages : []
-  const sharedPendingMessages = Array.isArray(input.sharedPendingMessages) ? input.sharedPendingMessages : []
+  const currentMessages = normalizeConversationMessageOrder(
+    Array.isArray(input.currentMessages) ? input.currentMessages : [],
+  )
+  const sharedPendingMessages = normalizeConversationMessageOrder(
+    Array.isArray(input.sharedPendingMessages) ? input.sharedPendingMessages : [],
+  )
 
   if (sharedPendingMessages.length === 0) return currentMessages
   if (currentMessages.length === 0) return sharedPendingMessages
@@ -222,8 +256,12 @@ export function resolveAiEntryCompletedConversationMessages<T extends Restorable
   backgroundAssistantMessage?: T | null
   matchesBackgroundAssistantMessage?: (message: T) => boolean
 }) {
-  const currentMessages = Array.isArray(input.currentMessages) ? input.currentMessages : []
-  const persistedMessages = Array.isArray(input.persistedMessages) ? input.persistedMessages : []
+  const currentMessages = normalizeConversationMessageOrder(
+    Array.isArray(input.currentMessages) ? input.currentMessages : [],
+  )
+  const persistedMessages = normalizeConversationMessageOrder(
+    Array.isArray(input.persistedMessages) ? input.persistedMessages : [],
+  )
   const backgroundAssistantMessage = input.backgroundAssistantMessage || null
 
   const resolvedMessages =
@@ -258,12 +296,17 @@ export function resolveAiEntryCompletedConversationMessages<T extends Restorable
       return resolvedMessages
     }
 
-    return resolvedMessages.map((message, index) =>
-      index === existingIndex ? mergedMessage : message,
+    return normalizeConversationMessageOrder(
+      resolvedMessages.map((message, index) =>
+        index === existingIndex ? mergedMessage : message,
+      ),
     )
   }
 
-  return [...resolvedMessages, backgroundAssistantMessage]
+  return normalizeConversationMessageOrder([
+    ...resolvedMessages,
+    backgroundAssistantMessage,
+  ])
 }
 
 export function hasAiEntryCompletedAssistantMessage<T extends RestorableMessage>(messages: T[]) {

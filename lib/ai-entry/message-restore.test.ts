@@ -15,6 +15,7 @@ type TestMessage = {
   role: "user" | "assistant"
   content: string
   parts?: unknown[]
+  createdAt?: number
 }
 
 test("keeps pending messages when persisted history is still empty", () => {
@@ -52,6 +53,22 @@ test("bootstraps pending messages for a routed conversation before persisted his
       messages: pending,
     }),
     false,
+  )
+})
+
+test("normalizes bootstrap pending message order by createdAt while keeping draft messages at the end", () => {
+  const pending: TestMessage[] = [
+    { role: "assistant", content: "optimistic draft", createdAt: undefined },
+    { role: "assistant", content: "second", createdAt: 20 },
+    { role: "user", content: "first", createdAt: 10 },
+  ]
+
+  assert.deepEqual(
+    resolveAiEntryBootstrapMessages({
+      conversationId: "422",
+      pendingMessages: pending,
+    }).map((message) => message.content),
+    ["first", "second", "optimistic draft"],
   )
 })
 
@@ -97,6 +114,27 @@ test("uses persisted messages once history has caught up", () => {
   const persisted: TestMessage[] = [
     { role: "user", content: "hello" },
     { role: "assistant", content: "final reply" },
+  ]
+
+  assert.deepEqual(
+    resolveAiEntryRestoredMessages({
+      pendingMessages: pending,
+      persistedMessages: persisted,
+    }),
+    persisted,
+  )
+})
+
+test("prefers persisted chronological history even when pending storage is reversed", () => {
+  const pending: TestMessage[] = [
+    { role: "assistant", content: "preview ready", createdAt: 30 },
+    { role: "assistant", content: "queued", createdAt: 20 },
+    { role: "user", content: "brief", createdAt: 10 },
+  ]
+  const persisted: TestMessage[] = [
+    { role: "user", content: "brief", createdAt: 10 },
+    { role: "assistant", content: "queued", createdAt: 20 },
+    { role: "assistant", content: "preview ready", createdAt: 30 },
   ]
 
   assert.deepEqual(

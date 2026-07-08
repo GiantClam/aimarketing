@@ -56,6 +56,8 @@ export type AiEntryConversationSummary = {
   created_at: number
   updated_at: number
   current_model_id: string | null
+  last_message_at: number | null
+  last_task_event_at: number | null
   has_unread: boolean
   unread_count: number
   has_running_ppt_task: boolean
@@ -530,19 +532,31 @@ function mapConversationSummary(
     latestMessageCreatedAt?: Date | string | number | null | undefined
   },
   decorations?: {
-    latestAssistantMessageId?: number | null
+    assistantMessageIds?: number[]
     runningTaskCount?: number
+    lastTaskEventAt?: Date | string | number | null | undefined
   },
 ): AiEntryConversationSummary {
   const createdAt = toEpochSeconds(row.createdAt)
+  const lastMessageAt = row.latestMessageCreatedAt
+    ? toEpochSeconds(row.latestMessageCreatedAt)
+    : null
   const updatedAt = toEpochSeconds(row.updatedAt ?? row.latestMessageCreatedAt ?? row.createdAt)
-  const latestAssistantMessageId = decorations?.latestAssistantMessageId || null
+  const assistantMessageIds = decorations?.assistantMessageIds || []
+  const latestAssistantMessageId = assistantMessageIds.at(-1) || null
   const lastReadAssistantMessageId = getAiEntryLastReadAssistantMessageId(row.metadata)
+  const unreadCount = assistantMessageIds.filter(
+    (messageId) => !lastReadAssistantMessageId || messageId > lastReadAssistantMessageId,
+  )
+    .length
   const hasUnread = Boolean(
     latestAssistantMessageId &&
-    (!lastReadAssistantMessageId || latestAssistantMessageId > lastReadAssistantMessageId),
+    unreadCount > 0,
   )
   const runningTaskCount = Math.max(0, decorations?.runningTaskCount || 0)
+  const lastTaskEventAt = decorations?.lastTaskEventAt
+    ? toEpochSeconds(decorations.lastTaskEventAt)
+    : null
   return {
     id: String(row.id),
     name: stripTitlePrefix(row.title),
@@ -550,8 +564,10 @@ function mapConversationSummary(
     created_at: createdAt,
     updated_at: updatedAt,
     current_model_id: normalizeModelId(row.currentModelId),
+    last_message_at: lastMessageAt,
+    last_task_event_at: lastTaskEventAt,
     has_unread: hasUnread,
-    unread_count: hasUnread ? 1 : 0,
+    unread_count: unreadCount,
     has_running_ppt_task: runningTaskCount > 0,
     running_ppt_task_count: runningTaskCount,
   }
@@ -784,31 +800,31 @@ export async function listAiEntryConversations(
     conversationIds.length > 0
       ? sql.join(conversationIds.map((id) => sql`${id}`), sql`,`)
       : null
-  const latestAssistantRows =
+  const assistantMessageRows =
     conversationIdSql
-      ? await withAiEntryDbRetry("list-ai-entry-conversations-latest-assistant", () =>
+      ? await withAiEntryDbRetry("list-ai-entry-conversations-assistant-messages", () =>
           db.execute(sql`
             SELECT
               conversation_id as "conversationId",
-              max(id) as "latestAssistantMessageId"
+              id as "assistantMessageId"
             FROM "AI_MARKETING_messages"
             WHERE role = 'assistant'
               AND conversation_id IN (${conversationIdSql})
-            GROUP BY conversation_id
+            ORDER BY conversation_id ASC, id ASC
           `),
         )
       : { rows: [] as unknown[] }
-  const runningTaskRows =
+  const taskSummaryRows =
     conversationIdSql
-      ? await withAiEntryDbRetry("list-ai-entry-conversations-running-task-count", () =>
+      ? await withAiEntryDbRetry("list-ai-entry-conversations-task-summary", () =>
           db.execute(sql`
             SELECT
               payload::jsonb ->> 'conversationId' as "conversationId",
-              count(*) as "runningTaskCount"
+              count(*) FILTER (WHERE status IN ('pending', 'running')) as "runningTaskCount",
+              max(updated_at) as "lastTaskEventAt"
             FROM "AI_MARKETING_tasks"
             WHERE user_id = ${userId}
               AND workflow_name = 'ai_entry_ppt_preview'
-              AND status IN ('pending', 'running')
               AND payload IS NOT NULL
               AND payload::jsonb ->> 'kind' = 'ai_entry_ppt_preview'
               AND payload::jsonb ->> 'conversationId' IN (${conversationIdSql})
@@ -817,20 +833,26 @@ export async function listAiEntryConversations(
         )
       : { rows: [] as unknown[] }
 
-  const latestAssistantMap = new Map<string, number>()
-  for (const row of latestAssistantRows.rows as Array<{ conversationId?: unknown; latestAssistantMessageId?: unknown }>) {
+  const assistantMessageIdsByConversationId = new Map<string, number[]>()
+  for (const row of assistantMessageRows.rows as Array<{ conversationId?: unknown; assistantMessageId?: unknown }>) {
     const conversationId = parsePositiveInt(row.conversationId)
-    const latestAssistantMessageId = parsePositiveInt(row.latestAssistantMessageId)
-    if (!conversationId || !latestAssistantMessageId) continue
-    latestAssistantMap.set(String(conversationId), latestAssistantMessageId)
+    const assistantMessageId = parsePositiveInt(row.assistantMessageId)
+    if (!conversationId || !assistantMessageId) continue
+    const key = String(conversationId)
+    const current = assistantMessageIdsByConversationId.get(key) || []
+    current.push(assistantMessageId)
+    assistantMessageIdsByConversationId.set(key, current)
   }
 
   const runningTaskCountMap = new Map<string, number>()
-  for (const row of runningTaskRows.rows as Array<{ conversationId?: unknown; runningTaskCount?: unknown }>) {
+  const lastTaskEventAtMap = new Map<string, Date | string | number | null>()
+  for (const row of taskSummaryRows.rows as Array<{ conversationId?: unknown; runningTaskCount?: unknown; lastTaskEventAt?: Date | string | number | null }>) {
     const conversationId = parsePositiveInt(row.conversationId)
     const runningTaskCount = parsePositiveInt(row.runningTaskCount) || 0
     if (!conversationId) continue
-    runningTaskCountMap.set(String(conversationId), runningTaskCount)
+    const key = String(conversationId)
+    runningTaskCountMap.set(key, runningTaskCount)
+    lastTaskEventAtMap.set(key, row.lastTaskEventAt || null)
   }
 
   const data = pageRows.map((row) =>
@@ -844,8 +866,9 @@ export async function listAiEntryConversations(
         latestMessageCreatedAt: row.latestMessageCreatedAt || null,
       },
       {
-        latestAssistantMessageId: latestAssistantMap.get(String(row.id)) || null,
+        assistantMessageIds: assistantMessageIdsByConversationId.get(String(row.id)) || [],
         runningTaskCount: runningTaskCountMap.get(String(row.id)) || 0,
+        lastTaskEventAt: lastTaskEventAtMap.get(String(row.id)) || null,
       },
     ),
   )
@@ -1115,6 +1138,11 @@ export async function listAiEntryMessages(
     .reverse()
     .map((message) => (message.role === "assistant" ? parsePositiveInt(message.id) : null))
     .find((messageId): messageId is number => Boolean(messageId))
+  const lastTaskEventAt = [...taskRuns, ...(pendingTask ? [pendingTask] : [])]
+    .reduce<number | null>((latest, taskRun) => {
+      if (!taskRun) return latest
+      return latest === null || taskRun.updated_at > latest ? taskRun.updated_at : latest
+    }, null)
   if (
     latestAssistantMessageId &&
     latestAssistantMessageId !== getAiEntryLastReadAssistantMessageId(conversation.metadata)
@@ -1151,8 +1179,11 @@ export async function listAiEntryMessages(
         createdAt: conversation.createdAt,
       },
       {
-        latestAssistantMessageId: latestAssistantMessageId || null,
+        assistantMessageIds: data
+          .map((message) => (message.role === "assistant" ? parsePositiveInt(message.id) : null))
+          .filter((messageId): messageId is number => Boolean(messageId)),
         runningTaskCount: taskRuns.filter((taskRun) => taskRun.status === "pending" || taskRun.status === "running").length,
+        lastTaskEventAt: lastTaskEventAt ? new Date(lastTaskEventAt * 1000) : null,
       },
     ),
   }

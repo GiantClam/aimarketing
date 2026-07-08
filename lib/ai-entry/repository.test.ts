@@ -474,7 +474,7 @@ test("AI entry conversation history uses latest message time as updated_at", asy
     ],
   ]
   executeRowsQueue = [
-    [{ conversationId: 42, latestAssistantMessageId: 101 }],
+    [{ conversationId: 42, assistantMessageId: 101 }],
     [],
   ]
 
@@ -510,14 +510,25 @@ test("AI entry conversation history includes unread and running task indicators"
     },
   ]]
   executeRowsQueue = [
-    [{ conversationId: 42, latestAssistantMessageId: 101 }],
-    [{ conversationId: "42", runningTaskCount: 2 }],
+    [
+      { conversationId: 42, assistantMessageId: 101 },
+      { conversationId: 42, assistantMessageId: 103 },
+    ],
+    [{
+      conversationId: "42",
+      runningTaskCount: 2,
+      lastTaskEventAt: new Date("2024-01-05T08:31:00.000Z"),
+    }],
   ]
 
   const page = await listAiEntryConversations(7, 20, null, "chat", "executive-ppt")
 
   assert.equal(page.data[0]?.has_unread, true)
-  assert.equal(page.data[0]?.unread_count, 1)
+  assert.equal(page.data[0]?.unread_count, 2)
   assert.equal(page.data[0]?.has_running_ppt_task, true)
   assert.equal(page.data[0]?.running_ppt_task_count, 2)
+  assert.equal(
+    page.data[0]?.last_task_event_at,
+    Math.floor(new Date("2024-01-05T08:31:00.000Z").getTime() / 1000),
+  )
 })

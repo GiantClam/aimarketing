@@ -5,6 +5,7 @@ import { extractAiEntryArtifactsFromToolResult } from "./artifact-runtime"
 import {
   buildPptTemplateRecommendationMessage,
   buildPptToolResultMessage,
+  collapsePptTemplateRecommendationMessageBlocks,
   extractQueuedPptBackgroundTaskContext,
   extractLatestPptExportContext,
   extractLatestPptPreviewInvalidationContext,
@@ -16,6 +17,7 @@ import {
   resolveLatestPptConversationState,
   stripPptArtifactRelativeLinks,
   stripPptHiddenContextMarkers,
+  stripPptTemplateRecommendationMessageBlocks,
   stripPptTemplateRecommendationContextMarkers,
 } from "./ppt-tool-result-message"
 
@@ -216,6 +218,52 @@ test("template recommendation marker can be extracted and stripped for persisted
   ])
   assert.doesNotMatch(stripPptTemplateRecommendationContextMarkers(content), /ai-entry-ppt-template-recommendations/)
   assert.match(stripPptTemplateRecommendationContextMarkers(content), /Anthropic 品牌/)
+})
+
+test("template recommendation message blocks can be removed without touching surrounding text", () => {
+  const block = buildPptTemplateRecommendationMessage({
+    recommendedTemplates: [
+      { rank: 1, templateId: "government-blue", templateLabel: "政务蓝", styleName: "Government Blue" },
+      { rank: 2, templateId: "global-ai-capital-2026", templateLabel: "全球 AI 资本 2026", styleName: "Global AI Capital" },
+    ],
+    isZh: true,
+  })
+
+  const content = [
+    "前文说明",
+    block,
+    "后文结论",
+  ].join("\n\n")
+
+  assert.equal(stripPptTemplateRecommendationMessageBlocks(content), "前文说明\n\n后文结论")
+})
+
+test("template recommendation message blocks collapse to the latest generated block", () => {
+  const olderBlock = buildPptTemplateRecommendationMessage({
+    recommendedTemplates: [
+      { rank: 1, templateId: "government-blue", templateLabel: "政务蓝", styleName: "Government Blue" },
+      { rank: 2, templateId: "ai-ops", templateLabel: "AI 运维", styleName: "AI Ops" },
+    ],
+    isZh: true,
+  })
+  const newerBlock = buildPptTemplateRecommendationMessage({
+    recommendedTemplates: [
+      { rank: 1, templateId: "government-blue", templateLabel: "政务蓝", styleName: "Government Blue" },
+      { rank: 2, templateId: "cangzhuo", templateLabel: "苍桌纪要", styleName: "Cangzhuo" },
+    ],
+    isZh: true,
+  })
+
+  const content = [
+    "前文说明",
+    olderBlock,
+    newerBlock,
+  ].join("\n\n")
+  const collapsed = collapsePptTemplateRecommendationMessageBlocks(content)
+
+  assert.equal((collapsed.match(/已为这次需求推荐 4 个模板：/g) || []).length, 1)
+  assert.match(collapsed, /苍桌纪要 \(cangzhuo\)/)
+  assert.doesNotMatch(collapsed, /AI 运维 \(ai-ops\)/)
 })
 
 test("hidden ppt context markers are stripped before markdown rendering", () => {
