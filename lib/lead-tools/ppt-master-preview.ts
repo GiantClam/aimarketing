@@ -126,6 +126,7 @@ const themeAssets: Record<PptPreviewStyleArchetype, AssetTheme> = {
 }
 
 const assetCache = new Map<string, string>()
+const DEFAULT_PREVIEW_ASSET_DIR_SEGMENTS = ["lib", "lead-tools", ["ppt", "master", "assets"].join("-")]
 
 function escapeXml(value: string) {
   return value
@@ -261,6 +262,15 @@ function sanitizeBaseSvg(svg: string) {
     .replace(/<text\b[\s\S]*?<\/text>/gi, "")
 }
 
+function resolvePreviewAssetDir() {
+  const configuredDir = process.env.PPT_MASTER_ASSET_DIR?.trim()
+  if (configuredDir) {
+    return configuredDir
+  }
+
+  return path.resolve(process.cwd(), ...DEFAULT_PREVIEW_ASSET_DIR_SEGMENTS)
+}
+
 function getAssetDataUrl(styleKey: PptPreviewStyleKey, fileName: string) {
   const archetype = resolvePptPreviewStyleArchetype(styleKey)
   const cacheKey = `${archetype}/${fileName}`
@@ -270,7 +280,7 @@ function getAssetDataUrl(styleKey: PptPreviewStyleKey, fileName: string) {
   }
 
   const assetTheme = themeAssets[archetype]
-  const filePath = path.join(process.cwd(), "lib", "lead-tools", "ppt-master-assets", assetTheme.directory, fileName)
+  const filePath = path.join(resolvePreviewAssetDir(), assetTheme.directory, fileName)
 
   try {
     const svg = sanitizeBaseSvg(fs.readFileSync(filePath, "utf8"))

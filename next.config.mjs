@@ -25,10 +25,17 @@ const nextConfig = {
     unoptimized: true,
   },
   outputFileTracingRoot: projectRoot,
+  outputFileTracingExcludes: {
+    "*": [
+      "./lib/lead-tools/ppt-master-assets/**/*",
+      "./.cache/ppt-master/**/*",
+      "./.cache/ppt-master-hugo/**/*",
+    ],
+  },
   // 增加 API 路由的超时时间
   experimental: {
     serverActions: {
-      bodySizeLimit: '10mb',
+      bodySizeLimit: "10mb",
     },
   },
 }

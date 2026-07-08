@@ -21,6 +21,37 @@ test("ppt master runtime prefers explicit python env and falls back to python3",
   }
 })
 
+test("runtime repo candidates skip project cache on production and vercel builds", () => {
+  const mutableEnv = process.env as Record<string, string | undefined>
+  const previousNodeEnv = mutableEnv.NODE_ENV
+  const previousVercel = mutableEnv.VERCEL
+
+  try {
+    delete mutableEnv.VERCEL
+    mutableEnv.NODE_ENV = "development"
+    assert.match(__testables__.getProjectCachePptMasterCandidate() ?? "", /\.cache\/ppt-master$/u)
+
+    mutableEnv.NODE_ENV = "production"
+    assert.equal(__testables__.getProjectCachePptMasterCandidate(), null)
+
+    mutableEnv.NODE_ENV = "development"
+    mutableEnv.VERCEL = "1"
+    assert.equal(__testables__.getProjectCachePptMasterCandidate(), null)
+  } finally {
+    if (previousNodeEnv === undefined) {
+      delete mutableEnv.NODE_ENV
+    } else {
+      mutableEnv.NODE_ENV = previousNodeEnv
+    }
+
+    if (previousVercel === undefined) {
+      delete mutableEnv.VERCEL
+    } else {
+      mutableEnv.VERCEL = previousVercel
+    }
+  }
+})
+
 test("runtime deck normalization preserves agenda copy for slide generation", () => {
   const normalized = __testables__.normalizeRuntimeDeckCopy({
     title: "霍尔木兹海峡风险如何改写全球油运成本",

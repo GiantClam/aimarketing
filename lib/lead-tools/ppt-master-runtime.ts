@@ -30,6 +30,7 @@ const PREVIEW_WIDTH = 1280
 const PREVIEW_HEIGHT = 720
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6
 const SVG_REGENERATION_RETRY_LIMIT = 2
+const PROJECT_CACHE_DIR_SEGMENTS = [".cache", ["ppt", "master"].join("-")]
 
 type StoredVariant = {
   key: string
@@ -101,12 +102,24 @@ export type PptMasterPreviewRuntimeOptions = {
   generateSlideSvg: (context: PptMasterPreviewRuntimeSlideContext) => Promise<PptMasterPreviewRuntimeSlideResult>
 }
 
+function isVercelEnvironment() {
+  return process.env.VERCEL === "1" || process.env.VERCEL === "true"
+}
+
+function getProjectCachePptMasterCandidate() {
+  if (process.env.NODE_ENV === "production" || isVercelEnvironment()) {
+    return null
+  }
+
+  return path.resolve(process.cwd(), ...PROJECT_CACHE_DIR_SEGMENTS)
+}
+
 function getPptMasterRootCandidates() {
   return [
     process.env.PPT_MASTER_REPO_DIR,
     "D:\\tmp\\ppt-master",
     path.join(os.tmpdir(), "ppt-master"),
-    path.join(process.cwd(), ".cache", "ppt-master"),
+    getProjectCachePptMasterCandidate(),
   ].filter((value): value is string => Boolean(value?.trim()))
 }
 
@@ -1924,6 +1937,8 @@ export async function exportPptMasterSessionVariant(sessionId: string, variantKe
 }
 
 export const __testables__ = {
+  isVercelEnvironment,
+  getProjectCachePptMasterCandidate,
   getPptMasterPythonCandidates,
   readManifest,
   compactRuntimeText,
