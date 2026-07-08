@@ -493,11 +493,30 @@ export function buildPptToolResultMessage(input: {
       (result as { backgroundTask?: { taskId?: unknown } }).backgroundTask?.taskId,
     )
     const queuedMessage = normalizeOptionalText((result as { message?: unknown }).message)
+    const queuedRecommendedTemplates = parseRecommendedTemplates(
+      (result as { recommendedTemplates?: unknown }).recommendedTemplates,
+    )
+    const queuedSelectedTemplateId = normalizeOptionalText(
+      (result as { selectedTemplateId?: unknown }).selectedTemplateId,
+    )
     if (backgroundStatus === "queued" && backgroundTaskId) {
+      const selectedTemplateSummary =
+        queuedSelectedTemplateId
+          ? queuedRecommendedTemplates.find((item) => item.templateId === queuedSelectedTemplateId)
+          : null
       const lines = [
         isZh ? "已切换为后台生成：" : "Moved to background generation:",
         `- ${isZh ? "任务 ID" : "Task ID"}: ${backgroundTaskId}`,
         `- ${isZh ? "状态" : "Status"}: ${queuedMessage || (isZh ? "系统会持续轮询，完成后自动回填预览结果。" : "The system will keep polling and fill the preview result back in when it completes.")}`,
+        ...(queuedSelectedTemplateId
+          ? [
+              `- ${isZh ? "本次已采用模板" : "Selected template for this run"}: ${
+                selectedTemplateSummary?.templateLabel ||
+                selectedTemplateSummary?.styleName ||
+                queuedSelectedTemplateId
+              } (${queuedSelectedTemplateId})`,
+            ]
+          : []),
       ]
       return `\n\n${lines.join("\n")}`
     }

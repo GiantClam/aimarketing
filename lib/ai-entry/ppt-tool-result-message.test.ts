@@ -131,6 +131,15 @@ test("preview ppt tool result message explains background generation when previe
       status: "queued",
       message:
         "PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。",
+      selectedTemplateId: "deck-china-telecom",
+      recommendedTemplates: [
+        {
+          rank: 1,
+          templateId: "deck-china-telecom",
+          templateLabel: "中国电信",
+          styleName: "Neo-Grid Bold",
+        },
+      ],
       backgroundTask: {
         taskId: "901",
       },
@@ -140,6 +149,7 @@ test("preview ppt tool result message explains background generation when previe
   assert.match(message || "", /已切换为后台生成：/)
   assert.match(message || "", /任务 ID: 901/)
   assert.match(message || "", /后台生成/)
+  assert.match(message || "", /本次已采用模板: 中国电信 \(deck-china-telecom\)/)
   assert.equal(isQueuedPptBackgroundStatusMessage(message), true)
 })
 

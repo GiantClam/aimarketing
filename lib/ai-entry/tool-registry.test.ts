@@ -552,6 +552,8 @@ test("tool registry queues executive-ppt preview in the background for chat turn
         goal: "经营同步",
         scenario: "marketing-campaign",
         language: "zh-CN",
+        templateMode: "single-template",
+        templateId: "long-table",
       },
       isZh: true,
     },
@@ -931,7 +933,7 @@ test("tool registry blocks preview_ppt_deck when the ppt brief is incomplete", a
   })
 })
 
-test("tool registry keeps executive-ppt preview in free-design mode without requiring a recommended template", async () => {
+test("tool registry auto-selects the top recommended template for executive-ppt background previews", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1000,9 +1002,16 @@ test("tool registry keeps executive-ppt preview in free-design mode without requ
   })
 
   assert.equal(previewResult.ok, true)
-  assert.ok(previewInput)
-  assert.equal("templateMode" in (previewInput as Record<string, unknown>), false)
-  assert.equal("templateId" in (previewInput as Record<string, unknown>), false)
+  assert.equal(previewInput, null)
+  assert.equal(enqueuedTasks.length, 1)
+  assert.equal(
+    (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
+    "single-template",
+  )
+  assert.equal(
+    (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
+    "cangzhuo",
+  )
 })
 
 test("tool registry strips model-supplied template ids when the user did not explicitly choose one", async () => {
@@ -1077,9 +1086,15 @@ test("tool registry strips model-supplied template ids when the user did not exp
 
   assert.equal(previewResult.ok, true)
   assert.equal(enqueuedTasks.length, 1)
-  assert.ok(previewInput)
-  assert.equal("templateMode" in (previewInput as Record<string, unknown>), false)
-  assert.equal("templateId" in (previewInput as Record<string, unknown>), false)
+  assert.equal(previewInput, null)
+  assert.equal(
+    (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
+    "single-template",
+  )
+  assert.equal(
+    (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
+    "aurora-glass",
+  )
 })
 
 test("tool registry injects the user-selected recommended template into editable ppt preview", async () => {

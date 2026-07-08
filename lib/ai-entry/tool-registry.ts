@@ -29,6 +29,7 @@ import {
 import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
+import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 type AiSdkToolLike = {
   description?: string
@@ -307,6 +308,8 @@ async function enqueueBackgroundPptPreviewTask(input: {
   toolCallId: string
   preparedInput: Record<string, unknown>
   isZh: boolean
+  selectedTemplateId?: string | null
+  recommendedTemplates?: unknown[]
 }) {
   const task = await enqueueAssistantTask({
     userId: input.user.id,
@@ -329,12 +332,84 @@ async function enqueueBackgroundPptPreviewTask(input: {
     message: input.isZh
       ? "PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。"
       : "PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.",
+    ...(input.selectedTemplateId ? { selectedTemplateId: input.selectedTemplateId } : {}),
+    ...(Array.isArray(input.recommendedTemplates) && input.recommendedTemplates.length > 0
+      ? { recommendedTemplates: input.recommendedTemplates }
+      : {}),
     backgroundTask: {
       taskId: String(task.id),
       conversationId: input.conversationId,
       toolName: "preview_ppt_deck",
       status: "queued",
     },
+  }
+}
+
+function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
+  toolId: string
+  preparedInput: unknown
+  agentId: string | null
+  executionContext?: "chat" | "workflow"
+}) {
+  if (
+    input.toolId !== "preview_ppt_deck" ||
+    input.agentId !== AI_ENTRY_BACKGROUND_PPT_AGENT_ID ||
+    input.executionContext === "workflow" ||
+    !input.preparedInput ||
+    typeof input.preparedInput !== "object"
+  ) {
+    return {
+      preparedInput: input.preparedInput,
+      selectedTemplateId: null,
+      recommendedTemplates: [] as Array<Record<string, unknown>>,
+    }
+  }
+
+  const record = input.preparedInput as Record<string, unknown>
+  const selectedTemplateId = readOptionalString(record.templateId)
+  if (selectedTemplateId) {
+    return {
+      preparedInput: record,
+      selectedTemplateId,
+      recommendedTemplates: [] as Array<Record<string, unknown>>,
+    }
+  }
+
+  const prompt = readOptionalString(record.prompt)
+  const scenario = readOptionalString(record.scenario)
+  const language = readOptionalString(record.language)
+  if (!prompt || !scenario || !language) {
+    return {
+      preparedInput: record,
+      selectedTemplateId: null,
+      recommendedTemplates: [] as Array<Record<string, unknown>>,
+    }
+  }
+
+  const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+    prompt,
+    researchBrief: record.researchBrief as StructuredResearchBrief | string | undefined,
+    scenario: scenario as "marketing-campaign" | "product-launch" | "sales-deck" | "training",
+    language: language as "zh-CN" | "en-US",
+    pageCount: typeof record.pageCount === "number" ? record.pageCount : undefined,
+  })
+  const defaultTemplateId = readOptionalString(recommendedTemplates[0]?.templateId)
+  if (!defaultTemplateId) {
+    return {
+      preparedInput: record,
+      selectedTemplateId: null,
+      recommendedTemplates,
+    }
+  }
+
+  return {
+    preparedInput: {
+      ...record,
+      templateMode: "single-template",
+      templateId: defaultTemplateId,
+    },
+    selectedTemplateId: defaultTemplateId,
+    recommendedTemplates,
   }
 }
 
@@ -446,6 +521,12 @@ function wrapToolSet(params: {
                 : {}),
             }
           }
+          const backgroundPreviewSelection = maybeApplyDefaultBackgroundPptTemplateSelection({
+            toolId,
+            preparedInput: preparedPreviewInput.input,
+            agentId: params.auditContext.agentId,
+            executionContext: params.executionContext,
+          })
           if (
             shouldRunPptPreviewInBackground({
               toolId,
@@ -465,10 +546,12 @@ function wrapToolSet(params: {
                     ? (options as { toolCallId?: unknown }).toolCallId
                     : null,
                 ) || toolId,
-              preparedInput: preparedPreviewInput.input as Record<string, unknown>,
+              preparedInput: backgroundPreviewSelection.preparedInput as Record<string, unknown>,
               isZh: /[\u4e00-\u9fff]/u.test(
                 typeof params.latestUserPrompt === "string" ? params.latestUserPrompt : "",
               ),
+              selectedTemplateId: backgroundPreviewSelection.selectedTemplateId,
+              recommendedTemplates: backgroundPreviewSelection.recommendedTemplates,
             })
             console.info("ai-entry.tool.audit.queued", {
               ...params.auditContext,
@@ -477,6 +560,7 @@ function wrapToolSet(params: {
               skillId,
               elapsedMs: Date.now() - startedAt,
               taskId: backgroundResult.backgroundTask.taskId,
+              selectedTemplateId: backgroundPreviewSelection.selectedTemplateId,
             })
             return backgroundResult
           }
