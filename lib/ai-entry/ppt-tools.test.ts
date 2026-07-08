@@ -242,7 +242,7 @@ test("ppt tools return preview metadata and export a downloadable PPTX artifact"
   assert.equal(exported.downloadUrl, "/api/platform/artifacts/401/download?download=1")
 })
 
-test("editable ppt agent keeps template recommendations visible without auto-selecting a template", async () => {
+test("editable ppt agent auto-selects the top recommended template for ppt-master previews", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -260,7 +260,7 @@ test("editable ppt agent keeps template recommendations visible without auto-sel
   })
 
   assert.equal(preview.ok, true)
-  assert.equal(preview.selectedTemplateId, null)
+  assert.equal(preview.selectedTemplateId, "cangzhuo")
   assert.equal(Array.isArray(preview.recommendedTemplates), true)
   assert.equal(preview.recommendedTemplates?.length, 4)
   assert.deepEqual(previewInputs[0], {
@@ -274,9 +274,9 @@ test("editable ppt agent keeps template recommendations visible without auto-sel
     scenario: "sales-deck",
     language: "zh-CN",
     previewRuntime: "ppt-master-agent",
-    templateMode: "auto-4",
-    templateId: undefined,
-    narrativeAngle: undefined,
+    templateMode: "single-template",
+    templateId: "cangzhuo",
+    narrativeAngle: "executive-brief",
     pageCount: undefined,
   })
 })

@@ -527,6 +527,10 @@ export function buildPptToolResultMessage(input: {
     const recommendedVariantName = normalizeOptionalText(result.recommendedVariantName)
     const recommendedTemplates = parseRecommendedTemplates(result.recommendedTemplates)
     const selectedTemplateId = normalizeOptionalText(result.selectedTemplateId)
+    const selectedTemplateSummary =
+      selectedTemplateId
+        ? recommendedTemplates.find((item) => item.templateId === selectedTemplateId) ?? null
+        : null
     if (!previewSessionId || variants.length === 0) return null
 
     const defaultVariant =
@@ -557,7 +561,7 @@ export function buildPptToolResultMessage(input: {
       isZh
         ? "- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。"
         : '- Next step: Reply with "confirm export" to export the recommended variant, or describe any changes first.',
-      ...(recommendedTemplates.length > 0
+      ...(recommendedTemplates.length > 0 && !selectedTemplateId
         ? [
             `- ${isZh ? "模板推荐" : "Template recommendations"}: ${recommendedTemplates
               .map((item) => `${item.rank ?? "?"}.${item.templateLabel || item.styleName || item.templateId}`)
@@ -565,7 +569,13 @@ export function buildPptToolResultMessage(input: {
           ]
         : []),
       ...(selectedTemplateId
-        ? [`- ${isZh ? "本次已采用模板" : "Selected template for this run"}: ${selectedTemplateId}`]
+        ? [
+            `- ${isZh ? "本次已采用模板" : "Selected template for this run"}: ${
+              selectedTemplateSummary?.templateLabel ||
+              selectedTemplateSummary?.styleName ||
+              selectedTemplateId
+            } (${selectedTemplateId})`,
+          ]
         : []),
       context,
     ]

@@ -111,8 +111,8 @@ test("preview ppt tool result message includes a hidden preview context marker",
 
   assert.match(message || "", /已生成 PPT 预览：/)
   assert.match(message || "", /默认推荐版本: Variant B \(variant-b\)/)
-  assert.match(message || "", /模板推荐: 1\.Long Table/)
-  assert.match(message || "", /本次已采用模板: long-table/)
+  assert.doesNotMatch(message || "", /模板推荐:/)
+  assert.match(message || "", /本次已采用模板: Long Table \(long-table\)/)
 
   const context = extractLatestPptPreviewContext(message)
   assert.deepEqual(context, {

@@ -6,6 +6,7 @@ import { z } from "zod"
 import type { AuthUser } from "@/lib/auth/session"
 import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
 import { preparePptPreviewInput } from "@/lib/ai-entry/ppt-brief"
+import { resolvePptTemplateSelection } from "@/lib/ai-entry/ppt-template-selection"
 import type {
   PptPreviewDeck,
   PptPreviewResearchBrief,
@@ -13,7 +14,6 @@ import type {
   PptPreviewVariant,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
-  buildPptRecommendedTemplateSummaries,
   isKnownPptFrontendTemplateId,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
@@ -569,17 +569,20 @@ export function buildAiEntryPptTools(input: {
 
           const limitTemplatesToRemoteWorker = shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime)
           const allowedTemplateIds = limitTemplatesToRemoteWorker ? getPptWorkerSupportedTemplateIds() : undefined
-          const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+          const selection = resolvePptTemplateSelection({
             prompt: prepared.input.prompt,
             researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
             scenario: prepared.input.scenario,
             language: prepared.input.language,
             pageCount: prepared.input.pageCount ?? undefined,
-          }, allowedTemplateIds ? { allowedTemplateIds } : undefined)
-          const effectiveTemplateId = prepared.input.templateId ?? templateId
-          const effectiveTemplateMode = effectiveTemplateId
-            ? "single-template"
-            : prepared.input.templateMode ?? templateMode
+            templateMode: prepared.input.templateMode ?? templateMode,
+            templateId: prepared.input.templateId ?? templateId,
+            previewRuntime: defaultPreviewRuntime,
+            allowedTemplateIds,
+          })
+          const { recommendedTemplates } = selection
+          const effectiveTemplateId = selection.selectedTemplateId ?? undefined
+          const effectiveTemplateMode = selection.templateMode
           if (
             limitTemplatesToRemoteWorker &&
             effectiveTemplateMode === "single-template" &&

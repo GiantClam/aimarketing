@@ -27,9 +27,9 @@ import {
   type StructuredResearchBrief,
 } from "@/lib/ai-entry/research-brief-context"
 import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
+import { resolvePptTemplateSelection } from "@/lib/ai-entry/ppt-template-selection"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
-import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 type AiSdkToolLike = {
   description?: string
@@ -386,14 +386,18 @@ function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
     }
   }
 
-  const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+  const selection = resolvePptTemplateSelection({
     prompt,
     researchBrief: record.researchBrief as StructuredResearchBrief | string | undefined,
     scenario: scenario as "marketing-campaign" | "product-launch" | "sales-deck" | "training",
     language: language as "zh-CN" | "en-US",
     pageCount: typeof record.pageCount === "number" ? record.pageCount : undefined,
+    templateMode: readOptionalString(record.templateMode) as "auto-4" | "single-template" | null,
+    templateId: selectedTemplateId,
+    preferSingleTemplate: true,
   })
-  const defaultTemplateId = readOptionalString(recommendedTemplates[0]?.templateId)
+  const recommendedTemplates = selection.recommendedTemplates
+  const defaultTemplateId = selection.selectedTemplateId
   if (!defaultTemplateId) {
     return {
       preparedInput: record,
