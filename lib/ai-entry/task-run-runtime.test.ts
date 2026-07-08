@@ -50,6 +50,22 @@ test("task elapsed seconds uses started time for running tasks", () => {
   )
 })
 
+test("task elapsed seconds prefer backend finished time when available", () => {
+  assert.equal(
+    getAiEntryTaskElapsedSeconds(
+      {
+        created_at: 100,
+        started_at: 110,
+        updated_at: 9_999,
+        finished_at: 150,
+        status: "running",
+      },
+      999_000,
+    ),
+    40,
+  )
+})
+
 test("task heartbeat stale check only applies to active tasks", () => {
   assert.equal(
     isAiEntryTaskHeartbeatStale(

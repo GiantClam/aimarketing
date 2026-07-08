@@ -141,6 +141,16 @@ export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boole
         {taskRun.error ? (
           <div className="mt-2 text-[11px] text-destructive">{taskRun.error}</div>
         ) : null}
+        <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+          <div>{`${isZh ? "任务 ID" : "Task ID"}: ${taskRun.task_id}`}</div>
+          {taskRun.selected_template_id ? (
+            <div>
+              {`${isZh ? "本次已采用模板" : "Selected template for this run"}: ${
+                taskRun.selected_template_label || taskRun.selected_template_id
+              } (${taskRun.selected_template_id})`}
+            </div>
+          ) : null}
+        </div>
         {taskRun.preview_session_id ? (
           <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <Clock3 className="h-3 w-3" />

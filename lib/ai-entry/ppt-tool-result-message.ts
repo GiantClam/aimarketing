@@ -308,7 +308,7 @@ export function resolvePptTemplateSelectionFromUserText(
     ? chineseOrdinalMap[`第${chineseOrdinalMatch[1]}`] ?? chineseOrdinalMap[chineseOrdinalMatch[1]] ?? null
     : null
   const selectedIndex = numericSelectedIndex || chineseSelectedIndex || null
-  if (Number.isFinite(selectedIndex) && selectedIndex > 0) {
+  if (typeof selectedIndex === "number" && Number.isFinite(selectedIndex) && selectedIndex > 0) {
     return context.templateIds[selectedIndex - 1] ?? null
   }
 

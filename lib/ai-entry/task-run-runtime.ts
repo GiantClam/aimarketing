@@ -28,9 +28,10 @@ export function getAiEntryTaskElapsedSeconds(
 ) {
   const startedAt = taskRun.started_at || taskRun.created_at
   const terminalAt =
-    taskRun.status === "success" || taskRun.status === "failed"
-      ? taskRun.finished_at || taskRun.updated_at
-      : Math.floor(nowMs / 1000)
+    taskRun.finished_at ||
+    (taskRun.status === "success" || taskRun.status === "failed"
+      ? taskRun.updated_at
+      : Math.floor(nowMs / 1000))
 
   return Math.max(0, terminalAt - startedAt)
 }

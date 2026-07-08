@@ -1,3 +1,8 @@
+import {
+  getPptPreviewTemplateLabel,
+  isKnownPptFrontendTemplateId,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
+
 type AiEntryTaskRunStatus = "pending" | "running" | "success" | "failed"
 type AiEntryTaskRunEventStatus = "running" | "completed" | "failed" | "info"
 
@@ -34,6 +39,8 @@ export type AiEntryTaskRunSummary = {
   preview_session_id: string | null
   request_label: string | null
   result_summary: string | null
+  selected_template_id: string | null
+  selected_template_label: string | null
   error_code: string | null
   error_message: string | null
   error: string | null
@@ -147,6 +154,38 @@ function resolveRequestLabel(input: Record<string, unknown> | null) {
   return audience || scenario || null
 }
 
+function resolveSelectedTemplate(input: {
+  payload: Record<string, unknown> | null
+  result: Record<string, unknown> | null
+  isZh: boolean
+}) {
+  const payloadInput = safeParseRecord(input.payload?.input)
+  const toolResult = safeParseRecord(input.result?.toolResult)
+  const selectedTemplateId =
+    normalizeText(toolResult?.selectedTemplateId) ||
+    normalizeText(input.result?.selectedTemplateId) ||
+    normalizeText(payloadInput?.templateId)
+
+  if (!selectedTemplateId) {
+    return {
+      selectedTemplateId: null,
+      selectedTemplateLabel: null,
+    }
+  }
+
+  if (isKnownPptFrontendTemplateId(selectedTemplateId)) {
+    return {
+      selectedTemplateId,
+      selectedTemplateLabel: getPptPreviewTemplateLabel(selectedTemplateId, input.isZh ? "zh-CN" : "en-US"),
+    }
+  }
+
+  return {
+    selectedTemplateId,
+    selectedTemplateLabel: selectedTemplateId,
+  }
+}
+
 function resolveStageLabel(stage: AiEntryTaskRunStage, isZh: boolean) {
   if (stage === "brief_validating") return isZh ? "已排队，准备校验需求" : "Queued, validating brief"
   if (stage === "story_planning") return isZh ? "正在规划结构与故事线" : "Planning structure and storyline"
@@ -226,6 +265,11 @@ export function parseAiEntryTaskRunSummary(source: TaskRunSource): AiEntryTaskRu
     normalizeText(result?.assistantMessage) ||
     normalizeText((result?.toolResult as Record<string, unknown> | undefined)?.title) ||
     null
+  const selectedTemplate = resolveSelectedTemplate({
+    payload,
+    result,
+    isZh,
+  })
 
   return {
     task_id: String(taskId),
@@ -269,6 +313,8 @@ export function parseAiEntryTaskRunSummary(source: TaskRunSource): AiEntryTaskRu
     preview_session_id: previewSessionId || null,
     request_label: resolveRequestLabel(safeParseRecord(payload?.input)),
     result_summary: resultSummary,
+    selected_template_id: selectedTemplate.selectedTemplateId,
+    selected_template_label: selectedTemplate.selectedTemplateLabel,
     error_code: errorCode,
     error_message: errorMessage,
     error: errorMessage,

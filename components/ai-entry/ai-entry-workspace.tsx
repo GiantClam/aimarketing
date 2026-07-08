@@ -253,6 +253,8 @@ type MessageApiResponse = {
     preview_session_id?: string | null
     request_label?: string | null
     result_summary?: string | null
+    selected_template_id?: string | null
+    selected_template_label?: string | null
     error_code?: string | null
     error_message?: string | null
     error?: string | null
@@ -784,6 +786,14 @@ function normalizeMessageApiTaskRun(
     result_summary:
       typeof taskRun.result_summary === "string" && taskRun.result_summary.trim()
         ? taskRun.result_summary.trim()
+        : null,
+    selected_template_id:
+      typeof taskRun.selected_template_id === "string" && taskRun.selected_template_id.trim()
+        ? taskRun.selected_template_id.trim()
+        : null,
+    selected_template_label:
+      typeof taskRun.selected_template_label === "string" && taskRun.selected_template_label.trim()
+        ? taskRun.selected_template_label.trim()
         : null,
     error_code:
       typeof taskRun.error_code === "string" && taskRun.error_code.trim()
@@ -3008,6 +3018,25 @@ export function AiEntryWorkspace({
               typeof event.data.result === "object"
                 ? (event.data.result as NonNullable<NonNullable<ChatStreamApiResponse["data"]>["result"]>)
                 : null
+            const toolResultRecord =
+              toolResultPayload && typeof toolResultPayload === "object"
+                ? (toolResultPayload as Record<string, unknown>)
+                : null
+            const backgroundSelectedTemplateId =
+              typeof toolResultRecord?.selectedTemplateId === "string" &&
+              toolResultRecord.selectedTemplateId.trim()
+                ? toolResultRecord.selectedTemplateId.trim()
+                : null
+            const backgroundSelectedTemplateLabel =
+              backgroundSelectedTemplateId && Array.isArray(toolResultRecord?.recommendedTemplates)
+                ? toolResultRecord.recommendedTemplates.find((item: unknown) => {
+                    if (!item || typeof item !== "object") return false
+                    return (
+                      typeof (item as { templateId?: unknown }).templateId === "string" &&
+                      (item as { templateId: string }).templateId.trim() === backgroundSelectedTemplateId
+                    )
+                  }) as { templateLabel?: unknown; styleName?: unknown } | undefined
+                : undefined
             const isToolFailure = toolResultPayload?.ok === false
             const backgroundTaskId =
               typeof toolResultPayload?.backgroundTask?.taskId === "string" &&
@@ -3073,6 +3102,17 @@ export function AiEntryWorkspace({
                     preview_session_id: null,
                     request_label: userMessage.content.trim() || null,
                     result_summary: null,
+                    selected_template_id: backgroundSelectedTemplateId,
+                    selected_template_label:
+                      backgroundSelectedTemplateLabel &&
+                      typeof backgroundSelectedTemplateLabel.templateLabel === "string" &&
+                      backgroundSelectedTemplateLabel.templateLabel.trim()
+                        ? backgroundSelectedTemplateLabel.templateLabel.trim()
+                        : backgroundSelectedTemplateLabel &&
+                            typeof backgroundSelectedTemplateLabel.styleName === "string" &&
+                            backgroundSelectedTemplateLabel.styleName.trim()
+                          ? backgroundSelectedTemplateLabel.styleName.trim()
+                          : backgroundSelectedTemplateId,
                     error_code: null,
                     error_message: null,
                     error: null,

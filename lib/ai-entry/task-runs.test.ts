@@ -14,6 +14,7 @@ test("parseAiEntryTaskRunSummary normalizes a running PPT preview task", () => {
       isZh: true,
       input: {
         title: "季度经营复盘",
+        templateId: "deck-china-telecom",
       },
     }),
     result: JSON.stringify({
@@ -40,6 +41,8 @@ test("parseAiEntryTaskRunSummary normalizes a running PPT preview task", () => {
   assert.equal(summary?.stage, "variant_generating")
   assert.equal(summary?.stage_label, "正在生成预览方向")
   assert.equal(summary?.request_label, "季度经营复盘")
+  assert.equal(summary?.selected_template_id, "deck-china-telecom")
+  assert.equal(summary?.selected_template_label, "中国电信")
   assert.equal(summary?.events.length, 1)
 })
 
