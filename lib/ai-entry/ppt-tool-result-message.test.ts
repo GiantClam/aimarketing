@@ -13,6 +13,7 @@ import {
   extractLatestPptTemplateRecommendationContext,
   extractPptTemplateRecommendationContexts,
   isQueuedPptBackgroundStatusMessage,
+  resolvePptCatalogTemplateSelectionFromUserText,
   resolvePptTemplateSelectionFromUserText,
   resolveLatestPptConversationState,
   stripPptArtifactRelativeLinks,
@@ -300,7 +301,15 @@ test("template selection resolves explicit template ids and labels from recommen
   assert.equal(resolvePptTemplateSelectionFromUserText("改用 broadside", context), "broadside")
   assert.equal(resolvePptTemplateSelectionFromUserText("试试长桌纪要", context), "long-table")
   assert.equal(resolvePptTemplateSelectionFromUserText("选择新网格粗体", context), "neo-grid-bold")
-  assert.equal(resolvePptTemplateSelectionFromUserText("用第一个模板生成", context), null)
+  assert.equal(resolvePptTemplateSelectionFromUserText("用第一个模板生成", context), "long-table")
+  assert.equal(resolvePptTemplateSelectionFromUserText("用第2个模板生成", context), "neo-grid-bold")
+})
+
+test("template selection can resolve explicit catalog template names without a recommendation context", () => {
+  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("用 swiss-grid 模板生成"), "swiss-grid")
+  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("改成瑞士网格"), "swiss-grid")
+  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("确认 academic-defense"), "academic-defense")
+  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("使用学术答辩"), "academic-defense")
 })
 
 test("preview failure with recommended templates produces selectable template context", () => {

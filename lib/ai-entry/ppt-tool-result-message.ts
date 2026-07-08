@@ -1,3 +1,4 @@
+import { pptFrontendTemplateOptions } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { stripResearchBriefContextMarkers } from "@/lib/ai-entry/research-brief-context"
 
 type ExportPptDeckResult = {
@@ -264,6 +265,53 @@ export function resolvePptTemplateSelectionFromUserText(
   const normalized = normalizeOptionalText(userText)?.toLowerCase() ?? ""
   if (!normalized || !context?.templateIds.length) return null
 
+  const chineseOrdinalMap: Record<string, number> = {
+    "一": 1,
+    "二": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+    "第一": 1,
+    "第二": 2,
+    "第三": 3,
+    "第四": 4,
+    "第五": 5,
+    "第六": 6,
+    "第七": 7,
+    "第八": 8,
+    "第九": 9,
+    "第十": 10,
+    "第一个": 1,
+    "第二个": 2,
+    "第三个": 3,
+    "第四个": 4,
+    "第五个": 5,
+    "第六个": 6,
+    "第七个": 7,
+    "第八个": 8,
+    "第九个": 9,
+    "第十个": 10,
+  }
+
+  const numberedMatch = normalized.match(/(?:第\s*([1-9]\d*)\s*个?模板|template\s*#?\s*([1-9]\d*)|option\s*#?\s*([1-9]\d*))/iu)
+  const chineseOrdinalMatch = normalized.match(/第\s*([一二三四五六七八九十]+)\s*个?模板/u)
+  const numericSelectedIndex = Number.parseInt(
+    numberedMatch?.[1] || numberedMatch?.[2] || numberedMatch?.[3] || "",
+    10,
+  )
+  const chineseSelectedIndex = chineseOrdinalMatch
+    ? chineseOrdinalMap[`第${chineseOrdinalMatch[1]}`] ?? chineseOrdinalMap[chineseOrdinalMatch[1]] ?? null
+    : null
+  const selectedIndex = numericSelectedIndex || chineseSelectedIndex || null
+  if (Number.isFinite(selectedIndex) && selectedIndex > 0) {
+    return context.templateIds[selectedIndex - 1] ?? null
+  }
+
   for (const templateId of context.templateIds) {
     const candidate = templateId.trim().toLowerCase()
     if (candidate && (normalized === candidate || normalized.includes(candidate))) {
@@ -277,6 +325,31 @@ export function resolvePptTemplateSelectionFromUserText(
       if (candidate && (normalized === candidate || normalized.includes(candidate))) {
         return template.templateId
       }
+    }
+  }
+
+  return null
+}
+
+export function resolvePptCatalogTemplateSelectionFromUserText(
+  userText: string | null | undefined,
+) {
+  const normalized = normalizeOptionalText(userText)?.toLowerCase() ?? ""
+  if (!normalized) return null
+
+  for (const option of pptFrontendTemplateOptions) {
+    if (normalized === option.id || normalized.includes(option.id)) {
+      return option.id
+    }
+  }
+
+  for (const option of pptFrontendTemplateOptions) {
+    const labels = [option.label.zh, option.label.en]
+      .filter((label): label is string => Boolean(label?.trim()))
+      .map((label) => label.trim().toLowerCase())
+
+    if (labels.some((label) => normalized === label || normalized.includes(label))) {
+      return option.id
     }
   }
 

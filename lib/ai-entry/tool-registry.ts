@@ -11,15 +11,14 @@ import { type AiEntryConversationState, resolveAiEntryConversationStateFromConte
 import { type AiEntryMcpServerDefinition, getAiEntryMcpServerDefinitions, loadAiEntryMcpTools } from "@/lib/ai-entry/mcp-tools"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
 import {
-  buildPptTemplateRecommendationSource,
   type PptBriefState,
   preparePptPreviewInput,
 } from "@/lib/ai-entry/ppt-brief"
 import {
   extractLatestPptPreviewContext,
   extractLatestPptTemplateRecommendationContext,
-  type PptTemplateRecommendationContext,
   type PptPreviewContext,
+  resolvePptCatalogTemplateSelectionFromUserText,
   resolvePptTemplateSelectionFromUserText,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import {
@@ -30,10 +29,6 @@ import {
 import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
-import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
-import type { PptRecommendedTemplateSummary } from "@/lib/lead-tools/ppt-preview-data-fixed"
-import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
-import { getPptWorkerSupportedTemplateIds } from "@/lib/lead-tools/ppt-worker-capabilities"
 
 type AiSdkToolLike = {
   description?: string
@@ -202,17 +197,11 @@ function maybeInjectPptTemplateSelection(input: {
   }
 
   const record = input.rawInput && typeof input.rawInput === "object" ? (input.rawInput as Record<string, unknown>) : {}
-  const suppliedTemplateId = readOptionalString(record.templateId)
-  const suppliedTemplateMode = readOptionalString(record.templateMode)
   const selectedTemplateId =
-    suppliedTemplateId &&
-    suppliedTemplateMode === "single-template" &&
-    input.latestTemplateRecommendationContext?.templateIds.includes(suppliedTemplateId)
-      ? suppliedTemplateId
-      : resolvePptTemplateSelectionFromUserText(
-          input.latestUserPrompt,
-          input.latestTemplateRecommendationContext,
-        )
+    resolvePptTemplateSelectionFromUserText(
+      input.latestUserPrompt,
+      input.latestTemplateRecommendationContext,
+    ) || resolvePptCatalogTemplateSelectionFromUserText(input.latestUserPrompt)
   if (selectedTemplateId) {
     return {
       ...record,
@@ -225,38 +214,6 @@ function maybeInjectPptTemplateSelection(input: {
   delete rest.templateId
   delete rest.templateMode
   return rest
-}
-
-function hasConfirmedEditablePptTemplate(input: {
-  record: Record<string, unknown>
-  latestTemplateRecommendationContext?: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
-  allowedTemplateIds?: readonly string[]
-}) {
-  const templateId = readOptionalString(input.record.templateId)
-  const templateMode = readOptionalString(input.record.templateMode)
-  const allowedTemplateIds = input.allowedTemplateIds?.length ? new Set(input.allowedTemplateIds) : null
-  return Boolean(
-    templateId &&
-    templateMode === "single-template" &&
-    (!allowedTemplateIds || allowedTemplateIds.has(templateId)) &&
-    input.latestTemplateRecommendationContext?.templateIds.includes(templateId),
-  )
-}
-
-function buildTemplateRecommendationContextFromSummaries(
-  recommendedTemplates: PptRecommendedTemplateSummary[],
-): PptTemplateRecommendationContext | null {
-  const templateIds = recommendedTemplates.map((item) => item.templateId).filter(Boolean)
-  if (templateIds.length === 0) return null
-
-  return {
-    defaultTemplateId: templateIds[0] ?? null,
-    templateIds,
-    templates: recommendedTemplates.map((item) => ({
-      templateId: item.templateId,
-      labels: [item.templateLabel, item.styleName, item.templateId].filter(Boolean),
-    })),
-  }
 }
 
 function extractPreviewContextFromToolResult(result: unknown): PptPreviewContext | null {
@@ -303,7 +260,7 @@ function maybePreparePptPreviewInput(
   toolId: string,
   input: unknown,
   briefState: PptBriefState | null,
-  options?: {
+  _options?: {
     agentId: string | null
     executionContext?: "chat" | "workflow"
     latestUserPrompt?: string | null
@@ -325,81 +282,6 @@ function maybePreparePptPreviewInput(
     return prepared
   }
 
-  if (
-    options?.agentId === "executive-ppt" &&
-    options?.executionContext !== "workflow"
-  ) {
-    const record = prepared.input as Record<string, unknown>
-    const allowedTemplateIds = getEditablePptAllowedTemplateIds({
-      agentId: options.agentId,
-      executionContext: options.executionContext,
-    })
-    if (!hasConfirmedEditablePptTemplate({
-      record,
-      latestTemplateRecommendationContext: options.latestTemplateRecommendationContext,
-      allowedTemplateIds,
-    })) {
-      const recordMustInclude = Array.isArray(record.mustInclude)
-        ? record.mustInclude.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-        : []
-      const fallbackRecommendationPrompt = [
-        readOptionalString(record.prompt) ? `Topic: ${readOptionalString(record.prompt)}` : null,
-        readOptionalString(record.audience) ? `Audience: ${readOptionalString(record.audience)}` : null,
-        readOptionalString(record.goal) ? `Goal: ${readOptionalString(record.goal)}` : null,
-        readOptionalString(record.scenario) ? `Scenario: ${readOptionalString(record.scenario)}` : null,
-        readOptionalString(record.language) ? `Language: ${readOptionalString(record.language)}` : null,
-        typeof record.pageCount === "number" && Number.isFinite(record.pageCount)
-          ? `Page count: ${record.pageCount}`
-          : null,
-        readOptionalString(record.tone) ? `Tone: ${readOptionalString(record.tone)}` : null,
-        recordMustInclude.length > 0 ? `Must include: ${recordMustInclude.join("; ")}` : null,
-        options?.latestUserPrompt ? `Latest request: ${options.latestUserPrompt}` : null,
-      ]
-        .filter((line): line is string => Boolean(line))
-        .join("\n")
-      const recommendationPrompt = briefState
-        ? buildPptTemplateRecommendationSource({
-            briefState,
-            latestUserPrompt: readOptionalString(record.prompt) || options?.latestUserPrompt || null,
-          })
-        : fallbackRecommendationPrompt
-      const recommendedTemplates = buildPptRecommendedTemplateSummaries({
-        prompt: recommendationPrompt,
-        researchBrief: record.researchBrief as Parameters<typeof buildPptRecommendedTemplateSummaries>[0]["researchBrief"],
-        scenario: readOptionalString(record.scenario) as Parameters<typeof buildPptRecommendedTemplateSummaries>[0]["scenario"],
-        language: readOptionalString(record.language) as Parameters<typeof buildPptRecommendedTemplateSummaries>[0]["language"],
-        pageCount:
-          typeof record.pageCount === "number" && Number.isFinite(record.pageCount)
-            ? record.pageCount
-            : undefined,
-      }, allowedTemplateIds ? { allowedTemplateIds } : undefined)
-      const fallbackSelectedTemplateId = resolvePptTemplateSelectionFromUserText(
-        options?.latestUserPrompt,
-        buildTemplateRecommendationContextFromSummaries(recommendedTemplates),
-      )
-      if (fallbackSelectedTemplateId) {
-        return {
-          ok: true as const,
-          input: {
-            ...record,
-            templateMode: "single-template",
-            templateId: fallbackSelectedTemplateId,
-          },
-        }
-      }
-      return {
-        ok: false as const,
-        error: {
-          code: "ppt_template_selection_required",
-          message: "Select one recommended template before generating the editable PPT preview.",
-        },
-        missingFields: [],
-        suggestedBrief: null,
-        recommendedTemplates,
-      }
-    }
-  }
-
   return prepared
 }
 
@@ -415,21 +297,6 @@ function shouldRunPptPreviewInBackground(input: {
     input.executionContext !== "workflow" &&
     input.agentId === AI_ENTRY_BACKGROUND_PPT_AGENT_ID
   )
-}
-
-function getEditablePptAllowedTemplateIds(input: {
-  agentId: string | null
-  executionContext?: "chat" | "workflow"
-}) {
-  if (
-    input.agentId === AI_ENTRY_BACKGROUND_PPT_AGENT_ID &&
-    input.executionContext !== "workflow" &&
-    getLeadToolPptExecutionTransport() === "remote-worker"
-  ) {
-    return getPptWorkerSupportedTemplateIds()
-  }
-
-  return undefined
 }
 
 async function enqueueBackgroundPptPreviewTask(input: {

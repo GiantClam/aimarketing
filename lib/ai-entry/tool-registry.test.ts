@@ -552,8 +552,6 @@ test("tool registry queues executive-ppt preview in the background for chat turn
         goal: "经营同步",
         scenario: "marketing-campaign",
         language: "zh-CN",
-        templateMode: "single-template",
-        templateId: "long-table",
       },
       isZh: true,
     },
@@ -933,7 +931,7 @@ test("tool registry blocks preview_ppt_deck when the ppt brief is incomplete", a
   })
 })
 
-test("tool registry blocks editable ppt preview until a recommended template is selected", async () => {
+test("tool registry keeps executive-ppt preview in free-design mode without requiring a recommended template", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -956,7 +954,7 @@ test("tool registry blocks editable ppt preview until a recommended template is 
         description: "PPT",
         type: "tool",
         triggerHints: ["ppt"],
-        instruction: "Recommend templates first, then preview after selection.",
+        instruction: "Preview directly unless the user explicitly selects a template.",
         toolIds: ["preview_ppt_deck"],
         mcpServerIds: [],
         version: "1",
@@ -1001,18 +999,13 @@ test("tool registry blocks editable ppt preview until a recommended template is 
     prompt: "继续，生成可编辑 PPT 预览。",
   })
 
-  assert.equal(previewInput, null)
-  assert.equal(previewResult.ok, false)
-  assert.deepEqual(previewResult.error, {
-    code: "ppt_template_selection_required",
-    message: "Select one recommended template before generating the editable PPT preview.",
-  })
-  const recommendedTemplates = previewResult.recommendedTemplates as unknown[]
-  assert.equal(Array.isArray(recommendedTemplates), true)
-  assert.equal(recommendedTemplates.length, 4)
+  assert.equal(previewResult.ok, true)
+  assert.ok(previewInput)
+  assert.equal("templateMode" in (previewInput as Record<string, unknown>), false)
+  assert.equal("templateId" in (previewInput as Record<string, unknown>), false)
 })
 
-test("tool registry ignores model-supplied editable ppt template before user selection", async () => {
+test("tool registry strips model-supplied template ids when the user did not explicitly choose one", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1035,7 +1028,7 @@ test("tool registry ignores model-supplied editable ppt template before user sel
         description: "PPT",
         type: "tool",
         triggerHints: ["ppt"],
-        instruction: "Recommend templates first, then preview after selection.",
+        instruction: "Preview directly unless the user explicitly selects a template.",
         toolIds: ["preview_ppt_deck"],
         mcpServerIds: [],
         version: "1",
@@ -1082,16 +1075,11 @@ test("tool registry ignores model-supplied editable ppt template before user sel
     templateId: "neo-grid-bold",
   })
 
-  assert.equal(previewInput, null)
-  assert.equal(enqueuedTasks.length, 0)
-  assert.equal(previewResult.ok, false)
-  assert.deepEqual(previewResult.error, {
-    code: "ppt_template_selection_required",
-    message: "Select one recommended template before generating the editable PPT preview.",
-  })
-  const recommendedTemplates = previewResult.recommendedTemplates as unknown[]
-  assert.equal(Array.isArray(recommendedTemplates), true)
-  assert.equal(recommendedTemplates.length, 4)
+  assert.equal(previewResult.ok, true)
+  assert.equal(enqueuedTasks.length, 1)
+  assert.ok(previewInput)
+  assert.equal("templateMode" in (previewInput as Record<string, unknown>), false)
+  assert.equal("templateId" in (previewInput as Record<string, unknown>), false)
 })
 
 test("tool registry injects the user-selected recommended template into editable ppt preview", async () => {
