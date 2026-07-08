@@ -1,3 +1,5 @@
+import type { AiEntryTaskRunSummary } from "@/lib/ai-entry/task-runs"
+
 // lib/ai-entry/message-parts/types.ts
 
 export type AiEntryStreamSourceResult = {
@@ -155,6 +157,12 @@ export type TaskProgressPart = {
   steps: TaskProgressStep[]
 }
 
+export type TaskRunPart = {
+  type: "task-run"
+  id: string
+  taskRun: AiEntryTaskRunSummary
+}
+
 /** phase 1 不填充 text（正文由 message.content 承载）；类型保留以对齐 AI SDK v5。 */
 export type TextPart = { type: "text"; id: string; text: string }
 
@@ -169,3 +177,4 @@ export type MessagePart =
   | ValidationPart
   | WorkflowStatusPart
   | TaskProgressPart
+  | TaskRunPart

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { createRetryableDbErrorMatcher, withDbRetry } from "@/lib/db/retry"
@@ -131,6 +131,22 @@ export async function getTaskById(taskId: number, userId?: number) {
       .where(userId ? and(eq(tasks.id, taskId), eq(tasks.userId, userId)) : eq(tasks.id, taskId)),
   )
   return rows[0] || null
+}
+
+export async function getTasksByIds(taskIds: number[], userId?: number) {
+  const normalizedTaskIds = [...new Set(taskIds.filter((taskId) => Number.isFinite(taskId) && taskId > 0))]
+  if (normalizedTaskIds.length === 0) return []
+
+  return withTaskDbRetry("get-tasks-by-ids", () =>
+    db
+      .select()
+      .from(tasks)
+      .where(
+        userId
+          ? and(inArray(tasks.id, normalizedTaskIds), eq(tasks.userId, userId))
+          : inArray(tasks.id, normalizedTaskIds),
+      ),
+  )
 }
 
 export async function listRecoverableTaskIds(limit = 6, staleAfterMs = 45_000) {

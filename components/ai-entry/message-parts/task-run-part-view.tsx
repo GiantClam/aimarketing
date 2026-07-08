@@ -1,0 +1,113 @@
+"use client"
+
+import { CheckCircle2, Clock3, Loader2, TriangleAlert } from "lucide-react"
+
+import { WorkspaceTaskEvents } from "@/components/workspace/workspace-message-primitives"
+import type { TaskRunPart } from "@/lib/ai-entry/message-parts/types"
+import { cn } from "@/lib/utils"
+
+function formatUpdatedAt(updatedAt: number, isZh: boolean) {
+  try {
+    return new Intl.DateTimeFormat(isZh ? "zh-CN" : "en-US", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(updatedAt * 1000))
+  } catch {
+    return ""
+  }
+}
+
+export function TaskRunPartView({ part, isZh }: { part: TaskRunPart; isZh: boolean }) {
+  const { taskRun } = part
+  const percent = Math.max(
+    0,
+    Math.min(100, Math.round((taskRun.progress_current / Math.max(1, taskRun.progress_total)) * 100)),
+  )
+  const isRunning = taskRun.status === "pending" || taskRun.status === "running"
+  const statusLabel =
+    taskRun.status === "success"
+      ? isZh
+        ? "已完成"
+        : "Completed"
+      : taskRun.status === "failed"
+        ? isZh
+          ? "失败"
+          : "Failed"
+        : isZh
+          ? "进行中"
+          : "Running"
+
+  return (
+    <div className="rounded-[12px] border border-border bg-background/80 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            {taskRun.status === "success" ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            ) : taskRun.status === "failed" ? (
+              <TriangleAlert className="h-4 w-4 text-destructive" />
+            ) : (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            )}
+            <span className="truncate">{isZh ? "PPT 预览任务" : "PPT preview task"}</span>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {taskRun.stage_label}
+            {taskRun.request_label ? <span className="ml-1">· {taskRun.request_label}</span> : null}
+          </div>
+        </div>
+        <div
+          className={cn(
+            "rounded-full border px-2 py-0.5 text-[11px]",
+            taskRun.status === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : taskRun.status === "failed"
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-primary/20 bg-primary/5 text-primary",
+          )}
+        >
+          {statusLabel}
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-[10px] border border-border/70 bg-muted/20 p-2.5">
+        <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>
+            {taskRun.progress_current}/{taskRun.progress_total}
+          </span>
+          <span>{formatUpdatedAt(taskRun.updated_at, isZh)}</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-300",
+              taskRun.status === "failed" ? "bg-destructive" : "bg-primary",
+            )}
+            style={{ width: `${taskRun.status === "failed" ? 100 : percent}%` }}
+          />
+        </div>
+        {taskRun.error ? (
+          <div className="mt-2 text-[11px] text-destructive">{taskRun.error}</div>
+        ) : null}
+        {taskRun.preview_session_id ? (
+          <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Clock3 className="h-3 w-3" />
+            <span className="truncate">{`session ${taskRun.preview_session_id}`}</span>
+          </div>
+        ) : null}
+      </div>
+
+      {taskRun.events.length > 0 ? (
+        <WorkspaceTaskEvents events={taskRun.events} limit={3} className="mt-3 pl-0" />
+      ) : null}
+
+      {isRunning ? (
+        <div className="mt-2 text-[11px] text-muted-foreground">
+          {isZh ? "刷新页面后会自动恢复这个任务的进度。" : "This task will recover automatically after refresh."}
+        </div>
+      ) : null}
+    </div>
+  )
+}

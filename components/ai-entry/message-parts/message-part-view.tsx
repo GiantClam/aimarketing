@@ -9,6 +9,7 @@ import { ReasoningPartView } from "./reasoning-part-view"
 import { ReportPartView } from "./report-part-view"
 import { SourcesPartView } from "./sources-part-view"
 import { TaskProgressPartView } from "./task-progress-part-view"
+import { TaskRunPartView } from "./task-run-part-view"
 import { TemplateRecommendationPartView } from "./template-recommendation-part-view"
 import { ToolCallPartView } from "./tool-call-part-view"
 import { ValidationPartView } from "./validation-part-view"
@@ -32,6 +33,7 @@ export const PART_RENDERERS: Partial<Record<MessagePart["type"], Renderer>> = {
   "template-recommendation": TemplateRecommendationPartView as Renderer,
   validation: ValidationPartView as Renderer,
   "task-progress": TaskProgressPartView as Renderer,
+  "task-run": TaskRunPartView as Renderer,
 }
 
 export function MessagePartView({ part, isZh }: { part: MessagePart; isZh: boolean }) {

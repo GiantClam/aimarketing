@@ -38,10 +38,15 @@ type AiEntryConversationSummary = {
   status: "normal"
   created_at: number
   updated_at: number
+  has_unread: boolean
+  unread_count: number
+  has_running_ppt_task: boolean
+  running_ppt_task_count: number
 }
 
 const AI_ENTRY_CONVERSATION_LIST_CACHE_KEY = "ai-entry-conversations-cache-v2"
 const AI_ENTRY_CONVERSATION_CACHE_TTL_MS = 60_000
+const AI_ENTRY_CONVERSATION_BACKGROUND_REFRESH_MS = 15_000
 
 function mergeConversations(
   current: AiEntryConversationSummary[],
@@ -70,7 +75,7 @@ export function AiEntrySidebarItem({
   entryHref?: string
   activeAgentId?: string | null
 }) {
-  const { messages } = useI18n()
+  const { messages, locale } = useI18n()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -174,6 +179,16 @@ export function AiEntrySidebarItem({
     window.addEventListener(AI_ENTRY_SIDEBAR_REFRESH_EVENT, handleRefresh)
     return () => window.removeEventListener(AI_ENTRY_SIDEBAR_REFRESH_EVENT, handleRefresh)
   }, [conversations.length, effectiveAgentId, entryMode, fetchConversations, isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const intervalId = window.setInterval(() => {
+      void fetchConversations({ background: conversations.length > 0 }).catch(() => {})
+    }, AI_ENTRY_CONVERSATION_BACKGROUND_REFRESH_MS)
+
+    return () => window.clearInterval(intervalId)
+  }, [conversations.length, fetchConversations, isOpen])
 
   const handleCreateConversation = (
     event: MouseEvent<HTMLButtonElement>,
@@ -340,9 +355,24 @@ export function AiEntrySidebarItem({
                         <SidebarSessionRow
                           active={isActive}
                           leading={
-                            <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                            <div className="relative">
+                              <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                              {conversation.has_running_ppt_task ? (
+                                <Loader2 className="absolute -right-2 -top-1 h-3 w-3 animate-spin text-primary" />
+                              ) : null}
+                              {conversation.has_unread ? (
+                                <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full bg-red-500" />
+                              ) : null}
+                            </div>
                           }
                           title={conversation.name || messages.sidebar.newChatFallback}
+                          subtitle={
+                            conversation.has_running_ppt_task
+                              ? locale === "zh"
+                                ? `生成中 · ${conversation.running_ppt_task_count}`
+                                : `Running · ${conversation.running_ppt_task_count}`
+                              : undefined
+                          }
                           actions={
                             <>
                               <button

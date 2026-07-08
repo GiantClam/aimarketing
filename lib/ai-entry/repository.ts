@@ -18,6 +18,10 @@ import {
   serializeAiEntryModelSelection,
 } from "@/lib/ai-entry/model-selection"
 import { extractQueuedPptBackgroundTaskContext } from "@/lib/ai-entry/ppt-tool-result-message"
+import {
+  parseAiEntryTaskRunSummary,
+  type AiEntryTaskRunSummary,
+} from "@/lib/ai-entry/task-runs"
 
 const AI_ENTRY_CHAT_TITLE_PREFIX = "[ai-entry] "
 const AI_ENTRY_CONSULTING_TITLE_PREFIX = "[ai-consulting] "
@@ -52,6 +56,10 @@ export type AiEntryConversationSummary = {
   created_at: number
   updated_at: number
   current_model_id: string | null
+  has_unread: boolean
+  unread_count: number
+  has_running_ppt_task: boolean
+  running_ppt_task_count: number
 }
 
 export type AiEntryConversationPage = {
@@ -76,20 +84,32 @@ export type AiEntryMessagePage = {
   has_more: boolean
   conversation: AiEntryConversationSummary | null
   conversation_state: AiEntryConversationState
+  task_runs: AiEntryTaskRunSummary[]
   pending_task: AiEntryPendingTaskSummary | null
 }
 
-export type AiEntryPendingTaskSummary = {
-  task_id: string
-  status: "pending" | "running" | "success" | "failed"
-  task_type: string | null
-  conversation_id: string | null
-  agent_id: string | null
-  created_at: number
-}
+export type AiEntryPendingTaskSummary = AiEntryTaskRunSummary
 
 function normalizeConversationMetadata(value: unknown) {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null
+}
+
+function getAiEntryLastReadAssistantMessageId(metadata: unknown) {
+  const normalized = normalizeConversationMetadata(metadata)
+  const unreadState = normalizeConversationMetadata(normalized?.aiEntryUnreadState)
+  return parsePositiveInt(unreadState?.lastReadAssistantMessageId) || null
+}
+
+function withAiEntryLastReadAssistantMessageId(metadata: unknown, lastReadAssistantMessageId: number) {
+  const normalized = normalizeConversationMetadata(metadata) || {}
+  const unreadState = normalizeConversationMetadata(normalized.aiEntryUnreadState) || {}
+  return {
+    ...normalized,
+    aiEntryUnreadState: {
+      ...unreadState,
+      lastReadAssistantMessageId,
+    },
+  }
 }
 
 const isRetryableAiEntryDbError = createRetryableDbErrorMatcher()
@@ -103,7 +123,7 @@ async function withAiEntryDbRetry<T>(label: string, operation: () => Promise<T>)
   })
 }
 
-function parsePositiveInt(value: string | number | null | undefined) {
+function parsePositiveInt(value: unknown) {
   const parsed = typeof value === "number" ? value : Number.parseInt(String(value || ""), 10)
   if (!Number.isFinite(parsed) || parsed <= 0) return null
   return Math.floor(parsed)
@@ -130,11 +150,6 @@ function toEpochSeconds(value: Date | string | number | null | undefined) {
   return Math.floor(Date.now() / 1000)
 }
 
-function safeParseRecord(value: unknown) {
-  if (!value || typeof value !== "object") return null
-  return value as Record<string, unknown>
-}
-
 async function findAiEntryPendingTaskSummary(input: {
   userId: number
   conversationId: string
@@ -146,7 +161,10 @@ async function findAiEntryPendingTaskSummary(input: {
         id,
         status,
         payload,
-        created_at as "createdAt"
+        result,
+        created_at as "createdAt",
+        updated_at as "updatedAt",
+        started_at as "startedAt"
       FROM "AI_MARKETING_tasks"
       WHERE user_id = ${input.userId}
         AND workflow_name = 'ai_entry_ppt_preview'
@@ -169,7 +187,10 @@ async function findAiEntryPendingTaskSummary(input: {
               id,
               status,
               payload,
-              created_at as "createdAt"
+              result,
+              created_at as "createdAt",
+              updated_at as "updatedAt",
+              started_at as "startedAt"
             FROM "AI_MARKETING_tasks"
             WHERE user_id = ${input.userId}
               AND workflow_name = 'ai_entry_ppt_preview'
@@ -187,42 +208,23 @@ async function findAiEntryPendingTaskSummary(input: {
     id?: unknown
     status?: unknown
     payload?: unknown
+    result?: unknown
     createdAt?: Date | string | number | null
+    updatedAt?: Date | string | number | null
+    startedAt?: Date | string | number | null
   } | null>)[0]
-  if (!row) return null
-
-  const taskId = parsePositiveInt(
-    typeof row.id === "string" || typeof row.id === "number" ? row.id : null,
-  )
-  const status: AiEntryPendingTaskSummary["status"] | null =
-    row.status === "pending" || row.status === "running" ? row.status : null
-  if (!taskId || !status) return null
-
-  const payloadRecord =
-    typeof row.payload === "string" && row.payload.trim()
-      ? (() => {
-          try {
-            return safeParseRecord(JSON.parse(row.payload))
-          } catch {
-            return null
-          }
-        })()
-      : safeParseRecord(row.payload)
-
-  return {
-    task_id: String(taskId),
-    status,
-    task_type: "preview_ppt_deck",
-    conversation_id:
-      typeof payloadRecord?.conversationId === "string" && payloadRecord.conversationId.trim()
-        ? payloadRecord.conversationId.trim()
-        : input.conversationId,
-    agent_id:
-      typeof payloadRecord?.agentId === "string" && payloadRecord.agentId.trim()
-        ? payloadRecord.agentId.trim()
-        : input.agentId || null,
-    created_at: toEpochSeconds(row.createdAt),
-  }
+  const summary = row
+    ? parseAiEntryTaskRunSummary({
+        id: row.id,
+        status: row.status,
+        payload: row.payload,
+        result: row.result,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        startedAt: row.startedAt,
+      })
+    : null
+  return summary && (summary.status === "pending" || summary.status === "running") ? summary : null
 }
 
 async function findAiEntryRecoverableTaskSummary(input: {
@@ -249,7 +251,10 @@ async function findAiEntryRecoverableTaskSummary(input: {
         id,
         status,
         payload,
-        created_at as "createdAt"
+        result,
+        created_at as "createdAt",
+        updated_at as "updatedAt",
+        started_at as "startedAt"
       FROM "AI_MARKETING_tasks"
       WHERE id = ${taskId}
         AND user_id = ${input.userId}
@@ -271,7 +276,10 @@ async function findAiEntryRecoverableTaskSummary(input: {
               id,
               status,
               payload,
-              created_at as "createdAt"
+              result,
+              created_at as "createdAt",
+              updated_at as "updatedAt",
+              started_at as "startedAt"
             FROM "AI_MARKETING_tasks"
             WHERE id = ${taskId}
               AND user_id = ${input.userId}
@@ -288,47 +296,77 @@ async function findAiEntryRecoverableTaskSummary(input: {
     id?: unknown
     status?: unknown
     payload?: unknown
+    result?: unknown
     createdAt?: Date | string | number | null
+    updatedAt?: Date | string | number | null
+    startedAt?: Date | string | number | null
   } | null>)[0]
-  if (!row) return null
 
-  const resolvedTaskId = parsePositiveInt(
-    typeof row.id === "string" || typeof row.id === "number" ? row.id : null,
+  return row
+    ? parseAiEntryTaskRunSummary({
+        id: row.id,
+        status: row.status,
+        payload: row.payload,
+        result: row.result,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        startedAt: row.startedAt,
+      })
+    : null
+}
+
+async function listAiEntryTaskRunSummaries(input: {
+  userId: number
+  conversationId: string
+  agentId?: string | null
+  limit?: number
+}) {
+  const safeLimit = Math.max(1, Math.min(input.limit || 10, 20))
+  const result = await withAiEntryDbRetry("list-ai-entry-task-run-summaries", () =>
+    db.execute(sql`
+      SELECT
+        id,
+        status,
+        payload,
+        result,
+        created_at as "createdAt",
+        updated_at as "updatedAt",
+        started_at as "startedAt"
+      FROM "AI_MARKETING_tasks"
+      WHERE user_id = ${input.userId}
+        AND workflow_name = 'ai_entry_ppt_preview'
+        AND payload IS NOT NULL
+        AND payload::jsonb ->> 'kind' = 'ai_entry_ppt_preview'
+        AND payload::jsonb ->> 'conversationId' = ${input.conversationId}
+        ${input.agentId
+          ? sql`AND payload::jsonb ->> 'agentId' = ${input.agentId}`
+          : sql``}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${safeLimit}
+    `),
   )
-  const status: AiEntryPendingTaskSummary["status"] | null =
-    row.status === "pending" ||
-    row.status === "running" ||
-    row.status === "success" ||
-    row.status === "failed"
-      ? row.status
-      : null
-  if (!resolvedTaskId || !status) return null
 
-  const payloadRecord =
-    typeof row.payload === "string" && row.payload.trim()
-      ? (() => {
-          try {
-            return safeParseRecord(JSON.parse(row.payload))
-          } catch {
-            return null
-          }
-        })()
-      : safeParseRecord(row.payload)
-
-  return {
-    task_id: String(resolvedTaskId),
-    status,
-    task_type: "preview_ppt_deck",
-    conversation_id:
-      typeof payloadRecord?.conversationId === "string" && payloadRecord.conversationId.trim()
-        ? payloadRecord.conversationId.trim()
-        : input.conversationId,
-    agent_id:
-      typeof payloadRecord?.agentId === "string" && payloadRecord.agentId.trim()
-        ? payloadRecord.agentId.trim()
-        : input.agentId || null,
-    created_at: toEpochSeconds(row.createdAt),
-  }
+  return ((result.rows || []) as Array<{
+    id?: unknown
+    status?: unknown
+    payload?: unknown
+    result?: unknown
+    createdAt?: Date | string | number | null
+    updatedAt?: Date | string | number | null
+    startedAt?: Date | string | number | null
+  }>)
+    .map((row) =>
+      parseAiEntryTaskRunSummary({
+        id: row.id,
+        status: row.status,
+        payload: row.payload,
+        result: row.result,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        startedAt: row.startedAt,
+      }),
+    )
+    .filter((item): item is AiEntryTaskRunSummary => Boolean(item))
 }
 
 function stripTitlePrefix(title: string) {
@@ -486,13 +524,25 @@ function mapConversationSummary(
     id: number
     title: string
     currentModelId?: string | null
+    metadata?: Record<string, unknown> | null
     createdAt: Date | string | number | null | undefined
     updatedAt?: Date | string | number | null | undefined
     latestMessageCreatedAt?: Date | string | number | null | undefined
   },
+  decorations?: {
+    latestAssistantMessageId?: number | null
+    runningTaskCount?: number
+  },
 ): AiEntryConversationSummary {
   const createdAt = toEpochSeconds(row.createdAt)
   const updatedAt = toEpochSeconds(row.updatedAt ?? row.latestMessageCreatedAt ?? row.createdAt)
+  const latestAssistantMessageId = decorations?.latestAssistantMessageId || null
+  const lastReadAssistantMessageId = getAiEntryLastReadAssistantMessageId(row.metadata)
+  const hasUnread = Boolean(
+    latestAssistantMessageId &&
+    (!lastReadAssistantMessageId || latestAssistantMessageId > lastReadAssistantMessageId),
+  )
+  const runningTaskCount = Math.max(0, decorations?.runningTaskCount || 0)
   return {
     id: String(row.id),
     name: stripTitlePrefix(row.title),
@@ -500,6 +550,10 @@ function mapConversationSummary(
     created_at: createdAt,
     updated_at: updatedAt,
     current_model_id: normalizeModelId(row.currentModelId),
+    has_unread: hasUnread,
+    unread_count: hasUnread ? 1 : 0,
+    has_running_ppt_task: runningTaskCount > 0,
+    running_ppt_task_count: runningTaskCount,
   }
 }
 
@@ -715,6 +769,7 @@ export async function listAiEntryConversations(
         conversations.id,
         conversations.title,
         conversations.currentModelId,
+        conversations.metadata,
         conversations.createdAt,
       )
       .orderBy(desc(sql`coalesce(max(${messages.createdAt}), ${conversations.createdAt})`), desc(conversations.id))
@@ -722,14 +777,77 @@ export async function listAiEntryConversations(
   )
 
   const pageRows = rows.slice(0, safeLimit)
+  const conversationIds = pageRows
+    .map((row) => parsePositiveInt(row.id))
+    .filter((id): id is number => Boolean(id))
+  const conversationIdSql =
+    conversationIds.length > 0
+      ? sql.join(conversationIds.map((id) => sql`${id}`), sql`,`)
+      : null
+  const latestAssistantRows =
+    conversationIdSql
+      ? await withAiEntryDbRetry("list-ai-entry-conversations-latest-assistant", () =>
+          db.execute(sql`
+            SELECT
+              conversation_id as "conversationId",
+              max(id) as "latestAssistantMessageId"
+            FROM "AI_MARKETING_messages"
+            WHERE role = 'assistant'
+              AND conversation_id IN (${conversationIdSql})
+            GROUP BY conversation_id
+          `),
+        )
+      : { rows: [] as unknown[] }
+  const runningTaskRows =
+    conversationIdSql
+      ? await withAiEntryDbRetry("list-ai-entry-conversations-running-task-count", () =>
+          db.execute(sql`
+            SELECT
+              payload::jsonb ->> 'conversationId' as "conversationId",
+              count(*) as "runningTaskCount"
+            FROM "AI_MARKETING_tasks"
+            WHERE user_id = ${userId}
+              AND workflow_name = 'ai_entry_ppt_preview'
+              AND status IN ('pending', 'running')
+              AND payload IS NOT NULL
+              AND payload::jsonb ->> 'kind' = 'ai_entry_ppt_preview'
+              AND payload::jsonb ->> 'conversationId' IN (${conversationIdSql})
+            GROUP BY payload::jsonb ->> 'conversationId'
+          `),
+        )
+      : { rows: [] as unknown[] }
+
+  const latestAssistantMap = new Map<string, number>()
+  for (const row of latestAssistantRows.rows as Array<{ conversationId?: unknown; latestAssistantMessageId?: unknown }>) {
+    const conversationId = parsePositiveInt(row.conversationId)
+    const latestAssistantMessageId = parsePositiveInt(row.latestAssistantMessageId)
+    if (!conversationId || !latestAssistantMessageId) continue
+    latestAssistantMap.set(String(conversationId), latestAssistantMessageId)
+  }
+
+  const runningTaskCountMap = new Map<string, number>()
+  for (const row of runningTaskRows.rows as Array<{ conversationId?: unknown; runningTaskCount?: unknown }>) {
+    const conversationId = parsePositiveInt(row.conversationId)
+    const runningTaskCount = parsePositiveInt(row.runningTaskCount) || 0
+    if (!conversationId) continue
+    runningTaskCountMap.set(String(conversationId), runningTaskCount)
+  }
+
   const data = pageRows.map((row) =>
-    mapConversationSummary({
-      id: row.id,
-      title: row.title,
-      currentModelId: row.currentModelId,
-      createdAt: row.createdAt || null,
-      latestMessageCreatedAt: row.latestMessageCreatedAt || null,
-    }),
+    mapConversationSummary(
+      {
+        id: row.id,
+        title: row.title,
+        currentModelId: row.currentModelId,
+        metadata: row.metadata,
+        createdAt: row.createdAt || null,
+        latestMessageCreatedAt: row.latestMessageCreatedAt || null,
+      },
+      {
+        latestAssistantMessageId: latestAssistantMap.get(String(row.id)) || null,
+        runningTaskCount: runningTaskCountMap.get(String(row.id)) || 0,
+      },
+    ),
   )
 
   const hasMore = rows.length > safeLimit
@@ -969,6 +1087,12 @@ export async function listAiEntryMessages(
     storedState: normalizeConversationMetadata(conversation.metadata)?.aiEntryConversationState,
     messageContents: data.map((message) => message.content),
   })
+  const taskRuns = await listAiEntryTaskRunSummaries({
+    userId,
+    conversationId: String(conversation.id),
+    agentId,
+    limit: 10,
+  })
   let pendingTask = await findAiEntryPendingTaskSummary({
     userId,
     conversationId: String(conversation.id),
@@ -987,17 +1111,49 @@ export async function listAiEntryMessages(
     })
   }
 
+  const latestAssistantMessageId = [...data]
+    .reverse()
+    .map((message) => (message.role === "assistant" ? parsePositiveInt(message.id) : null))
+    .find((messageId): messageId is number => Boolean(messageId))
+  if (
+    latestAssistantMessageId &&
+    latestAssistantMessageId !== getAiEntryLastReadAssistantMessageId(conversation.metadata)
+  ) {
+    await withAiEntryDbRetry("mark-ai-entry-conversation-read", () =>
+      db
+        .update(conversations)
+        .set({
+          metadata: withAiEntryLastReadAssistantMessageId(
+            conversation.metadata,
+            latestAssistantMessageId,
+          ),
+        })
+        .where(eq(conversations.id, conversation.id)),
+    )
+  }
+
   return {
     data,
     limit: safeLimit,
     has_more: false,
     conversation_state: conversationState,
+    task_runs: taskRuns,
     pending_task: pendingTask,
-    conversation: mapConversationSummary({
-      id: conversation.id,
-      title: conversation.title,
-      currentModelId: conversation.currentModelId,
-      createdAt: conversation.createdAt,
-    }),
+    conversation: mapConversationSummary(
+      {
+        id: conversation.id,
+        title: conversation.title,
+        currentModelId: conversation.currentModelId,
+        metadata: withAiEntryLastReadAssistantMessageId(
+          conversation.metadata,
+          latestAssistantMessageId || getAiEntryLastReadAssistantMessageId(conversation.metadata) || 0,
+        ),
+        createdAt: conversation.createdAt,
+      },
+      {
+        latestAssistantMessageId: latestAssistantMessageId || null,
+        runningTaskCount: taskRuns.filter((taskRun) => taskRun.status === "pending" || taskRun.status === "running").length,
+      },
+    ),
   }
 }

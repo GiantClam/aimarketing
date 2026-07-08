@@ -36,8 +36,8 @@ import {
 } from "@/lib/ai-entry/message-parts/reducer"
 import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
 import {
-  findAiEntryPendingTask,
   isPendingAssistantTaskStoreStorageKey,
+  listAiEntryPendingTasks,
   removePendingAssistantTask,
   savePendingAssistantTask,
 } from "@/lib/assistant-task-store"
@@ -92,12 +92,12 @@ import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
 import { renderAiEntryDisplayErrorMessage } from "@/lib/ai-entry/error-display"
 import {
   buildPptToolResultMessage,
+  extractQueuedPptBackgroundTaskContext,
   extractLatestPptPreviewContext,
   extractPptTemplateRecommendationContexts,
-  isQueuedPptBackgroundStatusMessage,
   stripPptHiddenContextMarkers,
 } from "@/lib/ai-entry/ppt-tool-result-message"
-import { buildBackgroundAssistantCompletionMessage } from "@/lib/ai-entry/background-assistant-message"
+import type { AiEntryTaskRunSummary } from "@/lib/ai-entry/task-runs"
 import { dispatchAiEntrySidebarRefresh } from "@/lib/ai-entry/sidebar-refresh-event"
 import {
   formatMessageTime,
@@ -238,7 +238,29 @@ type MessageApiResponse = {
     conversation_id?: string | null
     agent_id?: string | null
     created_at?: number
+    updated_at?: number
+    started_at?: number | null
+    stage?: "brief_validating" | "story_planning" | "variant_generating" | "preview_rendering" | "session_persisting"
+    stage_label?: string
+    progress_current?: number
+    progress_total?: number
+    last_heartbeat_at?: number
+    finished_at?: number | null
+    preview_session_id?: string | null
+    request_label?: string | null
+    result_summary?: string | null
+    error_code?: string | null
+    error_message?: string | null
+    error?: string | null
+    events?: Array<{
+      type?: string
+      label?: string
+      detail?: string
+      status?: "running" | "completed" | "failed" | "info"
+      at?: number
+    }>
   } | null
+  task_runs?: Array<MessageApiPendingTask>
   conversation_state?: {
     ppt?: {
       phase?: "idle" | "preview-ready" | "preview-invalidated" | "exported"
@@ -259,14 +281,8 @@ type MessageApiResponse = {
   } | null
 }
 type AiEntryConversationStatePayload = NonNullable<MessageApiResponse["conversation_state"]>
-type MessageApiPendingTask = {
-  task_id: string
-  status?: "pending" | "running" | "success" | "failed"
-  task_type?: string | null
-  conversation_id?: string | null
-  agent_id?: string | null
-  created_at?: number
-}
+type MessageApiPendingTask = AiEntryTaskRunSummary
+type MessageApiTaskRun = AiEntryTaskRunSummary
 type ChatApiResponse = {
   message?: string
   conversationId?: string
@@ -633,15 +649,6 @@ function resolveDisplayModelId(
 function mapPersistedAiEntryMessages(
   payload: MessageApiResponse | null | undefined,
 ) {
-  const hasResolvedPptPreview =
-    payload?.conversation_state?.ppt?.phase === "preview-ready" ||
-    payload?.conversation_state?.ppt?.phase === "exported" ||
-    (payload?.data || []).some((item) =>
-      item?.role === "assistant" &&
-      typeof item.content === "string" &&
-      Boolean(extractLatestPptPreviewContext(item.content)),
-    )
-
   return (payload?.data || [])
     .map((item) => {
       const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : null
@@ -652,9 +659,6 @@ function mapPersistedAiEntryMessages(
           ? item.created_at
           : undefined
       if (!role) return null
-      if (role === "assistant" && hasResolvedPptPreview && isQueuedPptBackgroundStatusMessage(content)) {
-        return null
-      }
 
       const templateRecommendationParts =
         role === "assistant"
@@ -679,17 +683,233 @@ function mapPersistedAiEntryMessages(
     .filter((item): item is ChatMessage => Boolean(item))
 }
 
-function mapPendingAiEntryTask(
-  payload: MessageApiResponse | null | undefined,
-): MessageApiPendingTask | null {
-  const pendingTask = payload?.pending_task
-  if (!pendingTask || typeof pendingTask.task_id !== "string" || !pendingTask.task_id.trim()) {
+function normalizeMessageApiTaskRun(
+  taskRun: MessageApiResponse["pending_task"] | null | undefined,
+): MessageApiTaskRun | null {
+  if (!taskRun || typeof taskRun.task_id !== "string" || !taskRun.task_id.trim()) {
     return null
   }
   return {
-    ...pendingTask,
-    task_id: pendingTask.task_id.trim(),
+    task_id: taskRun.task_id.trim(),
+    status:
+      taskRun.status === "pending" || taskRun.status === "running" || taskRun.status === "success" || taskRun.status === "failed"
+        ? taskRun.status
+        : "pending",
+    task_type: "preview_ppt_deck",
+    conversation_id:
+      typeof taskRun.conversation_id === "string" && taskRun.conversation_id.trim()
+        ? taskRun.conversation_id.trim()
+        : null,
+    agent_id:
+      typeof taskRun.agent_id === "string" && taskRun.agent_id.trim()
+        ? taskRun.agent_id.trim()
+        : null,
+    created_at:
+      typeof taskRun.created_at === "number" && Number.isFinite(taskRun.created_at)
+        ? taskRun.created_at
+        : Math.floor(Date.now() / 1000),
+    updated_at:
+      typeof taskRun.updated_at === "number" && Number.isFinite(taskRun.updated_at)
+        ? taskRun.updated_at
+        : typeof taskRun.created_at === "number" && Number.isFinite(taskRun.created_at)
+          ? taskRun.created_at
+          : Math.floor(Date.now() / 1000),
+    started_at:
+      typeof taskRun.started_at === "number" && Number.isFinite(taskRun.started_at)
+        ? taskRun.started_at
+        : null,
+    stage:
+      taskRun.stage === "brief_validating" ||
+      taskRun.stage === "story_planning" ||
+      taskRun.stage === "variant_generating" ||
+      taskRun.stage === "preview_rendering" ||
+      taskRun.stage === "session_persisting"
+        ? taskRun.stage
+        : taskRun.status === "success"
+          ? "session_persisting"
+          : taskRun.status === "running"
+            ? "story_planning"
+            : "brief_validating",
+    stage_label:
+      typeof taskRun.stage_label === "string" && taskRun.stage_label.trim()
+        ? taskRun.stage_label.trim()
+        : taskRun.status === "failed"
+          ? "Failed"
+          : taskRun.status === "success"
+            ? "Completed"
+            : "Running",
+    progress_current:
+      typeof taskRun.progress_current === "number" && Number.isFinite(taskRun.progress_current)
+        ? taskRun.progress_current
+        : taskRun.status === "pending"
+          ? 0
+          : taskRun.status === "running"
+            ? 1
+            : 5,
+    progress_total:
+      typeof taskRun.progress_total === "number" && Number.isFinite(taskRun.progress_total)
+        ? taskRun.progress_total
+        : 5,
+    last_heartbeat_at:
+      typeof taskRun.last_heartbeat_at === "number" && Number.isFinite(taskRun.last_heartbeat_at)
+        ? taskRun.last_heartbeat_at
+        : typeof taskRun.updated_at === "number" && Number.isFinite(taskRun.updated_at)
+          ? taskRun.updated_at
+          : Math.floor(Date.now() / 1000),
+    finished_at:
+      typeof taskRun.finished_at === "number" && Number.isFinite(taskRun.finished_at)
+        ? taskRun.finished_at
+        : null,
+    preview_session_id:
+      typeof taskRun.preview_session_id === "string" && taskRun.preview_session_id.trim()
+        ? taskRun.preview_session_id.trim()
+        : null,
+    request_label:
+      typeof taskRun.request_label === "string" && taskRun.request_label.trim()
+        ? taskRun.request_label.trim()
+        : null,
+    result_summary:
+      typeof taskRun.result_summary === "string" && taskRun.result_summary.trim()
+        ? taskRun.result_summary.trim()
+        : null,
+    error_code:
+      typeof taskRun.error_code === "string" && taskRun.error_code.trim()
+        ? taskRun.error_code.trim()
+        : null,
+    error_message:
+      typeof taskRun.error_message === "string" && taskRun.error_message.trim()
+        ? taskRun.error_message.trim()
+        : typeof taskRun.error === "string" && taskRun.error.trim()
+          ? taskRun.error.trim()
+        : null,
+    error:
+      typeof taskRun.error_message === "string" && taskRun.error_message.trim()
+        ? taskRun.error_message.trim()
+        : typeof taskRun.error === "string" && taskRun.error.trim()
+          ? taskRun.error.trim()
+        : null,
+    events: Array.isArray(taskRun.events)
+      ? taskRun.events.reduce<MessageApiTaskRun["events"]>((events, event) => {
+          if (!event || typeof event !== "object") return events
+          const type = typeof event.type === "string" ? event.type.trim() : ""
+          const label = typeof event.label === "string" ? event.label.trim() : ""
+          if (!type || !label) return events
+          events.push({
+            type,
+            label,
+            detail: typeof event.detail === "string" && event.detail.trim() ? event.detail.trim() : undefined,
+            status:
+              event.status === "running" || event.status === "completed" || event.status === "failed" || event.status === "info"
+                ? event.status
+                : "running",
+            at: typeof event.at === "number" && Number.isFinite(event.at) ? event.at : Math.floor(Date.now() / 1000),
+          })
+          return events
+        }, [])
+      : [],
   }
+}
+
+function mapAiEntryTaskRuns(payload: MessageApiResponse | null | undefined): MessageApiTaskRun[] {
+  const normalizedTaskRuns = (payload?.task_runs || [])
+    .map((taskRun) => normalizeMessageApiTaskRun(taskRun))
+    .filter((taskRun): taskRun is MessageApiTaskRun => Boolean(taskRun))
+  const normalizedPendingTask = normalizeMessageApiTaskRun(payload?.pending_task)
+  if (normalizedPendingTask && !normalizedTaskRuns.some((taskRun) => taskRun.task_id === normalizedPendingTask.task_id)) {
+    normalizedTaskRuns.unshift(normalizedPendingTask)
+  }
+  return normalizedTaskRuns
+}
+
+function mapPendingAiEntryTask(
+  payload: MessageApiResponse | null | undefined,
+): MessageApiPendingTask | null {
+  return normalizeMessageApiTaskRun(payload?.pending_task)
+}
+
+function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiTaskRun[]) {
+  if (taskRuns.length === 0) return messages
+
+  const taskRunMap = new Map(taskRuns.map((taskRun) => [taskRun.task_id, taskRun] as const))
+  const attachedTaskRunIds = new Set<string>()
+  const nextMessages = messages.map((message) => {
+    if (message.role !== "assistant") return message
+    const queuedTaskContext = extractQueuedPptBackgroundTaskContext(message.content)
+    const taskRun =
+      queuedTaskContext && taskRunMap.has(queuedTaskContext.taskId)
+        ? taskRunMap.get(queuedTaskContext.taskId) || null
+        : null
+    if (!taskRun) return message
+    attachedTaskRunIds.add(taskRun.task_id)
+    return {
+      ...message,
+      parts: [
+        ...(message.parts || []),
+        {
+          type: "task-run",
+          id: `task-run:${taskRun.task_id}`,
+          taskRun,
+        } satisfies MessagePart,
+      ],
+    }
+  })
+
+  const syntheticTaskRunMessages = taskRuns
+    .filter((taskRun) => !attachedTaskRunIds.has(taskRun.task_id))
+    .map((taskRun) => ({
+      id: `task-run-message:${taskRun.task_id}`,
+      role: "assistant" as const,
+      content: "",
+      createdAt: taskRun.created_at,
+      parts: [
+        {
+          type: "task-run",
+          id: `task-run:${taskRun.task_id}`,
+          taskRun,
+        } satisfies MessagePart,
+      ],
+    }))
+
+  return [...nextMessages, ...syntheticTaskRunMessages].sort(
+    (left, right) => (left.createdAt || 0) - (right.createdAt || 0),
+  )
+}
+
+function saveAiEntryPendingTasks(taskRuns: MessageApiTaskRun[], fallback: {
+  conversationId: string
+  agentId: string | null
+}) {
+  for (const taskRun of taskRuns) {
+    if (taskRun.status !== "pending" && taskRun.status !== "running") continue
+    savePendingAssistantTask({
+      taskId: taskRun.task_id,
+      scope: "ai_entry",
+      conversationId: taskRun.conversation_id || fallback.conversationId,
+      agentId: taskRun.agent_id || fallback.agentId,
+      taskType: taskRun.task_type,
+      createdAt: taskRun.created_at * 1000,
+    })
+  }
+}
+
+function mergeAiEntryTaskRuns(currentTaskRuns: MessageApiTaskRun[], nextTaskRuns: MessageApiTaskRun[]) {
+  const nextTaskRunMap = new Map(nextTaskRuns.map((taskRun) => [taskRun.task_id, taskRun] as const))
+  const merged: MessageApiTaskRun[] = []
+
+  for (const taskRun of currentTaskRuns) {
+    if (nextTaskRunMap.has(taskRun.task_id)) {
+      merged.push(nextTaskRunMap.get(taskRun.task_id)!)
+      nextTaskRunMap.delete(taskRun.task_id)
+    } else {
+      merged.push(taskRun)
+    }
+  }
+
+  for (const taskRun of nextTaskRunMap.values()) {
+    merged.push(taskRun)
+  }
+
+  return merged.sort((left, right) => left.created_at - right.created_at)
 }
 
 function resolveDisplayModelIdForProvider(input: {
@@ -1149,6 +1369,7 @@ export function AiEntryWorkspace({
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [taskRuns, setTaskRuns] = useState<MessageApiTaskRun[]>([])
   const [pendingTaskEvents, setPendingTaskEvents] = useState<PendingTaskEvent[]>([])
   const [pendingTaskRefreshKey, setPendingTaskRefreshKey] = useState(0)
   const [conversationState, setConversationState] = useState<AiEntryConversationStatePayload | null>(null)
@@ -1175,6 +1396,7 @@ export function AiEntryWorkspace({
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
   const previousMessageCountRef = useRef(0)
   const messagesLengthRef = useRef(messages.length)
+  const taskRunsRef = useRef(taskRuns)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
   const isLoadingRef = useRef(false)
@@ -1250,6 +1472,10 @@ export function AiEntryWorkspace({
       ),
     [messages],
   )
+  const displayMessages = useMemo(
+    () => attachTaskRunsToMessages(messages, taskRuns),
+    [messages, taskRuns],
+  )
   const fetchConversationMessages = useCallback(
     async (targetConversationId: string) => {
       const params = new URLSearchParams({ conversation_id: targetConversationId, limit: "200" })
@@ -1266,6 +1492,7 @@ export function AiEntryWorkspace({
         response,
         payload,
         messages: mapPersistedAiEntryMessages(payload),
+        taskRuns: mapAiEntryTaskRuns(payload),
         pendingTask: mapPendingAiEntryTask(payload),
         conversationState: payload?.conversation_state ?? null,
       }
@@ -1351,6 +1578,10 @@ export function AiEntryWorkspace({
   useEffect(() => {
     messagesLengthRef.current = messages.length
   }, [messages.length])
+
+  useEffect(() => {
+    taskRunsRef.current = taskRuns
+  }, [taskRuns])
 
   useEffect(() => {
     latestConversationIdRef.current = conversationId
@@ -1826,6 +2057,7 @@ export function AiEntryWorkspace({
       setConversationId(null)
       latestConversationIdRef.current = null
       setMessages([])
+      setTaskRuns([])
       setConversationState(null)
       setIsConversationLoading(false)
       if (!shouldLockModel && models.length > 0) {
@@ -1867,6 +2099,7 @@ export function AiEntryWorkspace({
           response,
           payload,
           messages: restored,
+          taskRuns: restoredTaskRuns,
           pendingTask,
           conversationState: restoredConversationState,
         } = await fetchConversationMessages(initialConversationId)
@@ -1881,6 +2114,7 @@ export function AiEntryWorkspace({
             setConversationId(null)
             latestConversationIdRef.current = null
             setMessages([])
+            setTaskRuns([])
             setConversationState(null)
             setErrorMessage(null)
             return
@@ -1894,30 +2128,15 @@ export function AiEntryWorkspace({
         })
 
         setMessages(resolvedMessages)
+        setTaskRuns(restoredTaskRuns)
         setConversationState(restoredConversationState)
         savePendingConversationMessages(initialConversationId, resolvedMessages)
 
-        if (pendingTask) {
-          savePendingAssistantTask({
-            taskId: pendingTask.task_id.trim(),
-            scope: "ai_entry",
-            conversationId:
-              typeof pendingTask.conversation_id === "string" && pendingTask.conversation_id.trim()
-                ? pendingTask.conversation_id.trim()
-                : initialConversationId,
-            agentId:
-              typeof pendingTask.agent_id === "string" && pendingTask.agent_id.trim()
-                ? pendingTask.agent_id.trim()
-                : routeAgentId || resolvedRequestAgentId || null,
-            taskType:
-              typeof pendingTask.task_type === "string" && pendingTask.task_type.trim()
-                ? pendingTask.task_type.trim()
-                : null,
-            createdAt:
-              typeof pendingTask.created_at === "number" && Number.isFinite(pendingTask.created_at)
-                ? pendingTask.created_at * 1000
-                : Date.now(),
-          })
+        saveAiEntryPendingTasks(restoredTaskRuns, {
+          conversationId: initialConversationId,
+          agentId: routeAgentId || resolvedRequestAgentId || null,
+        })
+        if (pendingTask || restoredTaskRuns.some((taskRun) => taskRun.status === "pending" || taskRun.status === "running")) {
           setPendingTaskRefreshKey((current) => current + 1)
         }
 
@@ -2038,6 +2257,7 @@ export function AiEntryWorkspace({
       const {
         response,
         messages: persistedMessages,
+        taskRuns: refreshedTaskRuns,
         pendingTask,
         conversationState: refreshedConversationState,
       } = await fetchConversationMessages(targetConversationId)
@@ -2047,6 +2267,7 @@ export function AiEntryWorkspace({
       }
 
       setConversationState(refreshedConversationState)
+      setTaskRuns(refreshedTaskRuns)
       setMessages((current) => {
         const next = resolveAiEntryCompletedConversationMessages({
           currentMessages: current,
@@ -2056,27 +2277,11 @@ export function AiEntryWorkspace({
         return next
       })
 
-      if (pendingTask) {
-        savePendingAssistantTask({
-          taskId: pendingTask.task_id.trim(),
-          scope: "ai_entry",
-          conversationId:
-            typeof pendingTask.conversation_id === "string" && pendingTask.conversation_id.trim()
-              ? pendingTask.conversation_id.trim()
-              : targetConversationId,
-          agentId:
-            typeof pendingTask.agent_id === "string" && pendingTask.agent_id.trim()
-              ? pendingTask.agent_id.trim()
-              : routeAgentId || resolvedRequestAgentId || null,
-          taskType:
-            typeof pendingTask.task_type === "string" && pendingTask.task_type.trim()
-              ? pendingTask.task_type.trim()
-              : null,
-          createdAt:
-            typeof pendingTask.created_at === "number" && Number.isFinite(pendingTask.created_at)
-              ? pendingTask.created_at * 1000
-              : Date.now(),
-        })
+      saveAiEntryPendingTasks(refreshedTaskRuns, {
+        conversationId: targetConversationId,
+        agentId: routeAgentId || resolvedRequestAgentId || null,
+      })
+      if (pendingTask || refreshedTaskRuns.some((taskRun) => taskRun.status === "pending" || taskRun.status === "running")) {
         setPendingTaskRefreshKey((current) => current + 1)
       }
 
@@ -2144,12 +2349,22 @@ export function AiEntryWorkspace({
   }, [attemptConversationRecovery, conversationId, hasStreamRecoveryPending, isConversationLoading, isLoading])
 
   useEffect(() => {
-    const pendingTask = findAiEntryPendingTask({
+    const localPendingTasks = listAiEntryPendingTasks({
       conversationId,
       agentId: activePendingAgentId,
     })
-    if (!pendingTask) {
+    const activeTaskRunIds = [
+      ...new Set([
+        ...localPendingTasks.map((task) => task.taskId),
+        ...taskRunsRef.current
+          .filter((taskRun) => taskRun.status === "pending" || taskRun.status === "running")
+          .map((taskRun) => taskRun.task_id),
+      ]),
+    ]
+
+    if (activeTaskRunIds.length === 0) {
       setPendingTaskEvents([])
+      setIsLoading(false)
       return
     }
 
@@ -2167,220 +2382,116 @@ export function AiEntryWorkspace({
     const poll = async () => {
       while (!cancelled) {
         try {
-          const response = await fetch(`/api/tasks/${pendingTask.taskId}`, {
+          const response = await fetch("/api/ai/task-runs/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ taskRunIds: activeTaskRunIds }),
             cache: "no-store",
             credentials: "same-origin",
           })
           if (!response.ok) {
-            throw new Error(response.status === 404 ? "task_not_found" : `http_${response.status}`)
+            throw new Error(`http_${response.status}`)
           }
+
           const payload = (await response.json().catch(() => null)) as {
-            data?: {
-              status?: string
-              result?: {
-                conversation_id?: string | null
-                toolName?: string
-                toolCallId?: string
-                toolResult?: NonNullable<NonNullable<ChatStreamApiResponse["data"]>["result"]> | null
-                assistantMessage?: string
-                error?: string | null
-                events?: unknown
-              } | null
-            } | null
+            data?: MessageApiTaskRun[]
           } | null
+          const refreshedTaskRuns = (payload?.data || [])
+            .map((taskRun) => normalizeMessageApiTaskRun(taskRun))
+            .filter((taskRun): taskRun is MessageApiTaskRun => Boolean(taskRun))
+
           consecutivePollErrors = 0
-          const status = payload?.data?.status
-          const taskResult = payload?.data?.result || null
-          const normalizedEvents = normalizePendingTaskEvents(taskResult?.events)
-          if (normalizedEvents.length > 0) {
-            setPendingTaskEvents(normalizedEvents)
+          setTaskRuns((current) => mergeAiEntryTaskRuns(current, refreshedTaskRuns))
+
+          const latestUpdatedTaskRun = [...refreshedTaskRuns].sort((left, right) => right.updated_at - left.updated_at)[0] || null
+          if (latestUpdatedTaskRun?.events.length) {
+            setPendingTaskEvents(
+              normalizePendingTaskEvents(
+                latestUpdatedTaskRun.events.map((event) => ({
+                  ...event,
+                  at: event.at * 1000,
+                })),
+              ),
+            )
           }
 
           historyRefreshPollCount += 1
-          const resolvedConversationIdForRefresh =
-            typeof taskResult?.conversation_id === "string" && taskResult.conversation_id.trim()
-              ? taskResult.conversation_id.trim()
-              : conversationId
+          const activeTaskRuns = refreshedTaskRuns.filter((taskRun) => taskRun.status === "pending" || taskRun.status === "running")
+          const terminalTaskRuns = refreshedTaskRuns.filter((taskRun) => taskRun.status === "success" || taskRun.status === "failed")
           const shouldRefreshHistoryWhileRunning =
-            resolvedConversationIdForRefresh &&
-            (pendingTask.taskType === "preview_ppt_deck" || taskResult?.toolName === "preview_ppt_deck") &&
+            conversationId &&
+            activeTaskRuns.length > 0 &&
             historyRefreshPollCount % AI_ENTRY_PENDING_TASK_HISTORY_REFRESH_CADENCE === 0
 
-          if (shouldRefreshHistoryWhileRunning) {
+          if (shouldRefreshHistoryWhileRunning && conversationId) {
             try {
               const {
-                response,
+                response: historyResponse,
                 messages: persistedMessages,
+                taskRuns: refreshedConversationTaskRuns,
                 conversationState: refreshedConversationState,
-              } = await fetchConversationMessages(resolvedConversationIdForRefresh)
+              } = await fetchConversationMessages(conversationId)
               if (
-                response.ok &&
+                historyResponse.ok &&
                 hasAiEntryPptPreviewMaterialized({
                   persistedMessages,
                   conversationState: refreshedConversationState,
                   previousPreviewSessionId: initialPreviewSessionId,
                 })
               ) {
+                setTaskRuns(refreshedConversationTaskRuns)
                 setConversationState(refreshedConversationState)
                 setMessages((current) => {
                   const next = resolveAiEntryCompletedConversationMessages({
                     currentMessages: current,
                     persistedMessages,
                   })
-                  savePendingConversationMessages(resolvedConversationIdForRefresh, next)
+                  savePendingConversationMessages(conversationId, next)
                   return next
                 })
-                removePendingAssistantTask(pendingTask.taskId)
-                if (!cancelled) {
-                  setIsLoading(false)
-                }
-                return
               }
             } catch (error) {
               console.error("ai-entry.pending-task.running-history-refresh.failed", error)
             }
           }
 
-          if (status === "success" || status === "failed") {
-            const resolvedConversationId =
-              typeof taskResult?.conversation_id === "string" && taskResult.conversation_id.trim()
-                ? taskResult.conversation_id.trim()
-                : conversationId
-            const assistantText =
-              typeof taskResult?.assistantMessage === "string"
-                ? taskResult.assistantMessage.trim()
-                : ""
-            const toolName =
-              typeof taskResult?.toolName === "string" ? taskResult.toolName : "preview_ppt_deck"
-          const toolCallId =
-              typeof taskResult?.toolCallId === "string"
-                ? taskResult.toolCallId
-                : `background-${pendingTask.taskId}`
-          const toolResult = taskResult?.toolResult ?? null
-            const resultParts =
-              toolResult && toolName
-                ? applySseEvent([], {
-                    event: "tool_result",
-                    conversation_id: resolvedConversationId || undefined,
-                    data: {
-                      toolName,
-                      toolCallId,
-                      result: toolResult,
-                    },
-                  })
-                : []
-            const backgroundAssistantMessage = buildBackgroundAssistantCompletionMessage({
-              pendingTaskId: pendingTask.taskId,
-              assistantText,
-              toolName,
-              toolResult,
-              resultParts,
-              isZh,
-            })
-            const previewSessionId =
-              toolName === "preview_ppt_deck" &&
-              toolResult &&
-              typeof toolResult === "object" &&
-              typeof (toolResult as { previewSessionId?: unknown }).previewSessionId === "string" &&
-              (toolResult as { previewSessionId?: string }).previewSessionId?.trim()
-                ? (toolResult as { previewSessionId: string }).previewSessionId.trim()
-                : null
-
+          if (terminalTaskRuns.length > 0) {
+            const resolvedConversationId = conversationId
             if (resolvedConversationId) {
               try {
                 const {
-                  response,
+                  response: historyResponse,
                   messages: persistedMessages,
+                  taskRuns: refreshedConversationTaskRuns,
                   conversationState: refreshedConversationState,
                 } = await fetchConversationMessages(resolvedConversationId)
-                if (response.ok) {
+                if (historyResponse.ok) {
+                  setTaskRuns(refreshedConversationTaskRuns)
                   setConversationState(refreshedConversationState)
                   setMessages((current) => {
                     const next = resolveAiEntryCompletedConversationMessages({
                       currentMessages: current,
                       persistedMessages,
-                      backgroundAssistantMessage,
-                      matchesBackgroundAssistantMessage:
-                        previewSessionId
-                          ? (message) =>
-                              message.role === "assistant" &&
-                              extractLatestPptPreviewContext(message.content)?.previewSessionId === previewSessionId
-                          : undefined,
                     })
                     savePendingConversationMessages(resolvedConversationId, next)
                     return next
                   })
-                } else {
-                  throw new Error(`http_${response.status}`)
                 }
               } catch (error) {
                 console.error("ai-entry.pending-task.history-refresh.failed", error)
-                setMessages((current) => {
-                  let next = [...current]
-                  const normalizedAssistantText = assistantText.trim()
-                  const existingIndex = normalizedAssistantText
-                    ? next.findIndex(
-                        (message) =>
-                          message.role === "assistant" &&
-                          message.content.trim() === normalizedAssistantText,
-                      )
-                    : -1
-
-                  if (existingIndex >= 0) {
-                    next[existingIndex] = {
-                      ...next[existingIndex],
-                      parts:
-                        resultParts.length > 0
-                          ? resultParts
-                          : next[existingIndex].parts,
-                    }
-                  } else if (backgroundAssistantMessage) {
-                    next = [...next, backgroundAssistantMessage]
-                  }
-
-                  savePendingConversationMessages(resolvedConversationId, next)
-                  return next
-                })
               }
-            } else {
-              setMessages((current) => {
-                let next = [...current]
-                const normalizedAssistantText = assistantText.trim()
-                const existingIndex = normalizedAssistantText
-                  ? next.findIndex(
-                      (message) =>
-                        message.role === "assistant" &&
-                        message.content.trim() === normalizedAssistantText,
-                    )
-                  : -1
-
-                if (existingIndex >= 0) {
-                  next[existingIndex] = {
-                    ...next[existingIndex],
-                    parts:
-                      resultParts.length > 0
-                        ? resultParts
-                        : next[existingIndex].parts,
-                  }
-                } else if (backgroundAssistantMessage) {
-                  next = [...next, backgroundAssistantMessage]
-                }
-
-                return next
-              })
-            }
-            if (resolvedConversationId) {
-              latestConversationIdRef.current = resolvedConversationId
-              setConversationId((current) =>
-                current === resolvedConversationId ? current : resolvedConversationId,
-              )
             }
 
-            removePendingAssistantTask(pendingTask.taskId)
-            if (!cancelled) {
-              setIsLoading(false)
+            for (const taskRun of terminalTaskRuns) {
+              removePendingAssistantTask(taskRun.task_id)
             }
-            return
+
+            if (activeTaskRuns.length === 0) {
+              if (!cancelled) {
+                setIsLoading(false)
+              }
+              return
+            }
           }
         } catch (error) {
           console.error("ai-entry.pending-task.poll.failed", error)
@@ -2389,12 +2500,13 @@ export function AiEntryWorkspace({
             error instanceof Error && error.message ? error.message : "pending_task_poll_failed"
           const pollTimedOut = Date.now() - pollStartedAt > AI_ENTRY_PENDING_TASK_MAX_AGE_MS
           const shouldStopPolling =
-            errorMessage === "task_not_found" ||
             consecutivePollErrors >= AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS ||
             pollTimedOut
 
           if (shouldStopPolling) {
-            removePendingAssistantTask(pendingTask.taskId)
+            for (const taskId of activeTaskRunIds) {
+              removePendingAssistantTask(taskId)
+            }
             if (!cancelled) {
               setIsLoading(false)
               setPendingTaskEvents((current) =>
@@ -2402,22 +2514,14 @@ export function AiEntryWorkspace({
                   ...current,
                   {
                     type: "background_generation_failed",
-                    label:
-                      errorMessage === "task_not_found"
-                        ? isZh
-                          ? "后台任务不存在或已失效"
-                          : "Background task was not found or has expired"
-                        : pollTimedOut
-                          ? isZh
-                            ? "后台任务轮询超时"
-                            : "Background task polling timed out"
-                          : isZh
-                            ? "后台任务轮询失败"
-                            : "Background task polling failed",
-                    detail:
-                      errorMessage === "task_not_found"
-                        ? undefined
-                        : renderAiEntryErrorMessage(errorMessage, copy, isZh),
+                    label: pollTimedOut
+                      ? isZh
+                        ? "后台任务轮询超时"
+                        : "Background task polling timed out"
+                      : isZh
+                        ? "后台任务轮询失败"
+                        : "Background task polling failed",
+                    detail: renderAiEntryErrorMessage(errorMessage, copy, isZh),
                     status: "failed" as const,
                     at: Date.now(),
                   },
@@ -2425,15 +2529,11 @@ export function AiEntryWorkspace({
               )
               setErrorMessage(
                 `${copy.errorPrefix}${
-                  errorMessage === "task_not_found"
+                  pollTimedOut
                     ? isZh
-                      ? "后台任务不存在或已失效。"
-                      : "The background task was not found or has expired."
-                    : pollTimedOut
-                      ? isZh
-                        ? "后台任务轮询超时，请刷新会话确认最终状态。"
-                        : "Background task polling timed out. Refresh the conversation to confirm the final state."
-                      : renderAiEntryErrorMessage(errorMessage, copy, isZh)
+                      ? "后台任务轮询超时，请刷新会话确认最终状态。"
+                      : "Background task polling timed out. Refresh the conversation to confirm the final state."
+                    : renderAiEntryErrorMessage(errorMessage, copy, isZh)
                 }`,
               )
             }
@@ -2443,14 +2543,13 @@ export function AiEntryWorkspace({
 
         const elapsedMs = Date.now() - pollStartedAt
         const pollIntervalMs =
-          pendingTask.taskType === "preview_ppt_deck" &&
           elapsedMs >= AI_ENTRY_PENDING_TASK_SLOW_POLL_AFTER_MS
             ? AI_ENTRY_PENDING_TASK_SLOW_POLL_INTERVAL_MS
             : AI_ENTRY_PENDING_TASK_POLL_INTERVAL_MS
 
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, pollIntervalMs),
-        )
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, pollIntervalMs)
+        })
       }
     }
 
@@ -2903,6 +3002,33 @@ export function AiEntryWorkspace({
                 taskType: toolName,
                 createdAt: Date.now(),
               })
+              setTaskRuns((current) =>
+                mergeAiEntryTaskRuns(current, [
+                  {
+                    task_id: backgroundTaskId,
+                    status: "running",
+                    task_type: toolName === "preview_ppt_deck" ? "preview_ppt_deck" : "preview_ppt_deck",
+                    conversation_id: streamConversationId,
+                    agent_id: routeAgentId || resolvedRequestAgentId || null,
+                    created_at: Math.floor(Date.now() / 1000),
+                    updated_at: Math.floor(Date.now() / 1000),
+                    started_at: null,
+                    stage: "brief_validating",
+                    stage_label: isZh ? "已排队，准备校验需求" : "Queued, validating brief",
+                    progress_current: 0,
+                    progress_total: 5,
+                    last_heartbeat_at: Math.floor(Date.now() / 1000),
+                    finished_at: null,
+                    preview_session_id: null,
+                    request_label: userMessage.content.trim() || null,
+                    result_summary: null,
+                    error_code: null,
+                    error_message: null,
+                    error: null,
+                    events: [],
+                  },
+                ]),
+              )
               setPendingTaskRefreshKey((current) => current + 1)
             }
             upsertTaskEvent({
@@ -3518,20 +3644,20 @@ export function AiEntryWorkspace({
                 </article>
               ) : null}
 
-              {messages.map((message, index) => {
+              {displayMessages.map((message, index) => {
                 const isAssistant = message.role === "assistant"
                 const copied = copiedMessageId === message.id
                 const isPendingAssistant =
                   isAssistant &&
                   isLoading &&
-                  index === messages.length - 1 &&
+                  index === displayMessages.length - 1 &&
                   !message.content.trim() &&
                   !message.parts?.length
                 const shouldShowLoadingDetails = isPendingAssistant
                 const parsedArtifact = isAssistant ? parseArtifactResult(message.content) : null
                 const parsedPptPreview = isAssistant ? extractLatestPptPreviewContext(message.content) : null
                 const isLastAssistantMessage =
-                  isAssistant && !messages.slice(index + 1).some((candidate) => candidate.role === "assistant")
+                  isAssistant && !displayMessages.slice(index + 1).some((candidate) => candidate.role === "assistant")
                 const fallbackPptPreview =
                   !parsedPptPreview &&
                   !hasMessagePptPreviewContext &&
@@ -3550,13 +3676,6 @@ export function AiEntryWorkspace({
                   Boolean(parsedPptPreview) ||
                   conversationState?.ppt?.phase === "preview-ready" ||
                   conversationState?.ppt?.phase === "exported"
-                const shouldHideQueuedBackgroundPreviewMessage =
-                  isAssistant &&
-                  hasResolvedPptPreview &&
-                  isQueuedPptBackgroundStatusMessage(message.content)
-                if (shouldHideQueuedBackgroundPreviewMessage) {
-                  return null
-                }
                 const processParts = parts.filter((part) => {
                   if (part.type === "text" || part.type === "source" || part.type === "artifact" || part.type === "report") {
                     return false

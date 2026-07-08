@@ -115,9 +115,7 @@ export function findAiEntryPendingTask(input: {
   conversationId?: string | null
   agentId?: string | null
 }) {
-  const tasks = Object.values(readStore())
-    .filter((task) => task.scope === "ai_entry")
-    .sort((a, b) => b.createdAt - a.createdAt)
+  const tasks = listAiEntryPendingTasks(input)
 
   if (input.conversationId) {
     const byConversation = tasks.filter((task) => task.conversationId === input.conversationId)
@@ -132,4 +130,19 @@ export function findAiEntryPendingTask(input: {
   }
 
   return tasks.find((task) => !task.conversationId) || null
+}
+
+export function listAiEntryPendingTasks(input: {
+  conversationId?: string | null
+  agentId?: string | null
+} = {}) {
+  const tasks = Object.values(readStore())
+    .filter((task) => task.scope === "ai_entry")
+    .sort((a, b) => b.createdAt - a.createdAt)
+
+  return tasks.filter((task) => {
+    if (input.conversationId && task.conversationId !== input.conversationId) return false
+    if (input.agentId && task.agentId !== input.agentId) return false
+    return true
+  })
 }

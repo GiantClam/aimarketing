@@ -36,9 +36,21 @@ const dbChain = {
   },
 }
 
+const dbUpdateChain = {
+  set() {
+    return dbUpdateChain
+  },
+  where() {
+    return Promise.resolve([])
+  },
+}
+
 const fakeDb = {
   select() {
     return dbChain
+  },
+  update() {
+    return dbUpdateChain
   },
   execute() {
     return Promise.resolve({ rows: executeRowsQueue.shift() || [] })
@@ -129,7 +141,7 @@ test("AI entry message history preserves database timestamps", async () => {
   executeRowsQueue = [[
     { id: 100, role: "user", content: "Need a recruiter scorecard", createdAt: userCreatedAt },
     { id: 101, role: "assistant", content: "Here is a scorecard", createdAt: assistantCreatedAt },
-  ], []]
+  ], [], [], []]
 
   const page = await listAiEntryMessages(
     7,
@@ -154,6 +166,7 @@ test("AI entry message history preserves database timestamps", async () => {
       phase: "idle",
     },
   })
+  assert.deepEqual(page.task_runs, [])
   assert.equal(page.pending_task, null)
 })
 
@@ -185,7 +198,7 @@ test("AI entry message history returns structured conversation state", async () 
         "已生成 PPT 成品：\n<!-- ai-entry-ppt-export-context:{\"previewSessionId\":\"preview-session-1\",\"selectedVariantKey\":\"variant-b\",\"artifactId\":118} -->",
       createdAt: new Date("2024-01-02T03:05:09.000Z"),
     },
-  ], []]
+  ], [], []]
 
   const page = await listAiEntryMessages(
     7,
@@ -211,6 +224,7 @@ test("AI entry message history returns structured conversation state", async () 
       phase: "exported",
     },
   })
+  assert.deepEqual(page.task_runs, [])
   assert.equal(page.pending_task, null)
 })
 
@@ -241,21 +255,53 @@ test("AI entry message history returns latest pending PPT background task", asyn
         conversationId: "42",
         agentId: "executive-ppt",
       }),
+      result: JSON.stringify({
+        stage: "variant_generating",
+        stageLabel: "正在生成预览方向",
+        progressCurrent: 2,
+        progressTotal: 5,
+        events: [
+          {
+            type: "background_generation_running",
+            label: "正在生成预览",
+            status: "running",
+            at: 1_704_164_709,
+          },
+        ],
+      }),
       createdAt: new Date("2024-01-02T03:05:09.000Z"),
+      updatedAt: new Date("2024-01-02T03:05:19.000Z"),
+      startedAt: new Date("2024-01-02T03:05:10.000Z"),
+    },
+  ], [
+    {
+      id: 1074,
+      status: "running",
+      payload: JSON.stringify({
+        kind: "ai_entry_ppt_preview",
+        conversationId: "42",
+        agentId: "executive-ppt",
+      }),
+      result: JSON.stringify({
+        stage: "variant_generating",
+        stageLabel: "正在生成预览方向",
+        progressCurrent: 2,
+        progressTotal: 5,
+      }),
+      createdAt: new Date("2024-01-02T03:05:09.000Z"),
+      updatedAt: new Date("2024-01-02T03:05:19.000Z"),
+      startedAt: new Date("2024-01-02T03:05:10.000Z"),
     },
   ]]
 
   const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
 
   assert.ok(page)
-  assert.deepEqual(page.pending_task, {
-    task_id: "1074",
-    status: "running",
-    task_type: "preview_ppt_deck",
-    conversation_id: "42",
-    agent_id: "executive-ppt",
-    created_at: Math.floor(new Date("2024-01-02T03:05:09.000Z").getTime() / 1000),
-  })
+  assert.equal(page.task_runs.length, 1)
+  assert.equal(page.task_runs[0]?.task_id, "1074")
+  assert.equal(page.task_runs[0]?.stage, "variant_generating")
+  assert.equal(page.pending_task?.task_id, "1074")
+  assert.equal(page.pending_task?.status, "running")
 })
 
 test("AI entry message history falls back to direct conversation lookup when agent prefix no longer matches", async () => {
@@ -279,7 +325,7 @@ test("AI entry message history falls back to direct conversation lookup when age
       content: "已生成 PPT 预览。",
       createdAt: new Date("2024-01-02T03:04:09.000Z"),
     },
-  ], []]
+  ], [], [], []]
 
   const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
 
@@ -307,7 +353,7 @@ test("AI entry message history falls back to pending preview task lookup without
       content: "已开始生成 PPT 预览，当前进入后台处理。",
       createdAt: new Date("2024-01-02T03:04:09.000Z"),
     },
-  ], [], [
+  ], [], [], [
     {
       id: 1074,
       status: "running",
@@ -316,21 +362,24 @@ test("AI entry message history falls back to pending preview task lookup without
         conversationId: "42",
         agentId: "legacy-executive-ppt",
       }),
+      result: JSON.stringify({
+        stage: "brief_validating",
+        stageLabel: "已排队，准备校验需求",
+        progressCurrent: 0,
+        progressTotal: 5,
+      }),
       createdAt: new Date("2024-01-02T03:05:09.000Z"),
+      updatedAt: new Date("2024-01-02T03:05:09.000Z"),
+      startedAt: null,
     },
   ]]
 
   const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
 
   assert.ok(page)
-  assert.deepEqual(page?.pending_task, {
-    task_id: "1074",
-    status: "running",
-    task_type: "preview_ppt_deck",
-    conversation_id: "42",
-    agent_id: "legacy-executive-ppt",
-    created_at: Math.floor(new Date("2024-01-02T03:05:09.000Z").getTime() / 1000),
-  })
+  assert.equal(page?.pending_task?.task_id, "1074")
+  assert.equal(page?.pending_task?.agent_id, "legacy-executive-ppt")
+  assert.equal(page?.pending_task?.stage, "brief_validating")
 })
 
 test("AI entry message history recovers a finished preview task from persisted queued task context", async () => {
@@ -357,6 +406,26 @@ test("AI entry message history recovers a finished preview task from persisted q
       ].join("\n"),
       createdAt: new Date("2024-01-02T03:04:09.000Z"),
     },
+  ], [
+    {
+      id: 901,
+      status: "failed",
+      payload: JSON.stringify({
+        kind: "ai_entry_ppt_preview",
+        conversationId: "42",
+        agentId: "executive-ppt",
+      }),
+      result: JSON.stringify({
+        stage: "variant_generating",
+        stageLabel: "预览生成失败",
+        progressCurrent: 2,
+        progressTotal: 5,
+        error: "ppt_preview_failed",
+      }),
+      createdAt: new Date("2024-01-02T03:05:09.000Z"),
+      updatedAt: new Date("2024-01-02T03:05:29.000Z"),
+      startedAt: new Date("2024-01-02T03:05:10.000Z"),
+    },
   ], [], [], [
     {
       id: 901,
@@ -366,21 +435,26 @@ test("AI entry message history recovers a finished preview task from persisted q
         conversationId: "42",
         agentId: "executive-ppt",
       }),
+      result: JSON.stringify({
+        stage: "variant_generating",
+        stageLabel: "预览生成失败",
+        progressCurrent: 2,
+        progressTotal: 5,
+        error: "ppt_preview_failed",
+      }),
       createdAt: new Date("2024-01-02T03:05:09.000Z"),
+      updatedAt: new Date("2024-01-02T03:05:29.000Z"),
+      startedAt: new Date("2024-01-02T03:05:10.000Z"),
     },
   ]]
 
   const page = await listAiEntryMessages(7, "42", 200, "chat", "executive-ppt")
 
   assert.ok(page)
-  assert.deepEqual(page?.pending_task, {
-    task_id: "901",
-    status: "failed",
-    task_type: "preview_ppt_deck",
-    conversation_id: "42",
-    agent_id: "executive-ppt",
-    created_at: Math.floor(new Date("2024-01-02T03:05:09.000Z").getTime() / 1000),
-  })
+  assert.equal(page?.task_runs[0]?.task_id, "901")
+  assert.equal(page?.task_runs[0]?.status, "failed")
+  assert.equal(page?.pending_task?.task_id, "901")
+  assert.equal(page?.pending_task?.status, "failed")
 })
 
 test("AI entry conversation history uses latest message time as updated_at", async () => {
@@ -399,7 +473,10 @@ test("AI entry conversation history uses latest message time as updated_at", asy
       },
     ],
   ]
-  executeRowsQueue = []
+  executeRowsQueue = [
+    [{ conversationId: 42, latestAssistantMessageId: 101 }],
+    [],
+  ]
 
   const page = await listAiEntryConversations(
     7,
@@ -412,4 +489,35 @@ test("AI entry conversation history uses latest message time as updated_at", asy
   assert.equal(page.data[0]?.created_at, Math.floor(createdAt.getTime() / 1000))
   assert.equal(page.data[0]?.updated_at, Math.floor(latestMessageCreatedAt.getTime() / 1000))
   assert.equal(page.data[0]?.name, "Hiring plan")
+  assert.equal(page.data[0]?.has_unread, true)
+})
+
+test("AI entry conversation history includes unread and running task indicators", async () => {
+  const { listAiEntryConversations } = await import("./repository")
+
+  selectRowsQueue = [[
+    {
+      id: 42,
+      title: "[ai-entry] [agent:executive-ppt] PPT plan",
+      currentModelId: "gpt-5",
+      metadata: {
+        aiEntryUnreadState: {
+          lastReadAssistantMessageId: 100,
+        },
+      },
+      createdAt: new Date("2024-01-01T00:00:00.000Z"),
+      latestMessageCreatedAt: new Date("2024-01-05T08:30:00.000Z"),
+    },
+  ]]
+  executeRowsQueue = [
+    [{ conversationId: 42, latestAssistantMessageId: 101 }],
+    [{ conversationId: "42", runningTaskCount: 2 }],
+  ]
+
+  const page = await listAiEntryConversations(7, 20, null, "chat", "executive-ppt")
+
+  assert.equal(page.data[0]?.has_unread, true)
+  assert.equal(page.data[0]?.unread_count, 1)
+  assert.equal(page.data[0]?.has_running_ppt_task, true)
+  assert.equal(page.data[0]?.running_ppt_task_count, 2)
 })

@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   findAiEntryPendingTask,
+  listAiEntryPendingTasks,
   removePendingAssistantTask,
   savePendingAssistantTask,
 } from "./assistant-task-store"
@@ -103,4 +104,37 @@ test("savePendingAssistantTask writes shared local storage entries and clears se
   removePendingAssistantTask("task-406")
   assert.equal(findAiEntryPendingTask({ conversationId: "406", agentId: "executive-ppt" }), null)
   assert.equal(localStorageMap.has(STORAGE_KEY), true)
+})
+
+test("listAiEntryPendingTasks returns all pending tasks for one conversation", () => {
+  const localStorageMap = new Map<string, string>()
+  const sessionStorageMap = new Map<string, string>()
+  installWindow(localStorageMap, sessionStorageMap)
+
+  savePendingAssistantTask({
+    taskId: "task-406-a",
+    scope: "ai_entry",
+    conversationId: "406",
+    agentId: "executive-ppt",
+    createdAt: 2_000,
+  })
+  savePendingAssistantTask({
+    taskId: "task-406-b",
+    scope: "ai_entry",
+    conversationId: "406",
+    agentId: "executive-ppt",
+    createdAt: 3_000,
+  })
+  savePendingAssistantTask({
+    taskId: "task-407",
+    scope: "ai_entry",
+    conversationId: "407",
+    agentId: "executive-ppt",
+    createdAt: 4_000,
+  })
+
+  assert.deepEqual(
+    listAiEntryPendingTasks({ conversationId: "406", agentId: "executive-ppt" }).map((task) => task.taskId),
+    ["task-406-b", "task-406-a"],
+  )
 })

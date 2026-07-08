@@ -17,6 +17,7 @@ import {
 import { appendAiEntryMessage, type AiEntryConversationScope } from "@/lib/ai-entry/repository"
 import { buildPptToolResultMessage } from "@/lib/ai-entry/ppt-tool-result-message"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
+import type { AiEntryTaskRunStage } from "@/lib/ai-entry/task-runs"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { buildDifyMemoryBridge, mergeDifyInputsWithMemoryBridge } from "@/lib/dify/memory-bridge"
 import { getUserAuthPayload } from "@/lib/enterprise/server"
@@ -1140,7 +1141,19 @@ async function handleAiEntryPptPreviewTask(
   payload: AiEntryPptPreviewTaskPayload,
 ) {
   const progressEvents: AssistantTaskProgressEvent[] = []
-  const persistProgress = async (force = false) => {
+  const persistProgress = async (
+    snapshot?: {
+      stage?: AiEntryTaskRunStage
+      stageLabel?: string
+      progressCurrent?: number
+      progressTotal?: number
+      previewSessionId?: string | null
+      toolResult?: Record<string, unknown> | null
+      assistantMessage?: string
+      error?: string | null
+    },
+    force = false,
+  ) => {
     if (!force && progressEvents.length === 0) return
     await updateTaskStatus(taskId, {
       status: "running",
@@ -1148,6 +1161,22 @@ async function handleAiEntryPptPreviewTask(
         conversation_id: payload.conversationId,
         toolName: "preview_ppt_deck",
         toolCallId: payload.toolCallId,
+        stage: snapshot?.stage || "story_planning",
+        stageLabel: snapshot?.stageLabel,
+        progressCurrent: snapshot?.progressCurrent,
+        progressTotal: snapshot?.progressTotal,
+        lastHeartbeatAt: Math.floor(Date.now() / 1000),
+        previewSessionId: snapshot?.previewSessionId || null,
+        toolResult: snapshot?.toolResult || null,
+        resultSummary:
+          snapshot?.assistantMessage ||
+          (snapshot?.toolResult && typeof snapshot.toolResult.title === "string"
+            ? snapshot.toolResult.title
+            : undefined),
+        assistantMessage: snapshot?.assistantMessage,
+        errorCode: snapshot?.error || null,
+        errorMessage: snapshot?.error || null,
+        error: snapshot?.error || null,
         events: progressEvents,
       },
     })
@@ -1160,7 +1189,31 @@ async function handleAiEntryPptPreviewTask(
     status: "running",
     at: Date.now(),
   })
-  await persistProgress(true)
+  await persistProgress(
+    {
+      stage: "brief_validating",
+      stageLabel: isZh ? "已排队，准备校验需求" : "Queued, validating brief",
+      progressCurrent: 0,
+      progressTotal: 5,
+    },
+    true,
+  )
+
+  pushTaskProgressEvent(progressEvents, {
+    type: "background_generation_preparing",
+    label: isZh ? "正在准备生成环境" : "Preparing generation runtime",
+    status: "running",
+    at: Date.now(),
+  })
+  await persistProgress(
+    {
+      stage: "story_planning",
+      stageLabel: isZh ? "正在规划结构与故事线" : "Planning structure and storyline",
+      progressCurrent: 1,
+      progressTotal: 5,
+    },
+    true,
+  )
 
   pushTaskProgressEvent(progressEvents, {
     type: "background_generation_running",
@@ -1168,7 +1221,15 @@ async function handleAiEntryPptPreviewTask(
     status: "running",
     at: Date.now(),
   })
-  await persistProgress(true)
+  await persistProgress(
+    {
+      stage: "variant_generating",
+      stageLabel: isZh ? "正在生成预览方向" : "Generating preview variants",
+      progressCurrent: 2,
+      progressTotal: 5,
+    },
+    true,
+  )
   try {
     const currentUser = await getUserAuthPayload(payload.userId)
     if (!currentUser) {
@@ -1236,8 +1297,41 @@ async function handleAiEntryPptPreviewTask(
         status: "running",
         at: Date.now(),
       })
-      await persistProgress(true)
+      await persistProgress(
+        {
+          stage: "variant_generating",
+          stageLabel: isZh ? "正在重新生成预览方向" : "Retrying preview variants",
+          progressCurrent: 2,
+          progressTotal: 5,
+          toolResult,
+          error: resultError,
+        },
+        true,
+      )
       await sleep(AI_ENTRY_PPT_PREVIEW_RETRY_DELAY_MS)
+    }
+
+    if (!resultError) {
+      pushTaskProgressEvent(progressEvents, {
+        type: "background_preview_rendering",
+        label: isZh ? "正在渲染预览" : "Rendering preview",
+        status: "running",
+        at: Date.now(),
+      })
+      await persistProgress(
+        {
+          stage: "preview_rendering",
+          stageLabel: isZh ? "正在渲染预览" : "Rendering preview",
+          progressCurrent: 3,
+          progressTotal: 5,
+          previewSessionId:
+            toolResult && typeof toolResult.previewSessionId === "string" && toolResult.previewSessionId.trim()
+              ? toolResult.previewSessionId.trim()
+              : null,
+          toolResult,
+        },
+        true,
+      )
     }
 
     const assistantMessage =
@@ -1251,6 +1345,22 @@ async function handleAiEntryPptPreviewTask(
           (isZh ? "后台预览已完成。" : "Background preview completed.")
 
     if (assistantMessage.trim()) {
+      await persistProgress(
+        {
+          stage: "session_persisting",
+          stageLabel: isZh ? "正在保存预览会话" : "Persisting preview session",
+          progressCurrent: 4,
+          progressTotal: 5,
+          previewSessionId:
+            toolResult && typeof toolResult.previewSessionId === "string" && toolResult.previewSessionId.trim()
+              ? toolResult.previewSessionId.trim()
+              : null,
+          toolResult,
+          assistantMessage,
+          error: resultError,
+        },
+        true,
+      )
       const persisted = await appendAiEntryMessage({
         userId: payload.userId,
         conversationId: payload.conversationId,
@@ -1284,8 +1394,29 @@ async function handleAiEntryPptPreviewTask(
         conversation_id: payload.conversationId,
         toolName: "preview_ppt_deck",
         toolCallId: payload.toolCallId,
+        stage: resultError ? "variant_generating" : "session_persisting",
+        stageLabel: resultError
+          ? isZh
+            ? "预览生成失败"
+            : "Preview failed"
+          : isZh
+            ? "预览已完成"
+            : "Preview completed",
+        progressCurrent: resultError ? 2 : 5,
+        progressTotal: 5,
+        lastHeartbeatAt: Math.floor(Date.now() / 1000),
+        finishedAt: Math.floor(Date.now() / 1000),
+        previewSessionId:
+          toolResult && typeof toolResult.previewSessionId === "string" && toolResult.previewSessionId.trim()
+            ? toolResult.previewSessionId.trim()
+            : null,
+        resultSummary:
+          assistantMessage ||
+          (toolResult && typeof toolResult.title === "string" ? toolResult.title : null),
         toolResult,
         assistantMessage,
+        errorCode: resultError,
+        errorMessage: resultError,
         error: resultError,
         events: progressEvents,
       },
@@ -1305,6 +1436,14 @@ async function handleAiEntryPptPreviewTask(
         conversation_id: payload.conversationId,
         toolName: "preview_ppt_deck",
         toolCallId: payload.toolCallId,
+        stage: "variant_generating",
+        stageLabel: isZh ? "预览生成失败" : "Preview failed",
+        progressCurrent: 2,
+        progressTotal: 5,
+        lastHeartbeatAt: Math.floor(Date.now() / 1000),
+        finishedAt: Math.floor(Date.now() / 1000),
+        errorCode: errorMessage,
+        errorMessage,
         error: errorMessage,
         events: progressEvents,
       },
