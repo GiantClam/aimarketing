@@ -745,6 +745,66 @@ test("tool registry injects a research brief from web_search into preview_ppt_de
   })
 })
 
+test("tool registry strips uploaded attachment blocks before injecting sourcePrompt", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "executive-ppt",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["preview_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Preview the deck.",
+        toolIds: ["preview_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    latestUserPrompt: [
+      "写一份介绍预算智能公司和业务的 ppt",
+      "",
+      "[Uploaded file: 屿算智能_ppt信息提取.md / text/markdown]",
+      "资源现状",
+      "行业研究报告",
+    ].join("\n"),
+    auditContext: {
+      traceId: "trace-source-prompt-strip",
+      conversationId: "conv-source-prompt-strip",
+      agentId: "executive-ppt",
+    },
+  })
+
+  const tools = result.selectedTools as unknown as Record<
+    string,
+    { execute: (input: Record<string, unknown>) => Promise<unknown> }
+  >
+  await tools.preview_ppt_deck.execute({
+    prompt: "写一份介绍预算智能公司和业务的 ppt",
+    audience: "管理层",
+    goal: "业务介绍",
+    scenario: "training",
+    language: "zh-CN",
+  })
+
+  assert.equal(previewInput?.sourcePrompt, "写一份介绍预算智能公司和业务的 ppt")
+})
+
 test("tool registry restores a persisted research brief marker from message history", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {

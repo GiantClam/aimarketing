@@ -32,7 +32,6 @@ import { MessagePartViewList } from "@/components/ai-entry/message-parts/message
 import { PptPreviewReportCard } from "@/components/ai-entry/ppt-preview-report-card"
 import {
   applySseEvent,
-  buildTemplateRecommendationPartFromContext,
 } from "@/lib/ai-entry/message-parts/reducer"
 import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
 import {
@@ -96,10 +95,8 @@ import {
 import { renderAiEntryDisplayErrorMessage } from "@/lib/ai-entry/error-display"
 import {
   buildPptToolResultMessage,
-  collapsePptTemplateRecommendationMessageBlocks,
   extractQueuedPptBackgroundTaskContext,
   extractLatestPptPreviewContext,
-  extractPptTemplateRecommendationContexts,
   stripPptHiddenContextMarkers,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import type { AiEntryTaskRunSummary } from "@/lib/ai-entry/task-runs"
@@ -122,6 +119,7 @@ import {
   resolveAiEntrySharedPendingMessages,
   shouldShowAiEntryConversationRestore,
 } from "@/lib/ai-entry/message-restore"
+import { mapPersistedAiEntryMessages as mapPersistedAiEntryMessagesFromRecords } from "@/lib/ai-entry/persisted-message-mapper"
 import { resolveAiEntryTargetConversationId } from "@/lib/ai-entry/route-sync"
 import { resolveAiEntryTaskPollIntervalMs } from "@/lib/ai-entry/task-run-runtime"
 import type { KnowledgeScope } from "@/lib/knowledge/types"
@@ -660,42 +658,7 @@ function resolveDisplayModelId(
 function mapPersistedAiEntryMessages(
   payload: MessageApiResponse | null | undefined,
 ) {
-  return (payload?.data || [])
-    .map((item) => {
-      const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : null
-      const content = typeof item.content === "string" ? item.content : ""
-      const normalizedContent =
-        role === "assistant"
-          ? collapsePptTemplateRecommendationMessageBlocks(content)
-          : content
-      const id = typeof item.id === "string" ? item.id : `${role || "msg"}-${Math.random()}`
-      const createdAt =
-        typeof item.created_at === "number" && Number.isFinite(item.created_at)
-          ? item.created_at
-          : undefined
-      if (!role) return null
-
-      const templateRecommendationParts =
-        role === "assistant"
-          ? extractPptTemplateRecommendationContexts(normalizedContent)
-              .map((context, index) =>
-                buildTemplateRecommendationPartFromContext(context, `template-recommendation:${id}:${index}`),
-              )
-              .filter((part): part is NonNullable<typeof part> => Boolean(part))
-          : []
-      const visibleContent =
-        role === "assistant" ? stripPptHiddenContextMarkers(normalizedContent) : normalizedContent
-
-      if (!visibleContent.trim() && templateRecommendationParts.length === 0) return null
-      return {
-        id,
-        role,
-        content: normalizedContent,
-        createdAt,
-        ...(templateRecommendationParts.length ? { parts: templateRecommendationParts } : {}),
-      } as ChatMessage
-    })
-    .filter((item): item is ChatMessage => Boolean(item))
+  return mapPersistedAiEntryMessagesFromRecords(payload?.data) as ChatMessage[]
 }
 
 function normalizeMessageApiTaskRun(

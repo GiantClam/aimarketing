@@ -13,6 +13,18 @@ export type IncomingAttachment = {
   size?: unknown
 }
 
+export type EmbeddedAttachmentSummary = {
+  name: string
+  mediaType: string
+}
+
+type MessageTextPartLike =
+  | string
+  | {
+      type?: unknown
+      text?: unknown
+    }
+
 type AttachmentContextPart =
   | { type: "text"; text: string }
   | { type: "image"; image: string; mediaType: string }
@@ -89,3 +101,55 @@ export function normalizeMessages(messages: IncomingMessage[], attachments: Retu
   return normalized
 }
 
+export function normalizeMessageTextContent(content: unknown) {
+  if (typeof content === "string") return content.trim()
+  if (!Array.isArray(content)) return ""
+
+  return (content as MessageTextPartLike[])
+    .map((part) => {
+      if (typeof part === "string") return part
+      if (part && typeof part === "object" && "text" in part) {
+        return typeof part.text === "string" ? part.text : ""
+      }
+      return ""
+    })
+    .join(" ")
+    .trim()
+}
+
+const EMBEDDED_ATTACHMENT_BLOCK_PATTERN =
+  /\n*\[Uploaded file:\s*([^\]/\n]+?)\s*\/\s*([^\]\n]+?)\]\n[\s\S]*?(?=(?:\n*\[Uploaded file:\s*[^\]/\n]+?\s*\/\s*[^\]\n]+?\]\n)|$)/g
+
+export function extractEmbeddedAttachmentSummaries(content: string | null | undefined) {
+  const normalized = typeof content === "string" ? content : ""
+  if (!normalized.trim()) {
+    return {
+      content: normalized,
+      attachments: [] as EmbeddedAttachmentSummary[],
+    }
+  }
+
+  const attachments: EmbeddedAttachmentSummary[] = []
+  const strippedContent = normalized.replace(
+    EMBEDDED_ATTACHMENT_BLOCK_PATTERN,
+    (_block, rawName: string, rawMediaType: string) => {
+      const name = rawName.trim()
+      const mediaType = rawMediaType.trim().toLowerCase()
+      if (name && mediaType) {
+        attachments.push({ name, mediaType })
+      }
+      return ""
+    },
+  )
+
+  return {
+    content: strippedContent.replace(/\n{3,}/g, "\n\n").trim(),
+    attachments,
+  }
+}
+
+export function extractUserIntentFromMessageContent(content: unknown) {
+  const normalized = normalizeMessageTextContent(content)
+  if (!normalized) return ""
+  return extractEmbeddedAttachmentSummaries(normalized).content
+}

@@ -134,6 +134,17 @@ export function isQueuedPptBackgroundStatusMessage(content: string | null | unde
   )
 }
 
+export function isFailedPptBackgroundStatusMessage(content: string | null | undefined) {
+  const normalized = stripPptHiddenContextMarkers(content).trim()
+  if (!normalized) return false
+
+  return (
+    normalized.startsWith("可编辑 PPT 后台生成失败：") ||
+    normalized.startsWith("Editable PPT background generation failed:") ||
+    normalized.startsWith("Background PPT generation failed:")
+  )
+}
+
 export function extractQueuedPptBackgroundTaskContext(
   content: string | null | undefined,
 ): QueuedPptBackgroundTaskContext | null {

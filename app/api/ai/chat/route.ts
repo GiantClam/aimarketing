@@ -47,6 +47,7 @@ import { hasCustomAiChatModelSelection } from "@/lib/platform/shared-credits-pol
 import { getCustomAgentForUser } from "@/lib/platform/custom-agents"
 import { parseCustomAgentRuntimeId } from "@/lib/platform/custom-agent-runtime-id"
 import {
+  extractUserIntentFromMessageContent,
   normalizeAttachmentList,
   normalizeMessages,
   type IncomingAttachment,
@@ -405,7 +406,7 @@ function normalizeCoreMessageContent(content: CoreMessage["content"]) {
 function getLatestUserPrompt(messages: CoreMessage[]) {
   const latest = [...messages].reverse().find((item) => item.role === "user")
   if (!latest) return ""
-  return normalizeCoreMessageContent(latest.content)
+  return extractUserIntentFromMessageContent(latest.content)
 }
 
 function estimateTextTokens(text: string) {

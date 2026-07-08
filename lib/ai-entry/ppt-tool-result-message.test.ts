@@ -12,6 +12,7 @@ import {
   extractLatestPptPreviewContext,
   extractLatestPptTemplateRecommendationContext,
   extractPptTemplateRecommendationContexts,
+  isFailedPptBackgroundStatusMessage,
   isQueuedPptBackgroundStatusMessage,
   resolvePptCatalogTemplateSelectionFromUserText,
   resolvePptTemplateSelectionFromUserText,
@@ -167,6 +168,19 @@ test("queued background status detector ignores real preview messages", () => {
   })
 
   assert.equal(isQueuedPptBackgroundStatusMessage(message), false)
+})
+
+test("failed background status detector only matches failure notices", () => {
+  assert.equal(
+    isFailedPptBackgroundStatusMessage(
+      "可编辑 PPT 后台生成失败：This PPT request needs fresh factual grounding before preview.",
+    ),
+    true,
+  )
+  assert.equal(
+    isFailedPptBackgroundStatusMessage("已生成 PPT 预览：\n- 标题: 董事会经营复盘"),
+    false,
+  )
 })
 
 test("queued background task context can be extracted from mixed assistant prose", () => {

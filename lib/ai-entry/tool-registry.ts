@@ -7,6 +7,7 @@ import { enqueueAssistantTask } from "@/lib/assistant-async"
 import { type AiEntryConversationScope } from "@/lib/ai-entry/repository"
 import { type AiEntryAgentRuntimePolicy } from "@/lib/ai-entry/agent-runtime-policy"
 import { extractAiEntryArtifactsFromToolResult } from "@/lib/ai-entry/artifact-runtime"
+import { extractUserIntentFromMessageContent } from "@/lib/ai-entry/chat-attachments"
 import { type AiEntryConversationState, resolveAiEntryConversationStateFromContents } from "@/lib/ai-entry/conversation-state"
 import { type AiEntryMcpServerDefinition, getAiEntryMcpServerDefinitions, loadAiEntryMcpTools } from "@/lib/ai-entry/mcp-tools"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
@@ -231,10 +232,15 @@ function maybeInjectPptSourcePrompt(input: {
     return input.rawInput
   }
 
+  const normalizedSourcePrompt = extractUserIntentFromMessageContent(sourcePrompt)
+  if (!normalizedSourcePrompt) {
+    return input.rawInput
+  }
+
   const record = input.rawInput && typeof input.rawInput === "object" ? (input.rawInput as Record<string, unknown>) : {}
   return {
     ...record,
-    sourcePrompt,
+    sourcePrompt: normalizedSourcePrompt,
   }
 }
 
@@ -413,7 +419,8 @@ function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
     scenario: scenario as "marketing-campaign" | "product-launch" | "sales-deck" | "training",
     language: language as "zh-CN" | "en-US",
     pageCount: typeof record.pageCount === "number" ? record.pageCount : undefined,
-    templateMode: readOptionalString(record.templateMode) as "auto-4" | "single-template" | null,
+    templateMode:
+      (readOptionalString(record.templateMode) as "auto-4" | "single-template" | null) ?? undefined,
     templateId: selectedTemplateId,
     preferSingleTemplate: true,
   })
