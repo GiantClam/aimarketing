@@ -789,6 +789,31 @@ test("ai chat route asks follow-up questions and stops before preview when execu
   assert.equal(releaseCalls, 0)
 })
 
+test("ai chat route accepts natural-language follow-up answers and continues after executive-ppt clarification", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [
+        { role: "user", content: "做一个克里米亚现状的ppt，10页，检索2026年最新的信息" },
+        { role: "user", content: "受众是初级军事爱好者，场景是50人的课堂讲解" },
+      ],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  const text = await response.text()
+  assert.match(text, /Normal chat reply\./)
+  assert.doesNotMatch(text, /还不能进入 PPT 预览/)
+  assert.match(lastStreamingSystemPrompt, /Ready for preview: yes/)
+  assert.match(lastStreamingSystemPrompt, /No blocking brief fields are missing\./)
+  assert.equal(finalizeCalls, 1)
+  assert.equal(releaseCalls, 0)
+})
+
 test("ai chat route does not persist closed stream transport errors as assistant replies", async () => {
   emitClosedControllerErrorFlow = true
 

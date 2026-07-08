@@ -59,12 +59,12 @@ function readOptionalStringArray(value: unknown) {
 }
 
 const EXPLICIT_BRIEF_FIELD_PATTERNS = {
-  audience: /(?:^|[;\n；。]\s*)(?:受众|对象|audience)\s*[:=：]\s*([^\n;；。]+)/giu,
-  goal: /(?:^|[;\n；。]\s*)(?:目标|目的|goal|objective)\s*[:=：]\s*([^\n;；。]+)/giu,
-  scenario: /(?:^|[;\n；。]\s*)(?:场景|用途|scenario|use case)\s*[:=：]\s*([^\n;；。]+)/giu,
-  language: /(?:^|[;\n；。]\s*)(?:语言|lang(?:uage)?)\s*[:=：]\s*([^\n;；。]+)/giu,
-  pageCount: /(?:^|[;\n；。]\s*)(?:页数|页码|slide count|page count|pages?|slides?)\s*[:=：]\s*(\d{1,2})/giu,
-  tone: /(?:^|[;\n；。]\s*)(?:语气|风格|tone|style)\s*[:=：]\s*([^\n;；。]+)/giu,
+  audience: /(?:^|[;\n；。,.，]\s*)(?:受众|对象|audience)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
+  goal: /(?:^|[;\n；。,.，]\s*)(?:目标|目的|goal|objective)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
+  scenario: /(?:^|[;\n；。,.，]\s*)(?:场景|用途|scenario|use case)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
+  language: /(?:^|[;\n；。,.，]\s*)(?:语言|lang(?:uage)?)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
+  pageCount: /(?:^|[;\n；。,.，]\s*)(?:页数|页码|slide count|page count|pages?|slides?)\s*(?:[:=：]|是)\s*(\d{1,2})/giu,
+  tone: /(?:^|[;\n；。,.，]\s*)(?:语气|风格|tone|style)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
   mustInclude: /(?:^|[;\n；。]\s*)(?:必须包含|包括|包含|must include|include)\s*[:=：]\s*([^\n]+)/giu,
 } as const
 
@@ -124,7 +124,7 @@ function inferLanguage(text: string): PptBriefLanguage {
 }
 
 function inferScenario(text: string): PptBriefScenario | null {
-  if (/(培训|课件|教学|workshop|training|onboarding)/iu.test(text)) return "training"
+  if (/(培训|课件|教学|讲解|课堂|lecture|classroom|workshop|training|onboarding)/iu.test(text)) return "training"
   if (
     /(战略汇报|战略分析|研究汇报|分析汇报|现状汇报|briefing|analysis|report|review|军事分析|局势分析|复盘汇报)/iu.test(
       text,

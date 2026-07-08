@@ -65,3 +65,34 @@ test("extractPptBriefState prefers the latest explicit field value across turns"
   assert.equal(state.language, "zh-CN")
   assert.equal(state.readyForPreview, true)
 })
+
+test("extractPptBriefState recognizes natural-language follow-up answers after clarification", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "做一个克里米亚现状的ppt，10页，检索2026年最新的信息",
+      "受众是初级军事爱好者，场景是50人的课堂讲解",
+    ],
+  })
+
+  assert.equal(state.audience, "初级军事爱好者")
+  assert.equal(state.scenario, "training")
+  assert.equal(state.goal, "培训讲解与统一认知")
+  assert.equal(state.language, "zh-CN")
+  assert.equal(state.pageCount, 10)
+  assert.equal(state.readyForPreview, true)
+})
+
+test("extractPptBriefState reads comma-separated natural-language brief fields", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "请生成一份4页中文产品方案PPT，主题是企业AI营销工作台。受众是企业管理层，场景是产品发布，目标是产品介绍，语言是中文。",
+    ],
+  })
+
+  assert.equal(state.audience, "企业管理层")
+  assert.equal(state.scenario, "product-launch")
+  assert.equal(state.goal, "产品介绍")
+  assert.equal(state.language, "zh-CN")
+  assert.equal(state.pageCount, 4)
+  assert.equal(state.readyForPreview, true)
+})
