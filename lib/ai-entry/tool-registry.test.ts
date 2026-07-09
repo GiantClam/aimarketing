@@ -470,7 +470,7 @@ test("tool registry injects the fresh preview session into export after a rebuil
   })
 })
 
-test("tool registry queues executive-ppt preview in the background for chat turns", async () => {
+test("tool registry queues executive-ppt preview with one official ppt-master template", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 42,
@@ -523,43 +523,30 @@ test("tool registry queues executive-ppt preview in the background for chat turn
     goal: "经营同步",
     scenario: "marketing-campaign",
     language: "zh-CN",
-    templateMode: "single-template",
-    templateId: "long-table",
   })
 
   assert.equal(previewInput, null)
   assert.equal(enqueuedTasks.length, 1)
-  assert.deepEqual(enqueuedTasks[0], {
-    userId: 42,
-    workflowName: "ai_entry_ppt_preview",
-    payload: {
-      kind: "ai_entry_ppt_preview",
-      userId: 42,
-      conversationId: "conv-background-preview",
-      conversationScope: "consulting",
-      agentId: "executive-ppt",
-      toolCallId: "preview_ppt_deck",
-      input: {
-        prompt: [
-          "请生成董事会汇报 PPT",
-          "Structured brief:",
-          "Audience: 管理层",
-          "Goal: 经营同步",
-          "Scenario: marketing-campaign",
-          "Language: zh-CN",
-        ].join("\n"),
-        sourcePrompt: "用第一个模板开始生成",
-        audience: "管理层",
-        goal: "经营同步",
-        scenario: "marketing-campaign",
-        language: "zh-CN",
-        templateMode: "single-template",
-        templateId: "long-table",
-      },
-      isZh: true,
-    },
-  })
+  const queuedPayload = enqueuedTasks[0]?.payload
+  const queuedInput = queuedPayload?.input as Record<string, unknown>
+  assert.equal(enqueuedTasks[0]?.userId, 42)
+  assert.equal(enqueuedTasks[0]?.workflowName, "ai_entry_ppt_preview")
+  assert.equal(queuedPayload?.kind, "ai_entry_ppt_preview")
+  assert.equal(queuedPayload?.agentId, "executive-ppt")
+  assert.equal(queuedInput.prompt, [
+    "请生成董事会汇报 PPT",
+    "Structured brief:",
+    "Audience: 管理层",
+    "Goal: 经营同步",
+    "Scenario: marketing-campaign",
+    "Language: zh-CN",
+  ].join("\n"))
+  assert.equal(queuedInput.sourcePrompt, "用第一个模板开始生成")
+  assert.equal(queuedInput.templateMode, "single-template")
+  assert.equal(typeof queuedInput.templateId, "string")
+  assert.notEqual(queuedInput.templateId, "long-table")
   assert.equal(queued.status, "queued")
+  assert.equal(queued.selectedTemplateId, queuedInput.templateId)
   assert.equal((queued.backgroundTask as { taskId?: string } | undefined)?.taskId, "901")
 })
 
@@ -1078,7 +1065,7 @@ test("tool registry blocks preview_ppt_deck when the ppt brief is incomplete", a
   })
 })
 
-test("tool registry keeps executive-ppt background previews in free-design mode by default", async () => {
+test("tool registry defaults executive-ppt background previews to one ppt-master template", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1151,15 +1138,12 @@ test("tool registry keeps executive-ppt background previews in free-design mode 
   assert.equal(enqueuedTasks.length, 1)
   assert.equal(
     (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    undefined,
+    "single-template",
   )
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
-    undefined,
-  )
+  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
 })
 
-test("tool registry strips model-supplied template ids when the user did not explicitly choose one", async () => {
+test("tool registry replaces model-supplied frontend template ids with ppt-master templates", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1234,15 +1218,13 @@ test("tool registry strips model-supplied template ids when the user did not exp
   assert.equal(previewInput, null)
   assert.equal(
     (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    undefined,
+    "single-template",
   )
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
-    undefined,
-  )
+  assert.notEqual((enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "neo-grid-bold")
+  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
 })
 
-test("tool registry injects the user-selected recommended template into editable ppt preview", async () => {
+test("tool registry ignores stale frontend recommendation ids for editable ppt preview", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1320,13 +1302,11 @@ test("tool registry injects the user-selected recommended template into editable
     (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
     "single-template",
   )
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
-    "neo-grid-bold",
-  )
+  assert.notEqual((enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "neo-grid-bold")
+  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
 })
 
-test("tool registry accepts a direct template id reply before a persisted recommendation marker exists", async () => {
+test("tool registry ignores direct frontend template aliases before a persisted recommendation marker exists", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1402,10 +1382,8 @@ test("tool registry accepts a direct template id reply before a persisted recomm
     (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
     "single-template",
   )
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
-    "swiss-grid",
-  )
+  assert.notEqual((enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "swiss-grid")
+  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
 })
 
 test("tool registry injects latest user prompt as sourcePrompt for executive-ppt preview tasks", async () => {

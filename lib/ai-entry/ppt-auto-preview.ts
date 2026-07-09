@@ -4,12 +4,17 @@ import {
 } from "@/lib/ai-entry/ppt-brief"
 import {
   buildPptToolResultMessage,
-  resolvePptCatalogTemplateSelectionFromUserText,
   extractLatestPptTemplateRecommendationContext,
   resolvePptTemplateSelectionFromUserText,
   stripPptTemplateRecommendationMessageBlocks,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
+import {
+  buildPptMasterRecommendedTemplateSummaries,
+  getPptWorkerSupportedTemplateIds,
+  isPptMasterLibraryTemplateSupported,
+} from "@/lib/lead-tools/ppt-worker-capabilities"
+import type { PptPreviewResearchBrief } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 type PptPreviewToolLike = {
   execute?: (input: unknown, options?: unknown) => Promise<unknown> | unknown
@@ -26,6 +31,59 @@ const PPT_AUTO_PREVIEW_INTENT_PATTERN =
 
 function readOptionalText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function resolveEditablePptTemplateSelection(input: {
+  userText: string | null | undefined
+  latestRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
+  preparedInput?: Record<string, unknown> | null
+}) {
+  const contextTemplateId = resolvePptTemplateSelectionFromUserText(
+    input.userText,
+    input.latestRecommendationContext,
+  )
+  if (contextTemplateId && isPptMasterLibraryTemplateSupported(contextTemplateId)) {
+    return contextTemplateId
+  }
+
+  const normalized = readOptionalText(input.userText)?.toLowerCase() ?? ""
+  if (normalized) {
+    const explicitTemplateId = getPptWorkerSupportedTemplateIds().find((templateId) => {
+      const candidate = templateId.trim().toLowerCase()
+      return candidate && (normalized === candidate || normalized.includes(candidate))
+    })
+    if (explicitTemplateId) return explicitTemplateId
+  }
+
+  const record = input.preparedInput
+  if (!record) return null
+
+  return (
+    buildPptMasterRecommendedTemplateSummaries(
+      {
+        prompt: readOptionalText(record.prompt) || readOptionalText(record.sourcePrompt) || input.userText || "",
+        researchBrief:
+          typeof record.researchBrief === "string" || (record.researchBrief && typeof record.researchBrief === "object")
+            ? (record.researchBrief as string | PptPreviewResearchBrief)
+            : undefined,
+        scenario:
+          record.scenario === "marketing-campaign" ||
+          record.scenario === "product-launch" ||
+          record.scenario === "sales-deck" ||
+          record.scenario === "training"
+            ? record.scenario
+            : "marketing-campaign",
+        language: record.language === "zh-CN" || record.language === "en-US" ? record.language : "zh-CN",
+        pageCount:
+          typeof record.pageCount === "number" && Number.isFinite(record.pageCount)
+            ? record.pageCount
+            : undefined,
+      },
+      {
+        allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
+      },
+    )[0]?.templateId?.trim() || null
+  )
 }
 
 function buildPreviewFailureNotice(errorMessage: string | null, isZh: boolean) {
@@ -77,13 +135,6 @@ export async function maybeAutoRunPptPreview(input: {
     .map((content) => extractLatestPptTemplateRecommendationContext(content))
     .filter((value): value is NonNullable<typeof value> => Boolean(value))
     .at(-1) ?? null
-  const rawSelectedTemplateId = resolvePptTemplateSelectionFromUserText(
-    input.latestUserPrompt,
-    latestRecommendationContext,
-  )
-  const selectedTemplateId =
-    rawSelectedTemplateId || resolvePptCatalogTemplateSelectionFromUserText(input.latestUserPrompt)
-
   if (
     !shouldAutoRunPptPreview({
       agentId: input.agentId,
@@ -109,20 +160,14 @@ export async function maybeAutoRunPptPreview(input: {
     }
   }
 
-  const preparedPreview = preparePptPreviewInput({
+  const basePreparedPreview = preparePptPreviewInput({
     rawInput: {
       prompt: input.latestUserPrompt,
-      ...(selectedTemplateId
-        ? {
-            templateMode: "single-template",
-            templateId: selectedTemplateId,
-          }
-        : {}),
     },
     briefState: input.briefState,
   })
 
-  if (!preparedPreview.ok) {
+  if (!basePreparedPreview.ok) {
     return {
       assistantMessage: input.assistantMessage,
       autoPreviewExecuted: false,
@@ -130,7 +175,23 @@ export async function maybeAutoRunPptPreview(input: {
     }
   }
 
-  const previewResult = await Promise.resolve(input.previewTool.execute(preparedPreview.input))
+  const selectedTemplateId =
+    input.agentId === "executive-ppt"
+      ? resolveEditablePptTemplateSelection({
+          userText: input.latestUserPrompt,
+          latestRecommendationContext,
+          preparedInput: basePreparedPreview.input,
+        })
+      : resolvePptTemplateSelectionFromUserText(input.latestUserPrompt, latestRecommendationContext)
+  const preparedInput = selectedTemplateId
+    ? {
+        ...basePreparedPreview.input,
+        templateMode: "single-template" as const,
+        templateId: selectedTemplateId,
+      }
+    : basePreparedPreview.input
+
+  const previewResult = await Promise.resolve(input.previewTool.execute(preparedInput))
   const isZh = input.isZh !== false
 
   if (previewResult && typeof previewResult === "object" && (previewResult as { ok?: unknown }).ok === false) {

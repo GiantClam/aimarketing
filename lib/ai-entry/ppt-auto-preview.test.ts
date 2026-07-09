@@ -5,7 +5,7 @@ import { extractPptBriefState } from "@/lib/ai-entry/ppt-brief"
 
 import { maybeAutoRunPptPreview, shouldAutoRunPptPreview } from "./ppt-auto-preview"
 
-test("shouldAutoRunPptPreview auto-generates free-design previews once the brief is ready", () => {
+test("shouldAutoRunPptPreview auto-generates previews once the brief is ready", () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -35,7 +35,7 @@ test("shouldAutoRunPptPreview auto-generates free-design previews once the brief
   )
 })
 
-test("maybeAutoRunPptPreview runs a free-design preview when no explicit template was selected", async () => {
+test("maybeAutoRunPptPreview chooses one official ppt-master template when none was selected", async () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -51,15 +51,16 @@ test("maybeAutoRunPptPreview runs a free-design preview when no explicit templat
     previewTool: {
       execute: async (input: unknown) => {
         const record = input as Record<string, unknown>
-        assert.equal("templateMode" in record, false)
-        assert.equal("templateId" in record, false)
+        assert.equal(record.templateMode, "single-template")
+        assert.equal(typeof record.templateId, "string")
+        assert.notEqual(record.templateId, "auto-4")
         return {
-        ok: true,
-        previewSessionId: "preview-session-1",
-        title: "AI Marketing Workbench",
-        variants: [{ key: "variant-a", name: "Long Table" }],
-        recommendedVariantKey: "variant-a",
-        recommendedVariantName: "Long Table",
+          ok: true,
+          previewSessionId: "preview-session-1",
+          title: "AI Marketing Workbench",
+          variants: [{ key: "variant-a", name: "Official ppt-master template" }],
+          recommendedVariantKey: "variant-a",
+          recommendedVariantName: "Official ppt-master template",
         }
       },
     },
@@ -121,25 +122,25 @@ test("maybeAutoRunPptPreview auto-generates editable ppt after the user selects 
   const result = await maybeAutoRunPptPreview({
     agentId: "executive-ppt",
     executionContext: "chat",
-    latestUserPrompt: "用 playful 模板，继续生成可编辑 PPT 预览。",
+    latestUserPrompt: "用 ppt169_sugar_rush_memphis 模板，继续生成可编辑 PPT 预览。",
     assistantMessage: "好的，我按你选的模板继续。",
     briefState: readyState,
     previewAlreadyExecuted: false,
     messageContents: [
       [
         "已为这次需求推荐 4 个模板：",
-        "- 1. Long Table (long-table)",
-        "- 2. Playful (playful)",
-        "- 3. Broadside (broadside)",
-        "- 4. Neo Grid Bold (neo-grid-bold)",
-        "<!-- ai-entry-ppt-template-recommendations:{\"defaultTemplateId\":\"long-table\",\"templateIds\":[\"long-table\",\"playful\",\"broadside\",\"neo-grid-bold\"]} -->",
+        "- 1. Global AI Capital (ppt169_global_ai_capital_2026)",
+        "- 2. Sugar Rush Memphis (ppt169_sugar_rush_memphis)",
+        "- 3. Building Effective Agents (ppt169_building_effective_agents)",
+        "- 4. Academic Defense (academic_defense)",
+        "<!-- ai-entry-ppt-template-recommendations:{\"defaultTemplateId\":\"ppt169_global_ai_capital_2026\",\"templateIds\":[\"ppt169_global_ai_capital_2026\",\"ppt169_sugar_rush_memphis\",\"ppt169_building_effective_agents\",\"academic_defense\"]} -->",
       ].join("\n"),
     ],
     previewTool: {
       execute: async (input: unknown) => {
         const record = input as Record<string, unknown>
         assert.equal(record.templateMode, "single-template")
-        assert.equal(record.templateId, "playful")
+        assert.equal(record.templateId, "ppt169_sugar_rush_memphis")
         return {
           ok: true,
           previewSessionId: "preview-session-1",
@@ -159,7 +160,7 @@ test("maybeAutoRunPptPreview auto-generates editable ppt after the user selects 
   assert.match(result.assistantMessage, /preview-session-1/)
 })
 
-test("maybeAutoRunPptPreview auto-generates when the user explicitly selects a catalog template", async () => {
+test("maybeAutoRunPptPreview ignores frontend catalog aliases for editable ppt auto-generation", async () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -176,7 +177,8 @@ test("maybeAutoRunPptPreview auto-generates when the user explicitly selects a c
       execute: async (input: unknown) => {
         const record = input as Record<string, unknown>
         assert.equal(record.templateMode, "single-template")
-        assert.equal(record.templateId, "academic-defense")
+        assert.equal(typeof record.templateId, "string")
+        assert.notEqual(record.templateId, "academic-defense")
         return {
           ok: true,
           previewSessionId: "preview-session-academic",

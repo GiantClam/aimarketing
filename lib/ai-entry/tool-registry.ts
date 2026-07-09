@@ -19,7 +19,6 @@ import {
   extractLatestPptPreviewContext,
   extractLatestPptTemplateRecommendationContext,
   type PptPreviewContext,
-  resolvePptCatalogTemplateSelectionFromUserText,
   resolvePptTemplateSelectionFromUserText,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import {
@@ -31,6 +30,12 @@ import {
 import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
+import {
+  buildPptMasterRecommendedTemplateSummaries,
+  getPptWorkerSupportedTemplateIds,
+  isPptMasterLibraryTemplateSupported,
+} from "@/lib/lead-tools/ppt-worker-capabilities"
+import type { PptPreviewResearchBrief } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 type AiSdkToolLike = {
   description?: string
@@ -141,6 +146,29 @@ function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
+function resolveEditablePptTemplateSelectionFromText(input: {
+  userText: string | null | undefined
+  latestTemplateRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
+}) {
+  const contextTemplateId = resolvePptTemplateSelectionFromUserText(
+    input.userText,
+    input.latestTemplateRecommendationContext,
+  )
+  if (contextTemplateId && isPptMasterLibraryTemplateSupported(contextTemplateId)) {
+    return contextTemplateId
+  }
+
+  const normalized = readOptionalString(input.userText)?.toLowerCase() ?? ""
+  if (!normalized) return null
+
+  return (
+    getPptWorkerSupportedTemplateIds().find((templateId) => {
+      const candidate = templateId.trim().toLowerCase()
+      return candidate && (normalized === candidate || normalized.includes(candidate))
+    }) ?? null
+  )
+}
+
 function maybeInjectResearchBrief(
   toolId: string,
   input: unknown,
@@ -199,11 +227,10 @@ function maybeInjectPptTemplateSelection(input: {
   }
 
   const record = input.rawInput && typeof input.rawInput === "object" ? (input.rawInput as Record<string, unknown>) : {}
-  const selectedTemplateId =
-    resolvePptTemplateSelectionFromUserText(
-      input.latestUserPrompt,
-      input.latestTemplateRecommendationContext,
-    ) || resolvePptCatalogTemplateSelectionFromUserText(input.latestUserPrompt)
+  const selectedTemplateId = resolveEditablePptTemplateSelectionFromText({
+    userText: input.latestUserPrompt,
+    latestTemplateRecommendationContext: input.latestTemplateRecommendationContext,
+  })
   if (selectedTemplateId) {
     return {
       ...record,
@@ -313,6 +340,25 @@ function maybePreparePptPreviewInput(
   return prepared
 }
 
+function normalizePptPreparedScenario(value: unknown) {
+  return value === "marketing-campaign" ||
+    value === "product-launch" ||
+    value === "sales-deck" ||
+    value === "training"
+    ? value
+    : "marketing-campaign"
+}
+
+function normalizePptPreparedLanguage(value: unknown) {
+  return value === "zh-CN" || value === "en-US" ? value : "zh-CN"
+}
+
+function readPptPreparedResearchBrief(value: unknown) {
+  return typeof value === "string" || (value && typeof value === "object")
+    ? (value as string | PptPreviewResearchBrief)
+    : undefined
+}
+
 function shouldRunPptPreviewInBackground(input: {
   toolId: string
   source: ToolSource
@@ -394,11 +440,39 @@ function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
 
   const record = input.preparedInput as Record<string, unknown>
   const selectedTemplateId = readOptionalString(record.templateId)
-  if (selectedTemplateId) {
+  if (selectedTemplateId && isPptMasterLibraryTemplateSupported(selectedTemplateId)) {
     return {
       preparedInput: record,
       selectedTemplateId,
       recommendedTemplates: [] as Array<Record<string, unknown>>,
+    }
+  }
+
+  const prompt = readOptionalString(record.prompt) || readOptionalString(record.sourcePrompt) || ""
+  const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
+    {
+      prompt,
+      researchBrief: readPptPreparedResearchBrief(record.researchBrief),
+      scenario: normalizePptPreparedScenario(record.scenario),
+      language: normalizePptPreparedLanguage(record.language),
+      pageCount: typeof record.pageCount === "number" && Number.isFinite(record.pageCount)
+        ? record.pageCount
+        : undefined,
+    },
+    {
+      allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
+    },
+  )
+  const defaultTemplateId = recommendedTemplates[0]?.templateId?.trim() || null
+  if (defaultTemplateId) {
+    return {
+      preparedInput: {
+        ...record,
+        templateMode: "single-template",
+        templateId: defaultTemplateId,
+      },
+      selectedTemplateId: defaultTemplateId,
+      recommendedTemplates: recommendedTemplates as Array<Record<string, unknown>>,
     }
   }
 
