@@ -92,6 +92,7 @@ export type PptPreviewResearchBrief = {
 }
 
 export type PptPreviewRequest = {
+  requestId?: string
   prompt: string
   researchBrief?: string | PptPreviewResearchBrief
   scenario: PptScenario

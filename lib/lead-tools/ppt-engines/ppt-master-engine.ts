@@ -93,7 +93,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
 
     if (runtime.id === "ppt-master-agent" && shouldUseRemoteWorkerPreview(request)) {
       const remote = await requestPptWorkerPreviewImpl({
-        requestId: randomUUID(),
+        requestId: request.requestId || randomUUID(),
         prompt: request.prompt,
         researchBrief: request.researchBrief,
         scenario: request.scenario,

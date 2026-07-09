@@ -17,6 +17,7 @@ type TaskStatusUpdate = {
   status?: string
   executionId?: string
   result?: unknown
+  releaseLease?: boolean
 }
 
 const TERMINAL_TASK_STATUSES = new Set(["success", "failed", "approved", "rejected"])
@@ -60,6 +61,7 @@ export async function createTask(input: CreateTaskInput) {
 export async function updateTaskStatus(taskId: number, data: TaskStatusUpdate) {
   const nextStatus = data.status?.trim()
   const isTerminal = nextStatus ? TERMINAL_TASK_STATUSES.has(nextStatus) : false
+  const releaseLease = data.releaseLease === true
 
   await withTaskDbRetry("update-task-status", () =>
     db
@@ -68,8 +70,8 @@ export async function updateTaskStatus(taskId: number, data: TaskStatusUpdate) {
         status: nextStatus || undefined,
         executionId: data.executionId || undefined,
         result: data.result !== undefined ? JSON.stringify(data.result) : undefined,
-        workerId: isTerminal ? null : undefined,
-        leaseExpiresAt: isTerminal ? null : undefined,
+        workerId: isTerminal || releaseLease ? null : undefined,
+        leaseExpiresAt: isTerminal || releaseLease ? null : undefined,
         updatedAt: new Date(),
       })
       .where(eq(tasks.id, taskId)),

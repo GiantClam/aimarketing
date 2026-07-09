@@ -177,3 +177,31 @@ export function createPostgresPptPreviewJobStore(): PptPreviewJobStore {
     },
   }
 }
+
+export async function getPptPreviewJobByRequestId(requestId: string) {
+  const normalizedRequestId = requestId.trim()
+  if (!normalizedRequestId) return null
+
+  await ensurePptPreviewJobStoreTables()
+  const result = await pool.query<PptPreviewJobRow>(
+    `
+      SELECT
+        job_id,
+        request_id,
+        status,
+        result_payload,
+        error_code,
+        error_message,
+        created_at,
+        updated_at
+      FROM "${PLATFORM_PPT_PREVIEW_JOBS_TABLE}"
+      WHERE request_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+    [normalizedRequestId],
+  )
+
+  const row = result.rows[0]
+  return row ? mapJobRow(row) : null
+}

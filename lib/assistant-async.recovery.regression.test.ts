@@ -52,6 +52,11 @@ let aiEntryPreviewToolPlan: Array<
 > = []
 let aiEntryPreviewAppendError: string | null = null
 let appendedAiEntryMessages: Array<{ conversationId: string | number | null | undefined; content: string }> = []
+let durablePptQueueEnabled = false
+let remotePptJobByRequestId: { jobId: string } | null = null
+let remotePptSubmitCalls: Array<{ requestId: string; prompt: string }> = []
+let remotePptStatus: Record<string, unknown> = { jobId: "remote-job-1", status: "running" }
+let persistedRemoteDecks: Array<Record<string, unknown>> = []
 
 nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
   if (request === "@/lib/services/tasks") {
@@ -61,7 +66,7 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
       getTaskById: async (taskId: number) => tasksById.get(taskId) ?? null,
       listRecoverableTaskIds: async (limit: number) => Array.from(tasksById.keys()).slice(0, Math.max(1, limit)),
       renewTaskLease: async () => true,
-      updateTaskStatus: async (taskId: number, data: { status?: string; result?: unknown }) => {
+      updateTaskStatus: async (taskId: number, data: { status?: string; result?: unknown; releaseLease?: boolean }) => {
         updateStatusCalls.push({ taskId, data })
         const current = tasksById.get(taskId)
         if (!current) return
@@ -69,8 +74,10 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           ...current,
           status: data.status || current.status,
           result: data.result !== undefined ? JSON.stringify(data.result) : current.result,
-          workerId: ["success", "failed", "approved", "rejected"].includes((data.status || "").trim()) ? null : current.workerId,
-          leaseExpiresAt: ["success", "failed", "approved", "rejected"].includes((data.status || "").trim())
+          workerId: ["success", "failed", "approved", "rejected"].includes((data.status || "").trim()) || data.releaseLease
+            ? null
+            : current.workerId,
+          leaseExpiresAt: ["success", "failed", "approved", "rejected"].includes((data.status || "").trim()) || data.releaseLease
             ? null
             : current.leaseExpiresAt,
           updatedAt: new Date(),
@@ -158,6 +165,44 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
           },
         },
       }),
+    }
+  }
+
+  if (request === "@/lib/lead-tools/config") {
+    return {
+      getLeadToolPptExecutionTransport: () => (durablePptQueueEnabled ? "remote-worker" : "local"),
+    }
+  }
+
+  if (request === "@/lib/platform/ppt-job-store") {
+    return {
+      getPptPreviewJobByRequestId: async () => remotePptJobByRequestId,
+    }
+  }
+
+  if (request === "@/lib/lead-tools/ppt-worker-client") {
+    return {
+      requestPptWorkerPreviewSubmit: async (input: { requestId: string; prompt: string }) => {
+        remotePptSubmitCalls.push({ requestId: input.requestId, prompt: input.prompt })
+        remotePptJobByRequestId = { jobId: "remote-job-1" }
+        return { jobId: "remote-job-1", status: "queued" }
+      },
+      requestPptWorkerPreviewStatus: async () => remotePptStatus,
+    }
+  }
+
+  if (request === "@/lib/lead-tools/ppt-preview-session-store") {
+    return {
+      storePptPreviewSessionDeck: async (deck: Record<string, unknown>) => {
+        persistedRemoteDecks.push(deck)
+        return deck
+      },
+    }
+  }
+
+  if (request === "@/lib/lead-tools/runtime") {
+    return {
+      persistLeadToolPreviewResult: async () => ({ platformRunId: 9, platformArtifactId: 10 }),
     }
   }
 
@@ -348,6 +393,11 @@ test.beforeEach(() => {
   aiEntryPreviewToolPlan = []
   aiEntryPreviewAppendError = null
   appendedAiEntryMessages = []
+  durablePptQueueEnabled = false
+  remotePptJobByRequestId = null
+  remotePptSubmitCalls = []
+  remotePptStatus = { jobId: "remote-job-1", status: "running" }
+  persistedRemoteDecks = []
 })
 
 test.after(() => {
@@ -545,4 +595,80 @@ test("fails ai-entry background ppt preview when assistant message persistence f
     ((terminal?.data.result as { events?: Array<{ type?: string; status?: string }> } | undefined)?.events || []).at(-1)?.status,
     "failed",
   )
+})
+
+test("resumes remote ppt-master jobs from Supabase state without Vercel polling", async () => {
+  const taskId = 1104
+  durablePptQueueEnabled = true
+  tasksById.set(
+    taskId,
+    buildAiEntryPptPreviewTask({
+      id: taskId,
+      status: "pending",
+      updatedAtMsAgo: 1_000,
+    }),
+  )
+  claimResultById.set(taskId, { id: taskId })
+
+  const submitted = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(submitted.failed, 0)
+  assert.equal(remotePptSubmitCalls.length, 1)
+  assert.equal(remotePptSubmitCalls[0]?.requestId, `ai-entry-ppt-task-${taskId}`)
+  const submittedTask = tasksById.get(taskId)
+  assert.equal(submittedTask?.status, "running")
+  assert.equal(submittedTask?.leaseExpiresAt, null)
+  const submittedResult = JSON.parse(submittedTask?.result || "{}") as Record<string, unknown>
+  assert.equal(submittedResult.remoteRequestId, `ai-entry-ppt-task-${taskId}`)
+  assert.equal(submittedResult.remoteJobId, "remote-job-1")
+  assert.equal(appendedAiEntryMessages.length, 0)
+
+  remotePptStatus = {
+    jobId: "remote-job-1",
+    status: "completed",
+    previewSessionId: "remote-preview-session-1",
+    generatedAt: "2026-07-10T02:23:16.000Z",
+    deck: {
+      previewSessionId: "remote-preview-session-1",
+      title: "董事会经营同步",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      pageCount: 12,
+      resolvedPageCount: 12,
+      variants: [
+        {
+          key: "ppt169_swiss_grid_systems",
+          name: "Swiss Grid",
+          summary: "Executive deck",
+          styleKey: "ppt169_swiss_grid_systems",
+          templateId: "ppt169_swiss_grid_systems",
+          slides: [{ title: "董事会经营同步" }],
+        },
+      ],
+    },
+  }
+  tasksById.set(taskId, {
+    ...submittedTask!,
+    updatedAt: new Date(),
+    leaseExpiresAt: null,
+  })
+
+  const completed = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(completed.failed, 0)
+  assert.equal(remotePptSubmitCalls.length, 1)
+  assert.equal(persistedRemoteDecks.length, 1)
+  assert.equal(appendedAiEntryMessages.length, 1)
+  assert.equal(tasksById.get(taskId)?.status, "success")
+  const terminal = JSON.parse(tasksById.get(taskId)?.result || "{}") as Record<string, unknown>
+  assert.equal(terminal.previewSessionId, "remote-preview-session-1")
+  assert.equal(terminal.remoteJobId, "remote-job-1")
 })

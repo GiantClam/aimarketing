@@ -198,6 +198,7 @@ const pptPreviewDeckSchema: z.ZodType<PptPreviewDeck> = z.object({
 
 const pptPreviewRequestSchema = z
   .object({
+    requestId: z.string().trim().min(1).optional(),
     prompt: z.string().trim().min(1, "Prompt is required"),
     researchBrief: z
       .union([
@@ -309,7 +310,7 @@ function assertPptProtectedArtifactReady(
   )
 }
 
-async function persistLeadToolPreviewResult(params: {
+export async function persistLeadToolPreviewResult(params: {
   toolSlug: string
   inputPayload: Record<string, unknown>
   deck: PptPreviewDeck

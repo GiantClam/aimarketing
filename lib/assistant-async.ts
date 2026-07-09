@@ -18,6 +18,16 @@ import { appendAiEntryMessage, type AiEntryConversationScope } from "@/lib/ai-en
 import { buildPptToolResultMessage } from "@/lib/ai-entry/ppt-tool-result-message"
 import { buildAiEntryPptTools } from "@/lib/ai-entry/ppt-tools"
 import type { AiEntryTaskRunStage } from "@/lib/ai-entry/task-runs"
+import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
+import { persistLeadToolPreviewResult } from "@/lib/lead-tools/runtime"
+import { storePptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
+import type { PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import {
+  requestPptWorkerPreviewStatus,
+  requestPptWorkerPreviewSubmit,
+} from "@/lib/lead-tools/ppt-worker-client"
+import type { PptWorkerPreviewRequest } from "@/lib/lead-tools/ppt-worker-types"
+import { getPptPreviewJobByRequestId } from "@/lib/platform/ppt-job-store"
 import { buildDifyUserIdentity, getDifyConfigByAdvisorType } from "@/lib/dify/config"
 import { buildDifyMemoryBridge, mergeDifyInputsWithMemoryBridge } from "@/lib/dify/memory-bridge"
 import { getUserAuthPayload } from "@/lib/enterprise/server"
@@ -1136,10 +1146,387 @@ function isRetryableAiEntryPptPreviewError(message: string) {
   )
 }
 
+type DurablePptPreviewState = {
+  remoteRequestId: string
+  remoteJobId: string | null
+}
+
+function shouldUseDurablePptPreviewQueue() {
+  return getLeadToolPptExecutionTransport() === "remote-worker"
+}
+
+function readDurablePptPreviewState(result: Record<string, unknown> | null, taskId: number): DurablePptPreviewState {
+  const remoteRequestId =
+    typeof result?.remoteRequestId === "string" && result.remoteRequestId.trim()
+      ? result.remoteRequestId.trim()
+      : `ai-entry-ppt-task-${taskId}`
+  const remoteJobId =
+    typeof result?.remoteJobId === "string" && result.remoteJobId.trim()
+      ? result.remoteJobId.trim()
+      : null
+
+  return { remoteRequestId, remoteJobId }
+}
+
+function readTaskProgressEvents(value: unknown): AssistantTaskProgressEvent[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item) => {
+      const record = getObjectRecord(item)
+      const type = typeof record?.type === "string" ? record.type.trim() : ""
+      const label = typeof record?.label === "string" ? record.label.trim() : ""
+      const at = typeof record?.at === "number" && Number.isFinite(record.at) ? record.at : Date.now()
+      if (!type || !label) return null
+      return {
+        type,
+        label,
+        ...(typeof record?.detail === "string" && record.detail.trim() ? { detail: record.detail.trim() } : {}),
+        status: normalizeAssistantTaskProgressStatus(record?.status),
+        at,
+      } satisfies AssistantTaskProgressEvent
+    })
+    .filter((item): item is AssistantTaskProgressEvent => Boolean(item))
+}
+
+function buildDurablePptPreviewRequest(
+  payload: AiEntryPptPreviewTaskPayload,
+  requestId: string,
+): Omit<PptWorkerPreviewRequest, "runtimeProfile"> {
+  const input = payload.input
+  const prompt = typeof input.prompt === "string" ? input.prompt.trim() : ""
+  if (!prompt) throw new Error("ppt_preview_prompt_missing")
+
+  const scenario =
+    input.scenario === "marketing-campaign" ||
+    input.scenario === "product-launch" ||
+    input.scenario === "sales-deck" ||
+    input.scenario === "training"
+      ? input.scenario
+      : "marketing-campaign"
+  const language = input.language === "en-US" ? "en-US" : "zh-CN"
+  const templateMode = input.templateMode === "single-template" ? "single-template" : "auto-4"
+  const narrativeAngle =
+    input.narrativeAngle === "executive-brief" ||
+    input.narrativeAngle === "campaign-story" ||
+    input.narrativeAngle === "data-proof" ||
+    input.narrativeAngle === "action-plan"
+      ? input.narrativeAngle
+      : undefined
+  const pageCount =
+    typeof input.pageCount === "number" && Number.isInteger(input.pageCount) ? input.pageCount : undefined
+
+  return {
+    requestId,
+    prompt,
+    ...(typeof input.researchBrief === "string" || getObjectRecord(input.researchBrief)
+      ? { researchBrief: input.researchBrief as PptWorkerPreviewRequest["researchBrief"] }
+      : {}),
+    scenario,
+    language,
+    ...(typeof input.model === "string" && input.model.trim() ? { model: input.model.trim() } : {}),
+    templateMode,
+    ...(typeof input.templateId === "string" && input.templateId.trim() ? { templateId: input.templateId.trim() } : {}),
+    ...(narrativeAngle ? { narrativeAngle } : {}),
+    ...(pageCount ? { pageCount } : {}),
+    ...(Array.isArray(input.images) ? { images: input.images as PptWorkerPreviewRequest["images"] } : {}),
+    allowMockFallback: false,
+  }
+}
+
+function readCompletedPptPreviewResult(value: unknown) {
+  const record = getObjectRecord(value)
+  const previewSessionId = typeof record?.previewSessionId === "string" ? record.previewSessionId.trim() : ""
+  const generatedAt = typeof record?.generatedAt === "string" ? record.generatedAt.trim() : ""
+  const deck = getObjectRecord(record?.deck)
+  if (!previewSessionId || !generatedAt || !deck) return null
+
+  return {
+    previewSessionId,
+    generatedAt,
+    deck: deck as PptPreviewDeck,
+  }
+}
+
+function summarizeDurablePptPreviewDeck(deck: PptPreviewDeck) {
+  return deck.variants.map((variant) => ({
+    key: variant.key,
+    name: variant.name,
+    summary: variant.summary,
+    styleKey: variant.styleKey,
+    templateId: variant.templateId ?? null,
+    narrativeAngle: variant.narrativeAngle ?? null,
+    slideCount: variant.slides.length,
+    coverTitle: variant.slides[0]?.title ?? null,
+  }))
+}
+
+async function handleDurableAiEntryPptPreviewTask(
+  taskId: number,
+  payload: AiEntryPptPreviewTaskPayload,
+) {
+  const task = parseTask(await getTaskById(taskId))
+  const previous = task?.parsedResult || null
+  const isZh = payload.isZh !== false
+  const events = readTaskProgressEvents(previous?.events)
+  const state = readDurablePptPreviewState(previous, taskId)
+
+  const persist = async (input: {
+    stage: AiEntryTaskRunStage
+    stageLabel: string
+    progressCurrent: number
+    previewSessionId?: string | null
+    toolResult?: Record<string, unknown> | null
+    assistantMessage?: string | null
+    error?: string | null
+    releaseLease?: boolean
+  }) => {
+    await updateTaskStatus(taskId, {
+      status: "running",
+      releaseLease: input.releaseLease,
+      result: {
+        conversation_id: payload.conversationId,
+        toolName: "preview_ppt_deck",
+        toolCallId: payload.toolCallId,
+        stage: input.stage,
+        stageLabel: input.stageLabel,
+        progressCurrent: input.progressCurrent,
+        progressTotal: 5,
+        lastHeartbeatAt: Math.floor(Date.now() / 1000),
+        previewSessionId: input.previewSessionId || null,
+        toolResult: input.toolResult || null,
+        resultSummary:
+          input.assistantMessage ||
+          (input.toolResult && typeof input.toolResult.title === "string" ? input.toolResult.title : undefined),
+        assistantMessage: input.assistantMessage || undefined,
+        errorCode: input.error || null,
+        errorMessage: input.error || null,
+        error: input.error || null,
+        remoteRequestId: state.remoteRequestId,
+        remoteJobId: state.remoteJobId,
+        events,
+      },
+    })
+  }
+
+  if (!previous?.remoteRequestId) {
+    pushTaskProgressEvent(events, {
+      type: "background_task_queued",
+      label: isZh ? "后台任务已创建" : "Background task queued",
+      status: "running",
+      at: Date.now(),
+    })
+    pushTaskProgressEvent(events, {
+      type: "background_generation_preparing",
+      label: isZh ? "正在提交 PPT 渲染任务" : "Submitting PPT render job",
+      status: "running",
+      at: Date.now(),
+    })
+    await persist({
+      stage: "story_planning",
+      stageLabel: isZh ? "已保存异步渲染任务" : "Persisted asynchronous render job",
+      progressCurrent: 1,
+    })
+  }
+
+  if (!state.remoteJobId) {
+    const storedJob = await getPptPreviewJobByRequestId(state.remoteRequestId)
+    if (storedJob) {
+      state.remoteJobId = storedJob.jobId
+    } else {
+      const submitted = await requestPptWorkerPreviewSubmit(
+        buildDurablePptPreviewRequest(payload, state.remoteRequestId),
+      )
+      state.remoteJobId = submitted.jobId
+      pushTaskProgressEvent(events, {
+        type: "background_generation_running",
+        label: isZh ? "正在后台生成 SVG 预览（导出时再生成 PPTX）" : "Generating SVG preview in background (PPTX on export)",
+        status: "running",
+        at: Date.now(),
+      })
+      await persist({
+        stage: "variant_generating",
+        stageLabel: isZh ? "已提交远端渲染任务" : "Remote render job submitted",
+        progressCurrent: 2,
+        // Rendering is owned by Railway and tracked in Supabase, not by this Vercel invocation.
+        releaseLease: true,
+      })
+      return
+    }
+  }
+
+  const remoteStatus = await requestPptWorkerPreviewStatus(state.remoteJobId)
+  if (remoteStatus.status === "queued" || remoteStatus.status === "running") {
+    pushTaskProgressEvent(events, {
+      type: "background_generation_running",
+      label: isZh ? "远端正在渲染 SVG 预览" : "Remote worker is rendering the SVG preview",
+      status: "running",
+      at: Date.now(),
+    })
+    await persist({
+      stage: "variant_generating",
+      stageLabel: isZh ? "正在生成预览方向" : "Generating preview variants",
+      progressCurrent: 2,
+      releaseLease: true,
+    })
+    return
+  }
+
+  if (remoteStatus.status === "failed") {
+    throw new Error(remoteStatus.message || "ppt_worker_preview_failed")
+  }
+
+  const completed = readCompletedPptPreviewResult(remoteStatus)
+  if (!completed) throw new Error("ppt_worker_preview_result_invalid")
+
+  const storedDeck = await storePptPreviewSessionDeck({
+    ...completed.deck,
+    previewSessionId: completed.previewSessionId,
+  })
+  const currentUser = await getUserAuthPayload(payload.userId)
+  if (!currentUser) throw new Error("ai_entry_user_not_found")
+  const platform = await persistLeadToolPreviewResult({
+    toolSlug: "ai-ppt-preview",
+    inputPayload: payload.input,
+    deck: storedDeck,
+    previewSessionId: storedDeck.previewSessionId,
+    currentUser: currentUser as never,
+  })
+  const variants = summarizeDurablePptPreviewDeck(storedDeck)
+  const toolResult = {
+    ok: true,
+    previewSessionId: storedDeck.previewSessionId,
+    generatedAt: completed.generatedAt,
+    recommendedVariantKey: storedDeck.variants[0]?.key ?? null,
+    recommendedVariantName: storedDeck.variants[0]?.name ?? null,
+    recommendedTemplates: [],
+    selectedTemplateId: typeof payload.input.templateId === "string" ? payload.input.templateId : null,
+    title: storedDeck.title,
+    scenario: storedDeck.scenario,
+    language: storedDeck.language,
+    pageCount: storedDeck.pageCount ?? null,
+    resolvedPageCount: storedDeck.resolvedPageCount ?? null,
+    variants,
+    validation: {
+      ok: variants.length > 0,
+      checks: [
+        {
+          code: "variants_present",
+          ok: variants.length > 0,
+          message: "Preview deck returned at least one variant.",
+        },
+      ],
+    },
+    platform: {
+      previewRunId: platform.platformRunId ?? null,
+      previewArtifactId: platform.platformArtifactId ?? null,
+      toolRunId: platform.platformRunId ?? null,
+    },
+    nextStep: "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library.",
+  }
+
+  pushTaskProgressEvent(events, {
+    type: "background_preview_rendering",
+    label: isZh ? "正在物化预览会话" : "Materializing preview session",
+    status: "running",
+    at: Date.now(),
+  })
+  await persist({
+    stage: "preview_rendering",
+    stageLabel: isZh ? "正在渲染预览" : "Rendering preview",
+    progressCurrent: 3,
+    previewSessionId: storedDeck.previewSessionId,
+    toolResult,
+  })
+
+  const assistantMessage =
+    buildPptToolResultMessage({ toolName: "preview_ppt_deck", result: toolResult, isZh })?.trim() ||
+    (isZh ? "后台预览已完成。" : "Background preview completed.")
+  await persist({
+    stage: "session_persisting",
+    stageLabel: isZh ? "正在保存预览会话" : "Persisting preview session",
+    progressCurrent: 4,
+    previewSessionId: storedDeck.previewSessionId,
+    toolResult,
+    assistantMessage,
+  })
+  const appended = await appendAiEntryMessage({
+    userId: payload.userId,
+    conversationId: payload.conversationId,
+    role: "assistant",
+    content: assistantMessage,
+    scope: payload.conversationScope,
+    agentId: payload.agentId,
+  })
+  if (!appended) throw new Error("ai_entry_conversation_not_found")
+
+  pushTaskProgressEvent(events, {
+    type: "background_generation_finished",
+    label: isZh ? "后台生成完成" : "Background generation completed",
+    status: "completed",
+    at: Date.now(),
+  })
+  await updateTaskStatus(taskId, {
+    status: "success",
+    result: {
+      conversation_id: payload.conversationId,
+      toolName: "preview_ppt_deck",
+      toolCallId: payload.toolCallId,
+      stage: "session_persisting",
+      stageLabel: isZh ? "预览已完成" : "Preview completed",
+      progressCurrent: 5,
+      progressTotal: 5,
+      lastHeartbeatAt: Math.floor(Date.now() / 1000),
+      finishedAt: Math.floor(Date.now() / 1000),
+      previewSessionId: storedDeck.previewSessionId,
+      resultSummary: assistantMessage,
+      toolResult,
+      assistantMessage,
+      errorCode: null,
+      errorMessage: null,
+      error: null,
+      remoteRequestId: state.remoteRequestId,
+      remoteJobId: state.remoteJobId,
+      events,
+    },
+  })
+}
+
 async function handleAiEntryPptPreviewTask(
   taskId: number,
   payload: AiEntryPptPreviewTaskPayload,
 ) {
+  if (shouldUseDurablePptPreviewQueue()) {
+    try {
+      await handleDurableAiEntryPptPreviewTask(taskId, payload)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "ai_entry_ppt_preview_failed"
+      const current = parseTask(await getTaskById(taskId))
+      const result = current?.parsedResult || {}
+      const events = readTaskProgressEvents(result.events)
+      pushTaskProgressEvent(events, {
+        type: "background_generation_finished",
+        label: payload.isZh === false ? "Background generation failed" : "后台生成失败",
+        detail: errorMessage,
+        status: "failed",
+        at: Date.now(),
+      })
+      await updateTaskStatus(taskId, {
+        status: "failed",
+        result: {
+          ...result,
+          conversation_id: payload.conversationId,
+          errorCode: errorMessage,
+          errorMessage,
+          error: errorMessage,
+          finishedAt: Math.floor(Date.now() / 1000),
+          events,
+        },
+      })
+    }
+    return
+  }
+
   const progressEvents: AssistantTaskProgressEvent[] = []
   const persistProgress = async (
     snapshot?: {
@@ -1801,6 +2188,20 @@ async function recoverAssistantTask(
     return { task, launched, waited: waitResult.waited, timedOut: waitResult.timedOut }
   }
 
+  const isDurableRemotePptTask =
+    task.parsedPayload.kind === "ai_entry_ppt_preview" &&
+    shouldUseDurablePptPreviewQueue() &&
+    typeof task.parsedResult?.remoteRequestId === "string" &&
+    task.parsedResult.remoteRequestId.trim().length > 0
+  if (isDurableRemotePptTask && !hasActiveTaskLease(task)) {
+    const launched = await kickTaskExecution(task.id)
+    if (!launched || !options.waitForCompletion) {
+      return { task, launched, waited: false, timedOut: false }
+    }
+    const waitResult = await waitForRunningTask(task.id, options.completionTimeoutMs)
+    return { task, launched, waited: waitResult.waited, timedOut: waitResult.timedOut }
+  }
+
   const ageMs = getTaskAgeMs(task)
   const recoveryThresholdMs =
     task.parsedPayload.kind === "advisor_turn" && !normalizeLeadHunterAdvisorType(task.parsedPayload.advisorType)
@@ -1869,6 +2270,24 @@ async function recoverAssistantTask(
 export async function getAssistantTask(taskId: number, userId?: number) {
   const task = await getTaskById(taskId, userId)
   return parseTask(task)
+}
+
+export async function advanceDurableAssistantPptTask(taskId: number, userId: number) {
+  const task = parseTask(await getTaskById(taskId, userId))
+  if (
+    task?.parsedPayload?.kind !== "ai_entry_ppt_preview" ||
+    !shouldUseDurablePptPreviewQueue() ||
+    !["pending", "running"].includes(task.status || "") ||
+    (task.status === "running" && typeof task.parsedResult?.remoteRequestId !== "string")
+  ) {
+    return false
+  }
+
+  const recovery = await recoverAssistantTask(task, {
+    waitForCompletion: true,
+    completionTimeoutMs: 8_000,
+  })
+  return recovery.launched || recovery.waited
 }
 
 export async function runAssistantTaskRecoveryPass(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { requireSessionUser } from "@/lib/auth/guards"
 import { parseAiEntryTaskRunSummary } from "@/lib/ai-entry/task-runs"
+import { advanceDurableAssistantPptTask } from "@/lib/assistant-async"
 import { getTasksByIds } from "@/lib/services/tasks"
 
 function normalizeTaskIds(value: unknown) {
@@ -27,8 +28,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const tasks = await getTasksByIds(taskIds, auth.user.id)
+    await Promise.all(
+      tasks.slice(0, 6).map((task) => advanceDurableAssistantPptTask(task.id, auth.user.id).catch(() => false)),
+    )
+    const refreshedTasks = await getTasksByIds(taskIds, auth.user.id)
     const data = taskIds
-      .map((taskId) => tasks.find((task) => task.id === taskId) || null)
+      .map((taskId) => refreshedTasks.find((task) => task.id === taskId) || null)
       .map((task) =>
         task
           ? parseAiEntryTaskRunSummary({

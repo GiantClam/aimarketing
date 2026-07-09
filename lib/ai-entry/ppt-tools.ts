@@ -859,9 +859,10 @@ export function buildAiEntryPptTools(input: {
           preferredProviderId,
           tone,
           mustInclude,
+          requestId,
         } = rawInput as EditablePreviewPptDeckInput &
           PresentationPreviewPptDeckInput &
-          GenericPreviewPptDeckInput
+          GenericPreviewPptDeckInput & { requestId?: unknown }
         try {
           const prepared = preparePptPreviewInput({
             rawInput: {
@@ -959,6 +960,7 @@ export function buildAiEntryPptTools(input: {
               ? preferredProviderId?.trim() || input.selectedPreviewProviderId?.trim() || undefined
               : undefined
           const previewRequest = {
+            ...(typeof requestId === "string" && requestId.trim() ? { requestId: requestId.trim() } : {}),
             prompt: prepared.input.prompt,
             researchBrief: prepared.input.researchBrief,
             scenario: prepared.input.scenario,
