@@ -73,8 +73,10 @@ function sleep(ms: number) {
 }
 
 function buildPreviewRequestBody(input: Omit<PptWorkerPreviewRequest, "runtimeProfile">) {
+  const templateMode = input.templateMode ?? "auto-4"
+
   if (
-    input.templateMode === "single-template" &&
+    templateMode === "single-template" &&
     input.templateId &&
     !isPptWorkerTemplateSupported(input.templateId)
   ) {
@@ -83,6 +85,7 @@ function buildPreviewRequestBody(input: Omit<PptWorkerPreviewRequest, "runtimePr
 
   return {
     ...input,
+    templateMode,
     model: normalizePptWorkerPreviewModel(input.model),
     runtimeProfile: getPptWorkerRuntimeProfile(),
   }

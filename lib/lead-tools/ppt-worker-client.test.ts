@@ -130,6 +130,77 @@ test("ppt worker preview posts runtime profile, fallback mode, and auth token", 
   }
 })
 
+test("ppt worker preview defaults missing templateMode to auto-4 before posting", async () => {
+  const originalFetch = global.fetch
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousPollInterval = process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+  const previousTimeout = process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com/"
+    process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = "1"
+    process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = "1000"
+
+    const seenBodies: string[] = []
+    global.fetch = (async (input, init) => {
+      if (String(input).endsWith("/preview")) {
+        seenBodies.push(String(init?.body || ""))
+        return {
+          ok: true,
+          status: 202,
+          json: async () => ({
+            jobId: "job_default_mode",
+            status: "queued",
+          }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          jobId: "job_default_mode",
+          status: "completed",
+          previewSessionId: "session_default_mode",
+          generatedAt: "2026-06-24T00:00:00.000Z",
+          deck: { title: "Deck" },
+        }),
+      } as Response
+    }) as typeof fetch
+
+    const result = await requestPptWorkerPreview({
+      requestId: "req_default_mode",
+      prompt: "Build deck",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      allowMockFallback: false,
+    })
+
+    assert.equal(result.previewSessionId, "session_default_mode")
+    assert.match(seenBodies[0] || "", /"templateMode":"auto-4"/)
+  } finally {
+    global.fetch = originalFetch
+
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+
+    if (previousPollInterval === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = previousPollInterval
+    }
+
+    if (previousTimeout === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+  }
+})
+
 test("ppt worker preview retries transient fetch failures", async () => {
   const originalFetch = global.fetch
   const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
