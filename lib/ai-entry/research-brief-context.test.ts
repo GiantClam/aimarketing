@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  buildResearchBriefFromAttachmentContent,
   buildResearchBriefContextMarker,
   buildResearchBriefFromWebSearchResult,
   extractLatestResearchBriefContext,
@@ -63,5 +64,39 @@ test("extracts the latest persisted research brief marker from message contents"
     keyFacts: ["Latest fact"],
     sourceNotes: ["Source A - https://example.com/a"],
     rawSummary: "Topic: Latest brief",
+  })
+})
+
+test("builds a minimal research brief from uploaded attachment content", () => {
+  const brief = buildResearchBriefFromAttachmentContent({
+    latestUserPrompt: [
+      "写一份介绍预算智能公司和业务的 ppt",
+      "",
+      "[Uploaded file: 屿算智能_ppt信息提取.md / text/markdown]",
+      "# 《屿算智能》PPT 信息提取",
+      "",
+      "- 实用 AI 大于 AI 概念",
+      "- 企业专属 AI 业务工作台",
+      "- 配置 17 个 AI 智能体员工",
+      "- 从业务梳理到资产沉淀形成闭环",
+    ].join("\n"),
+  })
+
+  assert.deepEqual(brief, {
+    topic: "《屿算智能》PPT 信息提取",
+    keyFacts: [
+      "实用 AI 大于 AI 概念",
+      "企业专属 AI 业务工作台",
+      "配置 17 个 AI 智能体员工",
+      "从业务梳理到资产沉淀形成闭环",
+    ],
+    rawSummary: [
+      "# 《屿算智能》PPT 信息提取",
+      "",
+      "- 实用 AI 大于 AI 概念",
+      "- 企业专属 AI 业务工作台",
+      "- 配置 17 个 AI 智能体员工",
+      "- 从业务梳理到资产沉淀形成闭环",
+    ].join("\n"),
   })
 })

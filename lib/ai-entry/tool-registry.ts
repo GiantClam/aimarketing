@@ -23,6 +23,7 @@ import {
   resolvePptTemplateSelectionFromUserText,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import {
+  buildResearchBriefFromAttachmentContent,
   buildResearchBriefFromWebSearchResult,
   extractLatestResearchBriefContextFromContents,
   type StructuredResearchBrief,
@@ -441,7 +442,12 @@ function wrapToolSet(params: {
   }
 }): ToolSet {
   const skillByToolId = new Map<string, string>()
-  let lastResearchBrief = extractLatestResearchBriefContextFromContents(params.messageContents)
+  let lastResearchBrief =
+    extractLatestResearchBriefContextFromContents(params.messageContents) ||
+    buildResearchBriefFromAttachmentContent({
+      latestUserPrompt: params.latestUserPrompt,
+      messageContents: params.messageContents,
+    })
   let latestPreviewContextForTurn = params.latestPreviewContext
   const latestTemplateRecommendationContextForTurn = params.latestTemplateRecommendationContext
 

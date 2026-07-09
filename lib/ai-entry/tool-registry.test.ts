@@ -808,6 +808,87 @@ test("tool registry strips uploaded attachment blocks before injecting sourcePro
   )
 })
 
+test("tool registry injects a fallback research brief from uploaded attachment content for executive ppt background preview", async () => {
+  const result = await buildAiEntryToolRegistry({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    policy: {
+      agentId: "executive-ppt",
+      allowedSkillIds: ["ppt-master"],
+      allowedToolIds: ["preview_ppt_deck"],
+      allowedMcpServerIds: [],
+      maxToolCalls: 4,
+      maxRuntimeMs: 30_000,
+      canCreateArtifacts: true,
+      approvalRequiredToolIds: [],
+    },
+    selectedSkills: [
+      {
+        id: "ppt-master",
+        name: "PPT Master",
+        description: "PPT",
+        type: "tool",
+        triggerHints: ["ppt"],
+        instruction: "Preview the deck.",
+        toolIds: ["preview_ppt_deck"],
+        mcpServerIds: [],
+        version: "1",
+      },
+    ],
+    skillsEnabled: true,
+    enabledToolNames: null,
+    latestUserPrompt: [
+      "写一份介绍预算智能公司和业务的 ppt",
+      "",
+      "[Uploaded file: 屿算智能_ppt信息提取.md / text/markdown]",
+      "# 《屿算智能》PPT 信息提取",
+      "",
+      "- 实用 AI 大于 AI 概念",
+      "- 企业专属 AI 业务工作台",
+      "- 配置 17 个 AI 智能体员工",
+      "- 从业务梳理到资产沉淀形成闭环",
+    ].join("\n"),
+    auditContext: {
+      traceId: "trace-attachment-research-brief",
+      conversationId: "conv-attachment-research-brief",
+      agentId: "executive-ppt",
+    },
+  })
+
+  const tools = result.selectedTools as unknown as Record<
+    string,
+    { execute: (input: Record<string, unknown>) => Promise<unknown> }
+  >
+  await tools.preview_ppt_deck.execute({
+    prompt: "写一份介绍预算智能公司和业务的 ppt",
+    audience: "管理层",
+    goal: "业务介绍",
+    scenario: "sales-deck",
+    language: "zh-CN",
+  })
+
+  const queuedInput = enqueuedTasks.at(-1)?.payload?.input as Record<string, unknown> | undefined
+  assert.deepEqual(queuedInput?.researchBrief, {
+    topic: "《屿算智能》PPT 信息提取",
+    keyFacts: [
+      "实用 AI 大于 AI 概念",
+      "企业专属 AI 业务工作台",
+      "配置 17 个 AI 智能体员工",
+      "从业务梳理到资产沉淀形成闭环",
+    ],
+    rawSummary: [
+      "# 《屿算智能》PPT 信息提取",
+      "",
+      "- 实用 AI 大于 AI 概念",
+      "- 企业专属 AI 业务工作台",
+      "- 配置 17 个 AI 智能体员工",
+      "- 从业务梳理到资产沉淀形成闭环",
+    ].join("\n"),
+  })
+})
+
 test("tool registry restores a persisted research brief marker from message history", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
