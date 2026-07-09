@@ -4,10 +4,12 @@ import test from "node:test"
 
 import {
   buildStyleAwarePrompt,
+  generateLeadToolPptStoryDeck,
   isLowInformationPptPlan,
   normalizeLeadToolPptPlan,
   normalizePptMasterRuntimeProviderError,
   resolveLeadToolPreviewProviderPreference,
+  setLeadToolPptGenerationDepsForTests,
 } from "./generation-ppt-fixed"
 import {
   buildMockPptPreview,
@@ -537,4 +539,76 @@ test("runtime provider errors normalize headers timeout for Railway diagnostics"
     ),
     "ppt_master_runtime_provider_headers_timeout:pptoken:gpt-5.4",
   )
+})
+
+test("deepseek writer preview planning falls back to structured object generation when freeform JSON is missing", async (t) => {
+  let structuredCalls = 0
+
+  t.after(() => {
+    setLeadToolPptGenerationDepsForTests(null)
+  })
+
+  setLeadToolPptGenerationDepsForTests({
+    generateTextWithWriterModel: (async () => "not json at all") as any,
+    generateStructuredObjectWithWriterModel: (async () => {
+      structuredCalls += 1
+      return {
+        title: "Enterprise AI Workflow Deck",
+        outline: ["Why now", "System", "Workflow", "Proof"],
+        slides: [
+          {
+            layout: "cover",
+            intent: "cover",
+            title: "Enterprise AI Workflow Deck",
+            body: "A concise intro to the workflow.",
+            bullets: ["AI workflow", "enterprise adoption"],
+          },
+          {
+            layout: "agenda",
+            intent: "contents",
+            title: "Agenda",
+            body: "What we will cover.",
+            bullets: ["Why now", "System", "Workflow", "Proof"],
+            contentsItems: [
+              { index: "01", title: "Why now", detail: "Business trigger" },
+              { index: "02", title: "System", detail: "Operating model" },
+            ],
+          },
+          {
+            layout: "insight",
+            intent: "statement",
+            title: "AI workflows compress execution time",
+            body: "Teams move from fragmented tools to a reusable system.",
+            bullets: ["Shared process", "Fewer manual hops", "Reusable outputs"],
+          },
+          {
+            layout: "comparison",
+            intent: "comparison",
+            title: "Before and after the workflow",
+            body: "Structured process replaces fragmented tool usage.",
+            bullets: ["Before", "After"],
+            comparisonItems: [
+              { label: "A", title: "Fragmented", detail: "Tool-by-tool execution" },
+              { label: "B", title: "Systematic", detail: "Workflow-based execution" },
+            ],
+          },
+        ],
+      }
+    }) as any,
+  })
+
+  const deck = await generateLeadToolPptStoryDeck({
+    prompt: "Build an enterprise AI workflow deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    model: "deepseek-v4-pro",
+    pageCount: 4,
+    preferredProviderId: "enterprise-openai-compatible",
+    templateMode: "single-template",
+    templateId: "ppt169_building_effective_agents",
+  })
+
+  assert.equal(structuredCalls > 0, true)
+  assert.equal(deck.variants.length > 0, true)
+  assert.equal(deck.title, "Enterprise AI Workflow Deck")
 })

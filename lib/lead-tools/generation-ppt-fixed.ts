@@ -44,7 +44,12 @@ import {
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { renderPptPreviewDeckAssets } from "@/lib/lead-tools/ppt-master-preview"
 import { buildPreviewSystemPrompt, buildPreviewUserPrompt, isPreviewPlaceholder } from "@/lib/lead-tools/ppt-preview-copy"
-import { generateTextWithWriterModel, hasAibermApiKey, hasCrazyrouteApiKey } from "@/lib/writer/aiberm"
+import {
+  generateStructuredObjectWithWriterModel,
+  generateTextWithWriterModel,
+  hasAibermApiKey,
+  hasCrazyrouteApiKey,
+} from "@/lib/writer/aiberm"
 import { withTaskTimeout } from "@/lib/task-timeout"
 
 type LeadToolPptPlan = {
@@ -55,6 +60,9 @@ type LeadToolPptPlan = {
 
 type LeadToolPreviewProviderId = "pptoken" | "minimax" | "stepfun" | "writer"
 const LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS = 45_000
+
+let generateTextWithWriterModelImpl = generateTextWithWriterModel
+let generateStructuredObjectWithWriterModelImpl = generateStructuredObjectWithWriterModel
 
 function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
@@ -792,6 +800,123 @@ function resolveRequestedPreviewModel(request: PptPreviewRequest) {
   return request.model ?? getLeadToolPreviewModel("ai-ppt-preview")
 }
 
+function buildPptPlanSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["title", "outline", "slides"],
+    properties: {
+      title: { type: "string" },
+      outline: {
+        type: "array",
+        items: { type: "string" },
+      },
+      slides: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          additionalProperties: true,
+          required: ["layout", "intent", "title", "body", "bullets"],
+          properties: {
+            layout: { type: "string" },
+            intent: { type: "string" },
+            kicker: { type: "string" },
+            title: { type: "string" },
+            body: { type: "string" },
+            bullets: {
+              type: "array",
+              items: { type: "string" },
+            },
+            contentsItems: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  index: { type: "string" },
+                  title: { type: "string" },
+                  detail: { type: "string" },
+                },
+              },
+            },
+            comparisonItems: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  label: { type: "string" },
+                  title: { type: "string" },
+                  detail: { type: "string" },
+                },
+              },
+            },
+            spotlightItems: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  title: { type: "string" },
+                  detail: { type: "string" },
+                },
+              },
+            },
+            metricItems: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  value: { type: "string" },
+                  label: { type: "string" },
+                  note: { type: "string" },
+                },
+              },
+            },
+            chartItems: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  label: { type: "string" },
+                  value: { type: "number" },
+                  detail: { type: "string" },
+                },
+              },
+            },
+            processItems: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  step: { type: "string" },
+                  title: { type: "string" },
+                  detail: { type: "string" },
+                },
+              },
+            },
+            closingItems: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  label: { type: "string" },
+                  detail: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  } satisfies Record<string, unknown>
+}
+
 function inferPreviewProviderId(model: string) {
   if (/^deepseek/iu.test(model)) {
     return "writer" as const
@@ -1037,7 +1162,7 @@ async function generateTextWithLeadToolPreviewProvider(params: {
   }
 
   if (preferredProviderId === "writer") {
-    const text = await generateTextWithWriterModel(params.systemPrompt, params.userPrompt, params.model, {
+    const text = await generateTextWithWriterModelImpl(params.systemPrompt, params.userPrompt, params.model, {
       temperature: 0.45,
       maxTokens: 1400,
       timeoutMs: 36_000,
@@ -1284,6 +1409,36 @@ function extractJsonObjectBlock(rawText: string) {
   }
 
   throw new Error("ppt_preview_json_missing")
+}
+
+async function generateStructuredPptPlanWithWriter(params: {
+  systemPrompt: string
+  userPrompt: string
+  model: string
+  preferredProviderId?: LeadToolPreviewProviderId | null
+}) {
+  const result = await generateStructuredObjectWithWriterModelImpl({
+    model: params.model,
+    systemPrompt: params.systemPrompt,
+    userPrompt: params.userPrompt,
+    toolName: "return_ppt_preview_plan",
+    toolDescription: "Return a structured PPT preview plan with title, outline, and slides.",
+    jsonSchema: buildPptPlanSchema(),
+    options: {
+      temperature: 0.45,
+      maxTokens: 2400,
+      timeoutMs: 36_000,
+      totalTimeoutMs: 42_000,
+      preferredProviderId:
+        params.preferredProviderId === "writer" ? undefined : (params.preferredProviderId as any),
+    },
+  })
+
+  return {
+    rawPlan: result,
+    providerId: hasAibermApiKey() ? "aiberm" : hasCrazyrouteApiKey() ? "crazyroute" : "writer",
+    model: params.model,
+  }
 }
 
 function buildFallbackBody(
@@ -2185,6 +2340,32 @@ async function generateVariantPlan(request: PptPreviewRequest, descriptor: PptPr
     ? getPptPreviewNarrativeAnglePrompt(descriptor.narrativeAngle, request.language)
     : undefined
   let lastError: unknown = null
+  const systemPrompt = [
+    buildPreviewSystemPrompt(request, {
+      layoutSequence,
+      templateMode,
+      templateLabel,
+      narrativeAngleLabel,
+      narrativeAnglePrompt,
+    }),
+    request.language === "zh-CN"
+      ? `风格要求：${style.stylePrompt} 直接按这种风格生成 ${pageCount} 页内容，不要先写一个通用版本再改写。每个 slide 对象必须输出 layout 与 intent。`
+      : `Style requirement: ${style.stylePrompt} Generate the ${pageCount}-slide plan directly in this style rather than drafting a neutral version first. Each slide object must output both layout and intent.`,
+  ]
+  const preferredProviderId = resolveLeadToolPreviewProviderPreference(
+    requestedModel,
+    request.preferredProviderId ?? getLeadToolPptPreviewProvider(),
+  )
+  const buildAttemptSystemPrompt = (retryGuardrail: string) =>
+    [
+      ...systemPrompt,
+      retryGuardrail,
+      request.language === "zh-CN"
+        ? "只输出一个 JSON 对象，不要 markdown，不要解释。"
+        : "Return only one JSON object with no markdown and no explanation.",
+    ]
+      .filter(Boolean)
+      .join(" ")
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
@@ -2196,33 +2377,31 @@ async function generateVariantPlan(request: PptPreviewRequest, descriptor: PptPr
             : "The previous result was rejected for low-information content. Rewrite all titles, sections, chart items, and process items with real business-specific language. Do not reuse numbered clones of the prompt or hollow labels like Step 1 / Section 2 / Signal 3."
 
       const providerResult = await generateTextWithLeadToolPreviewProvider({
-        systemPrompt: [
-          buildPreviewSystemPrompt(request, {
-            layoutSequence,
-            templateMode,
-            templateLabel,
-            narrativeAngleLabel,
-            narrativeAnglePrompt,
-          }),
-          request.language === "zh-CN"
-            ? `风格要求：${style.stylePrompt} 直接按这种风格生成 ${pageCount} 页内容，不要先写一个通用版本再改写。每个 slide 对象必须输出 layout 与 intent。`
-            : `Style requirement: ${style.stylePrompt} Generate the ${pageCount}-slide plan directly in this style rather than drafting a neutral version first. Each slide object must output both layout and intent.`,
-          retryGuardrail,
-          request.language === "zh-CN"
-            ? "只输出一个 JSON 对象，不要 markdown，不要解释。"
-            : "Return only one JSON object with no markdown and no explanation.",
-        ]
-          .filter(Boolean)
-          .join(" "),
+        systemPrompt: buildAttemptSystemPrompt(retryGuardrail),
         userPrompt: buildStyleAwarePrompt(request, descriptor),
         model: requestedModel,
-        preferredProviderId: resolveLeadToolPreviewProviderPreference(
-          requestedModel,
-          request.preferredProviderId ?? getLeadToolPptPreviewProvider(),
-        ),
+        preferredProviderId,
       })
-
-      const rawPlan = JSON.parse(extractJsonObjectBlock(providerResult.text))
+      let rawPlan: unknown
+      try {
+        rawPlan = JSON.parse(extractJsonObjectBlock(providerResult.text))
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ppt_preview_json_missing" &&
+          preferredProviderId === "writer"
+        ) {
+          const structuredResult = await generateStructuredPptPlanWithWriter({
+            systemPrompt: buildAttemptSystemPrompt(retryGuardrail),
+            userPrompt: buildStyleAwarePrompt(request, descriptor),
+            model: requestedModel,
+            preferredProviderId: request.preferredProviderId as LeadToolPreviewProviderId | null | undefined,
+          })
+          rawPlan = structuredResult.rawPlan
+        } else {
+          throw error
+        }
+      }
       const normalizedPlan = normalizeLeadToolPptPlan(sanitizeRawPlan(rawPlan, request, style), request, style)
 
       if (isLowInformationPptPlan(normalizedPlan, request)) {
@@ -2317,4 +2496,17 @@ export async function generateLeadToolPptPreviewWithFallback(
 
     throw error
   }
+}
+
+export function setLeadToolPptGenerationDepsForTests(
+  deps:
+    | {
+        generateTextWithWriterModel?: typeof generateTextWithWriterModel
+        generateStructuredObjectWithWriterModel?: typeof generateStructuredObjectWithWriterModel
+      }
+    | null,
+) {
+  generateTextWithWriterModelImpl = deps?.generateTextWithWriterModel ?? generateTextWithWriterModel
+  generateStructuredObjectWithWriterModelImpl =
+    deps?.generateStructuredObjectWithWriterModel ?? generateStructuredObjectWithWriterModel
 }
