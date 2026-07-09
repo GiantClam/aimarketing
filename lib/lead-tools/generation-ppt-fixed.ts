@@ -60,6 +60,7 @@ type LeadToolPptPlan = {
 
 type LeadToolPreviewProviderId = "deepseek" | "pptoken" | "minimax" | "stepfun" | "writer"
 const LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS = 45_000
+const LEAD_TOOL_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS = 120_000
 
 let generateTextWithWriterModelImpl = generateTextWithWriterModel
 let generateStructuredObjectWithWriterModelImpl = generateStructuredObjectWithWriterModel
@@ -149,6 +150,31 @@ function uniqueStrings(values: string[]) {
   }
 
   return result
+}
+
+function parsePositiveInt(raw: string | undefined) {
+  const parsed = Number.parseInt(normalizeText(raw), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+export function getLeadToolPreviewProviderTimeoutMs(providerId: Exclude<LeadToolPreviewProviderId, "writer">) {
+  const explicitProviderTimeout = parsePositiveInt(
+    process.env[`LEAD_TOOLS_PPT_PREVIEW_${providerId.toUpperCase()}_TIMEOUT_MS`],
+  )
+  if (explicitProviderTimeout) {
+    return explicitProviderTimeout
+  }
+
+  const explicitDefaultTimeout = parsePositiveInt(process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER_TIMEOUT_MS)
+  if (explicitDefaultTimeout) {
+    return explicitDefaultTimeout
+  }
+
+  if (providerId === "deepseek") {
+    return LEAD_TOOL_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS
+  }
+
+  return LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS
 }
 
 function splitResearchString(value: string) {
@@ -1027,7 +1053,7 @@ async function generatePreviewTextWithProviderTimeout(params: {
   try {
     return await withTaskTimeout(
       params.run(),
-      LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS,
+      getLeadToolPreviewProviderTimeoutMs(params.providerId),
       `ppt_master_runtime_provider_timeout:${params.providerId}:${params.model}`,
     )
   } catch (error) {

@@ -6,6 +6,7 @@ import {
   buildPreviewProviderMessages,
   buildStyleAwarePrompt,
   generateLeadToolPptStoryDeck,
+  getLeadToolPreviewProviderTimeoutMs,
   isLowInformationPptPlan,
   normalizeLeadToolPptPlan,
   normalizePptMasterRuntimeProviderError,
@@ -570,6 +571,35 @@ test("deepseek preview messages avoid developer-role system prompts", () => {
       prompt: "User ask",
     },
   )
+})
+
+test("deepseek preview provider timeout is longer than default runtime providers", () => {
+  const previousDefaultTimeout = process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER_TIMEOUT_MS
+  const previousDeepseekTimeout = process.env.LEAD_TOOLS_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS
+
+  delete process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER_TIMEOUT_MS
+  delete process.env.LEAD_TOOLS_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS
+
+  assert.equal(getLeadToolPreviewProviderTimeoutMs("pptoken"), 45_000)
+  assert.equal(getLeadToolPreviewProviderTimeoutMs("deepseek"), 120_000)
+
+  process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER_TIMEOUT_MS = "50000"
+  process.env.LEAD_TOOLS_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS = "130000"
+
+  assert.equal(getLeadToolPreviewProviderTimeoutMs("pptoken"), 50_000)
+  assert.equal(getLeadToolPreviewProviderTimeoutMs("deepseek"), 130_000)
+
+  if (previousDefaultTimeout === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER_TIMEOUT_MS
+  } else {
+    process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER_TIMEOUT_MS = previousDefaultTimeout
+  }
+
+  if (previousDeepseekTimeout === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS
+  } else {
+    process.env.LEAD_TOOLS_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS = previousDeepseekTimeout
+  }
 })
 
 test("deepseek writer preview planning falls back to structured object generation when freeform JSON is missing", async (t) => {
