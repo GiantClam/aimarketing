@@ -802,7 +802,10 @@ test("tool registry strips uploaded attachment blocks before injecting sourcePro
     language: "zh-CN",
   })
 
-  assert.equal(previewInput?.sourcePrompt, "写一份介绍预算智能公司和业务的 ppt")
+  assert.equal(
+    (enqueuedTasks.at(-1)?.payload?.input as { sourcePrompt?: string } | undefined)?.sourcePrompt,
+    "写一份介绍预算智能公司和业务的 ppt",
+  )
 })
 
 test("tool registry restores a persisted research brief marker from message history", async () => {
@@ -994,7 +997,7 @@ test("tool registry blocks preview_ppt_deck when the ppt brief is incomplete", a
   })
 })
 
-test("tool registry auto-selects the top recommended template for executive-ppt background previews", async () => {
+test("tool registry keeps executive-ppt background previews in free-design mode by default", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1067,11 +1070,11 @@ test("tool registry auto-selects the top recommended template for executive-ppt 
   assert.equal(enqueuedTasks.length, 1)
   assert.equal(
     (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    "single-template",
+    undefined,
   )
   assert.equal(
     (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
-    "cangzhuo",
+    undefined,
   )
 })
 
@@ -1150,11 +1153,11 @@ test("tool registry strips model-supplied template ids when the user did not exp
   assert.equal(previewInput, null)
   assert.equal(
     (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    "single-template",
+    undefined,
   )
   assert.equal(
     (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId,
-    "aurora-glass",
+    undefined,
   )
 })
 

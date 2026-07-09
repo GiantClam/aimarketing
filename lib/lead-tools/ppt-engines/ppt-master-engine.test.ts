@@ -253,6 +253,48 @@ test("ppt-master engine auto-selects remote worker preview when worker base url 
   assert.equal(result.meta.previewRuntime, "ppt-master-agent")
 })
 
+test("ppt-master engine does not force auto-4 when editable preview omits template mode", async () => {
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
+  process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "ppt-master-agent"
+  let seenTemplateMode: unknown = "__unset__"
+
+  const remoteDeck = {
+    ...htmlDeck,
+    previewEngine: "ppt-master-project" as const,
+    previewSessionId: "session-remote-free-design-1",
+  }
+
+  setPptWorkerTransportForTests({
+    preview: async (request) => {
+      seenTemplateMode = request.templateMode
+      return {
+        previewSessionId: "session-remote-free-design-1",
+        generatedAt: "2026-06-25T00:00:00.000Z",
+        deck: remoteDeck,
+      }
+    },
+  })
+
+  const engines = getPptMasterEngines()
+  const result = await engines.preview.buildPreview(
+    {
+      prompt: "Build editable free-design deck",
+      scenario: "sales-deck",
+      language: "zh-CN",
+    } as any,
+    {
+      allowMockFallback: false,
+      resolvedModels: {
+        previewModel: "gpt-5.4",
+        finalModel: "gpt-5.4",
+      },
+    },
+  )
+
+  assert.equal(result.previewSessionId, "session-remote-free-design-1")
+  assert.equal(seenTemplateMode, undefined)
+})
+
 test("ppt-master engine uses remote worker for download when configured", async () => {
   process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
 
@@ -320,7 +362,6 @@ test("ppt-master engine keeps local preview fallback when remote transport is di
       prompt: "Build local fallback deck",
       scenario: "sales-deck",
       language: "zh-CN",
-      templateMode: "auto-4",
     } as any,
     {
       allowMockFallback: false,

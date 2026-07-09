@@ -35,7 +35,15 @@ function extensionLabel(part: ArtifactPart) {
   return "FILE"
 }
 
-export function ArtifactPartView({ part, isZh }: { part: ArtifactPart; isZh: boolean }) {
+export function ArtifactPartView({
+  part,
+  isZh,
+  agentId,
+}: {
+  part: ArtifactPart
+  isZh: boolean
+  agentId?: string | null
+}) {
   const [previewContext, setPreviewContext] = useState<ArtifactPreviewContext | null>(null)
 
   useEffect(() => {
@@ -85,6 +93,7 @@ export function ArtifactPartView({ part, isZh }: { part: ArtifactPart; isZh: boo
         defaultVariantKey={previewContext.defaultVariantKey ?? previewContext.variantKeys?.[0] ?? null}
         variantKeys={previewContext.variantKeys}
         isZh={isZh}
+        agentId={agentId}
       />
     )
   }

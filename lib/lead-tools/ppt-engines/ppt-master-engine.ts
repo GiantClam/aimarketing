@@ -86,7 +86,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
         scenario: request.scenario,
         language: request.language,
         model: request.model,
-        templateMode: request.templateMode ?? "auto-4",
+        templateMode: request.templateMode,
         templateId: request.templateId,
         narrativeAngle: request.narrativeAngle,
         pageCount: request.pageCount ?? null,

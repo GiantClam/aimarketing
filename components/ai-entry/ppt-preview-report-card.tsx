@@ -26,6 +26,7 @@ type PptPreviewReportCardProps = {
   defaultVariantKey?: string | null
   variantKeys?: string[]
   isZh: boolean
+  agentId?: string | null
 }
 
 type PreviewSessionApiResponse = {
@@ -101,6 +102,7 @@ export function PptPreviewReportCard({
   defaultVariantKey,
   variantKeys,
   isZh,
+  agentId,
 }: PptPreviewReportCardProps) {
   const copy = getPreviewCopy(isZh)
   const [deck, setDeck] = useState<PptPreviewDeck | null>(null)
@@ -220,6 +222,7 @@ export function PptPreviewReportCard({
         previewSessionId,
         selectedVariantKey: variantKey,
         saveToAssets,
+        agentId,
       }),
     })
     const data = (await response.json().catch(() => ({}))) as PptExportApiResponse

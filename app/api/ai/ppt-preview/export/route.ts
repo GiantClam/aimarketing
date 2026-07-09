@@ -12,6 +12,7 @@ const exportRequestSchema = z.object({
   previewSessionId: z.string().trim().min(1),
   selectedVariantKey: z.string().trim().min(1).nullable().optional(),
   saveToAssets: z.boolean().optional(),
+  agentId: z.string().trim().min(1).nullable().optional(),
 })
 
 function readErrorMessage(error: unknown) {
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest) {
       currentUser: auth.user,
       previewSessionId: parsed.data.previewSessionId,
       selectedVariantKey: parsed.data.selectedVariantKey ?? undefined,
+      agentId: parsed.data.agentId ?? undefined,
     })
 
     if (exported.ok === false) {

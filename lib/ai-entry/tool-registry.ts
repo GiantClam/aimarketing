@@ -28,7 +28,6 @@ import {
   type StructuredResearchBrief,
 } from "@/lib/ai-entry/research-brief-context"
 import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
-import { resolvePptTemplateSelection } from "@/lib/ai-entry/ppt-template-selection"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 
@@ -402,46 +401,10 @@ function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
     }
   }
 
-  const prompt = readOptionalString(record.prompt)
-  const scenario = readOptionalString(record.scenario)
-  const language = readOptionalString(record.language)
-  if (!prompt || !scenario || !language) {
-    return {
-      preparedInput: record,
-      selectedTemplateId: null,
-      recommendedTemplates: [] as Array<Record<string, unknown>>,
-    }
-  }
-
-  const selection = resolvePptTemplateSelection({
-    prompt,
-    researchBrief: record.researchBrief as StructuredResearchBrief | string | undefined,
-    scenario: scenario as "marketing-campaign" | "product-launch" | "sales-deck" | "training",
-    language: language as "zh-CN" | "en-US",
-    pageCount: typeof record.pageCount === "number" ? record.pageCount : undefined,
-    templateMode:
-      (readOptionalString(record.templateMode) as "auto-4" | "single-template" | null) ?? undefined,
-    templateId: selectedTemplateId,
-    preferSingleTemplate: true,
-  })
-  const recommendedTemplates = selection.recommendedTemplates
-  const defaultTemplateId = selection.selectedTemplateId
-  if (!defaultTemplateId) {
-    return {
-      preparedInput: record,
-      selectedTemplateId: null,
-      recommendedTemplates,
-    }
-  }
-
   return {
-    preparedInput: {
-      ...record,
-      templateMode: "single-template",
-      templateId: defaultTemplateId,
-    },
-    selectedTemplateId: defaultTemplateId,
-    recommendedTemplates,
+    preparedInput: record,
+    selectedTemplateId: null,
+    recommendedTemplates: [] as Array<Record<string, unknown>>,
   }
 }
 

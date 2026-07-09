@@ -169,6 +169,7 @@ test.beforeEach(() => {
   previewShouldFail = false
   exportShouldFail = false
   previewFailureMessage = "ppt_master_repo_missing"
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
   previewInputs = []
   mockedDownloadDeckPreviewEngine = "ppt-master-project"
   mockedDownloadContentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -191,6 +192,7 @@ test.beforeEach(() => {
 })
 
 test.after(() => {
+  delete process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
   nodeModule._load = originalLoad
 })
 
@@ -242,7 +244,7 @@ test("ppt tools return preview metadata and export a downloadable PPTX artifact"
   assert.equal(exported.downloadUrl, "/api/platform/artifacts/401/download?download=1")
 })
 
-test("editable ppt agent auto-selects the top recommended template for ppt-master previews", async () => {
+test("editable ppt agent defaults to ppt-master free-design previews when no template is explicitly chosen", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -260,9 +262,8 @@ test("editable ppt agent auto-selects the top recommended template for ppt-maste
   })
 
   assert.equal(preview.ok, true)
-  assert.equal(preview.selectedTemplateId, "cangzhuo")
-  assert.equal(Array.isArray(preview.recommendedTemplates), true)
-  assert.equal(preview.recommendedTemplates?.length, 4)
+  assert.equal(preview.selectedTemplateId, null)
+  assert.deepEqual(preview.recommendedTemplates, [])
   assert.deepEqual(previewInputs[0], {
     prompt: buildStructuredPrompt("做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划", {
       audience: "董事会",
@@ -274,11 +275,93 @@ test("editable ppt agent auto-selects the top recommended template for ppt-maste
     scenario: "sales-deck",
     language: "zh-CN",
     previewRuntime: "ppt-master-agent",
-    templateMode: "single-template",
-    templateId: "cangzhuo",
-    narrativeAngle: "executive-brief",
+    templateMode: undefined,
+    templateId: undefined,
+    narrativeAngle: undefined,
     pageCount: undefined,
   })
+})
+
+test("editable ppt agent requires remote worker preview transport", async () => {
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
+
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划",
+    audience: "董事会",
+    goal: "管理层决策同步",
+    scenario: "sales-deck",
+    language: "zh-CN",
+  })
+
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_master_runtime_unavailable")
+  assert.equal(preview.error?.rawMessage, "ppt_master_runtime_unavailable:remote_worker_required")
+  assert.equal(previewInputs.length, 0)
+})
+
+test("editable ppt agent requires remote worker export transport", async () => {
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
+
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const exported = await tools.export_ppt_deck.execute({
+    previewSessionId: "preview-session-1",
+    selectedVariantKey: "variant-a",
+  })
+
+  assert.equal(exported.ok, false)
+  assert.equal(exported.error?.code, "ppt_master_runtime_unavailable")
+  assert.equal(exported.error?.rawMessage, "ppt_master_runtime_unavailable:remote_worker_required")
+})
+
+test("editable ppt agent only honors explicit template requests when sourcePrompt is provided", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  await tools.preview_ppt_deck.execute({
+    prompt: "做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划",
+    audience: "董事会",
+    goal: "管理层决策同步",
+    scenario: "sales-deck",
+    language: "zh-CN",
+  })
+  const promptOnlyInput = previewInputs.at(-1)
+
+  await tools.preview_ppt_deck.execute({
+    prompt: "做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划",
+    sourcePrompt: "做一份企业 AI 工作台的产品发布演示 PPT，强调视觉冲击、系统感和产品能力展示",
+    audience: "董事会",
+    goal: "管理层决策同步",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "broadside",
+  })
+  const sourcePromptInput = previewInputs.at(-1)
+
+  assert.equal(promptOnlyInput?.templateMode, undefined)
+  assert.equal(promptOnlyInput?.templateId, undefined)
+  assert.equal(sourcePromptInput?.templateMode, "single-template")
+  assert.equal(sourcePromptInput?.templateId, "broadside")
 })
 
 test("ppt tools forward researchBrief into preview generation", async () => {

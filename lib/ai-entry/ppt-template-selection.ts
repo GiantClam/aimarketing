@@ -41,8 +41,7 @@ export function resolvePptTemplateSelection(input: ResolvePptTemplateSelectionIn
   )
 
   const explicitTemplateId = normalizeOptionalString(input.templateId)
-  const shouldDefaultToSingleTemplate =
-    input.preferSingleTemplate || input.previewRuntime === "ppt-master-agent"
+  const shouldDefaultToSingleTemplate = input.preferSingleTemplate
   const selectedTemplateId =
     explicitTemplateId ||
     (shouldDefaultToSingleTemplate ? normalizeOptionalString(recommendedTemplates[0]?.templateId) : null)

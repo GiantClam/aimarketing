@@ -22,7 +22,7 @@ function UnknownPartView({ part }: { part: MessagePart }) {
   )
 }
 
-type RendererProps<T extends MessagePart> = { part: T; isZh: boolean }
+type RendererProps<T extends MessagePart> = { part: T; isZh: boolean; agentId?: string | null }
 type Renderer = ComponentType<RendererProps<any>>
 
 export const PART_RENDERERS: Partial<Record<MessagePart["type"], Renderer>> = {
@@ -36,10 +36,18 @@ export const PART_RENDERERS: Partial<Record<MessagePart["type"], Renderer>> = {
   "task-run": TaskRunPartView as Renderer,
 }
 
-export function MessagePartView({ part, isZh }: { part: MessagePart; isZh: boolean }) {
+export function MessagePartView({
+  part,
+  isZh,
+  agentId,
+}: {
+  part: MessagePart
+  isZh: boolean
+  agentId?: string | null
+}) {
   const Renderer = PART_RENDERERS[part.type]
   if (Renderer) {
-    return <Renderer part={part} isZh={isZh} />
+    return <Renderer part={part} isZh={isZh} agentId={agentId} />
   }
 
   switch (part.type) {
@@ -62,10 +70,12 @@ export function MessagePartViewList({
   parts,
   isZh,
   className,
+  agentId,
 }: {
   parts: MessagePart[]
   isZh: boolean
   className?: string
+  agentId?: string | null
 }) {
   const items: ReactNode[] = []
   let bucket: SourcePart[] = []
@@ -81,7 +91,7 @@ export function MessagePartViewList({
       continue
     }
     flush()
-    items.push(<MessagePartView key={`${part.type}-${part.id}`} part={part} isZh={isZh} />)
+    items.push(<MessagePartView key={`${part.type}-${part.id}`} part={part} isZh={isZh} agentId={agentId} />)
   }
   flush()
   return <div className={className ?? "mt-3 space-y-3"}>{items}</div>

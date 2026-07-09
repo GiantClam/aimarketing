@@ -363,13 +363,34 @@ function shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime: PptPreview
   return defaultPreviewRuntime === "ppt-master-agent" && getLeadToolPptExecutionTransport() === "remote-worker"
 }
 
+function requiresRemoteWorkerForEditablePptAssistant(input: {
+  agentId?: string | null
+  defaultPreviewRuntime?: PptPreviewRuntimeValue
+}) {
+  return (
+    input.agentId === "executive-ppt" &&
+    input.defaultPreviewRuntime === "ppt-master-agent" &&
+    getLeadToolPptExecutionTransport() !== "remote-worker"
+  )
+}
+
 export async function exportAiEntryPptDeckArtifact(input: {
   currentUser: AuthUser
   previewSessionId: string
   selectedVariantKey?: string | null
+  agentId?: string | null
 }): Promise<Record<string, unknown>> {
-  const { currentUser, previewSessionId, selectedVariantKey } = input
+  const { currentUser, previewSessionId, selectedVariantKey, agentId } = input
   try {
+    if (
+      requiresRemoteWorkerForEditablePptAssistant({
+        agentId,
+        defaultPreviewRuntime: resolveDefaultPreviewRuntime(agentId),
+      })
+    ) {
+      throw new Error("ppt_master_runtime_unavailable:remote_worker_required")
+    }
+
     const deck = await getPptPreviewSessionDeck(previewSessionId)
     const selectedVariant = selectDeckVariant(deck, selectedVariantKey)
     const result = (await buildLeadToolDownload(
@@ -538,13 +559,22 @@ export function buildAiEntryPptTools(input: {
           researchBrief,
           scenario = "marketing-campaign",
           language = "zh-CN",
-          templateMode = "auto-4",
+          templateMode,
           templateId,
           pageCount,
           tone,
           mustInclude,
         } = rawInput as PreviewPptDeckInput
         try {
+          if (
+            requiresRemoteWorkerForEditablePptAssistant({
+              agentId: input.agentId,
+              defaultPreviewRuntime,
+            })
+          ) {
+            throw new Error("ppt_master_runtime_unavailable:remote_worker_required")
+          }
+
           const prepared = preparePptPreviewInput({
             rawInput: {
               prompt,
@@ -577,20 +607,30 @@ export function buildAiEntryPptTools(input: {
 
           const limitTemplatesToRemoteWorker = shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime)
           const allowedTemplateIds = limitTemplatesToRemoteWorker ? getPptWorkerSupportedTemplateIds() : undefined
-          const selection = resolvePptTemplateSelection({
-            prompt: prepared.input.prompt,
-            researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
-            scenario: prepared.input.scenario,
-            language: prepared.input.language,
-            pageCount: prepared.input.pageCount ?? undefined,
-            templateMode: prepared.input.templateMode ?? templateMode,
-            templateId: prepared.input.templateId ?? templateId,
-            previewRuntime: defaultPreviewRuntime,
-            allowedTemplateIds,
-          })
-          const { recommendedTemplates } = selection
-          const effectiveTemplateId = selection.selectedTemplateId ?? undefined
-          const effectiveTemplateMode = selection.templateMode
+          const explicitTemplateId = prepared.input.templateId ?? templateId
+          const shouldBypassLocalTemplateSelection =
+            input.agentId === "executive-ppt" && !explicitTemplateId
+          const requestedTemplateMode = prepared.input.templateMode ?? templateMode
+          const selection = shouldBypassLocalTemplateSelection
+            ? null
+            : resolvePptTemplateSelection({
+                prompt: sourcePrompt ?? prompt,
+                researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
+                scenario: prepared.input.scenario,
+                language: prepared.input.language,
+                pageCount: prepared.input.pageCount ?? undefined,
+                templateMode: requestedTemplateMode ?? "auto-4",
+                templateId: explicitTemplateId,
+                previewRuntime: defaultPreviewRuntime,
+                allowedTemplateIds,
+              })
+          const recommendedTemplates = selection?.recommendedTemplates ?? []
+          const effectiveTemplateId = shouldBypassLocalTemplateSelection
+            ? explicitTemplateId
+            : (selection?.selectedTemplateId ?? explicitTemplateId ?? undefined)
+          const effectiveTemplateMode = shouldBypassLocalTemplateSelection
+            ? undefined
+            : (selection?.templateMode ?? (requestedTemplateMode ?? "auto-4"))
           if (
             limitTemplatesToRemoteWorker &&
             effectiveTemplateMode === "single-template" &&
@@ -693,6 +733,7 @@ export function buildAiEntryPptTools(input: {
           currentUser,
           previewSessionId,
           selectedVariantKey,
+          agentId: input.agentId,
         })
       },
     }),

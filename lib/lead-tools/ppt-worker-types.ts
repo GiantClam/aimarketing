@@ -30,7 +30,7 @@ export type PptWorkerPreviewRequest = {
   scenario: PptWorkerScenario
   language: PptWorkerLanguage
   model?: PptWorkerModelValue
-  templateMode: PptWorkerTemplateMode
+  templateMode?: PptWorkerTemplateMode
   templateId?: PptWorkerTemplateId
   narrativeAngle?: PptWorkerNarrativeAngle
   pageCount?: number | null

@@ -5,7 +5,15 @@ import { ArrowRight, LayoutTemplate } from "lucide-react"
 import { PptPreviewReportCard } from "@/components/ai-entry/ppt-preview-report-card"
 import type { ReportPart } from "@/lib/ai-entry/message-parts/types"
 
-export function ReportPartView({ part, isZh }: { part: ReportPart; isZh: boolean }) {
+export function ReportPartView({
+  part,
+  isZh,
+  agentId,
+}: {
+  part: ReportPart
+  isZh: boolean
+  agentId?: string | null
+}) {
   if (!part.variants.length) return null
 
   if (part.reportType === "ppt-preview" && part.previewSessionId) {
@@ -15,6 +23,7 @@ export function ReportPartView({ part, isZh }: { part: ReportPart; isZh: boolean
         defaultVariantKey={part.defaultVariantKey ?? part.variants[0]?.key ?? null}
         variantKeys={part.variantKeys?.length ? part.variantKeys : part.variants.map((variant) => variant.key)}
         isZh={isZh}
+        agentId={agentId}
       />
     )
   }

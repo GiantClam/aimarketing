@@ -3778,7 +3778,12 @@ export function AiEntryWorkspace({
                       ) : null}
                       {processParts.length ? (
                         <section className="assistant-section">
-                          <MessagePartViewList parts={processParts} isZh={isZh} className="process-list" />
+                          <MessagePartViewList
+                            parts={processParts}
+                            isZh={isZh}
+                            className="process-list"
+                            agentId={routeAgentId || resolvedRequestAgentId || null}
+                          />
                         </section>
                       ) : null}
                       {shouldShowLoadingDetails ? (
@@ -3817,17 +3822,37 @@ export function AiEntryWorkspace({
                                 defaultVariantKey={(parsedPptPreview ?? fallbackPptPreview)!.defaultVariantKey}
                                 variantKeys={(parsedPptPreview ?? fallbackPptPreview)!.variantKeys}
                                 isZh={isZh}
+                                agentId={routeAgentId || resolvedRequestAgentId || null}
                               />
                             ) : null}
-                            {visibleArtifactParts.length ? <MessagePartViewList parts={visibleArtifactParts} isZh={isZh} className="space-y-0" /> : null}
-                            {reportParts.length ? <MessagePartViewList parts={reportParts} isZh={isZh} className="space-y-3" /> : null}
+                            {visibleArtifactParts.length ? (
+                              <MessagePartViewList
+                                parts={visibleArtifactParts}
+                                isZh={isZh}
+                                className="space-y-0"
+                                agentId={routeAgentId || resolvedRequestAgentId || null}
+                              />
+                            ) : null}
+                            {reportParts.length ? (
+                              <MessagePartViewList
+                                parts={reportParts}
+                                isZh={isZh}
+                                className="space-y-3"
+                                agentId={routeAgentId || resolvedRequestAgentId || null}
+                              />
+                            ) : null}
                             {shouldRenderParsedArtifactBlock ? <ArtifactResultBlock artifact={parsedArtifact!} /> : null}
                           </div>
                         </section>
                       ) : null}
                       {referenceParts.length ? (
                         <section className="assistant-section">
-                          <MessagePartViewList parts={referenceParts} isZh={isZh} className="space-y-0" />
+                          <MessagePartViewList
+                            parts={referenceParts}
+                            isZh={isZh}
+                            className="space-y-0"
+                            agentId={routeAgentId || resolvedRequestAgentId || null}
+                          />
                         </section>
                       ) : null}
                       {(bodyContent.trim() || artifactPart || parsedArtifact) ? (
