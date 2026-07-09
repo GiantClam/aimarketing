@@ -1227,7 +1227,7 @@ test("workflow editable ppt auto-selects a template and generates in one pass wh
   assert.equal(leadToolPreviewBodies.length, 1)
   assert.equal(leadToolDownloadBodies.length, 1)
   assert.equal(leadToolPreviewBodies[0]?.previewRuntime, "ppt-master-agent")
-  assert.equal(leadToolPreviewBodies[0]?.model, "MiniMax-M2.7-highspeed")
+  assert.equal(leadToolPreviewBodies[0]?.model, "deepseek-v4-pro")
   assert.equal(leadToolPreviewBodies[0]?.scenario, "sales-deck")
   assert.equal(leadToolPreviewBodies[0]?.templateMode, "single-template")
   assert.equal(typeof leadToolPreviewBodies[0]?.templateId, "string")

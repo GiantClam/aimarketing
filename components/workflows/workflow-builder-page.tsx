@@ -472,7 +472,7 @@ function buildNode(
                   : type === "ppt_generate"
                     ? {
                         previewRuntime: pptPreviewRuntimeOptions[0]?.value || "frontend-slides-agent",
-                        model: pptPreviewModelOptions[0]?.value || "MiniMax-M2.7-highspeed",
+                        model: pptPreviewModelOptions[0]?.value || "deepseek-v4-pro",
                         pageCount: 8,
                         slideCount: 8,
                         language: locale === "zh" ? "zh-CN" : "en-US",

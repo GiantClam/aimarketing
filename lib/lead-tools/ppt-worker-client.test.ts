@@ -89,7 +89,7 @@ test("ppt worker preview posts runtime profile, fallback mode, and auth token", 
     assert.match(seen[0]?.body || "", /"runtimeProfile":"railway-linux"/)
     assert.match(seen[0]?.body || "", /"allowMockFallback":true/)
     assert.match(seen[0]?.body || "", /"researchBrief":\{"topic":"Hormuz Strait shipping risk 2026"/)
-    assert.match(seen[0]?.body || "", /"model":"MiniMax-M3"/)
+    assert.match(seen[0]?.body || "", /"model":"gpt-5\.4"/)
     assert.match(seen[0]?.body || "", /"narrativeAngle":"executive-brief"/)
     assert.match(seen[0]?.body || "", /"images":\[\{"url":"https:\/\/example.com\/cover\.png","role":"cover"\}\]/)
     assert.equal(seen[0]?.auth, "Bearer secret-token")

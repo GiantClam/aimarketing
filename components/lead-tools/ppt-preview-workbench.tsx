@@ -203,6 +203,7 @@ function getScenarioDescription(value: PptScenario, locale: "zh" | "en") {
 
 function getModelDescription(value: PptPreviewModelValue, locale: "zh" | "en") {
   const descriptions: Record<PptPreviewModelValue, { zh: string; en: string }> = {
+    "deepseek-v4-pro": { zh: "内容规划优先，适合作为可编辑 PPT 默认规划模型。", en: "Planning-first and well suited as the default model for editable PPT outlining." },
     "MiniMax-M2.7-highspeed": { zh: "速度优先，适合 4 份并行预览。", en: "Speed-first and well suited to four parallel preview generations." },
     "MiniMax-M3": { zh: "推理更重，适合更强表达但通常更慢。", en: "Heavier reasoning with stronger writing quality, but usually slower." },
     "gpt-5.4": { zh: "通过 pptoken 路由，稳定性更高。", en: "Routed through pptoken for higher stability." },
@@ -335,7 +336,7 @@ export function PptPreviewWorkbench({
   initialPrompt = "",
   initialScenario = "marketing-campaign",
   initialLanguage = "zh-CN",
-  initialModel = "MiniMax-M2.7-highspeed",
+  initialModel = "deepseek-v4-pro",
   initialTemplateMode = "auto-4",
   initialTemplateId,
   initialPageCount = null,

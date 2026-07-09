@@ -790,7 +790,7 @@ export function WorkflowNodeEditorFields({
   }))
   const currentPptRuntimeId =
     (asString(node.config.previewRuntime) as PptPreviewRuntimeValue) || pptPreviewRuntimeOptions[0]?.value || "frontend-slides-agent"
-  const currentPptModelId = asString(node.config.model) || pptModelOptions[0]?.value || "MiniMax-M2.7-highspeed"
+  const currentPptModelId = asString(node.config.model) || pptModelOptions[0]?.value || "deepseek-v4-pro"
   const audioGenreOptions: OptionItem[] =
     locale === "zh"
       ? [

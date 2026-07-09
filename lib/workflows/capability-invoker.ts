@@ -1644,7 +1644,7 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
             model:
               typeof params.node.config.model === "string" && params.node.config.model.trim()
                 ? params.node.config.model
-                : "MiniMax-M2.7-highspeed",
+                : "deepseek-v4-pro",
             previewRuntime,
             templateMode:
               previewRuntime === "ppt-master-agent"

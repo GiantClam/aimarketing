@@ -22,6 +22,7 @@ const PPT_WORKER_SUPPORTED_MODELS: PptWorkerModelValue[] = [
   "MiniMax-M2.7-highspeed",
   "MiniMax-M3",
   "deepseek-v4-pro",
+  "gpt-5.4",
   "step-3.7-flash",
 ]
 
@@ -46,8 +47,9 @@ export function isSupportedPptWorkerPreviewModel(value: unknown) {
 function resolvePptWorkerFallbackModel() {
   const configuredCandidates = [
     process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL,
+    process.env.LEAD_TOOLS_DEEPSEEK_MODEL,
     process.env.LEAD_TOOLS_MINIMAX_MODEL,
-    "MiniMax-M3",
+    "deepseek-v4-pro",
   ]
 
   for (const candidate of configuredCandidates) {
@@ -55,7 +57,7 @@ function resolvePptWorkerFallbackModel() {
     if (isSupportedPptWorkerModel(normalized)) return normalized
   }
 
-  return "MiniMax-M3" as const
+  return "deepseek-v4-pro" as const
 }
 
 export function normalizePptWorkerPreviewModel(model: unknown) {

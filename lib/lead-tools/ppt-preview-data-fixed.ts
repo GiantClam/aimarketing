@@ -65,6 +65,7 @@ export type PptPreviewStyleArchetype =
   | "ppt169_pritzker_2026"
   | "ppt169_swiss_grid_systems"
 export type PptPreviewModelValue =
+  | "deepseek-v4-pro"
   | "MiniMax-M2.7-highspeed"
   | "MiniMax-M3"
   | "gpt-5.4"
@@ -1661,9 +1662,15 @@ export const pptLanguageOptions: Array<{ value: PptLanguage; label: string }> = 
 export const pptPreviewModelOptions: Array<{
   value: PptPreviewModelValue
   label: string
-  provider: "minimax" | "pptoken" | "stepfun"
+  provider: "deepseek" | "minimax" | "pptoken" | "stepfun"
   description: string
 }> = [
+  {
+    value: "deepseek-v4-pro",
+    label: "DeepSeek V4 Pro",
+    provider: "deepseek",
+    description: "内容规划优先，适合可编辑 PPT 的默认方案生成。",
+  },
   {
     value: "MiniMax-M2.7-highspeed",
     label: "MiniMax M2.7 Highspeed",

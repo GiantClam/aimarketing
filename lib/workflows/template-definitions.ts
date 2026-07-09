@@ -230,7 +230,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 736,
             positionY: 340,
             config: {
-              model: "MiniMax-M2.7-highspeed",
+              model: "deepseek-v4-pro",
               pageCount: 8,
               slideCount: 8,
               language: locale === "zh" ? "zh-CN" : "en-US",
@@ -724,7 +724,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 1056,
             positionY: 90,
             config: {
-              model: "MiniMax-M2.7-highspeed",
+              model: "deepseek-v4-pro",
               pageCount: 10,
               slideCount: 10,
               language: locale === "zh" ? "zh-CN" : "en-US",
@@ -1358,7 +1358,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 1056,
             positionY: 320,
             config: {
-              model: "MiniMax-M2.7-highspeed",
+              model: "deepseek-v4-pro",
               pageCount: 8,
               slideCount: 8,
               language: locale === "zh" ? "zh-CN" : "en-US",
@@ -1768,7 +1768,7 @@ const TEMPLATE_DEFINITIONS: Record<WorkflowTemplateDefinitionKey, WorkflowTempla
             positionX: 736,
             positionY: 320,
             config: {
-              model: "MiniMax-M2.7-highspeed",
+              model: "deepseek-v4-pro",
               pageCount: 8,
               slideCount: 8,
               language: locale === "zh" ? "zh-CN" : "en-US",

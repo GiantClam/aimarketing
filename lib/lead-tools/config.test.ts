@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   allowPptMasterEmergencyFallback,
   getLeadToolPptExecutionTransport,
+  getLeadToolPreviewModel,
   getLeadToolPptPreviewRuntime,
   getLeadToolPptPreviewProvider,
   getLeadToolPptRuntimeSlideModel,
@@ -46,6 +47,30 @@ test("ai-ppt-preview defaults to frontend-slides preview runtime", () => {
       delete process.env.PPT_WORKER_BASE_URL
     } else {
       process.env.PPT_WORKER_BASE_URL = originalWorkerBaseUrl
+    }
+  }
+})
+
+test("ai-ppt-preview defaults to deepseek v4 pro for planning", () => {
+  const previousPptPreviewModel = process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL
+  const previousGlobalPreviewModel = process.env.LEAD_TOOLS_PREVIEW_MODEL
+
+  try {
+    delete process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL
+    delete process.env.LEAD_TOOLS_PREVIEW_MODEL
+
+    assert.equal(getLeadToolPreviewModel("ai-ppt-preview"), "deepseek-v4-pro")
+  } finally {
+    if (previousPptPreviewModel === undefined) {
+      delete process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL
+    } else {
+      process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL = previousPptPreviewModel
+    }
+
+    if (previousGlobalPreviewModel === undefined) {
+      delete process.env.LEAD_TOOLS_PREVIEW_MODEL
+    } else {
+      process.env.LEAD_TOOLS_PREVIEW_MODEL = previousGlobalPreviewModel
     }
   }
 })
@@ -225,7 +250,7 @@ test("ppt runtime slide config prefers explicit overrides and disables emergency
 
     assert.equal(getPptMasterSlideTimeoutMs(), 12 * 60 * 1000)
     assert.equal(allowPptMasterEmergencyFallback(), false)
-    assert.equal(getLeadToolPptRuntimeSlideModel(), "gpt-5.4")
+    assert.equal(getLeadToolPptRuntimeSlideModel(), "MiniMax-M2.7-highspeed")
     assert.equal(getLeadToolPptRuntimeSlideProvider(), "")
     assert.equal(getLeadToolPptPreviewProvider(), "")
 

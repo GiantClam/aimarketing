@@ -178,7 +178,7 @@ export function getLeadToolPreviewProviderTimeoutMs(providerId: Exclude<LeadTool
 }
 
 export function resolveRuntimeSlideExecutionConfig(deck: Pick<PptPreviewDeck, "previewModel" | "provider">) {
-  const requestedModel = getLeadToolPptRuntimeSlideModel() || deck.previewModel || "MiniMax-M3"
+  const requestedModel = getLeadToolPptRuntimeSlideModel() || deck.previewModel || "MiniMax-M2.7-highspeed"
   const inferredProviderId = inferPreviewProviderId(requestedModel)
   const preferredProviderId = resolveLeadToolPreviewProviderPreference(
     requestedModel,
