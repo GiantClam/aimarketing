@@ -262,8 +262,8 @@ test("editable ppt agent defaults to a single recommended ppt-master template wh
   })
 
   assert.equal(preview.ok, true)
-  assert.equal(preview.selectedTemplateId, "exhibit")
-  assert.equal(preview.recommendedTemplates[0]?.templateId, "exhibit")
+  assert.equal(preview.selectedTemplateId, "ppt169_global_ai_capital_2026")
+  assert.equal(preview.recommendedTemplates[0]?.templateId, "ppt169_global_ai_capital_2026")
   assert.deepEqual(previewInputs[0], {
     prompt: buildStructuredPrompt("做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划", {
       audience: "董事会",
@@ -276,13 +276,13 @@ test("editable ppt agent defaults to a single recommended ppt-master template wh
     language: "zh-CN",
     previewRuntime: "ppt-master-agent",
     templateMode: "single-template",
-    templateId: "exhibit",
+    templateId: "ppt169_global_ai_capital_2026",
     narrativeAngle: "executive-brief",
     pageCount: undefined,
   })
 })
 
-test("editable ppt agent defaults to smart_red for tech-company intro briefs that match the vendor template", async () => {
+test("editable ppt agent defaults to ai_ops for tech-company intro briefs while keeping official examples available", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -305,8 +305,8 @@ test("editable ppt agent defaults to smart_red for tech-company intro briefs tha
   })
 
   assert.equal(preview.ok, true)
-  assert.equal(preview.selectedTemplateId, "smart_red")
-  assert.equal(preview.recommendedTemplates[0]?.templateId, "smart_red")
+  assert.equal(preview.selectedTemplateId, "ai_ops")
+  assert.equal(preview.recommendedTemplates[0]?.templateId, "ai_ops")
   assert.deepEqual(previewInputs.at(-1), {
     prompt: buildStructuredPrompt("写一份介绍预算智能公司和业务的 PPT，强调科技公司介绍、解决方案能力和专业但有活力的视觉表达", {
       audience: "潜在客户与合作伙伴",
@@ -323,7 +323,7 @@ test("editable ppt agent defaults to smart_red for tech-company intro briefs tha
     language: "zh-CN",
     previewRuntime: "ppt-master-agent",
     templateMode: "single-template",
-    templateId: "smart_red",
+    templateId: "ai_ops",
     narrativeAngle: "executive-brief",
     pageCount: undefined,
   })
@@ -425,15 +425,15 @@ test("editable ppt agent only honors explicit template requests when sourcePromp
     scenario: "sales-deck",
     language: "zh-CN",
     templateMode: "single-template",
-    templateId: "smart_red",
+    templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
   })
   const sourcePromptInput = previewInputs.at(-1)
 
   assert.equal(promptOnlyInput?.templateMode, "single-template")
-  assert.equal(promptOnlyInput?.templateId, "exhibit")
+  assert.equal(promptOnlyInput?.templateId, "ppt169_global_ai_capital_2026")
   assert.equal(promptOnlyInput?.narrativeAngle, "executive-brief")
   assert.equal(sourcePromptInput?.templateMode, "single-template")
-  assert.equal(sourcePromptInput?.templateId, "smart_red")
+  assert.equal(sourcePromptInput?.templateId, "ppt169_general_dark_tech_claude_code_auto_mode")
 })
 
 test("ppt tools forward researchBrief into preview generation", async () => {
@@ -501,7 +501,7 @@ test("ppt tools coerce template id preview requests to single-template mode", as
     prompt: "做一份课堂讲解 PPT",
     ...DEFAULT_PPT_BRIEF_INPUT,
     templateMode: "auto-4",
-    templateId: "科技蓝商务",
+    templateId: "ppt169_attention_is_all_you_need",
   })
 
   assert.equal(preview.ok, true)
@@ -512,7 +512,7 @@ test("ppt tools coerce template id preview requests to single-template mode", as
     language: "zh-CN",
     previewRuntime: "ppt-master-agent",
     templateMode: "single-template",
-    templateId: "科技蓝商务",
+    templateId: "ppt169_attention_is_all_you_need",
     narrativeAngle: "executive-brief",
     pageCount: undefined,
   })
@@ -540,7 +540,7 @@ test("editable ppt agent rejects internal mapped template ids in favor of vendor
   assert.equal(previewInputs.length, 0)
 })
 
-test("ppt tools accept vendor ppt-master template ids for single-template preview", async () => {
+test("ppt tools accept official ppt-master example ids for single-template preview", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -553,12 +553,12 @@ test("ppt tools accept vendor ppt-master template ids for single-template previe
     prompt: "做一份预算智能公司和业务介绍 PPT",
     ...DEFAULT_PPT_BRIEF_INPUT,
     templateMode: "single-template",
-    templateId: "smart_red",
+    templateId: "ppt169_building_effective_agents",
   })
 
   assert.equal(preview.ok, true)
   assert.equal(previewInputs[0]?.templateMode, "single-template")
-  assert.equal(previewInputs[0]?.templateId, "smart_red")
+  assert.equal(previewInputs[0]?.templateId, "ppt169_building_effective_agents")
   assert.equal(previewInputs[0]?.narrativeAngle, "executive-brief")
 })
 
@@ -1054,7 +1054,7 @@ test("presentation ppt agent rejects ppt-master-only template ids", async () => 
     scenario: "product-launch",
     language: "zh-CN",
     templateMode: "single-template",
-    templateId: "exhibit",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   assert.equal(preview.ok, false)

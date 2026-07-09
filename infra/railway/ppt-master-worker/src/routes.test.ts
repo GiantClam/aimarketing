@@ -74,7 +74,7 @@ test("worker preview route validates payload and calls preview executor", async 
         scenario: "sales-deck",
         language: "zh-CN",
         templateMode: "single-template",
-        templateId: "academic-defense",
+        templateId: "academic_defense",
         allowMockFallback: false,
         runtimeProfile: "railway-linux",
       }),
@@ -88,7 +88,7 @@ test("worker preview route validates payload and calls preview executor", async 
   assert.match(payload.jobId, /^[0-9a-f-]{36}$/u)
 
   assert.equal(seenRequestId, "req_1")
-  assert.equal(seenTemplateId, "academic-defense")
+  assert.equal(seenTemplateId, "academic_defense")
 
   let statusPayload: any = null
   for (let attempt = 0; attempt < 10; attempt += 1) {

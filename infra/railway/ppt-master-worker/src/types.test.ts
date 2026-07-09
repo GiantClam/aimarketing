@@ -3,34 +3,34 @@ import test from "node:test"
 
 import { previewRequestSchema } from "./types.js"
 
-test("worker preview schema accepts expanded ppt-master template ids", () => {
+test("worker preview schema accepts official ppt-master layout ids", () => {
   const parsed = previewRequestSchema.parse({
-    requestId: "req_expanded_template",
+    requestId: "req_layout_template",
     prompt: "Build an academic defense deck",
     scenario: "training",
     language: "zh-CN",
     templateMode: "single-template",
-    templateId: "academic-defense",
+    templateId: "academic_defense",
     allowMockFallback: false,
     runtimeProfile: "railway-linux",
   })
 
-  assert.equal(parsed.templateId, "academic-defense")
+  assert.equal(parsed.templateId, "academic_defense")
 })
 
-test("worker preview schema accepts vendor ppt-master template ids", () => {
+test("worker preview schema accepts official ppt-master example ids", () => {
   const parsed = previewRequestSchema.parse({
-    requestId: "req_vendor_template",
+    requestId: "req_example_template",
     prompt: "Build a tech company introduction deck",
     scenario: "sales-deck",
     language: "zh-CN",
     templateMode: "single-template",
-    templateId: "smart_red",
+    templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
     allowMockFallback: false,
     runtimeProfile: "railway-linux",
   })
 
-  assert.equal(parsed.templateId, "smart_red")
+  assert.equal(parsed.templateId, "ppt169_general_dark_tech_claude_code_auto_mode")
 })
 
 test("worker preview schema accepts DeepSeek v4 pro as a remote worker model", () => {
@@ -41,7 +41,7 @@ test("worker preview schema accepts DeepSeek v4 pro as a remote worker model", (
     language: "zh-CN",
     model: "deepseek-v4-pro",
     templateMode: "single-template",
-    templateId: "smart_red",
+    templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
     allowMockFallback: false,
     runtimeProfile: "railway-linux",
   })

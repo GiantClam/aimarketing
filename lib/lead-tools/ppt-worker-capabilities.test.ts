@@ -16,18 +16,23 @@ test("ppt-master library template ids exclude internal style aliases", () => {
   assert.equal(templateIds.includes("neo-grid-bold"), false)
   assert.equal(templateIds.includes("cangzhuo"), false)
   assert.equal(templateIds.includes("general-dark-tech-claude-code-auto-mode"), false)
-  assert.equal(templateIds.includes("smart_red"), true)
-  assert.equal(templateIds.includes("科技蓝商务"), true)
+  assert.equal(templateIds.includes("smart_red"), false)
+  assert.equal(templateIds.includes("科技蓝商务"), false)
+  assert.equal(templateIds.includes("anthropic"), true)
+  assert.equal(templateIds.includes("中国电信"), true)
+  assert.equal(templateIds.includes("ppt169_general_dark_tech_claude_code_auto_mode"), true)
 })
 
 test("ppt-master library template support only accepts concrete template ids", () => {
   assert.equal(isPptMasterLibraryTemplateSupported("long-table"), false)
   assert.equal(isPptMasterLibraryTemplateSupported("broadside"), false)
   assert.equal(isPptMasterLibraryTemplateSupported("cangzhuo"), false)
-  assert.equal(isPptMasterLibraryTemplateSupported("smart_red"), true)
+  assert.equal(isPptMasterLibraryTemplateSupported("smart_red"), false)
+  assert.equal(isPptMasterLibraryTemplateSupported("anthropic"), true)
+  assert.equal(isPptMasterLibraryTemplateSupported("ppt169_general_dark_tech_claude_code_auto_mode"), true)
 })
 
-test("ppt-master recommendations prefer smart_red for tech-company intro briefs", () => {
+test("ppt-master recommendations prefer ai_ops for tech-company intro briefs while keeping official examples available", () => {
   const templates = buildPptMasterRecommendedTemplateSummaries({
     prompt: "写一份介绍预算智能公司和业务的 PPT，强调科技公司介绍、解决方案能力和专业但有活力的视觉表达",
     scenario: "sales-deck",
@@ -39,16 +44,16 @@ test("ppt-master recommendations prefer smart_red for tech-company intro briefs"
     },
   })
 
-  assert.equal(templates[0]?.templateId, "smart_red")
-  assert.equal(templates.some((item) => item.templateId === "科技蓝商务"), true)
+  assert.equal(templates[0]?.templateId, "ai_ops")
+  assert.equal(templates.some((item) => item.templateId === "ppt169_general_dark_tech_claude_code_auto_mode"), true)
 })
 
-test("ppt-master recommendations prefer exhibit for board review briefs", () => {
+test("ppt-master recommendations prefer the official AI-capital example for board review briefs", () => {
   const templates = buildPptMasterRecommendedTemplateSummaries({
     prompt: "做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划",
     scenario: "sales-deck",
     language: "zh-CN",
   })
 
-  assert.equal(templates[0]?.templateId, "exhibit")
+  assert.equal(templates[0]?.templateId, "ppt169_global_ai_capital_2026")
 })

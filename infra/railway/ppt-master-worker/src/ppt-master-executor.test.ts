@@ -52,7 +52,7 @@ test("worker preview executor forwards request and preserves session id", async 
     language: "zh-CN",
     model: "gpt-5.4",
     templateMode: "single-template",
-    templateId: "academic-defense",
+    templateId: "academic_defense",
     narrativeAngle: "executive-brief",
     pageCount: 8,
     images: [{ url: "https://example.com/cover.png", role: "cover" }],
@@ -70,7 +70,7 @@ test("worker preview executor forwards request and preserves session id", async 
   assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
   assert.equal(seenModel, "gpt-5.4")
   assert.equal(seenNarrativeAngle, "executive-brief")
-  assert.equal(seenTemplateId, "academic-defense")
+  assert.equal(seenTemplateId, "academic_defense")
   assert.equal(result.previewSessionId, "session_worker_1")
   assert.equal(result.generatedAt, "2026-06-24T08:00:00.000Z")
 })
