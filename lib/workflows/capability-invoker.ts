@@ -36,7 +36,6 @@ import { buildWorkflowImageGenerateRequestBody } from "@/lib/workflows/image-cap
 import { buildEnterpriseWorkflowPresetPrompt, getDefaultEnterpriseWorkflowPreset } from "@/lib/workflows/presets"
 import {
   buildPptRecommendedTemplateSummaries,
-  getPptPreviewTemplateLabel,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
   createWorkflowNodeInputBundle,
@@ -114,38 +113,23 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function buildWorkflowEditablePptTemplateSelectionMessage(input: {
+function resolveWorkflowEditablePptTemplateId(input: {
   locale: "zh" | "en"
   scenario: string
   language: string
   pageCount?: number
   prompt: string
 }) {
-  const isZh = input.locale === "zh"
   const recommendedTemplates = buildPptRecommendedTemplateSummaries({
     prompt: input.prompt,
     scenario: input.scenario as never,
     language: input.language as never,
     pageCount: input.pageCount,
   })
-
-  const lines = [
-    isZh
-      ? "当前节点使用可编辑 PPT 模式。请先在节点参数中选择一个模板，再重新运行生成。"
-      : "This node is in editable PPT mode. Select a template in the node settings, then run again.",
-    "",
-    isZh ? "推荐模板：" : "Recommended templates:",
-    ...recommendedTemplates.map((item, index) => {
-      const label = getPptPreviewTemplateLabel(item.templateId, input.language as never)
-      const summary = typeof item.summary === "string" ? item.summary.trim() : ""
-      return summary
-        ? `${index + 1}. ${label} (${item.templateId}) - ${summary}`
-        : `${index + 1}. ${label} (${item.templateId})`
-    }),
-  ]
+  const selectedTemplate = recommendedTemplates[0] ?? null
 
   return {
-    text: lines.join("\n"),
+    selectedTemplateId: selectedTemplate?.templateId ?? null,
     recommendedTemplates,
   }
 }
@@ -279,6 +263,14 @@ function normalizeOptionalText(value: unknown) {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function normalizeWorkflowPptScenario(value: unknown) {
+  if (value === "sales-proposal") return "sales-deck" as const
+  if (value === "product-launch" || value === "sales-deck" || value === "training") {
+    return value
+  }
+  return "marketing-campaign" as const
 }
 
 function normalizeOptionalNumber(value: unknown) {
@@ -1618,40 +1610,40 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
           const inputImages = extractWorkflowPptInputImages(params.input)
           const previewRuntime =
             typeof params.node.config.previewRuntime === "string" ? params.node.config.previewRuntime : "frontend-slides-agent"
-          const scenario = typeof params.node.config.scenario === "string" ? params.node.config.scenario : "marketing-campaign"
+          const scenario = normalizeWorkflowPptScenario(params.node.config.scenario)
           const language = typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN"
           const pageCount = typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined
-          const selectedTemplateId =
+          let selectedTemplateId =
             typeof params.node.config.templateId === "string" && params.node.config.templateId.trim()
               ? params.node.config.templateId.trim()
               : null
+          let autoSelectedTemplateId: string | null = null
+          let autoRecommendedTemplates: ReturnType<typeof buildPptRecommendedTemplateSummaries> | null = null
 
           if (previewRuntime === "ppt-master-agent" && !selectedTemplateId) {
-            const selection = buildWorkflowEditablePptTemplateSelectionMessage({
+            const selection = resolveWorkflowEditablePptTemplateId({
               locale,
               scenario,
               language,
               pageCount,
               prompt,
             })
-
-            return {
-              output: {
-                text: [selection.text],
-              },
-              metadata: {
-                templateSelectionRequired: true,
-                recommendedTemplates: selection.recommendedTemplates,
-                previewRuntime,
-              },
+            if (!selection.selectedTemplateId) {
+              throw new Error("workflow_ppt_template_autoselect_failed")
             }
+            selectedTemplateId = selection.selectedTemplateId
+            autoSelectedTemplateId = selection.selectedTemplateId
+            autoRecommendedTemplates = selection.recommendedTemplates
           }
 
           const previewBody = {
             prompt,
             scenario,
             language,
-            model: typeof params.node.config.model === "string" ? params.node.config.model : undefined,
+            model:
+              typeof params.node.config.model === "string" && params.node.config.model.trim()
+                ? params.node.config.model
+                : "MiniMax-M2.7-highspeed",
             previewRuntime,
             templateMode:
               previewRuntime === "ppt-master-agent"
@@ -1745,6 +1737,8 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               selectedVariantKey,
               previewSessionId: previewSessionId || null,
               workItemId: workItemId ?? null,
+              ...(autoSelectedTemplateId ? { autoSelectedTemplateId } : {}),
+              ...(autoRecommendedTemplates ? { recommendedTemplates: autoRecommendedTemplates } : {}),
             },
           }
         }

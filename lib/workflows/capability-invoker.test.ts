@@ -1190,7 +1190,7 @@ test("workflow ppt capability forwards the selected preview model", async () => 
   assert.equal(leadToolPreviewBodies[0]?.templateId, "neo-grid-bold")
 })
 
-test("workflow editable ppt returns template recommendations before any preview generation when no template is selected", async () => {
+test("workflow editable ppt auto-selects a template and generates in one pass when no template is selected", async () => {
   const invoke = createWorkflowCapabilityInvoker({
     currentUser: {
       id: 96,
@@ -1224,11 +1224,16 @@ test("workflow editable ppt returns template recommendations before any preview 
     },
   }))
 
-  assert.equal(leadToolPreviewBodies.length, 0)
-  assert.equal(leadToolDownloadBodies.length, 0)
-  assert.match(result.output.text?.[0] || "", /推荐模板/)
-  assert.match(result.output.text?.[0] || "", /新野蛮主义 \(neo-brutalism\)/)
-  assert.equal(result.metadata?.templateSelectionRequired, true)
+  assert.equal(leadToolPreviewBodies.length, 1)
+  assert.equal(leadToolDownloadBodies.length, 1)
+  assert.equal(leadToolPreviewBodies[0]?.previewRuntime, "ppt-master-agent")
+  assert.equal(leadToolPreviewBodies[0]?.model, "MiniMax-M2.7-highspeed")
+  assert.equal(leadToolPreviewBodies[0]?.scenario, "sales-deck")
+  assert.equal(leadToolPreviewBodies[0]?.templateMode, "single-template")
+  assert.equal(typeof leadToolPreviewBodies[0]?.templateId, "string")
+  assert.equal(result.output.ppt?.length, 1)
+  assert.equal(result.metadata?.autoSelectedTemplateId, leadToolPreviewBodies[0]?.templateId)
+  assert.equal(Array.isArray(result.metadata?.recommendedTemplates), true)
 })
 
 test("workflow writer capability forwards the selected model config", async () => {

@@ -877,12 +877,12 @@ export function WorkflowNodeEditorFields({
       ? [
           { value: "marketing-campaign", label: "营销方案" },
           { value: "product-launch", label: "产品发布" },
-          { value: "sales-proposal", label: "销售提案" },
+          { value: "sales-deck", label: "销售提案" },
         ]
       : [
           { value: "marketing-campaign", label: "Campaign" },
           { value: "product-launch", label: "Launch" },
-          { value: "sales-proposal", label: "Proposal" },
+          { value: "sales-deck", label: "Proposal" },
         ]
   const currentSelectedProviderId =
     asString(node.config.selectedProviderId) || llmModelCatalog.defaultProviderId || llmModelCatalog.providers[0]?.providerId || ""

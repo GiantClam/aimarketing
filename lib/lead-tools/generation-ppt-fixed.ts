@@ -45,6 +45,7 @@ import {
 import { renderPptPreviewDeckAssets } from "@/lib/lead-tools/ppt-master-preview"
 import { buildPreviewSystemPrompt, buildPreviewUserPrompt, isPreviewPlaceholder } from "@/lib/lead-tools/ppt-preview-copy"
 import { generateTextWithWriterModel, hasAibermApiKey, hasCrazyrouteApiKey } from "@/lib/writer/aiberm"
+import { withTaskTimeout } from "@/lib/task-timeout"
 
 type LeadToolPptPlan = {
   title: string
@@ -53,6 +54,7 @@ type LeadToolPptPlan = {
 }
 
 type LeadToolPreviewProviderId = "pptoken" | "minimax" | "stepfun" | "writer"
+const LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS = 45_000
 
 function normalizeText(raw: unknown) {
   return typeof raw === "string" ? raw.trim() : ""
@@ -843,6 +845,22 @@ export function normalizePptMasterRuntimeProviderError(
   return message
 }
 
+async function generatePreviewTextWithProviderTimeout(params: {
+  providerId: Exclude<LeadToolPreviewProviderId, "writer">
+  model: string
+  run: () => Promise<string>
+}) {
+  try {
+    return await withTaskTimeout(
+      params.run(),
+      LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS,
+      `ppt_master_runtime_provider_timeout:${params.providerId}:${params.model}`,
+    )
+  } catch (error) {
+    throw new Error(normalizePptMasterRuntimeProviderError(error, params.providerId, params.model))
+  }
+}
+
 async function generateTextWithLeadToolPreviewProvider(params: {
   systemPrompt: string
   userPrompt: string
@@ -865,16 +883,24 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       baseURL: config.baseURL,
     })
 
-    const response = await generateText({
-      model: provider.chat(params.model),
-      system: params.systemPrompt,
-      prompt: params.userPrompt,
-    })
+    const text = await generatePreviewTextWithProviderTimeout({
+      providerId: "minimax",
+      model: params.model,
+      run: async () => {
+        const response = await generateText({
+          model: provider.chat(params.model),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
 
-    const text = response.text.trim()
-    if (!text) {
-      throw new Error("lead_tool_preview_empty_response")
-    }
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+    })
 
     return {
       text,
@@ -962,18 +988,24 @@ async function generateTextWithLeadToolPreviewProvider(params: {
 
     const result = await executeAiEntryWithProviderFailover(
       async (providerRun) => {
-        const response = await generateText({
-          model: providerRun.provider.chat(providerRun.model),
-          system: params.systemPrompt,
-          prompt: params.userPrompt,
+        return generatePreviewTextWithProviderTimeout({
+          providerId: "pptoken",
+          model: providerRun.model,
+          run: async () => {
+            const response = await generateText({
+              model: providerRun.provider.chat(providerRun.model),
+              system: params.systemPrompt,
+              prompt: params.userPrompt,
+            })
+
+            const text = response.text.trim()
+            if (!text) {
+              throw new Error("lead_tool_preview_empty_response")
+            }
+
+            return text
+          },
         })
-
-        const text = response.text.trim()
-        if (!text) {
-          throw new Error("lead_tool_preview_empty_response")
-        }
-
-        return text
       },
       {
         preferredProviderId: "pptoken",
@@ -1012,16 +1044,24 @@ async function generateTextWithLeadToolPreviewProvider(params: {
     })
 
     const resolvedModel = config.model || params.model
-    const response = await generateText({
-      model: provider.chat(resolvedModel),
-      system: params.systemPrompt,
-      prompt: params.userPrompt,
-    })
+    const text = await generatePreviewTextWithProviderTimeout({
+      providerId: "minimax",
+      model: resolvedModel,
+      run: async () => {
+        const response = await generateText({
+          model: provider.chat(resolvedModel),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
 
-    const text = response.text.trim()
-    if (!text) {
-      throw new Error("lead_tool_preview_empty_response")
-    }
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+    })
 
     return {
       text,
@@ -1038,16 +1078,24 @@ async function generateTextWithLeadToolPreviewProvider(params: {
     })
 
     const resolvedModel = config.model || params.model
-    const response = await generateText({
-      model: provider.chat(resolvedModel),
-      system: params.systemPrompt,
-      prompt: params.userPrompt,
-    })
+    const text = await generatePreviewTextWithProviderTimeout({
+      providerId: "stepfun",
+      model: resolvedModel,
+      run: async () => {
+        const response = await generateText({
+          model: provider.chat(resolvedModel),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
 
-    const text = response.text.trim()
-    if (!text) {
-      throw new Error("lead_tool_preview_empty_response")
-    }
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+    })
 
     return {
       text,
@@ -1059,18 +1107,24 @@ async function generateTextWithLeadToolPreviewProvider(params: {
   if (hasLeadToolPptokenProvider()) {
     const result = await executeAiEntryWithProviderFailover(
       async (providerRun) => {
-        const response = await generateText({
-          model: providerRun.provider.chat(providerRun.model),
-          system: params.systemPrompt,
-          prompt: params.userPrompt,
+        return generatePreviewTextWithProviderTimeout({
+          providerId: "pptoken",
+          model: providerRun.model,
+          run: async () => {
+            const response = await generateText({
+              model: providerRun.provider.chat(providerRun.model),
+              system: params.systemPrompt,
+              prompt: params.userPrompt,
+            })
+
+            const text = response.text.trim()
+            if (!text) {
+              throw new Error("lead_tool_preview_empty_response")
+            }
+
+            return text
+          },
         })
-
-        const text = response.text.trim()
-        if (!text) {
-          throw new Error("lead_tool_preview_empty_response")
-        }
-
-        return text
       },
       {
         preferredProviderId: "pptoken",
