@@ -165,6 +165,7 @@ export function getLeadToolPptRuntimeSlideProvider() {
   const provider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER?.trim().toLowerCase()
 
   if (
+    provider === "deepseek" ||
     provider === "pptoken" ||
     provider === "minimax" ||
     provider === "stepfun" ||
@@ -181,6 +182,7 @@ export function getLeadToolPptPreviewProvider() {
   const provider = process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER?.trim().toLowerCase()
 
   if (
+    provider === "deepseek" ||
     provider === "pptoken" ||
     provider === "minimax" ||
     provider === "stepfun" ||

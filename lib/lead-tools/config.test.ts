@@ -297,3 +297,18 @@ test("ppt runtime slide config prefers explicit overrides and disables emergency
     }
   }
 })
+
+test("ppt preview provider accepts deepseek explicit override", () => {
+  const previousPreviewProvider = process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER
+
+  try {
+    process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER = "deepseek"
+    assert.equal(getLeadToolPptPreviewProvider(), "deepseek")
+  } finally {
+    if (previousPreviewProvider === undefined) {
+      delete process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER
+    } else {
+      process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER = previousPreviewProvider
+    }
+  }
+})
