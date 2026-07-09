@@ -7,6 +7,7 @@ import {
   type PptPreviewStyleKey,
   type PptRecommendedTemplateSummary,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { bundledPptMasterVendorLayoutsIndex } from "@/lib/lead-tools/ppt-master-vendor-layouts-index"
 
 type PptMasterLayoutsIndex = {
   categories?: Record<string, { label?: string; layouts?: string[] }>
@@ -47,10 +48,28 @@ let cachedPptMasterLayoutsIndex: PptMasterLayoutsIndex | null = null
 
 function getPptMasterRepoCandidates() {
   const projectCacheCandidate = path.resolve(process.cwd(), ".cache", "ppt-master-upstream")
-  const siblingVendorCandidate = path.resolve(process.cwd(), "..", "autoviralvid", "vendor", "minimax-skills")
 
-  return [process.env.PPT_MASTER_REPO_DIR, projectCacheCandidate, siblingVendorCandidate].filter(
+  return [process.env.PPT_MASTER_REPO_DIR, projectCacheCandidate].filter(
     (value): value is string => Boolean(value?.trim()),
+  )
+}
+
+function normalizePptMasterLayoutsIndex(parsed: Record<string, unknown>): PptMasterLayoutsIndex {
+  return parsed.layouts && typeof parsed.layouts === "object"
+    ? (parsed as PptMasterLayoutsIndex)
+    : {
+        categories: {},
+        quickLookup: {},
+        layouts: parsed as NonNullable<PptMasterLayoutsIndex["layouts"]>,
+      }
+}
+
+function getPptMasterLayoutsIndexRichnessScore(index: PptMasterLayoutsIndex) {
+  const layoutsCount = Object.keys(index.layouts ?? {}).length
+  return (
+    layoutsCount +
+    (Object.keys(index.categories ?? {}).length > 0 ? 100 : 0) +
+    (Object.keys(index.quickLookup ?? {}).length > 0 ? 100 : 0)
   )
 }
 
@@ -59,27 +78,15 @@ function loadPptMasterLayoutsIndex() {
     return cachedPptMasterLayoutsIndex
   }
 
-  let bestMatch: PptMasterLayoutsIndex | null = null
-  let bestScore = -1
+  let bestMatch = bundledPptMasterVendorLayoutsIndex as PptMasterLayoutsIndex
+  let bestScore = getPptMasterLayoutsIndexRichnessScore(bestMatch)
 
   for (const candidate of getPptMasterRepoCandidates()) {
     const layoutsIndexPath = path.join(candidate, PPT_MASTER_LAYOUTS_INDEX_RELATIVE_PATH)
     try {
       const raw = fs.readFileSync(layoutsIndexPath, "utf8")
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const normalized =
-        parsed.layouts && typeof parsed.layouts === "object"
-          ? (parsed as PptMasterLayoutsIndex)
-          : {
-              categories: {},
-              quickLookup: {},
-              layouts: parsed as NonNullable<PptMasterLayoutsIndex["layouts"]>,
-            }
-      const layoutsCount = Object.keys(normalized.layouts ?? {}).length
-      const richnessScore =
-        layoutsCount +
-        (Object.keys(normalized.categories ?? {}).length > 0 ? 100 : 0) +
-        (Object.keys(normalized.quickLookup ?? {}).length > 0 ? 100 : 0)
+      const normalized = normalizePptMasterLayoutsIndex(JSON.parse(raw) as Record<string, unknown>)
+      const richnessScore = getPptMasterLayoutsIndexRichnessScore(normalized)
 
       if (richnessScore > bestScore) {
         bestMatch = normalized
@@ -90,16 +97,7 @@ function loadPptMasterLayoutsIndex() {
     }
   }
 
-  if (bestMatch) {
-    cachedPptMasterLayoutsIndex = bestMatch
-    return cachedPptMasterLayoutsIndex
-  }
-
-  cachedPptMasterLayoutsIndex = {
-    categories: {},
-    quickLookup: {},
-    layouts: {},
-  }
+  cachedPptMasterLayoutsIndex = bestMatch
   return cachedPptMasterLayoutsIndex
 }
 
