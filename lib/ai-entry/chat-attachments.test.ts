@@ -2,11 +2,13 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  buildOutgoingAiEntryMessages,
   extractEmbeddedAttachmentSummaries,
   extractUserIntentFromMessageContent,
   normalizeMessageTextContent,
   normalizeAttachmentList,
   normalizeMessages,
+  serializeMessageTextWithAttachments,
 } from "./chat-attachments"
 
 test("normalizes and caps incoming text attachments", () => {
@@ -52,6 +54,34 @@ test("appends text attachment context to the latest user message", () => {
   assert.equal(parts[0].text, "Use the attachment")
   assert.match(parts[1].text || "", /brief\.pdf/)
   assert.match(parts[1].text || "", /Attachment facts/)
+})
+
+test("normalizes per-message text attachments from prior conversation turns", () => {
+  const messages = normalizeMessages([
+    {
+      role: "user",
+      content: "首轮请求",
+      attachments: [
+        {
+          name: "brief.md",
+          mediaType: "text/markdown",
+          text: "附件中的关键背景",
+          size: 123,
+        },
+      ],
+    },
+    { role: "assistant", content: "收到" },
+    { role: "user", content: "继续生成" },
+  ])
+
+  assert.equal(messages.length, 3)
+  const first = messages[0]
+  assert.equal(first.role, "user")
+  assert.ok(Array.isArray(first.content))
+  const parts = first.content as Array<{ type: string; text?: string }>
+  assert.equal(parts[0].text, "首轮请求")
+  assert.match(parts[1].text || "", /brief\.md/)
+  assert.match(parts[1].text || "", /附件中的关键背景/)
 })
 
 test("keeps image attachment parts intact", () => {
@@ -141,4 +171,67 @@ test("extracts user intent from multipart message content without attachment blo
   ])
 
   assert.equal(normalized, "写一份介绍预算智能公司和业务的 ppt")
+})
+
+test("serializes text attachments into persistable message content", () => {
+  const serialized = serializeMessageTextWithAttachments("请基于附件生成 PPT", [
+    {
+      name: "brief.md",
+      mediaType: "text/markdown",
+      text: "附件正文",
+      size: 1,
+    },
+  ])
+
+  assert.match(serialized, /^请基于附件生成 PPT/)
+  assert.match(serialized, /\[Uploaded file: brief\.md \/ text\/markdown\]/)
+  assert.match(serialized, /附件正文/)
+})
+
+test("builds outgoing ai-entry messages with raw content fallback", () => {
+  const outgoing = buildOutgoingAiEntryMessages([
+    {
+      role: "user",
+      content: "展示内容",
+      rawContent: "展示内容\n\n[Uploaded file: brief.md / text/markdown]\n附件正文",
+      attachments: [
+        {
+          name: "brief.md",
+          mediaType: "text/markdown",
+        },
+      ],
+    },
+    {
+      role: "user",
+      content: "当前轮补充",
+      attachments: [
+        {
+          name: "facts.txt",
+          mediaType: "text/plain",
+          text: "更多事实",
+          size: 10,
+        },
+      ],
+    },
+  ])
+
+  assert.deepEqual(outgoing, [
+    {
+      role: "user",
+      content: "展示内容\n\n[Uploaded file: brief.md / text/markdown]\n附件正文",
+    },
+    {
+      role: "user",
+      content: "当前轮补充",
+      attachments: [
+        {
+          name: "facts.txt",
+          mediaType: "text/plain",
+          dataUrl: "",
+          text: "更多事实",
+          size: 10,
+        },
+      ],
+    },
+  ])
 })

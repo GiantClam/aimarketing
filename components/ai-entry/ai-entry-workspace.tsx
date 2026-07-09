@@ -120,6 +120,7 @@ import {
   shouldShowAiEntryConversationRestore,
 } from "@/lib/ai-entry/message-restore"
 import { mapPersistedAiEntryMessages as mapPersistedAiEntryMessagesFromRecords } from "@/lib/ai-entry/persisted-message-mapper"
+import { buildOutgoingAiEntryMessages } from "@/lib/ai-entry/chat-attachments"
 import { resolveAiEntryTargetConversationId } from "@/lib/ai-entry/route-sync"
 import { resolveAiEntryTaskPollIntervalMs } from "@/lib/ai-entry/task-run-runtime"
 import type { KnowledgeScope } from "@/lib/knowledge/types"
@@ -202,6 +203,7 @@ type ChatMessage = {
   id: string
   role: "user" | "assistant"
   content: string
+  rawContent?: string
   parts?: MessagePart[]
   attachments?: ChatAttachment[]
   createdAt?: number
@@ -529,6 +531,7 @@ function readPendingConversationMessagesFromStorage(raw: string | null, clear: (
       id?: unknown
       role?: unknown
       content?: unknown
+      rawContent?: unknown
       attachments?: unknown
       parts?: unknown
       createdAt?: unknown
@@ -542,6 +545,7 @@ function readPendingConversationMessagesFromStorage(raw: string | null, clear: (
         const id = typeof item?.id === "string" && item.id.trim() ? item.id : `cached-${Date.now()}`
         const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
         const content = typeof item?.content === "string" ? item.content : ""
+        const rawContent = typeof item?.rawContent === "string" ? item.rawContent : undefined
         const attachments = Array.isArray(item?.attachments) ? item.attachments : undefined
         const parts = Array.isArray(item?.parts) ? item.parts : undefined
         const createdAt =
@@ -549,7 +553,7 @@ function readPendingConversationMessagesFromStorage(raw: string | null, clear: (
             ? item.createdAt
             : undefined
         if (!role) return null
-        return { id, role, content, attachments, parts, createdAt } as ChatMessage
+        return { id, role, content, rawContent, attachments, parts, createdAt } as ChatMessage
       })
       .filter((item): item is ChatMessage => Boolean(item))
   } catch {
@@ -2704,8 +2708,10 @@ export function AiEntryWorkspace({
     }
     const assistantMessageId = `assistant-${Date.now()}`
     const contextMessages = [
-      ...messages.filter((message) => message.content.trim()).map((message) => ({ role: message.role, content: message.content })),
-      { role: "user" as const, content: userMessageContent },
+      ...buildOutgoingAiEntryMessages(messages),
+      ...buildOutgoingAiEntryMessages([
+        { role: "user" as const, content: userMessageContent, attachments: sentAttachments },
+      ]),
     ]
     const baseMessages = messages
     let assistantDraft: ChatMessage = {

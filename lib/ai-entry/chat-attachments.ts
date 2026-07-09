@@ -3,6 +3,7 @@ import type { CoreMessage } from "ai"
 export type IncomingMessage = {
   role?: string
   content?: unknown
+  attachments?: unknown
 }
 
 export type IncomingAttachment = {
@@ -28,6 +29,13 @@ type MessageTextPartLike =
 type AttachmentContextPart =
   | { type: "text"; text: string }
   | { type: "image"; image: string; mediaType: string }
+
+type OutgoingMessageLike = {
+  role?: unknown
+  content?: unknown
+  rawContent?: unknown
+  attachments?: unknown
+}
 
 export function normalizeAttachmentList(input: unknown) {
   if (!Array.isArray(input)) return []
@@ -80,18 +88,38 @@ export function buildAttachmentContextParts(attachments: ReturnType<typeof norma
   return parts
 }
 
+export function serializeMessageTextWithAttachments(
+  content: unknown,
+  attachments: unknown,
+) {
+  const normalizedContent = normalizeMessageTextContent(content)
+  const normalizedAttachments = normalizeAttachmentList(attachments)
+  const textAttachmentBlocks = buildAttachmentContextParts(normalizedAttachments)
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+
+  return [normalizedContent, ...textAttachmentBlocks].filter(Boolean).join("")
+}
+
 export function normalizeMessages(messages: IncomingMessage[], attachments: ReturnType<typeof normalizeAttachmentList> = []) {
   const normalized: CoreMessage[] = []
   for (const [index, item] of messages.entries()) {
     const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
-    const content = typeof item?.content === "string" ? item.content.trim() : ""
+    const content = normalizeMessageTextContent(item?.content)
+    const messageAttachments =
+      role === "user" ? normalizeAttachmentList(item?.attachments) : []
+    const effectiveAttachments =
+      messageAttachments.length > 0
+        ? messageAttachments
+        : role === "user" && index === messages.length - 1
+          ? attachments
+          : []
     if (!role || !content) continue
-    if (role === "user" && index === messages.length - 1 && attachments.length > 0) {
+    if (role === "user" && effectiveAttachments.length > 0) {
       normalized.push({
         role,
         content: [
           { type: "text", text: content },
-          ...buildAttachmentContextParts(attachments),
+          ...buildAttachmentContextParts(effectiveAttachments),
         ],
       } as CoreMessage)
       continue
@@ -99,6 +127,35 @@ export function normalizeMessages(messages: IncomingMessage[], attachments: Retu
     normalized.push({ role, content })
   }
   return normalized
+}
+
+export function buildOutgoingAiEntryMessages(messages: OutgoingMessageLike[]) {
+  return messages
+    .map((item) => {
+      const role =
+        item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : null
+      const rawContent =
+        typeof item?.rawContent === "string" ? item.rawContent.trim() : ""
+      const content = rawContent || normalizeMessageTextContent(item?.content)
+      const attachments =
+        role === "user" && !rawContent ? normalizeAttachmentList(item?.attachments) : []
+
+      if (!role || !content) return null
+      return {
+        role,
+        content,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      }
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        role: "user" | "assistant"
+        content: string
+        attachments?: ReturnType<typeof normalizeAttachmentList>
+      } => Boolean(item),
+    )
 }
 
 export function normalizeMessageTextContent(content: unknown) {

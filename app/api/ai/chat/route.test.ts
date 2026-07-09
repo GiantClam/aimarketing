@@ -192,6 +192,12 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
     return {
       normalizeAttachmentList: () => [],
       normalizeMessages: (messages: Array<{ role: string; content: string }>) => messages,
+      normalizeMessageTextContent: (content: unknown) =>
+        typeof content === "string" ? content.trim() : "",
+      extractUserIntentFromMessageContent: (content: unknown) => {
+        if (typeof content !== "string") return ""
+        return content.replace(/\n*\[Uploaded file:[\s\S]*$/u, "").trim()
+      },
     }
   }
 
@@ -757,6 +763,31 @@ test("ai chat route persists the user prompt before assistant completion", async
         agentId: "executive-ppt",
       },
     ],
+  )
+})
+
+test("ai chat route persists uploaded attachment context inside the user message history", async () => {
+  const response = await POST({
+    json: async () => ({
+      messages: [
+        {
+          role: "user",
+          content: "写一份介绍预算智能公司和业务的 ppt\n\n[Uploaded file: brief.md / text/markdown]\n公司介绍\n业务结构\n套餐价格",
+        },
+      ],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  await response.text()
+  assert.equal(
+    appendMessageCalls[0]?.content,
+    "写一份介绍预算智能公司和业务的 ppt\n\n[Uploaded file: brief.md / text/markdown]\n公司介绍\n业务结构\n套餐价格",
   )
 })
 

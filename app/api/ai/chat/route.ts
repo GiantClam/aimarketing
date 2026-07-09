@@ -49,6 +49,7 @@ import { parseCustomAgentRuntimeId } from "@/lib/platform/custom-agent-runtime-i
 import {
   extractUserIntentFromMessageContent,
   normalizeAttachmentList,
+  normalizeMessageTextContent,
   normalizeMessages,
   type IncomingAttachment,
   type IncomingMessage,
@@ -407,6 +408,12 @@ function getLatestUserPrompt(messages: CoreMessage[]) {
   const latest = [...messages].reverse().find((item) => item.role === "user")
   if (!latest) return ""
   return extractUserIntentFromMessageContent(latest.content)
+}
+
+function getLatestPersistableUserMessageContent(messages: CoreMessage[]) {
+  const latest = [...messages].reverse().find((item) => item.role === "user")
+  if (!latest) return ""
+  return normalizeMessageTextContent(latest.content)
 }
 
 function estimateTextTokens(text: string) {
@@ -790,6 +797,8 @@ export async function POST(request: NextRequest) {
         : ([{ role: "user", content: fallbackPrompt }] as CoreMessage[])
 
     const latestUserPrompt = getLatestUserPrompt(normalizedMessages) || fallbackPrompt
+    const latestPersistableUserContent =
+      getLatestPersistableUserMessageContent(normalizedMessages) || latestUserPrompt || fallbackPrompt
     const forcedReplyLanguage = resolveForcedReplyLanguage(normalizedMessages)
     const isZh = forcedReplyLanguage !== "en"
     const requestOrigin = request.nextUrl.origin
@@ -860,7 +869,7 @@ export async function POST(request: NextRequest) {
       userPromptPersisted = await persistAiEntryUserPromptSafe({
         userId: currentUser.id,
         conversationId,
-        userPrompt: latestUserPrompt,
+        userPrompt: latestPersistableUserContent,
         scope: conversationScope,
         agentId: agentConfig.agentId,
       })

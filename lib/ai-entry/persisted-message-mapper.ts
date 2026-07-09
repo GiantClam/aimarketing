@@ -22,6 +22,7 @@ export type PersistedAiEntryMappedMessage = {
   id: string
   role: "user" | "assistant"
   content: string
+  rawContent?: string
   parts?: MessagePart[]
   attachments?: Array<{
     id: string
@@ -85,6 +86,7 @@ export function mapPersistedAiEntryMessages(
           id,
           role,
           content: normalizedContent,
+          ...(content !== normalizedContent ? { rawContent: content } : {}),
           createdAt,
           ...(embeddedAttachments.length ? { attachments: embeddedAttachments } : {}),
           ...(templateRecommendationParts.length ? { parts: templateRecommendationParts } : {}),

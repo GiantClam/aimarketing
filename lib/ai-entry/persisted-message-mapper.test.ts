@@ -41,3 +41,29 @@ test("mapPersistedAiEntryMessages drops stale failed background messages before 
     ["user", "preview"],
   )
 })
+
+test("mapPersistedAiEntryMessages keeps raw user content for follow-up requests while hiding attachment blocks in display content", () => {
+  const mapped = mapPersistedAiEntryMessages([
+    {
+      id: "user-1",
+      role: "user",
+      content: "请基于附件生成 PPT\n\n[Uploaded file: brief.md / text/markdown]\n附件正文",
+      created_at: 10,
+    },
+  ])
+
+  assert.equal(mapped.length, 1)
+  assert.equal(mapped[0]?.content, "请基于附件生成 PPT")
+  assert.equal(
+    mapped[0]?.rawContent,
+    "请基于附件生成 PPT\n\n[Uploaded file: brief.md / text/markdown]\n附件正文",
+  )
+  assert.deepEqual(mapped[0]?.attachments, [
+    {
+      id: "embedded-attachment:user-1:0",
+      name: "brief.md",
+      mediaType: "text/markdown",
+      size: 0,
+    },
+  ])
+})
