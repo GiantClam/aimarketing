@@ -76,6 +76,30 @@ function stripMarkdownDecorations(value: string) {
     .trim()
 }
 
+export function buildPreviewProviderMessages(params: {
+  providerId: LeadToolPreviewProviderId
+  systemPrompt: string
+  userPrompt: string
+}) {
+  if (params.providerId === "deepseek") {
+    return {
+      system: undefined,
+      prompt: [
+        "System instructions:",
+        params.systemPrompt,
+        "",
+        "User request:",
+        params.userPrompt,
+      ].join("\n"),
+    }
+  }
+
+  return {
+    system: params.systemPrompt,
+    prompt: params.userPrompt,
+  }
+}
+
 function toStructuredString(value: unknown) {
   return typeof value === "string" ? stripMarkdownDecorations(value).trim() : ""
 }
@@ -1182,10 +1206,15 @@ async function generateTextWithLeadToolPreviewProvider(params: {
           providerId: "deepseek",
           model: providerRun.model,
           run: async () => {
+            const messages = buildPreviewProviderMessages({
+              providerId: "deepseek",
+              systemPrompt: params.systemPrompt,
+              userPrompt: params.userPrompt,
+            })
             const response = await generateText({
               model: providerRun.provider.chat(providerRun.model),
-              system: params.systemPrompt,
-              prompt: params.userPrompt,
+              system: messages.system,
+              prompt: messages.prompt,
             })
 
             const text = response.text.trim()

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
+  buildPreviewProviderMessages,
   buildStyleAwarePrompt,
   generateLeadToolPptStoryDeck,
   isLowInformationPptPlan,
@@ -542,6 +543,32 @@ test("runtime provider errors normalize headers timeout for Railway diagnostics"
       "gpt-5.4",
     ),
     "ppt_master_runtime_provider_headers_timeout:pptoken:gpt-5.4",
+  )
+})
+
+test("deepseek preview messages avoid developer-role system prompts", () => {
+  assert.deepEqual(
+    buildPreviewProviderMessages({
+      providerId: "deepseek",
+      systemPrompt: "System policy",
+      userPrompt: "User ask",
+    }),
+    {
+      system: undefined,
+      prompt: "System instructions:\nSystem policy\n\nUser request:\nUser ask",
+    },
+  )
+
+  assert.deepEqual(
+    buildPreviewProviderMessages({
+      providerId: "pptoken",
+      systemPrompt: "System policy",
+      userPrompt: "User ask",
+    }),
+    {
+      system: "System policy",
+      prompt: "User ask",
+    },
   )
 })
 
