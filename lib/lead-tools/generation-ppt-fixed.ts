@@ -1049,11 +1049,12 @@ async function generatePreviewTextWithProviderTimeout(params: {
   providerId: Exclude<LeadToolPreviewProviderId, "writer">
   model: string
   run: () => Promise<string>
+  timeoutMs?: number
 }) {
   try {
     return await withTaskTimeout(
       params.run(),
-      getLeadToolPreviewProviderTimeoutMs(params.providerId),
+      params.timeoutMs ?? getLeadToolPreviewProviderTimeoutMs(params.providerId),
       `ppt_master_runtime_provider_timeout:${params.providerId}:${params.model}`,
     )
   } catch (error) {
@@ -1066,6 +1067,7 @@ async function generateTextWithLeadToolPreviewProvider(params: {
   userPrompt: string
   model: string
   preferredProviderId?: LeadToolPreviewProviderId | null
+  providerTimeoutMs?: number
 }) {
   const preferredProviderId = resolveLeadToolPreviewProviderPreference(
     params.model,
@@ -1086,6 +1088,7 @@ async function generateTextWithLeadToolPreviewProvider(params: {
     const text = await generatePreviewTextWithProviderTimeout({
       providerId: "minimax",
       model: params.model,
+      timeoutMs: params.providerTimeoutMs,
       run: async () => {
         const response = await generateText({
           model: provider.chat(params.model),
@@ -1191,6 +1194,7 @@ async function generateTextWithLeadToolPreviewProvider(params: {
         return generatePreviewTextWithProviderTimeout({
           providerId: "pptoken",
           model: providerRun.model,
+          timeoutMs: params.providerTimeoutMs,
           run: async () => {
             const response = await generateText({
               model: providerRun.provider.chat(providerRun.model),
@@ -1231,6 +1235,7 @@ async function generateTextWithLeadToolPreviewProvider(params: {
         return generatePreviewTextWithProviderTimeout({
           providerId: "deepseek",
           model: providerRun.model,
+          timeoutMs: params.providerTimeoutMs,
           run: async () => {
             const messages = buildPreviewProviderMessages({
               providerId: "deepseek",
@@ -1292,6 +1297,7 @@ async function generateTextWithLeadToolPreviewProvider(params: {
     const text = await generatePreviewTextWithProviderTimeout({
       providerId: "minimax",
       model: resolvedModel,
+      timeoutMs: params.providerTimeoutMs,
       run: async () => {
         const response = await generateText({
           model: provider.chat(resolvedModel),
@@ -1326,6 +1332,7 @@ async function generateTextWithLeadToolPreviewProvider(params: {
     const text = await generatePreviewTextWithProviderTimeout({
       providerId: "stepfun",
       model: resolvedModel,
+      timeoutMs: params.providerTimeoutMs,
       run: async () => {
         const response = await generateText({
           model: provider.chat(resolvedModel),
@@ -2405,6 +2412,7 @@ async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideCont
         userPrompt: buildRuntimeSlideUserPrompt(context),
         model: requestedModel,
         preferredProviderId,
+        providerTimeoutMs: slideTimeoutMs,
       }),
       new Promise<never>((_resolve, reject) =>
         setTimeout(() => reject(new Error("ppt_master_runtime_slide_timeout")), slideTimeoutMs),

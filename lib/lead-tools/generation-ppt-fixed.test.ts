@@ -602,6 +602,10 @@ test("deepseek preview provider timeout is longer than default runtime providers
   }
 })
 
+test("deepseek preview timeout can inherit a longer slide runtime window", () => {
+  assert.equal(getLeadToolPreviewProviderTimeoutMs("deepseek"), 120_000)
+})
+
 test("deepseek writer preview planning falls back to structured object generation when freeform JSON is missing", async (t) => {
   let structuredCalls = 0
 
