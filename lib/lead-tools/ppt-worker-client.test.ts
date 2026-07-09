@@ -437,6 +437,78 @@ test("ppt worker preview preserves supported worker models", async () => {
   }
 })
 
+test("ppt worker preview preserves DeepSeek v4 pro for remote worker requests", async () => {
+  const originalFetch = global.fetch
+  const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousPollInterval = process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+  const previousTimeout = process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+
+  try {
+    process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com"
+    process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = "1"
+    process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = "1000"
+
+    let requestBody = ""
+    global.fetch = (async (input, init) => {
+      if (String(input).endsWith("/preview")) {
+        requestBody = String(init?.body || "")
+        return {
+          ok: true,
+          status: 202,
+          json: async () => ({
+            jobId: "job_deepseek_v4_pro",
+            status: "queued",
+          }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          jobId: "job_deepseek_v4_pro",
+          status: "completed",
+          previewSessionId: "session_deepseek_v4_pro",
+          generatedAt: "2026-06-24T00:00:00.000Z",
+          deck: { title: "Deck" },
+        }),
+      } as Response
+    }) as typeof fetch
+
+    await requestPptWorkerPreview({
+      requestId: "req_deepseek_v4_pro",
+      prompt: "Build deck",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      model: "deepseek-v4-pro",
+      templateMode: "auto-4",
+      allowMockFallback: false,
+    })
+
+    assert.match(requestBody, /"model":"deepseek-v4-pro"/)
+  } finally {
+    global.fetch = originalFetch
+
+    if (previousBaseUrl === undefined) {
+      delete process.env.PPT_WORKER_BASE_URL
+    } else {
+      process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+
+    if (previousPollInterval === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_POLL_INTERVAL_MS = previousPollInterval
+    }
+
+    if (previousTimeout === undefined) {
+      delete process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS
+    } else {
+      process.env.PPT_WORKER_PREVIEW_TIMEOUT_MS = previousTimeout
+    }
+  }
+})
+
 test("ppt worker export posts selected variant and decodes success payload", async () => {
   const originalFetch = global.fetch
   const previousBaseUrl = process.env.PPT_WORKER_BASE_URL

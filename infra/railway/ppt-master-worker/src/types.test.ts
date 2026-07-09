@@ -33,6 +33,22 @@ test("worker preview schema accepts vendor ppt-master template ids", () => {
   assert.equal(parsed.templateId, "smart_red")
 })
 
+test("worker preview schema accepts DeepSeek v4 pro as a remote worker model", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_deepseek_v4_pro",
+    prompt: "Build a tech company introduction deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    model: "deepseek-v4-pro",
+    templateMode: "single-template",
+    templateId: "smart_red",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.model, "deepseek-v4-pro")
+})
+
 test("worker preview schema still rejects unknown template ids", () => {
   assert.throws(
     () =>

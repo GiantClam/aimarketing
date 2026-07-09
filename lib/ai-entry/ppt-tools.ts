@@ -6,16 +6,20 @@ import { z } from "zod"
 import type { AuthUser } from "@/lib/auth/session"
 import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
 import { preparePptPreviewInput } from "@/lib/ai-entry/ppt-brief"
-import { resolvePptTemplateSelection } from "@/lib/ai-entry/ppt-template-selection"
+import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
 import type {
   PptPreviewDeck,
   PptPreviewResearchBrief,
+  PptRecommendedTemplateSummary,
   PptPreviewRuntimeValue,
   PptPreviewVariant,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
-import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
 import {
-  getPptMasterLibraryTemplateIds,
+  buildPptRecommendedTemplateSummaries,
+  isKnownPptFrontendTemplateId,
+} from "@/lib/lead-tools/ppt-preview-data-fixed"
+import {
+  buildPptMasterRecommendedTemplateSummaries,
   getPptWorkerSupportedTemplateIds,
   isPptMasterLibraryTemplateSupported,
   isPptWorkerTemplateSupported,
@@ -45,10 +49,24 @@ const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
 
 const pptTemplateModeSchema = z.enum(["auto-4", "single-template"])
 
-const pptTemplateIdSchema = z.string().trim().refine(isPptWorkerTemplateSupported, "Unknown PPT template")
 const DEFAULT_SINGLE_TEMPLATE_NARRATIVE_ANGLE = "executive-brief" as const
 
-const previewPptDeckInputSchema = z
+const editablePptTemplateIdSchema = z
+  .string()
+  .trim()
+  .refine(isPptMasterLibraryTemplateSupported, "Unknown editable PPT template")
+
+const presentationPptTemplateIdSchema = z
+  .string()
+  .trim()
+  .refine(isKnownPptFrontendTemplateId, "Unknown presentation PPT template")
+
+const genericPptTemplateIdSchema = z
+  .string()
+  .trim()
+  .refine(isPptWorkerTemplateSupported, "Unknown PPT template")
+
+const editablePreviewPptDeckInputSchema = z
   .object({
     prompt: z
       .string()
@@ -97,7 +115,181 @@ const previewPptDeckInputSchema = z
     templateMode: pptTemplateModeSchema
       .optional()
       .describe("Use auto-4 to compare multiple directions, or single-template when the user wants one template family."),
-    templateId: pptTemplateIdSchema
+    templateId: editablePptTemplateIdSchema
+      .optional()
+      .describe("Optional editable PPT template id from the ppt-master library."),
+    pageCount: z
+      .number()
+      .int()
+      .min(4)
+      .max(20)
+      .optional()
+      .describe("Optional requested slide count."),
+    model: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Optional content-planning model override. Defaults to the user's selected chat model when available."),
+    preferredProviderId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Optional provider hint for content planning and ppt-master session materialization."),
+    tone: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Tone or style direction for the deck."),
+    mustInclude: z
+      .array(z.string().trim().min(1))
+      .max(12)
+      .optional()
+      .describe("Must-include sections, facts, or messages that need to appear in the deck."),
+  })
+  .superRefine((value, context) => {
+    if (value.templateMode === "single-template" && !value.templateId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "templateId is required when templateMode is single-template",
+        path: ["templateId"],
+      })
+    }
+  })
+
+const presentationPreviewPptDeckInputSchema = z
+  .object({
+    prompt: z
+      .string()
+      .trim()
+      .min(1)
+      .describe("The complete presentation brief, including topic, audience, speaking goal, pacing, and stage direction."),
+    sourcePrompt: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Internal canonical user request used for research-gate checks when the tool prompt has been expanded by orchestration."),
+    audience: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Target audience for the live presentation."),
+    goal: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Speaking goal such as launch keynote, proposal pitch, or training talk."),
+    researchBrief: z
+      .union([
+        z.string().trim().min(1),
+        z.object({
+          topic: z.string().trim().min(1),
+          keyFacts: z.array(z.string().trim().min(1)).min(1),
+          numericEvidence: z.array(z.string().trim().min(1)).optional(),
+          risks: z.array(z.string().trim().min(1)).optional(),
+          implications: z.array(z.string().trim().min(1)).optional(),
+          sourceNotes: z.array(z.string().trim().min(1)).optional(),
+          rawSummary: z.string().trim().min(1).optional(),
+        }),
+      ])
+      .optional()
+      .describe("Optional research grounding synthesized from web_search results."),
+    scenario: pptScenarioSchema
+      .optional()
+      .describe("Best-fit presentation scenario."),
+    language: pptLanguageSchema
+      .optional()
+      .describe("Deck language. Use zh-CN for Chinese or en-US for English."),
+    templateMode: pptTemplateModeSchema
+      .optional()
+      .describe("Use auto-4 to compare multiple presentation directions, or single-template to lock one frontend-slides template."),
+    templateId: presentationPptTemplateIdSchema
+      .optional()
+      .describe("Optional frontend-slides template id for a single presentation direction."),
+    pageCount: z
+      .number()
+      .int()
+      .min(4)
+      .max(20)
+      .optional()
+      .describe("Optional requested slide count."),
+    tone: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Presentation tone or stage style direction."),
+    mustInclude: z
+      .array(z.string().trim().min(1))
+      .max(12)
+      .optional()
+      .describe("Must-include story beats, sections, or messages."),
+  })
+  .superRefine((value, context) => {
+    if (value.templateMode === "single-template" && !value.templateId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "templateId is required when templateMode is single-template",
+        path: ["templateId"],
+      })
+    }
+  })
+
+const genericPreviewPptDeckInputSchema = z
+  .object({
+    prompt: z
+      .string()
+      .trim()
+      .min(1)
+      .describe("The complete deck brief, including topic, audience, goal, tone, and any must-include points."),
+    sourcePrompt: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Internal canonical user request used for research-gate checks when the tool prompt has been expanded by orchestration."),
+    audience: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Target audience for the deck. Required before preview when the user asks for a generated PPT."),
+    goal: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Presentation goal such as executive review, client proposal, fundraising pitch, or training."),
+    researchBrief: z
+      .union([
+        z.string().trim().min(1),
+        z.object({
+          topic: z.string().trim().min(1),
+          keyFacts: z.array(z.string().trim().min(1)).min(1),
+          numericEvidence: z.array(z.string().trim().min(1)).optional(),
+          risks: z.array(z.string().trim().min(1)).optional(),
+          implications: z.array(z.string().trim().min(1)).optional(),
+          sourceNotes: z.array(z.string().trim().min(1)).optional(),
+          rawSummary: z.string().trim().min(1).optional(),
+        }),
+      ])
+      .optional()
+      .describe("Optional research grounding synthesized from web_search results."),
+    scenario: pptScenarioSchema
+      .optional()
+      .describe("Best-fit business scenario for the deck."),
+    language: pptLanguageSchema
+      .optional()
+      .describe("Deck language. Use zh-CN for Chinese or en-US for English."),
+    templateMode: pptTemplateModeSchema
+      .optional()
+      .describe("Use auto-4 to compare multiple directions, or single-template when the user wants one template family."),
+    templateId: genericPptTemplateIdSchema
       .optional()
       .describe("Required only when templateMode is single-template."),
     pageCount: z
@@ -142,13 +334,23 @@ const exportPptDeckInputSchema = z.object({
     .describe("Variant key chosen from preview_ppt_deck. If omitted, the latest recommended variant is exported when available."),
 })
 
-type PreviewPptDeckInput = z.infer<typeof previewPptDeckInputSchema>
+type EditablePreviewPptDeckInput = z.infer<typeof editablePreviewPptDeckInputSchema>
+type PresentationPreviewPptDeckInput = z.infer<typeof presentationPreviewPptDeckInputSchema>
+type GenericPreviewPptDeckInput = z.infer<typeof genericPreviewPptDeckInputSchema>
 type ExportPptDeckInput = z.infer<typeof exportPptDeckInputSchema>
 
 function resolveDefaultPreviewRuntime(agentId: string | null | undefined): PptPreviewRuntimeValue | undefined {
   if (agentId === "executive-ppt") return "ppt-master-agent"
   if (agentId === "executive-presentation-ppt") return "frontend-slides-agent"
   return undefined
+}
+
+type PptToolFlow = "editable" | "presentation" | "generic"
+
+function resolvePptToolFlow(agentId: string | null | undefined): PptToolFlow {
+  if (agentId === "executive-ppt") return "editable"
+  if (agentId === "executive-presentation-ppt") return "presentation"
+  return "generic"
 }
 
 function buildArtifactDownloadUrl(artifactId: number, download = false) {
@@ -268,6 +470,37 @@ function normalizePptToolError(error: unknown) {
     }
   }
 
+  const unsupportedEditableTemplateMatch = message.match(/ppt_editable_template_unsupported:([^\s]+)/iu)
+  if (unsupportedEditableTemplateMatch?.[1]) {
+    const templateId = unsupportedEditableTemplateMatch[1].trim()
+    return {
+      code: "ppt_editable_template_unsupported",
+      message: `The editable PPT assistant only supports ppt-master templates. Template "${templateId}" is not in the editable template library.`,
+    }
+  }
+
+  const unsupportedPresentationTemplateMatch = message.match(/ppt_presentation_template_unsupported:([^\s]+)/iu)
+  if (unsupportedPresentationTemplateMatch?.[1]) {
+    const templateId = unsupportedPresentationTemplateMatch[1].trim()
+    return {
+      code: "ppt_presentation_template_unsupported",
+      message: `The presentation PPT assistant only supports frontend-slides templates. Template "${templateId}" is not in the presentation template library.`,
+    }
+  }
+
+  const exportRuntimeMismatchMatch = message.match(/ppt_export_runtime_mismatch:(pptx|html):([^:\s]+)/iu)
+  if (exportRuntimeMismatchMatch?.[1] && exportRuntimeMismatchMatch?.[2]) {
+    const expectedKind = exportRuntimeMismatchMatch[1].toLowerCase()
+    const actualEngine = exportRuntimeMismatchMatch[2].trim()
+    return {
+      code: "ppt_export_runtime_mismatch",
+      message:
+        expectedKind === "pptx"
+          ? `This assistant only exports editable PPTX decks, but the current preview session belongs to "${actualEngine}". Regenerate the deck with the editable PPT assistant first.`
+          : `This assistant only exports presentation HTML decks, but the current preview session belongs to "${actualEngine}". Regenerate the deck with the presentation PPT assistant first.`,
+    }
+  }
+
   if (
     /your account quota is insufficient|insufficient_quota|provider_quota_exceeded|quota exceeded|please recharge/iu.test(
       message,
@@ -362,35 +595,88 @@ function shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime: PptPreview
   return defaultPreviewRuntime === "ppt-master-agent" && getLeadToolPptExecutionTransport() === "remote-worker"
 }
 
-function requiresRemoteWorkerForEditablePptAssistant(input: {
-  agentId?: string | null
-  defaultPreviewRuntime?: PptPreviewRuntimeValue
+function resolveEditableTemplateSelection(input: {
+  prompt: string
+  researchBrief?: string | PptPreviewResearchBrief
+  scenario: "marketing-campaign" | "product-launch" | "sales-deck" | "training"
+  language: "zh-CN" | "en-US"
+  pageCount?: number
+  templateMode?: "auto-4" | "single-template"
+  templateId?: string | null
+  limitTemplatesToRemoteWorker: boolean
+  preferSingleTemplate: boolean
 }) {
-  return (
-    input.agentId === "executive-ppt" &&
-    input.defaultPreviewRuntime === "ppt-master-agent" &&
-    getLeadToolPptExecutionTransport() !== "remote-worker"
+  const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
+    {
+      prompt: input.prompt,
+      researchBrief: input.researchBrief,
+      scenario: input.scenario,
+      language: input.language,
+      pageCount: input.pageCount,
+    },
+    input.limitTemplatesToRemoteWorker
+      ? {
+          allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
+        }
+      : undefined,
   )
+  const explicitTemplateId = typeof input.templateId === "string" && input.templateId.trim() ? input.templateId.trim() : null
+  if (explicitTemplateId && !isPptMasterLibraryTemplateSupported(explicitTemplateId)) {
+    throw new Error(`ppt_editable_template_unsupported:${explicitTemplateId}`)
+  }
+  const selectedTemplateId =
+    explicitTemplateId ||
+    (input.preferSingleTemplate ? recommendedTemplates[0]?.templateId?.trim() || null : null)
+  const templateMode = selectedTemplateId ? ("single-template" as const) : (input.templateMode ?? "auto-4")
+  return {
+    recommendedTemplates,
+    selectedTemplateId: selectedTemplateId || undefined,
+    templateMode,
+  }
+}
+
+function resolvePresentationTemplateSelection(input: {
+  prompt: string
+  researchBrief?: string | PptPreviewResearchBrief
+  scenario: "marketing-campaign" | "product-launch" | "sales-deck" | "training"
+  language: "zh-CN" | "en-US"
+  pageCount?: number
+  templateMode?: "auto-4" | "single-template"
+  templateId?: string | null
+}) {
+  const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+    prompt: input.prompt,
+    researchBrief: input.researchBrief,
+    scenario: input.scenario,
+    language: input.language,
+    pageCount: input.pageCount,
+  })
+  const explicitTemplateId = typeof input.templateId === "string" && input.templateId.trim() ? input.templateId.trim() : null
+  if (explicitTemplateId && !isKnownPptFrontendTemplateId(explicitTemplateId)) {
+    throw new Error(`ppt_presentation_template_unsupported:${explicitTemplateId}`)
+  }
+  const selectedTemplateId = explicitTemplateId || undefined
+  const templateMode = selectedTemplateId ? ("single-template" as const) : (input.templateMode ?? "auto-4")
+  return {
+    recommendedTemplates,
+    selectedTemplateId,
+    templateMode,
+  }
 }
 
 export async function exportAiEntryPptDeckArtifact(input: {
   currentUser: AuthUser
   previewSessionId: string
   selectedVariantKey?: string | null
-  agentId?: string | null
+  expectedArtifactKind?: "pptx" | "html" | null
 }): Promise<Record<string, unknown>> {
-  const { currentUser, previewSessionId, selectedVariantKey, agentId } = input
+  const { currentUser, previewSessionId, selectedVariantKey, expectedArtifactKind = null } = input
   try {
-    if (
-      requiresRemoteWorkerForEditablePptAssistant({
-        agentId,
-        defaultPreviewRuntime: resolveDefaultPreviewRuntime(agentId),
-      })
-    ) {
-      throw new Error("ppt_master_runtime_unavailable:remote_worker_required")
-    }
-
     const deck = await getPptPreviewSessionDeck(previewSessionId)
+    const actualArtifactKind = deck.previewEngine === "frontend-slides-html" ? "html" : "pptx"
+    if (expectedArtifactKind && actualArtifactKind !== expectedArtifactKind) {
+      throw new Error(`ppt_export_runtime_mismatch:${expectedArtifactKind}:${deck.previewEngine}`)
+    }
     const selectedVariant = selectDeckVariant(deck, selectedVariantKey)
     const result = (await buildLeadToolDownload(
       "ai-ppt-preview",
@@ -540,15 +826,35 @@ export async function exportAiEntryPptDeckArtifact(input: {
 export function buildAiEntryPptTools(input: {
   currentUser: AuthUser
   agentId?: string | null
+  selectedPreviewModel?: string | null
+  selectedPreviewProviderId?: string | null
 }): ToolSet {
   const { currentUser } = input
+  const toolFlow = resolvePptToolFlow(input.agentId)
   const defaultPreviewRuntime = resolveDefaultPreviewRuntime(input.agentId)
+  const previewInputSchema =
+    toolFlow === "editable"
+      ? editablePreviewPptDeckInputSchema
+      : toolFlow === "presentation"
+        ? presentationPreviewPptDeckInputSchema
+        : genericPreviewPptDeckInputSchema
+  const previewDescription =
+    toolFlow === "editable"
+      ? "Generate an editable PPT preview through ppt-master. Use this when the user wants a downloadable, editable PPTX deck."
+      : toolFlow === "presentation"
+        ? "Generate a presentation-first HTML deck through frontend-slides. Use this for live delivery, speaking flow, and stage-ready narrative decks."
+        : "Generate a PPT preview deck from a conversation brief. Use this when the user wants a slide deck, PPT, pitch deck, training deck, or presentation draft."
+  const exportDescription =
+    toolFlow === "editable"
+      ? "Export a downloadable editable PPTX artifact from a ppt-master preview session."
+      : toolFlow === "presentation"
+        ? "Export a downloadable HTML presentation artifact from a frontend-slides preview session."
+        : "Export the downloadable deck artifact from a previously generated preview session and selected variant. Use this after preview_ppt_deck when the user wants the actual deliverable file."
 
   return {
     preview_ppt_deck: tool<unknown, Record<string, unknown>>({
-      description:
-        "Generate a PPT preview deck from a conversation brief. Use this when the user wants a slide deck, PPT, pitch deck, training deck, or presentation draft.",
-      inputSchema: previewPptDeckInputSchema as any,
+      description: previewDescription,
+      inputSchema: previewInputSchema as any,
       execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
         const {
           prompt,
@@ -561,19 +867,14 @@ export function buildAiEntryPptTools(input: {
           templateMode,
           templateId,
           pageCount,
+          model,
+          preferredProviderId,
           tone,
           mustInclude,
-        } = rawInput as PreviewPptDeckInput
+        } = rawInput as EditablePreviewPptDeckInput &
+          PresentationPreviewPptDeckInput &
+          GenericPreviewPptDeckInput
         try {
-          if (
-            requiresRemoteWorkerForEditablePptAssistant({
-              agentId: input.agentId,
-              defaultPreviewRuntime,
-            })
-          ) {
-            throw new Error("ppt_master_runtime_unavailable:remote_worker_required")
-          }
-
           const prepared = preparePptPreviewInput({
             rawInput: {
               prompt,
@@ -604,62 +905,88 @@ export function buildAiEntryPptTools(input: {
             throw new Error("ppt_research_brief_required")
           }
 
-          const limitTemplatesToRemoteWorker = shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime)
-          const preferPptMasterLibraryTemplates =
-            input.agentId === "executive-ppt" && defaultPreviewRuntime === "ppt-master-agent"
-          const allowedTemplateIds = limitTemplatesToRemoteWorker
-            ? preferPptMasterLibraryTemplates
-              ? getPptMasterLibraryTemplateIds()
-              : getPptWorkerSupportedTemplateIds()
-            : undefined
           const explicitTemplateId = prepared.input.templateId ?? templateId
           const requestedTemplateMode = prepared.input.templateMode ?? templateMode
-          const shouldPreferSingleTemplateRecommendation =
-            input.agentId === "executive-ppt" && !explicitTemplateId
-          const selection = resolvePptTemplateSelection({
-            prompt: sourcePrompt ?? prompt,
-            researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
-            scenario: prepared.input.scenario,
-            language: prepared.input.language,
-            pageCount: prepared.input.pageCount ?? undefined,
-            templateMode: requestedTemplateMode ?? "auto-4",
-            templateId: explicitTemplateId,
-            previewRuntime: defaultPreviewRuntime,
-            preferSingleTemplate: shouldPreferSingleTemplateRecommendation,
-            allowedTemplateIds,
-          })
-          const recommendedTemplates = selection?.recommendedTemplates ?? []
-          const effectiveTemplateId = selection?.selectedTemplateId ?? explicitTemplateId ?? undefined
-          const effectiveTemplateMode = selection?.templateMode ?? (requestedTemplateMode ?? "auto-4")
-          const isSupportedEditableTemplate = preferPptMasterLibraryTemplates
-            ? isPptMasterLibraryTemplateSupported
-            : isPptWorkerTemplateSupported
-          if (
-            limitTemplatesToRemoteWorker &&
-            effectiveTemplateMode === "single-template" &&
-            effectiveTemplateId &&
-            !isSupportedEditableTemplate(effectiveTemplateId)
-          ) {
-            throw new Error(`ppt_worker_template_unsupported:${effectiveTemplateId}`)
+          const limitTemplatesToRemoteWorker = shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime)
+          let recommendedTemplates: PptRecommendedTemplateSummary[] = []
+          let effectiveTemplateId: string | undefined
+          let effectiveTemplateMode: "auto-4" | "single-template" = requestedTemplateMode ?? "auto-4"
+
+          if (toolFlow === "editable") {
+            const selection = resolveEditableTemplateSelection({
+              prompt: sourcePrompt ?? prompt,
+              researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
+              scenario: prepared.input.scenario,
+              language: prepared.input.language,
+              pageCount: prepared.input.pageCount ?? undefined,
+              templateMode: requestedTemplateMode,
+              templateId: explicitTemplateId,
+              limitTemplatesToRemoteWorker,
+              preferSingleTemplate: !explicitTemplateId,
+            })
+            recommendedTemplates = selection.recommendedTemplates
+            effectiveTemplateId = selection.selectedTemplateId
+            effectiveTemplateMode = selection.templateMode
+            if (
+              limitTemplatesToRemoteWorker &&
+              effectiveTemplateMode === "single-template" &&
+              effectiveTemplateId &&
+              !isPptWorkerTemplateSupported(effectiveTemplateId)
+            ) {
+              throw new Error(`ppt_worker_template_unsupported:${effectiveTemplateId}`)
+            }
+          } else if (toolFlow === "presentation") {
+            const selection = resolvePresentationTemplateSelection({
+              prompt: sourcePrompt ?? prompt,
+              researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
+              scenario: prepared.input.scenario,
+              language: prepared.input.language,
+              pageCount: prepared.input.pageCount ?? undefined,
+              templateMode: requestedTemplateMode,
+              templateId: explicitTemplateId,
+            })
+            recommendedTemplates = selection.recommendedTemplates
+            effectiveTemplateId = selection.selectedTemplateId
+            effectiveTemplateMode = selection.templateMode
+          } else {
+            recommendedTemplates = buildPptRecommendedTemplateSummaries({
+              prompt: sourcePrompt ?? prompt,
+              researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
+              scenario: prepared.input.scenario,
+              language: prepared.input.language,
+              pageCount: prepared.input.pageCount ?? undefined,
+            })
+            effectiveTemplateId = explicitTemplateId ?? undefined
+            effectiveTemplateMode = effectiveTemplateId ? "single-template" : (requestedTemplateMode ?? "auto-4")
           }
+
           const effectiveNarrativeAngle =
             effectiveTemplateMode === "single-template" && effectiveTemplateId
               ? DEFAULT_SINGLE_TEMPLATE_NARRATIVE_ANGLE
               : undefined
+          const effectiveModel =
+            toolFlow === "editable" ? model?.trim() || input.selectedPreviewModel?.trim() || undefined : undefined
+          const effectivePreferredProviderId =
+            toolFlow === "editable"
+              ? preferredProviderId?.trim() || input.selectedPreviewProviderId?.trim() || undefined
+              : undefined
+          const previewRequest = {
+            prompt: prepared.input.prompt,
+            researchBrief: prepared.input.researchBrief,
+            scenario: prepared.input.scenario,
+            language: prepared.input.language,
+            ...(effectiveModel ? { model: effectiveModel } : {}),
+            ...(effectivePreferredProviderId ? { preferredProviderId: effectivePreferredProviderId } : {}),
+            previewRuntime: defaultPreviewRuntime,
+            templateMode: effectiveTemplateMode,
+            templateId: effectiveTemplateId,
+            narrativeAngle: effectiveNarrativeAngle,
+            pageCount: prepared.input.pageCount,
+          }
 
           const result = (await buildLeadToolPreview(
             "ai-ppt-preview",
-            {
-              prompt: prepared.input.prompt,
-              researchBrief: prepared.input.researchBrief,
-              scenario: prepared.input.scenario,
-              language: prepared.input.language,
-              previewRuntime: defaultPreviewRuntime,
-              templateMode: effectiveTemplateMode,
-              templateId: effectiveTemplateId,
-              narrativeAngle: effectiveNarrativeAngle,
-              pageCount: prepared.input.pageCount,
-            },
+            previewRequest,
             currentUser,
           )) as LeadToolPptPreviewResponse & {
             meta?: {
@@ -715,7 +1042,9 @@ export function buildAiEntryPptTools(input: {
                   : null,
             },
             nextStep:
-              "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library.",
+              toolFlow === "presentation"
+                ? "Review the recommended presentation variant first, then call export_ppt_deck to save the downloadable HTML deck artifact to the work library."
+                : "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library.",
           }
         } catch (error) {
           const normalizedError = normalizePptToolError(error)
@@ -727,8 +1056,7 @@ export function buildAiEntryPptTools(input: {
       },
     }),
     export_ppt_deck: tool<unknown, Record<string, unknown>>({
-      description:
-        "Export the downloadable deck artifact from a previously generated preview session and selected variant. Use this after preview_ppt_deck when the user wants the actual deliverable file.",
+      description: exportDescription,
       inputSchema: exportPptDeckInputSchema as any,
       execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
         const { previewSessionId, selectedVariantKey } = rawInput as ExportPptDeckInput
@@ -736,7 +1064,8 @@ export function buildAiEntryPptTools(input: {
           currentUser,
           previewSessionId,
           selectedVariantKey,
-          agentId: input.agentId,
+          expectedArtifactKind:
+            toolFlow === "editable" ? "pptx" : toolFlow === "presentation" ? "html" : null,
         })
       },
     }),

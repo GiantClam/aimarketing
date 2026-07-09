@@ -4,7 +4,13 @@ export type PptWorkerScenario = "marketing-campaign" | "product-launch" | "sales
 export type PptWorkerLanguage = "zh-CN" | "en-US"
 export type PptWorkerTemplateMode = "auto-4" | "single-template"
 export type PptWorkerTemplateId = string
-export type PptWorkerModelValue = "MiniMax-M2.7-highspeed" | "MiniMax-M3" | "gpt-5.4" | "step-3.7-flash"
+export type PptWorkerModelValue =
+  | "MiniMax-M2.7-highspeed"
+  | "MiniMax-M3"
+  | "deepseek-v4-pro"
+  | "gpt-5.4"
+  | "step-3.7-flash"
+  | (string & {})
 export type PptWorkerNarrativeAngle = "executive-brief" | "campaign-story" | "data-proof" | "action-plan"
 export type PptWorkerResearchBrief = {
   topic: string

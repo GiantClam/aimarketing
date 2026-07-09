@@ -21,6 +21,7 @@ import type {
 const PPT_WORKER_SUPPORTED_MODELS: PptWorkerModelValue[] = [
   "MiniMax-M2.7-highspeed",
   "MiniMax-M3",
+  "deepseek-v4-pro",
   "step-3.7-flash",
 ]
 
@@ -35,6 +36,11 @@ function normalizeWorkerModelValue(value: unknown) {
 
 function isSupportedPptWorkerModel(value: string): value is PptWorkerModelValue {
   return PPT_WORKER_SUPPORTED_MODELS.includes(value as PptWorkerModelValue)
+}
+
+export function isSupportedPptWorkerPreviewModel(value: unknown) {
+  const normalized = normalizeWorkerModelValue(value)
+  return normalized ? isSupportedPptWorkerModel(normalized) : false
 }
 
 function resolvePptWorkerFallbackModel() {

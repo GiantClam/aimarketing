@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
       currentUser: auth.user,
       previewSessionId: parsed.data.previewSessionId,
       selectedVariantKey: parsed.data.selectedVariantKey ?? undefined,
-      agentId: parsed.data.agentId ?? undefined,
     })
 
     if (exported.ok === false) {

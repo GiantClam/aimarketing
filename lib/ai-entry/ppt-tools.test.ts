@@ -329,7 +329,7 @@ test("editable ppt agent defaults to smart_red for tech-company intro briefs tha
   })
 })
 
-test("editable ppt agent requires remote worker preview transport", async () => {
+test("editable ppt agent can preview through local ppt-master transport", async () => {
   process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
 
   const tools = buildAiEntryPptTools({
@@ -348,13 +348,12 @@ test("editable ppt agent requires remote worker preview transport", async () => 
     language: "zh-CN",
   })
 
-  assert.equal(preview.ok, false)
-  assert.equal(preview.error?.code, "ppt_master_runtime_unavailable")
-  assert.equal(preview.error?.rawMessage, "ppt_master_runtime_unavailable:remote_worker_required")
-  assert.equal(previewInputs.length, 0)
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs.length, 1)
+  assert.equal(previewInputs[0]?.previewRuntime, "ppt-master-agent")
 })
 
-test("editable ppt agent requires remote worker export transport", async () => {
+test("editable ppt agent can export through local ppt-master transport", async () => {
   process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
 
   const tools = buildAiEntryPptTools({
@@ -370,9 +369,34 @@ test("editable ppt agent requires remote worker export transport", async () => {
     selectedVariantKey: "variant-a",
   })
 
-  assert.equal(exported.ok, false)
-  assert.equal(exported.error?.code, "ppt_master_runtime_unavailable")
-  assert.equal(exported.error?.rawMessage, "ppt_master_runtime_unavailable:remote_worker_required")
+  assert.equal(exported.ok, true)
+  assert.equal(exported.fileName, "ai-marketing-workbench.pptx")
+})
+
+test("editable ppt agent uses the user's selected model for content planning", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+    selectedPreviewModel: "deepseek-v4-pro",
+    selectedPreviewProviderId: "enterprise-openai-compatible",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份屿算智能管理层培训 PPT",
+    audience: "管理层",
+    goal: "统一产品认知与对外口径",
+    scenario: "training",
+    language: "zh-CN",
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs.length, 1)
+  assert.equal(previewInputs[0]?.model, "deepseek-v4-pro")
+  assert.equal(previewInputs[0]?.preferredProviderId, "enterprise-openai-compatible")
+  assert.equal(previewInputs[0]?.previewRuntime, "ppt-master-agent")
 })
 
 test("editable ppt agent only honors explicit template requests when sourcePrompt is provided", async () => {
@@ -511,7 +535,7 @@ test("editable ppt agent rejects internal mapped template ids in favor of vendor
   })
 
   assert.equal(preview.ok, false)
-  assert.equal(preview.error?.code, "ppt_worker_template_unsupported")
+  assert.equal(preview.error?.code, "ppt_editable_template_unsupported")
   assert.match(String(preview.error?.message || ""), /general-dark-tech-claude-code-auto-mode/)
   assert.equal(previewInputs.length, 0)
 })
@@ -555,7 +579,7 @@ test("editable ppt agent rejects internal style aliases that are not in the ppt-
   })
 
   assert.equal(preview.ok, false)
-  assert.equal(preview.error?.code, "ppt_worker_template_unsupported")
+  assert.equal(preview.error?.code, "ppt_editable_template_unsupported")
   assert.match(String(preview.error?.message || ""), /long-table/)
   assert.equal(previewInputs.length, 0)
 })
@@ -911,6 +935,132 @@ test("presentation ppt agent pins frontend runtime and accepts html export artif
   assert.equal(exported.ok, true)
   assert.equal(exported.fileName, "ai-marketing-workbench.html")
   assert.equal(exported.contentType, "text/html; charset=utf-8")
+})
+
+test("presentation ppt agent does not forward editable-model routing into frontend-slides preview generation", async () => {
+  mockedDownloadDeckPreviewEngine = "frontend-slides-html"
+  mockedDownloadContentType = "text/html; charset=utf-8"
+  mockedDownloadFileName = "ai-marketing-workbench.html"
+  storedDeck = {
+    title: "AI Marketing Workbench",
+    pageCount: 5,
+    resolvedPageCount: 5,
+    previewEngine: "frontend-slides-html",
+    variants: [
+      {
+        key: "variant-a",
+        name: "Variant A",
+        summary: "Summary",
+        styleKey: "ppt169_brutalist_ai_newspaper_2026",
+        slides: [{ title: "Cover" }, {}, {}, {}, {}],
+      },
+    ],
+  }
+
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-presentation-ppt",
+    selectedPreviewModel: "deepseek-v4-pro",
+    selectedPreviewProviderId: "enterprise-openai-compatible",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份 10 分钟发布会演讲型 PPT",
+    audience: "发布会现场观众",
+    goal: "现场演讲与品牌传播",
+    scenario: "product-launch",
+    language: "zh-CN",
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs[0]?.previewRuntime, "frontend-slides-agent")
+  assert.equal("model" in (previewInputs[0] || {}), false)
+  assert.equal("preferredProviderId" in (previewInputs[0] || {}), false)
+})
+
+test("editable ppt agent rejects frontend-slides html sessions during export", async () => {
+  mockedDownloadDeckPreviewEngine = "frontend-slides-html"
+  mockedDownloadContentType = "text/html; charset=utf-8"
+  mockedDownloadFileName = "ai-marketing-workbench.html"
+  storedDeck = {
+    title: "AI Marketing Workbench",
+    pageCount: 5,
+    resolvedPageCount: 5,
+    previewEngine: "frontend-slides-html",
+    variants: [
+      {
+        key: "variant-a",
+        name: "Variant A",
+        summary: "Summary",
+        styleKey: "ppt169_brutalist_ai_newspaper_2026",
+        slides: [{ title: "Cover" }, {}, {}, {}, {}],
+      },
+    ],
+  }
+
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const exported = await tools.export_ppt_deck.execute({
+    previewSessionId: "preview-session-1",
+    selectedVariantKey: "variant-a",
+  })
+
+  assert.equal(exported.ok, false)
+  assert.equal(exported.error?.code, "ppt_export_runtime_mismatch")
+  assert.match(String(exported.error?.message || ""), /editable PPTX/i)
+})
+
+test("presentation ppt agent rejects editable ppt-master sessions during export", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-presentation-ppt",
+  }) as unknown as TestToolSet
+
+  const exported = await tools.export_ppt_deck.execute({
+    previewSessionId: "preview-session-1",
+    selectedVariantKey: "variant-a",
+  })
+
+  assert.equal(exported.ok, false)
+  assert.equal(exported.error?.code, "ppt_export_runtime_mismatch")
+  assert.match(String(exported.error?.message || ""), /presentation HTML/i)
+})
+
+test("presentation ppt agent rejects ppt-master-only template ids", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-presentation-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份适合现场演讲的发布会 PPT",
+    audience: "发布会现场观众",
+    goal: "现场演讲与品牌传播",
+    scenario: "product-launch",
+    language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "exhibit",
+  })
+
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_presentation_template_unsupported")
+  assert.match(String(preview.error?.message || ""), /frontend-slides/i)
+  assert.equal(previewInputs.length, 0)
 })
 
 test("ppt tools return an explainable error when the selected variant is missing", async () => {

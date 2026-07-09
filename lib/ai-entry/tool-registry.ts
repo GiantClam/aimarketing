@@ -668,6 +668,8 @@ export async function buildAiEntryToolRegistry(input: {
   conversationState?: AiEntryConversationState | null
   latestUserPrompt?: string | null
   messageContents?: string[]
+  selectedPreviewModel?: string | null
+  selectedPreviewProviderId?: string | null
   auditContext: {
     traceId: string
     conversationId: string
@@ -720,6 +722,8 @@ export async function buildAiEntryToolRegistry(input: {
       ...buildAiEntryPptTools({
         currentUser: input.currentUser,
         agentId: input.auditContext.agentId,
+        selectedPreviewModel: input.selectedPreviewModel,
+        selectedPreviewProviderId: input.selectedPreviewProviderId,
       }),
     },
     firstPartyDesiredToolIds,

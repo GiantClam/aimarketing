@@ -27,7 +27,7 @@ import {
 
 const pptScenarioSchema = z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"])
 const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
-const pptPreviewModelSchema = z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"])
+const pptPreviewModelSchema = z.string().trim().min(1, "Model is required")
 const pptPreviewRuntimeSchema = z.enum(["ppt-master-agent", "frontend-slides-agent"])
 const pptPreviewTemplateModeSchema = z.enum(["auto-4", "single-template"])
 const pptFrontendTemplateIdSchema = z.string().trim().refine(isPptWorkerTemplateSupported, "Unknown PPT template")
@@ -188,6 +188,7 @@ const pptPreviewDeckSchema: z.ZodType<PptPreviewDeck> = z.object({
   previewSessionId: z.string().optional(),
   provider: z.string().optional(),
   previewModel: z.string().optional(),
+  preferredProviderId: z.string().trim().nullable().optional(),
   source: z.enum(["live", "mock"]).optional(),
   templateMode: pptPreviewTemplateModeSchema.optional(),
   selectedTemplateId: pptFrontendTemplateIdSchema.nullable().optional(),
@@ -211,6 +212,7 @@ const pptPreviewRequestSchema = z
     scenario: pptScenarioSchema.default("marketing-campaign"),
     language: pptLanguageSchema.default("zh-CN"),
     model: pptPreviewModelSchema.optional(),
+    preferredProviderId: z.string().trim().min(1).optional(),
     previewRuntime: pptPreviewRuntimeSchema.optional(),
     templateMode: pptPreviewTemplateModeSchema.default("auto-4"),
     templateId: pptFrontendTemplateIdSchema.optional(),

@@ -1053,6 +1053,9 @@ export async function POST(request: NextRequest) {
       conversationState,
       latestUserPrompt,
       messageContents: normalizedMessageContents,
+      selectedPreviewModel:
+        modelConfig?.providerModelId || modelConfig?.modelId || null,
+      selectedPreviewProviderId: modelConfig?.providerId || null,
       auditContext: {
         traceId,
         conversationId,

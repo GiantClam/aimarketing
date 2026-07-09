@@ -182,7 +182,7 @@ test("ppt-master engine uses remote worker for preview when configured", async (
       },
       scenario: "sales-deck",
       language: "zh-CN",
-      model: "gpt-5.4",
+      model: "MiniMax-M3",
       templateMode: "auto-4",
       images: [{ url: "https://example.com/cover.png", role: "cover" }],
     } as any,
@@ -204,10 +204,58 @@ test("ppt-master engine uses remote worker for preview when configured", async (
     keyFacts: ["War-risk premiums rose"],
   })
   assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
-  assert.equal(seenModel, "gpt-5.4")
+  assert.equal(seenModel, "MiniMax-M3")
   const storedDeck = await getPptPreviewSessionDeck("session-remote-1")
   assert.equal(storedDeck.previewSessionId, "session-remote-1")
   assert.equal(storedDeck.previewEngine, "ppt-master-svg")
+})
+
+test("ppt-master engine uses remote worker for DeepSeek v4 pro when configured", async () => {
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
+  process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "ppt-master-agent"
+  let remoteCalled = false
+  let seenModel: string | null = null
+
+  const remoteDeck = {
+    ...htmlDeck,
+    previewEngine: "ppt-master-project" as const,
+    previewSessionId: "session-remote-deepseek",
+    previewModel: "deepseek-v4-pro",
+  }
+
+  setPptWorkerTransportForTests({
+    preview: async (request) => {
+      remoteCalled = true
+      seenModel = request.model ?? null
+      return {
+        previewSessionId: "session-remote-deepseek",
+        generatedAt: "2026-06-25T00:00:00.000Z",
+        deck: remoteDeck,
+      }
+    },
+  })
+
+  const engines = getPptMasterEngines()
+  const result = await engines.preview.buildPreview(
+    {
+      prompt: "Build remote DeepSeek deck",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      model: "deepseek-v4-pro",
+    } as any,
+    {
+      allowMockFallback: false,
+      resolvedModels: {
+        previewModel: "deepseek-v4-pro",
+        finalModel: "deepseek-v4-pro",
+      },
+    },
+  )
+
+  assert.equal(remoteCalled, true)
+  assert.equal(seenModel, "deepseek-v4-pro")
+  assert.equal(result.previewSessionId, "session-remote-deepseek")
+  assert.equal(result.meta.previewRuntime, "ppt-master-agent")
 })
 
 test("ppt-master engine auto-selects remote worker preview when worker base url is configured", async () => {

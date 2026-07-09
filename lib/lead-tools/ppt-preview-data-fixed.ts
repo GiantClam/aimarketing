@@ -64,7 +64,12 @@ export type PptPreviewStyleArchetype =
   | "ppt169_sugar_rush_memphis"
   | "ppt169_pritzker_2026"
   | "ppt169_swiss_grid_systems"
-export type PptPreviewModelValue = "MiniMax-M2.7-highspeed" | "MiniMax-M3" | "gpt-5.4" | "step-3.7-flash"
+export type PptPreviewModelValue =
+  | "MiniMax-M2.7-highspeed"
+  | "MiniMax-M3"
+  | "gpt-5.4"
+  | "step-3.7-flash"
+  | (string & {})
 export type PptPreviewTemplateMode = "auto-4" | "single-template"
 export type PptFrontendTemplateId = string
 export type PptPreviewPageCount = number
@@ -91,6 +96,7 @@ export type PptPreviewRequest = {
   scenario: PptScenario
   language: PptLanguage
   model?: PptPreviewModelValue
+  preferredProviderId?: string | null
   previewRuntime?: PptPreviewRuntimeValue
   templateMode?: PptPreviewTemplateMode
   templateId?: PptFrontendTemplateId
@@ -222,6 +228,7 @@ export type PptPreviewDeck = {
   previewSessionId?: string
   provider?: string
   previewModel?: string
+  preferredProviderId?: string | null
   source?: "live" | "mock"
   templateMode?: PptPreviewTemplateMode
   selectedTemplateId?: PptFrontendTemplateId | null
@@ -2538,6 +2545,7 @@ export function buildPptPreviewDeckFromPlans(
     generatedAt: new Date().toISOString(),
     outline: (firstPlan?.outline?.length ? firstPlan.outline : fallbackOutline).slice(0, pageCount),
     provider: firstPlan?.provider || "live",
+    preferredProviderId: request.preferredProviderId ?? null,
     source: "live",
     templateMode,
     selectedTemplateId: templateMode === "single-template" ? request.templateId ?? null : null,

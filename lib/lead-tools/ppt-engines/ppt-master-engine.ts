@@ -20,7 +20,11 @@ import {
   getLeadToolPptPreviewRuntime,
 } from "@/lib/lead-tools/config"
 import { generateLeadToolPptStoryDeck } from "@/lib/lead-tools/generation-ppt-fixed"
-import { requestPptWorkerExport, requestPptWorkerPreview } from "@/lib/lead-tools/ppt-worker-client"
+import {
+  isSupportedPptWorkerPreviewModel,
+  requestPptWorkerExport,
+  requestPptWorkerPreview,
+} from "@/lib/lead-tools/ppt-worker-client"
 
 let requestPptWorkerPreviewImpl = requestPptWorkerPreview
 let requestPptWorkerExportImpl = requestPptWorkerExport
@@ -32,6 +36,15 @@ let storePptPreviewSessionDeckImpl = storePptPreviewSessionDeck
 
 function shouldUseRemoteWorkerTransport() {
   return getLeadToolPptExecutionTransport() === "remote-worker"
+}
+
+function shouldUseRemoteWorkerPreview(request: { model?: string | null }) {
+  if (!shouldUseRemoteWorkerTransport()) return false
+
+  const normalizedModel = typeof request.model === "string" ? request.model.trim() : ""
+  if (!normalizedModel) return true
+
+  return isSupportedPptWorkerPreviewModel(normalizedModel)
 }
 
 function getPreviewRuntime(requestedRuntimeId?: LeadToolPptPreviewRuntime["id"] | null): LeadToolPptPreviewRuntime {
@@ -78,7 +91,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
     const runtime = getPreviewRuntimeImpl(request.previewRuntime)
     const previewMeta = getPreviewEngineMeta(runtime)
 
-    if (runtime.id === "ppt-master-agent" && shouldUseRemoteWorkerTransport()) {
+    if (runtime.id === "ppt-master-agent" && shouldUseRemoteWorkerPreview(request)) {
       const remote = await requestPptWorkerPreviewImpl({
         requestId: randomUUID(),
         prompt: request.prompt,

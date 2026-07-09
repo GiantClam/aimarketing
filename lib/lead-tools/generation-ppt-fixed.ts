@@ -793,6 +793,10 @@ function resolveRequestedPreviewModel(request: PptPreviewRequest) {
 }
 
 function inferPreviewProviderId(model: string) {
+  if (/^deepseek/iu.test(model)) {
+    return "writer" as const
+  }
+
   if (model.startsWith("MiniMax-")) {
     return "minimax" as const
   }
@@ -820,6 +824,17 @@ export function resolveLeadToolPreviewProviderPreference(
     normalizedProvider === "writer"
   ) {
     return normalizedProvider
+  }
+
+  if (
+    normalizedProvider === "deepseek" ||
+    normalizedProvider === "enterprise-openai-compatible" ||
+    normalizedProvider === "aiberm" ||
+    normalizedProvider === "crazyroute" ||
+    normalizedProvider === "crazyrouter" ||
+    normalizedProvider === "openrouter"
+  ) {
+    return "writer"
   }
 
   return inferPreviewProviderId(model)
@@ -2095,11 +2110,11 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
 }
 
 async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideContext): Promise<PptMasterPreviewRuntimeSlideResult> {
-  const requestedModel = getLeadToolPptRuntimeSlideModel() || context.deck.previewModel || "MiniMax-M3"
+  const requestedModel = context.deck.previewModel || getLeadToolPptRuntimeSlideModel() || "MiniMax-M3"
   const slideTimeoutMs = getPptMasterSlideTimeoutMs()
   const preferredProviderId = resolveLeadToolPreviewProviderPreference(
     requestedModel,
-    getLeadToolPptRuntimeSlideProvider(),
+    context.deck.preferredProviderId || getLeadToolPptRuntimeSlideProvider() || context.deck.provider,
   )
   let providerResult: Awaited<ReturnType<typeof generateTextWithLeadToolPreviewProvider>>
 
@@ -2181,6 +2196,10 @@ async function generateVariantPlan(request: PptPreviewRequest, descriptor: PptPr
           .join(" "),
         userPrompt: buildStyleAwarePrompt(request, descriptor),
         model: requestedModel,
+        preferredProviderId: resolveLeadToolPreviewProviderPreference(
+          requestedModel,
+          request.preferredProviderId ?? getLeadToolPptPreviewProvider(),
+        ),
       })
 
       const rawPlan = JSON.parse(extractJsonObjectBlock(providerResult.text))
@@ -2230,11 +2249,12 @@ export async function generateLeadToolPptStoryDeck(request: PptPreviewRequest): 
   const variantDescriptors = buildPptPreviewVariantDescriptors(request)
   const plans = await Promise.all(variantDescriptors.map((descriptor) => generateVariantPlan(resolvedRequest, descriptor)))
   return {
-    ...buildPptPreviewDeckFromPlans(request, plans, {
+    ...buildPptPreviewDeckFromPlans(resolvedRequest, plans, {
       resolvedPageCount,
     }),
     provider: plans[0]?.provider ?? "unknown",
     previewModel: plans[0]?.previewModel ?? resolveRequestedPreviewModel(resolvedRequest),
+    preferredProviderId: resolvedRequest.preferredProviderId ?? null,
   }
 }
 

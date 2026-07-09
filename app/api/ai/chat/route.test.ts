@@ -13,6 +13,7 @@ let releaseCalls = 0
 let toolRegistryWarnings: string[] = []
 let toolRegistryToolIds: string[] = []
 let toolRegistryToolChoice: Record<string, unknown> | undefined
+let lastToolRegistryBuildInput: Record<string, unknown> | null = null
 let emitArtifactFlow = false
 let emitToolFailureFlow = false
 let emitPreviewSelectionRequiredFlow = false
@@ -293,14 +294,17 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/ai-entry/tool-registry") {
     return {
-      buildAiEntryToolRegistry: async () => ({
-        selectedTools: {},
-        selectedToolIds: toolRegistryToolIds,
-        toolChoice: toolRegistryToolChoice,
-        closeTools: null,
-        toolLoadWarnings: toolRegistryWarnings,
-        selectedMcpServerIds: [],
-      }),
+      buildAiEntryToolRegistry: async (input: Record<string, unknown>) => {
+        lastToolRegistryBuildInput = input
+        return {
+          selectedTools: {},
+          selectedToolIds: toolRegistryToolIds,
+          toolChoice: toolRegistryToolChoice,
+          closeTools: null,
+          toolLoadWarnings: toolRegistryWarnings,
+          selectedMcpServerIds: [],
+        }
+      },
     }
   }
 
@@ -535,6 +539,7 @@ test.beforeEach(() => {
   customAgentStatus = "published"
   ensureConversationArgs = null
   appendMessageCalls = []
+  lastToolRegistryBuildInput = null
 })
 
 test.after(() => {
@@ -559,6 +564,31 @@ test("ai chat route keeps ordinary streaming chat working even when MCP tool loa
   assert.match(text, /Normal chat reply\./)
   assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
+})
+
+test("ai chat route forwards the selected model into the PPT tool registry context", async () => {
+  toolRegistryToolIds = ["preview_ppt_deck", "export_ppt_deck"]
+
+  const response = await POST({
+    json: async () => ({
+      messages: [{ role: "user", content: "做一份管理层培训 PPT" }],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+      modelConfig: {
+        providerId: "pptoken",
+        modelId: "gpt-5.4",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+  const text = await response.text()
+  assert.match(text, /conversation_init/)
+  assert.equal(lastToolRegistryBuildInput?.selectedPreviewModel, "gpt-5.4")
+  assert.equal(lastToolRegistryBuildInput?.selectedPreviewProviderId, "pptoken")
 })
 
 test("ai chat route preserves business-agent streaming and emits artifact-created for PPT export flow", async () => {

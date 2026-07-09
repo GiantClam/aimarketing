@@ -1,11 +1,7 @@
 import { z } from "zod"
 
-import * as pptPreviewDataModule from "../../../../lib/lead-tools/ppt-preview-data-fixed.js"
 import * as pptWorkerCapabilitiesModule from "../../../../lib/lead-tools/ppt-worker-capabilities.js"
 
-const pptPreviewData = (
-  "default" in pptPreviewDataModule ? pptPreviewDataModule.default : pptPreviewDataModule
-) as typeof pptPreviewDataModule
 const pptWorkerCapabilities = (
   "default" in pptWorkerCapabilitiesModule ? pptWorkerCapabilitiesModule.default : pptWorkerCapabilitiesModule
 ) as typeof pptWorkerCapabilitiesModule
@@ -29,7 +25,9 @@ export const previewRequestSchema = z.object({
     .optional(),
   scenario: z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"]),
   language: z.enum(["zh-CN", "en-US"]),
-  model: z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"]).optional(),
+  model: z
+    .enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "deepseek-v4-pro", "gpt-5.4", "step-3.7-flash"])
+    .optional(),
   templateMode: z.enum(["auto-4", "single-template"]),
   templateId: z
     .string()
