@@ -115,6 +115,7 @@ const yusuanAttachmentMarkdown = readFileSync(
 type TestToolSet = Record<
   string,
   {
+    inputSchema?: unknown
     execute: (input: Record<string, unknown>, options?: unknown) => Promise<Record<string, any>>
   }
 >
@@ -160,6 +161,13 @@ function buildStructuredPrompt(
     .join("\n")
 }
 
+function readZodObjectShape(schema: unknown) {
+  const shape = (schema as { shape?: unknown } | null)?.shape
+  if (typeof shape === "function") return shape() as Record<string, unknown>
+  if (shape && typeof shape === "object") return shape as Record<string, unknown>
+  return {}
+}
+
 test.before(async () => {
   const mod = await import("./ppt-tools")
   buildAiEntryPptTools = mod.buildAiEntryPptTools
@@ -194,6 +202,21 @@ test.beforeEach(() => {
 test.after(() => {
   delete process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
   nodeModule._load = originalLoad
+})
+
+test("editable ppt agent tool schema does not expose auto template mode to the model", () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const shape = readZodObjectShape(tools.preview_ppt_deck.inputSchema)
+
+  assert.equal("templateMode" in shape, false)
+  assert.equal("templateId" in shape, true)
 })
 
 test("ppt tools return preview metadata and export a downloadable PPTX artifact", async () => {

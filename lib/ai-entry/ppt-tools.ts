@@ -112,12 +112,9 @@ const editablePreviewPptDeckInputSchema = z
     language: pptLanguageSchema
       .optional()
       .describe("Deck language. Use zh-CN for Chinese or en-US for English."),
-    templateMode: pptTemplateModeSchema
-      .optional()
-      .describe("Use auto-4 to compare multiple directions, or single-template when the user wants one template family."),
     templateId: editablePptTemplateIdSchema
       .optional()
-      .describe("Optional editable PPT template id from the ppt-master library."),
+      .describe("Optional editable PPT template id from the ppt-master library. Omit when unsure; the server will choose exactly one suitable ppt-master template."),
     pageCount: z
       .number()
       .int()
@@ -148,15 +145,6 @@ const editablePreviewPptDeckInputSchema = z
       .max(12)
       .optional()
       .describe("Must-include sections, facts, or messages that need to appear in the deck."),
-  })
-  .superRefine((value, context) => {
-    if (value.templateMode === "single-template" && !value.templateId) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "templateId is required when templateMode is single-template",
-        path: ["templateId"],
-      })
-    }
   })
 
 const presentationPreviewPptDeckInputSchema = z
