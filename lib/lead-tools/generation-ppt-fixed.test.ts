@@ -638,6 +638,73 @@ test("runtime slide execution uses dedicated runtime slide model/provider config
   }
 })
 
+test("runtime slide execution infers provider from runtime slide model when provider override is absent", () => {
+  const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = "MiniMax-M2.7-highspeed"
+  delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  assert.deepEqual(
+    resolveRuntimeSlideExecutionConfig({
+      previewModel: "deepseek-v4-pro",
+      provider: "deepseek",
+    } as any),
+    {
+      requestedModel: "MiniMax-M2.7-highspeed",
+      preferredProviderId: "minimax",
+    },
+  )
+
+  if (previousRuntimeSlideModel === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = previousRuntimeSlideModel
+  }
+
+  if (previousRuntimeSlideProvider === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = previousRuntimeSlideProvider
+  }
+})
+
+test("runtime slide execution infers glm provider from runtime slide model when provider override is absent", () => {
+  const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = "glm-5.2"
+  delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  assert.deepEqual(
+    resolveRuntimeSlideExecutionConfig({
+      previewModel: "deepseek-v4-pro",
+      provider: "deepseek",
+    } as any),
+    {
+      requestedModel: "glm-5.2",
+      preferredProviderId: "glm",
+    },
+  )
+
+  if (previousRuntimeSlideModel === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = previousRuntimeSlideModel
+  }
+
+  if (previousRuntimeSlideProvider === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = previousRuntimeSlideProvider
+  }
+})
+
+test("resolveLeadToolPreviewProviderPreference accepts explicit glm provider and glm models", () => {
+  assert.equal(resolveLeadToolPreviewProviderPreference("glm-5.2", undefined), "glm")
+  assert.equal(resolveLeadToolPreviewProviderPreference("gpt-5.4", "glm"), "glm")
+})
+
 test("deepseek writer preview planning falls back to structured object generation when freeform JSON is missing", async (t) => {
   let structuredCalls = 0
 

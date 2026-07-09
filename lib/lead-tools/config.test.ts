@@ -232,13 +232,13 @@ test("ppt runtime slide config prefers explicit overrides and disables emergency
     process.env.PPT_MASTER_SLIDE_TIMEOUT_MS = "720000"
     process.env.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK = "true"
     process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = "gpt-5.4"
-    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = "stepfun"
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = "glm"
     process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER = "minimax"
 
     assert.equal(getPptMasterSlideTimeoutMs(), 720000)
     assert.equal(allowPptMasterEmergencyFallback(), true)
     assert.equal(getLeadToolPptRuntimeSlideModel(), "gpt-5.4")
-    assert.equal(getLeadToolPptRuntimeSlideProvider(), "stepfun")
+    assert.equal(getLeadToolPptRuntimeSlideProvider(), "glm")
     assert.equal(getLeadToolPptPreviewProvider(), "minimax")
   } finally {
     if (previousTimeout === undefined) {

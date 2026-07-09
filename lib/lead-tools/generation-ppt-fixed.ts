@@ -58,7 +58,7 @@ type LeadToolPptPlan = {
   slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
 }
 
-type LeadToolPreviewProviderId = "deepseek" | "pptoken" | "minimax" | "stepfun" | "writer"
+type LeadToolPreviewProviderId = "deepseek" | "pptoken" | "minimax" | "stepfun" | "glm" | "writer"
 const LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS = 45_000
 const LEAD_TOOL_PPT_PREVIEW_DEEPSEEK_TIMEOUT_MS = 120_000
 
@@ -179,9 +179,10 @@ export function getLeadToolPreviewProviderTimeoutMs(providerId: Exclude<LeadTool
 
 export function resolveRuntimeSlideExecutionConfig(deck: Pick<PptPreviewDeck, "previewModel" | "provider">) {
   const requestedModel = getLeadToolPptRuntimeSlideModel() || deck.previewModel || "MiniMax-M3"
+  const inferredProviderId = inferPreviewProviderId(requestedModel)
   const preferredProviderId = resolveLeadToolPreviewProviderPreference(
     requestedModel,
-    getLeadToolPptRuntimeSlideProvider() || deck.provider,
+    getLeadToolPptRuntimeSlideProvider() || inferredProviderId || deck.provider,
   )
 
   return {
@@ -845,6 +846,18 @@ function getLeadToolStepfunConfig() {
   return { apiKey, baseURL, model }
 }
 
+function getLeadToolGlmConfig() {
+  const apiKey = normalizeText(
+    process.env.LEAD_TOOLS_GLM_API_KEY || process.env.GLM_API_KEY || process.env.BIGMODEL_API_KEY,
+  )
+  const baseURL =
+    normalizeText(process.env.LEAD_TOOLS_GLM_BASE_URL || process.env.GLM_BASE_URL || process.env.BIGMODEL_BASE_URL) ||
+    "https://open.bigmodel.cn/api/paas/v4"
+  const model = normalizeText(process.env.LEAD_TOOLS_GLM_MODEL || process.env.GLM_MODEL)
+
+  return { apiKey, baseURL, model }
+}
+
 function hasLeadToolMinimaxProvider() {
   const config = getLeadToolMinimaxConfig()
   return Boolean(config.apiKey && config.baseURL && config.model)
@@ -852,6 +865,11 @@ function hasLeadToolMinimaxProvider() {
 
 function hasLeadToolStepfunProvider() {
   const config = getLeadToolStepfunConfig()
+  return Boolean(config.apiKey && config.baseURL)
+}
+
+function hasLeadToolGlmProvider() {
+  const config = getLeadToolGlmConfig()
   return Boolean(config.apiKey && config.baseURL)
 }
 
@@ -997,6 +1015,10 @@ function inferPreviewProviderId(model: string) {
     return "stepfun" as const
   }
 
+  if (/^(?:glm-|GLM-)/u.test(model)) {
+    return "glm" as const
+  }
+
   if (model === "gpt-5.4") {
     return "pptoken" as const
   }
@@ -1013,6 +1035,7 @@ export function resolveLeadToolPreviewProviderPreference(
     normalizedProvider === "pptoken" ||
     normalizedProvider === "minimax" ||
     normalizedProvider === "stepfun" ||
+    normalizedProvider === "glm" ||
     normalizedProvider === "writer"
   ) {
     return normalizedProvider
@@ -1197,6 +1220,45 @@ async function generateTextWithLeadToolPreviewProvider(params: {
     }
   }
 
+  if (preferredProviderId === "glm") {
+    if (!hasLeadToolGlmProvider()) {
+      throw new Error(`lead_tool_provider_missing:glm:${params.model}`)
+    }
+
+    const config = getLeadToolGlmConfig()
+    const resolvedModel = config.model || params.model
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    })
+
+    const text = await generatePreviewTextWithProviderTimeout({
+      providerId: "glm",
+      model: resolvedModel,
+      timeoutMs: params.providerTimeoutMs,
+      run: async () => {
+        const response = await generateText({
+          model: provider.chat(resolvedModel),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
+
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+    })
+
+    return {
+      text,
+      providerId: "glm",
+      model: resolvedModel,
+    }
+  }
+
   if (preferredProviderId === "pptoken") {
     if (!hasLeadToolPptokenProvider()) {
       throw new Error(`lead_tool_provider_missing:pptoken:${params.model}`)
@@ -1365,6 +1427,41 @@ async function generateTextWithLeadToolPreviewProvider(params: {
     return {
       text,
       providerId: "stepfun",
+      model: resolvedModel,
+    }
+  }
+
+  if (hasLeadToolGlmProvider()) {
+    const config = getLeadToolGlmConfig()
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    })
+
+    const resolvedModel = config.model || params.model
+    const text = await generatePreviewTextWithProviderTimeout({
+      providerId: "glm",
+      model: resolvedModel,
+      timeoutMs: params.providerTimeoutMs,
+      run: async () => {
+        const response = await generateText({
+          model: provider.chat(resolvedModel),
+          system: params.systemPrompt,
+          prompt: params.userPrompt,
+        })
+
+        const text = response.text.trim()
+        if (!text) {
+          throw new Error("lead_tool_preview_empty_response")
+        }
+
+        return text
+      },
+    })
+
+    return {
+      text,
+      providerId: "glm",
       model: resolvedModel,
     }
   }
@@ -2595,6 +2692,7 @@ export async function generateLeadToolPptPreviewWithFallback(
   if (
     !hasLeadToolMinimaxProvider() &&
     !hasLeadToolStepfunProvider() &&
+    !hasLeadToolGlmProvider() &&
     !hasLeadToolPptokenProvider() &&
     !hasAibermApiKey() &&
     !hasCrazyrouteApiKey()

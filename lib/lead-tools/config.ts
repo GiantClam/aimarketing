@@ -167,6 +167,7 @@ export function getLeadToolPptRuntimeSlideProvider() {
     provider === "pptoken" ||
     provider === "minimax" ||
     provider === "stepfun" ||
+    provider === "glm" ||
     provider === "writer"
   ) {
     return provider
@@ -182,6 +183,7 @@ export function getLeadToolPptPreviewProvider() {
     provider === "pptoken" ||
     provider === "minimax" ||
     provider === "stepfun" ||
+    provider === "glm" ||
     provider === "writer"
   ) {
     return provider
