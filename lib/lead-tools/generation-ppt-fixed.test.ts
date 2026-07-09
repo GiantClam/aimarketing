@@ -10,6 +10,7 @@ import {
   isLowInformationPptPlan,
   normalizeLeadToolPptPlan,
   normalizePptMasterRuntimeProviderError,
+  resolveRuntimeSlideExecutionConfig,
   resolveLeadToolPreviewProviderPreference,
   setLeadToolPptGenerationDepsForTests,
 } from "./generation-ppt-fixed"
@@ -604,6 +605,37 @@ test("deepseek preview provider timeout is longer than default runtime providers
 
 test("deepseek preview timeout can inherit a longer slide runtime window", () => {
   assert.equal(getLeadToolPreviewProviderTimeoutMs("deepseek"), 120_000)
+})
+
+test("runtime slide execution uses dedicated runtime slide model/provider config", () => {
+  const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = "gpt-5.4"
+  process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = "pptoken"
+
+  assert.deepEqual(
+    resolveRuntimeSlideExecutionConfig({
+      previewModel: "deepseek-v4-pro",
+      provider: "deepseek",
+    } as any),
+    {
+      requestedModel: "gpt-5.4",
+      preferredProviderId: "pptoken",
+    },
+  )
+
+  if (previousRuntimeSlideModel === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = previousRuntimeSlideModel
+  }
+
+  if (previousRuntimeSlideProvider === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = previousRuntimeSlideProvider
+  }
 })
 
 test("deepseek writer preview planning falls back to structured object generation when freeform JSON is missing", async (t) => {

@@ -177,6 +177,19 @@ export function getLeadToolPreviewProviderTimeoutMs(providerId: Exclude<LeadTool
   return LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS
 }
 
+export function resolveRuntimeSlideExecutionConfig(deck: Pick<PptPreviewDeck, "previewModel" | "provider">) {
+  const requestedModel = getLeadToolPptRuntimeSlideModel() || deck.previewModel || "MiniMax-M3"
+  const preferredProviderId = resolveLeadToolPreviewProviderPreference(
+    requestedModel,
+    getLeadToolPptRuntimeSlideProvider() || deck.provider,
+  )
+
+  return {
+    requestedModel,
+    preferredProviderId,
+  }
+}
+
 function splitResearchString(value: string) {
   return uniqueStrings(
     value
@@ -2397,12 +2410,8 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
 }
 
 async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideContext): Promise<PptMasterPreviewRuntimeSlideResult> {
-  const requestedModel = context.deck.previewModel || getLeadToolPptRuntimeSlideModel() || "MiniMax-M3"
+  const { requestedModel, preferredProviderId } = resolveRuntimeSlideExecutionConfig(context.deck)
   const slideTimeoutMs = getPptMasterSlideTimeoutMs()
-  const preferredProviderId = resolveLeadToolPreviewProviderPreference(
-    requestedModel,
-    context.deck.preferredProviderId || getLeadToolPptRuntimeSlideProvider() || context.deck.provider,
-  )
   let providerResult: Awaited<ReturnType<typeof generateTextWithLeadToolPreviewProvider>>
 
   try {
