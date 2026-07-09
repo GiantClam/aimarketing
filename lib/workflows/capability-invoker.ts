@@ -37,6 +37,7 @@ import { buildEnterpriseWorkflowPresetPrompt, getDefaultEnterpriseWorkflowPreset
 import {
   buildPptRecommendedTemplateSummaries,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { buildPptMasterRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-worker-capabilities"
 import {
   createWorkflowNodeInputBundle,
   mergeWorkflowNodeOutputBundles,
@@ -120,7 +121,7 @@ function resolveWorkflowEditablePptTemplateId(input: {
   pageCount?: number
   prompt: string
 }) {
-  const recommendedTemplates = buildPptRecommendedTemplateSummaries({
+  const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries({
     prompt: input.prompt,
     scenario: input.scenario as never,
     language: input.language as never,

@@ -18,6 +18,21 @@ test("worker preview schema accepts expanded ppt-master template ids", () => {
   assert.equal(parsed.templateId, "academic-defense")
 })
 
+test("worker preview schema accepts vendor ppt-master template ids", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_vendor_template",
+    prompt: "Build a tech company introduction deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "smart_red",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.templateId, "smart_red")
+})
+
 test("worker preview schema still rejects unknown template ids", () => {
   assert.throws(
     () =>

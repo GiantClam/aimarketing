@@ -1,10 +1,14 @@
 import { z } from "zod"
 
 import * as pptPreviewDataModule from "../../../../lib/lead-tools/ppt-preview-data-fixed.js"
+import * as pptWorkerCapabilitiesModule from "../../../../lib/lead-tools/ppt-worker-capabilities.js"
 
 const pptPreviewData = (
   "default" in pptPreviewDataModule ? pptPreviewDataModule.default : pptPreviewDataModule
 ) as typeof pptPreviewDataModule
+const pptWorkerCapabilities = (
+  "default" in pptWorkerCapabilitiesModule ? pptWorkerCapabilitiesModule.default : pptWorkerCapabilitiesModule
+) as typeof pptWorkerCapabilitiesModule
 
 export const previewRequestSchema = z.object({
   requestId: z.string().min(1),
@@ -30,7 +34,7 @@ export const previewRequestSchema = z.object({
   templateId: z
     .string()
     .trim()
-    .refine(pptPreviewData.isKnownPptFrontendTemplateId, "Unknown PPT template")
+    .refine(pptWorkerCapabilities.isPptWorkerTemplateSupported, "Unknown PPT template")
     .optional(),
   narrativeAngle: z.enum(["executive-brief", "campaign-story", "data-proof", "action-plan"]).optional(),
   pageCount: z.number().int().min(4).max(20).nullable().optional(),

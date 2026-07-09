@@ -244,7 +244,7 @@ test("ppt tools return preview metadata and export a downloadable PPTX artifact"
   assert.equal(exported.downloadUrl, "/api/platform/artifacts/401/download?download=1")
 })
 
-test("editable ppt agent defaults to ppt-master free-design previews when no template is explicitly chosen", async () => {
+test("editable ppt agent defaults to a single recommended ppt-master template when no template is explicitly chosen", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -262,8 +262,8 @@ test("editable ppt agent defaults to ppt-master free-design previews when no tem
   })
 
   assert.equal(preview.ok, true)
-  assert.equal(preview.selectedTemplateId, null)
-  assert.deepEqual(preview.recommendedTemplates, [])
+  assert.equal(preview.selectedTemplateId, "exhibit")
+  assert.equal(preview.recommendedTemplates[0]?.templateId, "exhibit")
   assert.deepEqual(previewInputs[0], {
     prompt: buildStructuredPrompt("做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划", {
       audience: "董事会",
@@ -275,9 +275,56 @@ test("editable ppt agent defaults to ppt-master free-design previews when no tem
     scenario: "sales-deck",
     language: "zh-CN",
     previewRuntime: "ppt-master-agent",
-    templateMode: undefined,
-    templateId: undefined,
-    narrativeAngle: undefined,
+    templateMode: "single-template",
+    templateId: "exhibit",
+    narrativeAngle: "executive-brief",
+    pageCount: undefined,
+  })
+})
+
+test("editable ppt agent defaults to smart_red for tech-company intro briefs that match the vendor template", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "写一份介绍预算智能公司和业务的 PPT，强调科技公司介绍、解决方案能力和专业但有活力的视觉表达",
+    audience: "潜在客户与合作伙伴",
+    goal: "公司与业务介绍",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    researchBrief: {
+      topic: "预算智能公司介绍",
+      keyFacts: ["企业 AI 业务工作台", "面向老板、销售、运营和内容团队", "产品介绍与解决方案叙事并重"],
+      implications: ["需要兼顾商务表达、科技感和产品能力展示"],
+    },
+  })
+
+  assert.equal(preview.ok, true)
+  assert.equal(preview.selectedTemplateId, "smart_red")
+  assert.equal(preview.recommendedTemplates[0]?.templateId, "smart_red")
+  assert.deepEqual(previewInputs.at(-1), {
+    prompt: buildStructuredPrompt("写一份介绍预算智能公司和业务的 PPT，强调科技公司介绍、解决方案能力和专业但有活力的视觉表达", {
+      audience: "潜在客户与合作伙伴",
+      goal: "公司与业务介绍",
+      scenario: "sales-deck",
+      language: "zh-CN",
+    }),
+    researchBrief: {
+      topic: "预算智能公司介绍",
+      keyFacts: ["企业 AI 业务工作台", "面向老板、销售、运营和内容团队", "产品介绍与解决方案叙事并重"],
+      implications: ["需要兼顾商务表达、科技感和产品能力展示"],
+    },
+    scenario: "sales-deck",
+    language: "zh-CN",
+    previewRuntime: "ppt-master-agent",
+    templateMode: "single-template",
+    templateId: "smart_red",
+    narrativeAngle: "executive-brief",
     pageCount: undefined,
   })
 })
@@ -354,14 +401,15 @@ test("editable ppt agent only honors explicit template requests when sourcePromp
     scenario: "sales-deck",
     language: "zh-CN",
     templateMode: "single-template",
-    templateId: "broadside",
+    templateId: "smart_red",
   })
   const sourcePromptInput = previewInputs.at(-1)
 
-  assert.equal(promptOnlyInput?.templateMode, undefined)
-  assert.equal(promptOnlyInput?.templateId, undefined)
+  assert.equal(promptOnlyInput?.templateMode, "single-template")
+  assert.equal(promptOnlyInput?.templateId, "exhibit")
+  assert.equal(promptOnlyInput?.narrativeAngle, "executive-brief")
   assert.equal(sourcePromptInput?.templateMode, "single-template")
-  assert.equal(sourcePromptInput?.templateId, "broadside")
+  assert.equal(sourcePromptInput?.templateId, "smart_red")
 })
 
 test("ppt tools forward researchBrief into preview generation", async () => {
@@ -429,7 +477,7 @@ test("ppt tools coerce template id preview requests to single-template mode", as
     prompt: "做一份课堂讲解 PPT",
     ...DEFAULT_PPT_BRIEF_INPUT,
     templateMode: "auto-4",
-    templateId: "neo-grid-bold",
+    templateId: "科技蓝商务",
   })
 
   assert.equal(preview.ok, true)
@@ -440,13 +488,13 @@ test("ppt tools coerce template id preview requests to single-template mode", as
     language: "zh-CN",
     previewRuntime: "ppt-master-agent",
     templateMode: "single-template",
-    templateId: "neo-grid-bold",
+    templateId: "科技蓝商务",
     narrativeAngle: "executive-brief",
     pageCount: undefined,
   })
 })
 
-test("ppt tools accept expanded ppt-master template ids for single-template preview", async () => {
+test("editable ppt agent rejects internal mapped template ids in favor of vendor template ids", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -462,10 +510,54 @@ test("ppt tools accept expanded ppt-master template ids for single-template prev
     templateId: "general-dark-tech-claude-code-auto-mode",
   })
 
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_worker_template_unsupported")
+  assert.match(String(preview.error?.message || ""), /general-dark-tech-claude-code-auto-mode/)
+  assert.equal(previewInputs.length, 0)
+})
+
+test("ppt tools accept vendor ppt-master template ids for single-template preview", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份预算智能公司和业务介绍 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+    templateMode: "single-template",
+    templateId: "smart_red",
+  })
+
   assert.equal(preview.ok, true)
   assert.equal(previewInputs[0]?.templateMode, "single-template")
-  assert.equal(previewInputs[0]?.templateId, "general-dark-tech-claude-code-auto-mode")
+  assert.equal(previewInputs[0]?.templateId, "smart_red")
   assert.equal(previewInputs[0]?.narrativeAngle, "executive-brief")
+})
+
+test("editable ppt agent rejects internal style aliases that are not in the ppt-master template library", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet
+
+  const preview = await tools.preview_ppt_deck.execute({
+    prompt: "做一份预算智能公司介绍 PPT",
+    ...DEFAULT_PPT_BRIEF_INPUT,
+    templateMode: "single-template",
+    templateId: "long-table",
+  })
+
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_worker_template_unsupported")
+  assert.match(String(preview.error?.message || ""), /long-table/)
+  assert.equal(previewInputs.length, 0)
 })
 
 test("ppt tools forward structured researchBrief objects into preview generation", async () => {

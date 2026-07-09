@@ -6,6 +6,7 @@ import type {
   PptScenario,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { buildPptRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { buildPptMasterRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-worker-capabilities"
 
 type ResolvePptTemplateSelectionInput = {
   prompt: string
@@ -25,20 +26,22 @@ function normalizeOptionalString(value: unknown) {
 }
 
 export function resolvePptTemplateSelection(input: ResolvePptTemplateSelectionInput) {
-  const recommendedTemplates = buildPptRecommendedTemplateSummaries(
-    {
-      prompt: input.prompt,
-      researchBrief: input.researchBrief,
-      scenario: input.scenario,
-      language: input.language,
-      pageCount: input.pageCount,
-    },
-    input.allowedTemplateIds?.length
-      ? {
-          allowedTemplateIds: input.allowedTemplateIds,
-        }
-      : undefined,
-  )
+  const request = {
+    prompt: input.prompt,
+    researchBrief: input.researchBrief,
+    scenario: input.scenario,
+    language: input.language,
+    pageCount: input.pageCount,
+  }
+  const selectorOptions = input.allowedTemplateIds?.length
+    ? {
+        allowedTemplateIds: input.allowedTemplateIds,
+      }
+    : undefined
+  const recommendedTemplates =
+    input.previewRuntime === "ppt-master-agent"
+      ? buildPptMasterRecommendedTemplateSummaries(request, selectorOptions)
+      : buildPptRecommendedTemplateSummaries(request, selectorOptions)
 
   const explicitTemplateId = normalizeOptionalString(input.templateId)
   const shouldDefaultToSingleTemplate = input.preferSingleTemplate

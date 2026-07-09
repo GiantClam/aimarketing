@@ -11,11 +11,11 @@ import {
 import {
   MAX_PPT_PREVIEW_PAGE_COUNT,
   MIN_PPT_PREVIEW_PAGE_COUNT,
-  isKnownPptFrontendTemplateId,
   isKnownPptPreviewStyleKey,
   resolvePptPreviewDeckPageCount,
   type PptPreviewDeck,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { isPptWorkerTemplateSupported } from "@/lib/lead-tools/ppt-worker-capabilities"
 import { getLeadToolPptEngines } from "@/lib/lead-tools/ppt-engines"
 import type { LeadToolPptDownloadResponse, LeadToolPptFinalizeResponse } from "@/lib/lead-tools/ppt-engines/types"
 import { buildMockSeoMetaPreview } from "@/lib/lead-tools/seo-meta-data"
@@ -30,7 +30,7 @@ const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
 const pptPreviewModelSchema = z.enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "gpt-5.4", "step-3.7-flash"])
 const pptPreviewRuntimeSchema = z.enum(["ppt-master-agent", "frontend-slides-agent"])
 const pptPreviewTemplateModeSchema = z.enum(["auto-4", "single-template"])
-const pptFrontendTemplateIdSchema = z.string().trim().refine(isKnownPptFrontendTemplateId, "Unknown PPT template")
+const pptFrontendTemplateIdSchema = z.string().trim().refine(isPptWorkerTemplateSupported, "Unknown PPT template")
 const pptPreviewPageCountSchema = z
   .number()
   .int("Page count must be an integer")

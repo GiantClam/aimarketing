@@ -13,12 +13,11 @@ import type {
   PptPreviewRuntimeValue,
   PptPreviewVariant,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
-import {
-  isKnownPptFrontendTemplateId,
-} from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
 import {
+  getPptMasterLibraryTemplateIds,
   getPptWorkerSupportedTemplateIds,
+  isPptMasterLibraryTemplateSupported,
   isPptWorkerTemplateSupported,
 } from "@/lib/lead-tools/ppt-worker-capabilities"
 import type {
@@ -46,7 +45,7 @@ const pptLanguageSchema = z.enum(["zh-CN", "en-US"])
 
 const pptTemplateModeSchema = z.enum(["auto-4", "single-template"])
 
-const pptTemplateIdSchema = z.string().trim().refine(isKnownPptFrontendTemplateId, "Unknown PPT template")
+const pptTemplateIdSchema = z.string().trim().refine(isPptWorkerTemplateSupported, "Unknown PPT template")
 const DEFAULT_SINGLE_TEMPLATE_NARRATIVE_ANGLE = "executive-brief" as const
 
 const previewPptDeckInputSchema = z
@@ -606,36 +605,40 @@ export function buildAiEntryPptTools(input: {
           }
 
           const limitTemplatesToRemoteWorker = shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime)
-          const allowedTemplateIds = limitTemplatesToRemoteWorker ? getPptWorkerSupportedTemplateIds() : undefined
+          const preferPptMasterLibraryTemplates =
+            input.agentId === "executive-ppt" && defaultPreviewRuntime === "ppt-master-agent"
+          const allowedTemplateIds = limitTemplatesToRemoteWorker
+            ? preferPptMasterLibraryTemplates
+              ? getPptMasterLibraryTemplateIds()
+              : getPptWorkerSupportedTemplateIds()
+            : undefined
           const explicitTemplateId = prepared.input.templateId ?? templateId
-          const shouldBypassLocalTemplateSelection =
-            input.agentId === "executive-ppt" && !explicitTemplateId
           const requestedTemplateMode = prepared.input.templateMode ?? templateMode
-          const selection = shouldBypassLocalTemplateSelection
-            ? null
-            : resolvePptTemplateSelection({
-                prompt: sourcePrompt ?? prompt,
-                researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
-                scenario: prepared.input.scenario,
-                language: prepared.input.language,
-                pageCount: prepared.input.pageCount ?? undefined,
-                templateMode: requestedTemplateMode ?? "auto-4",
-                templateId: explicitTemplateId,
-                previewRuntime: defaultPreviewRuntime,
-                allowedTemplateIds,
-              })
+          const shouldPreferSingleTemplateRecommendation =
+            input.agentId === "executive-ppt" && !explicitTemplateId
+          const selection = resolvePptTemplateSelection({
+            prompt: sourcePrompt ?? prompt,
+            researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
+            scenario: prepared.input.scenario,
+            language: prepared.input.language,
+            pageCount: prepared.input.pageCount ?? undefined,
+            templateMode: requestedTemplateMode ?? "auto-4",
+            templateId: explicitTemplateId,
+            previewRuntime: defaultPreviewRuntime,
+            preferSingleTemplate: shouldPreferSingleTemplateRecommendation,
+            allowedTemplateIds,
+          })
           const recommendedTemplates = selection?.recommendedTemplates ?? []
-          const effectiveTemplateId = shouldBypassLocalTemplateSelection
-            ? explicitTemplateId
-            : (selection?.selectedTemplateId ?? explicitTemplateId ?? undefined)
-          const effectiveTemplateMode = shouldBypassLocalTemplateSelection
-            ? undefined
-            : (selection?.templateMode ?? (requestedTemplateMode ?? "auto-4"))
+          const effectiveTemplateId = selection?.selectedTemplateId ?? explicitTemplateId ?? undefined
+          const effectiveTemplateMode = selection?.templateMode ?? (requestedTemplateMode ?? "auto-4")
+          const isSupportedEditableTemplate = preferPptMasterLibraryTemplates
+            ? isPptMasterLibraryTemplateSupported
+            : isPptWorkerTemplateSupported
           if (
             limitTemplatesToRemoteWorker &&
             effectiveTemplateMode === "single-template" &&
             effectiveTemplateId &&
-            !isPptWorkerTemplateSupported(effectiveTemplateId)
+            !isSupportedEditableTemplate(effectiveTemplateId)
           ) {
             throw new Error(`ppt_worker_template_unsupported:${effectiveTemplateId}`)
           }
