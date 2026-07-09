@@ -6,6 +6,7 @@ import {
   type PptPreviewStyleKey,
   type PptRecommendedTemplateSummary,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
+import { PPT_MASTER_TEMPLATE_MANIFEST } from "@/lib/lead-tools/ppt-master-template-manifest"
 
 type PptMasterLayoutsIndex = {
   categories?: Record<string, { label?: string; layouts?: string[] }>
@@ -335,6 +336,10 @@ function buildPptMasterTemplateMetadataList() {
     metadataById.set(id, next)
   }
 
+  for (const template of PPT_MASTER_TEMPLATE_MANIFEST) {
+    upsertTemplate(template.id, template)
+  }
+
   for (const [id, layout] of Object.entries(layouts)) {
     upsertTemplate(id, {
       label: layout.label,
@@ -587,4 +592,11 @@ export function buildPptMasterRecommendedTemplateSummaries(
     styleName: item.label,
     summary: [item.summary, item.tone ? `Tone: ${item.tone}` : ""].filter(Boolean).join(" "),
   }))
+}
+
+export function resetPptWorkerCapabilitiesCachesForTests() {
+  cachedPptMasterLayoutsIndex = null
+  cachedPptMasterDecksIndex = null
+  cachedPptMasterBrandsIndex = null
+  cachedPptMasterExamplesIndex = null
 }
