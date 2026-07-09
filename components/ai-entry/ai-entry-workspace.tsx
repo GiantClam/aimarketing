@@ -100,6 +100,10 @@ import {
   stripPptHiddenContextMarkers,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import type { AiEntryTaskRunSummary } from "@/lib/ai-entry/task-runs"
+import {
+  AI_ENTRY_NEW_CONVERSATION_EVENT,
+  type AiEntryNewConversationDetail,
+} from "@/lib/ai-entry/new-conversation-event"
 import { dispatchAiEntrySidebarRefresh } from "@/lib/ai-entry/sidebar-refresh-event"
 import {
   formatMessageTime,
@@ -1390,6 +1394,7 @@ export function AiEntryWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestConversationIdRef = useRef<string | null>(initialConversationId)
   const isLoadingRef = useRef(false)
+  const activeRequestAbortControllerRef = useRef<AbortController | null>(null)
   const isStreamRecoveryInFlightRef = useRef(false)
   const onConversationIdChangeRef = useRef<typeof onConversationIdChange>(onConversationIdChange)
   const pendingFirstConversationRouteRef = useRef(false)
@@ -1497,6 +1502,27 @@ export function AiEntryWorkspace({
     },
     [effectiveEntryMode, routeAgentId],
   )
+  const resetWorkspaceForNewConversation = useCallback(() => {
+    activeRequestAbortControllerRef.current?.abort()
+    activeRequestAbortControllerRef.current = null
+    pendingFirstConversationRouteRef.current = false
+    latestConversationIdRef.current = null
+    isLoadingRef.current = false
+    isStreamRecoveryInFlightRef.current = false
+    setConversationId(null)
+    setMessages([])
+    setTaskRuns([])
+    setPendingTaskEvents([])
+    setConversationState(null)
+    setErrorMessage(null)
+    setInput("")
+    setAttachments([])
+    setCopiedMessageId(null)
+    setIsLoading(false)
+    setIsConversationLoading(false)
+    setIsPreparingAttachments(false)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }, [])
   const showLanding =
     !embedded &&
     !initialConversationId &&
@@ -2245,6 +2271,34 @@ export function AiEntryWorkspace({
     }
   }, [conversationId, syncSharedConversationDraft])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleNewConversation = (event: Event) => {
+      const detail =
+        event instanceof CustomEvent && event.detail && typeof event.detail === "object"
+          ? (event.detail as AiEntryNewConversationDetail)
+          : null
+      const targetAgentId =
+        typeof detail?.agentId === "string" && detail.agentId.trim()
+          ? detail.agentId.trim()
+          : null
+      const targetEntryMode =
+        typeof detail?.entryMode === "string" && detail.entryMode.trim()
+          ? detail.entryMode.trim()
+          : null
+      const activeAgentId = routeAgentId || resolvedRequestAgentId || null
+
+      if (targetAgentId !== activeAgentId) return
+      if (targetEntryMode !== effectiveEntryMode) return
+
+      resetWorkspaceForNewConversation()
+    }
+
+    window.addEventListener(AI_ENTRY_NEW_CONVERSATION_EVENT, handleNewConversation)
+    return () => window.removeEventListener(AI_ENTRY_NEW_CONVERSATION_EVENT, handleNewConversation)
+  }, [effectiveEntryMode, resetWorkspaceForNewConversation, resolvedRequestAgentId, routeAgentId])
+
   const attemptConversationRecovery = useCallback(async () => {
     const targetConversationId = latestConversationIdRef.current || conversationId
     if (!targetConversationId || isStreamRecoveryInFlightRef.current) return false
@@ -2786,6 +2840,9 @@ export function AiEntryWorkspace({
       pendingFirstConversationRouteRef.current = true
     }
 
+    const abortController = new AbortController()
+    activeRequestAbortControllerRef.current = abortController
+
     try {
       const effectiveRequestAgentId = resolveAiEntryRequestedAgentId({
         forcedAgentId: embedded ? forcedAgentId : null,
@@ -2806,6 +2863,7 @@ export function AiEntryWorkspace({
           Accept: "text/event-stream",
         },
         credentials: "same-origin",
+        signal: abortController.signal,
         body: JSON.stringify({
           stream: true,
           messages: contextMessages,
@@ -3299,6 +3357,12 @@ export function AiEntryWorkspace({
         ])
       }
     } catch (error) {
+      if (
+        abortController.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return
+      }
       const renderedError = `${copy.errorPrefix}${renderAiEntryErrorMessage(
         error instanceof Error ? error.message : error,
         copy,
@@ -3358,9 +3422,12 @@ export function AiEntryWorkspace({
             ].slice(-12),
       )
     } finally {
-      pendingFirstConversationRouteRef.current = false
-      isLoadingRef.current = false
-      setIsLoading(false)
+      if (activeRequestAbortControllerRef.current === abortController) {
+        activeRequestAbortControllerRef.current = null
+        pendingFirstConversationRouteRef.current = false
+        isLoadingRef.current = false
+        setIsLoading(false)
+      }
     }
   }, [
     attachments,

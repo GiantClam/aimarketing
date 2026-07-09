@@ -27,6 +27,7 @@ import { useCachedSidebarList } from "@/lib/hooks/use-cached-sidebar-list"
 import { useSidebarListPreheat } from "@/lib/hooks/use-sidebar-list-preheat"
 import { normalizeRouteEntityId } from "@/lib/navigation/route-params"
 import { resolveAiEntrySidebarEntryState } from "@/lib/ai-entry/sidebar-entry-state"
+import { dispatchAiEntryNewConversation } from "@/lib/ai-entry/new-conversation-event"
 import {
   AI_ENTRY_SIDEBAR_REFRESH_EVENT,
   type AiEntrySidebarRefreshDetail,
@@ -235,6 +236,10 @@ export function AiEntrySidebarItem({
   ) => {
     event.preventDefault()
     event.stopPropagation()
+    dispatchAiEntryNewConversation({
+      agentId: effectiveAgentId,
+      entryMode,
+    })
     router.push(`${basePath}${hrefSuffix}`)
   }
 
