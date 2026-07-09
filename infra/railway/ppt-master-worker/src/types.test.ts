@@ -9,6 +9,7 @@ test("worker preview schema accepts official ppt-master layout ids", () => {
     prompt: "Build an academic defense deck",
     scenario: "training",
     language: "zh-CN",
+    preferredProviderId: "enterprise-openai-compatible",
     templateMode: "single-template",
     templateId: "academic_defense",
     allowMockFallback: false,
@@ -16,6 +17,7 @@ test("worker preview schema accepts official ppt-master layout ids", () => {
   })
 
   assert.equal(parsed.templateId, "academic_defense")
+  assert.equal(parsed.preferredProviderId, "enterprise-openai-compatible")
 })
 
 test("worker preview schema accepts official ppt-master example ids", () => {

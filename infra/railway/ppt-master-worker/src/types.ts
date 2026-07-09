@@ -28,6 +28,7 @@ export const previewRequestSchema = z.object({
   model: z
     .enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "deepseek-v4-pro", "gpt-5.4", "step-3.7-flash"])
     .optional(),
+  preferredProviderId: z.string().trim().min(1).optional(),
   templateMode: z.enum(["auto-4", "single-template"]),
   templateId: z
     .string()

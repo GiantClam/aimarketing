@@ -41,6 +41,7 @@ function toPreviewRequest(request: PreviewRequest): PptPreviewRequest {
     scenario: request.scenario,
     language: request.language,
     model: request.model,
+    preferredProviderId: request.preferredProviderId,
     templateMode: request.templateMode,
     templateId: request.templateId,
     narrativeAngle: request.narrativeAngle,
