@@ -528,6 +528,10 @@ test("runtime slide provider preference honors explicit override", () => {
   assert.equal(resolveLeadToolPreviewProviderPreference("gpt-5.4", "stepfun"), "stepfun")
   assert.equal(resolveLeadToolPreviewProviderPreference("MiniMax-M3", ""), "minimax")
   assert.equal(resolveLeadToolPreviewProviderPreference("unknown-model", "writer"), "writer")
+  assert.equal(
+    resolveLeadToolPreviewProviderPreference("deepseek-v4-pro", "enterprise-openai-compatible"),
+    "deepseek",
+  )
 })
 
 test("runtime provider errors normalize headers timeout for Railway diagnostics", () => {
@@ -603,7 +607,7 @@ test("deepseek writer preview planning falls back to structured object generatio
     language: "zh-CN",
     model: "deepseek-v4-pro",
     pageCount: 4,
-    preferredProviderId: "enterprise-openai-compatible",
+    preferredProviderId: "aiberm",
     templateMode: "single-template",
     templateId: "ppt169_building_effective_agents",
   })

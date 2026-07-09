@@ -58,7 +58,7 @@ type LeadToolPptPlan = {
   slides: Array<Omit<PptPreviewSlide, "id" | "accent">>
 }
 
-type LeadToolPreviewProviderId = "pptoken" | "minimax" | "stepfun" | "writer"
+type LeadToolPreviewProviderId = "deepseek" | "pptoken" | "minimax" | "stepfun" | "writer"
 const LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS = 45_000
 
 let generateTextWithWriterModelImpl = generateTextWithWriterModel
@@ -796,6 +796,10 @@ function hasLeadToolPptokenProvider() {
   return getConfiguredAiEntryProviders().some((provider) => provider.id === "pptoken")
 }
 
+function hasLeadToolDeepseekProvider() {
+  return getConfiguredAiEntryProviders().some((provider) => provider.id === "deepseek")
+}
+
 function resolveRequestedPreviewModel(request: PptPreviewRequest) {
   return request.model ?? getLeadToolPreviewModel("ai-ppt-preview")
 }
@@ -953,7 +957,13 @@ export function resolveLeadToolPreviewProviderPreference(
 
   if (
     normalizedProvider === "deepseek" ||
-    normalizedProvider === "enterprise-openai-compatible" ||
+    (normalizedProvider === "enterprise-openai-compatible" && /^deepseek/iu.test(model))
+  ) {
+    return "deepseek"
+  }
+
+  if (
+    normalizedProvider === "deepseek" ||
     normalizedProvider === "aiberm" ||
     normalizedProvider === "crazyroute" ||
     normalizedProvider === "crazyrouter" ||
@@ -1149,6 +1159,46 @@ async function generateTextWithLeadToolPreviewProvider(params: {
       },
       {
         preferredProviderId: "pptoken",
+        preferredModel: params.model,
+        forcePreferredProvider: true,
+      },
+    )
+
+    return {
+      text: result.result,
+      providerId: result.providerId,
+      model: result.model,
+    }
+  }
+
+  if (preferredProviderId === "deepseek") {
+    if (!hasLeadToolDeepseekProvider()) {
+      throw new Error(`lead_tool_provider_missing:deepseek:${params.model}`)
+    }
+
+    const result = await executeAiEntryWithProviderFailover(
+      async (providerRun) => {
+        return generatePreviewTextWithProviderTimeout({
+          providerId: "deepseek",
+          model: providerRun.model,
+          run: async () => {
+            const response = await generateText({
+              model: providerRun.provider.chat(providerRun.model),
+              system: params.systemPrompt,
+              prompt: params.userPrompt,
+            })
+
+            const text = response.text.trim()
+            if (!text) {
+              throw new Error("lead_tool_preview_empty_response")
+            }
+
+            return text
+          },
+        })
+      },
+      {
+        preferredProviderId: "deepseek",
         preferredModel: params.model,
         forcePreferredProvider: true,
       },
