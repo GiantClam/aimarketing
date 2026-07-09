@@ -58,10 +58,12 @@ type StoredVariant = {
       slideId: string
       layout: PptPreviewSlide["layout"]
       fileBaseName: string
+      status?: "success" | "failed"
       durationMs: number
       provider?: string
       model?: string
       fallbackReason?: string | null
+      error?: string | null
     }>
   }
 }
@@ -764,10 +766,13 @@ function buildSlideFileBaseName(index: number, layout: PptPreviewSlide["layout"]
 
 function isRecoverableRuntimeSlideFailure(detail: string) {
   return (
-    detail === "ppt_master_runtime_slide_timeout" ||
     detail === "lead_tool_preview_empty_response" ||
     detail === "ppt_master_runtime_slide_svg_invalid"
   )
+}
+
+function isContinuableRuntimeSlideFailure(detail: string) {
+  return detail === "ppt_master_runtime_slide_timeout" || detail.startsWith("ppt_master_runtime_provider_timeout:")
 }
 
 function countPatternMatches(value: string, pattern: RegExp) {
@@ -1894,6 +1899,25 @@ async function materializeVariantProject(params: {
           attemptResult = await options.generateSlideSvg(slideContext)
         } catch (error) {
           const detail = error instanceof Error ? error.message : "unknown_error"
+          if (isContinuableRuntimeSlideFailure(detail)) {
+            await fs.writeFile(
+              path.join(projectDir, "notes", `${slideFileBaseName}.md`),
+              buildNoteMarkdown(slide.title, slide.body, slide.bullets),
+              "utf8",
+            )
+            normalizedSlides.push(slide)
+            slideRuns.push({
+              slideId: slide.id,
+              layout: slide.layout,
+              fileBaseName: slideFileBaseName,
+              status: "failed",
+              durationMs: Date.now() - slideStartedAt,
+              fallbackReason: null,
+              error: detail,
+            })
+            result = null
+            break
+          }
           if (!isRecoverableRuntimeSlideFailure(detail)) {
             throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
           }
@@ -1982,6 +2006,10 @@ async function materializeVariantProject(params: {
       }
     }
 
+    if (!result && slideRuns.at(-1)?.fileBaseName === slideFileBaseName && slideRuns.at(-1)?.status === "failed") {
+      continue
+    }
+
     if (!result) {
       throw new Error(`ppt_master_runtime_slide_unresolved:${variant.key}:${slideFileBaseName}`)
     }
@@ -1995,10 +2023,12 @@ async function materializeVariantProject(params: {
       slideId: slide.id,
       layout: slide.layout,
       fileBaseName: slideFileBaseName,
+      status: "success",
       durationMs: Date.now() - slideStartedAt,
       provider: result.provider,
       model: result.model,
       fallbackReason,
+      error: null,
     })
   }
 

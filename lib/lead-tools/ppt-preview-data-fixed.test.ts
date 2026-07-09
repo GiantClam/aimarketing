@@ -60,6 +60,22 @@ test("single-template variants can be narrowed to one narrative angle", () => {
   assert.equal(variants[0]?.slotLabel, "A")
 })
 
+test("single-template variants honor official ppt-master template ids", () => {
+  const variants = buildPptPreviewVariantDescriptors({
+    prompt: "写一份介绍屿算智能公司和业务的 PPT",
+    scenario: "training",
+    language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "ppt169_glassmorphism_demo",
+    narrativeAngle: "executive-brief",
+  })
+
+  assert.equal(variants.length, 1)
+  assert.equal(variants[0]?.key, "ppt169_glassmorphism_demo-executive-brief")
+  assert.equal(variants[0]?.templateId, "ppt169_glassmorphism_demo")
+  assert.equal(variants[0]?.style.key, "ppt169_glassmorphism_demo")
+})
+
 test("auto-4 recommends structured boardroom templates first for executive review prompts", () => {
   const variants = buildPptPreviewVariantDescriptors({
     prompt: "董事会经营复盘与风险诊断汇报，包含财务预算、关键决策与下一步计划",

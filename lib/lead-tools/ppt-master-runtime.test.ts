@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { __testables__ } from "./ppt-master-runtime"
+import { __testables__, materializePptMasterPreviewDeck } from "./ppt-master-runtime"
 
 test("ppt master runtime prefers explicit python env and falls back to python3", () => {
   const previous = process.env.PPT_MASTER_PYTHON_BIN
@@ -201,8 +201,14 @@ test("runtime deck normalization preserves agenda copy for slide generation", ()
   assert.equal(slide?.bullets[4], "行动顺序与处置节奏")
 })
 
-test("emergency runtime svg renders agenda slide and marks timeout as recoverable", () => {
-  assert.equal(__testables__.isRecoverableRuntimeSlideFailure("ppt_master_runtime_slide_timeout"), true)
+test("emergency runtime svg renders agenda slide without treating provider timeout as recoverable", () => {
+  assert.equal(__testables__.isRecoverableRuntimeSlideFailure("ppt_master_runtime_slide_timeout"), false)
+  assert.equal(
+    __testables__.isRecoverableRuntimeSlideFailure(
+      "ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+    ),
+    false,
+  )
   assert.equal(__testables__.isRecoverableRuntimeSlideFailure("provider_quota_exceeded"), false)
 
   const svg = __testables__.buildEmergencyRuntimeSvg({
@@ -253,6 +259,131 @@ test("emergency runtime svg renders agenda slide and marks timeout as recoverabl
   assert.match(svg, /<svg/u)
   assert.match(svg, /结构总览/u)
   assert.match(svg, /agenda-row-1/u)
+})
+
+test("runtime records provider timeouts and continues later slides without fallback or retry", async () => {
+  const mutableEnv = process.env as Record<string, string | undefined>
+  const previousRepoDir = mutableEnv.PPT_MASTER_REPO_DIR
+  const previousStore = mutableEnv.PPT_MASTER_SESSION_STORE
+  const previousFallback = mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK
+
+  mutableEnv.PPT_MASTER_REPO_DIR = path.resolve(process.cwd(), ".cache", "ppt-master-upstream")
+  mutableEnv.PPT_MASTER_SESSION_STORE = "filesystem"
+  mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK = "false"
+
+  try {
+    const calls: number[] = []
+    const deck = await materializePptMasterPreviewDeck(
+      {
+        title: "Provider timeout deck",
+        scenario: "training",
+        language: "zh-CN",
+        generatedAt: "2026-07-10T00:00:00.000Z",
+        outline: ["one", "two", "three"],
+        source: "live",
+        provider: "minimax",
+        previewModel: "MiniMax-M2.7-highspeed",
+        variants: [
+          {
+            key: "timeout-variant",
+            templateId: "ppt169_glassmorphism_demo",
+            styleKey: "ppt169_glassmorphism_demo",
+            name: "Glass",
+            summary: "summary",
+            stylePrompt: "glass",
+            palette: {
+              background: "#ffffff",
+              foreground: "#111111",
+              accent: "#2563eb",
+              panel: "#f8fafc",
+              border: "#cbd5e1",
+            },
+            strengths: ["clear"],
+            slides: [
+              {
+                id: "s1",
+                layout: "cover",
+                intent: "open",
+                kicker: "Intro",
+                title: "Slide One",
+                body: "First slide",
+                bullets: ["Alpha"],
+                accent: "#2563eb",
+              },
+              {
+                id: "s2",
+                layout: "comparison",
+                intent: "compare",
+                kicker: "Compare",
+                title: "Slide Two",
+                body: "Timeout slide",
+                bullets: ["Beta"],
+                accent: "#2563eb",
+              },
+              {
+                id: "s3",
+                layout: "closing",
+                intent: "close",
+                kicker: "Close",
+                title: "Slide Three",
+                body: "Third slide",
+                bullets: ["Gamma"],
+                accent: "#2563eb",
+              },
+            ],
+          },
+        ],
+      } as any,
+      {
+        async generateSlideSvg(context) {
+          calls.push(context.slideIndex)
+          if (context.slideIndex === 1) {
+            throw new Error("ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed")
+          }
+
+          return {
+            provider: "minimax",
+            model: "MiniMax-M2.7-highspeed",
+            svg: `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect x="0" y="0" width="1280" height="720" fill="#ffffff"/>
+  <text x="80" y="120" font-size="40" fill="#111111">${context.slide.title}</text>
+</svg>`,
+          }
+        },
+      },
+    )
+
+    assert.deepEqual(calls, [0, 1, 2])
+    assert.equal(deck.variants[0]?.preview?.slides.length, 2)
+
+    const sessionId = deck.previewSessionId
+    assert.ok(sessionId)
+    const manifest = await __testables__.readManifest(sessionId)
+    const runs = manifest.variants[0]?.runtimeDiagnostics?.slideRuns ?? []
+    assert.equal(runs.length, 3)
+    assert.equal(runs[1]?.status, "failed")
+    assert.equal(runs[1]?.fallbackReason, null)
+    assert.equal(runs[1]?.error, "ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed")
+    assert.equal(runs[2]?.status, "success")
+  } finally {
+    if (previousRepoDir === undefined) {
+      delete mutableEnv.PPT_MASTER_REPO_DIR
+    } else {
+      mutableEnv.PPT_MASTER_REPO_DIR = previousRepoDir
+    }
+
+    if (previousStore === undefined) {
+      delete mutableEnv.PPT_MASTER_SESSION_STORE
+    } else {
+      mutableEnv.PPT_MASTER_SESSION_STORE = previousStore
+    }
+
+    if (previousFallback === undefined) {
+      delete mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK
+    } else {
+      mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK = previousFallback
+    }
+  }
 })
 
 test("runtime svg preparation keeps the richest svg when the model returns multiple candidates", () => {

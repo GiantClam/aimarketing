@@ -1148,6 +1148,10 @@ export function getPptFrontendTemplateOption(templateId: PptFrontendTemplateId) 
 }
 
 export function getPptPreviewStyleKeyByTemplateId(templateId: PptFrontendTemplateId) {
+  if (isKnownPptPreviewStyleKey(templateId)) {
+    return templateId
+  }
+
   return getPptFrontendTemplateOption(templateId)?.styleKey ?? null
 }
 
