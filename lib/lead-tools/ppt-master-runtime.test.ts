@@ -1,4 +1,7 @@
 import assert from "node:assert/strict"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import test from "node:test"
 
 import { __testables__ } from "./ppt-master-runtime"
@@ -49,6 +52,102 @@ test("runtime repo candidates skip project cache on production and vercel builds
     } else {
       mutableEnv.VERCEL = previousVercel
     }
+  }
+})
+
+test("runtime repo candidates also expose upstream cache in development", () => {
+  const mutableEnv = process.env as Record<string, string | undefined>
+  const previousNodeEnv = mutableEnv.NODE_ENV
+  const previousVercel = mutableEnv.VERCEL
+
+  try {
+    delete mutableEnv.VERCEL
+    mutableEnv.NODE_ENV = "development"
+    assert.match(__testables__.getProjectCachePptMasterUpstreamCandidate() ?? "", /\.cache\/ppt-master-upstream$/u)
+
+    mutableEnv.NODE_ENV = "production"
+    assert.equal(__testables__.getProjectCachePptMasterUpstreamCandidate(), null)
+  } finally {
+    if (previousNodeEnv === undefined) {
+      delete mutableEnv.NODE_ENV
+    } else {
+      mutableEnv.NODE_ENV = previousNodeEnv
+    }
+
+    if (previousVercel === undefined) {
+      delete mutableEnv.VERCEL
+    } else {
+      mutableEnv.VERCEL = previousVercel
+    }
+  }
+})
+
+test("runtime resolves official template sources across layout deck and example libraries", async () => {
+  const repoDir = path.resolve(process.cwd(), ".cache", "ppt-master-upstream")
+
+  const layoutSource = await __testables__.resolveOfficialTemplateSource(repoDir, "academic_defense")
+  const deckSource = await __testables__.resolveOfficialTemplateSource(repoDir, "招商银行")
+  const exampleSource = await __testables__.resolveOfficialTemplateSource(
+    repoDir,
+    "ppt169_building_effective_agents",
+  )
+
+  assert.equal(layoutSource?.kind, "layout")
+  assert.match(layoutSource?.sourcePathLabel ?? "", /layouts\/academic_defense\/$/u)
+  assert.equal(deckSource?.kind, "deck")
+  assert.match(deckSource?.sourcePathLabel ?? "", /decks\/招商银行\/$/u)
+  assert.equal(exampleSource?.kind, "example")
+  assert.match(exampleSource?.sourcePathLabel ?? "", /examples\/ppt169_building_effective_agents\/$/u)
+})
+
+test("runtime materializes official deck templates into project templates and images", async () => {
+  const repoDir = path.resolve(process.cwd(), ".cache", "ppt-master-upstream")
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ppt-master-runtime-deck-"))
+
+  try {
+    await fs.mkdir(path.join(projectDir, "templates"), { recursive: true })
+    await fs.mkdir(path.join(projectDir, "images"), { recursive: true })
+
+    const reference = await __testables__.materializeOfficialTemplateAssets(repoDir, projectDir, "招商银行")
+
+    assert.equal(reference?.kind, "deck")
+    assert.equal(reference?.templateId, "招商银行")
+    assert.equal(reference?.designSpecTitle, "China Merchants Bank Transaction Banking - Design Specification")
+    assert.equal(await fs.readFile(path.join(projectDir, "templates", "01_cover.svg"), "utf8").then(Boolean), true)
+    assert.equal(await fs.readFile(path.join(projectDir, "images", "cover_bg.png")).then(Boolean), true)
+    assert.equal(reference?.referenceSvgFiles.includes("01_cover.svg"), true)
+    assert.equal(reference?.imageFiles.includes("cover_bg.png"), true)
+  } finally {
+    await fs.rm(projectDir, { recursive: true, force: true })
+  }
+})
+
+test("runtime materializes official example projects without copying exported pptx artifacts", async () => {
+  const repoDir = path.resolve(process.cwd(), ".cache", "ppt-master-upstream")
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ppt-master-runtime-example-"))
+
+  try {
+    await fs.mkdir(path.join(projectDir, "templates"), { recursive: true })
+    await fs.mkdir(path.join(projectDir, "images"), { recursive: true })
+
+    const reference = await __testables__.materializeOfficialTemplateAssets(
+      repoDir,
+      projectDir,
+      "ppt169_building_effective_agents",
+    )
+
+    assert.equal(reference?.kind, "example")
+    assert.equal(reference?.templateId, "ppt169_building_effective_agents")
+    assert.match(reference?.designSpecTitle ?? "", /Building Effective Agents/u)
+    assert.equal(await fs.readFile(path.join(projectDir, "templates", "notes", "01_cover.md"), "utf8").then(Boolean), true)
+    assert.equal(
+      await fs.readFile(path.join(projectDir, "templates", "svg_output", "01_cover.svg"), "utf8").then(Boolean),
+      true,
+    )
+    assert.equal(await fs.readFile(path.join(projectDir, "images", "image.png")).then(Boolean), true)
+    await assert.rejects(fs.access(path.join(projectDir, "templates", "exports", "building_effective_agents.pptx")))
+  } finally {
+    await fs.rm(projectDir, { recursive: true, force: true })
   }
 })
 

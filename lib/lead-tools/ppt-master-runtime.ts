@@ -31,6 +31,21 @@ const PREVIEW_HEIGHT = 720
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6
 const SVG_REGENERATION_RETRY_LIMIT = 2
 const PROJECT_CACHE_DIR_SEGMENTS = [".cache", ["ppt", "master"].join("-")]
+const PROJECT_CACHE_UPSTREAM_DIR_SEGMENTS = [".cache", "ppt-master-upstream"]
+const BITMAP_FILE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i
+
+type PptMasterImportedTemplateKind = "brand" | "layout" | "deck" | "example"
+
+type ImportedPptMasterTemplateReference = {
+  templateId: string
+  kind: PptMasterImportedTemplateKind
+  sourcePathLabel: string
+  sourceDir: string
+  designSpecTitle: string | null
+  designSpecExcerpt: string | null
+  referenceSvgFiles: string[]
+  imageFiles: string[]
+}
 
 type StoredVariant = {
   key: string
@@ -89,6 +104,7 @@ export type PptMasterPreviewRuntimeSlideContext = {
   designSpecPath: string
   specLockPath: string
   sourceBriefPath: string
+  templateReference?: ImportedPptMasterTemplateReference | null
   previousSlides: Array<Pick<PptPreviewSlide, "layout" | "title" | "body" | "bullets">>
 }
 
@@ -114,12 +130,21 @@ function getProjectCachePptMasterCandidate() {
   return path.resolve(process.cwd(), ...PROJECT_CACHE_DIR_SEGMENTS)
 }
 
+function getProjectCachePptMasterUpstreamCandidate() {
+  if (process.env.NODE_ENV === "production" || isVercelEnvironment()) {
+    return null
+  }
+
+  return path.resolve(process.cwd(), ...PROJECT_CACHE_UPSTREAM_DIR_SEGMENTS)
+}
+
 function getPptMasterRootCandidates() {
   return [
     process.env.PPT_MASTER_REPO_DIR,
     "D:\\tmp\\ppt-master",
     path.join(os.tmpdir(), "ppt-master"),
     getProjectCachePptMasterCandidate(),
+    getProjectCachePptMasterUpstreamCandidate(),
   ].filter((value): value is string => Boolean(value?.trim()))
 }
 
@@ -297,6 +322,179 @@ async function createProjectStructure(projectDir: string) {
   await fs.mkdir(path.join(projectDir, "templates"), { recursive: true })
 }
 
+function getOfficialTemplateSourceCandidates(repoDir: string, templateId: string) {
+  return [
+    {
+      kind: "layout" as const,
+      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "layouts", templateId),
+      sourcePathLabel: `skills/ppt-master/templates/layouts/${templateId}/`,
+    },
+    {
+      kind: "deck" as const,
+      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "decks", templateId),
+      sourcePathLabel: `skills/ppt-master/templates/decks/${templateId}/`,
+    },
+    {
+      kind: "brand" as const,
+      sourceDir: path.join(repoDir, "skills", "ppt-master", "templates", "brands", templateId),
+      sourcePathLabel: `skills/ppt-master/templates/brands/${templateId}/`,
+    },
+    {
+      kind: "example" as const,
+      sourceDir: path.join(repoDir, "examples", templateId),
+      sourcePathLabel: `examples/${templateId}/`,
+    },
+  ] satisfies Array<{
+    kind: PptMasterImportedTemplateKind
+    sourceDir: string
+    sourcePathLabel: string
+  }>
+}
+
+async function pathExists(targetPath: string) {
+  try {
+    await fs.access(targetPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function resolveOfficialTemplateSource(repoDir: string, templateId?: string | null) {
+  if (!templateId?.trim()) {
+    return null
+  }
+
+  for (const candidate of getOfficialTemplateSourceCandidates(repoDir, templateId.trim())) {
+    if (await pathExists(candidate.sourceDir)) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+async function collectRelativeFiles(rootDir: string): Promise<string[]> {
+  const entries = await fs.readdir(rootDir, { withFileTypes: true })
+  const nestedFiles = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(rootDir, entry.name)
+      if (entry.isDirectory()) {
+        const childFiles = await collectRelativeFiles(entryPath)
+        return childFiles.map((relativePath) => path.join(entry.name, relativePath))
+      }
+
+      return entry.isFile() ? [entry.name] : []
+    }),
+  )
+
+  return nestedFiles.flat().sort((left, right) => left.localeCompare(right, "en"))
+}
+
+function shouldSkipImportedTemplateFile(relativePath: string) {
+  const normalized = relativePath.replace(/\\/g, "/")
+  return (
+    normalized.startsWith("exports/") ||
+    normalized.endsWith(".pptx") ||
+    normalized.endsWith(".pdf") ||
+    normalized.endsWith(".key")
+  )
+}
+
+async function copyImportedTemplateFiles(sourceDir: string, templatesDir: string, imagesDir: string) {
+  const relativeFiles = await collectRelativeFiles(sourceDir)
+  const imageFiles = new Set<string>()
+  const referenceSvgFiles: string[] = []
+
+  for (const relativeFile of relativeFiles) {
+    if (shouldSkipImportedTemplateFile(relativeFile)) {
+      continue
+    }
+
+    const sourcePath = path.join(sourceDir, relativeFile)
+    if (BITMAP_FILE_PATTERN.test(relativeFile)) {
+      const imageTargetPath = path.join(imagesDir, path.basename(relativeFile))
+      await fs.copyFile(sourcePath, imageTargetPath)
+      imageFiles.add(path.basename(relativeFile))
+      continue
+    }
+
+    const templateTargetPath = path.join(templatesDir, relativeFile)
+    await fs.mkdir(path.dirname(templateTargetPath), { recursive: true })
+    await fs.copyFile(sourcePath, templateTargetPath)
+
+    if (relativeFile.endsWith(".svg")) {
+      referenceSvgFiles.push(relativeFile)
+    }
+  }
+
+  return {
+    imageFiles: Array.from(imageFiles).sort((left, right) => left.localeCompare(right, "en")),
+    referenceSvgFiles: referenceSvgFiles.sort((left, right) => left.localeCompare(right, "en")),
+  }
+}
+
+function extractTemplateDesignSpecTitle(markdown: string) {
+  const firstHeading = markdown
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("# "))
+
+  return firstHeading ? firstHeading.replace(/^#\s+/u, "").trim() : null
+}
+
+function buildTemplateDesignSpecExcerpt(markdown: string) {
+  const excerpt = markdown
+    .replace(/^---[\s\S]*?---\s*/u, "")
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 18)
+    .join("\n")
+
+  return excerpt ? excerpt.slice(0, 1800) : null
+}
+
+async function materializeOfficialTemplateAssets(
+  repoDir: string,
+  projectDir: string,
+  templateId?: string | null,
+): Promise<ImportedPptMasterTemplateReference | null> {
+  const resolvedSource = await resolveOfficialTemplateSource(repoDir, templateId)
+  if (!resolvedSource || !templateId?.trim()) {
+    return null
+  }
+
+  const templatesDir = path.join(projectDir, "templates")
+  const imagesDir = path.join(projectDir, "images")
+  const { imageFiles, referenceSvgFiles } = await copyImportedTemplateFiles(
+    resolvedSource.sourceDir,
+    templatesDir,
+    imagesDir,
+  )
+
+  const designSpecPath = path.join(templatesDir, "design_spec.md")
+  let designSpecTitle: string | null = null
+  let designSpecExcerpt: string | null = null
+
+  if (await pathExists(designSpecPath)) {
+    const designSpec = await fs.readFile(designSpecPath, "utf8")
+    designSpecTitle = extractTemplateDesignSpecTitle(designSpec)
+    designSpecExcerpt = buildTemplateDesignSpecExcerpt(designSpec)
+  }
+
+  return {
+    templateId: templateId.trim(),
+    kind: resolvedSource.kind,
+    sourceDir: resolvedSource.sourceDir,
+    sourcePathLabel: resolvedSource.sourcePathLabel,
+    designSpecTitle,
+    designSpecExcerpt,
+    referenceSvgFiles,
+    imageFiles,
+  }
+}
+
 function buildNoteMarkdown(title: string, body: string, bullets: string[]) {
   return [`# ${title}`, "", body, "", ...bullets.map((bullet) => `- ${bullet}`), ""].join("\n")
 }
@@ -358,7 +556,11 @@ function getRuntimeTypography(variantKey: PptPreviewVariant["styleKey"]): Runtim
   }
 }
 
-function buildRuntimeSourceBrief(deck: PptPreviewDeck, variant: PptPreviewVariant) {
+function buildRuntimeSourceBrief(
+  deck: PptPreviewDeck,
+  variant: PptPreviewVariant,
+  templateReference?: ImportedPptMasterTemplateReference | null,
+) {
   return [
     `# ${deck.title}`,
     "",
@@ -366,6 +568,13 @@ function buildRuntimeSourceBrief(deck: PptPreviewDeck, variant: PptPreviewVarian
     `- Language: ${deck.language}`,
     `- Variant: ${variant.name}`,
     `- Summary: ${variant.summary}`,
+    ...(templateReference
+      ? [
+          `- Official template: ${templateReference.templateId}`,
+          `- Template kind: ${templateReference.kind}`,
+          `- Template source: ${templateReference.sourcePathLabel}`,
+        ]
+      : []),
     "",
     "## Outline",
     ...deck.outline.map((item, index) => `${index + 1}. ${item}`),
@@ -382,7 +591,12 @@ function buildRuntimeSourceBrief(deck: PptPreviewDeck, variant: PptPreviewVarian
   ].join("\n")
 }
 
-function buildRuntimeDesignSpec(deck: PptPreviewDeck, variant: PptPreviewVariant, typography: RuntimeTypography) {
+function buildRuntimeDesignSpec(
+  deck: PptPreviewDeck,
+  variant: PptPreviewVariant,
+  typography: RuntimeTypography,
+  templateReference?: ImportedPptMasterTemplateReference | null,
+) {
   const now = new Date().toISOString().slice(0, 10)
 
   return [
@@ -396,6 +610,12 @@ function buildRuntimeDesignSpec(deck: PptPreviewDeck, variant: PptPreviewVariant
     "| **Canvas Format** | PPT 16:9 (1280 x 720) |",
     `| **Page Count** | ${variant.slides.length} |`,
     `| **Design Style** | ${variant.name} |`,
+    ...(templateReference
+      ? [
+          `| **Official Template** | ${templateReference.templateId} (${templateReference.kind}) |`,
+          `| **Template Source** | ${templateReference.sourcePathLabel} |`,
+        ]
+      : []),
     "| **Target Audience** | Preview viewers evaluating PPT directions |",
     `| **Use Case** | ${deck.scenario} |`,
     `| **Created Date** | ${now} |`,
@@ -516,14 +736,19 @@ function buildRuntimeSpecLock(variant: PptPreviewVariant, typography: RuntimeTyp
   ].join("\n")
 }
 
-async function writeProjectArtifacts(projectDir: string, deck: PptPreviewDeck, variant: PptPreviewVariant): Promise<RuntimeProjectArtifacts> {
+async function writeProjectArtifacts(
+  projectDir: string,
+  deck: PptPreviewDeck,
+  variant: PptPreviewVariant,
+  templateReference?: ImportedPptMasterTemplateReference | null,
+): Promise<RuntimeProjectArtifacts> {
   const typography = getRuntimeTypography(variant.styleKey)
   const sourceBriefPath = path.join(projectDir, "sources", "brief.md")
   const designSpecPath = path.join(projectDir, "design_spec.md")
   const specLockPath = path.join(projectDir, "spec_lock.md")
 
-  await fs.writeFile(sourceBriefPath, buildRuntimeSourceBrief(deck, variant), "utf8")
-  await fs.writeFile(designSpecPath, buildRuntimeDesignSpec(deck, variant, typography), "utf8")
+  await fs.writeFile(sourceBriefPath, buildRuntimeSourceBrief(deck, variant, templateReference), "utf8")
+  await fs.writeFile(designSpecPath, buildRuntimeDesignSpec(deck, variant, typography, templateReference), "utf8")
   await fs.writeFile(specLockPath, buildRuntimeSpecLock(variant, typography), "utf8")
 
   return {
@@ -1620,7 +1845,8 @@ async function materializeVariantProject(params: {
   await fs.rm(projectDir, { recursive: true, force: true })
   await createProjectStructure(projectDir)
 
-  const projectArtifacts = await writeProjectArtifacts(projectDir, deck, variant)
+  const templateReference = await materializeOfficialTemplateAssets(repoDir, projectDir, variant.templateId)
+  const projectArtifacts = await writeProjectArtifacts(projectDir, deck, variant, templateReference)
   const normalizedSlides: PptPreviewSlide[] = []
   let runtimeProvider = deck.provider
   let runtimeModel = deck.previewModel
@@ -1643,6 +1869,7 @@ async function materializeVariantProject(params: {
       designSpecPath: projectArtifacts.designSpecPath,
       specLockPath: projectArtifacts.specLockPath,
       sourceBriefPath: projectArtifacts.sourceBriefPath,
+      templateReference,
       previousSlides,
     } satisfies PptMasterPreviewRuntimeSlideContext
 
@@ -1939,7 +2166,10 @@ export async function exportPptMasterSessionVariant(sessionId: string, variantKe
 export const __testables__ = {
   isVercelEnvironment,
   getProjectCachePptMasterCandidate,
+  getProjectCachePptMasterUpstreamCandidate,
   getPptMasterPythonCandidates,
+  resolveOfficialTemplateSource,
+  materializeOfficialTemplateAssets,
   readManifest,
   compactRuntimeText,
   normalizeRuntimeDeckCopy,

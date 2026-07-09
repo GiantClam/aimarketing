@@ -1959,7 +1959,7 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
       "你是 ppt-master agent runtime 里的 Executor。",
       "任务是为单页演示文稿直接手写一个可导出的 SVG 页面。",
       "必须只返回一个完整 SVG 文档，不要 markdown、不要解释、不要代码块、不要 XML 声明。",
-      "不要套用现成模板，不要引用外部素材底图，要基于当前页面内容直接构图。",
+      "如果当前项目已导入官方模板参考，请沿用其版式骨架、视觉 DNA 和素材语义，但必须根据当前页面内容重写，不能照搬示例文案。",
       "画布固定为 1280x720，必须包含 viewBox=\"0 0 1280 720\"。",
       "必须使用内联属性，不要使用 <style>、class、mask、foreignObject、textPath、symbol、script、animate、iframe，也不要使用 <g opacity>。",
       "优先用 rect、line、circle、path、text 这些基础图元完成构图，减少无意义节点和重复装饰。",
@@ -1973,7 +1973,7 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
     "You are the Executor inside a ppt-master agent runtime.",
     "Generate one standalone SVG slide that is ready for downstream finalize/export.",
     "Return one complete SVG document only. No markdown, no explanation, no code fences, no XML declaration.",
-    "Do not wrap or reuse an existing template. Compose the slide directly from the current page content.",
+    "When an official template reference is provided, follow its layout skeleton, visual DNA, and asset semantics while rewriting the slide for the current page content.",
     "The canvas is fixed at 1280x720 and must include viewBox=\"0 0 1280 720\".",
     "Use inline SVG attributes only. Do not use <style>, class, mask, foreignObject, textPath, symbol, script, animate, iframe, or <g opacity>.",
     "Prefer rect, line, circle, path, and text primitives instead of bloated or repetitive node trees.",
@@ -2086,6 +2086,26 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
     `Palette accent: ${context.variant.palette.accent}`,
     `Palette panel: ${context.variant.palette.panel}`,
     `Palette border: ${context.variant.palette.border}`,
+    ...(context.templateReference
+      ? [
+          "",
+          `Official template id: ${context.templateReference.templateId}`,
+          `Official template kind: ${context.templateReference.kind}`,
+          `Official template source: ${context.templateReference.sourcePathLabel}`,
+          context.templateReference.designSpecTitle
+            ? `Template design spec title: ${context.templateReference.designSpecTitle}`
+            : "",
+          context.templateReference.designSpecExcerpt
+            ? `Template design spec excerpt:\n${context.templateReference.designSpecExcerpt}`
+            : "",
+          context.templateReference.referenceSvgFiles.length
+            ? `Template reference SVGs: ${context.templateReference.referenceSvgFiles.slice(0, 12).join(" | ")}`
+            : "",
+          context.templateReference.imageFiles.length
+            ? `Imported bitmap assets: ${context.templateReference.imageFiles.slice(0, 12).join(" | ")}`
+            : "",
+        ].filter(Boolean)
+      : []),
     "",
     `Current page: ${context.slideIndex + 1} / ${context.variant.slides.length}`,
     `Layout type: ${context.slide.layout}`,
