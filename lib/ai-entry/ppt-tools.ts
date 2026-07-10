@@ -11,11 +11,11 @@ import {
   preparePptPreviewInput,
   type PptBriefState,
 } from "@/lib/ai-entry/ppt-brief"
+import { buildPptTemplateRecommendationMessage } from "@/lib/ai-entry/ppt-tool-result-message"
 import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
 import type {
   PptPreviewDeck,
   PptPreviewResearchBrief,
-  PptRecommendedTemplateSummary,
   PptPreviewRuntimeValue,
   PptPreviewVariant,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
@@ -24,7 +24,7 @@ import {
   isKnownPptFrontendTemplateId,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
-  buildPptMasterRecommendedTemplateSummaries,
+  getPptMasterTemplateCatalog,
   getPptWorkerSupportedTemplateIds,
   isPptMasterLibraryTemplateSupported,
   isPptWorkerTemplateSupported,
@@ -38,10 +38,6 @@ import { buildLeadToolDownload, buildLeadToolPreview } from "@/lib/lead-tools/ru
 
 const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 const HTML_MIME_TYPE_PREFIX = "text/html"
-const FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN =
-  /(?:现状|最新|政策|法规|关税|融资|财报|业绩|地缘|战争|制裁|供应链|进出口|油价|运价|汇率|\bpolicy\b|\bregulation\b|\btariff\b|\bearnings\b|\bgeopolitical\b|\bsupply chain\b|\blatest\b|\bcurrent state\b)/iu
-const FACTUAL_PPT_MARKET_RESEARCH_REQUIRED_PATTERN =
-  /(?:(?:最新|当前|近期|202[4-9]|today|latest|current|recent).{0,24}(?:趋势|市场|行业|竞品|\btrend\b|\bmarket\b|\bindustry\b|\bcompetitor\b)|(?:趋势|市场|行业|竞品|\btrend\b|\bmarket\b|\bindustry\b|\bcompetitor\b).{0,24}(?:最新|当前|近期|202[4-9]|today|latest|current|recent))/iu
 
 const pptScenarioSchema = z.enum([
   "marketing-campaign",
@@ -80,6 +76,14 @@ const updatePptBriefInputSchema = z.object({
   pageCount: z.number().int().min(4).max(20).nullable().optional(),
   tone: z.string().trim().min(1).nullable().optional(),
   mustInclude: z.array(z.string().trim().min(1)).max(12).optional(),
+})
+
+const recommendPptTemplatesInputSchema = z.object({
+  templateIds: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .max(4)
+    .describe("One to four exact template ids from the complete ppt-master catalog in the system prompt."),
 })
 
 const editablePreviewPptDeckInputSchema = z
@@ -130,7 +134,7 @@ const editablePreviewPptDeckInputSchema = z
       .describe("Deck language. Use zh-CN for Chinese or en-US for English."),
     templateId: editablePptTemplateIdSchema
       .optional()
-      .describe("Optional editable PPT template id from the ppt-master library. Omit when unsure; the server will choose exactly one suitable ppt-master template."),
+      .describe("Exact editable PPT template id from the ppt-master library selected by the model from the catalog. Omit until a recommendation has been confirmed."),
     pageCount: z
       .number()
       .int()
@@ -457,6 +461,13 @@ function normalizePptToolError(error: unknown) {
     })
   }
 
+  if (/ppt_template_selection_required/iu.test(message)) {
+    return withRawMessage({
+      code: "ppt_template_selection_required",
+      message: "Select an exact templateId from the latest editable ppt-master template recommendation before preview.",
+    })
+  }
+
   if (/ppt_research_brief_required/iu.test(message)) {
     return withRawMessage({
       code: "ppt_research_brief_required",
@@ -531,49 +542,6 @@ function normalizePptToolError(error: unknown) {
   }
 }
 
-function extractPrimaryPptRequest(prompt: string) {
-  const normalized = prompt.trim()
-  if (!normalized) return ""
-
-  const structuredBriefIndex = normalized.indexOf("\n\nStructured brief:")
-  const primarySegment =
-    structuredBriefIndex >= 0
-      ? normalized.slice(0, structuredBriefIndex).trim()
-      : normalized
-
-  return primarySegment
-}
-
-function requiresResearchBrief(prompt: string) {
-  const primaryRequest = extractPrimaryPptRequest(prompt)
-  return (
-    FACTUAL_PPT_RESEARCH_REQUIRED_PATTERN.test(primaryRequest) ||
-    FACTUAL_PPT_MARKET_RESEARCH_REQUIRED_PATTERN.test(primaryRequest)
-  )
-}
-
-function hasUsableResearchBrief(value: unknown) {
-  if (typeof value === "string") {
-    return Boolean(value.trim())
-  }
-
-  if (value && typeof value === "object") {
-    const record = value as {
-      topic?: unknown
-      keyFacts?: unknown
-      rawSummary?: unknown
-    }
-    const keyFacts = Array.isArray(record.keyFacts)
-      ? record.keyFacts.filter((item) => typeof item === "string" && item.trim())
-      : []
-    const topic = typeof record.topic === "string" && record.topic.trim()
-    const rawSummary = typeof record.rawSummary === "string" && record.rawSummary.trim()
-    return Boolean(topic && (keyFacts.length > 0 || rawSummary))
-  }
-
-  return false
-}
-
 function isNonEmptyBuffer(value: unknown) {
   return value instanceof Uint8Array ? value.byteLength > 0 : false
 }
@@ -600,44 +568,34 @@ function shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime: PptPreview
 }
 
 function resolveEditableTemplateSelection(input: {
-  prompt: string
-  researchBrief?: string | PptPreviewResearchBrief
-  scenario: "marketing-campaign" | "product-launch" | "sales-deck" | "training"
-  language: "zh-CN" | "en-US"
-  pageCount?: number
-  templateMode?: "auto-4" | "single-template"
   templateId?: string | null
   limitTemplatesToRemoteWorker: boolean
 }) {
-  const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
-    {
-      prompt: input.prompt,
-      researchBrief: input.researchBrief,
-      scenario: input.scenario,
-      language: input.language,
-      pageCount: input.pageCount,
-    },
-    input.limitTemplatesToRemoteWorker
-      ? {
-          allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
-        }
-      : undefined,
-  )
   const explicitTemplateId = typeof input.templateId === "string" && input.templateId.trim() ? input.templateId.trim() : null
+  if (!explicitTemplateId) {
+    throw new Error("ppt_template_selection_required")
+  }
   if (explicitTemplateId && !isPptMasterLibraryTemplateSupported(explicitTemplateId)) {
     throw new Error(`ppt_editable_template_unsupported:${explicitTemplateId}`)
   }
-  const selectedTemplateId =
-    explicitTemplateId ||
-    recommendedTemplates[0]?.templateId?.trim() || null
-  if (!selectedTemplateId) {
-    throw new Error("ppt_master_template_selection_unavailable")
+  if (input.limitTemplatesToRemoteWorker && !isPptWorkerTemplateSupported(explicitTemplateId)) {
+    throw new Error(`ppt_worker_template_unsupported:${explicitTemplateId}`)
   }
+
+  const template = getPptMasterTemplateCatalog().find((item) => item.id === explicitTemplateId)
+  const recommendedTemplates = template
+    ? [{
+        rank: 1,
+        templateId: template.id,
+        templateLabel: template.label,
+        styleName: template.tone || template.themeMode || null,
+      }]
+    : []
 
   // Editable decks are always materialized from one vendor ppt-master template.
   return {
     recommendedTemplates,
-    selectedTemplateId,
+    selectedTemplateId: explicitTemplateId,
     templateMode: "single-template" as const,
   }
 }
@@ -852,6 +810,8 @@ export function buildAiEntryPptTools(input: {
       : toolFlow === "presentation"
         ? "Generate a presentation-first HTML deck through frontend-slides. Use this for live delivery, speaking flow, and stage-ready narrative decks."
         : "Generate a PPT preview deck from a conversation brief. Use this when the user wants a slide deck, PPT, pitch deck, training deck, or presentation draft."
+  const recommendTemplatesDescription =
+    "Recommend one to four exact editable ppt-master template ids from the complete catalog in the system prompt. Use the complete brief and conversation context to make the semantic recommendation; do not infer by keyword in code. Call this before preview when the user has confirmed the brief but has not selected a template."
   const exportDescription =
     toolFlow === "editable"
       ? "Export a downloadable editable PPTX artifact from a ppt-master preview session."
@@ -912,7 +872,63 @@ export function buildAiEntryPptTools(input: {
   })
 
   return {
-    ...(toolFlow === "editable" ? { update_ppt_brief: updateBriefTool } : {}),
+    ...(toolFlow === "editable"
+      ? {
+          update_ppt_brief: updateBriefTool,
+          recommend_ppt_templates: tool<unknown, Record<string, unknown>>({
+            description: recommendTemplatesDescription,
+            inputSchema: recommendPptTemplatesInputSchema as any,
+            execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
+              if (toolFlow !== "editable") {
+                return {
+                  ok: false,
+                  error: {
+                    code: "ppt_template_recommendation_not_supported",
+                    message: "Template recommendations are only available in the editable PPT assistant.",
+                  },
+                }
+              }
+
+              const requestedIds = (rawInput as { templateIds?: unknown }).templateIds
+              const catalog = getPptMasterTemplateCatalog()
+              const catalogById = new Map(catalog.map((template) => [template.id, template]))
+              const templateIds = Array.isArray(requestedIds)
+                ? [...new Set(requestedIds.filter((value): value is string => typeof value === "string"))]
+                : []
+              const selectedTemplates = templateIds
+                .map((templateId) => catalogById.get(templateId.trim()))
+                .filter((template): template is (typeof catalog)[number] => Boolean(template))
+
+              if (selectedTemplates.length === 0 || selectedTemplates.length !== templateIds.length) {
+                return {
+                  ok: false,
+                  error: {
+                    code: "ppt_template_recommendation_invalid",
+                    message: "Every recommended template id must come from the complete ppt-master catalog.",
+                  },
+                  catalog,
+                }
+              }
+
+              const recommendedTemplates = selectedTemplates.map((template, index) => ({
+                rank: index + 1,
+                templateId: template.id,
+                templateLabel: template.label,
+                styleName: template.tone || template.themeMode || null,
+              }))
+              return {
+                ok: true,
+                recommendedTemplates,
+                message: buildPptTemplateRecommendationMessage({
+                  recommendedTemplates,
+                  selectedTemplateId: null,
+                  isZh: true,
+                }),
+              }
+            },
+          }),
+        }
+      : {}),
     preview_ppt_deck: tool<unknown, Record<string, unknown>>({
       description: previewDescription,
       inputSchema: previewInputSchema as any,
@@ -962,26 +978,15 @@ export function buildAiEntryPptTools(input: {
             }
           }
 
-          const researchGatePrompt = sourcePrompt ?? prompt
-          if (requiresResearchBrief(researchGatePrompt) && !hasUsableResearchBrief(researchBrief)) {
-            throw new Error("ppt_research_brief_required")
-          }
-
           const explicitTemplateId = prepared.input.templateId ?? templateId
           const requestedTemplateMode = prepared.input.templateMode ?? templateMode
           const limitTemplatesToRemoteWorker = shouldLimitTemplatesToRemotePptWorker(defaultPreviewRuntime)
-          let recommendedTemplates: PptRecommendedTemplateSummary[] = []
+          let recommendedTemplates: unknown[] = []
           let effectiveTemplateId: string | undefined
           let effectiveTemplateMode: "auto-4" | "single-template" = requestedTemplateMode ?? "auto-4"
 
           if (toolFlow === "editable") {
             const selection = resolveEditableTemplateSelection({
-              prompt: sourcePrompt ?? prompt,
-              researchBrief: prepared.input.researchBrief as string | PptPreviewResearchBrief | undefined,
-              scenario: prepared.input.scenario,
-              language: prepared.input.language,
-              pageCount: prepared.input.pageCount ?? undefined,
-              templateMode: requestedTemplateMode,
               templateId: explicitTemplateId,
               limitTemplatesToRemoteWorker,
             })

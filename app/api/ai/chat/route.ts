@@ -18,7 +18,6 @@ import {
 } from "@/lib/ai-entry/agent-catalog"
 import {
   AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT,
-  isAiEntryPptAgentId,
   pickConsultingModelId,
   resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
@@ -42,7 +41,7 @@ import {
   isAiEntryToolErrorResult,
 } from "@/lib/ai-entry/artifact-runtime"
 import { loadEnterpriseKnowledgeContext } from "@/lib/knowledge/service"
-import type { EnterpriseKnowledgeContext, EnterpriseKnowledgeScope } from "@/lib/knowledge/types"
+import type { EnterpriseKnowledgeContext } from "@/lib/knowledge/types"
 import { hasCustomAiChatModelSelection } from "@/lib/platform/shared-credits-policy"
 import { getCustomAgentForUser } from "@/lib/platform/custom-agents"
 import { parseCustomAgentRuntimeId } from "@/lib/platform/custom-agent-runtime-id"
@@ -57,27 +56,20 @@ import {
 import { buildAiEntryToolRegistry } from "@/lib/ai-entry/tool-registry"
 import { maybeAutoRunPptPreview } from "@/lib/ai-entry/ppt-auto-preview"
 import {
-  buildPptBriefConfirmationMessage,
-  buildPptBriefClarificationMessage,
+  buildPptBriefConversationPromptSection,
   buildPptBriefPromptSection,
-  buildPptTemplateRecommendationSource,
   createPptBriefStateFromConfirmationContext,
   extractLatestPptBriefConfirmationContext,
-  extractPptBriefState,
-  isPptBriefConfirmationReply,
 } from "@/lib/ai-entry/ppt-brief"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import {
   buildPptTemplateSelectionPromptSection,
-  buildPptTemplateRecommendationMessage,
+  buildPptTemplateCatalogPromptSection,
   buildPptToolResultMessage,
   extractLatestPptTemplateRecommendationContext,
   stripPptArtifactRelativeLinks,
 } from "@/lib/ai-entry/ppt-tool-result-message"
-import {
-  buildPptMasterRecommendedTemplateSummaries,
-  getPptWorkerSupportedTemplateIds,
-} from "@/lib/lead-tools/ppt-worker-capabilities"
+import { getPptMasterTemplateCatalog } from "@/lib/lead-tools/ppt-worker-capabilities"
 import {
   buildResearchBriefContextMarker,
   buildResearchBriefFromWebSearchResult,
@@ -159,20 +151,6 @@ function buildSseEvent(payload: Record<string, unknown>) {
   return `data: ${JSON.stringify(payload)}\n\n`
 }
 
-function createImmediateSseResponse(events: Record<string, unknown>[]) {
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    start(controller) {
-      for (const event of events) {
-        controller.enqueue(encoder.encode(buildSseEvent(event)))
-      }
-      controller.close()
-    },
-  })
-
-  return new Response(stream, { headers: STREAM_HEADERS })
-}
-
 function isClosedStreamControllerError(error: unknown) {
   return error instanceof Error && /controller is already closed/i.test(error.message)
 }
@@ -251,20 +229,6 @@ function buildAiEntryKnowledgeQueryVariants(query: string, enterpriseName: strin
   }
 
   return [...new Set(variants.map((item) => item.trim()).filter(Boolean))].slice(0, 4)
-}
-
-function inferAiEntryPreferredKnowledgeScopes(query: string): EnterpriseKnowledgeScope[] | undefined {
-  const normalizedQuery = query.trim()
-  if (!normalizedQuery) return undefined
-
-  const brandIntroPattern =
-    /\u54c1\u724c|\u54c1\u724c\u53d9\u4e8b|\u54c1\u724c\u4f18\u5316|\u516c\u53f8\u4ecb\u7ecd|\u4f01\u4e1a\u4ecb\u7ecd|\u4f01\u4e1a\u7b80\u4ecb|\u4ef7\u503c\u4e3b\u5f20|\u5b9a\u4f4d|about\s+us|company\s+intro|brand|positioning|value\s+proposition/i
-
-  if (brandIntroPattern.test(normalizedQuery)) {
-    return ["brand", "general"]
-  }
-
-  return undefined
 }
 
 type ToolFailureSummary = {
@@ -351,12 +315,6 @@ function buildAiEntrySystemPrompt(
     consultingModelMode?: AiEntryConsultingModelMode
   } = {},
 ) {
-  const normalizedPrompt = latestUserPrompt.trim()
-  const inferredLanguage = /[\u4e00-\u9fff]/.test(normalizedPrompt)
-    ? "Chinese"
-    : normalizedPrompt
-      ? "the user's message language"
-      : "the user's message language"
   const languageDirectives =
     forcedReplyLanguage === "en"
       ? [
@@ -371,7 +329,6 @@ function buildAiEntrySystemPrompt(
         : [
             "Language rule: default to the same language as the user's latest input.",
             "Language rule: only switch languages when the user explicitly asks to do so.",
-            `Language hint: latest user input should be treated as ${inferredLanguage}.`,
           ]
   const base = [
     "You are an enterprise AI chat assistant focused on practical strategy, growth, operations, and execution support.",
@@ -870,8 +827,6 @@ export async function POST(request: NextRequest) {
       latestUserPrompt,
       enterpriseName,
     )
-    const preferredKnowledgeScopes =
-      inferAiEntryPreferredKnowledgeScopes(latestUserPrompt)
     const canQueryEnterpriseKnowledge =
       canLoadEnterpriseKnowledgeForUser(currentUser) &&
       enterpriseKnowledgeConfig.enabled &&
@@ -903,7 +858,6 @@ export async function POST(request: NextRequest) {
           enterpriseId,
           query: latestUserPrompt.trim(),
           queryVariants: knowledgeQueryVariants,
-          preferredScopes: preferredKnowledgeScopes,
           preferredDatasetIds: enterpriseKnowledgeConfig.datasetIds,
           platform: "generic",
           mode: "article",
@@ -991,18 +945,9 @@ export async function POST(request: NextRequest) {
       effectiveAgentId,
     })
     const normalizedMessageContents = normalizedMessages.map((message) => normalizeCoreMessageContent(message.content))
-    const pptBriefState = executionContext !== "workflow" && isAiEntryPptAgentId(effectiveAgentId)
-      ? extractPptBriefState({
-          userMessages: normalizedMessages
-            .filter((message) => message.role === "user")
-            .map((message) => normalizeCoreMessageContent(message.content))
-            .filter(Boolean),
-        })
-      : null
+    // Editable PPT brief meaning is resolved by update_ppt_brief, not by parsing user text here.
+    const pptBriefState = null
     const conversationState = resolveAiEntryConversationStateFromContents(normalizedMessageContents)
-    const hasPersistedPptPreviewContext = normalizedMessageContents.some((content) =>
-      content.includes("ai-entry-ppt-preview-context"),
-    )
     const latestBriefConfirmationContext = normalizedMessageContents
       .map((content) => extractLatestPptBriefConfirmationContext(content))
       .filter((value): value is NonNullable<typeof value> => Boolean(value))
@@ -1014,11 +959,14 @@ export async function POST(request: NextRequest) {
     const effectivePptBriefState = latestBriefConfirmationContext
       ? createPptBriefStateFromConfirmationContext(latestBriefConfirmationContext)
       : pptBriefState
-    const isPptBriefEditTurn = Boolean(
-      latestBriefConfirmationContext && !isPptBriefConfirmationReply(latestUserPrompt),
-    )
     if (effectivePptBriefState) {
       resolvedInstruction = [resolvedInstruction, buildPptBriefPromptSection(effectivePptBriefState)]
+        .map((section) => section.trim())
+        .filter(Boolean)
+        .join("\n\n")
+    }
+    if (effectiveAgentId === "executive-ppt" && !effectivePptBriefState) {
+      resolvedInstruction = [resolvedInstruction, buildPptBriefConversationPromptSection()]
         .map((section) => section.trim())
         .filter(Boolean)
         .join("\n\n")
@@ -1036,86 +984,14 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .join("\n\n")
     }
-
-    if (
-      executionContext !== "workflow" &&
-      effectiveAgentId === "executive-ppt" &&
-      effectivePptBriefState &&
-      conversationState.ppt.phase !== "preview-ready" &&
-      conversationState.ppt.phase !== "exported" &&
-      !hasPersistedPptPreviewContext
-    ) {
-      let gateMessage: string | null
-      if (isPptBriefEditTurn) {
-        gateMessage = null
-      } else if (!effectivePptBriefState.readyForPreview) {
-        gateMessage = buildPptBriefClarificationMessage(effectivePptBriefState, isZh)
-      } else if (latestTemplateRecommendationContext) {
-        // Let the LLM resolve natural-language references to the candidate list.
-        // The wrapped preview tool validates the resulting templateId against this context.
-        gateMessage = null
-      } else if (
-        latestBriefConfirmationContext &&
-        isPptBriefConfirmationReply(latestUserPrompt)
-      ) {
-        const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
-          {
-            prompt: buildPptTemplateRecommendationSource({
-              briefState: effectivePptBriefState,
-              latestUserPrompt: latestBriefConfirmationContext.sourcePrompt,
-            }),
-            scenario: effectivePptBriefState.scenario || "marketing-campaign",
-            language: effectivePptBriefState.language || "zh-CN",
-            pageCount: effectivePptBriefState.pageCount ?? undefined,
-          },
-          {
-            allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
-          },
-        )
-        gateMessage = buildPptTemplateRecommendationMessage({
-          title: latestBriefConfirmationContext.sourcePrompt || effectivePptBriefState.topic,
-          recommendedTemplates,
-          isZh,
-        })
-      } else {
-        gateMessage = buildPptBriefConfirmationMessage(effectivePptBriefState, isZh)
-      }
-
-      if (gateMessage) {
-        if (persistenceEnabled) {
-          await persistAiEntryTurnSafe({
-            userId: currentUser.id,
-            conversationId,
-            assistantMessage: gateMessage,
-            scope: conversationScope,
-            agentId: agentConfig.agentId,
-          })
-        }
-
-        if (!stream) {
-          return NextResponse.json({
-            conversationId,
-            message: gateMessage,
-          })
-        }
-
-        return createImmediateSseResponse([
-          {
-            event: "conversation_init",
-            conversation_id: conversationId,
-          },
-          {
-            event: "message",
-            conversation_id: conversationId,
-            answer: gateMessage,
-          },
-          {
-            event: "message_end",
-            conversation_id: conversationId,
-            answer: gateMessage,
-          },
-        ])
-      }
+    if (executionContext !== "workflow" && effectiveAgentId === "executive-ppt") {
+      resolvedInstruction = [
+        resolvedInstruction,
+        buildPptTemplateCatalogPromptSection(getPptMasterTemplateCatalog(), isZh),
+      ]
+        .map((section) => section.trim())
+        .filter(Boolean)
+        .join("\n\n")
     }
 
     const toolRegistry = await buildAiEntryToolRegistry({

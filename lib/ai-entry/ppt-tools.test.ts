@@ -256,6 +256,33 @@ test("editable ppt brief updates are merged by the model-facing tool and preserv
   assert.match(String(result.message), /ai-entry-ppt-brief-confirmation:/u)
 })
 
+test("editable ppt template recommendations are accepted only as exact catalog ids", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+  }) as unknown as TestToolSet & {
+    recommend_ppt_templates: { execute: (input: unknown) => Promise<Record<string, unknown>> }
+  }
+
+  const recommendation = await tools.recommend_ppt_templates.execute({
+    templateIds: ["ppt169_global_ai_capital_2026", "ppt169_building_effective_agents"],
+  })
+
+  assert.equal(recommendation.ok, true)
+  assert.equal(
+    (recommendation.recommendedTemplates as Array<{ templateId?: unknown }>)[0]?.templateId,
+    "ppt169_global_ai_capital_2026",
+  )
+  assert.match(String(recommendation.message), /ai-entry-ppt-template-recommendations:/u)
+
+  const invalid = await tools.recommend_ppt_templates.execute({ templateIds: ["not-a-ppt-master-template"] })
+  assert.equal(invalid.ok, false)
+  assert.equal((invalid.error as { code?: unknown }).code, "ppt_template_recommendation_invalid")
+})
+
 test("ppt tools return preview metadata and export a downloadable PPTX artifact", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
@@ -304,7 +331,7 @@ test("ppt tools return preview metadata and export a downloadable PPTX artifact"
   assert.equal(exported.downloadUrl, "/api/platform/artifacts/401/download?download=1")
 })
 
-test("editable ppt agent defaults to a single recommended ppt-master template when no template is explicitly chosen", async () => {
+test("editable ppt agent requires an LLM-selected template before preview", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -321,28 +348,12 @@ test("editable ppt agent defaults to a single recommended ppt-master template wh
     language: "zh-CN",
   })
 
-  assert.equal(preview.ok, true)
-  assert.equal(preview.selectedTemplateId, "ppt169_global_ai_capital_2026")
-  assert.equal(preview.recommendedTemplates[0]?.templateId, "ppt169_global_ai_capital_2026")
-  assert.deepEqual(previewInputs[0], {
-    prompt: buildStructuredPrompt("做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划", {
-      audience: "董事会",
-      goal: "管理层决策同步",
-      scenario: "sales-deck",
-      language: "zh-CN",
-    }),
-    researchBrief: undefined,
-    scenario: "sales-deck",
-    language: "zh-CN",
-    previewRuntime: "ppt-master-agent",
-    templateMode: "single-template",
-    templateId: "ppt169_global_ai_capital_2026",
-    narrativeAngle: "executive-brief",
-    pageCount: undefined,
-  })
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_template_selection_required")
+  assert.equal(previewInputs.length, 0)
 })
 
-test("editable ppt agent defaults to ai_ops for tech-company intro briefs while keeping official examples available", async () => {
+test("editable ppt agent does not infer a template from topic keywords", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -364,32 +375,12 @@ test("editable ppt agent defaults to ai_ops for tech-company intro briefs while 
     },
   })
 
-  assert.equal(preview.ok, true)
-  assert.equal(preview.selectedTemplateId, "ai_ops")
-  assert.equal(preview.recommendedTemplates[0]?.templateId, "ai_ops")
-  assert.deepEqual(previewInputs.at(-1), {
-    prompt: buildStructuredPrompt("写一份介绍预算智能公司和业务的 PPT，强调科技公司介绍、解决方案能力和专业但有活力的视觉表达", {
-      audience: "潜在客户与合作伙伴",
-      goal: "公司与业务介绍",
-      scenario: "sales-deck",
-      language: "zh-CN",
-    }),
-    researchBrief: {
-      topic: "预算智能公司介绍",
-      keyFacts: ["企业 AI 业务工作台", "面向老板、销售、运营和内容团队", "产品介绍与解决方案叙事并重"],
-      implications: ["需要兼顾商务表达、科技感和产品能力展示"],
-    },
-    scenario: "sales-deck",
-    language: "zh-CN",
-    previewRuntime: "ppt-master-agent",
-    templateMode: "single-template",
-    templateId: "ai_ops",
-    narrativeAngle: "executive-brief",
-    pageCount: undefined,
-  })
+  assert.equal(preview.ok, false)
+  assert.equal(preview.error?.code, "ppt_template_selection_required")
+  assert.equal(previewInputs.length, 0)
 })
 
-test("editable ppt agent can preview through local ppt-master transport", async () => {
+test("editable ppt agent can preview through local ppt-master transport after template selection", async () => {
   process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
 
   const tools = buildAiEntryPptTools({
@@ -406,6 +397,7 @@ test("editable ppt agent can preview through local ppt-master transport", async 
     goal: "管理层决策同步",
     scenario: "sales-deck",
     language: "zh-CN",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   assert.equal(preview.ok, true)
@@ -450,6 +442,7 @@ test("editable ppt agent uses the user's selected model for content planning", a
     goal: "统一产品认知与对外口径",
     scenario: "training",
     language: "zh-CN",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   assert.equal(preview.ok, true)
@@ -468,14 +461,13 @@ test("editable ppt agent only honors explicit template requests when sourcePromp
     agentId: "executive-ppt",
   }) as unknown as TestToolSet
 
-  await tools.preview_ppt_deck.execute({
+  const promptOnlyResult = await tools.preview_ppt_deck.execute({
     prompt: "做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划",
     audience: "董事会",
     goal: "管理层决策同步",
     scenario: "sales-deck",
     language: "zh-CN",
   })
-  const promptOnlyInput = previewInputs.at(-1)
 
   await tools.preview_ppt_deck.execute({
     prompt: "做一份董事会经营复盘与风险诊断汇报 PPT，包含财务预算、关键决策与下一步计划",
@@ -489,9 +481,8 @@ test("editable ppt agent only honors explicit template requests when sourcePromp
   })
   const sourcePromptInput = previewInputs.at(-1)
 
-  assert.equal(promptOnlyInput?.templateMode, "single-template")
-  assert.equal(promptOnlyInput?.templateId, "ppt169_global_ai_capital_2026")
-  assert.equal(promptOnlyInput?.narrativeAngle, "executive-brief")
+  assert.equal(promptOnlyResult.ok, false)
+  assert.equal(promptOnlyResult.error?.code, "ppt_template_selection_required")
   assert.equal(sourcePromptInput?.templateMode, "single-template")
   assert.equal(sourcePromptInput?.templateId, "ppt169_general_dark_tech_claude_code_auto_mode")
 })
@@ -803,7 +794,7 @@ test("ppt tools explain unsupported remote worker models clearly", async () => {
   assert.match(String(preview.error?.message || ""), /MiniMax-M3/)
 })
 
-test("ppt tools require a researchBrief for factual decks before preview", async () => {
+test("ppt tools do not use keyword gates to decide whether research is needed", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -816,9 +807,8 @@ test("ppt tools require a researchBrief for factual decks before preview", async
     ...DEFAULT_PPT_BRIEF_INPUT,
   })
 
-  assert.equal(preview.ok, false)
-  assert.equal(preview.error?.code, "ppt_research_brief_required")
-  assert.equal(previewInputs.length, 0)
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs.length, 1)
 })
 
 test("ppt tools allow factual decks to preview after a researchBrief is provided", async () => {
@@ -897,7 +887,7 @@ test("ppt tools do not require a researchBrief for product deck copy with generi
   assert.equal(previewInputs.length, 1)
 })
 
-test("ppt tools still require a researchBrief for latest market trend decks", async () => {
+test("ppt tools leave research-needed decisions to the LLM", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,
@@ -910,12 +900,11 @@ test("ppt tools still require a researchBrief for latest market trend decks", as
     ...DEFAULT_PPT_BRIEF_INPUT,
   })
 
-  assert.equal(preview.ok, false)
-  assert.equal(preview.error?.code, "ppt_research_brief_required")
-  assert.equal(previewInputs.length, 0)
+  assert.equal(preview.ok, true)
+  assert.equal(previewInputs.length, 1)
 })
 
-test("ppt tools use sourcePrompt for research-gate checks when orchestration expands the preview prompt", async () => {
+test("ppt tools preserve sourcePrompt while leaving research decisions to the LLM", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {
       id: 7,

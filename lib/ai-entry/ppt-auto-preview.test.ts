@@ -1,14 +1,25 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { extractPptBriefState } from "@/lib/ai-entry/ppt-brief"
+import { createPptBriefState } from "@/lib/ai-entry/ppt-brief"
 
 import { maybeAutoRunPptPreview, shouldAutoRunPptPreview } from "./ppt-auto-preview"
 
-test("shouldAutoRunPptPreview requires a selected recommended template for editable PPT chat", () => {
-  const readyState = extractPptBriefState({
-    userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
+function buildReadyBrief() {
+  return createPptBriefState({
+    topic: "产品发布",
+    audience: "客户提案会",
+    goal: "客户提案与说服",
+    scenario: "product-launch",
+    language: "zh-CN",
+    pageCount: 10,
+    tone: "专业",
+    mustInclude: [],
   })
+}
+
+test("shouldAutoRunPptPreview requires a selected recommended template for editable PPT chat", () => {
+  const readyState = buildReadyBrief()
 
   assert.equal(
     shouldAutoRunPptPreview({
@@ -36,9 +47,7 @@ test("shouldAutoRunPptPreview requires a selected recommended template for edita
 })
 
 test("maybeAutoRunPptPreview does not choose a template before the user selects one", async () => {
-  const readyState = extractPptBriefState({
-    userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
-  })
+  const readyState = buildReadyBrief()
 
   const result = await maybeAutoRunPptPreview({
     agentId: "executive-ppt",
@@ -58,9 +67,7 @@ test("maybeAutoRunPptPreview does not choose a template before the user selects 
 })
 
 test("maybeAutoRunPptPreview does not resolve editable template references from user text", async () => {
-  const readyState = extractPptBriefState({
-    userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
-  })
+  const readyState = buildReadyBrief()
 
   const result = await maybeAutoRunPptPreview({
     agentId: "executive-ppt",
@@ -100,9 +107,7 @@ test("maybeAutoRunPptPreview does not resolve editable template references from 
 })
 
 test("maybeAutoRunPptPreview delegates editable template semantics to the LLM tool call", async () => {
-  const readyState = extractPptBriefState({
-    userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
-  })
+  const readyState = buildReadyBrief()
 
   const result = await maybeAutoRunPptPreview({
     agentId: "executive-ppt",
@@ -146,9 +151,7 @@ test("maybeAutoRunPptPreview delegates editable template semantics to the LLM to
 })
 
 test("maybeAutoRunPptPreview does not accept a template that was not offered", async () => {
-  const readyState = extractPptBriefState({
-    userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
-  })
+  const readyState = buildReadyBrief()
 
   const result = await maybeAutoRunPptPreview({
     agentId: "executive-ppt",

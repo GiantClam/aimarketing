@@ -24,7 +24,7 @@ function buildDefaultPolicy(agentId: string): AiEntryAgentRuntimePolicy {
   return {
     agentId,
     allowedSkillIds: ["executive-consulting", "longform-writing", "ppt-master"],
-    allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck", "update_ppt_brief"],
+    allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck", "update_ppt_brief", "recommend_ppt_templates"],
     allowedMcpServerIds: getApprovedMcpServerIds(),
     maxToolCalls: 8,
     maxRuntimeMs: DEFAULT_AGENT_RUNTIME_MS,
@@ -54,7 +54,7 @@ export function resolveAiEntryAgentRuntimePolicy(input: {
     return {
       ...policy,
       allowedSkillIds: ["ppt-master", "executive-consulting"],
-      allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck", "update_ppt_brief"],
+      allowedToolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck", "update_ppt_brief", "recommend_ppt_templates"],
       maxRuntimeMs: PPT_AGENT_RUNTIME_MS,
       canCreateArtifacts: true,
     }

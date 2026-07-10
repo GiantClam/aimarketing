@@ -23,8 +23,6 @@ import { persistLeadToolPreviewResult } from "@/lib/lead-tools/runtime"
 import { storePptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
 import type { PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
-  buildPptMasterRecommendedTemplateSummaries,
-  getPptWorkerSupportedTemplateIds,
   isPptMasterLibraryTemplateSupported,
 } from "@/lib/lead-tools/ppt-worker-capabilities"
 import {
@@ -1223,22 +1221,9 @@ function buildDurablePptPreviewRequest(
       : undefined
   const pageCount =
     typeof input.pageCount === "number" && Number.isInteger(input.pageCount) ? input.pageCount : undefined
-  const templateId =
-    requestedTemplateId ||
-    buildPptMasterRecommendedTemplateSummaries(
-      {
-        prompt,
-        ...(typeof input.researchBrief === "string" || getObjectRecord(input.researchBrief)
-          ? { researchBrief: input.researchBrief as PptWorkerPreviewRequest["researchBrief"] }
-          : {}),
-        scenario,
-        language,
-        ...(pageCount ? { pageCount } : {}),
-      },
-      { allowedTemplateIds: getPptWorkerSupportedTemplateIds() },
-    )[0]?.templateId?.trim()
+  const templateId = requestedTemplateId
   if (!templateId) {
-    throw new Error("ppt_master_template_selection_unavailable")
+    throw new Error("ppt_master_template_selection_required")
   }
 
   return {

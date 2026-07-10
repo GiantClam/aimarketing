@@ -23,7 +23,6 @@ export type StructuredResearchBrief = {
 const RESEARCH_BRIEF_CONTEXT_PREFIX = "<!-- ai-entry-research-brief:"
 const RESEARCH_BRIEF_CONTEXT_SUFFIX = "-->"
 const MAX_RESEARCH_BRIEF_CHARS = 2_000
-const MAX_ATTACHMENT_BRIEF_FACTS = 5
 
 function normalizeOptionalText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
@@ -44,10 +43,6 @@ function normalizeStringList(value: unknown) {
         .map((item) => normalizeOptionalText(item))
         .filter((item): item is string => Boolean(item))
     : []
-}
-
-function uniqueStrings(values: Array<string | null | undefined>) {
-  return [...new Set(values.map((item) => normalizeOptionalText(item)).filter((item): item is string => Boolean(item)))]
 }
 
 function normalizeStructuredResearchBrief(value: unknown): StructuredResearchBrief | null {
@@ -156,73 +151,6 @@ export function buildResearchBriefFromWebSearchResult(result: unknown): Structur
   }
 
   brief.rawSummary = buildResearchBriefSummary(brief)
-  return brief
-}
-
-function extractAttachmentBody(content: string) {
-  const blocks = [...content.matchAll(/\[Uploaded file:[^\]]+\]\n([\s\S]*?)(?=(?:\n*\[Uploaded file:[^\]]+\]\n)|$)/g)]
-  const bodies = blocks
-    .map((match) => normalizeOptionalText(match[1]))
-    .filter((item): item is string => Boolean(item))
-
-  if (bodies.length === 0) return null
-  return bodies.join("\n\n")
-}
-
-function extractTopicFromText(text: string) {
-  const lines = text
-    .split("\n")
-    .map((line) => normalizeOptionalText(line))
-    .filter((line): line is string => Boolean(line))
-
-  const titled = lines.find((line) => /^#/.test(line))
-  if (titled) {
-    return titled.replace(/^#+\s*/u, "").trim()
-  }
-
-  return lines[0] ?? null
-}
-
-function buildKeyFactsFromText(text: string) {
-  const bulletFacts = [...text.matchAll(/^[\-\*\u2022]\s+(.+)$/gmu)]
-    .map((match) => normalizeWhitespace(match[1] || ""))
-    .filter(Boolean)
-
-  if (bulletFacts.length > 0) {
-    return uniqueStrings(bulletFacts).slice(0, MAX_ATTACHMENT_BRIEF_FACTS)
-  }
-
-  const sentenceFacts = text
-    .split(/[\n。！？!?]/u)
-    .map((line) => normalizeWhitespace(line))
-    .filter((line) => line.length >= 12)
-
-  return uniqueStrings(sentenceFacts).slice(0, MAX_ATTACHMENT_BRIEF_FACTS)
-}
-
-export function buildResearchBriefFromAttachmentContent(input: {
-  latestUserPrompt?: string | null | undefined
-  messageContents?: string[] | undefined
-}) {
-  const latestPrompt = normalizeOptionalText(input.latestUserPrompt) || ""
-  const attachmentBody =
-    input.messageContents
-      ?.map((content) => (typeof content === "string" ? extractAttachmentBody(content) : null))
-      .filter((item): item is string => Boolean(item))
-      .at(-1) ?? extractAttachmentBody(latestPrompt)
-
-  if (!attachmentBody) return null
-
-  const topic = extractTopicFromText(attachmentBody) || extractTopicFromText(latestPrompt) || "Attachment research brief"
-  const keyFacts = buildKeyFactsFromText(attachmentBody)
-  if (keyFacts.length === 0) return null
-
-  const brief: StructuredResearchBrief = {
-    topic,
-    keyFacts,
-    rawSummary: trimToLength(attachmentBody, MAX_RESEARCH_BRIEF_CHARS),
-  }
-
   return brief
 }
 

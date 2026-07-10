@@ -296,6 +296,35 @@ export function buildPptTemplateSelectionPromptSection(
   ].join("\n")
 }
 
+export function buildPptTemplateCatalogPromptSection(
+  templates: Array<{
+    id: string
+    label: string
+    summary: string
+    tone: string
+    themeMode: string
+  }>,
+  isZh = true,
+) {
+  const catalog = templates
+    .map((template) => {
+      const details = [template.label, template.tone, template.themeMode, template.summary]
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(" / ")
+      return `- ${template.id}: ${details || template.id}`
+    })
+    .join("\n")
+
+  return [
+    "## Editable PPT template catalog",
+    isZh
+      ? "这是 ppt-master 当前可用的完整模板目录。模板推荐必须由 LLM 基于完整 brief、研究上下文和用户偏好完成；代码不根据关键词替用户做推荐。"
+      : "This is the complete editable ppt-master template catalog. Template recommendations must be made by the LLM from the complete brief, research context, and user preferences; code must not recommend by keyword.",
+    catalog,
+  ].join("\n")
+}
+
 export function buildPptTemplateRecommendationMessage(input: {
   title?: string | null
   recommendedTemplates: unknown
@@ -412,6 +441,17 @@ export function buildPptToolResultMessage(input: {
   isZh?: boolean
 }) {
   if (input.toolName === "update_ppt_brief" && input.result && typeof input.result === "object") {
+    const result = input.result as { ok?: unknown; message?: unknown; error?: { message?: unknown } }
+    if (result.ok === false) {
+      return normalizeOptionalText(result.error?.message)
+        ? `\n\n${normalizeOptionalText(result.error?.message)}`
+        : null
+    }
+    const message = normalizeOptionalText(result.message)
+    return message ? `\n\n${message}` : null
+  }
+
+  if (input.toolName === "recommend_ppt_templates" && input.result && typeof input.result === "object") {
     const result = input.result as { ok?: unknown; message?: unknown; error?: { message?: unknown } }
     if (result.ok === false) {
       return normalizeOptionalText(result.error?.message)

@@ -21,7 +21,6 @@ import {
   type PptPreviewContext,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import {
-  buildResearchBriefFromAttachmentContent,
   buildResearchBriefFromWebSearchResult,
   extractLatestResearchBriefContextFromContents,
   type StructuredResearchBrief,
@@ -30,11 +29,8 @@ import { type AiEntrySkillDefinition } from "@/lib/ai-entry/skill-registry"
 import { buildAiEntryWebSearchTools } from "@/lib/ai-entry/web-search-tool"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
 import {
-  buildPptMasterRecommendedTemplateSummaries,
-  getPptWorkerSupportedTemplateIds,
   isPptMasterLibraryTemplateSupported,
 } from "@/lib/lead-tools/ppt-worker-capabilities"
-import type { PptPreviewResearchBrief } from "@/lib/lead-tools/ppt-preview-data-fixed"
 
 type AiSdkToolLike = {
   description?: string
@@ -234,8 +230,7 @@ function getPptTemplateSelectionRequiredResult(input: {
   if (
     input.toolId !== "preview_ppt_deck" ||
     input.agentId !== "executive-ppt" ||
-    input.executionContext === "workflow" ||
-    !input.latestTemplateRecommendationContext
+    input.executionContext === "workflow"
   ) {
     return null
   }
@@ -244,7 +239,11 @@ function getPptTemplateSelectionRequiredResult(input: {
     input.preparedInput && typeof input.preparedInput === "object"
       ? readOptionalString((input.preparedInput as Record<string, unknown>).templateId)
       : null
-  if (templateId && input.latestTemplateRecommendationContext.templateIds.includes(templateId)) {
+  if (
+    templateId &&
+    (!input.latestTemplateRecommendationContext ||
+      input.latestTemplateRecommendationContext.templateIds.includes(templateId))
+  ) {
     return null
   }
 
@@ -254,17 +253,21 @@ function getPptTemplateSelectionRequiredResult(input: {
       code: "ppt_template_selection_required",
       message: "Select one template from the latest editable PPT recommendation before generating the preview.",
     },
-    recommendedTemplates: input.latestTemplateRecommendationContext.templateIds.map((templateId, index) => {
-      const labels = input.latestTemplateRecommendationContext?.templates?.find(
-        (item) => item.templateId === templateId,
-      )?.labels ?? []
-      return {
-        rank: index + 1,
-        templateId,
-        templateLabel: labels[0] || templateId,
-        styleName: labels[1] || null,
-      }
-    }),
+    ...(input.latestTemplateRecommendationContext
+      ? {
+          recommendedTemplates: input.latestTemplateRecommendationContext.templateIds.map((templateId, index) => {
+            const labels = input.latestTemplateRecommendationContext?.templates?.find(
+              (item) => item.templateId === templateId,
+            )?.labels ?? []
+            return {
+              rank: index + 1,
+              templateId,
+              templateLabel: labels[0] || templateId,
+              styleName: labels[1] || null,
+            }
+          }),
+        }
+      : {}),
   }
 }
 
@@ -363,25 +366,6 @@ function maybePreparePptPreviewInput(
   return prepared
 }
 
-function normalizePptPreparedScenario(value: unknown) {
-  return value === "marketing-campaign" ||
-    value === "product-launch" ||
-    value === "sales-deck" ||
-    value === "training"
-    ? value
-    : "marketing-campaign"
-}
-
-function normalizePptPreparedLanguage(value: unknown) {
-  return value === "zh-CN" || value === "en-US" ? value : "zh-CN"
-}
-
-function readPptPreparedResearchBrief(value: unknown) {
-  return typeof value === "string" || (value && typeof value === "object")
-    ? (value as string | PptPreviewResearchBrief)
-    : undefined
-}
-
 function shouldRunPptPreviewInBackground(input: {
   toolId: string
   source: ToolSource
@@ -441,7 +425,7 @@ async function enqueueBackgroundPptPreviewTask(input: {
   }
 }
 
-function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
+function normalizeBackgroundPptTemplateSelection(input: {
   toolId: string
   preparedInput: unknown
   agentId: string | null
@@ -475,35 +459,11 @@ function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
     }
   }
 
-  const prompt = readOptionalString(record.prompt) || readOptionalString(record.sourcePrompt) || ""
-  const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
-    {
-      prompt,
-      researchBrief: readPptPreparedResearchBrief(record.researchBrief),
-      scenario: normalizePptPreparedScenario(record.scenario),
-      language: normalizePptPreparedLanguage(record.language),
-      pageCount: typeof record.pageCount === "number" && Number.isFinite(record.pageCount)
-        ? record.pageCount
-        : undefined,
-    },
-    {
-      allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
-    },
-  )
-  const defaultTemplateId = recommendedTemplates[0]?.templateId?.trim() || null
-  if (defaultTemplateId) {
-    return {
-      preparedInput: {
-        ...record,
-        templateMode: "single-template",
-        templateId: defaultTemplateId,
-      },
-      selectedTemplateId: defaultTemplateId,
-      recommendedTemplates: recommendedTemplates as Array<Record<string, unknown>>,
-    }
+  return {
+    preparedInput: record,
+    selectedTemplateId: null,
+    recommendedTemplates: [] as Array<Record<string, unknown>>,
   }
-
-  throw new Error("ppt_master_template_selection_unavailable")
 }
 
 function filterToolSet(tools: ToolSet, allowedIds: Set<string>) {
@@ -540,11 +500,7 @@ function wrapToolSet(params: {
 }): ToolSet {
   const skillByToolId = new Map<string, string>()
   let lastResearchBrief =
-    extractLatestResearchBriefContextFromContents(params.messageContents) ||
-    buildResearchBriefFromAttachmentContent({
-      latestUserPrompt: params.latestUserPrompt,
-      messageContents: params.messageContents,
-    })
+    extractLatestResearchBriefContextFromContents(params.messageContents)
   let latestPreviewContextForTurn = params.latestPreviewContext
   const latestTemplateRecommendationContextForTurn = params.latestTemplateRecommendationContext
 
@@ -577,16 +533,6 @@ function wrapToolSet(params: {
           agentId: params.auditContext.agentId,
           executionContext: params.executionContext,
         })
-        const templateSelectionRequired = getPptTemplateSelectionRequiredResult({
-          toolId,
-          preparedInput: templateReadyInput,
-          latestTemplateRecommendationContext: latestTemplateRecommendationContextForTurn,
-          agentId: params.auditContext.agentId,
-          executionContext: params.executionContext,
-        })
-        if (templateSelectionRequired) {
-          return templateSelectionRequired
-        }
         const sourcePromptReadyInput = maybeInjectPptSourcePrompt({
           toolId,
           rawInput: templateReadyInput,
@@ -604,6 +550,18 @@ function wrapToolSet(params: {
             latestTemplateRecommendationContext: latestTemplateRecommendationContextForTurn,
           },
         )
+        const templateSelectionRequired = preparedPreviewInput.ok
+          ? getPptTemplateSelectionRequiredResult({
+              toolId,
+              preparedInput: preparedPreviewInput.input,
+              latestTemplateRecommendationContext: latestTemplateRecommendationContextForTurn,
+              agentId: params.auditContext.agentId,
+              executionContext: params.executionContext,
+            })
+          : null
+        if (templateSelectionRequired) {
+          return templateSelectionRequired
+        }
         console.info("ai-entry.tool.audit.start", {
           ...params.auditContext,
           toolId,
@@ -633,7 +591,7 @@ function wrapToolSet(params: {
                 : {}),
             }
           }
-          const backgroundPreviewSelection = maybeApplyDefaultBackgroundPptTemplateSelection({
+          const backgroundPreviewSelection = normalizeBackgroundPptTemplateSelection({
             toolId,
             preparedInput: preparedPreviewInput.input,
             agentId: params.auditContext.agentId,
@@ -659,9 +617,10 @@ function wrapToolSet(params: {
                     : null,
                 ) || toolId,
               preparedInput: backgroundPreviewSelection.preparedInput as Record<string, unknown>,
-              isZh: /[\u4e00-\u9fff]/u.test(
-                typeof params.latestUserPrompt === "string" ? params.latestUserPrompt : "",
-              ),
+              isZh:
+                readOptionalString(
+                  (backgroundPreviewSelection.preparedInput as Record<string, unknown>).language,
+                ) !== "en-US",
               selectedTemplateId: backgroundPreviewSelection.selectedTemplateId,
               recommendedTemplates: backgroundPreviewSelection.recommendedTemplates,
             })

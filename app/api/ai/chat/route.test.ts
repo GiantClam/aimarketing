@@ -210,6 +210,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/ai-entry/ppt-tool-result-message") {
     return {
+      buildPptTemplateCatalogPromptSection: () => "Editable PPT template catalog",
+      buildPptTemplateSelectionPromptSection: () => "Editable PPT template selection",
       buildPptTemplateRecommendationMessage: () => null,
       buildPptToolResultMessage: (input: { toolName?: string; result?: { status?: string; backgroundTask?: { taskId?: string } } | null }) => {
         if (
@@ -849,7 +851,7 @@ test("ai chat route persists uploaded attachment context inside the user message
   )
 })
 
-test("ai chat route asks follow-up questions and stops before preview when executive-ppt brief is incomplete", async () => {
+test("ai chat route delegates initial editable PPT brief interpretation to the model", async () => {
   const response = await POST({
     json: async () => ({
       messages: [{ role: "user", content: "做一个克里米亚现状的ppt，10页，检索2026年最新的信息" }],
@@ -863,18 +865,17 @@ test("ai chat route asks follow-up questions and stops before preview when execu
 
   assert.equal(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
   const text = await response.text()
-  assert.match(text, /还不能进入 PPT 预览/)
-  assert.match(text, /这份 PPT 主要给谁看/)
-  assert.match(text, /这次更接近哪种场景/)
-  assert.doesNotMatch(text, /Normal chat reply\./)
-  assert.doesNotMatch(text, /"event":"tool_call"/)
+  assert.match(text, /Normal chat reply\./)
+  assert.match(lastStreamingSystemPrompt, /Editable PPT brief planning/u)
+  assert.match(lastStreamingSystemPrompt, /update_ppt_brief/u)
+  assert.doesNotMatch(text, /还不能进入 PPT 预览/)
   assert.equal(appendMessageCalls[0]?.role, "user")
   assert.equal(appendMessageCalls[0]?.agentId, "executive-ppt")
   assert.equal(appendMessageCalls[0]?.content, "做一个克里米亚现状的ppt，10页，检索2026年最新的信息")
   assert.equal(appendMessageCalls[1]?.role, "assistant")
   assert.equal(appendMessageCalls[1]?.agentId, "executive-ppt")
-  assert.match(appendMessageCalls[1]?.content || "", /我收到后会继续追问，直到 brief 完整再进入预览/)
-  assert.equal(finalizeCalls, 0)
+  assert.equal(appendMessageCalls[1]?.content, "Normal chat reply.")
+  assert.equal(finalizeCalls, 1)
   assert.equal(releaseCalls, 0)
 })
 

@@ -48,8 +48,8 @@ export type PptBriefUpdateInput = {
   topic: string
   audience: string
   goal: string
-  scenario: PptBriefScenario
-  language: PptBriefLanguage
+  scenario: PptBriefScenario | null
+  language: PptBriefLanguage | null
   pageCount?: number | null
   tone?: string | null
   mustInclude?: string[]
@@ -84,213 +84,6 @@ function readOptionalStringArray(value: unknown) {
     .filter(Boolean)
 }
 
-const BRIEF_FIELD_PREFIX = String.raw`(?:^|[;\n；。,.，]\s*|(?:请|帮我|我想|希望)?\s*(?:把|将)\s*(?:这份\s*)?(?:PPT|演示稿)?\s*)`
-const BRIEF_FIELD_ASSIGNMENT = String.raw`(?:\s*请)?\s*(?:[:=：]|是|改为|改成|调整为|设置为|修改为|换成|变更为|变为|to)`
-const BRIEF_FIELD_VALUE = String.raw`\s*([^\n;；。,.，]+)`
-const BRIEF_PAGE_COUNT_VALUE = String.raw`\s*(\d{1,2})\s*(?:页|p\b|pages?|slides?)?`
-
-const EXPLICIT_BRIEF_FIELD_PATTERNS = {
-  topic: new RegExp(`${BRIEF_FIELD_PREFIX}(?:主题|题目|topic)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
-  audience: new RegExp(`${BRIEF_FIELD_PREFIX}(?:受众|对象|audience)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
-  goal: new RegExp(`${BRIEF_FIELD_PREFIX}(?:目标|目的|goal|objective)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
-  scenario: new RegExp(`${BRIEF_FIELD_PREFIX}(?:场景|用途|scenario|use case)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
-  language: new RegExp(`${BRIEF_FIELD_PREFIX}(?:语言|lang(?:uage)?)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
-  pageCount: new RegExp(
-    `${BRIEF_FIELD_PREFIX}(?:页数|页码|slide count|page count|pages?|slides?)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_PAGE_COUNT_VALUE}`,
-    "giu",
-  ),
-  tone: new RegExp(`${BRIEF_FIELD_PREFIX}(?:语气|风格|tone|style)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
-  mustInclude: new RegExp(
-    `${BRIEF_FIELD_PREFIX}(?:必须包含|包括|包含|must include|include)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`,
-    "giu",
-  ),
-} as const
-
-function readLastExplicitFieldValue(pattern: RegExp, text: string) {
-  const matches = [...text.matchAll(new RegExp(pattern.source, pattern.flags))]
-  const value = matches.at(-1)?.[1]
-  return readOptionalString(value)
-}
-
-function normalizeExplicitLanguage(value: string | null): PptBriefLanguage | null {
-  if (!value) return null
-  if (/(中文|汉语|简体|zh)/iu.test(value)) return "zh-CN"
-  if (/(英文|英语|english|en)/iu.test(value)) return "en-US"
-  return null
-}
-
-function normalizeExplicitPageCount(value: string | null) {
-  if (!value) return null
-  const parsed = Number.parseInt(value, 10)
-  if (!Number.isFinite(parsed) || parsed < 4 || parsed > 20) return null
-  return parsed
-}
-
-function extractExplicitBriefFields(text: string): {
-  topic: string | null
-  audience: string | null
-  goal: string | null
-  scenario: PptBriefScenario | null
-  language: PptBriefLanguage | null
-  pageCount: number | null
-  tone: string | null
-  mustInclude: string[]
-} {
-  const audience = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.audience, text)
-  const topic = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.topic, text)
-  const goal = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.goal, text)
-  const scenarioText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.scenario, text)
-  const languageText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.language, text)
-  const tone = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.tone, text)
-  const mustIncludeText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.mustInclude, text)
-
-  return {
-    topic,
-    audience,
-    goal,
-    scenario: scenarioText ? inferScenario(scenarioText) : null,
-    language: normalizeExplicitLanguage(languageText),
-    pageCount: normalizeExplicitPageCount(
-      readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.pageCount, text),
-    ),
-    tone,
-    mustInclude: mustIncludeText
-      ? mustIncludeText.split(/[，,、;；]/u).map((item) => item.trim()).filter(Boolean)
-      : [],
-  }
-}
-
-function inferLanguage(text: string): PptBriefLanguage {
-  return /[\u4e00-\u9fff]/u.test(text) ? "zh-CN" : "en-US"
-}
-
-function inferScenario(text: string): PptBriefScenario | null {
-  if (/(培训|课件|教学|讲解|课堂|lecture|classroom|workshop|training|onboarding)/iu.test(text)) return "training"
-  if (
-    /(战略汇报|战略分析|研究汇报|分析汇报|现状汇报|briefing|analysis|report|review|军事分析|局势分析|复盘汇报)/iu.test(
-      text,
-    )
-  ) {
-    return "sales-deck"
-  }
-  if (
-    /(路演|提案|客户|销售|pitch|proposal|sales|investor|解决方案|产品方案|方案PPT|方案汇报|合作方式)/iu.test(
-      text,
-    )
-  ) {
-    return "sales-deck"
-  }
-  if (/(发布|上市|上新|launch|release|go-to-market|gtm|product intro|产品介绍)/iu.test(text)) {
-    return "product-launch"
-  }
-  if (/(品牌|营销|campaign|marketing|推广|传播)/iu.test(text)) return "marketing-campaign"
-  return null
-}
-
-function inferAudience(text: string, language: PptBriefLanguage) {
-  if (/(老板|管理层|高管|领导|board|exec|executive|management|董事会)/iu.test(text)) {
-    return language === "zh-CN" ? "管理层汇报" : "Executive review"
-  }
-  if (/(投资人|融资|investor|fundraising|roadshow)/iu.test(text)) {
-    return language === "zh-CN" ? "投资人路演" : "Investor pitch"
-  }
-  if (/(客户|提案|招标|client|customer|proposal|bid)/iu.test(text)) {
-    return language === "zh-CN" ? "客户提案会" : "Client proposal meeting"
-  }
-  if (/(团队|内部|培训|同事|internal|team|training)/iu.test(text)) {
-    return language === "zh-CN" ? "内部团队沟通" : "Internal team audience"
-  }
-  return null
-}
-
-function inferGoal(text: string, scenario: PptBriefScenario | null, language: PptBriefLanguage) {
-  if (/(复盘|汇报|总结|review|report|recap)/iu.test(text)) {
-    return language === "zh-CN" ? "经营汇报与决策同步" : "Business review and decision alignment"
-  }
-  if (/(提案|说服|赢单|proposal|convince|close)/iu.test(text)) {
-    return language === "zh-CN" ? "客户提案与说服" : "Client proposal and persuasion"
-  }
-  if (/(路演|融资|investor|fundraising|pitch)/iu.test(text)) {
-    return language === "zh-CN" ? "路演说服与融资沟通" : "Pitch and fundraising communication"
-  }
-  if (/(培训|教学|training|onboarding|enablement)/iu.test(text)) {
-    return language === "zh-CN" ? "培训讲解与统一认知" : "Training and enablement"
-  }
-  if (/(发布|上市|launch|release|go-to-market)/iu.test(text)) {
-    return language === "zh-CN" ? "产品发布与市场沟通" : "Product launch communication"
-  }
-
-  if (scenario === "sales-deck") {
-    return language === "zh-CN" ? "客户提案与说服" : "Client proposal and persuasion"
-  }
-  if (scenario === "training") {
-    return language === "zh-CN" ? "培训讲解与统一认知" : "Training and enablement"
-  }
-  if (scenario === "product-launch") {
-    return language === "zh-CN" ? "产品发布与市场沟通" : "Product launch communication"
-  }
-  return language === "zh-CN" ? "业务表达与结构化汇报" : "Structured business presentation"
-}
-
-function inferPageCount(text: string) {
-  const candidates: Array<{ index: number; value: string }> = []
-  for (const match of text.matchAll(/(\d{1,2})\s*(?:页|p\b|pages?|slides?)/giu)) {
-    candidates.push({ index: match.index ?? 0, value: match[1] || "" })
-  }
-  for (const match of text.matchAll(/(?:页数|页码|page count|slide count)\D{0,8}(\d{1,2})/giu)) {
-    candidates.push({ index: match.index ?? 0, value: match[1] || "" })
-  }
-
-  const candidate = candidates.sort((left, right) => left.index - right.index).at(-1)
-  if (!candidate) return null
-  const parsed = Number.parseInt(candidate.value, 10)
-  if (!Number.isFinite(parsed) || parsed < 4 || parsed > 20) return null
-  return parsed
-}
-
-function inferTone(text: string, language: PptBriefLanguage) {
-  if (/(简洁|专业|高层|决策|executive|concise|professional)/iu.test(text)) {
-    return language === "zh-CN" ? "简洁、专业、决策导向" : "Concise, professional, executive-ready"
-  }
-  if (/(演讲|感染力|叙事|story|presentation|stage)/iu.test(text)) {
-    return language === "zh-CN" ? "强叙事、适合现场表达" : "Narrative-driven and presentation-ready"
-  }
-  return null
-}
-
-function stripExplicitBriefFields(text: string) {
-  return Object.values(EXPLICIT_BRIEF_FIELD_PATTERNS)
-    .reduce(
-      (current, pattern) => current.replace(new RegExp(pattern.source, pattern.flags), " "),
-      text,
-    )
-    .replace(/^[\s,，;；。:：\-|/]+|[\s,，;；。:：\-|/]+$/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function isBriefFieldOnlyEdit(text: string) {
-  const hasEditIntent =
-    /(?:改|调整|设置|修改|换成|变更|太多|太少|不够|过多|过少|就行|即可|吧|change(?:d)?|adjust(?:ed)?|set|replace|too many|too few|enough|fine)/iu.test(
-      text,
-    )
-  const hasBriefField =
-    /(?:页数|页码|受众|对象|目标|目的|场景|用途|语言|风格|语气|必须包含|包括|包含|pages?|slides?)/iu.test(text) ||
-    /\d{1,2}\s*页/iu.test(text)
-  return hasEditIntent && hasBriefField
-}
-
-function inferTopic(userMessages: string[]) {
-  for (let index = userMessages.length - 1; index >= 0; index -= 1) {
-    if (isBriefFieldOnlyEdit(userMessages[index] || "")) continue
-    const normalized = stripExplicitBriefFields(userMessages[index] || "")
-    if (normalized) return normalized.slice(0, 120)
-  }
-
-  const normalized = (userMessages.at(-1) || "").replace(/\s+/g, " ").trim()
-  return normalized ? normalized.slice(0, 120) : null
-}
-
 function buildSuggestedValues(input: {
   scenario: PptBriefScenario | null
   language: PptBriefLanguage
@@ -317,7 +110,13 @@ function buildSuggestedValues(input: {
             : "Executive review"),
     goal:
       input.goal ||
-      inferGoal("", scenario, language),
+      (scenario === "sales-deck"
+        ? language === "zh-CN" ? "客户提案与说服" : "Client proposal and persuasion"
+        : scenario === "training"
+          ? language === "zh-CN" ? "培训讲解与统一认知" : "Training and enablement"
+          : scenario === "product-launch"
+            ? language === "zh-CN" ? "产品发布与市场沟通" : "Product launch communication"
+            : language === "zh-CN" ? "业务表达与结构化汇报" : "Structured business presentation"),
     scenario,
     language,
     pageCount: input.pageCount || (scenario === "training" ? 12 : 10),
@@ -382,51 +181,17 @@ export function createPptBriefStateFromConfirmationContext(
 export function extractPptBriefState(input: {
   userMessages: string[]
 }) {
-  const userMessages = input.userMessages.map((item) => item.trim()).filter(Boolean)
-  const combinedText = userMessages.join("\n")
-  const latestUserText = userMessages.at(-1) || ""
-  const explicitFields = extractExplicitBriefFields(combinedText)
-  const language = explicitFields.language || inferLanguage(combinedText || latestUserText || "")
-  const scenario = explicitFields.scenario || inferScenario(combinedText)
-  const audience = explicitFields.audience || inferAudience(combinedText, language)
-  const goal = explicitFields.goal || inferGoal(combinedText, scenario, language)
-  const pageCount = inferPageCount(combinedText) || explicitFields.pageCount
-  const tone = explicitFields.tone || inferTone(combinedText, language)
-  const mustInclude =
-    explicitFields.mustInclude.length > 0
-      ? explicitFields.mustInclude
-      : readOptionalStringArray(
-          combinedText.match(/(?:必须包含|包括|包含|must include|include)\s*[:：]\s*(.+)$/imu)?.[1]
-            ?.split(/[，,、;；]/u),
-        )
-  const topic = explicitFields.topic || inferTopic(userMessages)
-  const suggestedValues = buildSuggestedValues({
-    scenario,
-    language,
-    audience,
-    goal,
-    pageCount,
-    tone,
-  })
-  const missingFields: PptBriefMissingField[] = []
-  if (!audience) missingFields.push("audience")
-  if (!goal) missingFields.push("goal")
-  if (!scenario) missingFields.push("scenario")
-  if (!language) missingFields.push("language")
-
-  return {
+  const topic = input.userMessages.map((item) => item.trim()).filter(Boolean).at(-1) || ""
+  return createPptBriefState({
     topic,
-    audience,
-    goal,
-    scenario,
-    language,
-    pageCount,
-    tone,
-    mustInclude,
-    missingFields,
-    readyForPreview: missingFields.length === 0,
-    suggestedValues,
-  } satisfies PptBriefState
+    audience: "",
+    goal: "",
+    scenario: null,
+    language: null,
+    pageCount: null,
+    tone: null,
+    mustInclude: [],
+  })
 }
 
 function normalizePptBriefConfirmationContext(value: unknown): PptBriefConfirmationContext | null {
@@ -485,15 +250,6 @@ export function stripPptBriefConfirmationContextMarkers(content: string | null |
     "gu",
   )
   return normalized.replace(markerPattern, "").replace(/\n{3,}/g, "\n\n").trim()
-}
-
-export function isPptBriefConfirmationReply(value: string | null | undefined) {
-  const normalized = readOptionalString(value)?.toLowerCase() ?? ""
-  if (!normalized) return false
-  if (/(?:确认|确认了|好的|可以|同意|确认无误|confirm|confirmed)(?:\s*(?:brief|需求|方案|以上|上述))?(?:\s*[,，]?\s*(?:继续|进入下一步|continue))?$/iu.test(normalized)) {
-    return true
-  }
-  return /(?:brief|需求|方案)\s*(?:确认|已确认|无误)(?:\s*[,，]?\s*(?:继续|进入下一步|continue))?$/iu.test(normalized)
 }
 
 export function buildPptBriefConfirmationMessage(state: PptBriefState, isZh: boolean) {
@@ -564,6 +320,16 @@ export function buildPptBriefPromptSection(state: PptBriefState) {
     .join("\n")
 
   return lines
+}
+
+export function buildPptBriefConversationPromptSection() {
+  return [
+    "## Editable PPT brief planning",
+    "Use the latest user request and the full conversation context to build the structured brief.",
+    "For a new request, call update_ppt_brief with the complete brief you infer from the user's meaning, including topic, audience, goal, scenario, language, page count, tone, and must-include items when available.",
+    "For a change to an existing brief, preserve unchanged fields and call update_ppt_brief with the complete merged brief. Do not infer fields with keywords, regex, or fixed phrase lists.",
+    "If important information is genuinely missing or ambiguous, ask a concise clarification question instead of inventing facts; do not call preview_ppt_deck until the brief is complete.",
+  ].join("\n")
 }
 
 export function buildPptBriefClarificationMessage(state: PptBriefState, isZh: boolean) {

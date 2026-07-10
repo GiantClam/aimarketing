@@ -35,10 +35,6 @@ import { shouldChargeSharedCreditsForCapability } from "@/lib/platform/shared-cr
 import { buildWorkflowImageGenerateRequestBody } from "@/lib/workflows/image-capability-request"
 import { buildEnterpriseWorkflowPresetPrompt, getDefaultEnterpriseWorkflowPreset } from "@/lib/workflows/presets"
 import {
-  buildPptRecommendedTemplateSummaries,
-} from "@/lib/lead-tools/ppt-preview-data-fixed"
-import { buildPptMasterRecommendedTemplateSummaries } from "@/lib/lead-tools/ppt-worker-capabilities"
-import {
   createWorkflowNodeInputBundle,
   mergeWorkflowNodeOutputBundles,
 } from "@/lib/workflows/node-executors"
@@ -112,27 +108,6 @@ function parsePositiveIntegerEnv(name: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function resolveWorkflowEditablePptTemplateId(input: {
-  locale: "zh" | "en"
-  scenario: string
-  language: string
-  pageCount?: number
-  prompt: string
-}) {
-  const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries({
-    prompt: input.prompt,
-    scenario: input.scenario as never,
-    language: input.language as never,
-    pageCount: input.pageCount,
-  })
-  const selectedTemplate = recommendedTemplates[0] ?? null
-
-  return {
-    selectedTemplateId: selectedTemplate?.templateId ?? null,
-    recommendedTemplates,
-  }
 }
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutError: string) {
@@ -1614,27 +1589,12 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
           const scenario = normalizeWorkflowPptScenario(params.node.config.scenario)
           const language = typeof params.node.config.language === "string" ? params.node.config.language : "zh-CN"
           const pageCount = typeof params.node.config.pageCount === "number" ? params.node.config.pageCount : undefined
-          let selectedTemplateId =
+          const selectedTemplateId =
             typeof params.node.config.templateId === "string" && params.node.config.templateId.trim()
               ? params.node.config.templateId.trim()
               : null
-          let autoSelectedTemplateId: string | null = null
-          let autoRecommendedTemplates: ReturnType<typeof buildPptRecommendedTemplateSummaries> | null = null
-
           if (previewRuntime === "ppt-master-agent" && !selectedTemplateId) {
-            const selection = resolveWorkflowEditablePptTemplateId({
-              locale,
-              scenario,
-              language,
-              pageCount,
-              prompt,
-            })
-            if (!selection.selectedTemplateId) {
-              throw new Error("workflow_ppt_template_autoselect_failed")
-            }
-            selectedTemplateId = selection.selectedTemplateId
-            autoSelectedTemplateId = selection.selectedTemplateId
-            autoRecommendedTemplates = selection.recommendedTemplates
+            throw new Error("workflow_ppt_template_selection_required")
           }
 
           const previewBody = {
@@ -1738,8 +1698,6 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
               selectedVariantKey,
               previewSessionId: previewSessionId || null,
               workItemId: workItemId ?? null,
-              ...(autoSelectedTemplateId ? { autoSelectedTemplateId } : {}),
-              ...(autoRecommendedTemplates ? { recommendedTemplates: autoRecommendedTemplates } : {}),
             },
           }
         }

@@ -470,7 +470,7 @@ test("tool registry injects the fresh preview session into export after a rebuil
   })
 })
 
-test("tool registry queues executive-ppt preview with one official ppt-master template", async () => {
+test("tool registry queues executive-ppt preview with the model-selected official ppt-master template", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 42,
@@ -504,7 +504,7 @@ test("tool registry queues executive-ppt preview with one official ppt-master te
     conversationScope: "consulting",
     latestUserPrompt: "用第一个模板开始生成",
     messageContents: [
-      "<!-- ai-entry-ppt-template-recommendations:{\"defaultTemplateId\":\"long-table\",\"templateIds\":[\"long-table\",\"neo-grid-bold\",\"broadside\",\"playful\"]} -->",
+      "<!-- ai-entry-ppt-template-recommendations:{\"defaultTemplateId\":\"ppt169_global_ai_capital_2026\",\"templateIds\":[\"ppt169_global_ai_capital_2026\",\"ppt169_building_effective_agents\"]} -->",
     ],
     auditContext: {
       traceId: "trace-background-preview",
@@ -523,6 +523,8 @@ test("tool registry queues executive-ppt preview with one official ppt-master te
     goal: "经营同步",
     scenario: "marketing-campaign",
     language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   assert.equal(previewInput, null)
@@ -544,7 +546,7 @@ test("tool registry queues executive-ppt preview with one official ppt-master te
   assert.equal(queuedInput.sourcePrompt, "用第一个模板开始生成")
   assert.equal(queuedInput.templateMode, "single-template")
   assert.equal(typeof queuedInput.templateId, "string")
-  assert.notEqual(queuedInput.templateId, "long-table")
+  assert.equal(queuedInput.templateId, "ppt169_global_ai_capital_2026")
   assert.equal(queued.status, "queued")
   assert.equal(queued.selectedTemplateId, queuedInput.templateId)
   assert.equal((queued.backgroundTask as { taskId?: string } | undefined)?.taskId, "901")
@@ -787,6 +789,8 @@ test("tool registry strips uploaded attachment blocks before injecting sourcePro
     goal: "业务介绍",
     scenario: "training",
     language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   assert.equal(
@@ -795,7 +799,7 @@ test("tool registry strips uploaded attachment blocks before injecting sourcePro
   )
 })
 
-test("tool registry injects a fallback research brief from uploaded attachment content for executive ppt background preview", async () => {
+test("tool registry leaves uploaded attachment interpretation to the LLM", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -854,26 +858,13 @@ test("tool registry injects a fallback research brief from uploaded attachment c
     goal: "业务介绍",
     scenario: "sales-deck",
     language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   const queuedInput = enqueuedTasks.at(-1)?.payload?.input as Record<string, unknown> | undefined
-  assert.deepEqual(queuedInput?.researchBrief, {
-    topic: "《屿算智能》PPT 信息提取",
-    keyFacts: [
-      "实用 AI 大于 AI 概念",
-      "企业专属 AI 业务工作台",
-      "配置 17 个 AI 智能体员工",
-      "从业务梳理到资产沉淀形成闭环",
-    ],
-    rawSummary: [
-      "# 《屿算智能》PPT 信息提取",
-      "",
-      "- 实用 AI 大于 AI 概念",
-      "- 企业专属 AI 业务工作台",
-      "- 配置 17 个 AI 智能体员工",
-      "- 从业务梳理到资产沉淀形成闭环",
-    ].join("\n"),
-  })
+  assert.equal(queuedInput?.researchBrief, undefined)
+  assert.equal(queuedInput?.sourcePrompt, "写一份介绍预算智能公司和业务的 ppt")
 })
 
 test("tool registry restores a persisted research brief marker from message history", async () => {
@@ -927,15 +918,25 @@ test("tool registry restores a persisted research brief marker from message hist
         }),
         buildPptTemplateRecommendationMessage({
           isZh: true,
-          selectedTemplateId: "swiss-grid",
+          selectedTemplateId: "ppt169_global_ai_capital_2026",
           recommendedTemplates: [
-            { rank: 1, templateId: "swiss-grid", templateLabel: "瑞士网格", styleName: "Neo-Grid Bold" },
-            { rank: 2, templateId: "government-blue", templateLabel: "政务蓝", styleName: "Long Table" },
+            {
+              rank: 1,
+              templateId: "ppt169_global_ai_capital_2026",
+              templateLabel: "Global AI Capital",
+              styleName: "PPT169",
+            },
+            {
+              rank: 2,
+              templateId: "ppt169_building_effective_agents",
+              templateLabel: "Building Effective Agents",
+              styleName: "PPT169",
+            },
           ],
         }) || "",
       ].join("\n"),
     ],
-    latestUserPrompt: "就按第二个的感觉，但请用模型已经确定的 swiss-grid",
+    latestUserPrompt: "就按第二个的感觉，但请用模型已经确定的 Global AI Capital",
     pptBriefState: {
       topic: "克里米亚现状军事分析",
       audience: "初级军事爱好者",
@@ -970,7 +971,7 @@ test("tool registry restores a persisted research brief marker from message hist
   await tools.preview_ppt_deck.execute({
     prompt: "按推荐模板继续生成克里米亚课堂 PPT 预览。",
     templateMode: "single-template",
-    templateId: "swiss-grid",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   const queuedInput = enqueuedTasks.at(-1)?.payload?.input as Record<string, unknown> | undefined
@@ -1066,7 +1067,7 @@ test("tool registry blocks preview_ppt_deck when the ppt brief is incomplete", a
   })
 })
 
-test("tool registry defaults executive-ppt background previews to one ppt-master template", async () => {
+test("tool registry requires an LLM-selected template for executive-ppt background previews", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1134,17 +1135,13 @@ test("tool registry defaults executive-ppt background previews to one ppt-master
     prompt: "继续，生成可编辑 PPT 预览。",
   })
 
-  assert.equal(previewResult.ok, true)
+  assert.equal(previewResult.ok, false)
+  assert.equal((previewResult.error as { code?: string } | undefined)?.code, "ppt_template_selection_required")
   assert.equal(previewInput, null)
-  assert.equal(enqueuedTasks.length, 1)
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    "single-template",
-  )
-  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
+  assert.equal(enqueuedTasks.length, 0)
 })
 
-test("tool registry replaces model-supplied frontend template ids with ppt-master templates", async () => {
+test("tool registry rejects model-supplied frontend template ids instead of replacing them", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1214,15 +1211,10 @@ test("tool registry replaces model-supplied frontend template ids with ppt-maste
     templateId: "neo-grid-bold",
   })
 
-  assert.equal(previewResult.ok, true)
-  assert.equal(enqueuedTasks.length, 1)
+  assert.equal(previewResult.ok, false)
+  assert.equal((previewResult.error as { code?: string } | undefined)?.code, "ppt_template_selection_required")
+  assert.equal(enqueuedTasks.length, 0)
   assert.equal(previewInput, null)
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    "single-template",
-  )
-  assert.notEqual((enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "neo-grid-bold")
-  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
 })
 
 test("tool registry rejects an unoffered editable template instead of silently falling back", async () => {
@@ -1302,7 +1294,7 @@ test("tool registry rejects an unoffered editable template instead of silently f
   assert.equal(enqueuedTasks.length, 0)
 })
 
-test("tool registry ignores direct frontend template aliases before a persisted recommendation marker exists", async () => {
+test("tool registry requires an LLM recommendation before accepting a template selection", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1333,7 +1325,7 @@ test("tool registry ignores direct frontend template aliases before a persisted 
     ],
     skillsEnabled: true,
     enabledToolNames: null,
-    latestUserPrompt: "swiss-grid",
+    latestUserPrompt: "请直接生成",
     pptBriefState: {
       topic: "企业AI营销工作台",
       audience: "管理层",
@@ -1372,14 +1364,9 @@ test("tool registry ignores direct frontend template aliases before a persisted 
     prompt: "企业AI营销工作台",
   })
 
-  assert.equal(previewResult.ok, true)
-  assert.equal(enqueuedTasks.length, 1)
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    "single-template",
-  )
-  assert.notEqual((enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "swiss-grid")
-  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
+  assert.equal(previewResult.ok, false)
+  assert.equal((previewResult.error as { code?: string } | undefined)?.code, "ppt_template_selection_required")
+  assert.equal(enqueuedTasks.length, 0)
 })
 
 test("tool registry injects latest user prompt as sourcePrompt for executive-ppt preview tasks", async () => {
@@ -1452,6 +1439,8 @@ test("tool registry injects latest user prompt as sourcePrompt for executive-ppt
       "请生成董事会经营复盘与风险诊断汇报。",
       "关键风险诊断（外部） —— 市场、竞争、政策",
     ].join("\n"),
+    templateMode: "single-template",
+    templateId: "ppt169_global_ai_capital_2026",
   })
 
   assert.equal(previewResult.ok, true)
