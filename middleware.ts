@@ -50,7 +50,7 @@ export function middleware(request: NextRequest) {
   if (normalizedPathname.startsWith("/dashboard")) {
     if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url)
-      loginUrl.searchParams.set("next", normalizedPathname)
+      loginUrl.searchParams.set("next", `${normalizedPathname}${request.nextUrl.search}`)
       return applySecurityHeaders(applyLocaleCookie(NextResponse.redirect(loginUrl), locale))
     }
   }

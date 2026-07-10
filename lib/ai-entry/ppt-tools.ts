@@ -592,7 +592,6 @@ function resolveEditableTemplateSelection(input: {
   templateMode?: "auto-4" | "single-template"
   templateId?: string | null
   limitTemplatesToRemoteWorker: boolean
-  preferSingleTemplate: boolean
 }) {
   const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
     {
@@ -614,17 +613,16 @@ function resolveEditableTemplateSelection(input: {
   }
   const selectedTemplateId =
     explicitTemplateId ||
-    (input.preferSingleTemplate ? recommendedTemplates[0]?.templateId?.trim() || null : null)
-  if (input.preferSingleTemplate && !selectedTemplateId) {
+    recommendedTemplates[0]?.templateId?.trim() || null
+  if (!selectedTemplateId) {
     throw new Error("ppt_master_template_selection_unavailable")
   }
 
   // Editable decks are always materialized from one vendor ppt-master template.
-  const templateMode = selectedTemplateId ? ("single-template" as const) : (input.templateMode ?? "auto-4")
   return {
     recommendedTemplates,
-    selectedTemplateId: selectedTemplateId || undefined,
-    templateMode,
+    selectedTemplateId,
+    templateMode: "single-template" as const,
   }
 }
 
@@ -916,7 +914,6 @@ export function buildAiEntryPptTools(input: {
               templateMode: requestedTemplateMode,
               templateId: explicitTemplateId,
               limitTemplatesToRemoteWorker,
-              preferSingleTemplate: !explicitTemplateId,
             })
             recommendedTemplates = selection.recommendedTemplates
             effectiveTemplateId = selection.selectedTemplateId
@@ -964,6 +961,12 @@ export function buildAiEntryPptTools(input: {
             toolFlow === "editable"
               ? preferredProviderId?.trim() || input.selectedPreviewProviderId?.trim() || undefined
               : undefined
+          if (
+            toolFlow === "editable" &&
+            (effectiveTemplateMode !== "single-template" || !effectiveTemplateId)
+          ) {
+            throw new Error("ppt_master_editable_request_not_materialized")
+          }
           const previewRequest = {
             ...(typeof requestId === "string" && requestId.trim() ? { requestId: requestId.trim() } : {}),
             prompt: prepared.input.prompt,
@@ -972,7 +975,7 @@ export function buildAiEntryPptTools(input: {
             language: prepared.input.language,
             ...(effectiveModel ? { model: effectiveModel } : {}),
             ...(effectivePreferredProviderId ? { preferredProviderId: effectivePreferredProviderId } : {}),
-            previewRuntime: defaultPreviewRuntime,
+            previewRuntime: toolFlow === "editable" ? "ppt-master-agent" : defaultPreviewRuntime,
             templateMode: effectiveTemplateMode,
             templateId: effectiveTemplateId,
             narrativeAngle: effectiveNarrativeAngle,
