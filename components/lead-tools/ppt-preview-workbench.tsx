@@ -206,7 +206,9 @@ function getModelDescription(value: PptPreviewModelValue, locale: "zh" | "en") {
     "deepseek-v4-pro": { zh: "内容规划优先，适合作为可编辑 PPT 默认规划模型。", en: "Planning-first and well suited as the default model for editable PPT outlining." },
     "MiniMax-M2.7-highspeed": { zh: "速度优先，适合 4 份并行预览。", en: "Speed-first and well suited to four parallel preview generations." },
     "MiniMax-M3": { zh: "推理更重，适合更强表达但通常更慢。", en: "Heavier reasoning with stronger writing quality, but usually slower." },
-    "gpt-5.4": { zh: "通过 pptoken 路由，稳定性更高。", en: "Routed through pptoken for higher stability." },
+    "gpt-5.6-sol": { zh: "通过 pptoken 路由，适合高质量内容规划。", en: "Routed through pptoken for high-quality content planning." },
+    "gpt-5.6-terra": { zh: "通过 pptoken 路由，适合结构化分析和方案表达。", en: "Routed through pptoken for structured analysis and proposal writing." },
+    "gpt-5.6-luna": { zh: "通过 pptoken 路由，适合轻量快速的内容生成。", en: "Routed through pptoken for lightweight, fast content generation." },
     "step-3.7-flash": { zh: "通过阶跃星辰直连路由，适合并发生成耗时测试。", en: "Direct StepFun routing, useful for concurrency and latency testing." },
   }
 

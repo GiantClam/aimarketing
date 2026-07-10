@@ -8,7 +8,9 @@ export type PptWorkerModelValue =
   | "MiniMax-M2.7-highspeed"
   | "MiniMax-M3"
   | "deepseek-v4-pro"
-  | "gpt-5.4"
+  | "gpt-5.6-sol"
+  | "gpt-5.6-terra"
+  | "gpt-5.6-luna"
   | "step-3.7-flash"
   | (string & {})
 export type PptWorkerNarrativeAngle = "executive-brief" | "campaign-story" | "data-proof" | "action-plan"

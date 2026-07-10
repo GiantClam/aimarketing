@@ -35,20 +35,20 @@ test("worker preview schema accepts official ppt-master example ids", () => {
   assert.equal(parsed.templateId, "ppt169_general_dark_tech_claude_code_auto_mode")
 })
 
-test("worker preview schema accepts DeepSeek v4 pro as a remote worker model", () => {
+test("worker preview schema accepts pptoken GPT-5.6 Sol as a remote worker model", () => {
   const parsed = previewRequestSchema.parse({
     requestId: "req_deepseek_v4_pro",
     prompt: "Build a tech company introduction deck",
     scenario: "sales-deck",
     language: "zh-CN",
-    model: "deepseek-v4-pro",
+    model: "gpt-5.6-sol",
     templateMode: "single-template",
     templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
     allowMockFallback: false,
     runtimeProfile: "railway-linux",
   })
 
-  assert.equal(parsed.model, "deepseek-v4-pro")
+  assert.equal(parsed.model, "gpt-5.6-sol")
 })
 
 test("worker preview schema still rejects unknown template ids", () => {

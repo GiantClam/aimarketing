@@ -26,7 +26,15 @@ export const previewRequestSchema = z.object({
   scenario: z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"]),
   language: z.enum(["zh-CN", "en-US"]),
   model: z
-    .enum(["MiniMax-M2.7-highspeed", "MiniMax-M3", "deepseek-v4-pro", "gpt-5.4", "step-3.7-flash"])
+    .enum([
+      "MiniMax-M2.7-highspeed",
+      "MiniMax-M3",
+      "deepseek-v4-pro",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "step-3.7-flash",
+    ])
     .optional(),
   preferredProviderId: z.string().trim().min(1).optional(),
   templateMode: z.enum(["auto-4", "single-template"]),

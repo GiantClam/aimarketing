@@ -578,7 +578,7 @@ test("model catalog can be aggregated across configured providers", async () => 
     {
       AI_ENTRY_PPTOKEN_API_KEY: "pptoken-key",
       AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
-      AI_ENTRY_PPTOKEN_MODEL: "gpt-5.4",
+      AI_ENTRY_PPTOKEN_MODEL: "gpt-5.6-sol",
       AI_ENTRY_AIBERM_API_KEY: "aiberm-key",
       AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
       AI_ENTRY_AIBERM_MODEL: "claude-sonnet-4.6",
@@ -602,8 +602,8 @@ test("model catalog can be aggregated across configured providers", async () => 
             status: 200,
             json: async () => ({
               data: [
-                { id: "gpt-5.4", owned_by: "openai" },
-                { id: "gpt-5.5", owned_by: "openai" },
+                { id: "gpt-5.6-sol", owned_by: "openai" },
+                { id: "gpt-5.6-terra", owned_by: "openai" },
               ],
             }),
           } as Response
@@ -659,7 +659,7 @@ test("model catalog can be aggregated across configured providers", async () => 
         }
 
         assert.deepEqual([...mergedGroups.keys()], ["openai", "anthropic", "gemini", "minimax"])
-        assert.equal(mergedGroups.get("openai")?.has("gpt-5.4"), true)
+        assert.equal(mergedGroups.get("openai")?.has("gpt-5.6-sol"), true)
         assert.equal(mergedGroups.get("anthropic")?.has("claude-sonnet-4.6"), true)
         assert.equal(mergedGroups.get("gemini")?.has("gemini-3.1-pro-preview"), true)
         assert.equal(mergedGroups.get("minimax")?.has("MiniMax-M2.7"), true)

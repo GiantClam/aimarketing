@@ -16,7 +16,7 @@ import {
 } from "@/lib/ai-entry/model-policy"
 
 const CACHE_TTL_MS = 30 * 60 * 1000
-const CATALOG_FILTER_CACHE_VERSION = "v7"
+const CATALOG_FILTER_CACHE_VERSION = "v8"
 const PRIORITY_PROVIDER_FAMILIES = ["anthropic", "openai", "deepseek", "gemini", "minimax"] as const
 const ALLOWED_PROVIDER_FAMILIES = [
   "anthropic",
@@ -32,6 +32,9 @@ const ALLOWED_DISPLAY_MODEL_IDS = [
   "claude-sonnet-4.6",
   "claude-haiku-4.5",
   "gpt-5.5",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
   "gpt-5.4",
   "gpt-5.4-mini",
   "deepseek-v4-pro",
@@ -186,9 +189,9 @@ const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> 
     "deepseek-v4-pro",
   ],
   pptoken: [
-    "gpt-5.4",
-    "gpt-5.4-mini",
-    "gpt-5.5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
   ],
   openrouter: [
     "claude-opus-4.6",
@@ -548,6 +551,15 @@ function addVerifiedProviderModels(
   return additions.length > 0 ? [...models, ...additions] : models
 }
 
+function restrictProviderModels(provider: AiEntryProviderConfig, models: ParsedModel[]) {
+  if (provider.id !== "pptoken") return models
+
+  const supported = new Set(
+    (VERIFIED_PROVIDER_MODEL_IDS.pptoken || []).map((modelId) => equivalentModelFingerprint(modelId)),
+  )
+  return models.filter((model) => supported.has(equivalentModelFingerprint(model.id)))
+}
+
 function applyRecentFilter(
   models: ParsedModel[],
   recentDays: number | null,
@@ -865,7 +877,7 @@ export async function getAiEntryModelCatalog(options?: AiEntryModelCatalogOption
         })
       }
 
-      const chatModels = modelsWithDefault.filter(
+      const chatModels = restrictProviderModels(provider, modelsWithDefault).filter(
         (model) => model.isLikelyChat || model.id === configuredDefaultModel,
       )
       const allowedChatModels = filterHighTierDisplayModels(

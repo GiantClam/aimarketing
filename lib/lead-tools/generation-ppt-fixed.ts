@@ -1019,7 +1019,7 @@ function inferPreviewProviderId(model: string) {
     return "glm" as const
   }
 
-  if (model === "gpt-5.4") {
+  if (/^gpt-5\.6-(?:sol|terra|luna)$/iu.test(model)) {
     return "pptoken" as const
   }
 

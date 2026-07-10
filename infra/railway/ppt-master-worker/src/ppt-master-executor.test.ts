@@ -52,7 +52,7 @@ test("worker preview executor forwards request and preserves session id", async 
     },
     scenario: "sales-deck",
     language: "zh-CN",
-    model: "gpt-5.4",
+    model: "gpt-5.6-sol",
     preferredProviderId: "enterprise-openai-compatible",
     templateMode: "single-template",
     templateId: "academic_defense",
@@ -71,7 +71,7 @@ test("worker preview executor forwards request and preserves session id", async 
     implications: ["Buyers move inventory forward"],
   })
   assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
-  assert.equal(seenModel, "gpt-5.4")
+  assert.equal(seenModel, "gpt-5.6-sol")
   assert.equal(seenPreferredProviderId, "enterprise-openai-compatible")
   assert.equal(seenNarrativeAngle, "executive-brief")
   assert.equal(seenTemplateId, "academic_defense")
