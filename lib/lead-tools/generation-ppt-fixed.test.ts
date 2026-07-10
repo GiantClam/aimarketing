@@ -368,6 +368,62 @@ test("normalizeLeadToolPptPlan maps structured researchBrief into fallback slide
   assert.equal((normalized.slides[1]?.contentsItems?.length ?? 0) >= 3, true)
 })
 
+test("normalizeLeadToolPptPlan uses neutral zh agenda fallbacks when bullets are missing", () => {
+  const style = pptPreviewStyles.find((item) => item.key === "ppt169_pritzker_2026")
+  assert.ok(style)
+
+  const request = {
+    prompt: "企业 AI 营销工作台",
+    scenario: "product-launch" as const,
+    language: "zh-CN" as const,
+    model: "gpt-5.4" as const,
+    pageCount: 4,
+  }
+
+  const rawPlan = {
+    title: "企业 AI 营销工作台",
+    outline: ["封面", "导览", "判断", "对比"],
+    slides: [
+      {
+        layout: "cover",
+        intent: "cover",
+        title: "企业 AI 营销工作台",
+        body: "封面摘要。",
+        bullets: ["统一数据", "AI 分析", "自动化执行"],
+      },
+      {
+        layout: "contents",
+        intent: "contents",
+        title: "决策导览",
+        body: "先判断值不值得投，再判断怎么落地。",
+        bullets: ["先看业务信号", "聚焦可量化价值与实施边界", "以 90 天首期上线为决策窗口"],
+      },
+      {
+        layout: "statement",
+        intent: "statement",
+        title: "核心判断",
+        body: "营销系统需要从人驱动转向系统驱动。",
+        bullets: ["统一数据底座", "AI 驱动日常动作", "效果回流复盘"],
+      },
+      {
+        layout: "comparison",
+        intent: "comparison",
+        title: "两种运营模式",
+        body: "差距在于是否形成连续系统。",
+        bullets: ["传统模式", "工作台模式"],
+      },
+    ],
+  }
+
+  const normalized = normalizeLeadToolPptPlan(rawPlan, request, style)
+  const agendaBullets = normalized.slides[1]?.bullets ?? []
+  const agendaContents = normalized.slides[1]?.contentsItems ?? []
+
+  assert.equal(agendaBullets[3], "业务现状与判断")
+  assert.equal(agendaContents[3]?.title, "业务现状与判断")
+  assert.doesNotMatch(agendaBullets.join("|"), /海峡通行现状|能源与航运影响/u)
+})
+
 test("normalizeLeadToolPptPlan maps the yusuan attachment markdown string into business-workbench ppt structure", () => {
   const style = pptPreviewStyles.find((item) => item.key === "ppt169_pritzker_2026")
   assert.ok(style)

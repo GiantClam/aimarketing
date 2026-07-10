@@ -839,6 +839,13 @@ function isContinuableRuntimeSlideFailure(detail: string) {
   return detail === "ppt_master_runtime_slide_timeout" || detail.startsWith("ppt_master_runtime_provider_timeout:")
 }
 
+function formatFailedRuntimeSlideRuns(slideRuns: StoredVariantSlideRun[]) {
+  return slideRuns
+    .filter((run) => run.status === "failed")
+    .map((run) => `${run.fileBaseName}=${run.error ?? "failed"}`)
+    .join(",")
+}
+
 function countPatternMatches(value: string, pattern: RegExp) {
   return Array.from(value.matchAll(pattern)).length
 }
@@ -2108,6 +2115,11 @@ async function materializeVariantProject(params: {
     })
   }
 
+  const failedSlideSummary = formatFailedRuntimeSlideRuns(slideRuns)
+  if (failedSlideSummary) {
+    throw new Error(`ppt_master_runtime_incomplete_variant:${variant.key}:${failedSlideSummary}`)
+  }
+
   await runPptMasterSvgQualityCheck(repoDir, projectDir)
   await runPythonScript(repoDir, "finalize_svg.py", [projectDir])
   await runPptMasterSvgQualityCheck(repoDir, path.join(projectDir, "svg_final"))
@@ -2125,6 +2137,10 @@ async function materializeVariantProject(params: {
 
   if (!slideAssets.length) {
     throw new Error(`ppt_master_finalized_slides_missing:${variant.key}`)
+  }
+
+  if (slideAssets.length !== variant.slides.length) {
+    throw new Error(`ppt_master_finalized_slide_count_mismatch:${variant.key}:${slideAssets.length}:${variant.slides.length}`)
   }
 
   return {

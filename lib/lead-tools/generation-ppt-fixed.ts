@@ -1798,7 +1798,7 @@ function buildFallbackBullets(
       case "cover":
         return ["现状概览", "核心风险", "影响范围"]
       case "agenda":
-        return ["海峡通行现状", "能源与航运影响", "后续观察重点"]
+        return ["业务现状与判断", "关键模块与价值", "落地节奏与动作"]
       case "insight":
         return ["当前事实", "变化趋势", "结构性影响"]
       case "comparison":
