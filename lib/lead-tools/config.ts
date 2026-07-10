@@ -10,6 +10,7 @@ const DEFAULT_PPT_WORKER_PREVIEW_TIMEOUT_MS = 90 * 60 * 1000
 const DEFAULT_PPT_WORKER_PREVIEW_MAX_ATTEMPTS = 2
 const DEFAULT_PPT_WORKER_PREVIEW_RETRY_DELAY_MS = 3000
 const DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS = 12 * 60 * 1000
+const MIN_PPT_MASTER_PPTOKEN_GPT54_SLIDE_TIMEOUT_MS = 6 * 60 * 1000
 
 function pickFirstNonEmpty(values: Array<string | undefined>, fallback: string) {
   for (const value of values) {
@@ -143,11 +144,92 @@ export function getPptWorkerPreviewRetryDelayMs() {
   )
 }
 
+function normalizeEnvKeySegment(value: string | null | undefined) {
+  return value?.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || ""
+}
+
+function pickOptionalPositiveInt(values: Array<string | undefined>) {
+  for (const value of values) {
+    const parsed = Number.parseInt(value?.trim() || "", 10)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+
+  return null
+}
+
+function resolveConfiguredPptMasterSlideTimeout(params?: { provider?: string | null; model?: string | null }) {
+  const providerKey = normalizeEnvKeySegment(params?.provider)
+  const modelKey = normalizeEnvKeySegment(params?.model)
+
+  const providerModelTimeout = pickOptionalPositiveInt([
+    providerKey && modelKey ? process.env[`PPT_MASTER_SLIDE_TIMEOUT_MS_${providerKey}_${modelKey}`] : undefined,
+  ])
+  if (providerModelTimeout) {
+    return {
+      value: providerModelTimeout,
+      source: "provider-model" as const,
+    }
+  }
+
+  const providerTimeout = pickOptionalPositiveInt([
+    providerKey ? process.env[`PPT_MASTER_SLIDE_TIMEOUT_MS_${providerKey}`] : undefined,
+  ])
+  if (providerTimeout) {
+    return {
+      value: providerTimeout,
+      source: "provider" as const,
+    }
+  }
+
+  const globalTimeout = pickOptionalPositiveInt([
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_TIMEOUT_MS,
+    process.env.PPT_MASTER_SLIDE_TIMEOUT_MS,
+  ])
+  if (globalTimeout) {
+    return {
+      value: globalTimeout,
+      source: "global" as const,
+    }
+  }
+
+  return {
+    value: null,
+    source: null,
+  }
+}
+
+function getPptMasterKnownTimeoutFloor(params?: { provider?: string | null; model?: string | null }) {
+  const provider = params?.provider?.trim().toLowerCase() || ""
+  const model = params?.model?.trim() || ""
+
+  if (provider === "pptoken" && model === "gpt-5.4") {
+    return MIN_PPT_MASTER_PPTOKEN_GPT54_SLIDE_TIMEOUT_MS
+  }
+
+  return 0
+}
+
+export function resolvePptMasterSlideTimeoutMs(params?: { provider?: string | null; model?: string | null }) {
+  const configured = resolveConfiguredPptMasterSlideTimeout(params)
+  const floor = getPptMasterKnownTimeoutFloor(params)
+
+  if (configured.source === "provider-model" || configured.source === "provider") {
+    return configured.value ?? DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS
+  }
+
+  if (configured.source === "global") {
+    return Math.max(configured.value ?? DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS, floor)
+  }
+
+  if (floor > 0) {
+    return Math.max(DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS, floor)
+  }
+
+  return DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS
+}
+
 export function getPptMasterSlideTimeoutMs() {
-  return pickPositiveInt(
-    [process.env.PPT_MASTER_SLIDE_TIMEOUT_MS],
-    DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS,
-  )
+  return resolvePptMasterSlideTimeoutMs()
 }
 
 export function allowPptMasterEmergencyFallback() {

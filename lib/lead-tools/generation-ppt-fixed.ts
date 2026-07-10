@@ -7,7 +7,7 @@ import {
   getLeadToolPptPreviewProvider,
   getLeadToolPptRuntimeSlideProvider,
   getLeadToolPreviewModel,
-  getPptMasterSlideTimeoutMs,
+  resolvePptMasterSlideTimeoutMs,
 } from "@/lib/lead-tools/config"
 import {
   loadPptMasterTemplateReference,
@@ -2615,7 +2615,10 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
 
 async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideContext): Promise<PptMasterPreviewRuntimeSlideResult> {
   const { requestedModel, preferredProviderId } = resolveRuntimeSlideExecutionConfig(context.deck)
-  const slideTimeoutMs = getPptMasterSlideTimeoutMs()
+  const slideTimeoutMs = resolvePptMasterSlideTimeoutMs({
+    provider: preferredProviderId,
+    model: requestedModel,
+  })
   let providerResult: Awaited<ReturnType<typeof generateTextWithLeadToolPreviewProvider>>
 
   try {

@@ -10,6 +10,7 @@ import {
   getLeadToolPptRuntimeSlideModel,
   getLeadToolPptRuntimeSlideProvider,
   getPptMasterSlideTimeoutMs,
+  resolvePptMasterSlideTimeoutMs,
   getPptWorkerBaseUrl,
   getPptWorkerInternalToken,
   getPptWorkerPreviewMaxAttempts,
@@ -236,6 +237,9 @@ test("ppt worker base url upgrades preview runtime and transport defaults", () =
 
 test("ppt runtime slide config prefers explicit overrides and disables emergency fallback by default", () => {
   const previousTimeout = process.env.PPT_MASTER_SLIDE_TIMEOUT_MS
+  const previousScopedTimeout = process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN
+  const previousScopedModelTimeout = process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN_GPT_5_4
+  const previousRuntimeScopedTimeout = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_TIMEOUT_MS
   const previousFallback = process.env.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK
   const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
   const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
@@ -243,24 +247,38 @@ test("ppt runtime slide config prefers explicit overrides and disables emergency
 
   try {
     delete process.env.PPT_MASTER_SLIDE_TIMEOUT_MS
+    delete process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN
+    delete process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN_GPT_5_4
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_TIMEOUT_MS
     delete process.env.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK
     delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
     delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
     delete process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER
 
     assert.equal(getPptMasterSlideTimeoutMs(), 12 * 60 * 1000)
+    assert.equal(resolvePptMasterSlideTimeoutMs({ provider: "pptoken", model: "gpt-5.4" }), 12 * 60 * 1000)
     assert.equal(allowPptMasterEmergencyFallback(), false)
     assert.equal(getLeadToolPptRuntimeSlideModel(), "MiniMax-M2.7-highspeed")
     assert.equal(getLeadToolPptRuntimeSlideProvider(), "")
     assert.equal(getLeadToolPptPreviewProvider(), "")
 
-    process.env.PPT_MASTER_SLIDE_TIMEOUT_MS = "720000"
+    process.env.PPT_MASTER_SLIDE_TIMEOUT_MS = "180000"
     process.env.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK = "true"
     process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = "gpt-5.4"
     process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = "glm"
     process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER = "minimax"
 
-    assert.equal(getPptMasterSlideTimeoutMs(), 720000)
+    assert.equal(getPptMasterSlideTimeoutMs(), 180000)
+    assert.equal(resolvePptMasterSlideTimeoutMs({ provider: "pptoken", model: "gpt-5.4" }), 6 * 60 * 1000)
+
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_TIMEOUT_MS = "240000"
+    assert.equal(resolvePptMasterSlideTimeoutMs({ provider: "pptoken", model: "gpt-5.4" }), 6 * 60 * 1000)
+
+    process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN = "300000"
+    assert.equal(resolvePptMasterSlideTimeoutMs({ provider: "pptoken", model: "gpt-5.4" }), 300000)
+
+    process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN_GPT_5_4 = "420000"
+    assert.equal(resolvePptMasterSlideTimeoutMs({ provider: "pptoken", model: "gpt-5.4" }), 420000)
     assert.equal(allowPptMasterEmergencyFallback(), true)
     assert.equal(getLeadToolPptRuntimeSlideModel(), "gpt-5.4")
     assert.equal(getLeadToolPptRuntimeSlideProvider(), "glm")
@@ -270,6 +288,24 @@ test("ppt runtime slide config prefers explicit overrides and disables emergency
       delete process.env.PPT_MASTER_SLIDE_TIMEOUT_MS
     } else {
       process.env.PPT_MASTER_SLIDE_TIMEOUT_MS = previousTimeout
+    }
+
+    if (previousScopedTimeout === undefined) {
+      delete process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN
+    } else {
+      process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN = previousScopedTimeout
+    }
+
+    if (previousScopedModelTimeout === undefined) {
+      delete process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN_GPT_5_4
+    } else {
+      process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN_GPT_5_4 = previousScopedModelTimeout
+    }
+
+    if (previousRuntimeScopedTimeout === undefined) {
+      delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_TIMEOUT_MS
+    } else {
+      process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_TIMEOUT_MS = previousRuntimeScopedTimeout
     }
 
     if (previousFallback === undefined) {
