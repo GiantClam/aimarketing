@@ -1398,6 +1398,25 @@ async function handleDurableAiEntryPptPreviewTask(
   }
 
   if (remoteStatus.status === "failed") {
+    if (remoteStatus.message === "ppt_worker_job_request_missing") {
+      const resubmitted = await requestPptWorkerPreviewSubmit(
+        buildDurablePptPreviewRequest(payload, state.remoteRequestId),
+      )
+      state.remoteJobId = resubmitted.jobId
+      pushTaskProgressEvent(events, {
+        type: "background_generation_recovered",
+        label: isZh ? "远端任务已恢复，继续生成预览" : "Remote job recovered, continuing preview generation",
+        status: "running",
+        at: Date.now(),
+      })
+      await persist({
+        stage: "variant_generating",
+        stageLabel: isZh ? "已恢复远端渲染任务" : "Recovered remote render job",
+        progressCurrent: 2,
+        releaseLease: true,
+      })
+      return
+    }
     throw new Error(remoteStatus.message || "ppt_worker_preview_failed")
   }
 

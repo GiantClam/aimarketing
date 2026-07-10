@@ -1,5 +1,6 @@
 import { createServer } from "node:http"
 
+import { shutdownPreviewJobRecovery, startPreviewJobRecovery } from "./preview-jobs.js"
 import { routeRequest } from "./routes.js"
 
 async function readBody(req: import("node:http").IncomingMessage) {
@@ -16,7 +17,7 @@ async function readBody(req: import("node:http").IncomingMessage) {
 
 const port = Number(process.env.PORT || 8080)
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   try {
     const body = await readBody(req)
     const request = new Request(`http://127.0.0.1:${port}${req.url || "/"}`, {
@@ -39,4 +40,32 @@ createServer(async (req, res) => {
     res.writeHead(500, { "content-type": "application/json" })
     res.end(JSON.stringify({ message }))
   }
-}).listen(port)
+})
+
+let shuttingDown = false
+
+async function shutdown(signal: string) {
+  if (shuttingDown) return
+  shuttingDown = true
+
+  await shutdownPreviewJobRecovery()
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve())
+  })
+  console.log(`ppt-master-worker stopped (${signal})`)
+}
+
+process.once("SIGTERM", () => {
+  void shutdown("SIGTERM")
+})
+process.once("SIGINT", () => {
+  void shutdown("SIGINT")
+})
+
+server.listen(port, () => {
+  void startPreviewJobRecovery().catch((error) => {
+    console.error("ppt-worker.preview.startup-recovery-failed", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+  })
+})

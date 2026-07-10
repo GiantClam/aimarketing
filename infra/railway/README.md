@@ -30,6 +30,13 @@
 - `LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL=MiniMax-M2.7-highspeed`
 - `PPT_WORKER_PREVIEW_JOB_STORE=postgres`
 - `AI_MARKETING_DB_POSTGRES_URL=<shared app database url>`
+- `PPT_WORKER_JOB_LEASE_MS=120000`
+- `PPT_WORKER_JOB_HEARTBEAT_INTERVAL_MS=15000`
+- `PPT_WORKER_JOB_RECOVERY_INTERVAL_MS=20000`
+- `PPT_WORKER_JOB_RECOVERY_BATCH_SIZE=8`
+- `PPT_WORKER_JOB_SHUTDOWN_GRACE_MS=10000`
+
+Preview requests persist their full request payload in Postgres. The worker claims queued or expired jobs with a lease, renews the lease during execution, and scans for recoverable jobs on startup and on a timer. On `SIGTERM`/`SIGINT`, it stops scheduling new work, waits for the configured grace period, and releases active leases so another replica can resume them.
 
 If Railway logs show `ppt_master_runtime_provider_headers_timeout:*` for the slide-SVG stage, keep the model constant first and switch only the provider override for this worker hop, for example:
 

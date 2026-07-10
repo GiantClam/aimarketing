@@ -55,6 +55,13 @@ export type PptWorkerPreviewResponse = {
 
 export type PptWorkerPreviewJobStatus = "queued" | "running" | "completed" | "failed"
 
+export type PptWorkerPreviewJobObservability = {
+  updatedAt?: string
+  heartbeatAt?: string
+  leaseUntil?: string
+  attemptCount?: number
+}
+
 export type PptWorkerPreviewSubmitResponse = {
   jobId: string
   status: Extract<PptWorkerPreviewJobStatus, "queued" | "running">
@@ -64,16 +71,17 @@ export type PptWorkerPreviewStatusResponse =
   | {
       jobId: string
       status: "queued" | "running"
-    }
+    } & PptWorkerPreviewJobObservability
   | ({
       jobId: string
       status: "completed"
     } & PptWorkerPreviewResponse)
-  | {
+    & PptWorkerPreviewJobObservability
+  | ({
       jobId: string
       status: "failed"
       message: string
-    }
+    } & PptWorkerPreviewJobObservability)
 
 export type PptWorkerExportRequest = {
   requestId: string

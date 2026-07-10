@@ -684,3 +684,37 @@ test("resumes remote ppt-master jobs from Supabase state without Vercel polling"
   assert.equal(terminal.previewSessionId, "remote-preview-session-1")
   assert.equal(terminal.remoteJobId, "remote-job-1")
 })
+
+test("resubmits legacy remote jobs when the worker cannot recover their missing request payload", async () => {
+  const taskId = 1105
+  durablePptQueueEnabled = true
+  remotePptJobByRequestId = { jobId: "legacy-job" }
+  remotePptStatus = {
+    jobId: "legacy-job",
+    status: "failed",
+    message: "ppt_worker_job_request_missing",
+  }
+  tasksById.set(
+    taskId,
+    buildAiEntryPptPreviewTask({
+      id: taskId,
+      status: "pending",
+      updatedAtMsAgo: 1_000,
+    }),
+  )
+  claimResultById.set(taskId, { id: taskId })
+
+  const recovered = await runAssistantTaskRecoveryPass({
+    limit: 1,
+    waitForCompletion: true,
+    completionTimeoutMs: 10_000,
+  })
+
+  assert.equal(recovered.failed, 0)
+  assert.equal(remotePptSubmitCalls.length, 1)
+  assert.equal(remotePptSubmitCalls[0]?.requestId, `ai-entry-ppt-task-${taskId}`)
+  assert.equal(tasksById.get(taskId)?.status, "running")
+  const result = JSON.parse(tasksById.get(taskId)?.result || "{}") as Record<string, unknown>
+  assert.equal(result.remoteJobId, "remote-job-1")
+  assert.equal((result.events as Array<{ type?: string }>).at(-1)?.type, "background_generation_recovered")
+})

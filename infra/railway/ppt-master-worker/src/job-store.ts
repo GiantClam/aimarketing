@@ -1,31 +1,46 @@
+import type { PreviewRequest } from "./types.js"
+
 export type PptPreviewJobStatus = "queued" | "running" | "completed" | "failed"
 
 export type PptPreviewJobRecord = {
   jobId: string
   requestId: string
+  request: PreviewRequest | null
   status: PptPreviewJobStatus
   createdAt: number
   updatedAt: number
+  leaseOwner: string | null
+  leaseUntil: number | null
+  heartbeatAt: number | null
+  attemptCount: number
   result: unknown | null
   errorCode: string | null
   errorMessage: string | null
 }
 
 export interface PptPreviewJobStore {
-  createJob(input: { jobId: string; requestId: string }): Promise<PptPreviewJobRecord>
+  createJob(input: { jobId: string; requestId: string; request: PreviewRequest }): Promise<PptPreviewJobRecord>
   getJob(jobId: string): Promise<PptPreviewJobRecord | null>
-  markRunning(jobId: string): Promise<void>
-  completeJob(jobId: string, result: unknown): Promise<void>
-  failJob(jobId: string, error: { code: string; message: string }): Promise<void>
+  listRecoverableJobs(limit?: number): Promise<PptPreviewJobRecord[]>
+  claimJob(jobId: string, workerId: string, leaseMs: number): Promise<PptPreviewJobRecord | null>
+  heartbeatJob(jobId: string, workerId: string, leaseMs: number): Promise<boolean>
+  releaseLease(jobId: string, workerId: string): Promise<boolean>
+  completeJob(jobId: string, workerId: string, result: unknown): Promise<boolean>
+  failJob(jobId: string, workerId: string, error: { code: string; message: string }): Promise<boolean>
   clearForTests?(): Promise<void> | void
 }
 
 function buildBaseRecord(input: {
   jobId: string
   requestId: string
+  request?: PreviewRequest | null
   status?: PptPreviewJobStatus
   createdAt?: number
   updatedAt?: number
+  leaseOwner?: string | null
+  leaseUntil?: number | null
+  heartbeatAt?: number | null
+  attemptCount?: number
   result?: unknown | null
   errorCode?: string | null
   errorMessage?: string | null
@@ -35,9 +50,14 @@ function buildBaseRecord(input: {
   return {
     jobId: input.jobId,
     requestId: input.requestId,
+    request: input.request ?? null,
     status: input.status ?? "queued",
     createdAt: input.createdAt ?? now,
     updatedAt: input.updatedAt ?? now,
+    leaseOwner: input.leaseOwner ?? null,
+    leaseUntil: input.leaseUntil ?? null,
+    heartbeatAt: input.heartbeatAt ?? null,
+    attemptCount: input.attemptCount ?? 0,
     result: input.result ?? null,
     errorCode: input.errorCode ?? null,
     errorMessage: input.errorMessage ?? null,
@@ -56,38 +76,87 @@ export function createInMemoryPptPreviewJobStore(): PptPreviewJobStore {
     async getJob(jobId) {
       return jobs.get(jobId) ?? null
     },
-    async markRunning(jobId) {
+    async listRecoverableJobs(limit = 20) {
+      const now = Date.now()
+      return [...jobs.values()]
+        .filter((job) => job.status === "queued" || (job.status === "running" && (!job.leaseUntil || job.leaseUntil <= now)))
+        .sort((left, right) => left.createdAt - right.createdAt)
+        .slice(0, limit)
+    },
+    async claimJob(jobId, workerId, leaseMs) {
       const current = jobs.get(jobId)
-      if (!current) return
-      jobs.set(jobId, {
+      const now = Date.now()
+      if (!current || (current.status !== "queued" && !(current.status === "running" && (!current.leaseUntil || current.leaseUntil <= now)))) {
+        return null
+      }
+      const claimed = {
         ...current,
         status: "running",
+        updatedAt: now,
+        leaseOwner: workerId,
+        leaseUntil: now + leaseMs,
+        heartbeatAt: now,
+        attemptCount: current.attemptCount + 1,
+      } satisfies PptPreviewJobRecord
+      jobs.set(jobId, claimed)
+      return claimed
+    },
+    async heartbeatJob(jobId, workerId, leaseMs) {
+      const current = jobs.get(jobId)
+      const now = Date.now()
+      if (!current || current.status !== "running" || current.leaseOwner !== workerId) return false
+      jobs.set(jobId, {
+        ...current,
+        updatedAt: now,
+        leaseUntil: now + leaseMs,
+        heartbeatAt: now,
+      })
+      return true
+    },
+    async releaseLease(jobId, workerId) {
+      const current = jobs.get(jobId)
+      if (!current || current.leaseOwner !== workerId) return false
+      jobs.set(jobId, {
+        ...current,
+        status: "queued",
+        leaseOwner: null,
+        leaseUntil: null,
+        heartbeatAt: null,
         updatedAt: Date.now(),
       })
+      return true
     },
-    async completeJob(jobId, result) {
+    async completeJob(jobId, workerId, result) {
       const current = jobs.get(jobId)
-      if (!current) return
+      if (!current || current.leaseOwner !== workerId) return false
       jobs.set(jobId, {
         ...current,
         status: "completed",
         result,
+        leaseOwner: null,
+        leaseUntil: null,
+        heartbeatAt: null,
         errorCode: null,
         errorMessage: null,
         updatedAt: Date.now(),
       })
+      return true
     },
-    async failJob(jobId, error) {
+    async failJob(jobId, workerId, error) {
       const current = jobs.get(jobId)
-      if (!current) return
+      if (!current || current.leaseOwner !== workerId) return false
       jobs.set(jobId, {
         ...current,
         status: "failed",
         result: null,
+        leaseOwner: null,
+        leaseUntil: null,
+        heartbeatAt: null,
         errorCode: error.code,
         errorMessage: error.message,
         updatedAt: Date.now(),
       })
+      return true
     },
     async clearForTests() {
       jobs.clear()
