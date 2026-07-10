@@ -993,36 +993,8 @@ function prepareGeneratedSvg(raw: string) {
   )
 }
 
-function cleanupRuntimeSvgVisibleText(context: PptMasterPreviewRuntimeSlideContext, rawText: string) {
-  if (context.deck.language !== "zh-CN") {
-    return rawText
-  }
-
-  const normalized = rawText
-    .replace(/&quot;/g, "\"")
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&")
-
-  const cleaned = normalized
-    .replace(/\b(?:GRIDBRIEF|PROOFGRID|SIGNALCOUNT|SPREADMAP)\b/giu, "")
-    .replace(/\b(?:product-launch|sales-deck|marketing-campaign|training)\b/giu, "")
-    .replace(/\bEnterprise AI Marketing Workspace\b/giu, "")
-    .replace(/\b(?:module-rail|executive flow|grid-hero|decision-grid|proof-grid|signal-chart-board|signal-count-grid|action-sequence-close|action-broadside|closing-broadside)\b/giu, "")
-    .replace(/\s*[·/|-]\s*(?=$)/gu, "")
-    .replace(/^[\s·/|-]+|[\s·/|-]+$/gu, "")
-    .replace(/\s{2,}/g, " ")
-
-  return escapeXml(cleaned.trim())
-}
-
-function postprocessGeneratedSvg(context: PptMasterPreviewRuntimeSlideContext, svg: string) {
-  return svg.replace(/<text\b([^>]*)>([^<]*)<\/text>/giu, (_match, attrs: string, rawText: string) => {
-    const cleanedText = cleanupRuntimeSvgVisibleText(context, rawText)
-    if (!cleanedText) {
-      return ""
-    }
-    return `<text${attrs}>${cleanedText}</text>`
-  })
+function postprocessGeneratedSvg(_context: PptMasterPreviewRuntimeSlideContext, svg: string) {
+  return svg
 }
 
 async function repairStoredSvgFinalDirectory(svgDir: string) {
@@ -2298,7 +2270,6 @@ export const __testables__ = {
   readManifest,
   compactRuntimeText,
   normalizeRuntimeDeckCopy,
-  cleanupRuntimeSvgVisibleText,
   prepareGeneratedSvg,
   postprocessGeneratedSvg,
   buildEmergencyRuntimeSvg,

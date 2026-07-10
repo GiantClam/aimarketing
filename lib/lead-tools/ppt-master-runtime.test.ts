@@ -730,28 +730,3 @@ test("svg postprocess keeps generated svg unchanged", () => {
 
   assert.equal(__testables__.postprocessGeneratedSvg(context, svg), svg)
 })
-
-test("svg postprocess removes visible metadata chrome from zh slides", () => {
-  const context = {
-    deck: {
-      title: "deck",
-      scenario: "product-launch",
-      language: "zh-CN",
-      generatedAt: "2026-06-24T00:00:00.000Z",
-      outline: [],
-      variants: [],
-    },
-  } as any
-
-  const svg = `<svg>
-    <text x="60" y="40">GRIDBRIEF</text>
-    <text x="120" y="40">Enterprise AI Marketing Workspace</text>
-    <text x="180" y="40">product-launch</text>
-    <text x="240" y="40">module-rail / executive flow</text>
-    <text x="300" y="40">企业AI营销工作台</text>
-  </svg>`
-
-  const cleaned = __testables__.postprocessGeneratedSvg(context, svg)
-  assert.doesNotMatch(cleaned, /GRIDBRIEF|Enterprise AI Marketing Workspace|product-launch|module-rail|executive flow/u)
-  assert.match(cleaned, /企业AI营销工作台/u)
-})
