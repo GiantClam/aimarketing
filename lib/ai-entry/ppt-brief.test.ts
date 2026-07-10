@@ -117,6 +117,40 @@ test("buildPptBriefConfirmationMessage presents a complete brief and persists it
   assert.equal(context?.scenario, "training")
 })
 
+test("brief follow-up edits merge into the existing brief instead of becoming a new topic", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "做一个日本地震现状的 PPT，受众是初级军事爱好者，场景是课堂讲解，目标是培训讲解，语言是中文，12页。",
+      "把页数改为 8 页",
+    ],
+  })
+
+  assert.equal(state.pageCount, 8)
+  assert.equal(state.audience, "初级军事爱好者")
+  assert.equal(state.scenario, "training")
+  assert.equal(state.language, "zh-CN")
+  assert.match(state.topic || "", /日本地震现状/)
+  assert.doesNotMatch(state.topic || "", /页数改为|改为 8 页/)
+})
+
+test("brief follow-up edits can update every editable brief field", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "做一个日本地震现状的 PPT，受众是初级军事爱好者，场景是课堂讲解，目标是培训讲解，语言是中文，12页。",
+      "主题改为日本地震风险简报；受众改为企业管理层；目标改为战略决策同步；场景改为战略汇报；语言改为英文；页数改为 8 页；风格改为数据驱动；必须包含改为风险地图、行动建议。",
+    ],
+  })
+
+  assert.equal(state.topic, "日本地震风险简报")
+  assert.equal(state.audience, "企业管理层")
+  assert.equal(state.goal, "战略决策同步")
+  assert.equal(state.scenario, "sales-deck")
+  assert.equal(state.language, "en-US")
+  assert.equal(state.pageCount, 8)
+  assert.equal(state.tone, "数据驱动")
+  assert.deepEqual(state.mustInclude, ["风险地图", "行动建议"])
+})
+
 test("brief confirmation markers are hidden from the rendered assistant reply", () => {
   const state = extractPptBriefState({
     userMessages: ["做一个日本近期地震的 PPT，受众是初级军事爱好者，场景是课堂讲解，目标是培训讲解，语言是中文。"],

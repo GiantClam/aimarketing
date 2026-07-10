@@ -73,14 +73,26 @@ function readOptionalStringArray(value: unknown) {
     .filter(Boolean)
 }
 
+const BRIEF_FIELD_PREFIX = String.raw`(?:^|[;\n；。,.，]\s*|(?:请|帮我|我想|希望)?\s*(?:把|将)\s*(?:这份\s*)?(?:PPT|演示稿)?\s*)`
+const BRIEF_FIELD_ASSIGNMENT = String.raw`(?:\s*请)?\s*(?:[:=：]|是|改为|改成|调整为|设置为|修改为|换成|变更为|变为|to)`
+const BRIEF_FIELD_VALUE = String.raw`\s*([^\n;；。,.，]+)`
+const BRIEF_PAGE_COUNT_VALUE = String.raw`\s*(\d{1,2})\s*(?:页|p\b|pages?|slides?)?`
+
 const EXPLICIT_BRIEF_FIELD_PATTERNS = {
-  audience: /(?:^|[;\n；。,.，]\s*)(?:受众|对象|audience)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
-  goal: /(?:^|[;\n；。,.，]\s*)(?:目标|目的|goal|objective)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
-  scenario: /(?:^|[;\n；。,.，]\s*)(?:场景|用途|scenario|use case)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
-  language: /(?:^|[;\n；。,.，]\s*)(?:语言|lang(?:uage)?)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
-  pageCount: /(?:^|[;\n；。,.，]\s*)(?:页数|页码|slide count|page count|pages?|slides?)\s*(?:[:=：]|是)\s*(\d{1,2})/giu,
-  tone: /(?:^|[;\n；。,.，]\s*)(?:语气|风格|tone|style)\s*(?:[:=：]|是)\s*([^\n;；。,.，]+)/giu,
-  mustInclude: /(?:^|[;\n；。]\s*)(?:必须包含|包括|包含|must include|include)\s*[:=：]\s*([^\n]+)/giu,
+  topic: new RegExp(`${BRIEF_FIELD_PREFIX}(?:主题|题目|topic)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
+  audience: new RegExp(`${BRIEF_FIELD_PREFIX}(?:受众|对象|audience)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
+  goal: new RegExp(`${BRIEF_FIELD_PREFIX}(?:目标|目的|goal|objective)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
+  scenario: new RegExp(`${BRIEF_FIELD_PREFIX}(?:场景|用途|scenario|use case)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
+  language: new RegExp(`${BRIEF_FIELD_PREFIX}(?:语言|lang(?:uage)?)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
+  pageCount: new RegExp(
+    `${BRIEF_FIELD_PREFIX}(?:页数|页码|slide count|page count|pages?|slides?)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_PAGE_COUNT_VALUE}`,
+    "giu",
+  ),
+  tone: new RegExp(`${BRIEF_FIELD_PREFIX}(?:语气|风格|tone|style)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`, "giu"),
+  mustInclude: new RegExp(
+    `${BRIEF_FIELD_PREFIX}(?:必须包含|包括|包含|must include|include)${BRIEF_FIELD_ASSIGNMENT}${BRIEF_FIELD_VALUE}`,
+    "giu",
+  ),
 } as const
 
 function readLastExplicitFieldValue(pattern: RegExp, text: string) {
@@ -104,6 +116,7 @@ function normalizeExplicitPageCount(value: string | null) {
 }
 
 function extractExplicitBriefFields(text: string): {
+  topic: string | null
   audience: string | null
   goal: string | null
   scenario: PptBriefScenario | null
@@ -113,6 +126,7 @@ function extractExplicitBriefFields(text: string): {
   mustInclude: string[]
 } {
   const audience = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.audience, text)
+  const topic = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.topic, text)
   const goal = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.goal, text)
   const scenarioText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.scenario, text)
   const languageText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.language, text)
@@ -120,6 +134,7 @@ function extractExplicitBriefFields(text: string): {
   const mustIncludeText = readLastExplicitFieldValue(EXPLICIT_BRIEF_FIELD_PATTERNS.mustInclude, text)
 
   return {
+    topic,
     audience,
     goal,
     scenario: scenarioText ? inferScenario(scenarioText) : null,
@@ -305,7 +320,7 @@ export function extractPptBriefState(input: {
           combinedText.match(/(?:必须包含|包括|包含|must include|include)\s*[:：]\s*(.+)$/imu)?.[1]
             ?.split(/[，,、;；]/u),
         )
-  const topic = inferTopic(userMessages)
+  const topic = explicitFields.topic || inferTopic(userMessages)
   const suggestedValues = buildSuggestedValues({
     scenario,
     language,
