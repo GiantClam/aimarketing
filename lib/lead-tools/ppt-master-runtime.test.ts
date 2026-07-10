@@ -210,13 +210,13 @@ test("runtime deck normalization preserves agenda copy for slide generation", ()
   assert.equal(slide?.bullets[4], "行动顺序与处置节奏")
 })
 
-test("emergency runtime svg renders agenda slide without treating provider timeout as recoverable", () => {
-  assert.equal(__testables__.isRecoverableRuntimeSlideFailure("ppt_master_runtime_slide_timeout"), false)
+test("emergency runtime svg renders agenda slide while timeouts remain retryable", () => {
+  assert.equal(__testables__.isRecoverableRuntimeSlideFailure("ppt_master_runtime_slide_timeout"), true)
   assert.equal(
     __testables__.isRecoverableRuntimeSlideFailure(
       "ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
     ),
-    false,
+    true,
   )
   assert.equal(__testables__.isRecoverableRuntimeSlideFailure("provider_quota_exceeded"), false)
 
@@ -270,7 +270,7 @@ test("emergency runtime svg renders agenda slide without treating provider timeo
   assert.match(svg, /agenda-row-1/u)
 })
 
-test("runtime rejects incomplete variants after provider timeouts even if later slides succeed", async () => {
+test("runtime retries provider timeouts and then fails the variant without continuing", async () => {
   const mutableEnv = process.env as Record<string, string | undefined>
   const previousRepoDir = mutableEnv.PPT_MASTER_REPO_DIR
   const previousStore = mutableEnv.PPT_MASTER_SESSION_STORE
@@ -363,10 +363,10 @@ test("runtime rejects incomplete variants after provider timeouts even if later 
             },
           },
         ),
-      /ppt_master_runtime_incomplete_variant:timeout-variant:02_comparison=ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed/u,
+      /ppt_master_runtime_slide_generation_failed:timeout-variant:02_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed/u,
     )
 
-    assert.deepEqual(calls, [0, 1, 2])
+    assert.deepEqual(calls, [0, 1, 1, 1])
   } finally {
     if (previousRepoDir === undefined) {
       delete mutableEnv.PPT_MASTER_REPO_DIR

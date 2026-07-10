@@ -831,12 +831,10 @@ function buildSlideFileBaseName(index: number, layout: PptPreviewSlide["layout"]
 function isRecoverableRuntimeSlideFailure(detail: string) {
   return (
     detail === "lead_tool_preview_empty_response" ||
-    detail === "ppt_master_runtime_slide_svg_invalid"
+    detail === "ppt_master_runtime_slide_svg_invalid" ||
+    detail === "ppt_master_runtime_slide_timeout" ||
+    detail.startsWith("ppt_master_runtime_provider_timeout:")
   )
-}
-
-function isContinuableRuntimeSlideFailure(detail: string) {
-  return detail === "ppt_master_runtime_slide_timeout" || detail.startsWith("ppt_master_runtime_provider_timeout:")
 }
 
 function formatFailedRuntimeSlideRuns(slideRuns: StoredVariantSlideRun[]) {
@@ -1982,25 +1980,6 @@ async function materializeVariantProject(params: {
           attemptResult = await options.generateSlideSvg(slideContext)
         } catch (error) {
           const detail = error instanceof Error ? error.message : "unknown_error"
-          if (isContinuableRuntimeSlideFailure(detail)) {
-            await fs.writeFile(
-              path.join(projectDir, "notes", `${slideFileBaseName}.md`),
-              buildNoteMarkdown(slide.title, slide.body, slide.bullets),
-              "utf8",
-            )
-            normalizedSlides.push(slide)
-            slideRuns.push({
-              slideId: slide.id,
-              layout: slide.layout,
-              fileBaseName: slideFileBaseName,
-              status: "failed",
-              durationMs: Date.now() - slideStartedAt,
-              fallbackReason: null,
-              error: detail,
-            })
-            result = null
-            break
-          }
           if (!isRecoverableRuntimeSlideFailure(detail)) {
             throw new Error(`ppt_master_runtime_slide_generation_failed:${variant.key}:${slideFileBaseName}:${detail}`)
           }
@@ -2087,10 +2066,6 @@ async function materializeVariantProject(params: {
         fallbackReason = attemptFallbackReason ?? detail
         break
       }
-    }
-
-    if (!result && slideRuns.at(-1)?.fileBaseName === slideFileBaseName && slideRuns.at(-1)?.status === "failed") {
-      continue
     }
 
     if (!result) {
