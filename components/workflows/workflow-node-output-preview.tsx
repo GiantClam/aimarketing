@@ -7,7 +7,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { copyTextToClipboard } from "@/lib/browser/clipboard"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 type WorkflowNodeOutputPreviewProps = {
@@ -688,6 +688,7 @@ export function WorkflowNodeOutputPreview({
       <Dialog open={Boolean(activeImageItem)} onOpenChange={(open) => (!open ? setActiveImageItem(null) : null)}>
         <DialogContent className="max-w-5xl border-border bg-background/95 p-3 sm:p-4">
           <DialogTitle className="sr-only">{activeImageItem?.title ?? copy.image}</DialogTitle>
+          <DialogDescription className="sr-only">{copy.title}</DialogDescription>
           {activeImageItem?.url ? (
             <img
               src={activeImageItem.url}
@@ -701,6 +702,7 @@ export function WorkflowNodeOutputPreview({
       <Dialog open={Boolean(activeVideoItem)} onOpenChange={(open) => (!open ? setActiveVideoItem(null) : null)}>
         <DialogContent className="max-w-5xl border-border bg-background/95 p-3 sm:p-4">
           <DialogTitle className="sr-only">{activeVideoItem?.title ?? copy.video}</DialogTitle>
+          <DialogDescription className="sr-only">{copy.title}</DialogDescription>
           {activeVideoItem?.url ? (
             <video
               key={activeVideoItem.url}

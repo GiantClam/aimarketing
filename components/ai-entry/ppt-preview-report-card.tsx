@@ -13,7 +13,7 @@ import {
   Loader2,
 } from "lucide-react"
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
   resolvePptPreviewDisplayTitle,
@@ -442,6 +442,7 @@ export function PptPreviewReportCard({
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="max-w-6xl border-border bg-background/95 p-3 sm:p-4">
           <DialogTitle className="sr-only">{copy.previewTitle}</DialogTitle>
+          <DialogDescription className="sr-only">{copy.title}</DialogDescription>
           <div className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3 pr-10">
               <div>

@@ -388,6 +388,7 @@ export function WorkspaceWorkLibrary({
       <Dialog open={Boolean(activePreviewItem)} onOpenChange={(open) => (!open ? setActivePreviewItem(null) : null)}>
         <DialogContent className="max-w-5xl border-border bg-background/95 p-4 sm:p-5">
           <DialogTitle className="sr-only">{activePreviewItem?.title ?? copy.open}</DialogTitle>
+          <DialogDescription className="sr-only">{activePreviewItem?.title ?? copy.open}</DialogDescription>
           {activePreviewItem?.previewKind === "image" ? (
             <img
               src={activePreviewItem.previewUrl}

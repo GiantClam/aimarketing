@@ -1710,6 +1710,7 @@ export function WorkspaceAssetLibrary({
       <Dialog open={Boolean(previewItem)} onOpenChange={(open) => (!open ? setPreviewItem(null) : null)}>
         <DialogContent className="max-w-5xl border-border bg-background/95 p-4 sm:p-5">
           <DialogTitle className="sr-only">{previewItem?.title ?? copy.preview}</DialogTitle>
+          <DialogDescription className="sr-only">{previewItem?.title ?? copy.preview}</DialogDescription>
           {previewItem?.previewKind === "image" ? (
             <img src={previewItem.previewUrl} alt={previewItem.title} className="max-h-[80vh] w-full rounded-[10px] object-contain" />
           ) : null}
