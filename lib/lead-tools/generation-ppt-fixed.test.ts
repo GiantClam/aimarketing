@@ -768,6 +768,37 @@ test("runtime slide execution uses dedicated runtime slide model/provider config
   }
 })
 
+test("runtime slide execution defaults to pptoken/gpt-5.4 when no override is provided", () => {
+  const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  assert.deepEqual(
+    resolveRuntimeSlideExecutionConfig({
+      previewModel: "deepseek-v4-pro",
+      provider: "deepseek",
+    } as any),
+    {
+      requestedModel: "gpt-5.4",
+      preferredProviderId: "pptoken",
+    },
+  )
+
+  if (previousRuntimeSlideModel === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = previousRuntimeSlideModel
+  }
+
+  if (previousRuntimeSlideProvider === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = previousRuntimeSlideProvider
+  }
+})
+
 test("runtime slide execution prefers explicit deck-level config before env fallback", () => {
   const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
   const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER

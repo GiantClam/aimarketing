@@ -187,7 +187,10 @@ export function resolveRuntimeSlideExecutionConfig(
   const inferredProviderId = inferPreviewProviderId(requestedModel)
   const preferredProviderId = resolveLeadToolPreviewProviderPreference(
     requestedModel,
-    normalizeText(deck.runtimeSlideProvider) || getLeadToolPptRuntimeSlideProvider() || inferredProviderId || deck.provider,
+    normalizeText(deck.runtimeSlideProvider) ||
+      getLeadToolPptRuntimeSlideProvider() ||
+      inferredProviderId ||
+      "pptoken",
   )
 
   return {

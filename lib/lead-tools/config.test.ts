@@ -235,7 +235,7 @@ test("ppt worker base url upgrades preview runtime and transport defaults", () =
   }
 })
 
-test("ppt runtime slide config prefers explicit overrides and disables emergency fallback by default", () => {
+test("ppt runtime slide config defaults to gpt-5.4 and prefers explicit overrides", () => {
   const previousTimeout = process.env.PPT_MASTER_SLIDE_TIMEOUT_MS
   const previousScopedTimeout = process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN
   const previousScopedModelTimeout = process.env.PPT_MASTER_SLIDE_TIMEOUT_MS_PPTOKEN_GPT_5_4
@@ -258,7 +258,7 @@ test("ppt runtime slide config prefers explicit overrides and disables emergency
     assert.equal(getPptMasterSlideTimeoutMs(), 12 * 60 * 1000)
     assert.equal(resolvePptMasterSlideTimeoutMs({ provider: "pptoken", model: "gpt-5.4" }), 12 * 60 * 1000)
     assert.equal(allowPptMasterEmergencyFallback(), false)
-    assert.equal(getLeadToolPptRuntimeSlideModel(), "MiniMax-M2.7-highspeed")
+    assert.equal(getLeadToolPptRuntimeSlideModel(), "gpt-5.4")
     assert.equal(getLeadToolPptRuntimeSlideProvider(), "")
     assert.equal(getLeadToolPptPreviewProvider(), "")
 
