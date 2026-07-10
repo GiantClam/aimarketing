@@ -5,7 +5,7 @@ import { extractPptBriefState } from "@/lib/ai-entry/ppt-brief"
 
 import { maybeAutoRunPptPreview, shouldAutoRunPptPreview } from "./ppt-auto-preview"
 
-test("shouldAutoRunPptPreview auto-generates previews once the brief is ready", () => {
+test("shouldAutoRunPptPreview requires a selected recommended template for editable PPT chat", () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -19,7 +19,7 @@ test("shouldAutoRunPptPreview auto-generates previews once the brief is ready", 
       previewAlreadyExecuted: false,
       messageContents: [],
     }),
-    true,
+    false,
   )
 
   assert.equal(
@@ -35,7 +35,7 @@ test("shouldAutoRunPptPreview auto-generates previews once the brief is ready", 
   )
 })
 
-test("maybeAutoRunPptPreview chooses one official ppt-master template when none was selected", async () => {
+test("maybeAutoRunPptPreview does not choose a template before the user selects one", async () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -48,29 +48,13 @@ test("maybeAutoRunPptPreview chooses one official ppt-master template when none 
     briefState: readyState,
     previewAlreadyExecuted: false,
     messageContents: [],
-    previewTool: {
-      execute: async (input: unknown) => {
-        const record = input as Record<string, unknown>
-        assert.equal(record.templateMode, "single-template")
-        assert.equal(typeof record.templateId, "string")
-        assert.notEqual(record.templateId, "auto-4")
-        return {
-          ok: true,
-          previewSessionId: "preview-session-1",
-          title: "AI Marketing Workbench",
-          variants: [{ key: "variant-a", name: "Official ppt-master template" }],
-          recommendedVariantKey: "variant-a",
-          recommendedVariantName: "Official ppt-master template",
-        }
-      },
-    },
+    previewTool: { execute: async () => assert.fail("preview must not run before template selection") },
     origin: "https://example.com",
     isZh: true,
   })
 
-  assert.equal(result.autoPreviewExecuted, true)
-  assert.match(result.assistantMessage, /已生成 PPT 预览/)
-  assert.match(result.assistantMessage, /preview-session-1/)
+  assert.equal(result.autoPreviewExecuted, false)
+  assert.equal(result.assistantMessage, "下面是建议的页结构。")
 })
 
 test("maybeAutoRunPptPreview removes stale template recommendation blocks when generating preview", async () => {
@@ -81,7 +65,7 @@ test("maybeAutoRunPptPreview removes stale template recommendation blocks when g
   const result = await maybeAutoRunPptPreview({
     agentId: "executive-ppt",
     executionContext: "chat",
-    latestUserPrompt: "继续，直接生成 PPT 预览。",
+    latestUserPrompt: "使用 ppt169_sugar_rush_memphis 模板，继续生成 PPT 预览。",
     assistantMessage: [
       "下面是建议的页结构。",
       "",
@@ -94,7 +78,9 @@ test("maybeAutoRunPptPreview removes stale template recommendation blocks when g
     ].join("\n"),
     briefState: readyState,
     previewAlreadyExecuted: false,
-    messageContents: [],
+    messageContents: [
+      "<!-- ai-entry-ppt-template-recommendations:{\"defaultTemplateId\":\"ppt169_global_ai_capital_2026\",\"templateIds\":[\"ppt169_global_ai_capital_2026\",\"ppt169_sugar_rush_memphis\"]} -->",
+    ],
     previewTool: {
       execute: async () => ({
         ok: true,
@@ -160,7 +146,7 @@ test("maybeAutoRunPptPreview auto-generates editable ppt after the user selects 
   assert.match(result.assistantMessage, /preview-session-1/)
 })
 
-test("maybeAutoRunPptPreview ignores frontend catalog aliases for editable ppt auto-generation", async () => {
+test("maybeAutoRunPptPreview does not accept a template that was not offered", async () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -173,26 +159,10 @@ test("maybeAutoRunPptPreview ignores frontend catalog aliases for editable ppt a
     briefState: readyState,
     previewAlreadyExecuted: false,
     messageContents: [],
-    previewTool: {
-      execute: async (input: unknown) => {
-        const record = input as Record<string, unknown>
-        assert.equal(record.templateMode, "single-template")
-        assert.equal(typeof record.templateId, "string")
-        assert.notEqual(record.templateId, "academic-defense")
-        return {
-          ok: true,
-          previewSessionId: "preview-session-academic",
-          title: "Academic Defense",
-          variants: [{ key: "variant-a", name: "Academic Defense" }],
-          recommendedVariantKey: "variant-a",
-          recommendedVariantName: "Academic Defense",
-        }
-      },
-    },
+    previewTool: { execute: async () => assert.fail("preview must not run for an unoffered template") },
     isZh: true,
   })
 
-  assert.equal(result.autoPreviewExecuted, true)
-  assert.match(result.assistantMessage, /已生成 PPT 预览/)
-  assert.match(result.assistantMessage, /preview-session-academic/)
+  assert.equal(result.autoPreviewExecuted, false)
+  assert.equal(result.assistantMessage, "好的。")
 })

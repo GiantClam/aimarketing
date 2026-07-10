@@ -57,12 +57,26 @@ import {
 import { buildAiEntryToolRegistry } from "@/lib/ai-entry/tool-registry"
 import { maybeAutoRunPptPreview } from "@/lib/ai-entry/ppt-auto-preview"
 import {
+  buildPptBriefConfirmationMessage,
   buildPptBriefClarificationMessage,
   buildPptBriefPromptSection,
+  buildPptTemplateRecommendationSource,
+  extractLatestPptBriefConfirmationContext,
   extractPptBriefState,
+  isPptBriefConfirmationReply,
 } from "@/lib/ai-entry/ppt-brief"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
-import { buildPptToolResultMessage, stripPptArtifactRelativeLinks } from "@/lib/ai-entry/ppt-tool-result-message"
+import {
+  buildPptTemplateRecommendationMessage,
+  buildPptToolResultMessage,
+  extractLatestPptTemplateRecommendationContext,
+  resolvePptTemplateSelectionFromUserText,
+  stripPptArtifactRelativeLinks,
+} from "@/lib/ai-entry/ppt-tool-result-message"
+import {
+  buildPptMasterRecommendedTemplateSummaries,
+  getPptWorkerSupportedTemplateIds,
+} from "@/lib/lead-tools/ppt-worker-capabilities"
 import {
   buildResearchBriefContextMarker,
   buildResearchBriefFromWebSearchResult,
@@ -988,6 +1002,14 @@ export async function POST(request: NextRequest) {
     const hasPersistedPptPreviewContext = normalizedMessageContents.some((content) =>
       content.includes("ai-entry-ppt-preview-context"),
     )
+    const latestBriefConfirmationContext = normalizedMessageContents
+      .map((content) => extractLatestPptBriefConfirmationContext(content))
+      .filter((value): value is NonNullable<typeof value> => Boolean(value))
+      .at(-1) ?? null
+    const latestTemplateRecommendationContext = normalizedMessageContents
+      .map((content) => extractLatestPptTemplateRecommendationContext(content))
+      .filter((value): value is NonNullable<typeof value> => Boolean(value))
+      .at(-1) ?? null
     if (pptBriefState) {
       resolvedInstruction = [resolvedInstruction, buildPptBriefPromptSection(pptBriefState)]
         .map((section) => section.trim())
@@ -999,46 +1021,97 @@ export async function POST(request: NextRequest) {
       executionContext !== "workflow" &&
       effectiveAgentId === "executive-ppt" &&
       pptBriefState &&
-      !pptBriefState.readyForPreview &&
       conversationState.ppt.phase !== "preview-ready" &&
       conversationState.ppt.phase !== "exported" &&
       !hasPersistedPptPreviewContext
     ) {
-      const clarificationMessage = buildPptBriefClarificationMessage(pptBriefState, isZh)
-
-      if (persistenceEnabled) {
-        await persistAiEntryTurnSafe({
-          userId: currentUser.id,
-          conversationId,
-          assistantMessage: clarificationMessage,
-          scope: conversationScope,
-          agentId: agentConfig.agentId,
+      let gateMessage: string | null
+      if (!pptBriefState.readyForPreview) {
+        gateMessage = buildPptBriefClarificationMessage(pptBriefState, isZh)
+      } else if (latestTemplateRecommendationContext) {
+        const selectedTemplateId = resolvePptTemplateSelectionFromUserText(
+          latestUserPrompt,
+          latestTemplateRecommendationContext,
+        )
+        gateMessage = selectedTemplateId
+          ? null
+          : buildPptTemplateRecommendationMessage({
+              recommendedTemplates: latestTemplateRecommendationContext.templateIds.map((templateId, index) => {
+                const template = latestTemplateRecommendationContext.templates?.find(
+                  (item) => item.templateId === templateId,
+                )
+                return {
+                  rank: index + 1,
+                  templateId,
+                  templateLabel: template?.labels[0] || templateId,
+                  styleName: template?.labels[1] || null,
+                }
+              }),
+              selectedTemplateId: latestTemplateRecommendationContext.defaultTemplateId,
+              isZh,
+            })
+      } else if (
+        latestBriefConfirmationContext &&
+        isPptBriefConfirmationReply(latestUserPrompt)
+      ) {
+        const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
+          {
+            prompt: buildPptTemplateRecommendationSource({
+              briefState: pptBriefState,
+              latestUserPrompt: latestBriefConfirmationContext.sourcePrompt,
+            }),
+            scenario: pptBriefState.scenario || "marketing-campaign",
+            language: pptBriefState.language || "zh-CN",
+            pageCount: pptBriefState.pageCount ?? undefined,
+          },
+          {
+            allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
+          },
+        )
+        gateMessage = buildPptTemplateRecommendationMessage({
+          title: latestBriefConfirmationContext.sourcePrompt || pptBriefState.topic,
+          recommendedTemplates,
+          isZh,
         })
+      } else {
+        gateMessage = buildPptBriefConfirmationMessage(pptBriefState, isZh)
       }
 
-      if (!stream) {
-        return NextResponse.json({
-          conversationId,
-          message: clarificationMessage,
-        })
-      }
+      if (gateMessage) {
+        if (persistenceEnabled) {
+          await persistAiEntryTurnSafe({
+            userId: currentUser.id,
+            conversationId,
+            assistantMessage: gateMessage,
+            scope: conversationScope,
+            agentId: agentConfig.agentId,
+          })
+        }
 
-      return createImmediateSseResponse([
-        {
-          event: "conversation_init",
-          conversation_id: conversationId,
-        },
-        {
-          event: "message",
-          conversation_id: conversationId,
-          answer: clarificationMessage,
-        },
-        {
-          event: "message_end",
-          conversation_id: conversationId,
-          answer: clarificationMessage,
-        },
-      ])
+        if (!stream) {
+          return NextResponse.json({
+            conversationId,
+            message: gateMessage,
+          })
+        }
+
+        return createImmediateSseResponse([
+          {
+            event: "conversation_init",
+            conversation_id: conversationId,
+          },
+          {
+            event: "message",
+            conversation_id: conversationId,
+            answer: gateMessage,
+          },
+          {
+            event: "message_end",
+            conversation_id: conversationId,
+            answer: gateMessage,
+          },
+        ])
+      }
     }
 
     const toolRegistry = await buildAiEntryToolRegistry({

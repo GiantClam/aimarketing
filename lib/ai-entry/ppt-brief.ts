@@ -33,6 +33,20 @@ export type PptBriefState = {
   }
 }
 
+export type PptBriefConfirmationContext = {
+  sourcePrompt: string | null
+  audience: string
+  goal: string
+  scenario: PptBriefScenario
+  language: PptBriefLanguage
+  pageCount: number | null
+  tone: string | null
+  mustInclude: string[]
+}
+
+const PPT_BRIEF_CONFIRMATION_CONTEXT_PREFIX = "<!-- ai-entry-ppt-brief-confirmation:"
+const PPT_BRIEF_CONFIRMATION_CONTEXT_SUFFIX = " -->"
+
 type PreparedPreviewInput = {
   prompt: string
   sourcePrompt?: string
@@ -319,6 +333,109 @@ export function extractPptBriefState(input: {
     readyForPreview: missingFields.length === 0,
     suggestedValues,
   } satisfies PptBriefState
+}
+
+function normalizePptBriefConfirmationContext(value: unknown): PptBriefConfirmationContext | null {
+  if (!value || typeof value !== "object") return null
+  const record = value as Record<string, unknown>
+  const audience = readOptionalString(record.audience)
+  const goal = readOptionalString(record.goal)
+  const scenario = record.scenario
+  const language = record.language
+  if (
+    !audience ||
+    !goal ||
+    (scenario !== "marketing-campaign" && scenario !== "product-launch" && scenario !== "sales-deck" && scenario !== "training") ||
+    (language !== "zh-CN" && language !== "en-US")
+  ) {
+    return null
+  }
+
+  return {
+    sourcePrompt: readOptionalString(record.sourcePrompt),
+    audience,
+    goal,
+    scenario,
+    language,
+    pageCount: typeof record.pageCount === "number" && Number.isFinite(record.pageCount) ? record.pageCount : null,
+    tone: readOptionalString(record.tone),
+    mustInclude: readOptionalStringArray(record.mustInclude),
+  }
+}
+
+export function extractLatestPptBriefConfirmationContext(
+  content: string | null | undefined,
+): PptBriefConfirmationContext | null {
+  if (typeof content !== "string" || !content.trim()) return null
+  const markerPattern = new RegExp(
+    `${PPT_BRIEF_CONFIRMATION_CONTEXT_PREFIX.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(\\{[\\s\\S]*?\\})\\s*-->`,
+    "gu",
+  )
+  const matches = [...content.matchAll(markerPattern)]
+  const serializedContext = matches.at(-1)?.[1]
+  if (!serializedContext) return null
+
+  try {
+    return normalizePptBriefConfirmationContext(JSON.parse(serializedContext))
+  } catch {
+    return null
+  }
+}
+
+export function isPptBriefConfirmationReply(value: string | null | undefined) {
+  const normalized = readOptionalString(value)?.toLowerCase() ?? ""
+  if (!normalized) return false
+  if (/(?:确认|确认了|好的|可以|同意|确认无误|confirm|confirmed)(?:\s*(?:brief|需求|方案|以上|上述))?(?:\s*[,，]?\s*(?:继续|进入下一步|continue))?$/iu.test(normalized)) {
+    return true
+  }
+  return /(?:brief|需求|方案)\s*(?:确认|已确认|无误)(?:\s*[,，]?\s*(?:继续|进入下一步|continue))?$/iu.test(normalized)
+}
+
+export function buildPptBriefConfirmationMessage(state: PptBriefState, isZh: boolean) {
+  if (!state.readyForPreview || !state.audience || !state.goal || !state.scenario || !state.language) {
+    return buildPptBriefClarificationMessage(state, isZh)
+  }
+
+  const context: PptBriefConfirmationContext = {
+    sourcePrompt: state.topic,
+    audience: state.audience,
+    goal: state.goal,
+    scenario: state.scenario,
+    language: state.language,
+    pageCount: state.pageCount,
+    tone: state.tone,
+    mustInclude: state.mustInclude,
+  }
+  const marker = `${PPT_BRIEF_CONFIRMATION_CONTEXT_PREFIX}${JSON.stringify(context)}${PPT_BRIEF_CONFIRMATION_CONTEXT_SUFFIX}`
+  const lines = isZh
+    ? [
+        "PPT brief 已整理，请先确认：",
+        `- 主题：${state.topic || "未命名演示"}`,
+        `- 受众：${state.audience}`,
+        `- 目标：${state.goal}`,
+        `- 场景：${state.scenario}`,
+        `- 语言：${state.language === "zh-CN" ? "中文" : "英文"}`,
+        `- 页数：${state.pageCount || state.suggestedValues.pageCount}`,
+        `- 风格：${state.tone || state.suggestedValues.tone}`,
+        state.mustInclude.length > 0 ? `- 必须包含：${state.mustInclude.join("；")}` : null,
+        "回复“确认 brief”进入模板选择；如需修改，请直接指出字段。",
+        marker,
+      ]
+    : [
+        "Your PPT brief is ready. Please confirm it before choosing a template:",
+        `- Topic: ${state.topic || "Untitled presentation"}`,
+        `- Audience: ${state.audience}`,
+        `- Goal: ${state.goal}`,
+        `- Scenario: ${state.scenario}`,
+        `- Language: ${state.language}`,
+        `- Page count: ${state.pageCount || state.suggestedValues.pageCount}`,
+        `- Tone: ${state.tone || state.suggestedValues.tone}`,
+        state.mustInclude.length > 0 ? `- Must include: ${state.mustInclude.join("; ")}` : null,
+        'Reply "confirm brief" to choose a template, or specify the fields you want to change.',
+        marker,
+      ]
+
+  return lines.filter((line): line is string => Boolean(line)).join("\n")
 }
 
 export function buildPptBriefPromptSection(state: PptBriefState) {

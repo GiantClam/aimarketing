@@ -2,8 +2,11 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  buildPptBriefConfirmationMessage,
   buildPptBriefClarificationMessage,
+  extractLatestPptBriefConfirmationContext,
   extractPptBriefState,
+  isPptBriefConfirmationReply,
 } from "./ppt-brief"
 
 test("extractPptBriefState recognizes strategic briefing style follow-up prompts", () => {
@@ -95,4 +98,27 @@ test("extractPptBriefState reads comma-separated natural-language brief fields",
   assert.equal(state.language, "zh-CN")
   assert.equal(state.pageCount, 4)
   assert.equal(state.readyForPreview, true)
+})
+
+test("buildPptBriefConfirmationMessage presents a complete brief and persists its confirmation context", () => {
+  const state = extractPptBriefState({
+    userMessages: ["做一个日本近期地震的 PPT，受众是初级军事爱好者，场景是课堂讲解，目标是培训讲解，语言是中文，12页。"],
+  })
+
+  const message = buildPptBriefConfirmationMessage(state, true)
+  const context = extractLatestPptBriefConfirmationContext(message)
+
+  assert.match(message, /PPT brief 已整理/)
+  assert.match(message, /受众：初级军事爱好者/)
+  assert.match(message, /回复“确认 brief”/)
+  assert.equal(context?.sourcePrompt, state.topic)
+  assert.equal(context?.audience, "初级军事爱好者")
+  assert.equal(context?.scenario, "training")
+})
+
+test("isPptBriefConfirmationReply only accepts an explicit brief confirmation", () => {
+  assert.equal(isPptBriefConfirmationReply("确认 brief"), true)
+  assert.equal(isPptBriefConfirmationReply("brief 确认，继续"), true)
+  assert.equal(isPptBriefConfirmationReply("直接生成 PPT"), false)
+  assert.equal(isPptBriefConfirmationReply("确认使用第 2 个模板"), false)
 })
