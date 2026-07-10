@@ -2412,10 +2412,12 @@ export function AiEntryWorkspace({
   }, [attemptConversationRecovery, conversationId, hasStreamRecoveryPending, isConversationLoading, isResponseLoading])
 
   useEffect(() => {
-    const localPendingTasks = listAiEntryPendingTasks({
-      conversationId,
-      agentId: activePendingAgentId,
-    })
+    const localPendingTasks = conversationId
+      ? listAiEntryPendingTasks({
+          conversationId,
+          agentId: activePendingAgentId,
+        })
+      : []
     const activeTaskRunIds = [
       ...new Set([
         ...localPendingTasks.map((task) => task.taskId),
