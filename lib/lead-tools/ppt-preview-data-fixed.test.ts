@@ -12,6 +12,8 @@ import {
   pptPreviewStyles,
   resolveOptionalPptPreviewPageCount,
 } from "./ppt-preview-data-fixed"
+import { PPT_MASTER_TEMPLATE_MANIFEST } from "./ppt-master-template-manifest"
+import { resolvePptMasterTemplateStyleKey } from "./ppt-master-template-style"
 
 test("getPptPreviewStyleSummary falls back safely for unknown style keys", () => {
   assert.equal(getPptPreviewStyleSummary(undefined, "zh-CN"), "正式 AI PPT 模板。")
@@ -74,6 +76,32 @@ test("single-template variants honor official ppt-master template ids", () => {
   assert.equal(variants[0]?.key, "ppt169_glassmorphism_demo-executive-brief")
   assert.equal(variants[0]?.templateId, "ppt169_glassmorphism_demo")
   assert.equal(variants[0]?.style.key, "ppt169_glassmorphism_demo")
+})
+
+test("single-template variants resolve vendor ppt-master ids instead of falling back to auto-4", () => {
+  const variants = buildPptPreviewVariantDescriptors({
+    prompt: "生成一个阐述俄乌战争现状的 PPT",
+    scenario: "training",
+    language: "zh-CN",
+    templateMode: "single-template",
+    templateId: "google",
+    narrativeAngle: "executive-brief",
+  })
+
+  assert.equal(variants.length, 1)
+  assert.equal(variants[0]?.templateId, "google")
+  assert.equal(variants[0]?.style.key, "ppt169_building_effective_agents")
+})
+
+test("every imported ppt-master vendor template resolves to a local planning style", () => {
+  for (const template of PPT_MASTER_TEMPLATE_MANIFEST) {
+    const styleKey = resolvePptMasterTemplateStyleKey(template.id, template.quickLookup)
+    assert.ok(styleKey, `missing style mapping for ${template.id}`)
+    assert.ok(
+      pptPreviewStyles.some((style) => style.key === styleKey),
+      `unknown planning style ${styleKey} for ${template.id}`,
+    )
+  }
 })
 
 test("auto-4 recommends structured boardroom templates first for executive review prompts", () => {

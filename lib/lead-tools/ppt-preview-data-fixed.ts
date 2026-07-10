@@ -4,6 +4,7 @@ import {
   buildPreviewStyleKicker,
   buildPreviewStyleTitle,
 } from "@/lib/lead-tools/ppt-preview-copy"
+import { resolvePptMasterTemplateStyleKey } from "@/lib/lead-tools/ppt-master-template-style"
 
 export type PptScenario = "marketing-campaign" | "product-launch" | "sales-deck" | "training"
 export type PptLanguage = "zh-CN" | "en-US"
@@ -1155,7 +1156,10 @@ export function getPptPreviewStyleKeyByTemplateId(templateId: PptFrontendTemplat
     return templateId
   }
 
-  return getPptFrontendTemplateOption(templateId)?.styleKey ?? null
+  return (
+    getPptFrontendTemplateOption(templateId)?.styleKey ??
+    resolvePptMasterTemplateStyleKey(templateId)
+  ) as PptPreviewStyleKey | null
 }
 
 export function getPptPreviewNarrativeAngleOption(angle: PptPreviewNarrativeAngle) {

@@ -7,6 +7,7 @@ import {
   type PptRecommendedTemplateSummary,
 } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { PPT_MASTER_TEMPLATE_MANIFEST } from "@/lib/lead-tools/ppt-master-template-manifest"
+import { resolvePptMasterTemplateStyleKey } from "@/lib/lead-tools/ppt-master-template-style"
 
 type PptMasterLayoutsIndex = {
   categories?: Record<string, { label?: string; layouts?: string[] }>
@@ -488,26 +489,6 @@ function countTextMatches(text: string, candidates: readonly string[]) {
   return matches
 }
 
-function resolveStyleKeyForPptMasterTemplate(templateId: string, quickLookup: string[]): PptPreviewStyleKey {
-  if (templateId.startsWith("ppt169_")) return templateId as PptPreviewStyleKey
-  if (templateId === "anthropic" || templateId === "google" || templateId === "中国电信" || templateId === "ai_ops") {
-    return "ppt169_building_effective_agents"
-  }
-  if (templateId === "academic_defense") return "ppt169_attention_is_all_you_need"
-  if (templateId === "重庆大学") return "ppt169_attention_is_all_you_need"
-  if (templateId === "medical_university") return "ppt169_swiss_grid_systems"
-  if (templateId === "psychology_attachment") return "ppt169_sugar_rush_memphis"
-  if (templateId === "pixel_retro") return "ppt169_sugar_rush_memphis"
-  if (templateId === "government_red") return "ppt169_pritzker_2026"
-  if (templateId === "government_blue") return "ppt169_brutalist_ai_newspaper_2026"
-  if (templateId === "招商银行") return "ppt169_global_ai_capital_2026"
-  if (quickLookup.includes("academic")) return "ppt169_attention_is_all_you_need"
-  if (quickLookup.includes("technology")) return "ppt169_building_effective_agents"
-  if (quickLookup.includes("board") || quickLookup.includes("finance")) return "ppt169_global_ai_capital_2026"
-  if (quickLookup.includes("creative") || quickLookup.includes("psychology")) return "ppt169_sugar_rush_memphis"
-  return "ppt169_swiss_grid_systems"
-}
-
 function scorePptMasterLayout(
   request: PptPreviewRequest,
   template: PptMasterTemplateMetadata,
@@ -588,7 +569,7 @@ export function buildPptMasterRecommendedTemplateSummaries(
     rank: index + 1,
     templateId: item.id,
     templateLabel: item.label,
-    styleKey: resolveStyleKeyForPptMasterTemplate(item.id, item.quickLookup),
+    styleKey: resolvePptMasterTemplateStyleKey(item.id, item.quickLookup) as PptPreviewStyleKey,
     styleName: item.label,
     summary: [item.summary, item.tone ? `Tone: ${item.tone}` : ""].filter(Boolean).join(" "),
   }))
