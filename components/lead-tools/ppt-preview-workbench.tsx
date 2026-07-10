@@ -208,7 +208,7 @@ function getModelDescription(value: PptPreviewModelValue, locale: "zh" | "en") {
     "MiniMax-M3": { zh: "推理更重，适合更强表达但通常更慢。", en: "Heavier reasoning with stronger writing quality, but usually slower." },
     "gpt-5.6-sol": { zh: "通过 pptoken 路由，适合高质量内容规划。", en: "Routed through pptoken for high-quality content planning." },
     "gpt-5.6-terra": { zh: "通过 pptoken 路由，适合结构化分析和方案表达。", en: "Routed through pptoken for structured analysis and proposal writing." },
-    "gpt-5.6-luna": { zh: "通过 pptoken 路由，适合轻量快速的内容生成。", en: "Routed through pptoken for lightweight, fast content generation." },
+    "gpt-5.6-luna": { zh: "通过 pptoken 路由，速度优先，适合作为默认模型。", en: "Routed through pptoken for speed-first default generation." },
     "step-3.7-flash": { zh: "通过阶跃星辰直连路由，适合并发生成耗时测试。", en: "Direct StepFun routing, useful for concurrency and latency testing." },
   }
 

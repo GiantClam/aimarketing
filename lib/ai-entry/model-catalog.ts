@@ -189,9 +189,9 @@ const VERIFIED_PROVIDER_MODEL_IDS: Partial<Record<AiEntryProviderId, string[]>> 
     "deepseek-v4-pro",
   ],
   pptoken: [
+    "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
-    "gpt-5.6-luna",
   ],
   openrouter: [
     "claude-opus-4.6",

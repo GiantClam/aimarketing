@@ -1691,10 +1691,10 @@ export const pptPreviewModelOptions: Array<{
     description: "推理更重，适合更强表达但通常更慢。",
   },
   {
-    value: "gpt-5.6-sol",
-    label: "GPT-5.6 Sol",
+    value: "gpt-5.6-luna",
+    label: "GPT-5.6 Luna",
     provider: "pptoken",
-    description: "通过 pptoken 路由，适合高质量内容规划。",
+    description: "通过 pptoken 路由，速度优先，适合作为默认模型。",
   },
   {
     value: "gpt-5.6-terra",
@@ -1703,10 +1703,10 @@ export const pptPreviewModelOptions: Array<{
     description: "通过 pptoken 路由，适合结构化分析和方案表达。",
   },
   {
-    value: "gpt-5.6-luna",
-    label: "GPT-5.6 Luna",
+    value: "gpt-5.6-sol",
+    label: "GPT-5.6 Sol",
     provider: "pptoken",
-    description: "通过 pptoken 路由，适合轻量快速的内容生成。",
+    description: "通过 pptoken 路由，适合高质量内容规划。",
   },
   {
     value: "step-3.7-flash",

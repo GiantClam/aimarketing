@@ -1,6 +1,6 @@
 export const AI_ENTRY_CONSULTING_ENTRY_MODE = "consulting-advisor"
 export const AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT = "claude-sonnet-4.6"
-export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "gpt-5.6-sol"
+export const AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT = "gpt-5.6-luna"
 export const AI_ENTRY_SONNET_46_MODEL_HINT = "claude-sonnet-4.6"
 export const AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT = "deepseek-v4-pro"
 export const AI_ENTRY_CONSULTING_DEFAULT_EXECUTIVE_AGENT_ID = "executive-diagnostic"

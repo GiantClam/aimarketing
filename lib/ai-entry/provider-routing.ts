@@ -80,7 +80,7 @@ const DEFAULT_AIBERM_BASE_URL = "https://aiberm.com/v1"
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 const DEFAULT_PPTOKEN_BASE_URL = "https://api.pptoken.org/v1"
 const DEFAULT_MODEL = "openai/gpt-5.4-mini"
-const DEFAULT_PPTOKEN_MODEL = "gpt-5.6-sol"
+const DEFAULT_PPTOKEN_MODEL = "gpt-5.6-luna"
 const PROVIDER_MODEL_LIST_CACHE_TTL_MS = parsePositiveInt(
   process.env.AI_ENTRY_PROVIDER_MODEL_LIST_CACHE_TTL_MS,
   30 * 60 * 1000,

@@ -37,26 +37,26 @@ test("pickSonnet46ModelId returns null when sonnet-4.6 model does not exist", ()
   assert.equal(selected, null)
 })
 
-test("pickConsultingModelId defaults consulting advisor to pptoken GPT-5.6 Sol", () => {
+test("pickConsultingModelId defaults consulting advisor to pptoken GPT-5.6 Luna", () => {
   const selected = pickConsultingModelId([
     { id: "aiberm::gpt-5.4", name: "AIBERM / GPT 5.4", providerId: "aiberm", modelId: "gpt-5.4" },
     { id: "crazyroute::gpt-5.4", name: "Crazyroute / GPT 5.4", providerId: "crazyroute", modelId: "gpt-5.4" },
-    { id: "pptoken::gpt-5.6-sol", name: "PPToken / GPT-5.6 Sol", providerId: "pptoken", modelId: "gpt-5.6-sol" },
+    { id: "pptoken::gpt-5.6-luna", name: "PPToken / GPT-5.6 Luna", providerId: "pptoken", modelId: "gpt-5.6-luna" },
   ])
 
-  assert.equal(selected, "pptoken::gpt-5.6-sol")
+  assert.equal(selected, "pptoken::gpt-5.6-luna")
 })
 
-test("pickConsultingModelId quality mode targets GPT-5.6 Sol", () => {
+test("pickConsultingModelId quality mode targets GPT-5.6 Luna", () => {
   const selected = pickConsultingModelId(
     [
       { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
-      { id: "pptoken::gpt-5.6-sol", name: "PPToken / GPT-5.6 Sol", providerId: "pptoken", modelId: "gpt-5.6-sol" },
+      { id: "pptoken::gpt-5.6-luna", name: "PPToken / GPT-5.6 Luna", providerId: "pptoken", modelId: "gpt-5.6-luna" },
     ],
     "quality",
   )
 
-  assert.equal(selected, "pptoken::gpt-5.6-sol")
+  assert.equal(selected, "pptoken::gpt-5.6-luna")
 })
 
 test("pickPptAssistantDefaultModelId defaults PPT assistant to DeepSeek V4 Pro", () => {
@@ -116,7 +116,7 @@ test("consulting entry mode detection and lock flag", () => {
   assert.equal(isAiEntryPptAgentId("executive-presentation-ppt"), true)
   assert.equal(isAiEntryPptAgentId("executive-brand"), false)
   assert.equal(AI_ENTRY_NORMAL_DEFAULT_MODEL_HINT, "claude-sonnet-4.6")
-  assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "gpt-5.6-sol")
+  assert.equal(AI_ENTRY_CONSULTING_QUALITY_MODEL_HINT, "gpt-5.6-luna")
   assert.equal(AI_ENTRY_SONNET_46_MODEL_HINT, "claude-sonnet-4.6")
   assert.equal(AI_ENTRY_PPT_ASSISTANT_DEFAULT_MODEL_HINT, "deepseek-v4-pro")
 })
