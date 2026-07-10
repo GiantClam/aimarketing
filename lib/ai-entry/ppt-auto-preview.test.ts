@@ -57,7 +57,7 @@ test("maybeAutoRunPptPreview does not choose a template before the user selects 
   assert.equal(result.assistantMessage, "下面是建议的页结构。")
 })
 
-test("maybeAutoRunPptPreview removes stale template recommendation blocks when generating preview", async () => {
+test("maybeAutoRunPptPreview does not resolve editable template references from user text", async () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -95,12 +95,11 @@ test("maybeAutoRunPptPreview removes stale template recommendation blocks when g
     isZh: true,
   })
 
-  assert.equal(result.autoPreviewExecuted, true)
-  assert.equal((result.assistantMessage.match(/已为这次需求推荐 4 个模板：/g) || []).length, 0)
-  assert.equal((result.assistantMessage.match(/ai-entry-ppt-template-recommendations:/g) || []).length, 0)
+  assert.equal(result.autoPreviewExecuted, false)
+  assert.equal(result.assistantMessage.startsWith("下面是建议的页结构。"), true)
 })
 
-test("maybeAutoRunPptPreview auto-generates editable ppt after the user selects a recommended template", async () => {
+test("maybeAutoRunPptPreview delegates editable template semantics to the LLM tool call", async () => {
   const readyState = extractPptBriefState({
     userMessages: ["请生成一份给客户提案会使用的产品发布 PPT，目标是客户提案与说服，10 页。"],
   })
@@ -141,9 +140,9 @@ test("maybeAutoRunPptPreview auto-generates editable ppt after the user selects 
     isZh: true,
   })
 
-  assert.equal(result.autoPreviewExecuted, true)
-  assert.match(result.assistantMessage, /已生成 PPT 预览/)
-  assert.match(result.assistantMessage, /preview-session-1/)
+  assert.equal(result.autoPreviewExecuted, false)
+  assert.equal(result.previewResult, null)
+  assert.equal(result.assistantMessage, "好的，我按你选的模板继续。")
 })
 
 test("maybeAutoRunPptPreview does not accept a template that was not offered", async () => {

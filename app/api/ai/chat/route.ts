@@ -68,10 +68,10 @@ import {
 } from "@/lib/ai-entry/ppt-brief"
 import { resolveForcedReplyLanguage } from "@/lib/ai-entry/language-policy"
 import {
+  buildPptTemplateSelectionPromptSection,
   buildPptTemplateRecommendationMessage,
   buildPptToolResultMessage,
   extractLatestPptTemplateRecommendationContext,
-  resolvePptTemplateSelectionFromUserText,
   stripPptArtifactRelativeLinks,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import {
@@ -1023,6 +1023,19 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .join("\n\n")
     }
+    if (
+      executionContext !== "workflow" &&
+      effectiveAgentId === "executive-ppt" &&
+      latestTemplateRecommendationContext
+    ) {
+      resolvedInstruction = [
+        resolvedInstruction,
+        buildPptTemplateSelectionPromptSection(latestTemplateRecommendationContext, isZh),
+      ]
+        .map((section) => section.trim())
+        .filter(Boolean)
+        .join("\n\n")
+    }
 
     if (
       executionContext !== "workflow" &&
@@ -1038,27 +1051,9 @@ export async function POST(request: NextRequest) {
       } else if (!effectivePptBriefState.readyForPreview) {
         gateMessage = buildPptBriefClarificationMessage(effectivePptBriefState, isZh)
       } else if (latestTemplateRecommendationContext) {
-        const selectedTemplateId = resolvePptTemplateSelectionFromUserText(
-          latestUserPrompt,
-          latestTemplateRecommendationContext,
-        )
-        gateMessage = selectedTemplateId
-          ? null
-          : buildPptTemplateRecommendationMessage({
-              recommendedTemplates: latestTemplateRecommendationContext.templateIds.map((templateId, index) => {
-                const template = latestTemplateRecommendationContext.templates?.find(
-                  (item) => item.templateId === templateId,
-                )
-                return {
-                  rank: index + 1,
-                  templateId,
-                  templateLabel: template?.labels[0] || templateId,
-                  styleName: template?.labels[1] || null,
-                }
-              }),
-              selectedTemplateId: latestTemplateRecommendationContext.defaultTemplateId,
-              isZh,
-            })
+        // Let the LLM resolve natural-language references to the candidate list.
+        // The wrapped preview tool validates the resulting templateId against this context.
+        gateMessage = null
       } else if (
         latestBriefConfirmationContext &&
         isPptBriefConfirmationReply(latestUserPrompt)

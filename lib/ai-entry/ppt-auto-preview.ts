@@ -4,8 +4,6 @@ import {
 } from "@/lib/ai-entry/ppt-brief"
 import {
   buildPptToolResultMessage,
-  extractLatestPptTemplateRecommendationContext,
-  resolvePptTemplateSelectionFromUserText,
   stripPptTemplateRecommendationMessageBlocks,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import { isAiEntryPptAgentId } from "@/lib/ai-entry/model-policy"
@@ -25,16 +23,6 @@ const PPT_AUTO_PREVIEW_INTENT_PATTERN =
 
 function readOptionalText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
-}
-
-function resolveEditablePptTemplateSelection(input: {
-  userText: string | null | undefined
-  latestRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
-}) {
-  return resolvePptTemplateSelectionFromUserText(
-    input.userText,
-    input.latestRecommendationContext,
-  )
 }
 
 function buildPreviewFailureNotice(errorMessage: string | null, isZh: boolean) {
@@ -68,14 +56,8 @@ export function shouldAutoRunPptPreview(input: {
   if (input.previewAlreadyExecuted) return false
   if (!input.briefState?.readyForPreview) return false
   if (input.agentId === "executive-ppt") {
-    const latestRecommendationContext = (input.messageContents || [])
-      .map((content) => extractLatestPptTemplateRecommendationContext(content))
-      .filter((value): value is NonNullable<typeof value> => Boolean(value))
-      .at(-1) ?? null
-    return Boolean(resolveEditablePptTemplateSelection({
-      userText: input.latestUserPrompt,
-      latestRecommendationContext,
-    }))
+    // Editable PPT template choices must be resolved by the LLM tool call.
+    return false
   }
   return PPT_AUTO_PREVIEW_INTENT_PATTERN.test(input.latestUserPrompt.trim())
 }
@@ -92,10 +74,6 @@ export async function maybeAutoRunPptPreview(input: {
   isZh?: boolean
   messageContents?: string[]
 }): Promise<AutoPreviewResult> {
-  const latestRecommendationContext = (input.messageContents || [])
-    .map((content) => extractLatestPptTemplateRecommendationContext(content))
-    .filter((value): value is NonNullable<typeof value> => Boolean(value))
-    .at(-1) ?? null
   if (
     !shouldAutoRunPptPreview({
       agentId: input.agentId,
@@ -136,22 +114,7 @@ export async function maybeAutoRunPptPreview(input: {
     }
   }
 
-  const selectedTemplateId =
-    input.agentId === "executive-ppt"
-      ? resolveEditablePptTemplateSelection({
-          userText: input.latestUserPrompt,
-          latestRecommendationContext,
-        })
-      : resolvePptTemplateSelectionFromUserText(input.latestUserPrompt, latestRecommendationContext)
-  const preparedInput = selectedTemplateId
-    ? {
-        ...basePreparedPreview.input,
-        templateMode: "single-template" as const,
-        templateId: selectedTemplateId,
-      }
-    : basePreparedPreview.input
-
-  const previewResult = await Promise.resolve(input.previewTool.execute(preparedInput))
+  const previewResult = await Promise.resolve(input.previewTool.execute(basePreparedPreview.input))
   const isZh = input.isZh !== false
 
   if (previewResult && typeof previewResult === "object" && (previewResult as { ok?: unknown }).ok === false) {

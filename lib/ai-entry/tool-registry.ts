@@ -19,7 +19,6 @@ import {
   extractLatestPptPreviewContext,
   extractLatestPptTemplateRecommendationContext,
   type PptPreviewContext,
-  resolvePptTemplateSelectionFromUserText,
 } from "@/lib/ai-entry/ppt-tool-result-message"
 import {
   buildResearchBriefFromAttachmentContent,
@@ -146,29 +145,6 @@ function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
-function resolveEditablePptTemplateSelectionFromText(input: {
-  userText: string | null | undefined
-  latestTemplateRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
-}) {
-  const contextTemplateId = resolvePptTemplateSelectionFromUserText(
-    input.userText,
-    input.latestTemplateRecommendationContext,
-  )
-  if (contextTemplateId && isPptMasterLibraryTemplateSupported(contextTemplateId)) {
-    return contextTemplateId
-  }
-
-  const normalized = readOptionalString(input.userText)?.toLowerCase() ?? ""
-  if (!normalized) return null
-
-  return (
-    getPptWorkerSupportedTemplateIds().find((templateId) => {
-      const candidate = templateId.trim().toLowerCase()
-      return candidate && (normalized === candidate || normalized.includes(candidate))
-    }) ?? null
-  )
-}
-
 function maybeInjectResearchBrief(
   toolId: string,
   input: unknown,
@@ -214,7 +190,6 @@ function maybeInjectPptTemplateSelection(input: {
   toolId: string
   rawInput: unknown
   latestTemplateRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
-  latestUserPrompt: string | null | undefined
   agentId: string | null
   executionContext?: "chat" | "workflow"
 }) {
@@ -227,11 +202,15 @@ function maybeInjectPptTemplateSelection(input: {
   }
 
   const record = input.rawInput && typeof input.rawInput === "object" ? (input.rawInput as Record<string, unknown>) : {}
-  const selectedTemplateId = resolveEditablePptTemplateSelectionFromText({
-    userText: input.latestUserPrompt,
-    latestTemplateRecommendationContext: input.latestTemplateRecommendationContext,
-  })
-  if (selectedTemplateId) {
+  const selectedTemplateId = readOptionalString(record.templateId)
+  const isOfferedTemplate =
+    !input.latestTemplateRecommendationContext ||
+    input.latestTemplateRecommendationContext.templateIds.includes(selectedTemplateId || "")
+  if (
+    selectedTemplateId &&
+    isOfferedTemplate &&
+    isPptMasterLibraryTemplateSupported(selectedTemplateId)
+  ) {
     return {
       ...record,
       templateMode: "single-template",
@@ -243,6 +222,50 @@ function maybeInjectPptTemplateSelection(input: {
   delete rest.templateId
   delete rest.templateMode
   return rest
+}
+
+function getPptTemplateSelectionRequiredResult(input: {
+  toolId: string
+  preparedInput: unknown
+  latestTemplateRecommendationContext: ReturnType<typeof extractLatestPptTemplateRecommendationContext>
+  agentId: string | null
+  executionContext?: "chat" | "workflow"
+}) {
+  if (
+    input.toolId !== "preview_ppt_deck" ||
+    input.agentId !== "executive-ppt" ||
+    input.executionContext === "workflow" ||
+    !input.latestTemplateRecommendationContext
+  ) {
+    return null
+  }
+
+  const templateId =
+    input.preparedInput && typeof input.preparedInput === "object"
+      ? readOptionalString((input.preparedInput as Record<string, unknown>).templateId)
+      : null
+  if (templateId && input.latestTemplateRecommendationContext.templateIds.includes(templateId)) {
+    return null
+  }
+
+  return {
+    ok: false,
+    error: {
+      code: "ppt_template_selection_required",
+      message: "Select one template from the latest editable PPT recommendation before generating the preview.",
+    },
+    recommendedTemplates: input.latestTemplateRecommendationContext.templateIds.map((templateId, index) => {
+      const labels = input.latestTemplateRecommendationContext?.templates?.find(
+        (item) => item.templateId === templateId,
+      )?.labels ?? []
+      return {
+        rank: index + 1,
+        templateId,
+        templateLabel: labels[0] || templateId,
+        styleName: labels[1] || null,
+      }
+    }),
+  }
 }
 
 function maybeInjectPptSourcePrompt(input: {
@@ -551,10 +574,19 @@ function wrapToolSet(params: {
           toolId,
           rawInput: exportReadyInput,
           latestTemplateRecommendationContext: latestTemplateRecommendationContextForTurn,
-          latestUserPrompt: params.latestUserPrompt,
           agentId: params.auditContext.agentId,
           executionContext: params.executionContext,
         })
+        const templateSelectionRequired = getPptTemplateSelectionRequiredResult({
+          toolId,
+          preparedInput: templateReadyInput,
+          latestTemplateRecommendationContext: latestTemplateRecommendationContextForTurn,
+          agentId: params.auditContext.agentId,
+          executionContext: params.executionContext,
+        })
+        if (templateSelectionRequired) {
+          return templateSelectionRequired
+        }
         const sourcePromptReadyInput = maybeInjectPptSourcePrompt({
           toolId,
           rawInput: templateReadyInput,

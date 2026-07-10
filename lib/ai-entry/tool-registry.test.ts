@@ -935,6 +935,7 @@ test("tool registry restores a persisted research brief marker from message hist
         }) || "",
       ].join("\n"),
     ],
+    latestUserPrompt: "就按第二个的感觉，但请用模型已经确定的 swiss-grid",
     pptBriefState: {
       topic: "克里米亚现状军事分析",
       audience: "初级军事爱好者",
@@ -1224,7 +1225,7 @@ test("tool registry replaces model-supplied frontend template ids with ppt-maste
   assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
 })
 
-test("tool registry ignores stale frontend recommendation ids for editable ppt preview", async () => {
+test("tool registry rejects an unoffered editable template instead of silently falling back", async () => {
   const result = await buildAiEntryToolRegistry({
     currentUser: {
       id: 7,
@@ -1296,14 +1297,9 @@ test("tool registry ignores stale frontend recommendation ids for editable ppt p
     templateId: "neo-grid-bold",
   })
 
-  assert.equal(previewResult.ok, true)
-  assert.equal(enqueuedTasks.length, 1)
-  assert.equal(
-    (enqueuedTasks[0]?.payload?.input as { templateMode?: string } | undefined)?.templateMode,
-    "single-template",
-  )
-  assert.notEqual((enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "neo-grid-bold")
-  assert.equal(typeof (enqueuedTasks[0]?.payload?.input as { templateId?: string } | undefined)?.templateId, "string")
+  assert.equal(previewResult.ok, false)
+  assert.equal((previewResult.error as { code?: string } | undefined)?.code, "ppt_template_selection_required")
+  assert.equal(enqueuedTasks.length, 0)
 })
 
 test("tool registry ignores direct frontend template aliases before a persisted recommendation marker exists", async () => {

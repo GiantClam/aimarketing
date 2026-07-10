@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { extractAiEntryArtifactsFromToolResult } from "./artifact-runtime"
 import {
+  buildPptTemplateSelectionPromptSection,
   buildPptTemplateRecommendationMessage,
   buildPptToolResultMessage,
   collapsePptTemplateRecommendationMessageBlocks,
@@ -14,8 +15,6 @@ import {
   extractPptTemplateRecommendationContexts,
   isFailedPptBackgroundStatusMessage,
   isQueuedPptBackgroundStatusMessage,
-  resolvePptCatalogTemplateSelectionFromUserText,
-  resolvePptTemplateSelectionFromUserText,
   resolveLatestPptConversationState,
   stripPptArtifactRelativeLinks,
   stripPptHiddenContextMarkers,
@@ -325,7 +324,7 @@ test("hidden ppt context markers are stripped before markdown rendering", () => 
   assert.match(cleaned, /正文结束/)
 })
 
-test("template selection resolves explicit template ids and labels from recommendation context", () => {
+test("template selection prompt gives the LLM the complete candidate context", () => {
   const context = {
     defaultTemplateId: "long-table",
     templateIds: ["long-table", "neo-grid-bold", "broadside", "playful"],
@@ -337,21 +336,11 @@ test("template selection resolves explicit template ids and labels from recommen
     ],
   }
 
-  assert.equal(resolvePptTemplateSelectionFromUserText("用 neo-grid-bold 模板生成", context), "neo-grid-bold")
-  assert.equal(resolvePptTemplateSelectionFromUserText("改用 broadside", context), "broadside")
-  assert.equal(resolvePptTemplateSelectionFromUserText("试试长桌纪要", context), "long-table")
-  assert.equal(resolvePptTemplateSelectionFromUserText("选择新网格粗体", context), "neo-grid-bold")
-  assert.equal(resolvePptTemplateSelectionFromUserText("用第一个模板生成", context), "long-table")
-  assert.equal(resolvePptTemplateSelectionFromUserText("用第2个模板生成", context), "neo-grid-bold")
-  assert.equal(resolvePptTemplateSelectionFromUserText("1", context), "long-table")
-  assert.equal(resolvePptTemplateSelectionFromUserText("选择 2", context), "neo-grid-bold")
-})
-
-test("template selection can resolve explicit catalog template names without a recommendation context", () => {
-  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("用 swiss-grid 模板生成"), "swiss-grid")
-  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("改成瑞士网格"), "swiss-grid")
-  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("确认 academic-defense"), "academic-defense")
-  assert.equal(resolvePptCatalogTemplateSelectionFromUserText("使用学术答辩"), "academic-defense")
+  const prompt = buildPptTemplateSelectionPromptSection(context)
+  assert.match(prompt, /结合对话语义理解/u)
+  assert.match(prompt, /long-table/u)
+  assert.match(prompt, /Neo Grid Bold/u)
+  assert.match(prompt, /不得使用 auto-4/u)
 })
 
 test("preview failure with recommended templates produces selectable template context", () => {
@@ -383,10 +372,8 @@ test("preview failure with recommended templates produces selectable template co
 
   assert.match(message || "", /暗色科技 \(general-dark-tech-claude-code-auto-mode\)/)
   const context = extractLatestPptTemplateRecommendationContext(message)
-  assert.equal(
-    resolvePptTemplateSelectionFromUserText("选择暗色科技", context),
-    "general-dark-tech-claude-code-auto-mode",
-  )
+  assert.ok(context)
+  assert.match(buildPptTemplateSelectionPromptSection(context), /general-dark-tech-claude-code-auto-mode/u)
 })
 
 test("ppt conversation state resolves preview-ready and exported phases from hidden markers", () => {

@@ -848,7 +848,7 @@ export function buildAiEntryPptTools(input: {
         : genericPreviewPptDeckInputSchema
   const previewDescription =
     toolFlow === "editable"
-      ? "Generate an editable PPT preview through ppt-master. Use this when the user wants a downloadable, editable PPTX deck."
+      ? "Generate an editable PPT preview through ppt-master. Use this when the user wants a downloadable, editable PPTX deck. When a template recommendation context is present, resolve the user's natural-language choice using that context and pass the exact candidate templateId with templateMode=single-template; never use auto-4."
       : toolFlow === "presentation"
         ? "Generate a presentation-first HTML deck through frontend-slides. Use this for live delivery, speaking flow, and stage-ready narrative decks."
         : "Generate a PPT preview deck from a conversation brief. Use this when the user wants a slide deck, PPT, pitch deck, training deck, or presentation draft."
