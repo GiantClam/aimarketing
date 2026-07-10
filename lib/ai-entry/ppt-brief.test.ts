@@ -7,6 +7,7 @@ import {
   extractLatestPptBriefConfirmationContext,
   extractPptBriefState,
   isPptBriefConfirmationReply,
+  stripPptBriefConfirmationContextMarkers,
 } from "./ppt-brief"
 
 test("extractPptBriefState recognizes strategic briefing style follow-up prompts", () => {
@@ -114,6 +115,17 @@ test("buildPptBriefConfirmationMessage presents a complete brief and persists it
   assert.equal(context?.sourcePrompt, state.topic)
   assert.equal(context?.audience, "初级军事爱好者")
   assert.equal(context?.scenario, "training")
+})
+
+test("brief confirmation markers are hidden from the rendered assistant reply", () => {
+  const state = extractPptBriefState({
+    userMessages: ["做一个日本近期地震的 PPT，受众是初级军事爱好者，场景是课堂讲解，目标是培训讲解，语言是中文。"],
+  })
+  const message = buildPptBriefConfirmationMessage(state, true)
+
+  const cleaned = stripPptBriefConfirmationContextMarkers(message)
+  assert.match(cleaned, /PPT brief 已整理/)
+  assert.doesNotMatch(cleaned, /ai-entry-ppt-brief-confirmation/)
 })
 
 test("isPptBriefConfirmationReply only accepts an explicit brief confirmation", () => {

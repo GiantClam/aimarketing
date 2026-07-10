@@ -298,6 +298,7 @@ test("hidden ppt context markers are stripped before markdown rendering", () => 
     '<!-- ai-entry-ppt-export-context:{"previewSessionId":"ps1","selectedVariantKey":"v1","artifactId":12} -->',
     '<!-- ai-entry-ppt-preview-invalidated:{"previewSessionId":"ps1"} -->',
     '<!-- ai-entry-ppt-template-recommendations:{"defaultTemplateId":"government-blue","templateIds":["government-blue"],"templates":[{"templateId":"government-blue","labels":["政务蓝","government-blue"]}]} -->',
+    '<!-- ai-entry-ppt-brief-confirmation:{"sourcePrompt":"做一个地震现状 PPT","audience":"初级军事爱好者","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":12,"tone":null,"mustInclude":[]} -->',
     '<!-- ai-entry-research-brief:{"topic":"Crimea current status military posture 2025 2026","keyFacts":["Crimea remains strategically important."],"rawSummary":"Topic: Crimea current status military posture 2025 2026"} -->',
     "正文结束",
   ].join("\n")

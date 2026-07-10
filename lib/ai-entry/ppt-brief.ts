@@ -382,6 +382,17 @@ export function extractLatestPptBriefConfirmationContext(
   }
 }
 
+export function stripPptBriefConfirmationContextMarkers(content: string | null | undefined) {
+  const normalized = typeof content === "string" ? content : ""
+  if (!normalized) return ""
+
+  const markerPattern = new RegExp(
+    `${PPT_BRIEF_CONFIRMATION_CONTEXT_PREFIX}(?:\\{[\\s\\S]*?\\})\\s*-->`,
+    "gu",
+  )
+  return normalized.replace(markerPattern, "").replace(/\n{3,}/g, "\n\n").trim()
+}
+
 export function isPptBriefConfirmationReply(value: string | null | undefined) {
   const normalized = readOptionalString(value)?.toLowerCase() ?? ""
   if (!normalized) return false

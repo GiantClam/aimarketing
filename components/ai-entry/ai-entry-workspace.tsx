@@ -835,10 +835,13 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
         : null
     if (!taskRun) return message
     attachedTaskRunIds.add(taskRun.task_id)
+    const nextParts = (message.parts || []).filter(
+      (part) => !(part.type === "task-run" && part.taskRun.task_id === taskRun.task_id),
+    )
     return {
       ...message,
       parts: [
-        ...(message.parts || []),
+        ...nextParts,
         {
           type: "task-run",
           id: `task-run:${taskRun.task_id}`,

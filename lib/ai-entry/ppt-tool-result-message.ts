@@ -1,5 +1,6 @@
 import { pptFrontendTemplateOptions } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import { stripResearchBriefContextMarkers } from "@/lib/ai-entry/research-brief-context"
+import { stripPptBriefConfirmationContextMarkers } from "@/lib/ai-entry/ppt-brief"
 
 type ExportPptDeckResult = {
   ok?: unknown
@@ -801,12 +802,12 @@ export function stripPptTemplateRecommendationContextMarkers(content: string | n
 }
 
 export function stripPptHiddenContextMarkers(content: string | null | undefined) {
-  return stripResearchBriefContextMarkers([
+  return stripPptBriefConfirmationContextMarkers(stripResearchBriefContextMarkers([
     PPT_PREVIEW_CONTEXT_PREFIX,
     PPT_EXPORT_CONTEXT_PREFIX,
     PPT_PREVIEW_INVALIDATION_CONTEXT_PREFIX,
     PPT_TEMPLATE_RECOMMENDATION_CONTEXT_PREFIX,
-  ].reduce((current, prefix) => stripMarkers(current, prefix), content ?? ""))
+  ].reduce((current, prefix) => stripMarkers(current, prefix), content ?? "")))
 }
 
 export function resolveLatestPptConversationState(messageContents: string[] | undefined): PptConversationState {
