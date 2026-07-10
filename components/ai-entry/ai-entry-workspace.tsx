@@ -1358,7 +1358,9 @@ export function AiEntryWorkspace({
   )
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  // Only an active chat response locks this composer. PPT rendering is durable
+  // and scoped to its conversation, so it must not block another conversation.
+  const [isResponseLoading, setIsResponseLoading] = useState(false)
   const [isPreparingAttachments, setIsPreparingAttachments] = useState(false)
   const [isConversationLoading, setIsConversationLoading] = useState(Boolean(initialConversationId))
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -1518,7 +1520,7 @@ export function AiEntryWorkspace({
     setInput("")
     setAttachments([])
     setCopiedMessageId(null)
-    setIsLoading(false)
+    setIsResponseLoading(false)
     setIsConversationLoading(false)
     setIsPreparingAttachments(false)
     if (fileInputRef.current) fileInputRef.current.value = ""
@@ -1612,8 +1614,8 @@ export function AiEntryWorkspace({
   }, [conversationId])
 
   useEffect(() => {
-    isLoadingRef.current = isLoading
-  }, [isLoading])
+    isLoadingRef.current = isResponseLoading
+  }, [isResponseLoading])
 
   useEffect(() => {
     onConversationIdChangeRef.current = onConversationIdChange
@@ -2364,7 +2366,7 @@ export function AiEntryWorkspace({
   }, [conversationId, fetchConversationMessages, resolvedRequestAgentId, routeAgentId])
 
   useEffect(() => {
-    if (!conversationId || isConversationLoading || isLoading || !hasStreamRecoveryPending) {
+    if (!conversationId || isConversationLoading || isResponseLoading || !hasStreamRecoveryPending) {
       return
     }
 
@@ -2399,7 +2401,7 @@ export function AiEntryWorkspace({
       window.removeEventListener("pageshow", tryRecover)
       document.removeEventListener("visibilitychange", handleVisibility)
     }
-  }, [attemptConversationRecovery, conversationId, hasStreamRecoveryPending, isConversationLoading, isLoading])
+  }, [attemptConversationRecovery, conversationId, hasStreamRecoveryPending, isConversationLoading, isResponseLoading])
 
   useEffect(() => {
     const localPendingTasks = listAiEntryPendingTasks({
@@ -2417,7 +2419,6 @@ export function AiEntryWorkspace({
 
     if (activeTaskRunIds.length === 0) {
       setPendingTaskEvents([])
-      setIsLoading(false)
       return
     }
 
@@ -2430,8 +2431,6 @@ export function AiEntryWorkspace({
         ? conversationState.ppt.latestPreview.previewSessionId.trim()
         : null
     let historyRefreshPollCount = 0
-    setIsLoading(true)
-
     const requestImmediateRepoll = () => {
       setPendingTaskRefreshKey((current) => current + 1)
     }
@@ -2555,9 +2554,6 @@ export function AiEntryWorkspace({
             }
 
             if (activeTaskRuns.length === 0) {
-              if (!cancelled) {
-                setIsLoading(false)
-              }
               return
             }
           }
@@ -2576,7 +2572,6 @@ export function AiEntryWorkspace({
               removePendingAssistantTask(taskId)
             }
             if (!cancelled) {
-              setIsLoading(false)
               setPendingTaskEvents((current) =>
                 [
                   ...current,
@@ -2744,7 +2739,7 @@ export function AiEntryWorkspace({
 
   const handleSend = useCallback(async () => {
     const prompt = input.trim()
-    if ((!prompt && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments) return
+    if ((!prompt && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments) return
     const hasImageAttachments = attachments.some((attachment) => attachment.mediaType.startsWith("image/"))
     if (hasImageAttachments && !modelSupportsImageInput(selectedModel)) {
       setErrorMessage(isZh ? "当前所选模型不支持图片上传或识别，请切换到支持视觉的模型后再发送。" : "The selected model does not support image upload or recognition. Switch to a vision-capable model before sending.")
@@ -2835,7 +2830,7 @@ export function AiEntryWorkspace({
       savePendingConversationMessages(latestConversationIdRef.current, initialMessages)
     }
     isLoadingRef.current = true
-    setIsLoading(true)
+    setIsResponseLoading(true)
     if (!conversationId) {
       pendingFirstConversationRouteRef.current = true
     }
@@ -3426,7 +3421,7 @@ export function AiEntryWorkspace({
         activeRequestAbortControllerRef.current = null
         pendingFirstConversationRouteRef.current = false
         isLoadingRef.current = false
-        setIsLoading(false)
+        setIsResponseLoading(false)
       }
     }
   }, [
@@ -3436,7 +3431,7 @@ export function AiEntryWorkspace({
     input,
     isConversationLoading,
     isPreparingAttachments,
-    isLoading,
+    isResponseLoading,
     isZh,
     embedded,
     forcedAgentId,
@@ -3476,7 +3471,7 @@ export function AiEntryWorkspace({
             setSelectedModelId(nextValue || null)
             setModelSelectOpen(false)
           }}
-          disabled={isLoading || modelsLoading || models.length === 0}
+          disabled={isResponseLoading || modelsLoading || models.length === 0}
         >
           <SelectTrigger className={`model-select min-w-0 w-[140px] max-w-[44vw] rounded-[8px] px-3 text-xs text-foreground outline-none focus:border-primary sm:w-[220px] sm:max-w-[220px] ${buttonHeight}`}>
             <SelectValue placeholder={`${copy.modelLabel}: ${modelsLoading ? copy.modelLoading : copy.modelEmpty}`} />
@@ -3508,7 +3503,7 @@ export function AiEntryWorkspace({
                 className="rounded-[4px] p-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
                 aria-label={isZh ? "移除附件" : "Remove attachment"}
                 onClick={() => removeAttachment(attachment.id)}
-                disabled={isLoading}
+                disabled={isResponseLoading}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -3532,7 +3527,7 @@ export function AiEntryWorkspace({
                 size="sm"
                 variant="outline"
                 className="dashboard-button-secondary h-9 max-w-[220px] gap-2 px-3"
-                disabled={isLoading || isConversationLoading || isPreparingAttachments}
+                disabled={isResponseLoading || isConversationLoading || isPreparingAttachments}
               >
                 <Database className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{copy.knowledgeLabel}</span>
@@ -3595,7 +3590,7 @@ export function AiEntryWorkspace({
             size="sm"
             variant="outline"
             className="dashboard-button-secondary h-9 px-2.5"
-            disabled={isLoading || isConversationLoading || isPreparingAttachments}
+            disabled={isResponseLoading || isConversationLoading || isPreparingAttachments}
             onClick={disableKnowledge}
           >
             <X className="h-3.5 w-3.5" />
@@ -3628,7 +3623,7 @@ export function AiEntryWorkspace({
             size="sm"
             variant="outline"
             className="composer-add"
-            disabled={isLoading || isConversationLoading || isPreparingAttachments}
+            disabled={isResponseLoading || isConversationLoading || isPreparingAttachments}
           >
             <Plus className="h-5 w-5" />
           </Button>
@@ -3699,7 +3694,7 @@ export function AiEntryWorkspace({
 
             <div className="sticky bottom-0 z-20 shrink-0 bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:px-0">
               <div className="dashboard-panel mx-auto max-w-5xl rounded-[12px] p-4 shadow-sm">
-                <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
+                <PromptInput value={input} onValueChange={setInput} onSubmit={handleSend} isLoading={isResponseLoading} maxHeight={220} className="border-0 bg-transparent p-0 shadow-none">
                   {isAgentSelectionExplicit && selectedAgent ? (
                     <div className="px-1 pb-2 text-xs text-muted-foreground">
                       {copy.selectedAgent}: <span className="font-medium text-foreground">{selectedAgent.name}</span>
@@ -3723,8 +3718,8 @@ export function AiEntryWorkspace({
                     <div className="flex min-w-0 items-center gap-2">
                       {renderSelectors("h-10")}
                       <PromptInputAction tooltip={copy.send}>
-                        <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
-                          {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
+                        <Button type="button" size="sm" className="dashboard-button-primary h-10 shrink-0 px-4" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
+                          {isResponseLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
                           {copy.send}
                         </Button>
                       </PromptInputAction>
@@ -3781,7 +3776,7 @@ export function AiEntryWorkspace({
                 const copied = copiedMessageId === message.id
                 const isPendingAssistant =
                   isAssistant &&
-                  isLoading &&
+                  isResponseLoading &&
                   index === displayMessages.length - 1 &&
                   !message.content.trim() &&
                   !message.parts?.length
@@ -3987,7 +3982,7 @@ export function AiEntryWorkspace({
               <div className="mb-2">
                 <div className="flex flex-wrap gap-2">
                   {composerPromptButtons.map((prompt) => (
-                    <button key={prompt} type="button" className="dashboard-chip max-w-[260px] truncate rounded-[4px] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-primary" title={prompt} onClick={() => setInput(prompt)} disabled={isLoading}>{prompt}</button>
+                    <button key={prompt} type="button" className="dashboard-chip max-w-[260px] truncate rounded-[4px] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-primary" title={prompt} onClick={() => setInput(prompt)} disabled={isResponseLoading}>{prompt}</button>
                   ))}
                 </div>
               </div>
@@ -4025,7 +4020,7 @@ export function AiEntryWorkspace({
               value={input}
               onValueChange={setInput}
               onSubmit={handleSend}
-              isLoading={isLoading}
+              isLoading={isResponseLoading}
               maxHeight={220}
               className="border-0 bg-transparent p-0 shadow-none"
             >
@@ -4052,8 +4047,8 @@ export function AiEntryWorkspace({
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="send-button shrink-0 px-5" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
-                      {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+                    <Button type="button" size="sm" className="send-button shrink-0 px-5" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments || modelsLoading}>
+                      {isResponseLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>
                   </PromptInputAction>
