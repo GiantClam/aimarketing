@@ -343,6 +343,26 @@ test("ppt preview forwards an explicit preview runtime selection", async () => {
   })
 })
 
+test("ppt preview forwards explicit runtime slide configuration to the preview engine", async () => {
+  await buildLeadToolPreview("ai-ppt-preview", {
+    prompt: "先生成内容，再用指定渲染层出图",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    runtimeSlideModel: "gpt-5.4",
+    runtimeSlideProvider: "pptoken",
+  })
+
+  assert.equal(previewCalls.length, 1)
+  assert.deepEqual(previewCalls[0]?.[0], {
+    prompt: "先生成内容，再用指定渲染层出图",
+    scenario: "marketing-campaign",
+    language: "zh-CN",
+    runtimeSlideModel: "gpt-5.4",
+    runtimeSlideProvider: "pptoken",
+    templateMode: "auto-4",
+  })
+})
+
 test("ppt preview forwards researchBrief to the preview engine", async () => {
   await buildLeadToolPreview("ai-ppt-preview", {
     prompt: "做一份霍尔木兹海峡现状汇报",

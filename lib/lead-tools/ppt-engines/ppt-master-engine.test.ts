@@ -151,6 +151,8 @@ test("ppt-master engine uses remote worker for preview when configured", async (
   let seenResearchBrief: unknown = null
   let seenImages: unknown = null
   let seenModel: unknown = null
+  let seenRuntimeSlideModel: unknown = null
+  let seenRuntimeSlideProvider: unknown = null
 
   const remoteDeck = {
     ...htmlDeck,
@@ -164,6 +166,8 @@ test("ppt-master engine uses remote worker for preview when configured", async (
       seenResearchBrief = request.researchBrief
       seenImages = request.images
       seenModel = request.model
+      seenRuntimeSlideModel = request.runtimeSlideModel
+      seenRuntimeSlideProvider = request.runtimeSlideProvider
       return {
         previewSessionId: "session-remote-1",
         generatedAt: "2026-06-24T00:00:00.000Z",
@@ -183,6 +187,8 @@ test("ppt-master engine uses remote worker for preview when configured", async (
       scenario: "sales-deck",
       language: "zh-CN",
       model: "MiniMax-M3",
+      runtimeSlideModel: "gpt-5.4",
+      runtimeSlideProvider: "pptoken",
       templateMode: "auto-4",
       images: [{ url: "https://example.com/cover.png", role: "cover" }],
     } as any,
@@ -205,6 +211,8 @@ test("ppt-master engine uses remote worker for preview when configured", async (
   })
   assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
   assert.equal(seenModel, "MiniMax-M3")
+  assert.equal(seenRuntimeSlideModel, "gpt-5.4")
+  assert.equal(seenRuntimeSlideProvider, "pptoken")
   const storedDeck = await getPptPreviewSessionDeck("session-remote-1")
   assert.equal(storedDeck.previewSessionId, "session-remote-1")
   assert.equal(storedDeck.previewEngine, "ppt-master-svg")

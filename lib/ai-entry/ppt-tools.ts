@@ -154,6 +154,18 @@ const editablePreviewPptDeckInputSchema = z
       .min(1)
       .optional()
       .describe("Optional provider hint for content planning and ppt-master session materialization."),
+    runtimeSlideModel: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Optional ppt-master rendering model override. This controls the slide SVG rendering layer, not the content-planning layer."),
+    runtimeSlideProvider: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Optional ppt-master rendering provider override. This controls the slide SVG rendering layer, with environment variables used only as fallback."),
     tone: z
       .string()
       .trim()
@@ -946,6 +958,8 @@ export function buildAiEntryPptTools(input: {
           pageCount,
           model,
           preferredProviderId,
+          runtimeSlideModel,
+          runtimeSlideProvider,
           tone,
           mustInclude,
           requestId,
@@ -1036,6 +1050,9 @@ export function buildAiEntryPptTools(input: {
             toolFlow === "editable"
               ? preferredProviderId?.trim() || input.selectedPreviewProviderId?.trim() || undefined
               : undefined
+          const effectiveRuntimeSlideModel = toolFlow === "editable" ? runtimeSlideModel?.trim() || undefined : undefined
+          const effectiveRuntimeSlideProvider =
+            toolFlow === "editable" ? runtimeSlideProvider?.trim() || undefined : undefined
           if (
             toolFlow === "editable" &&
             (effectiveTemplateMode !== "single-template" || !effectiveTemplateId)
@@ -1050,6 +1067,8 @@ export function buildAiEntryPptTools(input: {
             language: prepared.input.language,
             ...(effectiveModel ? { model: effectiveModel } : {}),
             ...(effectivePreferredProviderId ? { preferredProviderId: effectivePreferredProviderId } : {}),
+            ...(effectiveRuntimeSlideModel ? { runtimeSlideModel: effectiveRuntimeSlideModel } : {}),
+            ...(effectiveRuntimeSlideProvider ? { runtimeSlideProvider: effectiveRuntimeSlideProvider } : {}),
             previewRuntime: toolFlow === "editable" ? "ppt-master-agent" : defaultPreviewRuntime,
             templateMode: effectiveTemplateMode,
             templateId: effectiveTemplateId,

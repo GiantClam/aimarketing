@@ -13,6 +13,8 @@ test("worker preview executor forwards request and preserves session id", async 
   let seenResearchBrief: unknown = null
   let seenImages: unknown = null
   let seenModel: unknown = null
+  let seenRuntimeSlideModel: unknown = null
+  let seenRuntimeSlideProvider: unknown = null
   let seenPreferredProviderId: unknown = null
   let seenNarrativeAngle: unknown = null
   let seenTemplateId: unknown = null
@@ -25,6 +27,8 @@ test("worker preview executor forwards request and preserves session id", async 
       seenResearchBrief = request.researchBrief
       seenImages = request.images
       seenModel = request.model
+      seenRuntimeSlideModel = request.runtimeSlideModel
+      seenRuntimeSlideProvider = request.runtimeSlideProvider
       seenPreferredProviderId = request.preferredProviderId
       seenNarrativeAngle = request.narrativeAngle
       seenTemplateId = request.templateId
@@ -55,6 +59,8 @@ test("worker preview executor forwards request and preserves session id", async 
     scenario: "sales-deck",
     language: "zh-CN",
     model: "gpt-5.6-sol",
+    runtimeSlideModel: "gpt-5.4",
+    runtimeSlideProvider: "pptoken",
     preferredProviderId: "enterprise-openai-compatible",
     templateMode: "single-template",
     templateId: "academic_defense",
@@ -74,6 +80,8 @@ test("worker preview executor forwards request and preserves session id", async 
   })
   assert.deepEqual(seenImages, [{ url: "https://example.com/cover.png", role: "cover" }])
   assert.equal(seenModel, "gpt-5.6-sol")
+  assert.equal(seenRuntimeSlideModel, "gpt-5.4")
+  assert.equal(seenRuntimeSlideProvider, "pptoken")
   assert.equal(seenPreferredProviderId, "enterprise-openai-compatible")
   assert.equal(seenNarrativeAngle, "executive-brief")
   assert.equal(seenTemplateId, "academic_defense")

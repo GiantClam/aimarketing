@@ -8,6 +8,7 @@ export type PptWorkerModelValue =
   | "MiniMax-M2.7-highspeed"
   | "MiniMax-M3"
   | "deepseek-v4-pro"
+  | "gpt-5.4"
   | "gpt-5.6-sol"
   | "gpt-5.6-terra"
   | "gpt-5.6-luna"
@@ -38,6 +39,8 @@ export type PptWorkerPreviewRequest = {
   scenario: PptWorkerScenario
   language: PptWorkerLanguage
   model?: PptWorkerModelValue
+  runtimeSlideModel?: string | null
+  runtimeSlideProvider?: string | null
   templateMode?: PptWorkerTemplateMode
   templateId?: PptWorkerTemplateId
   narrativeAngle?: PptWorkerNarrativeAngle

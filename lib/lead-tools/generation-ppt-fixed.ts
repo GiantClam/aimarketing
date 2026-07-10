@@ -179,12 +179,15 @@ export function getLeadToolPreviewProviderTimeoutMs(providerId: Exclude<LeadTool
   return LEAD_TOOL_PPT_PREVIEW_PROVIDER_TIMEOUT_MS
 }
 
-export function resolveRuntimeSlideExecutionConfig(deck: Pick<PptPreviewDeck, "previewModel" | "provider">) {
-  const requestedModel = getLeadToolPptRuntimeSlideModel() || deck.previewModel || "MiniMax-M2.7-highspeed"
+export function resolveRuntimeSlideExecutionConfig(
+  deck: Pick<PptPreviewDeck, "previewModel" | "provider" | "runtimeSlideModel" | "runtimeSlideProvider">,
+) {
+  const requestedModel =
+    normalizeText(deck.runtimeSlideModel) || getLeadToolPptRuntimeSlideModel() || deck.previewModel || "MiniMax-M2.7-highspeed"
   const inferredProviderId = inferPreviewProviderId(requestedModel)
   const preferredProviderId = resolveLeadToolPreviewProviderPreference(
     requestedModel,
-    getLeadToolPptRuntimeSlideProvider() || inferredProviderId || deck.provider,
+    normalizeText(deck.runtimeSlideProvider) || getLeadToolPptRuntimeSlideProvider() || inferredProviderId || deck.provider,
   )
 
   return {

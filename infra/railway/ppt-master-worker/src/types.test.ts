@@ -51,6 +51,40 @@ test("worker preview schema accepts pptoken GPT-5.6 Sol as a remote worker model
   assert.equal(parsed.model, "gpt-5.6-sol")
 })
 
+test("worker preview schema accepts pptoken GPT-5.4 as a remote worker model", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_gpt_5_4",
+    prompt: "Build a tech company introduction deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    model: "gpt-5.4",
+    templateMode: "single-template",
+    templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.model, "gpt-5.4")
+})
+
+test("worker preview schema accepts explicit runtime slide overrides", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_runtime_slide_override",
+    prompt: "Build a tech company introduction deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    runtimeSlideModel: "gpt-5.4",
+    runtimeSlideProvider: "pptoken",
+    templateMode: "single-template",
+    templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.runtimeSlideModel, "gpt-5.4")
+  assert.equal(parsed.runtimeSlideProvider, "pptoken")
+})
+
 test("worker preview schema still rejects unknown template ids", () => {
   assert.throws(
     () =>

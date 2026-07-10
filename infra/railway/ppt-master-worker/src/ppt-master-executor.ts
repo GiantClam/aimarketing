@@ -41,6 +41,8 @@ function toPreviewRequest(request: PreviewRequest): PptPreviewRequest {
     scenario: request.scenario,
     language: request.language,
     model: request.model,
+    runtimeSlideModel: request.runtimeSlideModel,
+    runtimeSlideProvider: request.runtimeSlideProvider,
     preferredProviderId: request.preferredProviderId,
     previewRuntime: "ppt-master-agent",
     templateMode: request.templateMode,

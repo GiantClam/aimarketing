@@ -702,6 +702,39 @@ test("runtime slide execution uses dedicated runtime slide model/provider config
   }
 })
 
+test("runtime slide execution prefers explicit deck-level config before env fallback", () => {
+  const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+
+  process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = "MiniMax-M3"
+  process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = "minimax"
+
+  assert.deepEqual(
+    resolveRuntimeSlideExecutionConfig({
+      previewModel: "deepseek-v4-pro",
+      provider: "deepseek",
+      runtimeSlideModel: "gpt-5.4",
+      runtimeSlideProvider: "pptoken",
+    } as any),
+    {
+      requestedModel: "gpt-5.4",
+      preferredProviderId: "pptoken",
+    },
+  )
+
+  if (previousRuntimeSlideModel === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL = previousRuntimeSlideModel
+  }
+
+  if (previousRuntimeSlideProvider === undefined) {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER
+  } else {
+    process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER = previousRuntimeSlideProvider
+  }
+})
+
 test("runtime slide execution infers provider from runtime slide model when provider override is absent", () => {
   const previousRuntimeSlideModel = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_MODEL
   const previousRuntimeSlideProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_SLIDE_PROVIDER

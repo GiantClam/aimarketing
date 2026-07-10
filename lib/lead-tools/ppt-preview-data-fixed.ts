@@ -103,6 +103,8 @@ export type PptPreviewRequest = {
   language: PptLanguage
   model?: PptPreviewModelValue
   preferredProviderId?: string | null
+  runtimeSlideModel?: string | null
+  runtimeSlideProvider?: string | null
   previewRuntime?: PptPreviewRuntimeValue
   templateMode?: PptPreviewTemplateMode
   templateId?: PptFrontendTemplateId
@@ -235,6 +237,8 @@ export type PptPreviewDeck = {
   provider?: string
   previewModel?: string
   preferredProviderId?: string | null
+  runtimeSlideModel?: string | null
+  runtimeSlideProvider?: string | null
   source?: "live" | "mock"
   templateMode?: PptPreviewTemplateMode
   selectedTemplateId?: PptFrontendTemplateId | null
@@ -2533,6 +2537,8 @@ export function buildMockPptPreview(request: PptPreviewRequest): PptPreviewDeck 
     outline,
     provider: "mock",
     source: "mock",
+    runtimeSlideModel: request.runtimeSlideModel ?? null,
+    runtimeSlideProvider: request.runtimeSlideProvider ?? null,
     templateMode,
     selectedTemplateId: templateMode === "single-template" ? request.templateId ?? null : null,
     pageCount: requestedPageCount,
@@ -2613,6 +2619,8 @@ export function buildPptPreviewDeckFromPlans(
     outline: (firstPlan?.outline?.length ? firstPlan.outline : fallbackOutline).slice(0, pageCount),
     provider: firstPlan?.provider || "live",
     preferredProviderId: request.preferredProviderId ?? null,
+    runtimeSlideModel: request.runtimeSlideModel ?? null,
+    runtimeSlideProvider: request.runtimeSlideProvider ?? null,
     source: "live",
     templateMode,
     selectedTemplateId: templateMode === "single-template" ? request.templateId ?? null : null,

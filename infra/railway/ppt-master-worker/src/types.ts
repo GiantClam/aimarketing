@@ -30,12 +30,15 @@ export const previewRequestSchema = z.object({
       "MiniMax-M2.7-highspeed",
       "MiniMax-M3",
       "deepseek-v4-pro",
+      "gpt-5.4",
       "gpt-5.6-sol",
       "gpt-5.6-terra",
       "gpt-5.6-luna",
       "step-3.7-flash",
     ])
     .optional(),
+  runtimeSlideModel: z.string().trim().min(1).optional(),
+  runtimeSlideProvider: z.string().trim().min(1).optional(),
   preferredProviderId: z.string().trim().min(1).optional(),
   templateMode: z.enum(["auto-4", "single-template"]),
   templateId: z
