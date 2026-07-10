@@ -219,6 +219,43 @@ test("editable ppt agent tool schema does not expose auto template mode to the m
   assert.equal("templateId" in shape, true)
 })
 
+test("editable ppt brief updates are merged by the model-facing tool and preserve unchanged fields", async () => {
+  const tools = buildAiEntryPptTools({
+    currentUser: {
+      id: 7,
+      enterpriseId: 3,
+    } as never,
+    agentId: "executive-ppt",
+    briefState: {
+      topic: "俄乌战争现状",
+      audience: "军事爱好者",
+      goal: "培训讲解与统一认知",
+      scenario: "training",
+      language: "zh-CN",
+      pageCount: 12,
+      tone: "简洁、专业、决策导向",
+      mustInclude: [],
+      missingFields: [],
+      readyForPreview: true,
+      suggestedValues: {
+        audience: "军事爱好者",
+        goal: "培训讲解与统一认知",
+        scenario: "training",
+        language: "zh-CN",
+        pageCount: 12,
+        tone: "简洁、专业、决策导向",
+      },
+    },
+  }) as unknown as TestToolSet
+
+  const result = await tools.update_ppt_brief.execute({ pageCount: 10 })
+
+  assert.equal(result.ok, true)
+  assert.equal((result.brief as Record<string, unknown>).pageCount, 10)
+  assert.equal((result.brief as Record<string, unknown>).topic, "俄乌战争现状")
+  assert.match(String(result.message), /ai-entry-ppt-brief-confirmation:/u)
+})
+
 test("ppt tools return preview metadata and export a downloadable PPTX artifact", async () => {
   const tools = buildAiEntryPptTools({
     currentUser: {

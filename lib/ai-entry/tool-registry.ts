@@ -798,6 +798,7 @@ export async function buildAiEntryToolRegistry(input: {
         agentId: input.auditContext.agentId,
         selectedPreviewModel: input.selectedPreviewModel,
         selectedPreviewProviderId: input.selectedPreviewProviderId,
+        briefState: input.pptBriefState ?? null,
       }),
     },
     firstPartyDesiredToolIds,

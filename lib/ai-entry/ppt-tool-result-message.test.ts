@@ -51,6 +51,21 @@ test("ppt tool result message expands relative export links into absolute URLs",
   })
 })
 
+test("ppt brief update tool result persists a hidden confirmation marker", () => {
+  const message = buildPptToolResultMessage({
+    toolName: "update_ppt_brief",
+    isZh: true,
+    result: {
+      ok: true,
+      message:
+        'PPT brief 已整理，请先确认：\n- 页数：10\n<!-- ai-entry-ppt-brief-confirmation:{"sourcePrompt":"俄乌战争现状","audience":"军事爱好者","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":10,"tone":null,"mustInclude":[]} -->',
+    },
+  })
+
+  assert.match(message || "", /ai-entry-ppt-brief-confirmation:/u)
+  assert.doesNotMatch(stripPptHiddenContextMarkers(message || ""), /ai-entry-ppt-brief-confirmation:/u)
+})
+
 test("ppt tool result message labels html exports as html deliverables", () => {
   const message = buildPptToolResultMessage({
     toolName: "export_ppt_deck",

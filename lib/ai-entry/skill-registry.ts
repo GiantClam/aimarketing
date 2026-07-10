@@ -62,6 +62,7 @@ const SKILL_REGISTRY: Record<string, AiEntrySkillDefinition> = {
     instruction: [
       "For presentation requests grounded in external facts, current events, industry research, companies, policies, markets, or other time-sensitive claims, first call web_search and turn the findings into a concise research brief.",
       "Use the research brief to refine the deck brief before generating slides; do not rely on the raw user prompt alone when factual evidence is needed.",
+      "When the user changes an existing PPT brief, compare the latest request with the current structured brief and call update_ppt_brief with the complete merged brief. Do not use string-pattern guesses, do not treat a field-only edit as a new topic, and do not call preview_ppt_deck on an edit-only turn.",
       "After the brief is research-backed, call preview_ppt_deck with the complete brief.",
       "After preview, summarize the tool-provided recommended variant and wait for the user to explicitly confirm export before calling export_ppt_deck.",
       "When the user confirms export, use the latest preview context and the chosen variant key; if no variant is specified, use the default recommended variant.",
@@ -69,7 +70,7 @@ const SKILL_REGISTRY: Record<string, AiEntrySkillDefinition> = {
       "If export_ppt_deck fails with unchanged parameters, do not blindly retry the same call in a loop. Explain the failure reason and what needs to change before retrying.",
       "Do not claim a downloadable deck exists until export_ppt_deck returns artifact metadata.",
     ].join(" "),
-    toolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck"],
+    toolIds: ["web_search", "preview_ppt_deck", "export_ppt_deck", "update_ppt_brief"],
     mcpServerIds: [],
     version: "2026-06-24",
   },

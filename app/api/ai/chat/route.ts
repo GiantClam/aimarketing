@@ -61,6 +61,7 @@ import {
   buildPptBriefClarificationMessage,
   buildPptBriefPromptSection,
   buildPptTemplateRecommendationSource,
+  createPptBriefStateFromConfirmationContext,
   extractLatestPptBriefConfirmationContext,
   extractPptBriefState,
   isPptBriefConfirmationReply,
@@ -1010,8 +1011,14 @@ export async function POST(request: NextRequest) {
       .map((content) => extractLatestPptTemplateRecommendationContext(content))
       .filter((value): value is NonNullable<typeof value> => Boolean(value))
       .at(-1) ?? null
-    if (pptBriefState) {
-      resolvedInstruction = [resolvedInstruction, buildPptBriefPromptSection(pptBriefState)]
+    const effectivePptBriefState = latestBriefConfirmationContext
+      ? createPptBriefStateFromConfirmationContext(latestBriefConfirmationContext)
+      : pptBriefState
+    const isPptBriefEditTurn = Boolean(
+      latestBriefConfirmationContext && !isPptBriefConfirmationReply(latestUserPrompt),
+    )
+    if (effectivePptBriefState) {
+      resolvedInstruction = [resolvedInstruction, buildPptBriefPromptSection(effectivePptBriefState)]
         .map((section) => section.trim())
         .filter(Boolean)
         .join("\n\n")
@@ -1020,14 +1027,16 @@ export async function POST(request: NextRequest) {
     if (
       executionContext !== "workflow" &&
       effectiveAgentId === "executive-ppt" &&
-      pptBriefState &&
+      effectivePptBriefState &&
       conversationState.ppt.phase !== "preview-ready" &&
       conversationState.ppt.phase !== "exported" &&
       !hasPersistedPptPreviewContext
     ) {
       let gateMessage: string | null
-      if (!pptBriefState.readyForPreview) {
-        gateMessage = buildPptBriefClarificationMessage(pptBriefState, isZh)
+      if (isPptBriefEditTurn) {
+        gateMessage = null
+      } else if (!effectivePptBriefState.readyForPreview) {
+        gateMessage = buildPptBriefClarificationMessage(effectivePptBriefState, isZh)
       } else if (latestTemplateRecommendationContext) {
         const selectedTemplateId = resolvePptTemplateSelectionFromUserText(
           latestUserPrompt,
@@ -1057,24 +1066,24 @@ export async function POST(request: NextRequest) {
         const recommendedTemplates = buildPptMasterRecommendedTemplateSummaries(
           {
             prompt: buildPptTemplateRecommendationSource({
-              briefState: pptBriefState,
+              briefState: effectivePptBriefState,
               latestUserPrompt: latestBriefConfirmationContext.sourcePrompt,
             }),
-            scenario: pptBriefState.scenario || "marketing-campaign",
-            language: pptBriefState.language || "zh-CN",
-            pageCount: pptBriefState.pageCount ?? undefined,
+            scenario: effectivePptBriefState.scenario || "marketing-campaign",
+            language: effectivePptBriefState.language || "zh-CN",
+            pageCount: effectivePptBriefState.pageCount ?? undefined,
           },
           {
             allowedTemplateIds: getPptWorkerSupportedTemplateIds(),
           },
         )
         gateMessage = buildPptTemplateRecommendationMessage({
-          title: latestBriefConfirmationContext.sourcePrompt || pptBriefState.topic,
+          title: latestBriefConfirmationContext.sourcePrompt || effectivePptBriefState.topic,
           recommendedTemplates,
           isZh,
         })
       } else {
-        gateMessage = buildPptBriefConfirmationMessage(pptBriefState, isZh)
+        gateMessage = buildPptBriefConfirmationMessage(effectivePptBriefState, isZh)
       }
 
       if (gateMessage) {
@@ -1122,7 +1131,7 @@ export async function POST(request: NextRequest) {
       enabledToolNames,
       executionContext,
       conversationScope,
-      pptBriefState,
+      pptBriefState: effectivePptBriefState,
       conversationState,
       latestUserPrompt,
       messageContents: normalizedMessageContents,
@@ -1307,8 +1316,21 @@ export async function POST(request: NextRequest) {
           })
         },
       })
+      const blockingToolAppendix = Array.isArray((execution.result as { toolResults?: unknown }).toolResults)
+        ? ((execution.result as { toolResults: Array<{ toolName?: unknown; result?: unknown; output?: unknown }> }).toolResults)
+            .map((toolResult) =>
+              buildPptToolResultMessage({
+                toolName: typeof toolResult.toolName === "string" ? toolResult.toolName : "",
+                result: toolResult.result ?? toolResult.output ?? null,
+                origin: requestOrigin,
+                isZh,
+              }),
+            )
+            .filter((value): value is string => Boolean(value))
+            .join("")
+        : ""
       const normalizedAssistantMessage = normalizeAiEntryIdentity(
-        execution.result.text || "",
+        `${execution.result.text || ""}${blockingToolAppendix}`,
         latestUserPrompt,
         forcedReplyLanguage,
       )
@@ -1317,13 +1339,17 @@ export async function POST(request: NextRequest) {
           toolCallId: call.toolCallId,
           toolName: call.toolName,
         })) ?? []
+      const blockingBriefUpdateExecuted = blockingToolCalls.some(
+        (call) => call.toolName === "update_ppt_brief",
+      )
       const autoPreview = await maybeAutoRunPptPreview({
         agentId: effectiveAgentId,
         executionContext,
         latestUserPrompt,
         assistantMessage: normalizedAssistantMessage,
-        briefState: pptBriefState,
-        previewAlreadyExecuted: blockingToolCalls.some((call) => call.toolName === "preview_ppt_deck"),
+        briefState: effectivePptBriefState,
+        previewAlreadyExecuted:
+          blockingBriefUpdateExecuted || blockingToolCalls.some((call) => call.toolName === "preview_ppt_deck"),
         messageContents: normalizedMessageContents,
         previewTool:
           effectiveSelectedTools.preview_ppt_deck &&
@@ -1412,6 +1438,7 @@ export async function POST(request: NextRequest) {
         let firstTextDeltaAtMs: number | null = null
         let lastTextDeltaAtMs: number | null = null
         let previewToolExecutedInTurn = false
+        let briefUpdateToolExecutedInTurn = false
         let streamedToolAppendix = ""
         const toolFailures: ToolFailureSummary[] = []
         const sendEvent = (payload: Record<string, unknown>) => {
@@ -1559,6 +1586,9 @@ export async function POST(request: NextRequest) {
               if (payload.toolName === "preview_ppt_deck") {
                 previewToolExecutedInTurn = true
               }
+              if (payload.toolName === "update_ppt_brief") {
+                briefUpdateToolExecutedInTurn = true
+              }
               sendEvent({
                 event: "tool_call",
                 conversation_id: conversationId,
@@ -1689,8 +1719,8 @@ export async function POST(request: NextRequest) {
             executionContext,
             latestUserPrompt,
             assistantMessage: provisionalStreamedAnswer,
-            briefState: pptBriefState,
-            previewAlreadyExecuted: previewToolExecutedInTurn,
+            briefState: effectivePptBriefState,
+            previewAlreadyExecuted: previewToolExecutedInTurn || briefUpdateToolExecutedInTurn,
             messageContents: normalizedMessageContents,
             previewTool:
               effectiveSelectedTools.preview_ppt_deck &&

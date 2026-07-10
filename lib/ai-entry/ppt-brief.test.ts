@@ -133,6 +133,30 @@ test("brief follow-up edits merge into the existing brief instead of becoming a 
   assert.doesNotMatch(state.topic || "", /页数改为|改为 8 页/)
 })
 
+test("natural-language page-count corrections use the latest value and preserve the topic", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "生成一个阐述俄乌战争现状的 ppt，受众是军事爱好者，50人培训",
+      "12页太多了，10页就行",
+    ],
+  })
+
+  assert.equal(state.pageCount, 10)
+  assert.match(state.topic || "", /俄乌战争现状/)
+  assert.doesNotMatch(state.topic || "", /12页太多了|10页就行/)
+})
+
+test("natural-language page-count corrections override an earlier labeled page count", () => {
+  const state = extractPptBriefState({
+    userMessages: [
+      "生成一个俄乌战争现状培训 PPT，受众是军事爱好者，场景是培训，目标是课堂讲解，语言是中文，页数=12",
+      "12页太多了，10页就行",
+    ],
+  })
+
+  assert.equal(state.pageCount, 10)
+})
+
 test("brief follow-up edits can update every editable brief field", () => {
   const state = extractPptBriefState({
     userMessages: [

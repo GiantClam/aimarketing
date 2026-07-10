@@ -571,7 +571,14 @@ test("ai chat route forwards the selected model into the PPT tool registry conte
 
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "做一份管理层培训 PPT" }],
+      messages: [
+        {
+          role: "assistant",
+          content:
+            '已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{"previewSessionId":"preview-session-1","defaultVariantKey":"variant-a","variantKeys":["variant-a"]} -->',
+        },
+        { role: "user", content: "做一份管理层培训 PPT" },
+      ],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -660,7 +667,14 @@ test("ai chat route keeps preview template-selection in waiting state instead of
 
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT 预览。" }],
+      messages: [
+        {
+          role: "assistant",
+          content:
+            '已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{"previewSessionId":"preview-session-1","defaultVariantKey":"variant-a","variantKeys":["variant-a"]} -->',
+        },
+        { role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT 预览。" },
+      ],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -686,7 +700,14 @@ test("ai chat route persists queued background preview status so refresh can rec
 
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我先生成一个给管理层看的产品发布可编辑 PPT 预览。" }],
+      messages: [
+        {
+          role: "assistant",
+          content:
+            '已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{"previewSessionId":"preview-session-1","defaultVariantKey":"variant-a","variantKeys":["variant-a"]} -->',
+        },
+        { role: "user", content: "帮我先生成一个给管理层看的产品发布可编辑 PPT 预览。" },
+      ],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -764,7 +785,14 @@ test("ai chat route uses the first user prompt as conversation title fallback", 
 test("ai chat route persists the user prompt before assistant completion", async () => {
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。" }],
+      messages: [
+        {
+          role: "assistant",
+          content:
+            '已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{"previewSessionId":"preview-session-1","defaultVariantKey":"variant-a","variantKeys":["variant-a"]} -->',
+        },
+        { role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。" },
+      ],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",
@@ -850,11 +878,47 @@ test("ai chat route asks follow-up questions and stops before preview when execu
   assert.equal(releaseCalls, 0)
 })
 
+test("ai chat route delegates confirmed PPT brief edits to the model with the persisted brief", async () => {
+  toolRegistryToolIds = ["update_ppt_brief", "preview_ppt_deck"]
+
+  const response = await POST({
+    json: async () => ({
+      messages: [
+        {
+          role: "assistant",
+          content:
+            'PPT brief 已整理，请先确认：\n<!-- ai-entry-ppt-brief-confirmation:{"sourcePrompt":"俄乌战争现状","audience":"军事爱好者","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":12,"tone":"简洁、专业、决策导向","mustInclude":[]} -->',
+        },
+        { role: "user", content: "12页太多了，10页就行" },
+      ],
+      stream: true,
+      agentConfig: {
+        agentId: "executive-ppt",
+      },
+    }),
+    nextUrl: { origin: "https://example.com" },
+  })
+
+  const text = await response.text()
+  assert.match(text, /Normal chat reply\./)
+  assert.doesNotMatch(text, /PPT brief 已整理，请先确认/u)
+  assert.equal(
+    (lastToolRegistryBuildInput?.pptBriefState as { pageCount?: number } | undefined)?.pageCount,
+    12,
+  )
+  assert.match(lastStreamingSystemPrompt, /Page count: 12/u)
+})
+
 test("ai chat route accepts natural-language follow-up answers and continues after executive-ppt clarification", async () => {
   const response = await POST({
     json: async () => ({
       messages: [
         { role: "user", content: "做一个克里米亚现状的ppt，10页，检索2026年最新的信息" },
+        {
+          role: "assistant",
+          content:
+            'PPT brief 已整理，请先确认：\n<!-- ai-entry-ppt-brief-confirmation:{"sourcePrompt":"做一个克里米亚现状的ppt","audience":"初级军事爱好者","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":10,"tone":null,"mustInclude":[]} -->',
+        },
         { role: "user", content: "受众是初级军事爱好者，场景是50人的课堂讲解" },
       ],
       stream: true,
@@ -880,7 +944,14 @@ test("ai chat route does not persist closed stream transport errors as assistant
 
   const response = await POST({
     json: async () => ({
-      messages: [{ role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。" }],
+      messages: [
+        {
+          role: "assistant",
+          content:
+            '已生成 PPT 预览：\n<!-- ai-entry-ppt-preview-context:{"previewSessionId":"preview-session-1","defaultVariantKey":"variant-a","variantKeys":["variant-a"]} -->',
+        },
+        { role: "user", content: "帮我生成一份给管理层看的产品发布董事会汇报 PPT。" },
+      ],
       stream: true,
       agentConfig: {
         agentId: "executive-ppt",

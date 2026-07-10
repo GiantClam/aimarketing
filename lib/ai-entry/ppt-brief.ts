@@ -44,6 +44,17 @@ export type PptBriefConfirmationContext = {
   mustInclude: string[]
 }
 
+export type PptBriefUpdateInput = {
+  topic: string
+  audience: string
+  goal: string
+  scenario: PptBriefScenario
+  language: PptBriefLanguage
+  pageCount?: number | null
+  tone?: string | null
+  mustInclude?: string[]
+}
+
 const PPT_BRIEF_CONFIRMATION_CONTEXT_PREFIX = "<!-- ai-entry-ppt-brief-confirmation:"
 const PPT_BRIEF_CONFIRMATION_CONTEXT_SUFFIX = " -->"
 
@@ -222,11 +233,17 @@ function inferGoal(text: string, scenario: PptBriefScenario | null, language: Pp
 }
 
 function inferPageCount(text: string) {
-  const match =
-    text.match(/(\d{1,2})\s*(?:页|p\b|pages?|slides?)/iu) ||
-    text.match(/(?:page count|slide count)\D{0,8}(\d{1,2})/iu)
-  if (!match) return null
-  const parsed = Number.parseInt(match[1] || "", 10)
+  const candidates: Array<{ index: number; value: string }> = []
+  for (const match of text.matchAll(/(\d{1,2})\s*(?:页|p\b|pages?|slides?)/giu)) {
+    candidates.push({ index: match.index ?? 0, value: match[1] || "" })
+  }
+  for (const match of text.matchAll(/(?:页数|页码|page count|slide count)\D{0,8}(\d{1,2})/giu)) {
+    candidates.push({ index: match.index ?? 0, value: match[1] || "" })
+  }
+
+  const candidate = candidates.sort((left, right) => left.index - right.index).at(-1)
+  if (!candidate) return null
+  const parsed = Number.parseInt(candidate.value, 10)
   if (!Number.isFinite(parsed) || parsed < 4 || parsed > 20) return null
   return parsed
 }
@@ -252,8 +269,20 @@ function stripExplicitBriefFields(text: string) {
     .trim()
 }
 
+function isBriefFieldOnlyEdit(text: string) {
+  const hasEditIntent =
+    /(?:改|调整|设置|修改|换成|变更|太多|太少|不够|过多|过少|就行|即可|吧|change(?:d)?|adjust(?:ed)?|set|replace|too many|too few|enough|fine)/iu.test(
+      text,
+    )
+  const hasBriefField =
+    /(?:页数|页码|受众|对象|目标|目的|场景|用途|语言|风格|语气|必须包含|包括|包含|pages?|slides?)/iu.test(text) ||
+    /\d{1,2}\s*页/iu.test(text)
+  return hasEditIntent && hasBriefField
+}
+
 function inferTopic(userMessages: string[]) {
   for (let index = userMessages.length - 1; index >= 0; index -= 1) {
+    if (isBriefFieldOnlyEdit(userMessages[index] || "")) continue
     const normalized = stripExplicitBriefFields(userMessages[index] || "")
     if (normalized) return normalized.slice(0, 120)
   }
@@ -300,6 +329,56 @@ function buildSuggestedValues(input: {
   }
 }
 
+export function createPptBriefState(input: PptBriefUpdateInput): PptBriefState {
+  const topic = input.topic.trim()
+  const audience = input.audience.trim()
+  const goal = input.goal.trim()
+  const tone = input.tone?.trim() || null
+  const mustInclude = readOptionalStringArray(input.mustInclude)
+  const missingFields: PptBriefMissingField[] = []
+
+  if (!audience) missingFields.push("audience")
+  if (!goal) missingFields.push("goal")
+  if (!input.scenario) missingFields.push("scenario")
+  if (!input.language) missingFields.push("language")
+
+  return {
+    topic: topic || null,
+    audience: audience || null,
+    goal: goal || null,
+    scenario: input.scenario || null,
+    language: input.language || null,
+    pageCount: input.pageCount ?? null,
+    tone,
+    mustInclude,
+    missingFields,
+    readyForPreview: missingFields.length === 0,
+    suggestedValues: buildSuggestedValues({
+      scenario: input.scenario || null,
+      language: input.language || "zh-CN",
+      audience: audience || null,
+      goal: goal || null,
+      pageCount: input.pageCount ?? null,
+      tone,
+    }),
+  }
+}
+
+export function createPptBriefStateFromConfirmationContext(
+  context: PptBriefConfirmationContext,
+) {
+  return createPptBriefState({
+    topic: context.sourcePrompt || "Untitled presentation",
+    audience: context.audience,
+    goal: context.goal,
+    scenario: context.scenario,
+    language: context.language,
+    pageCount: context.pageCount,
+    tone: context.tone,
+    mustInclude: context.mustInclude,
+  })
+}
+
 export function extractPptBriefState(input: {
   userMessages: string[]
 }) {
@@ -311,7 +390,7 @@ export function extractPptBriefState(input: {
   const scenario = explicitFields.scenario || inferScenario(combinedText)
   const audience = explicitFields.audience || inferAudience(combinedText, language)
   const goal = explicitFields.goal || inferGoal(combinedText, scenario, language)
-  const pageCount = explicitFields.pageCount || inferPageCount(combinedText)
+  const pageCount = inferPageCount(combinedText) || explicitFields.pageCount
   const tone = explicitFields.tone || inferTone(combinedText, language)
   const mustInclude =
     explicitFields.mustInclude.length > 0

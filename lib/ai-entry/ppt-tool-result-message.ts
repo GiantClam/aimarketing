@@ -483,6 +483,17 @@ export function buildPptToolResultMessage(input: {
   origin?: string | null
   isZh?: boolean
 }) {
+  if (input.toolName === "update_ppt_brief" && input.result && typeof input.result === "object") {
+    const result = input.result as { ok?: unknown; message?: unknown; error?: { message?: unknown } }
+    if (result.ok === false) {
+      return normalizeOptionalText(result.error?.message)
+        ? `\n\n${normalizeOptionalText(result.error?.message)}`
+        : null
+    }
+    const message = normalizeOptionalText(result.message)
+    return message ? `\n\n${message}` : null
+  }
+
   if (input.toolName === "preview_ppt_deck" && input.result && typeof input.result === "object") {
     const result = input.result as PreviewPptDeckResult
     const isZh = input.isZh !== false

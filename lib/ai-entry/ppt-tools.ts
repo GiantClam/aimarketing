@@ -5,7 +5,12 @@ import { z } from "zod"
 
 import type { AuthUser } from "@/lib/auth/session"
 import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
-import { preparePptPreviewInput } from "@/lib/ai-entry/ppt-brief"
+import {
+  buildPptBriefConfirmationMessage,
+  createPptBriefState,
+  preparePptPreviewInput,
+  type PptBriefState,
+} from "@/lib/ai-entry/ppt-brief"
 import { getLeadToolPptExecutionTransport } from "@/lib/lead-tools/config"
 import type {
   PptPreviewDeck,
@@ -65,6 +70,17 @@ const genericPptTemplateIdSchema = z
   .string()
   .trim()
   .refine(isPptWorkerTemplateSupported, "Unknown PPT template")
+
+const updatePptBriefInputSchema = z.object({
+  topic: z.string().trim().min(1).optional().describe("Complete presentation topic after applying the user's change."),
+  audience: z.string().trim().min(1).optional().describe("Complete target audience after applying the user's change."),
+  goal: z.string().trim().min(1).optional().describe("Complete presentation goal after applying the user's change."),
+  scenario: pptScenarioSchema.optional(),
+  language: pptLanguageSchema.optional(),
+  pageCount: z.number().int().min(4).max(20).nullable().optional(),
+  tone: z.string().trim().min(1).nullable().optional(),
+  mustInclude: z.array(z.string().trim().min(1)).max(12).optional(),
+})
 
 const editablePreviewPptDeckInputSchema = z
   .object({
@@ -819,6 +835,7 @@ export function buildAiEntryPptTools(input: {
   agentId?: string | null
   selectedPreviewModel?: string | null
   selectedPreviewProviderId?: string | null
+  briefState?: PptBriefState | null
 }): ToolSet {
   const { currentUser } = input
   const toolFlow = resolvePptToolFlow(input.agentId)
@@ -840,9 +857,62 @@ export function buildAiEntryPptTools(input: {
       ? "Export a downloadable editable PPTX artifact from a ppt-master preview session."
       : toolFlow === "presentation"
         ? "Export a downloadable HTML presentation artifact from a frontend-slides preview session."
-        : "Export the downloadable deck artifact from a previously generated preview session and selected variant. Use this after preview_ppt_deck when the user wants the actual deliverable file."
+      : "Export the downloadable deck artifact from a previously generated preview session and selected variant. Use this after preview_ppt_deck when the user wants the actual deliverable file."
+
+  const updateBriefTool = tool<unknown, Record<string, unknown>>({
+    description:
+      "Update the editable PPT brief after the user changes requirements. Compare the latest user request with the current PPT brief, merge the change into the complete brief, and do not generate a preview on this turn.",
+    inputSchema: updatePptBriefInputSchema as any,
+    execute: async (rawInput: unknown): Promise<Record<string, unknown>> => {
+      if (toolFlow !== "editable") {
+        return {
+          ok: false,
+          error: {
+            code: "ppt_brief_update_not_supported",
+            message: "Brief updates are only available in the editable PPT assistant.",
+          },
+        }
+      }
+
+      const update = rawInput as z.infer<typeof updatePptBriefInputSchema>
+      const current = input.briefState
+      const topic = update.topic?.trim() || current?.topic || ""
+      const audience = update.audience?.trim() || current?.audience || ""
+      const goal = update.goal?.trim() || current?.goal || ""
+      const scenario = update.scenario || current?.scenario
+      const language = update.language || current?.language
+
+      if (!topic || !audience || !goal || !scenario || !language) {
+        return {
+          ok: false,
+          error: {
+            code: "ppt_brief_update_incomplete",
+            message: "The merged PPT brief is still incomplete. Keep the existing values and provide the changed fields.",
+          },
+        }
+      }
+
+      const nextBrief = createPptBriefState({
+        topic,
+        audience,
+        goal,
+        scenario,
+        language,
+        pageCount: update.pageCount === undefined ? current?.pageCount : update.pageCount,
+        tone: update.tone === undefined ? current?.tone : update.tone,
+        mustInclude: update.mustInclude === undefined ? current?.mustInclude : update.mustInclude,
+      })
+
+      return {
+        ok: true,
+        brief: nextBrief,
+        message: buildPptBriefConfirmationMessage(nextBrief, nextBrief.language === "zh-CN"),
+      }
+    },
+  })
 
   return {
+    ...(toolFlow === "editable" ? { update_ppt_brief: updateBriefTool } : {}),
     preview_ppt_deck: tool<unknown, Record<string, unknown>>({
       description: previewDescription,
       inputSchema: previewInputSchema as any,
