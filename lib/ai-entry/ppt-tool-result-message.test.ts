@@ -343,6 +343,8 @@ test("template selection resolves explicit template ids and labels from recommen
   assert.equal(resolvePptTemplateSelectionFromUserText("选择新网格粗体", context), "neo-grid-bold")
   assert.equal(resolvePptTemplateSelectionFromUserText("用第一个模板生成", context), "long-table")
   assert.equal(resolvePptTemplateSelectionFromUserText("用第2个模板生成", context), "neo-grid-bold")
+  assert.equal(resolvePptTemplateSelectionFromUserText("1", context), "long-table")
+  assert.equal(resolvePptTemplateSelectionFromUserText("选择 2", context), "neo-grid-bold")
 })
 
 test("template selection can resolve explicit catalog template names without a recommendation context", () => {

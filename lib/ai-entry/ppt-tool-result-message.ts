@@ -311,9 +311,10 @@ export function resolvePptTemplateSelectionFromUserText(
   }
 
   const numberedMatch = normalized.match(/(?:第\s*([1-9]\d*)\s*个?模板|template\s*#?\s*([1-9]\d*)|option\s*#?\s*([1-9]\d*))/iu)
+  const bareNumberMatch = normalized.match(/^(?:选择|选|用)?\s*([1-9]\d*)\s*(?:号|项|个?模板|生成|继续|预览)?$/u)
   const chineseOrdinalMatch = normalized.match(/第\s*([一二三四五六七八九十]+)\s*个?模板/u)
   const numericSelectedIndex = Number.parseInt(
-    numberedMatch?.[1] || numberedMatch?.[2] || numberedMatch?.[3] || "",
+    numberedMatch?.[1] || numberedMatch?.[2] || numberedMatch?.[3] || bareNumberMatch?.[1] || "",
     10,
   )
   const chineseSelectedIndex = chineseOrdinalMatch
