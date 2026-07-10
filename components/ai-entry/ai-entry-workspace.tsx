@@ -2080,6 +2080,11 @@ export function AiEntryWorkspace({
         setIsConversationLoading(false)
         return
       }
+      activeRequestAbortControllerRef.current?.abort()
+      activeRequestAbortControllerRef.current = null
+      pendingFirstConversationRouteRef.current = false
+      isLoadingRef.current = false
+      setIsResponseLoading(false)
       setConversationId(null)
       latestConversationIdRef.current = null
       setMessages([])
