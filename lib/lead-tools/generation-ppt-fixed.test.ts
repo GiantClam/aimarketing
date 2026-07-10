@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
+  __testables__,
   buildPreviewProviderMessages,
   buildStyleAwarePrompt,
   generateLeadToolPptStoryDeck,
@@ -645,6 +646,15 @@ test("every imported ppt-master example plans from its official visual contract"
       false,
     )
   }
+})
+
+test("runtime slide prompt preserves design while requiring local fit checks", () => {
+  const prompt = __testables__.buildRuntimeSlideSystemPrompt("zh-CN")
+
+  assert.match(prompt, /保持当前模板骨架、页面节奏和视觉语言/u)
+  assert.match(prompt, /位于 1280x720 画布及所属容器内/u)
+  assert.match(prompt, /只在当前模块内换行、缩短正文或调整局部几何/u)
+  assert.match(prompt, /不要改变整体构图、删除主内容、缩小标题或把元素推到画布外/u)
 })
 
 test("runtime slide provider preference honors explicit override", () => {

@@ -2447,6 +2447,7 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
       "所有文字和结构必须与当前页面内容匹配，不能残留示例文案、占位词或通用模板标题。",
       "输出中必须包含顶层语义分组，例如 background、chrome、content、annotations。",
       "同一风格下要保持一致的视觉语法，但每一页都应重新构图，不要复刻上一页壳子。",
+      "保持当前模板骨架、页面节奏和视觉语言。输出前检查所有可见文字和图形都位于 1280x720 画布及所属容器内；如果内容放不下，只在当前模块内换行、缩短正文或调整局部几何，不要改变整体构图、删除主内容、缩小标题或把元素推到画布外。",
     ].join(" ")
   }
 
@@ -2461,6 +2462,7 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
     "All text and structure must match the current slide content. Never leave sample copy, placeholders, or generic template labels in the output.",
     "Include semantic top-level groups such as background, chrome, content, and annotations.",
     "Keep the visual language consistent within the variant while still recomposing each page rather than duplicating one shell.",
+    "Preserve the current template skeleton, page rhythm, and visual language. Before returning, check that all visible text and shapes stay within the 1280x720 canvas and their owning containers; if content does not fit, reflow text or adjust only local geometry instead of changing the composition, deleting primary content, shrinking titles, or pushing elements outside the canvas.",
   ].join(" ")
 }
 
@@ -2864,4 +2866,8 @@ export function setLeadToolPptGenerationDepsForTests(
   generateTextWithWriterModelImpl = deps?.generateTextWithWriterModel ?? generateTextWithWriterModel
   generateStructuredObjectWithWriterModelImpl =
     deps?.generateStructuredObjectWithWriterModel ?? generateStructuredObjectWithWriterModel
+}
+
+export const __testables__ = {
+  buildRuntimeSlideSystemPrompt,
 }
