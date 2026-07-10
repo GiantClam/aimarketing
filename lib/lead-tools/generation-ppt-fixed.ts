@@ -2447,6 +2447,9 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
       "所有文字和结构必须与当前页面内容匹配，不能残留示例文案、占位词或通用模板标题。",
       "输出中必须包含顶层语义分组，例如 background、chrome、content、annotations。",
       "同一风格下要保持一致的视觉语法，但每一页都应重新构图，不要复刻上一页壳子。",
+      "如果页面语言是中文，所有可见界面文字都必须用简体中文；允许 AI、CRM、SaaS 这类必要缩写，但不要额外出现 executive flow、product-launch、evidence、scenario 之类英文元信息。",
+      "不要把场景名、native page type、layout 名、文件路径、模板 id、spec 名称画进页面，也不要把这些信息伪装成页脚或眉角标签。",
+      "优先保证正文可读性：避免大段深色底上的低对比度小字，避免难以辨认的超细字和装饰性噪声。",
     ].join(" ")
   }
 
@@ -2461,6 +2464,9 @@ function buildRuntimeSlideSystemPrompt(language: PptPreviewRequest["language"]) 
     "All text and structure must match the current slide content. Never leave sample copy, placeholders, or generic template labels in the output.",
     "Include semantic top-level groups such as background, chrome, content, and annotations.",
     "Keep the visual language consistent within the variant while still recomposing each page rather than duplicating one shell.",
+    "Do not render scenario names, native page type names, layout names, file paths, template ids, or spec metadata as visible slide text.",
+    "For non-English slides, keep visible UI copy in the requested language instead of leaking English chrome labels.",
+    "Preserve readability: avoid long low-contrast body copy on dark panels, avoid tiny footnotes, and avoid decorative noise that competes with the message.",
   ].join(" ")
 }
 
@@ -2602,6 +2608,13 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
     `Body: ${context.slide.body}`,
     `Bullets: ${context.slide.bullets.join(" | ")}`,
     ...structuredSections,
+    "",
+    context.deck.language === "zh-CN"
+      ? "Visible text constraints: 页面里不要出现 product-launch、executive flow、evidence、scenario、layout、native page type、template id 这类英文元信息；页脚和眉角也不要塞这类标签。"
+      : "Visible text constraints: do not show scenario names, layout/native page type labels, template ids, or other metadata in the slide chrome.",
+    context.deck.language === "zh-CN"
+      ? "Readability constraints: 如果使用深色底块，正文和说明文字必须保持高对比与足够字号；避免长段低对比小字。"
+      : "Readability constraints: if you use dark panels, keep body copy high-contrast and large enough to read; avoid long low-contrast paragraphs.",
     ...(shouldIncludeDeckOutline ? ["", "Deck outline:", ...context.deck.outline.map((item, index) => `${index + 1}. ${item}`)] : []),
     "",
     "Recent previous slides in this variant:",
@@ -2864,4 +2877,9 @@ export function setLeadToolPptGenerationDepsForTests(
   generateTextWithWriterModelImpl = deps?.generateTextWithWriterModel ?? generateTextWithWriterModel
   generateStructuredObjectWithWriterModelImpl =
     deps?.generateStructuredObjectWithWriterModel ?? generateStructuredObjectWithWriterModel
+}
+
+export const __testables__ = {
+  buildRuntimeSlideSystemPrompt,
+  buildRuntimeSlideUserPrompt,
 }
