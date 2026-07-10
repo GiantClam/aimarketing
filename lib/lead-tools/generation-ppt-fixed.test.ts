@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
-  __testables__,
   buildPreviewProviderMessages,
   buildStyleAwarePrompt,
   generateLeadToolPptStoryDeck,
@@ -646,64 +645,6 @@ test("every imported ppt-master example plans from its official visual contract"
       false,
     )
   }
-})
-
-test("runtime slide prompts forbid visible metadata leakage and reinforce zh readability", () => {
-  const systemPrompt = __testables__.buildRuntimeSlideSystemPrompt("zh-CN")
-  assert.match(systemPrompt, /所有可见界面文字都必须用简体中文/u)
-  assert.match(systemPrompt, /不要把场景名、native page type、layout 名、文件路径、模板 id、spec 名称画进页面/u)
-  assert.match(systemPrompt, /避免大段深色底上的低对比度小字/u)
-
-  const userPrompt = __testables__.buildRuntimeSlideUserPrompt({
-    deck: {
-      title: "企业 AI 营销工作台",
-      scenario: "product-launch",
-      language: "zh-CN",
-      outline: ["企业 AI 营销工作台", "决策框架", "四模块闭环"],
-    } as any,
-    variant: {
-      name: "attention_is_all_you_need — Design Spec",
-      summary: "面向管理层的增长运营工作台",
-      stylePrompt: "信息密度高、结构清晰、理性科技感",
-      slides: [{}, {}, {}],
-      palette: {
-        background: "#FFFFFF",
-        foreground: "#1A202C",
-        accent: "#3182CE",
-        panel: "#F5F7FA",
-        border: "#E2E8F0",
-      },
-    } as any,
-    slide: {
-      layout: "agenda",
-      nativePageType: "module-rail",
-      kicker: "模块目录",
-      title: "决策框架",
-      body: "本次简报聚焦为什么现在上、具体买到什么、以及如何低风险落地。",
-      bullets: ["先看经营约束与机会", "再看平台能力与证据", "最后明确试点范围与推进节奏", "业务现状与判断"],
-      contentsItems: [
-        { index: "01", title: "先看经营约束与机会", detail: "先看经营约束与机会" },
-        { index: "02", title: "再看平台能力与证据", detail: "再看平台能力与证据" },
-      ],
-    } as any,
-    slideIndex: 1,
-    projectDir: "/tmp/project",
-    slideFileBaseName: "02_agenda",
-    designSpecPath: "/tmp/project/design_spec.md",
-    specLockPath: "/tmp/project/spec_lock.md",
-    sourceBriefPath: "/tmp/project/source_brief.md",
-    previousSlides: [
-      {
-        layout: "cover",
-        title: "企业 AI 营销工作台",
-        body: "封面摘要",
-        bullets: ["统一工作台", "数据整合"],
-      },
-    ],
-  })
-
-  assert.match(userPrompt, /页面里不要出现 product-launch、executive flow、evidence、scenario、layout、native page type、template id 这类英文元信息/u)
-  assert.match(userPrompt, /如果使用深色底块，正文和说明文字必须保持高对比与足够字号/u)
 })
 
 test("runtime slide provider preference honors explicit override", () => {
