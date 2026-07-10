@@ -442,7 +442,11 @@ function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
   const selectedTemplateId = readOptionalString(record.templateId)
   if (selectedTemplateId && isPptMasterLibraryTemplateSupported(selectedTemplateId)) {
     return {
-      preparedInput: record,
+      preparedInput: {
+        ...record,
+        templateMode: "single-template",
+        templateId: selectedTemplateId,
+      },
       selectedTemplateId,
       recommendedTemplates: [] as Array<Record<string, unknown>>,
     }
@@ -476,11 +480,7 @@ function maybeApplyDefaultBackgroundPptTemplateSelection(input: {
     }
   }
 
-  return {
-    preparedInput: record,
-    selectedTemplateId: null,
-    recommendedTemplates: [] as Array<Record<string, unknown>>,
-  }
+  throw new Error("ppt_master_template_selection_unavailable")
 }
 
 function filterToolSet(tools: ToolSet, allowedIds: Set<string>) {

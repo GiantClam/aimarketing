@@ -54,7 +54,7 @@ let aiEntryPreviewAppendError: string | null = null
 let appendedAiEntryMessages: Array<{ conversationId: string | number | null | undefined; content: string }> = []
 let durablePptQueueEnabled = false
 let remotePptJobByRequestId: { jobId: string } | null = null
-let remotePptSubmitCalls: Array<{ requestId: string; prompt: string }> = []
+let remotePptSubmitCalls: Array<{ requestId: string; prompt: string; templateMode?: string; templateId?: string }> = []
 let remotePptStatus: Record<string, unknown> = { jobId: "remote-job-1", status: "running" }
 let persistedRemoteDecks: Array<Record<string, unknown>> = []
 
@@ -182,8 +182,18 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/lead-tools/ppt-worker-client") {
     return {
-      requestPptWorkerPreviewSubmit: async (input: { requestId: string; prompt: string }) => {
-        remotePptSubmitCalls.push({ requestId: input.requestId, prompt: input.prompt })
+      requestPptWorkerPreviewSubmit: async (input: {
+        requestId: string
+        prompt: string
+        templateMode?: string
+        templateId?: string
+      }) => {
+        remotePptSubmitCalls.push({
+          requestId: input.requestId,
+          prompt: input.prompt,
+          templateMode: input.templateMode,
+          templateId: input.templateId,
+        })
         remotePptJobByRequestId = { jobId: "remote-job-1" }
         return { jobId: "remote-job-1", status: "queued" }
       },
@@ -619,6 +629,8 @@ test("resumes remote ppt-master jobs from Supabase state without Vercel polling"
   assert.equal(submitted.failed, 0)
   assert.equal(remotePptSubmitCalls.length, 1)
   assert.equal(remotePptSubmitCalls[0]?.requestId, `ai-entry-ppt-task-${taskId}`)
+  assert.equal(remotePptSubmitCalls[0]?.templateMode, "single-template")
+  assert.ok(remotePptSubmitCalls[0]?.templateId)
   const submittedTask = tasksById.get(taskId)
   assert.equal(submittedTask?.status, "running")
   assert.equal(submittedTask?.leaseExpiresAt, null)

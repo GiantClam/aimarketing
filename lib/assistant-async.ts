@@ -23,6 +23,11 @@ import { persistLeadToolPreviewResult } from "@/lib/lead-tools/runtime"
 import { storePptPreviewSessionDeck } from "@/lib/lead-tools/ppt-preview-session-store"
 import type { PptPreviewDeck } from "@/lib/lead-tools/ppt-preview-data-fixed"
 import {
+  buildPptMasterRecommendedTemplateSummaries,
+  getPptWorkerSupportedTemplateIds,
+  isPptMasterLibraryTemplateSupported,
+} from "@/lib/lead-tools/ppt-worker-capabilities"
+import {
   requestPptWorkerPreviewStatus,
   requestPptWorkerPreviewSubmit,
 } from "@/lib/lead-tools/ppt-worker-client"
@@ -1205,7 +1210,10 @@ function buildDurablePptPreviewRequest(
       ? input.scenario
       : "marketing-campaign"
   const language = input.language === "en-US" ? "en-US" : "zh-CN"
-  const templateMode = input.templateMode === "single-template" ? "single-template" : "auto-4"
+  const requestedTemplateId =
+    typeof input.templateId === "string" && isPptMasterLibraryTemplateSupported(input.templateId)
+      ? input.templateId.trim()
+      : null
   const narrativeAngle =
     input.narrativeAngle === "executive-brief" ||
     input.narrativeAngle === "campaign-story" ||
@@ -1215,6 +1223,23 @@ function buildDurablePptPreviewRequest(
       : undefined
   const pageCount =
     typeof input.pageCount === "number" && Number.isInteger(input.pageCount) ? input.pageCount : undefined
+  const templateId =
+    requestedTemplateId ||
+    buildPptMasterRecommendedTemplateSummaries(
+      {
+        prompt,
+        ...(typeof input.researchBrief === "string" || getObjectRecord(input.researchBrief)
+          ? { researchBrief: input.researchBrief as PptWorkerPreviewRequest["researchBrief"] }
+          : {}),
+        scenario,
+        language,
+        ...(pageCount ? { pageCount } : {}),
+      },
+      { allowedTemplateIds: getPptWorkerSupportedTemplateIds() },
+    )[0]?.templateId?.trim()
+  if (!templateId) {
+    throw new Error("ppt_master_template_selection_unavailable")
+  }
 
   return {
     requestId,
@@ -1225,9 +1250,9 @@ function buildDurablePptPreviewRequest(
     scenario,
     language,
     ...(typeof input.model === "string" && input.model.trim() ? { model: input.model.trim() } : {}),
-    templateMode,
-    ...(typeof input.templateId === "string" && input.templateId.trim() ? { templateId: input.templateId.trim() } : {}),
-    ...(narrativeAngle ? { narrativeAngle } : {}),
+    templateMode: "single-template",
+    templateId,
+    narrativeAngle: narrativeAngle || "executive-brief",
     ...(pageCount ? { pageCount } : {}),
     ...(Array.isArray(input.images) ? { images: input.images as PptWorkerPreviewRequest["images"] } : {}),
     allowMockFallback: false,

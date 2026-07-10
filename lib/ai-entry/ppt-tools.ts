@@ -615,6 +615,11 @@ function resolveEditableTemplateSelection(input: {
   const selectedTemplateId =
     explicitTemplateId ||
     (input.preferSingleTemplate ? recommendedTemplates[0]?.templateId?.trim() || null : null)
+  if (input.preferSingleTemplate && !selectedTemplateId) {
+    throw new Error("ppt_master_template_selection_unavailable")
+  }
+
+  // Editable decks are always materialized from one vendor ppt-master template.
   const templateMode = selectedTemplateId ? ("single-template" as const) : (input.templateMode ?? "auto-4")
   return {
     recommendedTemplates,
