@@ -16,6 +16,7 @@ test("worker preview executor forwards request and preserves session id", async 
   let seenPreferredProviderId: unknown = null
   let seenNarrativeAngle: unknown = null
   let seenTemplateId: unknown = null
+  let seenPreviewRuntime: unknown = null
 
   setPptWorkerExecutorDepsForTests({
     generateLeadToolPptPreviewWithFallback: async (request, allowMockFallback) => {
@@ -27,6 +28,7 @@ test("worker preview executor forwards request and preserves session id", async 
       seenPreferredProviderId = request.preferredProviderId
       seenNarrativeAngle = request.narrativeAngle
       seenTemplateId = request.templateId
+      seenPreviewRuntime = request.previewRuntime
 
       return {
         title: "Railway Deck",
@@ -75,6 +77,7 @@ test("worker preview executor forwards request and preserves session id", async 
   assert.equal(seenPreferredProviderId, "enterprise-openai-compatible")
   assert.equal(seenNarrativeAngle, "executive-brief")
   assert.equal(seenTemplateId, "academic_defense")
+  assert.equal(seenPreviewRuntime, "ppt-master-agent")
   assert.equal(result.previewSessionId, "session_worker_1")
   assert.equal(result.generatedAt, "2026-06-24T08:00:00.000Z")
 })

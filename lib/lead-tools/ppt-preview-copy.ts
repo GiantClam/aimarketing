@@ -61,6 +61,7 @@ type PreviewPromptOptions = {
 
 export function buildPreviewSystemPrompt(request: PptPreviewRequest, options: PreviewPromptOptions) {
   const { language } = request
+  const isPptMasterRuntime = request.previewRuntime === "ppt-master-agent"
   const pageCount = request.pageCount ?? 9
   const layoutSequenceLabel = options.layoutSequence.join(", ")
   const templateInstruction =
@@ -74,7 +75,9 @@ export function buildPreviewSystemPrompt(request: PptPreviewRequest, options: Pr
 
   if (language === "zh-CN") {
     return [
-      "你是 frontend-slides 预览链路里的演示文稿策划助手。",
+      isPptMasterRuntime
+        ? "你是 ppt-master skill 运行链路里的演示文稿策划助手。"
+        : "你是 frontend-slides 预览链路里的演示文稿策划助手。",
       `目标是直接生成一套适合商业展示的 ${pageCount} 页高信号 PPT 内容方案。`,
       "必须输出中文。",
       "必须严格返回结构化结果，不要输出 JSON 之外的说明。",
@@ -97,7 +100,9 @@ export function buildPreviewSystemPrompt(request: PptPreviewRequest, options: Pr
   }
 
   return [
-    "You are the presentation strategist inside a frontend-slides preview pipeline.",
+    isPptMasterRuntime
+      ? "You are the presentation strategist inside the ppt-master skill runtime."
+      : "You are the presentation strategist inside a frontend-slides preview pipeline.",
     `Generate one business-ready ${pageCount}-slide high-signal presentation plan.`,
     "Output in English only.",
     "Return structured data only.",
@@ -183,6 +188,17 @@ export function buildPreviewStyleKicker(
       process: "行动张贴",
       timeline: "下一张告示",
     },
+    "ppt169_building_effective_agents": {
+      cover: "系统封面",
+      agenda: "能力目录",
+      insight: "核心判断",
+      comparison: "编排对照",
+      evidence: "运行证据",
+      stats: "能力指标",
+      chart: "系统图谱",
+      process: "执行链路",
+      timeline: "落地序列",
+    },
     "ppt169_swiss_grid_systems": {
       cover: "GRID BRIEF",
       agenda: "模块目录",
@@ -229,6 +245,17 @@ export function buildPreviewStyleKicker(
       chart: "SPREAD DIAGRAM",
       process: "POSTED STEPS",
       timeline: "POSTING ORDER",
+    },
+    "ppt169_building_effective_agents": {
+      cover: "AGENT SYSTEMS",
+      agenda: "CAPABILITY MAP",
+      insight: "SYSTEM VERDICT",
+      comparison: "ORCHESTRATION",
+      evidence: "RUNTIME PROOF",
+      stats: "CAPABILITY SIGNALS",
+      chart: "SYSTEM GRAPH",
+      process: "EXECUTION FLOW",
+      timeline: "ROLLOUT SEQUENCE",
     },
     "ppt169_swiss_grid_systems": {
       cover: "GRID BRIEF",

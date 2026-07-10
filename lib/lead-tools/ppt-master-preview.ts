@@ -106,6 +106,25 @@ const themeAssets: Record<PptPreviewStyleArchetype, AssetTheme> = {
       bodyWeight: 470,
     },
   },
+  "ppt169_building_effective_agents": {
+    // The official example is materialized by ppt-master at runtime. Keep the
+    // local preview fallback dark rather than borrowing another template's art.
+    directory: "effective-agents",
+    files: [],
+    overlay: {
+      panelFill: "#1A1D27",
+      panelStroke: "#2D3348",
+      panelOpacity: 0.96,
+      textColor: "#E8E8EC",
+      mutedTextColor: "#9CA3AF",
+      accentColor: "#D4845A",
+      eyebrowFont: "'Helvetica Neue',Arial,sans-serif",
+      titleFont: "'Helvetica Neue',Arial,sans-serif",
+      bodyFont: "'Helvetica Neue',Arial,sans-serif",
+      titleWeight: 700,
+      bodyWeight: 400,
+    },
+  },
   "ppt169_swiss_grid_systems": {
     directory: "swiss-grid",
     files: ["01_cover.svg", "02_quote.svg", "04_principles.svg", "05_figures.svg", "14_closing.svg"],
@@ -271,7 +290,11 @@ function resolvePreviewAssetDir() {
   return path.resolve(process.cwd(), ...DEFAULT_PREVIEW_ASSET_DIR_SEGMENTS)
 }
 
-function getAssetDataUrl(styleKey: PptPreviewStyleKey, fileName: string) {
+function getAssetDataUrl(styleKey: PptPreviewStyleKey, fileName?: string) {
+  if (!fileName) {
+    return null
+  }
+
   const archetype = resolvePptPreviewStyleArchetype(styleKey)
   const cacheKey = `${archetype}/${fileName}`
   const cached = assetCache.get(cacheKey)

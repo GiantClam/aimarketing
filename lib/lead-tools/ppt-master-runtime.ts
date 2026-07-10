@@ -36,13 +36,15 @@ const BITMAP_FILE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i
 
 type PptMasterImportedTemplateKind = "brand" | "layout" | "deck" | "example"
 
-type ImportedPptMasterTemplateReference = {
+export type ImportedPptMasterTemplateReference = {
   templateId: string
   kind: PptMasterImportedTemplateKind
   sourcePathLabel: string
   sourceDir: string
   designSpecTitle: string | null
   designSpecExcerpt: string | null
+  designSpecContent: string | null
+  specLockContent: string | null
   referenceSvgFiles: string[]
   imageFiles: string[]
 }
@@ -478,12 +480,21 @@ async function materializeOfficialTemplateAssets(
   const designSpecPath = path.join(templatesDir, "design_spec.md")
   let designSpecTitle: string | null = null
   let designSpecExcerpt: string | null = null
+  let designSpecContent: string | null = null
+  let specLockContent: string | null = null
 
   if (await pathExists(designSpecPath)) {
     const designSpec = await fs.readFile(designSpecPath, "utf8")
+    designSpecContent = designSpec
     designSpecTitle = extractTemplateDesignSpecTitle(designSpec)
     designSpecExcerpt = buildTemplateDesignSpecExcerpt(designSpec)
   }
+
+  const specLockPath = path.join(templatesDir, "spec_lock.md")
+  if (await pathExists(specLockPath)) {
+    specLockContent = await fs.readFile(specLockPath, "utf8")
+  }
+  specLockContent ??= designSpecContent
 
   return {
     templateId: templateId.trim(),
@@ -492,8 +503,41 @@ async function materializeOfficialTemplateAssets(
     sourcePathLabel: resolvedSource.sourcePathLabel,
     designSpecTitle,
     designSpecExcerpt,
+    designSpecContent,
+    specLockContent,
     referenceSvgFiles,
     imageFiles,
+  }
+}
+
+export async function loadPptMasterTemplateReference(templateId: string): Promise<ImportedPptMasterTemplateReference> {
+  const repoDir = await resolvePptMasterRepoDir()
+  const resolvedSource = await resolveOfficialTemplateSource(repoDir, templateId)
+  if (!resolvedSource) {
+    throw new Error(`ppt_master_template_missing:${templateId}`)
+  }
+
+  const designSpecPath = path.join(resolvedSource.sourceDir, "design_spec.md")
+  const specLockPath = path.join(resolvedSource.sourceDir, "spec_lock.md")
+  const designSpecContent = (await pathExists(designSpecPath)) ? await fs.readFile(designSpecPath, "utf8") : null
+  const specLockContent = (await pathExists(specLockPath)) ? await fs.readFile(specLockPath, "utf8") : null
+
+  const officialContract = specLockContent ?? designSpecContent
+  if (!designSpecContent && !officialContract) {
+    throw new Error(`ppt_master_template_contract_missing:${templateId}`)
+  }
+
+  return {
+    templateId: templateId.trim(),
+    kind: resolvedSource.kind,
+    sourceDir: resolvedSource.sourceDir,
+    sourcePathLabel: resolvedSource.sourcePathLabel,
+    designSpecTitle: designSpecContent ? extractTemplateDesignSpecTitle(designSpecContent) : null,
+    designSpecExcerpt: designSpecContent ? buildTemplateDesignSpecExcerpt(designSpecContent) : null,
+    designSpecContent,
+    specLockContent: officialContract,
+    referenceSvgFiles: [],
+    imageFiles: [],
   }
 }
 
@@ -542,6 +586,18 @@ function getRuntimeTypography(variantKey: PptPreviewVariant["styleKey"]): Runtim
         titleSize: 50,
         subtitleSize: 30,
         annotationSize: 13,
+      }
+    case "ppt169_building_effective_agents":
+      return {
+        fontFamily: '"Helvetica Neue", Arial, "Microsoft YaHei", sans-serif',
+        titleFamily: '"Helvetica Neue", Arial, "Microsoft YaHei", sans-serif',
+        bodyFamily: '"Helvetica Neue", Arial, "Microsoft YaHei", sans-serif',
+        emphasisFamily: '"Helvetica Neue", Arial, "Microsoft YaHei", sans-serif',
+        codeFamily: "Consolas, \"Courier New\", monospace",
+        bodySize: 18,
+        titleSize: 32,
+        subtitleSize: 24,
+        annotationSize: 14,
       }
     case "ppt169_swiss_grid_systems":
       return {
@@ -750,8 +806,16 @@ async function writeProjectArtifacts(
   const specLockPath = path.join(projectDir, "spec_lock.md")
 
   await fs.writeFile(sourceBriefPath, buildRuntimeSourceBrief(deck, variant, templateReference), "utf8")
-  await fs.writeFile(designSpecPath, buildRuntimeDesignSpec(deck, variant, typography, templateReference), "utf8")
-  await fs.writeFile(specLockPath, buildRuntimeSpecLock(variant, typography), "utf8")
+  await fs.writeFile(
+    designSpecPath,
+    templateReference?.designSpecContent ?? buildRuntimeDesignSpec(deck, variant, typography, templateReference),
+    "utf8",
+  )
+  await fs.writeFile(
+    specLockPath,
+    templateReference?.specLockContent ?? buildRuntimeSpecLock(variant, typography),
+    "utf8",
+  )
 
   return {
     designSpecPath,
@@ -1207,6 +1271,14 @@ function buildEmergencyRuntimeSvg(context: PptMasterPreviewRuntimeSlideContext) 
       `<rect x="74" y="72" width="1132" height="566" rx="26" fill="none" stroke="${border}" stroke-width="2"/>`,
       `<circle cx="1084" cy="124" r="64" fill="${accent}" fill-opacity="0.14"/>`,
       `<rect x="138" y="104" width="216" height="10" fill="${accent}" fill-opacity="0.85"/>`,
+      ].join(""),
+    "ppt169_building_effective_agents": [
+      `<rect width="${PREVIEW_WIDTH}" height="${PREVIEW_HEIGHT}" fill="${background}"/>`,
+      `<rect x="64" y="56" width="1152" height="608" fill="${panel}" fill-opacity="0.42" stroke="${border}" stroke-width="2"/>`,
+      `<line x1="64" y1="154" x2="1216" y2="154" stroke="${border}" stroke-width="2"/>`,
+      `<line x1="64" y1="610" x2="1216" y2="610" stroke="${border}" stroke-width="2"/>`,
+      `<rect x="64" y="56" width="6" height="98" fill="${accent}"/>`,
+      `<circle cx="1090" cy="130" r="92" fill="${accent}" fill-opacity="0.08"/>`,
     ].join(""),
     "ppt169_swiss_grid_systems": [
       `<rect width="${PREVIEW_WIDTH}" height="${PREVIEW_HEIGHT}" fill="${background}"/>`,
@@ -1248,11 +1320,14 @@ function buildEmergencyRuntimeSvgDocument(params: {
   const isLongTable = archetype === "ppt169_brutalist_ai_newspaper_2026"
   const isPlayful = archetype === "ppt169_sugar_rush_memphis"
   const isBroadside = archetype === "ppt169_pritzker_2026"
+  const isEffectiveAgents = archetype === "ppt169_building_effective_agents"
   const titleFont =
     isLongTable
       ? 52
       : isPlayful
         ? 46
+        : isEffectiveAgents
+          ? 42
         : context.slide.layout === "cover"
           ? 42
           : 34
@@ -1845,12 +1920,13 @@ async function materializeVariantProject(params: {
   const projectDir = path.join(sessionDir, variant.key)
   const materializeStartedAt = Date.now()
   const slideRuns: StoredVariantSlideRun[] = []
-  const allowEmergencyFallback = allowPptMasterEmergencyFallback()
-
   await fs.rm(projectDir, { recursive: true, force: true })
   await createProjectStructure(projectDir)
 
   const templateReference = await materializeOfficialTemplateAssets(repoDir, projectDir, variant.templateId)
+  // Editable decks must stay inside the official ppt-master contract. The
+  // deterministic SVG is a legacy local safety net, not a template renderer.
+  const allowEmergencyFallback = !templateReference && allowPptMasterEmergencyFallback()
   const projectArtifacts = await writeProjectArtifacts(projectDir, deck, variant, templateReference)
   const normalizedSlides: PptPreviewSlide[] = []
   let runtimeProvider = deck.provider

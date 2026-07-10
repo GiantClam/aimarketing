@@ -133,7 +133,7 @@ const pptMasterPreviewEngine: LeadToolPptPreviewEngine = {
       const storyDeck = await generateLeadToolPptStoryDeckImpl(request)
       deck = normalizePptMasterPreviewDeck(await runtime.materializeStoryDeck(storyDeck))
     } catch (error) {
-      if (!options.allowMockFallback) {
+      if (!options.allowMockFallback || runtime.id === "ppt-master-agent") {
         throw error
       }
 

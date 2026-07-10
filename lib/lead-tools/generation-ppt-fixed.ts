@@ -10,9 +10,11 @@ import {
   getPptMasterSlideTimeoutMs,
 } from "@/lib/lead-tools/config"
 import {
+  loadPptMasterTemplateReference,
   materializePptMasterPreviewDeck,
   type PptMasterPreviewRuntimeSlideContext,
   type PptMasterPreviewRuntimeSlideResult,
+  type ImportedPptMasterTemplateReference,
 } from "@/lib/lead-tools/ppt-master-runtime"
 import {
   MAX_PPT_PREVIEW_PAGE_COUNT,
@@ -2241,15 +2243,109 @@ export function normalizeLeadToolPptPlan(rawPlan: any, request: PptPreviewReques
   }
 }
 
-export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: PptPreviewVariantDescriptor) {
-  const { style } = descriptor
+function isHexColor(value: string) {
+  if (value.length !== 7 || value[0] !== "#") return false
+  return Array.from(value.slice(1)).every((character) => "0123456789abcdefABCDEF".includes(character))
+}
+
+function extractHexColor(value: string) {
+  for (let index = 0; index <= value.length - 7; index += 1) {
+    const candidate = value.slice(index, index + 7)
+    if (isHexColor(candidate)) return candidate.toUpperCase()
+  }
+  return null
+}
+
+function readOfficialTemplateValue(content: string, key: string) {
+  const prefix = `- ${key}:`
+  for (const rawLine of content.split("\n")) {
+    const trimmed = rawLine.trim()
+    const line = trimmed.endsWith("\r") ? trimmed.slice(0, -1) : trimmed
+    if (line.startsWith(prefix)) return line.slice(prefix.length).trim()
+  }
+  return null
+}
+
+function readOfficialDesignRoleColor(content: string, role: string) {
+  const marker = `| ${role.toLowerCase()} |`
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.trim().toLowerCase()
+    if (line.includes(marker)) {
+      const color = extractHexColor(rawLine)
+      if (color) return color
+    }
+  }
+  return null
+}
+
+function resolveOfficialTemplateColor(
+  reference: ImportedPptMasterTemplateReference,
+  lockKeys: readonly string[],
+  designRoles: readonly string[],
+) {
+  for (const key of lockKeys) {
+    const value = reference.specLockContent ? extractHexColor(readOfficialTemplateValue(reference.specLockContent, key) ?? "") : null
+    if (value) return value
+  }
+  for (const role of designRoles) {
+    const value = reference.designSpecContent ? readOfficialDesignRoleColor(reference.designSpecContent, role) : null
+    if (value) return value
+  }
+  return null
+}
+
+function buildPptMasterVariantStyle(
+  descriptor: PptPreviewVariantDescriptor,
+  reference: ImportedPptMasterTemplateReference,
+): PptPreviewVariantStyle {
+  const background = resolveOfficialTemplateColor(reference, ["bg", "background"], ["bg", "background"])
+  const foreground = resolveOfficialTemplateColor(reference, ["text", "primary"], ["text", "primary", "neutral-dark"])
+  const accent = resolveOfficialTemplateColor(reference, ["accent", "secondary_accent"], ["accent", "primary"])
+  const panel = resolveOfficialTemplateColor(
+    reference,
+    ["secondary_bg", "bg_secondary", "bg_paper", "card_bg", "panel", "surface"],
+    ["secondary_bg", "bg_secondary", "bg_paper", "card_bg", "panel", "surface"],
+  )
+  const border = resolveOfficialTemplateColor(reference, ["border"], ["border"])
+
+  if (!background || !foreground || !accent || !panel || !border) {
+    throw new Error(`ppt_master_template_visual_contract_missing:${reference.templateId}`)
+  }
+
+  const officialContract = [reference.designSpecContent, reference.specLockContent].filter(Boolean).join("\n\n")
+  return {
+    ...descriptor.style,
+    name: reference.designSpecTitle || reference.templateId,
+    summary: reference.designSpecExcerpt || reference.templateId,
+    stylePrompt: [
+      `Use only the official ppt-master template ${reference.templateId}.`,
+      "The following files are the source of truth. Do not substitute a local preset, frontend-slides style, Swiss Grid style, or custom palette.",
+      officialContract,
+    ].join("\n\n"),
+    palette: { background, foreground, accent, panel, border },
+    strengths: [],
+  }
+}
+
+export function buildStyleAwarePrompt(
+  request: PptPreviewRequest,
+  descriptor: PptPreviewVariantDescriptor,
+  templateReference?: ImportedPptMasterTemplateReference,
+) {
+  const style = templateReference ? buildPptMasterVariantStyle(descriptor, templateReference) : descriptor.style
   const pageCount = resolvePptPreviewPageCount(request.pageCount)
   const research = normalizeResearchBrief(request.researchBrief, request.prompt.trim())
   const layoutSequence = getPptPreviewLayoutSequence(pageCount)
-  const styleSlots = getPptPreviewStyleSlotSequence(style.key, pageCount)
-  const intentSequence = buildPptPreviewIntentSequenceLabel(style.key, request.language, pageCount)
+  const styleSlots = templateReference ? [] : getPptPreviewStyleSlotSequence(style.key, pageCount)
+  const intentSequence = templateReference
+    ? request.language === "zh-CN"
+      ? "以官方 ppt-master spec_lock.md 中的 page_rhythm 和模板原生结构为准。"
+      : "Follow the official ppt-master spec_lock.md page_rhythm and native template structure."
+    : buildPptPreviewIntentSequenceLabel(style.key, request.language, pageCount)
   const rawIntentSequence = styleSlots.map((slot) => slot.intent).join(", ")
-  const capabilityLabel = buildPptPreviewTemplateCapabilityLabel(style.key, request.language)
+  const capabilityLabel = templateReference
+    ? templateReference.designSpecExcerpt || templateReference.templateId
+    : buildPptPreviewTemplateCapabilityLabel(style.key, request.language)
   const templateMode = resolvePptPreviewTemplateMode(request)
   const templateLabel = getPptPreviewTemplateLabel(descriptor.templateId, request.language)
   const narrativeAngleLabel = descriptor.narrativeAngle
@@ -2258,8 +2354,9 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: Pp
   const narrativeAnglePrompt = descriptor.narrativeAngle
     ? getPptPreviewNarrativeAnglePrompt(descriptor.narrativeAngle, request.language)
     : undefined
-  const densityHint =
-    request.language === "zh-CN"
+  const densityHint = templateReference
+    ? ""
+    : request.language === "zh-CN"
       ? style.key === "ppt169_swiss_grid_systems"
         ? "Neo-Grid Bold 这种分析型模板要把网格喂满：agenda 尽量给满 9 个模块中的主要章节，comparison、stats、chart 和 closing 都尽量给 3-4 个短而硬的信号项，不要过度留白。"
         : ""
@@ -2287,16 +2384,20 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: Pp
       : null,
     request.language === "zh-CN" ? `该模板的原生页型顺序: ${intentSequence}` : `Native page-intent sequence: ${intentSequence}`,
     request.language === "zh-CN" ? `模板能力注册表:\n${capabilityLabel}` : `Template capability registry:\n${capabilityLabel}`,
-    request.language === "zh-CN"
-      ? `slides 数组里的每个对象都必须同时包含 layout 和 intent 字段。本模板 intent 顺序固定为: ${rawIntentSequence}。`
-      : `Every slide object must include both layout and intent. For this preset the intent sequence must be: ${rawIntentSequence}.`,
+    templateReference
+      ? request.language === "zh-CN"
+        ? "不要根据本地 style registry 重新发明模板布局、配色或字体；如果官方 spec 与其他提示冲突，以官方 spec_lock.md 为准。"
+        : "Do not invent layout, palette, or typography from the local style registry. If any instruction conflicts with the official spec, spec_lock.md wins."
+      : request.language === "zh-CN"
+        ? `slides 数组里的每个对象都必须同时包含 layout 和 intent 字段。本模板 intent 顺序固定为: ${rawIntentSequence}。`
+        : `Every slide object must include both layout and intent. For this preset the intent sequence must be: ${rawIntentSequence}.`,
     "",
     request.language === "zh-CN"
       ? [
           "直接以该风格写完整的九页结构，不要先写通用版。",
           `这次只需要输出 ${pageCount} 页，对应 layout 顺序固定为 ${layoutSequence.join(", ")}。`,
           "这一路必须有独立的叙事角度、章节命名和判断，不要和其他风格只做同义改写。",
-          "Long Table 要像长桌纪要和董事会讨论；Playful 要像轻快发布和友好品牌表达；Broadside 要像海报宣言和印刷告示；Neo-Grid Bold 要像现代策略界面和粗体网格评审。",
+          templateReference ? "" : "Long Table 要像长桌纪要和董事会讨论；Playful 要像轻快发布和友好品牌表达；Broadside 要像海报宣言和印刷告示；Neo-Grid Bold 要像现代策略界面和粗体网格评审。",
           "虽然 slides 的字段顺序固定，但内容必须按该模板的原生页型去写，不要把九页都写成普通文字页。",
           `layout 顺序固定为 ${layoutSequence.join(", ")}。`,
           "agenda 页优先产出 contentsItems；comparison 页优先产出 comparisonItems；evidence 页优先产出 spotlightItems；stats 页优先产出 metricItems；chart 页优先产出 chartItems；process 页优先产出 processItems；timeline 页优先产出 closingItems，不要只给 bullets。",
@@ -2312,7 +2413,7 @@ export function buildStyleAwarePrompt(request: PptPreviewRequest, descriptor: Pp
       : [
           `Write the ${pageCount}-slide structure directly in this style rather than drafting a neutral base plan.`,
           "This lane must introduce its own narrative angle, chapter naming, and judgment instead of producing a synonym pass of the other styles.",
-          "Long Table should feel like a chaired long-table memo; Playful should feel like a bright launch narrative; Broadside should read like a printed declaration; Neo-Grid Bold should feel like a modern strategy interface review.",
+          templateReference ? "" : "Long Table should feel like a chaired long-table memo; Playful should feel like a bright launch narrative; Broadside should read like a printed declaration; Neo-Grid Bold should feel like a modern strategy interface review.",
           "Even though the field order is fixed, write each slot according to this preset's native page intent rather than treating all nine as generic text slides.",
           `The fixed layout order is: ${layoutSequence.join(", ")}.`,
           "Prefer returning contentsItems on agenda slides, comparisonItems on comparison slides, spotlightItems on evidence slides, metricItems on stats slides, chartItems on chart slides, processItems on process slides, and closingItems on closing slides rather than relying on bullets alone.",
@@ -2475,6 +2576,9 @@ function buildRuntimeSlideUserPrompt(context: PptMasterPreviewRuntimeSlideContex
           context.templateReference.designSpecExcerpt
             ? `Template design spec excerpt:\n${context.templateReference.designSpecExcerpt}`
             : "",
+          context.templateReference.specLockContent
+            ? `Official ppt-master spec_lock.md (authoritative visual contract):\n${context.templateReference.specLockContent}`
+            : "",
           context.templateReference.referenceSvgFiles.length
             ? `Template reference SVGs: ${context.templateReference.referenceSvgFiles.slice(0, 12).join(" | ")}`
             : "",
@@ -2545,7 +2649,11 @@ async function generateRuntimeSlideSvg(context: PptMasterPreviewRuntimeSlideCont
   }
 }
 
-async function generateVariantPlan(request: PptPreviewRequest, descriptor: PptPreviewVariantDescriptor) {
+async function generateVariantPlan(
+  request: PptPreviewRequest,
+  descriptor: PptPreviewVariantDescriptor,
+  templateReference?: ImportedPptMasterTemplateReference,
+) {
   const { style } = descriptor
   const requestedModel = resolveRequestedPreviewModel(request)
   const pageCount = resolvePptPreviewPageCount(request.pageCount)
@@ -2597,7 +2705,7 @@ async function generateVariantPlan(request: PptPreviewRequest, descriptor: PptPr
 
       const providerResult = await generateTextWithLeadToolPreviewProvider({
         systemPrompt: buildAttemptSystemPrompt(retryGuardrail),
-        userPrompt: buildStyleAwarePrompt(request, descriptor),
+        userPrompt: buildStyleAwarePrompt(request, descriptor, templateReference),
         model: requestedModel,
         preferredProviderId,
       })
@@ -2612,7 +2720,7 @@ async function generateVariantPlan(request: PptPreviewRequest, descriptor: PptPr
         ) {
           const structuredResult = await generateStructuredPptPlanWithWriter({
             systemPrompt: buildAttemptSystemPrompt(retryGuardrail),
-            userPrompt: buildStyleAwarePrompt(request, descriptor),
+            userPrompt: buildStyleAwarePrompt(request, descriptor, templateReference),
             model: requestedModel,
             preferredProviderId: request.preferredProviderId as LeadToolPreviewProviderId | null | undefined,
           })
@@ -2659,16 +2767,36 @@ export async function generateLeadToolPptPreview(request: PptPreviewRequest): Pr
 }
 
 export async function generateLeadToolPptStoryDeck(request: PptPreviewRequest): Promise<PptPreviewDeck> {
+  if (
+    request.previewRuntime === "ppt-master-agent" &&
+    (resolvePptPreviewTemplateMode(request) !== "single-template" || !request.templateId)
+  ) {
+    throw new Error("ppt_master_template_selection_required")
+  }
+
   const resolvedPageCount = await resolveLeadToolPptPageCount(request)
   const resolvedRequest = {
     ...request,
     pageCount: resolvedPageCount,
   }
-  const variantDescriptors = buildPptPreviewVariantDescriptors(request)
-  const plans = await Promise.all(variantDescriptors.map((descriptor) => generateVariantPlan(resolvedRequest, descriptor)))
+  const baseVariantDescriptors = buildPptPreviewVariantDescriptors(request)
+  const templateReference =
+    request.previewRuntime === "ppt-master-agent" && resolvePptPreviewTemplateMode(request) === "single-template" && request.templateId
+      ? await loadPptMasterTemplateReference(request.templateId)
+      : undefined
+  const variantDescriptors = templateReference
+    ? baseVariantDescriptors.map((descriptor) => ({
+        ...descriptor,
+        style: buildPptMasterVariantStyle(descriptor, templateReference),
+      }))
+    : baseVariantDescriptors
+  const plans = await Promise.all(
+    variantDescriptors.map((descriptor) => generateVariantPlan(resolvedRequest, descriptor, templateReference)),
+  )
   return {
     ...buildPptPreviewDeckFromPlans(resolvedRequest, plans, {
       resolvedPageCount,
+      variantDescriptors,
     }),
     provider: plans[0]?.provider ?? "unknown",
     previewModel: plans[0]?.previewModel ?? resolveRequestedPreviewModel(resolvedRequest),
@@ -2689,6 +2817,7 @@ export async function generateLeadToolPptPreviewWithFallback(
   request: PptPreviewRequest,
   allowMockFallback: boolean,
 ): Promise<PptPreviewDeck> {
+  const allowCustomMockFallback = allowMockFallback && request.previewRuntime !== "ppt-master-agent"
   if (
     !hasLeadToolMinimaxProvider() &&
     !hasLeadToolStepfunProvider() &&
@@ -2697,7 +2826,7 @@ export async function generateLeadToolPptPreviewWithFallback(
     !hasAibermApiKey() &&
     !hasCrazyrouteApiKey()
   ) {
-    if (allowMockFallback) {
+    if (allowCustomMockFallback) {
       return renderPptPreviewDeckAssets(buildMockPptPreview(request))
     }
 
@@ -2707,7 +2836,7 @@ export async function generateLeadToolPptPreviewWithFallback(
   try {
     return await generateLeadToolPptPreview(request)
   } catch (error) {
-    if (allowMockFallback) {
+    if (allowCustomMockFallback) {
       console.warn("lead-tools.ppt.preview.fallback", {
         message: error instanceof Error ? error.message : String(error),
       })

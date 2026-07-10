@@ -24,3 +24,22 @@ test("renderPptPreviewDeckAssets materializes mock deck assets for every preview
     assert.match(variant.preview?.cover.dataUrl ?? "", /^data:image\/svg\+xml;base64,/)
   }
 })
+
+test("Effective Agents local fallback does not borrow Swiss Grid styling", () => {
+  const deck = buildMockPptPreview({
+    prompt: "Build an editable agent platform deck",
+    scenario: "product-launch",
+    language: "en-US",
+    templateMode: "single-template",
+    templateId: "ppt169_building_effective_agents",
+  })
+
+  const rendered = renderPptPreviewDeckAssets(deck)
+  const cover = rendered.variants[0]?.preview?.cover.dataUrl ?? ""
+  const svg = Buffer.from(cover.split(",")[1] ?? "", "base64").toString("utf8")
+
+  assert.equal(rendered.variants[0]?.styleKey, "ppt169_building_effective_agents")
+  assert.match(svg, /#0F1117/u)
+  assert.match(svg, /#D4845A/u)
+  assert.doesNotMatch(svg, /#E6FF3D/u)
+})

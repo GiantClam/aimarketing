@@ -925,6 +925,7 @@ export function buildFrontendSlidesVariantCss(theme: FrontendSlidesTheme, styleK
         .horizontal-sequence .sequence-row { border-left: 0; border-top: 1px solid var(--deck-border); padding: 0.75rem 0 0; min-height: 0; }
       }
     `,
+    ppt169_building_effective_agents: "",
   } satisfies Record<PptPreviewStyleArchetype, string>
 
   const styleOverrideCss: Partial<Record<PptPreviewStyleKey, string>> = {
@@ -1690,4 +1691,3 @@ export function buildFrontendSlidesVariantCss(theme: FrontendSlidesTheme, styleK
 
   return `${sharedCss}\n${styleCss[archetype]}\n${styleOverrideCss[styleKey] ?? ""}`
 }
-

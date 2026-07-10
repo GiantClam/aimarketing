@@ -64,6 +64,7 @@ export type PptPreviewStyleArchetype =
   | "ppt169_brutalist_ai_newspaper_2026"
   | "ppt169_sugar_rush_memphis"
   | "ppt169_pritzker_2026"
+  | "ppt169_building_effective_agents"
   | "ppt169_swiss_grid_systems"
 export type PptPreviewModelValue =
   | "deepseek-v4-pro"
@@ -275,7 +276,7 @@ const pptPreviewStyleArchetypeMap: Readonly<Record<PptPreviewStyleKey, PptPrevie
   "ppt169_swiss_grid_systems": "ppt169_swiss_grid_systems",
   "ppt169_glassmorphism_demo": "ppt169_sugar_rush_memphis",
   "ppt169_attention_is_all_you_need": "ppt169_swiss_grid_systems",
-  "ppt169_building_effective_agents": "ppt169_swiss_grid_systems",
+  "ppt169_building_effective_agents": "ppt169_building_effective_agents",
   "ppt169_cangzhuo": "ppt169_brutalist_ai_newspaper_2026",
   "ppt169_fashion_weekly_digest": "ppt169_pritzker_2026",
   "ppt169_general_dark_tech_claude_code_auto_mode": "ppt169_pritzker_2026",
@@ -347,6 +348,17 @@ const basePptPreviewStyleIntentMap: Readonly<Record<PptPreviewStyleArchetype, Re
     process: "process",
     timeline: "closing",
   },
+  "ppt169_building_effective_agents": {
+    cover: "cover",
+    agenda: "contents",
+    insight: "statement",
+    comparison: "comparison",
+    evidence: "spotlight",
+    stats: "stats",
+    chart: "chart",
+    process: "process",
+    timeline: "closing",
+  },
 } as const
 
 export const pptPreviewStyleIntentMap: Readonly<
@@ -355,7 +367,7 @@ export const pptPreviewStyleIntentMap: Readonly<
   ...basePptPreviewStyleIntentMap,
   "ppt169_glassmorphism_demo": basePptPreviewStyleIntentMap["ppt169_sugar_rush_memphis"],
   "ppt169_attention_is_all_you_need": basePptPreviewStyleIntentMap["ppt169_swiss_grid_systems"],
-  "ppt169_building_effective_agents": basePptPreviewStyleIntentMap["ppt169_swiss_grid_systems"],
+  "ppt169_building_effective_agents": basePptPreviewStyleIntentMap["ppt169_building_effective_agents"],
   "ppt169_cangzhuo": basePptPreviewStyleIntentMap["ppt169_brutalist_ai_newspaper_2026"],
   "ppt169_fashion_weekly_digest": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
   "ppt169_general_dark_tech_claude_code_auto_mode": basePptPreviewStyleIntentMap["ppt169_pritzker_2026"],
@@ -460,6 +472,21 @@ const basePptPreviewTemplateCapabilities: Readonly<Record<PptPreviewStyleArchety
       createTemplateSlot("chart", "chart", "signal-chart-board", "data", ["comparison", "stats", "spotlight"]),
       createTemplateSlot("process", "process", "sequence-flow-board", "flow", ["closing", "contents", "spotlight"]),
       createTemplateSlot("timeline", "closing", "action-sequence-close", "closing", ["process", "spotlight"]),
+    ],
+  },
+  "ppt169_building_effective_agents": {
+    templateId: "building-effective-agents",
+    summary: "Effective Agents prioritizes capability layers, orchestration maps, runtime proof, and operator-friendly rollout sequences.",
+    slots: [
+      createTemplateSlot("cover", "cover", "agent-system-cover", "hero"),
+      createTemplateSlot("agenda", "contents", "capability-map", "structured"),
+      createTemplateSlot("insight", "statement", "system-verdict", "hero"),
+      createTemplateSlot("comparison", "comparison", "orchestration-compare", "comparison"),
+      createTemplateSlot("evidence", "spotlight", "runtime-proof", "evidence"),
+      createTemplateSlot("stats", "stats", "capability-signals", "data"),
+      createTemplateSlot("chart", "chart", "system-graph", "data", ["comparison", "stats", "spotlight"]),
+      createTemplateSlot("process", "process", "execution-flow", "flow", ["closing", "contents", "spotlight"]),
+      createTemplateSlot("timeline", "closing", "rollout-sequence", "closing", ["process", "spotlight"]),
     ],
   },
 } as const
@@ -1219,7 +1246,12 @@ function scorePptPreviewStyleForRequest(
   text: string,
 ) {
   let score = 0
-  const archetype = resolvePptPreviewStyleArchetype(styleKey)
+  // Keep legacy auto-4 ranking stable while selected templates use their own
+  // visual archetype in the ppt-master runtime.
+  const archetype =
+    styleKey === "ppt169_building_effective_agents"
+      ? "ppt169_swiss_grid_systems"
+      : resolvePptPreviewStyleArchetype(styleKey)
 
   const addIfMatched = (keywords: readonly string[], points: number) => {
     if (includesAnyKeyword(text, keywords)) {
@@ -1232,24 +1264,28 @@ function scorePptPreviewStyleForRequest(
       "ppt169_brutalist_ai_newspaper_2026": 1,
       "ppt169_sugar_rush_memphis": 3,
       "ppt169_pritzker_2026": 4,
+      "ppt169_building_effective_agents": 2,
       "ppt169_swiss_grid_systems": 2,
     },
     "product-launch": {
       "ppt169_brutalist_ai_newspaper_2026": 1,
       "ppt169_sugar_rush_memphis": 2,
       "ppt169_pritzker_2026": 3,
+      "ppt169_building_effective_agents": 4,
       "ppt169_swiss_grid_systems": 4,
     },
     "sales-deck": {
       "ppt169_brutalist_ai_newspaper_2026": 3,
       "ppt169_sugar_rush_memphis": 1,
       "ppt169_pritzker_2026": 2,
+      "ppt169_building_effective_agents": 4,
       "ppt169_swiss_grid_systems": 4,
     },
     training: {
       "ppt169_brutalist_ai_newspaper_2026": 3,
       "ppt169_sugar_rush_memphis": 3,
       "ppt169_pritzker_2026": 1,
+      "ppt169_building_effective_agents": 2,
       "ppt169_swiss_grid_systems": 2,
     },
   }
@@ -1833,13 +1869,13 @@ export const pptPreviewStyles: readonly PptPreviewVariantStyle[] = [
     name: "Effective Agents",
     summary: "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制，适合智能体平台、工作流和架构型 deck。",
     stylePrompt:
-      "Use the Effective Agents preset. Write with orchestration clarity, capability layers, system decomposition, and operator-friendly execution language.",
+      "Use the official ppt-master Effective Agents preset. Preserve its dark technical theme: deep #0F1117 canvas, #1A1D27 structural panels, light #E8E8EC typography, Anthropic-inspired coral #D4845A for primary emphasis, cool blue #5B9BD5 for workflow signals, warm gold #E8B87D for secondary emphasis, and #2D3348 dividers. Use Helvetica Neue/Arial-style technical typography, capability layers, orchestration maps, system decomposition, and operator-friendly execution language. Never switch to a light background, neon green accents, Swiss Grid styling, or a generic SaaS palette.",
     palette: {
-      background: "#EEF2EC",
-      foreground: "#101418",
-      accent: "#B7F36B",
-      panel: "#F9FBF6",
-      border: "#CED8C2",
+      background: "#0F1117",
+      foreground: "#E8E8EC",
+      accent: "#D4845A",
+      panel: "#1A1D27",
+      border: "#2D3348",
     },
     strengths: ["Agent 编排", "能力拆解", "架构叙事"],
   },
@@ -2513,7 +2549,7 @@ export function buildMockPptPreview(request: PptPreviewRequest): PptPreviewDeck 
         narrativeAngle: variantDescriptor.narrativeAngle,
         slotLabel: variantDescriptor.slotLabel,
         name: variantDescriptor.style.name,
-        summary: getPptPreviewStyleSummary(variantDescriptor.style.key, request.language),
+        summary: variantDescriptor.style.summary,
         stylePrompt: variantDescriptor.style.stylePrompt,
         palette: variantDescriptor.style.palette,
         strengths: variantDescriptor.style.strengths,
@@ -2554,6 +2590,7 @@ export function buildPptPreviewDeckFromPlans(
   }>,
   options?: {
     resolvedPageCount?: PptPreviewPageCount | null
+    variantDescriptors?: PptPreviewVariantDescriptor[]
   },
 ): PptPreviewDeck {
   const firstPlan = plans[0]
@@ -2564,7 +2601,7 @@ export function buildPptPreviewDeckFromPlans(
   )
   const layouts = getPptPreviewLayoutSequence(pageCount)
   const fallbackOutline = buildExtendedScenarioOutline(request.scenario, layouts, request.language)
-  const variantDescriptors = buildPptPreviewVariantDescriptors(request)
+  const variantDescriptors = options?.variantDescriptors ?? buildPptPreviewVariantDescriptors(request)
   const templateMode = resolvePptPreviewTemplateMode(request)
   const requestImages = normalizePptPreviewRequestImages(request.images)
 
@@ -2596,7 +2633,7 @@ export function buildPptPreviewDeckFromPlans(
         narrativeAngle: variantDescriptor.narrativeAngle,
         slotLabel: variantDescriptor.slotLabel,
         name: style.name,
-        summary: getPptPreviewStyleSummary(style.key, request.language),
+        summary: style.summary,
         stylePrompt: style.stylePrompt,
         palette: style.palette,
         strengths: style.strengths,

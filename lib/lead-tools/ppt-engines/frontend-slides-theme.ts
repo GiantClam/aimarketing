@@ -70,6 +70,21 @@ export function getFrontendSlidesTheme(
         secondary: variant.palette.border,
         glow: "rgba(232,93,38,0.14)",
       }
+    case "ppt169_building_effective_agents":
+      return {
+        deckClass: "agents",
+        fontHref: "",
+        titleFont: '"Helvetica Neue", Arial, "Noto Sans SC", sans-serif',
+        bodyFont: '"Helvetica Neue", Arial, "Noto Sans SC", sans-serif',
+        monoFont: '"IBM Plex Mono", Consolas, monospace',
+        background: variant.palette.background,
+        foreground: variant.palette.foreground,
+        accent: variant.palette.accent,
+        panel: variant.palette.panel,
+        border: variant.palette.border,
+        secondary: "#9CA3AF",
+        glow: "rgba(212,132,90,0.12)",
+      }
     case "ppt169_swiss_grid_systems":
       return {
         deckClass: "neo-grid-bold",

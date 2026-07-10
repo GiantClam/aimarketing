@@ -42,6 +42,7 @@ function toPreviewRequest(request: PreviewRequest): PptPreviewRequest {
     language: request.language,
     model: request.model,
     preferredProviderId: request.preferredProviderId,
+    previewRuntime: "ppt-master-agent",
     templateMode: request.templateMode,
     templateId: request.templateId,
     narrativeAngle: request.narrativeAngle,

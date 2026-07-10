@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { __testables__, materializePptMasterPreviewDeck } from "./ppt-master-runtime"
+import { __testables__, loadPptMasterTemplateReference, materializePptMasterPreviewDeck } from "./ppt-master-runtime"
 
 test("ppt master runtime prefers explicit python env and falls back to python3", () => {
   const previous = process.env.PPT_MASTER_PYTHON_BIN
@@ -98,6 +98,15 @@ test("runtime resolves official template sources across layout deck and example 
   assert.match(deckSource?.sourcePathLabel ?? "", /decks\/招商银行\/$/u)
   assert.equal(exampleSource?.kind, "example")
   assert.match(exampleSource?.sourcePathLabel ?? "", /examples\/ppt169_building_effective_agents\/$/u)
+})
+
+test("runtime exposes the official ppt-master design contract for editable planning", async () => {
+  const reference = await loadPptMasterTemplateReference("ppt169_building_effective_agents")
+
+  assert.equal(reference.kind, "example")
+  assert.match(reference.designSpecContent ?? "", /# Building Effective Agents - Design Spec/u)
+  assert.match(reference.specLockContent ?? "", /- bg: #0F1117/u)
+  assert.match(reference.specLockContent ?? "", /- accent: #5B9BD5/u)
 })
 
 test("runtime materializes official deck templates into project templates and images", async () => {

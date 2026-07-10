@@ -8,8 +8,10 @@ import {
   buildPptPreviewDeckFromPlans,
   buildPptPreviewVariantDescriptors,
   getPptPreviewLayoutSequence,
+  getPptPreviewStyleByKey,
   getPptPreviewStyleSummary,
   pptPreviewStyles,
+  resolvePptPreviewStyleArchetype,
   resolveOptionalPptPreviewPageCount,
 } from "./ppt-preview-data-fixed"
 import { PPT_MASTER_TEMPLATE_MANIFEST } from "./ppt-master-template-manifest"
@@ -21,6 +23,22 @@ test("getPptPreviewStyleSummary falls back safely for unknown style keys", () =>
     getPptPreviewStyleSummary("ppt169_unknown_template" as never, "en-US"),
     "Formal AI PPT template.",
   )
+})
+
+test("Effective Agents keeps the official ppt-master dark theme", () => {
+  const style = getPptPreviewStyleByKey("ppt169_building_effective_agents")
+  assert.ok(style)
+
+  assert.equal(resolvePptPreviewStyleArchetype("ppt169_building_effective_agents"), "ppt169_building_effective_agents")
+  assert.deepEqual(style.palette, {
+    background: "#0F1117",
+    foreground: "#E8E8EC",
+    accent: "#D4845A",
+    panel: "#1A1D27",
+    border: "#2D3348",
+  })
+  assert.match(style.stylePrompt, /never switch to a light background/i)
+  assert.notEqual(style.palette.accent, "#E6FF3D")
 })
 
 test("optional page count accepts blank input and arbitrary integers within range", () => {

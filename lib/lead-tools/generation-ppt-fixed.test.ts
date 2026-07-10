@@ -17,9 +17,12 @@ import {
 import {
   buildMockPptPreview,
   buildPptPreviewTemplateCapabilityLabel,
+  buildPptPreviewVariantDescriptors,
   getPptPreviewStyleSlots,
   pptPreviewStyles,
 } from "./ppt-preview-data-fixed"
+import { PPT_MASTER_TEMPLATE_MANIFEST } from "./ppt-master-template-manifest"
+import { loadPptMasterTemplateReference } from "./ppt-master-runtime"
 
 const yusuanAttachmentMarkdown = readFileSync(
   new URL("../../tests/fixtures/ppt/yusuan-intelligence-ppt-info.md", import.meta.url),
@@ -525,6 +528,67 @@ test("buildStyleAwarePrompt explicitly instructs researchBrief field mapping", (
   assert.match(prompt, /研究结构映射：keyFacts=1，numericEvidence=1，risks=1，implications=1/)
   assert.match(prompt, /numericEvidence 必须优先进入 stats 或 chart 页/)
   assert.match(prompt, /implications 必须进入 process 或 timeline 页/)
+})
+
+test("editable ppt-master planning uses the official template contract instead of local preset guidance", async () => {
+  const style = pptPreviewStyles.find((item) => item.key === "ppt169_building_effective_agents")
+  assert.ok(style)
+  const descriptor = {
+    key: "ppt169_building_effective_agents-executive-brief",
+    slotLabel: "A" as const,
+    style,
+    templateId: "ppt169_building_effective_agents",
+    narrativeAngle: "executive-brief" as const,
+  }
+  const reference = await loadPptMasterTemplateReference("ppt169_building_effective_agents")
+  const prompt = buildStyleAwarePrompt(
+    {
+      prompt: "企业 AI 营销工作台",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      previewRuntime: "ppt-master-agent",
+      templateMode: "single-template",
+      templateId: "ppt169_building_effective_agents",
+      pageCount: 8,
+    },
+    descriptor,
+    reference,
+  )
+
+  assert.match(prompt, /官方 ppt-master spec_lock\.md/u)
+  assert.match(prompt, /- bg: #0F1117/u)
+  assert.match(prompt, /- accent: #5B9BD5/u)
+  assert.doesNotMatch(prompt, /Neo-Grid Bold/u)
+})
+
+test("every imported ppt-master example plans from its official visual contract", async () => {
+  const examples = PPT_MASTER_TEMPLATE_MANIFEST.filter((template) => template.id.startsWith("ppt169_"))
+
+  assert.equal(examples.length, 21)
+
+  for (const template of examples) {
+    const request = {
+      prompt: `生成 ${template.label} 模板的可编辑 PPT`,
+      scenario: "sales-deck" as const,
+      language: "zh-CN" as const,
+      previewRuntime: "ppt-master-agent" as const,
+      templateMode: "single-template" as const,
+      templateId: template.id,
+      pageCount: 9,
+    }
+    const descriptor = buildPptPreviewVariantDescriptors(request)[0]
+    assert.ok(descriptor, `missing variant descriptor for ${template.id}`)
+
+    const reference = await loadPptMasterTemplateReference(template.id)
+    const prompt = buildStyleAwarePrompt(request, descriptor, reference)
+
+    assert.equal(prompt.includes(`Use only the official ppt-master template ${template.id}.`), true)
+    assert.equal(prompt.includes("spec_lock.md"), true)
+    assert.equal(
+      ["Neo-Grid Bold", "Long Table", "Playful", "Broadside"].some((preset) => prompt.includes(preset)),
+      false,
+    )
+  }
 })
 
 test("runtime slide provider preference honors explicit override", () => {

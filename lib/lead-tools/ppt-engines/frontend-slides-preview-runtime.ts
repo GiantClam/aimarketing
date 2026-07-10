@@ -3690,6 +3690,7 @@ const ARCHETYPE_FRONTEND_SLIDES_RENDERERS = {
   ppt169_brutalist_ai_newspaper_2026: renderLongTableSlides,
   ppt169_sugar_rush_memphis: renderPlayfulSlides,
   ppt169_pritzker_2026: renderBroadsideSlides,
+  ppt169_building_effective_agents: renderBuildingEffectiveAgentsSlides,
   ppt169_swiss_grid_systems: renderNeoGridBoldSlides,
 } satisfies Record<PptPreviewStyleArchetype, typeof renderLongTableSlides>
 
