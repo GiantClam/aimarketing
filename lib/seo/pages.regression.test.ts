@@ -89,6 +89,20 @@ test("positioning remediation pages exist with marketing-team-focused keywords",
   assert.equal(aiCostComparePage.sections.some((section) => section.heading === "Why cost comparisons fail without workflow context"), true)
 })
 
+test("CTR priority SEO pages carry exact search promises and downstream links", () => {
+  const marketingPage = getSeoPage("use-cases", "ai-workspace-for-marketing-teams")
+  const typingMindPage = getSeoPage("alternatives", "typingmind-alternative")
+  const modelComparePage = getSeoPage("compare", "chatgpt-vs-claude-for-marketing")
+
+  assert.equal(marketingPage?.title, "AI Workspace for Marketing Teams: Content, Research, Visuals, and Workflows")
+  assert.equal(marketingPage?.description.includes("shared brand context"), true)
+  assert.ok(marketingPage?.sections.some((section) => section.heading === "What marketing teams can do in one AI workspace"))
+  assert.equal(typingMindPage?.title, "TypingMind Alternative for Marketing Teams That Need More Than Chat")
+  assert.ok(typingMindPage?.faqs.some((faq) => /full TypingMind replacement/i.test(faq.question)))
+  assert.equal(modelComparePage?.title, "Claude vs ChatGPT for Marketing: Which AI Should Teams Use?")
+  assert.ok(modelComparePage?.sections.some((section) => section.heading === "When marketing teams should use both"))
+})
+
 test("resource SEO remediation pages exist and point into tools and workflows", () => {
   const briefPage = getSeoPage("resources", "what-is-a-content-brief")
   const pillarPage = getSeoPage("resources", "what-is-a-content-pillar")

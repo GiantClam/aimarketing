@@ -1,0 +1,98 @@
+{
+  "startedAt": "2026-07-10T23:26:30.182Z",
+  "concurrency": 10,
+  "sameTenantCredential": true,
+  "request": {
+    "prompt": "请生成一份 8 页中文可编辑 PPT，主题是企业 AI 营销工作台，面向企业管理层，使用 ppt169_attention_is_all_you_need / Attention Is All You Need 模板，必须走 ppt-master 全流程，不得使用 auto-4 或 frontend-slides。 这是面向客户的 SaaS 方案。请覆盖数据整合、AI 分析、自动化执行、效果度量四个模块，不需要竞品对标。",
+    "scenario": "product-launch",
+    "language": "zh-CN",
+    "templateMode": "single-template",
+    "templateId": "ppt169_attention_is_all_you_need",
+    "narrativeAngle": "executive-brief",
+    "pageCount": 8,
+    "allowMockFallback": false,
+    "runtimeProfile": "railway-linux"
+  },
+  "jobs": [
+    {
+      "index": 1,
+      "requestId": "post-release-same-tenant-1-03027e60-f257-418e-b2b8-efda65a25a4d",
+      "submittedAt": "2026-07-10T23:26:32.701Z",
+      "httpStatus": 202,
+      "jobId": "3daf7742-93ef-4c96-830d-89a799bc5942",
+      "status": "queued"
+    },
+    {
+      "index": 2,
+      "requestId": "post-release-same-tenant-2-72087207-871d-4492-9866-6d6d32a042eb",
+      "submittedAt": "2026-07-10T23:26:32.702Z",
+      "httpStatus": 202,
+      "jobId": "a0a3b224-1744-4703-aa6a-df36777cfa27",
+      "status": "queued"
+    },
+    {
+      "index": 3,
+      "requestId": "post-release-same-tenant-3-cc532b29-1ccd-43a1-a968-80f9d851aca3",
+      "submittedAt": "2026-07-10T23:26:32.703Z",
+      "httpStatus": 202,
+      "jobId": "f60e0297-82c5-4858-9282-ae7ac90c5c34",
+      "status": "queued"
+    },
+    {
+      "index": 4,
+      "requestId": "post-release-same-tenant-4-3fff4397-75e7-40c9-b90a-6ea29fb5f091",
+      "submittedAt": "2026-07-10T23:26:32.706Z",
+      "httpStatus": 202,
+      "jobId": "b2dff77a-a0bd-4c8f-bd9c-67736c8d9b05",
+      "status": "queued"
+    },
+    {
+      "index": 5,
+      "requestId": "post-release-same-tenant-5-0f049049-0657-4a06-80b8-e7edaafe9f32",
+      "submittedAt": "2026-07-10T23:26:32.705Z",
+      "httpStatus": 202,
+      "jobId": "36afa9d7-6c33-4d6d-bda5-61f2b45b8e7f",
+      "status": "queued"
+    },
+    {
+      "index": 6,
+      "requestId": "post-release-same-tenant-6-e7b2792b-ded4-429e-9748-f90a2d197ede",
+      "submittedAt": "2026-07-10T23:26:32.700Z",
+      "httpStatus": 202,
+      "jobId": "4c6c105b-443c-43d3-97b2-a7df5de09f0b",
+      "status": "queued"
+    },
+    {
+      "index": 7,
+      "requestId": "post-release-same-tenant-7-e50d257b-0201-435c-9c41-5b9df2a078d1",
+      "submittedAt": "2026-07-10T23:26:32.709Z",
+      "httpStatus": 202,
+      "jobId": "6d7aa1eb-9da5-464c-881b-9dc4c57707a1",
+      "status": "queued"
+    },
+    {
+      "index": 8,
+      "requestId": "post-release-same-tenant-8-41f8b627-b46c-4cf1-89c3-93b1f65ed513",
+      "submittedAt": "2026-07-10T23:26:32.711Z",
+      "httpStatus": 202,
+      "jobId": "0d820276-9742-49d4-bf75-ea92e0d7b67f",
+      "status": "queued"
+    },
+    {
+      "index": 9,
+      "requestId": "post-release-same-tenant-9-379760db-700d-4f11-93dc-0513f58ecec0",
+      "submittedAt": "2026-07-10T23:26:32.704Z",
+      "httpStatus": 202,
+      "jobId": "dfa1a087-ce85-4a84-8666-6c042f73d657",
+      "status": "queued"
+    },
+    {
+      "index": 10,
+      "requestId": "post-release-same-tenant-10-454b5750-ab88-48dc-82da-0546afbdb8d9",
+      "submittedAt": "2026-07-10T23:26:31.291Z",
+      "httpStatus": 202,
+      "jobId": "2fd25957-764a-4d38-ac04-c78841df82b4",
+      "status": "queued"
+    }
+  ]
+}

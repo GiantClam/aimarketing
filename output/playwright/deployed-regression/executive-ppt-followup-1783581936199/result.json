@@ -1,0 +1,14 @@
+{
+  "base": "https://www.aimarketingsite.com",
+  "fixture": "/Users/beihuang/Documents/github/aimarketing/tests/fixtures/ppt/yusuan-intelligence-ppt-info.md",
+  "out": "/Users/beihuang/Documents/github/aimarketing/output/playwright/deployed-regression/executive-ppt-followup-1783581936199",
+  "login": {
+    "mode": "demo",
+    "status": 200
+  },
+  "firstTurn": {
+    "hasClarification": false,
+    "hasBadPrompt": false
+  },
+  "error": "page.waitForFunction: Timeout 30000ms exceeded.\n    at waitForInteractive ([stdin]:41:14)\n    at async [stdin]:113:23"
+}

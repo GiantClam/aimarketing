@@ -1,0 +1,27 @@
+[
+  {
+    "case": "deck-zhaoshang",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "5c739c97-0da5-47c7-9729-05b1cb8f2046",
+        "status": "failed",
+        "message": "ppt_master_runtime_slide_generation_failed:kubernetes-blueprint-2026:01_cover:ppt_master_runtime_provider_headers_timeout:glm:glm-5.2"
+      }
+    }
+  },
+  {
+    "case": "example-effective-agents",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "0677919e-3f2e-4e4f-8a2e-534221dc3147",
+        "status": "running"
+      }
+    }
+  }
+]

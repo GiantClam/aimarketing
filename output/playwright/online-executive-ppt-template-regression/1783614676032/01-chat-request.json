@@ -1,0 +1,15 @@
+{
+  "stream": true,
+  "conversationScope": "consulting",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Please generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4. Directly generate the editable PPT preview."
+    }
+  ],
+  "agentConfig": {
+    "agentId": "executive-ppt",
+    "agentName": "Editable PPT Assistant",
+    "entryMode": "consulting-advisor"
+  }
+}

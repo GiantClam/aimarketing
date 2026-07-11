@@ -1,0 +1,122 @@
+{
+  "baseUrl": "https://www.aimarketingsite.com",
+  "outputDir": "/Users/beihuang/Documents/github/aimarketing/output/playwright/online-executive-ppt-template-regression/1783613830916",
+  "chat": {
+    "status": 200,
+    "ok": true,
+    "eventCount": 223,
+    "eventNames": [
+      "conversation_init",
+      "skill_selected",
+      "knowledge_query_start",
+      "knowledge_query_result",
+      "provider_selected",
+      "tool_call",
+      "tool_call_start",
+      "tool_result",
+      "tool_call_done",
+      "message",
+      "reasoning_end",
+      "message_end"
+    ],
+    "conversationId": "459",
+    "provider": "enterprise-openai-compatible",
+    "providerModel": "deepseek-v4-pro",
+    "agentId": "executive-ppt",
+    "selectedSkills": [
+      "ppt-master"
+    ],
+    "toolResultCount": 2,
+    "toolDoneCount": 2,
+    "toolResult": {
+      "event": "tool_result",
+      "conversation_id": "459",
+      "data": {
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_NCtmAMbYvdWZkfm79XuE1139",
+        "result": {
+          "ok": true,
+          "status": "queued",
+          "message": "PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.",
+          "backgroundTask": {
+            "taskId": "1125",
+            "conversationId": "459",
+            "toolName": "preview_ppt_deck",
+            "status": "queued"
+          }
+        }
+      }
+    },
+    "selectedTemplateId": null,
+    "recommendedTemplateIds": [],
+    "backgroundTask": {
+      "taskId": "1125",
+      "conversationId": "459",
+      "toolName": "preview_ppt_deck",
+      "status": "queued"
+    },
+    "staleIdsInRawSse": [
+      "auto-4"
+    ],
+    "hasAuto4InRawSse": true
+  },
+  "task": {
+    "pollCount": 23,
+    "latestStatus": "running",
+    "selectedTemplateId": null,
+    "previewSessionId": null,
+    "error": null,
+    "latest": {
+      "task_id": "1125",
+      "status": "running",
+      "task_type": "preview_ppt_deck",
+      "conversation_id": "459",
+      "agent_id": "executive-ppt",
+      "created_at": 1783613866,
+      "updated_at": 1783614111,
+      "started_at": 1783613866,
+      "stage": "variant_generating",
+      "stage_label": "Generating preview variants",
+      "progress_current": 2,
+      "progress_total": 5,
+      "last_heartbeat_at": 1783613981,
+      "finished_at": null,
+      "preview_session_id": null,
+      "request_label": "sales deck and decision sync",
+      "result_summary": null,
+      "selected_template_id": null,
+      "selected_template_label": null,
+      "error_code": null,
+      "error_message": null,
+      "error": null,
+      "events": [
+        {
+          "type": "background_task_queued",
+          "label": "Background task queued",
+          "status": "running",
+          "at": 1783613981
+        },
+        {
+          "type": "background_generation_preparing",
+          "label": "Preparing generation runtime",
+          "status": "running",
+          "at": 1783613981
+        },
+        {
+          "type": "background_generation_running",
+          "label": "Generating SVG preview in background (PPTX on export)",
+          "status": "running",
+          "at": 1783613981
+        }
+      ]
+    }
+  },
+  "assertion": {
+    "passed": false,
+    "failures": [
+      "missing_selected_template_id",
+      "stale_template_ids_seen:auto-4"
+    ],
+    "selectedTemplateId": null
+  }
+}

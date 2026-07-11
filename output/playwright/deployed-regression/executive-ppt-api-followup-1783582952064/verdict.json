@@ -1,0 +1,12 @@
+{
+  "outDir": "/Users/beihuang/Documents/github/aimarketing/output/playwright/deployed-regression/executive-ppt-api-followup-1783582952064",
+  "conversationId": "452",
+  "firstStatus": 200,
+  "secondStatus": 200,
+  "secondRequestHasAttachmentTextInHistory": true,
+  "secondRequestHasFollowup": true,
+  "secondResponseHasIncompletePrompt": false,
+  "secondResponseHasToolCall": true,
+  "secondResponseHasConfirmation": true,
+  "secondAnswerPreview": "收到，按 12 页、保留套餐价格页，其他按推荐 brief 执行，现在生成预览。PPT 预览已进入后台生成（任务 ID: 1121），12 页结构按确认方案执行，套餐价格页已保留。\n\n生成完成后我会回填预览结果供你审阅。届时你可以：\n\n- 逐页确认内容和逻辑\n- 指出需要调整的页面或表述\n- 确认后我会导出可编辑的 PPTX 文件\n\n请稍候，复杂 deck 可能需要几分钟。\n\n已切换为后台生成：\n- 任务 ID: 1121\n- 状态: PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。"
+}

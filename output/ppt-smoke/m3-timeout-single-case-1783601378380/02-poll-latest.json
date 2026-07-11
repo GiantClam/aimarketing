@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "statusPayload": {
+    "jobId": "5dbb59f0-a8bf-44b6-8677-75109e27a185",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:building-effective-agents:01_cover:ppt_master_runtime_provider_timeout:minimax:MiniMax-M3"
+  }
+}

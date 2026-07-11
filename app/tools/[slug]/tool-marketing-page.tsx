@@ -316,9 +316,11 @@ export async function ToolMarketingPage({
       {faqJsonLd ? (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       ) : null}
-      {tool.slug === "ai-seo-meta-generator" ? (
+      {tool.slug === "ai-seo-meta-generator" || tool.slug === "seo-title-generator" ? (
         <>
           <SeoMetaWorkbench
+            locale={locale}
+            titleOnly={tool.slug === "seo-title-generator"}
             initialTopic={topic ?? prompt}
             initialAudience={audience}
             initialPageType={pageType}
@@ -459,6 +461,24 @@ export async function ToolMarketingPage({
             />
           ) : null}
 
+          {tool.contentSections?.length ? (
+            <section className="mt-8 grid gap-4 md:grid-cols-3">
+              {tool.contentSections.map((section) => (
+                <Card key={section.heading} className="border-border/70 bg-card/85 text-foreground">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
+                      {section.heading}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
+                    {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                  </CardContent>
+                </Card>
+              ))}
+            </section>
+          ) : null}
+
           <section className="rounded-[2rem] border border-border/70 bg-card/85 p-4">
             <div className="max-w-3xl space-y-2">
               <h2 className="text-2xl font-semibold text-foreground">
@@ -563,6 +583,24 @@ export async function ToolMarketingPage({
               ))}
             </div>
           </section>
+
+          {tool.relatedLinks?.length ? (
+            <section className="mt-8 rounded-[2rem] border border-border/70 bg-card/85 p-5">
+              <h2 className="text-2xl font-semibold text-foreground">{copy.relatedLinksTitle}</h2>
+              <div className="mt-6 grid gap-4 md:grid-cols-3">
+                {tool.relatedLinks.map((link) => (
+                  <Link
+                    key={`${tool.slug}-${link.href}`}
+                    href={localizePublicPath(link.href, locale)}
+                    className="rounded-2xl border border-border/70 bg-background/75 p-4 transition hover:border-primary/30 hover:bg-primary/5"
+                  >
+                    <h3 className="text-base font-medium text-foreground">{link.label}</h3>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">{link.description}</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </>
       ) : tool.contentSections?.length || examplePages.length || tool.relatedLinks?.length || tool.primaryCta || tool.secondaryCta ? (
         <>

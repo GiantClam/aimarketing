@@ -1,0 +1,8 @@
+{
+  "index": 1,
+  "requestId": "post-release-same-tenant-1-03027e60-f257-418e-b2b8-efda65a25a4d",
+  "submittedAt": "2026-07-10T23:26:32.701Z",
+  "httpStatus": 202,
+  "jobId": "3daf7742-93ef-4c96-830d-89a799bc5942",
+  "status": "queued"
+}

@@ -1,13 +1,39 @@
 import assert from "node:assert/strict"
+import { createRequire } from "node:module"
 import test from "node:test"
 
-import {
-  getLocalizedPlatformDirectoryEntryBySlug,
-  getLocalizedPublicToolsCenterEntries,
-  getLocalizedToolDirectoryEntryBySlug,
-  getPlatformDirectoryAvailability,
-  getPlatformDirectorySourceMap,
-} from "@/lib/platform/directory-registry"
+const require = createRequire(import.meta.url)
+const nodeModule = require("node:module") as {
+  _load: (request: string, parent: unknown, isMain: boolean) => unknown
+}
+const originalLoad = nodeModule._load
+
+nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, isMain: boolean) {
+  if (request === "server-only") {
+    return {}
+  }
+
+  return originalLoad.call(this, request, parent, isMain)
+}
+
+let getLocalizedPlatformDirectoryEntryBySlug: typeof import("./directory-registry").getLocalizedPlatformDirectoryEntryBySlug
+let getLocalizedPublicToolsCenterEntries: typeof import("./directory-registry").getLocalizedPublicToolsCenterEntries
+let getLocalizedToolDirectoryEntryBySlug: typeof import("./directory-registry").getLocalizedToolDirectoryEntryBySlug
+let getPlatformDirectoryAvailability: typeof import("./directory-registry").getPlatformDirectoryAvailability
+let getPlatformDirectorySourceMap: typeof import("./directory-registry").getPlatformDirectorySourceMap
+
+test.before(async () => {
+  const directoryRegistry = await import("./directory-registry")
+  getLocalizedPlatformDirectoryEntryBySlug = directoryRegistry.getLocalizedPlatformDirectoryEntryBySlug
+  getLocalizedPublicToolsCenterEntries = directoryRegistry.getLocalizedPublicToolsCenterEntries
+  getLocalizedToolDirectoryEntryBySlug = directoryRegistry.getLocalizedToolDirectoryEntryBySlug
+  getPlatformDirectoryAvailability = directoryRegistry.getPlatformDirectoryAvailability
+  getPlatformDirectorySourceMap = directoryRegistry.getPlatformDirectorySourceMap
+})
+
+test.after(() => {
+  nodeModule._load = originalLoad
+})
 
 test("tool directory exposes deferred waitlist state without pretending the tool is live", () => {
   const entry = getLocalizedToolDirectoryEntryBySlug("en", "sentiment-monitoring")
@@ -59,6 +85,14 @@ test("video operations agent can stay enterprise-only across shared directory su
   assert.ok(agent)
   assert.equal(agent?.status, "planned")
   assert.equal(agent?.availability, "enterprise_only")
+})
+
+test("public capability directory resolves runtime-backed capability entries", () => {
+  const capability = getLocalizedPlatformDirectoryEntryBySlug("en", "capability", "ai-image")
+
+  assert.ok(capability)
+  assert.equal(capability?.slug, "ai-image")
+  assert.ok(capability?.sourceRefs.some((item) => item.file === "lib/platform/runtime.ts"))
 })
 
 test("directory source map documents the registry inputs for toolsite and workspace reuse", () => {

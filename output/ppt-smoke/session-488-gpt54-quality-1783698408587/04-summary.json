@@ -1,0 +1,14 @@
+{
+  "ok": false,
+  "outDir": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/session-488-gpt54-quality-1783698408587",
+  "jobId": "90cc25e3-0187-4836-90a4-aa475a3bdb4e",
+  "status": "failed",
+  "message": "ppt_master_runtime_incomplete_variant:ppt169_attention_is_all_you_need-executive-brief:07_chart=ppt_master_runtime_slide_timeout",
+  "previewSessionId": null,
+  "provider": null,
+  "previewModel": null,
+  "previewEngine": null,
+  "logicalSlideCount": null,
+  "previewSlideCount": null,
+  "outline": []
+}

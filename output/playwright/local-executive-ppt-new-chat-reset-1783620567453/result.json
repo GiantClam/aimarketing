@@ -1,0 +1,14 @@
+[
+  {
+    "type": "chat_intercepted"
+  },
+  {
+    "type": "state_after_new_conversation",
+    "chatRequestSeen": true,
+    "textareaDisabled": false,
+    "textareaEditable": true,
+    "sendDisabled": false,
+    "oldGeneratingVisible": false,
+    "url": "http://localhost:3000/dashboard/ai?agent=executive-ppt"
+  }
+]

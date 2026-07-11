@@ -1,0 +1,446 @@
+data: {"event":"conversation_init","conversation_id":"459","enabled_tools":["web_search","preview_ppt_deck"],"skills_enabled":true,"selected_skills":["ppt-master"],"persisted":true,"agent_id":"executive-ppt","agent_route":null}
+
+data: {"event":"skill_selected","conversation_id":"459","skill_id":"ppt-master"}
+
+data: {"event":"knowledge_query_start","conversation_id":"459","data":null}
+
+data: {"event":"knowledge_query_result","conversation_id":"459","data":{"status":"miss","snippetCount":0,"datasetCount":0}}
+
+data: {"event":"provider_selected","conversation_id":"459","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","provider_order":["enterprise-openai-compatible"],"provider_attempt":1,"provider_upgrade_probe":false}
+
+data: {"event":"tool_call","conversation_id":"459","data":{"toolName":"web_search","toolCallId":"call_00_V8n8v30F1TAbReQhAUVA6990","args":{"query":"宇算智能 企业AI 业务工作空间","intent":"了解宇算智能公司背景、产品定位和企业AI业务工作空间的核心信息，以便生成准确的销售演示文稿","maxResults":5}}}
+
+data: {"event":"tool_call_start","conversation_id":"459","data":{"toolName":"web_search","toolCallId":"call_00_V8n8v30F1TAbReQhAUVA6990","args":{"query":"宇算智能 企业AI 业务工作空间","intent":"了解宇算智能公司背景、产品定位和企业AI业务工作空间的核心信息，以便生成准确的销售演示文稿","maxResults":5}}}
+
+data: {"event":"tool_result","conversation_id":"459","data":{"toolName":"web_search","toolCallId":"call_00_V8n8v30F1TAbReQhAUVA6990","result":{"query":"宇算智能 企业AI 业务工作空间","intent":"了解宇算智能公司背景、产品定位和企业AI业务工作空间的核心信息，以便生成准确的销售演示文稿","searchedAt":"2026-07-09T16:17:26.693Z","results":[{"title":"Wino Studio：本地优先的智能体工作空间 - 杭州宇算科技","url":"https://wino.cosmoduli.com/","snippet":"Wino Studio是面向『未来超级个体』的高效探索平台，定位为本地优先的智能体工作空间，产品的核心理念是：用户主导、实用主义、回归本质。","provider":"serper"},{"title":"面向企业的AI 工具","url":"https://workspace.google.com/intl/zh-CN/solutions/ai/","snippet":"*Google Workspace 为每位用户提供灵活的共用存储空间，这些存储空间��在整个组织范围内共享。商务新手版向每位用户提供30 GB 共用存储空间，商务标准版提供2 TB， ...","provider":"serper"},{"title":"华为《智能世界2035》报告","url":"https://www-file.huawei.com/dam/asset/view/39056d5bf2c5412f93d58026c146308c.pdf","snippet":"AI 大模型让算力资源释放“智能价值”，算力网络让AI 能力渗透“千行万业”，产业智能体. 反向驱动大模型与算力的技术迭代，各种科技发展彼此交织，催生出规模空前的智能体生态。与 ...","provider":"serper"},{"title":"AI平台| 智启云川_GPU算力 - 人工智能","url":"https://www.zqcloud-ai.com/?page_id=1650","snippet":"其业务包括：AI算力资源租售、企业AI应用培训、企业AI智能体定制、AIDC运营、云服务、及企业AI战略转型咨询服务。旗下“智启云川”专注于AI算力运营及应用，通过GPU云平台链接 ...","provider":"serper"},{"title":"Wino Studio","url":"https://www.aiproducthome.com/products/mGJEA2wUW5qQCda3MW","snippet":"杭州宇算科技. 关于开发者. 杭州宇算科技于2024年5月成立，致力于从事新一代信息技术及人工智能产业方向的基础软件研发和应用。 公司面向AI编码时代的产业需求，基于Rust ...","provider":"serper"}]}}}
+
+data: {"event":"tool_call_done","conversation_id":"459","data":{"toolName":"web_search","toolCallId":"call_00_V8n8v30F1TAbReQhAUVA6990","result":{"query":"宇算智能 企业AI 业务工作空间","intent":"了解宇算智能公司背景、产品定位和企业AI业务工作空间的核心信息，以便生成准确的销售演示文稿","searchedAt":"2026-07-09T16:17:26.693Z","results":[{"title":"Wino Studio：本地优先的智能体工作空间 - 杭州宇算科技","url":"https://wino.cosmoduli.com/","snippet":"Wino Studio是面向『未来超级个体』的高效探索平台，定位为本地优先的智能体工作空间，产品的核心理念是：用户主导、实用主义、回归本质。","provider":"serper"},{"title":"面向企业的AI 工具","url":"https://workspace.google.com/intl/zh-CN/solutions/ai/","snippet":"*Google Workspace 为每位用户提供灵活的共用存储空间，这些存储空间��在整个组织范围内共享。商务新手版向每位用户提供30 GB 共用存储空间，商务标准版提供2 TB， ...","provider":"serper"},{"title":"华为《智能世界2035》报告","url":"https://www-file.huawei.com/dam/asset/view/39056d5bf2c5412f93d58026c146308c.pdf","snippet":"AI 大模型让算力资源释放“智能价值”，算力网络让AI 能力渗透“千行万业”，产业智能体. 反向驱动大模型与算力的技术迭代，各种科技发展彼此交织，催生出规模空前的智能体生态。与 ...","provider":"serper"},{"title":"AI平台| 智启云川_GPU算力 - 人工智能","url":"https://www.zqcloud-ai.com/?page_id=1650","snippet":"其业务包括：AI算力资源租售、企业AI应用培训、企业AI智能体定制、AIDC运营、云服务、及企业AI战略转型咨询服务。旗下“智启云川”专注于AI算力运营及应用，通过GPU云平台链接 ...","provider":"serper"},{"title":"Wino Studio","url":"https://www.aiproducthome.com/products/mGJEA2wUW5qQCda3MW","snippet":"杭州宇算科技. 关于开发者. 杭州宇算科技于2024年5月成立，致力于从事新一代信息技术及人工智能产业方向的基础软件研发和应用。 公司面向AI编码时代的产业需求，基于Rust ...","provider":"serper"}]}}}
+
+data: {"event":"tool_call","conversation_id":"459","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_NCtmAMbYvdWZkfm79XuE1139","args":{"prompt":"Generate a 4-slide Chinese editable PPT sales deck about 宇算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace). \n\nThe deck is for executive leadership audience, goal is sales decision sync. Tone: concise, professional, executive-ready.\n\nSlide structure:\n1. 封面 (Cover): 宇算智能 | 企业AI业务工作空间 — 让AI成为业务增长的引擎. Subtitle: 面向决策者的智能工作空间解决方案.\n\n2. 核心价值主张 (Core Value Proposition): 企业AI业务工作空间 = 本地优先的智能体平台 + 业务场景深度集成. Three pillars: ① 用户主导的AI协作模式 ② 实用主义：从业务痛点出发 ③ 回归本质：降本增效可量化. Key message: Not just another AI tool — it's your team's AI-native operating system.\n\n3. 产品能力与场景 (Product Capabilities & Scenarios): Wino Studio — 本地优先的智能体工作空间. Capabilities: AI智能体定制、业务知识库接入、多模型调度、Rust技术栈带来的性能与安全优势. Use cases: 销售提案自动生成、运营数据分析、客户洞察报告、代码与文档协作.\n\n4. 合作路径 (Partnership & Next Steps): 快速启动路径 — ① 业务诊断工作坊 (1周) ② 试点场景部署 (2-4周) ③ 规模化推广. CTA: 立即预约企业AI工作空间演示. Contact placeholder.\n\nResearch grounding: 杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发，核心产品Wino Studio定位为本地优先的智能体工作空间，核心理念为用户主导、实用主义、回归本质。","sourcePrompt":"Generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4.","audience":"executive leadership","goal":"sales deck and decision sync","researchBrief":"{\"topic\": \"宇算智能企业AI业务工作空间\", \"keyFacts\": [\"杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发\", \"核心产品Wino Studio定位为本地优先的智能体工作空间\", \"产品理念：用户主导、实用主义、回归本质\", \"技术栈基于Rust，面向AI编码时代\", \"目标用户为未来超级个体与企业决策者\"], \"sourceNotes\": [\"https://wino.cosmoduli.com/\", \"https://www.aiproducthome.com/products/mGJEA2wUW5qQCda3MW\"]}","scenario":"sales-deck","language":"zh-CN","templateMode":"auto-4","pageCount":4,"tone":"Concise, professional, executive-ready"}}}
+
+data: {"event":"tool_call_start","conversation_id":"459","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_NCtmAMbYvdWZkfm79XuE1139","args":{"prompt":"Generate a 4-slide Chinese editable PPT sales deck about 宇算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace). \n\nThe deck is for executive leadership audience, goal is sales decision sync. Tone: concise, professional, executive-ready.\n\nSlide structure:\n1. 封面 (Cover): 宇算智能 | 企业AI业务工作空间 — 让AI成为业务增长的引擎. Subtitle: 面向决策者的智能工作空间解决方案.\n\n2. 核心价值主张 (Core Value Proposition): 企业AI业务工作空间 = 本地优先的智能体平台 + 业务场景深度集成. Three pillars: ① 用户主导的AI协作模式 ② 实用主义：从业务痛点出发 ③ 回归本质：降本增效可量化. Key message: Not just another AI tool — it's your team's AI-native operating system.\n\n3. 产品能力与场景 (Product Capabilities & Scenarios): Wino Studio — 本地优先的智能体工作空间. Capabilities: AI智能体定制、业务知识库接入、多模型调度、Rust技术栈带来的性能与安全优势. Use cases: 销售提案自动生成、运营数据分析、客户洞察报告、代码与文档协作.\n\n4. 合作路径 (Partnership & Next Steps): 快速启动路径 — ① 业务诊断工作坊 (1周) ② 试点场景部署 (2-4周) ③ 规模化推广. CTA: 立即预约企业AI工作空间演示. Contact placeholder.\n\nResearch grounding: 杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发，核心产品Wino Studio定位为本地优先的智能体工作空间，核心理念为用户主导、实用主义、回归本质。","sourcePrompt":"Generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4.","audience":"executive leadership","goal":"sales deck and decision sync","researchBrief":"{\"topic\": \"宇算智能企业AI业务工作空间\", \"keyFacts\": [\"杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发\", \"核心产品Wino Studio定位为本地优先的智能体工作空间\", \"产品理念：用户主导、实用主义、回归本质\", \"技术栈基于Rust，面向AI编码时代\", \"目标用户为未来超级个体与企业决策者\"], \"sourceNotes\": [\"https://wino.cosmoduli.com/\", \"https://www.aiproducthome.com/products/mGJEA2wUW5qQCda3MW\"]}","scenario":"sales-deck","language":"zh-CN","templateMode":"auto-4","pageCount":4,"tone":"Concise, professional, executive-ready"}}}
+
+data: {"event":"tool_result","conversation_id":"459","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_NCtmAMbYvdWZkfm79XuE1139","result":{"ok":true,"status":"queued","message":"PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.","backgroundTask":{"taskId":"1125","conversationId":"459","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"tool_call_done","conversation_id":"459","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_NCtmAMbYvdWZkfm79XuE1139","result":{"ok":true,"status":"queued","message":"PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.","backgroundTask":{"taskId":"1125","conversationId":"459","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"message","conversation_id":"459","answer":"PPT"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"预览"}
+
+data: {"event":"message","conversation_id":"459","answer":"正在"}
+
+data: {"event":"message","conversation_id":"459","answer":"后台"}
+
+data: {"event":"message","conversation_id":"459","answer":"生成"}
+
+data: {"event":"message","conversation_id":"459","answer":"中"}
+
+data: {"event":"message","conversation_id":"459","answer":"，"}
+
+data: {"event":"message","conversation_id":"459","answer":"稍"}
+
+data: {"event":"message","conversation_id":"459","answer":"等"}
+
+data: {"event":"message","conversation_id":"459","answer":"片刻"}
+
+data: {"event":"message","conversation_id":"459","answer":"即可"}
+
+data: {"event":"message","conversation_id":"459","answer":"查看"}
+
+data: {"event":"message","conversation_id":"459","answer":"。"}
+
+data: {"event":"message","conversation_id":"459","answer":"以下"}
+
+data: {"event":"message","conversation_id":"459","answer":"是我"}
+
+data: {"event":"message","conversation_id":"459","answer":"为您"}
+
+data: {"event":"message","conversation_id":"459","answer":"构建"}
+
+data: {"event":"message","conversation_id":"459","answer":"的"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"4"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"页"}
+
+data: {"event":"message","conversation_id":"459","answer":"销售"}
+
+data: {"event":"message","conversation_id":"459","answer":"提案"}
+
+data: {"event":"message","conversation_id":"459","answer":"结构"}
+
+data: {"event":"message","conversation_id":"459","answer":"：\n\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"---\n\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"###"}
+
+data: {"event":"message","conversation_id":"459","answer":" 📊"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"宇"}
+
+data: {"event":"message","conversation_id":"459","answer":"算"}
+
+data: {"event":"message","conversation_id":"459","answer":"智能"}
+
+data: {"event":"message","conversation_id":"459","answer":" |"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"企业"}
+
+data: {"event":"message","conversation_id":"459","answer":"AI"}
+
+data: {"event":"message","conversation_id":"459","answer":"业务"}
+
+data: {"event":"message","conversation_id":"459","answer":"工作"}
+
+data: {"event":"message","conversation_id":"459","answer":"空间"}
+
+data: {"event":"message","conversation_id":"459","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"|"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"页码"}
+
+data: {"event":"message","conversation_id":"459","answer":" |"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"内容"}
+
+data: {"event":"message","conversation_id":"459","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"|"}
+
+data: {"event":"message","conversation_id":"459","answer":"------"}
+
+data: {"event":"message","conversation_id":"459","answer":"|"}
+
+data: {"event":"message","conversation_id":"459","answer":"------"}
+
+data: {"event":"message","conversation_id":"459","answer":"|\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"|"}
+
+data: {"event":"message","conversation_id":"459","answer":" **"}
+
+data: {"event":"message","conversation_id":"459","answer":"P"}
+
+data: {"event":"message","conversation_id":"459","answer":"1"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"封面"}
+
+data: {"event":"message","conversation_id":"459","answer":"**"}
+
+data: {"event":"message","conversation_id":"459","answer":" |"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"宇"}
+
+data: {"event":"message","conversation_id":"459","answer":"算"}
+
+data: {"event":"message","conversation_id":"459","answer":"智能"}
+
+data: {"event":"message","conversation_id":"459","answer":" ·"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"企业"}
+
+data: {"event":"message","conversation_id":"459","answer":"AI"}
+
+data: {"event":"message","conversation_id":"459","answer":"业务"}
+
+data: {"event":"message","conversation_id":"459","answer":"工作"}
+
+data: {"event":"message","conversation_id":"459","answer":"空间"}
+
+data: {"event":"message","conversation_id":"459","answer":" —"}
+
+data: {"event":"message","conversation_id":"459","answer":" \""}
+
+data: {"event":"message","conversation_id":"459","answer":"让"}
+
+data: {"event":"message","conversation_id":"459","answer":"AI"}
+
+data: {"event":"message","conversation_id":"459","answer":"成为"}
+
+data: {"event":"message","conversation_id":"459","answer":"业务"}
+
+data: {"event":"message","conversation_id":"459","answer":"增长的"}
+
+data: {"event":"message","conversation_id":"459","answer":"引擎"}
+
+data: {"event":"message","conversation_id":"459","answer":"\""}
+
+data: {"event":"message","conversation_id":"459","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"|"}
+
+data: {"event":"message","conversation_id":"459","answer":" **"}
+
+data: {"event":"message","conversation_id":"459","answer":"P"}
+
+data: {"event":"message","conversation_id":"459","answer":"2"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"核心"}
+
+data: {"event":"message","conversation_id":"459","answer":"价值"}
+
+data: {"event":"message","conversation_id":"459","answer":"**"}
+
+data: {"event":"message","conversation_id":"459","answer":" |"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"三大"}
+
+data: {"event":"message","conversation_id":"459","answer":"支柱"}
+
+data: {"event":"message","conversation_id":"459","answer":"："}
+
+data: {"event":"message","conversation_id":"459","answer":"用户"}
+
+data: {"event":"message","conversation_id":"459","answer":"主导"}
+
+data: {"event":"message","conversation_id":"459","answer":"的"}
+
+data: {"event":"message","conversation_id":"459","answer":"AI"}
+
+data: {"event":"message","conversation_id":"459","answer":"协作"}
+
+data: {"event":"message","conversation_id":"459","answer":" /"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"实用"}
+
+data: {"event":"message","conversation_id":"459","answer":"主义"}
+
+data: {"event":"message","conversation_id":"459","answer":"从"}
+
+data: {"event":"message","conversation_id":"459","answer":"痛点"}
+
+data: {"event":"message","conversation_id":"459","answer":"出发"}
+
+data: {"event":"message","conversation_id":"459","answer":" /"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"降"}
+
+data: {"event":"message","conversation_id":"459","answer":"本"}
+
+data: {"event":"message","conversation_id":"459","answer":"增效"}
+
+data: {"event":"message","conversation_id":"459","answer":"可"}
+
+data: {"event":"message","conversation_id":"459","answer":"量化"}
+
+data: {"event":"message","conversation_id":"459","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"|"}
+
+data: {"event":"message","conversation_id":"459","answer":" **"}
+
+data: {"event":"message","conversation_id":"459","answer":"P"}
+
+data: {"event":"message","conversation_id":"459","answer":"3"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"产品"}
+
+data: {"event":"message","conversation_id":"459","answer":"能力"}
+
+data: {"event":"message","conversation_id":"459","answer":"**"}
+
+data: {"event":"message","conversation_id":"459","answer":" |"}
+
+data: {"event":"message","conversation_id":"459","answer":" W"}
+
+data: {"event":"message","conversation_id":"459","answer":"ino"}
+
+data: {"event":"message","conversation_id":"459","answer":" Studio"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"本地"}
+
+data: {"event":"message","conversation_id":"459","answer":"优先"}
+
+data: {"event":"message","conversation_id":"459","answer":"智能"}
+
+data: {"event":"message","conversation_id":"459","answer":"体"}
+
+data: {"event":"message","conversation_id":"459","answer":"工作"}
+
+data: {"event":"message","conversation_id":"459","answer":"空间"}
+
+data: {"event":"message","conversation_id":"459","answer":"："}
+
+data: {"event":"message","conversation_id":"459","answer":"AI"}
+
+data: {"event":"message","conversation_id":"459","answer":"定制"}
+
+data: {"event":"message","conversation_id":"459","answer":"、"}
+
+data: {"event":"message","conversation_id":"459","answer":"知识"}
+
+data: {"event":"message","conversation_id":"459","answer":"库"}
+
+data: {"event":"message","conversation_id":"459","answer":"接入"}
+
+data: {"event":"message","conversation_id":"459","answer":"、"}
+
+data: {"event":"message","conversation_id":"459","answer":"多"}
+
+data: {"event":"message","conversation_id":"459","answer":"模型"}
+
+data: {"event":"message","conversation_id":"459","answer":"调度"}
+
+data: {"event":"message","conversation_id":"459","answer":"、"}
+
+data: {"event":"message","conversation_id":"459","answer":"R"}
+
+data: {"event":"message","conversation_id":"459","answer":"ust"}
+
+data: {"event":"message","conversation_id":"459","answer":"高性能"}
+
+data: {"event":"message","conversation_id":"459","answer":"底座"}
+
+data: {"event":"message","conversation_id":"459","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"|"}
+
+data: {"event":"message","conversation_id":"459","answer":" **"}
+
+data: {"event":"message","conversation_id":"459","answer":"P"}
+
+data: {"event":"message","conversation_id":"459","answer":"4"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"合作"}
+
+data: {"event":"message","conversation_id":"459","answer":"路径"}
+
+data: {"event":"message","conversation_id":"459","answer":"**"}
+
+data: {"event":"message","conversation_id":"459","answer":" |"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"诊断"}
+
+data: {"event":"message","conversation_id":"459","answer":"工作"}
+
+data: {"event":"message","conversation_id":"459","answer":"坊"}
+
+data: {"event":"message","conversation_id":"459","answer":" →"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"试点"}
+
+data: {"event":"message","conversation_id":"459","answer":"部署"}
+
+data: {"event":"message","conversation_id":"459","answer":" →"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"规模化"}
+
+data: {"event":"message","conversation_id":"459","answer":"推广"}
+
+data: {"event":"message","conversation_id":"459","answer":"，"}
+
+data: {"event":"message","conversation_id":"459","answer":"一步"}
+
+data: {"event":"message","conversation_id":"459","answer":"直达"}
+
+data: {"event":"message","conversation_id":"459","answer":"企业"}
+
+data: {"event":"message","conversation_id":"459","answer":"AI"}
+
+data: {"event":"message","conversation_id":"459","answer":"落地"}
+
+data: {"event":"message","conversation_id":"459","answer":" |\n\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"---\n\n"}
+
+data: {"event":"message","conversation_id":"459","answer":"预览"}
+
+data: {"event":"message","conversation_id":"459","answer":"完成后"}
+
+data: {"event":"message","conversation_id":"459","answer":"，"}
+
+data: {"event":"message","conversation_id":"459","answer":"您可以"}
+
+data: {"event":"message","conversation_id":"459","answer":"查看"}
+
+data: {"event":"message","conversation_id":"459","answer":"四个"}
+
+data: {"event":"message","conversation_id":"459","answer":"模板"}
+
+data: {"event":"message","conversation_id":"459","answer":"方向"}
+
+data: {"event":"message","conversation_id":"459","answer":"，"}
+
+data: {"event":"message","conversation_id":"459","answer":"选"}
+
+data: {"event":"message","conversation_id":"459","answer":"中最"}
+
+data: {"event":"message","conversation_id":"459","answer":"满意"}
+
+data: {"event":"message","conversation_id":"459","answer":"的一个"}
+
+data: {"event":"message","conversation_id":"459","answer":"后"}
+
+data: {"event":"message","conversation_id":"459","answer":"告诉我"}
+
+data: {"event":"message","conversation_id":"459","answer":"，"}
+
+data: {"event":"message","conversation_id":"459","answer":"我会"}
+
+data: {"event":"message","conversation_id":"459","answer":"立即"}
+
+data: {"event":"message","conversation_id":"459","answer":"导出"}
+
+data: {"event":"message","conversation_id":"459","answer":"可"}
+
+data: {"event":"message","conversation_id":"459","answer":"编辑"}
+
+data: {"event":"message","conversation_id":"459","answer":"的"}
+
+data: {"event":"message","conversation_id":"459","answer":" PPT"}
+
+data: {"event":"message","conversation_id":"459","answer":"X"}
+
+data: {"event":"message","conversation_id":"459","answer":" "}
+
+data: {"event":"message","conversation_id":"459","answer":"文件"}
+
+data: {"event":"message","conversation_id":"459","answer":"。"}
+
+data: {"event":"reasoning_end","conversation_id":"459"}
+
+data: {"event":"message_end","conversation_id":"459","answer":"PPT 预览正在后台生成中，稍等片刻即可查看。以下是我为您构建的 4 页销售提案结构：\n\n---\n\n### 📊 宇算智能 | 企业AI业务工作空间\n\n| 页码 | 内容 |\n|------|------|\n| **P1 封面** | 宇算智能 · 企业AI业务工作空间 — \"让AI成为业务增长的引擎\" |\n| **P2 核心价值** | 三大支柱：用户主导的AI协作 / 实用主义从痛点出发 / 降本增效可量化 |\n| **P3 产品能力** | Wino Studio 本地优先智能体工作空间：AI定制、知识库接入、多模型调度、Rust高性能底座 |\n| **P4 合作路径** | 诊断工作坊 → 试点部署 → 规模化推广，一步直达企业AI落地 |\n\n---\n\n预览完成后，您可以查看四个模板方向，选中最满意的一个后告诉我，我会立即导出可编辑的 PPTX 文件。<!-- ai-entry-research-brief:{\"topic\":\"宇算智能 企业AI 业务工作空间\",\"keyFacts\":[\"Wino Studio是面向『未来超级个体』的高效探索平台，定位为本地优先的智能体工作空间，产品的核心理念是：用户主导、实用主义、回归本质。\",\"*Google Workspace 为每位用户提供灵活的共用存储空间，这些存储空间��在整个组织范围内共享。商务新手版向每位用户提供30 GB 共用存储空间，商务标准版提供2 TB， ...\",\"AI 大模型让算力资源释放“智能价值”，算力网络让AI 能力渗透“千行万业”，产业智能体. 反向驱动大模型与算力的技术迭代，各种科技发展彼此交织，催生出规模空前的智能体生态。与 ...\",\"其业务包括：AI算力资源租售、企业AI应用培训、企业AI智能体定制、AIDC运营、云服务、及企业AI战略转型咨询服务。旗下“智启云川”专注于AI算力运营及应用，通过GPU云平台链接 ...\"],\"sourceNotes\":[\"Wino Studio：本地优先的智能体工作空间 - 杭州宇算科技 - https://wino.cosmoduli.com/\",\"面向企业的AI 工具 - https://workspace.google.com/intl/zh-CN/solutions/ai/\",\"华为《智能世界2035》报告 - https://www-file.huawei.com/dam/asset/view/39056d5bf2c5412f93d58026c146308c.pdf\",\"AI平台| 智启云川_GPU算力 - 人工智能 - https://www.zqcloud-ai.com/?page_id=1650\"],\"implications\":[\"了解宇算智能公司背景、产品定位和企业AI业务工作空间的核心信息，以便生成准确的销售演示文稿\"],\"rawSummary\":\"Topic: 宇算智能 企业AI 业务工作空间\\nKey facts:\\n- Wino Studio是面向『未来超级个体』的高效探索平台，定位为本地优先的智能体工作空间，产品的核心理念是：用户主导、实用主义、回归本质。\\n- *Google Workspace 为每位用户提供灵活的共用存储空间，这些存储空间��在整个组织范围内共享。商务新手版向每位用户提供30 GB 共用存储空间，商务标准版提供2 TB， ...\\n- AI 大模型让算力资源释放“智能价值”，算力网络让AI 能力渗透“千行万业”，产业智能体. 反向驱动大模型与算力的技术迭代，各种科技发展彼此交织，催生出规模空前的智能体生态。与 ...\\n- 其业务包括：AI算力资源租售、企业AI应用培训、企业AI智能体定制、AIDC运营、云服务、及企业AI战略转型咨询服务。旗下“智启云川”专注于AI算力运营及应用，通过GPU云平台链接 ...\\nImplications:\\n- 了解宇算智能公司背景、产品定位和企业AI业务工作空间的核心信息，以便生成准确的销售演示文稿\\nSource notes:\\n- Wino Studio：本地优先的智能体工作空间 - 杭州宇算科技 - https://wino.cosmoduli.com/\\n- 面向企业的AI 工具 - https://workspace.google.com/intl/zh-CN/solutions/ai/\\n- 华为《智能世界2035》报告 - https://www-file.huawei.com/dam/asset/view/39056d5bf2c5412f93d58026c146308c.pdf\\n- AI平台| 智启云川_GPU算力 - 人工智能 - https://www.zqcloud-ai.com/?page_id=1650\"} -->\n\n已切换为后台生成：\n- 任务 ID: 1125\n- 状态: PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","agent_id":"executive-ppt","agent_route":null,"provider_order":["enterprise-openai-compatible"]}
+

@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "outDir": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/session-488-gpt54-headroom-1783696900752",
+  "jobId": "5359523c-575d-4cc0-a020-68b51af20385",
+  "status": "completed",
+  "message": null,
+  "previewSessionId": "800f9746-1122-4c64-a1ec-935effec6963",
+  "provider": "pptoken",
+  "previewModel": "gpt-5.4",
+  "previewEngine": "ppt-master-svg",
+  "logicalSlideCount": 8,
+  "previewSlideCount": 8,
+  "outline": [
+    "企业 AI 营销工作台",
+    "决策框架",
+    "先做统一，再做智能",
+    "工作方式重构",
+    "价值落在运营链路",
+    "管理层关注的四个结果",
+    "四模块闭环",
+    "建议先试点再放大"
+  ]
+}

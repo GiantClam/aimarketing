@@ -1,0 +1,2910 @@
+{
+  "conv": [
+    {
+      "id": 462,
+      "user_id": 96,
+      "title": "[ai-entry] [agent:executive-ppt] 写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m",
+      "current_model_id": "enterprise-openai-compatible::deepseek-v4-pro",
+      "metadata": {
+        "aiEntryUnreadState": {
+          "lastReadAssistantMessageId": 1167
+        },
+        "aiEntryConversationState": {
+          "ppt": {
+            "phase": "idle",
+            "latestExport": null,
+            "latestPreview": null
+          }
+        }
+      },
+      "created_at": "2026-07-09T09:01:47.502Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": 1166,
+      "role": "user",
+      "content": "写一份介绍预算智能公司和业务的 ppt \n\n[Uploaded file: 屿算智能_ppt信息提取.md / text/markdown]\n# 《屿算智能》PPT 信息提取\n\n> 说明：该 PPT 每页为整页图片，以下内容基于图片 OCR 识别并人工整理。个别小字、二维码、细节标签可能存在漏识或轻微误差。\n\n## 整体主题\n\n该 PPT 是“屿算智能 / 屿算智脑 / 屿算超脑”的企业 AI 业务工具介绍稿。核心主张是：\n\n- **实用 AI 大于 AI 概念**。\n- 不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。\n- 通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\n- 目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。\n\n---\n\n## 第 1 页：封面\n\n**标题：企业专属 AI 业务工具**\n\n核心口号：\n\n- 实用 AI 大于 AI 概念。\n- 不是追逐概念热度，而是把 AI 真正用进业务流程与增长。\n- 让 AI 进入企业的岗位、流程和结果。\n\n---\n\n## 第 2 页：AI 时代的企业经营焦虑\n\n**核心观点：每一个老板的脑海里都有 100 个问题。**\n\n企业面临的问题包括：\n\n- 客户从哪里来？\n- 内容怎么持续做？\n- 团队怎么执行？\n- 数据怎么沉淀？\n- AI 到底怎么用？\n\n结论：\n\n- 问题越来越多，工具越来越多，但真正能落到业务里的答案越来越少。\n- 企业需要的不是更多工具，而是一套能把问题变成流程的系统。\n\n---\n\n## 第 3 页：企业 AI 落地的真实卡点\n\n**核心观点：企业听懂了 AI，却很难把 AI 用进业务。**\n\n真实卡点：\n\n1. **不会问**  \n   打开大模型后，不知道如何描述业务、拆解问题、提出有效需求。\n\n2. **不会用 / 不好用**  \n   知道 AI 能写文案、做图片和视频，但接不进真实工作流程。\n\n3. **不能沉淀**  \n   员工零散使用工具，结果留不进企业知识、项目和资产体系。\n\n核心判断：\n\n- 很多企业已经不缺 AI 认知，真正缺的是一条能从问题走到执行、从执行走到结果的业务路径。\n\n---\n\n## 第 4 页：屿算智脑是什么\n\n**标题：屿算智脑：让 AI 进入企业的岗位、流程和结果。**\n\n产品定义：\n\n- 不是再给企业一个 AI 工具。\n- 而是把大模型、数字员工、业务流程和应用工具组合成一套企业专属 AI 业务能力。\n\n三层进入：\n\n1. **进入岗位**  \n   配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\n\n2. **进入流程**  \n   从业务梳理、立项规划、每日任务，到内容生产、发布获客和资产沉淀。\n\n3. **进入结果**  \n   降低试错成本，扩大内容产能，推动获客、转化与增长。\n\n最终价值：\n\n- 企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。\n\n---\n\n## 第 5 页：产品形态升级\n\n**标题：从单点 AI 工具，到企业专属的 AI 业务工作台。**\n\n核心观点：\n\n- 真正的企业 AI，不是让员工多打开几个工具，而是让业务问题、岗位角色、执行流程和结果资产在同一个系统里协同运转。\n\n对比关系：\n\n### 传统单点 AI 工具\n\n- 按工具分散使用，能力散落在不同入口。\n- 依赖员工自己会提问、会选工具、会拼流程。\n- 生成了内容，但不一定进入项目、任务和客户跟进。\n- 结果留在个人账号和聊天记录里，难以复用。\n\n### 屿算智脑工作台\n\n- 按企业真实业务路径组织能力，先流程，后工具。\n- 由角色、场景和任务主动引导，降低 AI 使用门槛。\n- 从业务梳理到每日任务、内容生产、客户跟进形成闭环。\n- 方案、内容、知识和流程进入企业资产库，越用越完整。\n\n---\n\n## 第 6 页：七层业务闭环\n\n**标题：一张图看屿算智脑的七层业务闭环。**\n\n核心逻辑：\n\n- 从 AI 能力接入，到业务梳理、项目执行、内容分发，再到风控和资产沉淀。\n- 把企业 AI 落地做成一条完整链路。\n\n主要层级：\n\n1. **底座层**  \n   40+ 模型与工具接入，配置 17 个 AI 智能体员工。\n\n2. **诊断层**  \n   主动提问，帮助企业梳理业务目标、资源和问题。\n\n3. **立项层**  \n   生成行业研究、实施方案、运营策划与风险防控。\n\n4. **管理层**  \n   把长期目标拆到季度、月度、看板和每日任务。\n\n5. **生产层**  \n   生产文案、图片、视频、数字人、广告片和 PPT。\n\n6. **分发层**  \n   多平台同步发布，评论抓取、互动回复与客户管理。\n\n7. **资产层**  \n   AI 法务审查，知识库与工作流沉淀为企业资产。\n\n现场核心句：\n\n- 不是买一堆 AI 功能，而是把 AI 放进企业每天运转的流程里。\n\n---\n\n## 第 7 页：阶段一，业务梳理\n\n**标题：从业务梳理开始：让企业知道该怎么用 AI。**\n\n系统能力：\n\n- 不是让客户打开空白对话框自己想提示词。\n- 而是由系统根据营销场景、岗位角色和业务流程，主动把问题问清楚。\n\n输出内容：\n\n- 可落地的业务地图。\n- 业务目标、资源现状、关键断点、行动计划。\n- 自动生成业务梳理清单与立项建议。\n\n典型问题：\n\n- 今年最想提升的是获客、转化、复购，还是品牌？\n- 当前人员、素材、账号、客户与知识库有什么资源？\n- 从内容生产到销售转化，中间断点在哪里？\n- 哪些项目先做，谁来执行，怎么验收？\n\n核心价值：\n\n- 先帮企业问清楚，再进入立项和执行。\n\n---\n\n## 第 8 页：阶段二，立项与执行管理\n\n**标题：从立项到任务：把想法变成方案、计划和每日执行。**\n\n核心问题：\n\n- 很多企业不是没有想法，而是想法进不了计划，计划落不到人，任务不能持续推进。\n\n系统能力：\n\n1. **生成深度方案**  \n   原本需要咨询公司长期交付的分析，被系统结构化生成。\n\n2. **提供默认回复模板**  \n   老板只需按企业情况微调。\n\n3. **生成项目成果**  \n   包括行业研究报告、落地实施方案、运营总策划、风险防控方案。\n\n4. **进入目标看板**  \n   从长期规划拆到季度、月度，项目进度看得见。\n\n5. **拆成每日任务**  \n   团队照着流程推进。\n\n核心句：\n\n- 立项不是填表，而是让 AI 把业务想法变成可推进的项目系统。\n\n---\n\n## 第 9 页：阶段三，生产与分发\n\n**标题：从生产到分发：让内容、获客和成交形成闭环。**\n\n核心观点：\n\n- 企业需要的不是单次生成一篇文案，而是把策划、素材、内容、合规、发布和互动客户接成连续流程。\n\n营销内容增长流水线：\n\n1. 从企业目标、竞品账号和热门内容里，反推选题方向与提示词。\n2. 围绕营销场景，快速生产文案、图片、视频、数字人、广告片等内容。\n3. 对参考、复刻和搬运风险做 AI 法务与改写审查。\n4. 内容同步发布到主流平台。\n5. 评论、互动与潜在客户回到系统里跟进。\n6. 抓取评论人群，批量回复，把内容流量变成可跟进线索。\n7. 绑定客服与微信账号，统一管理客户、朋友圈模板和营销海报。\n8. 将客户、素材、反馈和高质量内容沉淀到企业资产库。\n\n---\n\n## 第 10 页：阶段四，风控与资产沉淀\n\n**标题：从风控到资产：让每一次执行沉淀为企业能力。**\n\n核心观点：\n\n- AI 不能只负责“生成”。\n- 还要在内容复刻、搬运、改写、数字人使用和客户互动过程中守住风险，并把过程沉淀为企业资产。\n\n两大能力：\n\n1. **AI 风控**  \n   对素材来源、数字人使用、平台发布、话术等建立边界。\n\n2. **资产入库**  \n   把内容、方案、知识、流程、任务记录等沉淀到企业资产体系。\n\n资产类型：\n\n- 企业知识库。\n- 内容资产。\n- 项目资料。\n- 工作流资产。\n\n核心价值：\n\n- 真正值钱的不是一次结果，而是企业越用越完整的知识、流程和内容资产。\n- 每一次项目执行，都会反哺下一次诊断、立项、生产和分发。\n\n---\n\n## 第 11 页：AI 智能体员工矩阵\n\n**标题：AI 智能体员工，覆盖企业关键岗位。**\n\n核心观点：\n\n- 屿算智脑不是让客户面对一个空白聊天框，而是把真实业务岗位训练成 AI 员工。\n- AI 员工按营销增长流程协同工作。\n\n岗位类别：\n\n1. **内容策略类**  \n   如编导老师、选题专家、提示词工程师、脚本相关角色等。\n\n2. **成交和私域裂变类**  \n   如平台获客导师、精准线索专家、设计专员、数字人专家、私域/客户运营相关角色等。\n\n3. **组织裂变类**  \n   如合伙人导师、招商策划师、分公司总监、行政专员等。\n\n4. **专业支持类**  \n   如合同专家、法务老师、企业知识库、财务等。\n\n核心价值：\n\n- 真实岗位，而不是通用角色。\n- 从诊断、立项、生产、分发到风控沉淀，每一步都有对应 AI 员工进入流程。\n\n---\n\n## 第 12 页：AI 底座与工具聚合\n\n**标题：把外部 AI 能力变成企业可用的业务系统。**\n\n能力底座：\n\n- **40+** 国内外大模型与工具接入。\n- **10+** 主流内容发布与客户承接触点。\n- **全链路** ",
+      "created_at": "2026-07-09T09:01:47.554Z"
+    },
+    {
+      "id": 1167,
+      "role": "assistant",
+      "content": "PPT 预览正在后台生成中，系统已匹配到模板并开始制作。以下是当前状态：\n\n---\n\n## ✅ 简报已确认，预览生成中\n\n| 项目 | 设定 |\n|---|---|\n| **主题** | 屿算智能公司及业务介绍 |\n| **受众** | 管理层汇报 |\n| **目标** | 培训讲解与统一认知 |\n| **场景** | training |\n| **语言** | 中文 |\n| **页数** | 约 12 页 |\n| **风格** | 简洁、专业、决策导向 |\n\n---\n\n## 🎨 已匹配模板\n\n系统推荐了 **Glassmorphism Demo**（毛玻璃现代SaaS风格），适合 AI 产品与科技企业介绍场景，视觉语言现代、层次清晰。\n\n备选模板还包括：\n- **Global AI Capital 2026** — Bloomberg 编辑风格的密集数据排版，偏行业分析感\n- **藏拙** — 水墨留白中式美学，偏创意与文化感\n\n---\n\n## 📋 已载入的核心内容\n\nPPT 将覆盖 13 个关键页面：\n\n1. 封面 — 企业专属AI业务工具\n2. 企业痛点 — 含「客户从哪里来」的获客闭环解答\n3. AI落地卡点 — 不会问 / 不会用 / 不能沉淀\n4. 屿算智脑定义 — 三层进入：岗位、流程、结果\n5. 产品形态对比 — 单点工具 vs 业务工作台\n6. 七层业务闭环全景图\n7. 业务四阶段（诊断→立项→生产分发→风控资产）\n8. 17个AI智能体员工矩阵\n9. AI底座与工具聚合\n10. 客户价值四象限（降成本/提效率/强执行/促增长）\n11. 行业应用场景\n12. 套餐与价格体系\n13. 合作入口与结尾\n\n---\n\n预览结果出来后我会第一时间回填，届时您可以查看效果并决定是否导出可编辑 PPTX 文件。请稍等片刻。\n\n已切换为后台生成：\n- 任务 ID: 1128\n- 状态: PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。\n- 本次已采用模板: Glassmorphism Demo (ppt169_glassmorphism_demo)",
+      "created_at": "2026-07-09T09:02:22.334Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": 1128,
+      "user_id": 96,
+      "status": "running",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "462",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_KaLAvcrZmoa6U9PP2dyT3623",
+        "input": {
+          "prompt": "写一份介绍屿算智能公司及其核心业务的PPT，用于内部培训和管理层认知统一。\n\n**公司定位：** 屿算智能致力于帮助传统企业实现AI科技化升级，核心产品包括屿算智脑（标准SaaS AI业务工作台）和屿算超脑（定制化独立部署AI系统）。\n\n**核心理念：** 实用AI大于AI概念。不是再给企业一个单点AI工具，而是让AI真正进入企业的岗位、流程和结果。\n\n**必含内容：**\n\n1. **封面** — 企业专属AI业务工具，实用AI大于AI概念\n2. **企业痛点** — AI时代企业的经营焦虑：客户从哪里来？内容怎么持续做？团队怎么执行？数据怎么沉淀？AI到底怎么用？\n3. **AI落地卡点** — 企业听懂了AI却用不进业务：不会问、不会用/不好用、不能沉淀\n4. **屿算智脑是什么** — 让AI进入企业的岗位、流程和结果，配置17个AI智能体员工\n5. **产品形态升级** — 从单点AI工具到企业专属AI业务工作台的对比\n6. **七层业务闭环** — 底座层→诊断层→立项层→管理层→生产层→分发层→资产层\n7. **业务四阶段（可合并或分页）** — 阶段一：业务梳理（系统主动帮企业问清楚）；阶段二：立项与执行管理（想法→方案→计划→每日任务）；阶段三：生产与分发（内容生产、多平台发布、获客闭环）；阶段四：风控与资产沉淀（AI法务审查、知识库与工作流沉淀）\n8. **AI智能体员工矩阵** — 17个AI智能体覆盖内容策略、成交私域、组织裂变、专业支持四类岗位\n9. **AI底座与工具聚合** — 40+模型与工具接入，10+内容发布与客户承接触点\n10. **客户最终买到什么** — 降成本、提效率、强执行、促增长四类业务结果\n11. **行业应用场景** — 传统企业转型、账号矩阵、渠道合作、知识产品等\n12. **产品套餐与价格体系** — 入门版¥19,800、标准版¥39,800、增长版¥59,800，以及屿算超脑定制方案\n13. **合作入口与结尾** — 预约演示、合作沟通、定制化部署评估\n\n**特别要求：** 第2页企业痛点中必须明确回答\"客户从哪里来\"这一问题——通过内容生产→多平台分发→评论抓取→互动回复→客户管理形成获客闭环。\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？——通过内容生产、多平台分发、评论抓取与互动回复形成获客闭环; 17个AI智能体员工覆盖四类岗位矩阵; 七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层; 从单点AI工具到企业专属AI业务工作台的对比; 产品套餐与价格体系：入门版¥19,800 / 标准版¥39,800 / 增长版¥59,800 / 超脑定制",
+          "sourcePrompt": "写一份介绍预算智能公司和业务的 ppt",
+          "audience": "管理层汇报",
+          "goal": "培训讲解与统一认知",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "客户从哪里来？——通过内容生产、多平台分发、评论抓取与互动回复形成获客闭环",
+            "17个AI智能体员工覆盖四类岗位矩阵",
+            "七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层",
+            "从单点AI工具到企业专属AI业务工作台的对比",
+            "产品套餐与价格体系：入门版¥19,800 / 标准版¥39,800 / 增长版¥59,800 / 超脑定制"
+          ],
+          "researchBrief": {
+            "topic": "《屿算智能》PPT 信息提取",
+            "keyFacts": [
+              "**实用 AI 大于 AI 概念**。",
+              "不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。",
+              "通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。",
+              "目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。",
+              "实用 AI 大于 AI 概念。"
+            ],
+            "rawSummary": "# 《屿算智能》PPT 信息提取\n\n> 说明：该 PPT 每页为整页图片，以下内容基于图片 OCR 识别并人工整理。个别小字、二维码、细节标签可能存在漏识或轻微误差。\n\n## 整体主题\n\n该 PPT 是“屿算智能 / 屿算智脑 / 屿算超脑”的企业 AI 业务工具介绍稿。核心主张是：\n\n- **实用 AI 大于 AI 概念**。\n- 不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。\n- 通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\n- 目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。\n\n---\n\n## 第 1 页：封面\n\n**标题：企业专属 AI 业务工具**\n\n核心口号：\n\n- 实用 AI 大于 AI 概念。\n- 不是追逐概念热度，而是把 AI 真正用进业务流程与增长。\n- 让 AI 进入企业的岗位、流程和结果。\n\n---\n\n## 第 2 页：AI 时代的企业经营焦虑\n\n**核心观点：每一个老板的脑海里都有 100 个问题。**\n\n企业面临的问题包括：\n\n- 客户从哪里来？\n- 内容怎么持续做？\n- 团队怎么执行？\n- 数据怎么沉淀？\n- AI 到底怎么用？\n\n结论：\n\n- 问题越来越多，工具越来越多，但真正能落到业务里的答案越来越少。\n- 企业需要的不是更多工具，而是一套能把问题变成流程的系统。\n\n---\n\n## 第 3 页：企业 AI 落地的真实卡点\n\n**核心观点：企业听懂了 AI，却很难把 AI 用进业务。**\n\n真实卡点：\n\n1. **不会问**  \n   打开大模型后，不知道如何描述业务、拆解问题、提出有效需求。\n\n2. **不会用 / 不好用**  \n   知道 AI 能写文案、做图片和视频，但接不进真实工作流程。\n\n3. **不能沉淀**  \n   员工零散使用工具，结果留不进企业知识、项目和资产体系。\n\n核心判断：\n\n- 很多企业已经不缺 AI 认知，真正缺的是一条能从问题走到执行、从执行走到结果的业务路径。\n\n---\n\n## 第 4 页：屿算智脑是什么\n\n**标题：屿算智脑：让 AI 进入企业的岗位、流程和结果。**\n\n产品定义：\n\n- 不是再给企业一个 AI 工具。\n- 而是把大模型、数字员工、业务流程和应用工具组合成一套企业专属 AI 业务能力。\n\n三层进入：\n\n1. **进入岗位**  \n   配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\n\n2. **进入流程**  \n   从业务梳理、立项规划、每日任务，到内容生产、发布获客和资产沉淀。\n\n3. **进入结果**  \n   降低试错成本，扩大内容产能，推动获客、转化与增长。\n\n最终价值：\n\n- 企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。\n\n---\n\n## 第 5 页：产品形态升级\n\n**标题：从单点 AI 工具，到企业专属的 AI 业务工作台。**\n\n核心观点：\n\n- 真正的企业 AI，不是让员工多打开几个工具，而是让业务问题、岗位角色、执行流程和结果资产在同一个系统里协同运转。\n\n对比关系：\n\n### 传统单点 AI 工具\n\n- 按工具分散使用，能力散落在不同入口。\n- 依赖员工自己会提问、会选工具、会拼流程。\n- 生成了内容，但不一定进入项目、任务和客户跟进。\n- 结果留在个人账号和聊天记录里，难以复用。\n\n### 屿算智脑工作台\n\n- 按企业真实业务路径组织能力，先流程，后工具。\n- 由角色、场景和任务主动引导，降低 AI 使用门槛。\n- 从业务梳理到每日任务、内容生产、客户跟进形成闭环。\n- 方案、内容、知识和流程进入企业资产库，越用越完整。\n\n---\n\n## 第 6 页：七层业务闭环\n\n**标题：一张图看屿算智脑的七层业务闭环。**\n\n核心逻辑：\n\n- 从 AI 能力接入，到业务梳理、项目执行、内容分发，再到风控和资产沉淀。\n- 把企业 AI 落地做成一条完整链路。\n\n主要层级：\n\n1. **底座层**  \n   40+ 模型与工具接入，配置 17 个 AI 智能体员工。\n\n2. **诊断层**  \n   主动提问，帮助企业梳理业务目标、资源和问题。\n\n3. **立项层**  \n   生成行业研究、实施方案、运营策划与风险防控。\n\n4. **管理层**  \n   把长期目标拆到季度、月度、看板和每日任务。\n\n5. **生产层**  \n   生产文案、图片、视频、数字人、广告片和 PPT。\n\n6. **分发层**  \n   多平台同步发布，评论抓取、互动回复与客户管理。\n\n7. **资产层**  \n   AI 法…"
+          },
+          "templateMode": "single-template",
+          "templateId": "ppt169_glassmorphism_demo"
+        },
+        "isZh": true
+      },
+      "result": {
+        "conversation_id": "462",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_KaLAvcrZmoa6U9PP2dyT3623",
+        "stage": "variant_generating",
+        "stageLabel": "正在重新生成预览方向",
+        "progressCurrent": 2,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783617287,
+        "previewSessionId": null,
+        "toolResult": {
+          "ok": false,
+          "error": {
+            "code": "ppt_tool_failed",
+            "message": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed"
+          }
+        },
+        "errorCode": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+        "errorMessage": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+        "error": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "后台任务已创建",
+            "status": "running",
+            "at": 1783616628426
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "正在准备生成环境",
+            "status": "running",
+            "at": 1783616628430
+          },
+          {
+            "type": "background_generation_running",
+            "label": "正在后台生成 SVG 预览（导出时再生成 PPTX）",
+            "status": "running",
+            "at": 1783616628435
+          },
+          {
+            "type": "background_generation_retry",
+            "label": "后台生成失败，正在自动重试（1/2）",
+            "detail": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+            "status": "running",
+            "at": 1783617287049
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {},
+      "started_at": {}
+    }
+  ],
+  "swissGridTasks": [
+    {
+      "id": 1128,
+      "user_id": 96,
+      "status": "running",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "462",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_KaLAvcrZmoa6U9PP2dyT3623",
+        "input": {
+          "prompt": "写一份介绍屿算智能公司及其核心业务的PPT，用于内部培训和管理层认知统一。\n\n**公司定位：** 屿算智能致力于帮助传统企业实现AI科技化升级，核心产品包括屿算智脑（标准SaaS AI业务工作台）和屿算超脑（定制化独立部署AI系统）。\n\n**核心理念：** 实用AI大于AI概念。不是再给企业一个单点AI工具，而是让AI真正进入企业的岗位、流程和结果。\n\n**必含内容：**\n\n1. **封面** — 企业专属AI业务工具，实用AI大于AI概念\n2. **企业痛点** — AI时代企业的经营焦虑：客户从哪里来？内容怎么持续做？团队怎么执行？数据怎么沉淀？AI到底怎么用？\n3. **AI落地卡点** — 企业听懂了AI却用不进业务：不会问、不会用/不好用、不能沉淀\n4. **屿算智脑是什么** — 让AI进入企业的岗位、流程和结果，配置17个AI智能体员工\n5. **产品形态升级** — 从单点AI工具到企业专属AI业务工作台的对比\n6. **七层业务闭环** — 底座层→诊断层→立项层→管理层→生产层→分发层→资产层\n7. **业务四阶段（可合并或分页）** — 阶段一：业务梳理（系统主动帮企业问清楚）；阶段二：立项与执行管理（想法→方案→计划→每日任务）；阶段三：生产与分发（内容生产、多平台发布、获客闭环）；阶段四：风控与资产沉淀（AI法务审查、知识库与工作流沉淀）\n8. **AI智能体员工矩阵** — 17个AI智能体覆盖内容策略、成交私域、组织裂变、专业支持四类岗位\n9. **AI底座与工具聚合** — 40+模型与工具接入，10+内容发布与客户承接触点\n10. **客户最终买到什么** — 降成本、提效率、强执行、促增长四类业务结果\n11. **行业应用场景** — 传统企业转型、账号矩阵、渠道合作、知识产品等\n12. **产品套餐与价格体系** — 入门版¥19,800、标准版¥39,800、增长版¥59,800，以及屿算超脑定制方案\n13. **合作入口与结尾** — 预约演示、合作沟通、定制化部署评估\n\n**特别要求：** 第2页企业痛点中必须明确回答\"客户从哪里来\"这一问题——通过内容生产→多平台分发→评论抓取→互动回复→客户管理形成获客闭环。\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？——通过内容生产、多平台分发、评论抓取与互动回复形成获客闭环; 17个AI智能体员工覆盖四类岗位矩阵; 七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层; 从单点AI工具到企业专属AI业务工作台的对比; 产品套餐与价格体系：入门版¥19,800 / 标准版¥39,800 / 增长版¥59,800 / 超脑定制",
+          "sourcePrompt": "写一份介绍预算智能公司和业务的 ppt",
+          "audience": "管理层汇报",
+          "goal": "培训讲解与统一认知",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "客户从哪里来？——通过内容生产、多平台分发、评论抓取与互动回复形成获客闭环",
+            "17个AI智能体员工覆盖四类岗位矩阵",
+            "七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层",
+            "从单点AI工具到企业专属AI业务工作台的对比",
+            "产品套餐与价格体系：入门版¥19,800 / 标准版¥39,800 / 增长版¥59,800 / 超脑定制"
+          ],
+          "researchBrief": {
+            "topic": "《屿算智能》PPT 信息提取",
+            "keyFacts": [
+              "**实用 AI 大于 AI 概念**。",
+              "不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。",
+              "通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。",
+              "目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。",
+              "实用 AI 大于 AI 概念。"
+            ],
+            "rawSummary": "# 《屿算智能》PPT 信息提取\n\n> 说明：该 PPT 每页为整页图片，以下内容基于图片 OCR 识别并人工整理。个别小字、二维码、细节标签可能存在漏识或轻微误差。\n\n## 整体主题\n\n该 PPT 是“屿算智能 / 屿算智脑 / 屿算超脑”的企业 AI 业务工具介绍稿。核心主张是：\n\n- **实用 AI 大于 AI 概念**。\n- 不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。\n- 通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\n- 目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。\n\n---\n\n## 第 1 页：封面\n\n**标题：企业专属 AI 业务工具**\n\n核心口号：\n\n- 实用 AI 大于 AI 概念。\n- 不是追逐概念热度，而是把 AI 真正用进业务流程与增长。\n- 让 AI 进入企业的岗位、流程和结果。\n\n---\n\n## 第 2 页：AI 时代的企业经营焦虑\n\n**核心观点：每一个老板的脑海里都有 100 个问题。**\n\n企业面临的问题包括：\n\n- 客户从哪里来？\n- 内容怎么持续做？\n- 团队怎么执行？\n- 数据怎么沉淀？\n- AI 到底怎么用？\n\n结论：\n\n- 问题越来越多，工具越来越多，但真正能落到业务里的答案越来越少。\n- 企业需要的不是更多工具，而是一套能把问题变成流程的系统。\n\n---\n\n## 第 3 页：企业 AI 落地的真实卡点\n\n**核心观点：企业听懂了 AI，却很难把 AI 用进业务。**\n\n真实卡点：\n\n1. **不会问**  \n   打开大模型后，不知道如何描述业务、拆解问题、提出有效需求。\n\n2. **不会用 / 不好用**  \n   知道 AI 能写文案、做图片和视频，但接不进真实工作流程。\n\n3. **不能沉淀**  \n   员工零散使用工具，结果留不进企业知识、项目和资产体系。\n\n核心判断：\n\n- 很多企业已经不缺 AI 认知，真正缺的是一条能从问题走到执行、从执行走到结果的业务路径。\n\n---\n\n## 第 4 页：屿算智脑是什么\n\n**标题：屿算智脑：让 AI 进入企业的岗位、流程和结果。**\n\n产品定义：\n\n- 不是再给企业一个 AI 工具。\n- 而是把大模型、数字员工、业务流程和应用工具组合成一套企业专属 AI 业务能力。\n\n三层进入：\n\n1. **进入岗位**  \n   配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\n\n2. **进入流程**  \n   从业务梳理、立项规划、每日任务，到内容生产、发布获客和资产沉淀。\n\n3. **进入结果**  \n   降低试错成本，扩大内容产能，推动获客、转化与增长。\n\n最终价值：\n\n- 企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。\n\n---\n\n## 第 5 页：产品形态升级\n\n**标题：从单点 AI 工具，到企业专属的 AI 业务工作台。**\n\n核心观点：\n\n- 真正的企业 AI，不是让员工多打开几个工具，而是让业务问题、岗位角色、执行流程和结果资产在同一个系统里协同运转。\n\n对比关系：\n\n### 传统单点 AI 工具\n\n- 按工具分散使用，能力散落在不同入口。\n- 依赖员工自己会提问、会选工具、会拼流程。\n- 生成了内容，但不一定进入项目、任务和客户跟进。\n- 结果留在个人账号和聊天记录里，难以复用。\n\n### 屿算智脑工作台\n\n- 按企业真实业务路径组织能力，先流程，后工具。\n- 由角色、场景和任务主动引导，降低 AI 使用门槛。\n- 从业务梳理到每日任务、内容生产、客户跟进形成闭环。\n- 方案、内容、知识和流程进入企业资产库，越用越完整。\n\n---\n\n## 第 6 页：七层业务闭环\n\n**标题：一张图看屿算智脑的七层业务闭环。**\n\n核心逻辑：\n\n- 从 AI 能力接入，到业务梳理、项目执行、内容分发，再到风控和资产沉淀。\n- 把企业 AI 落地做成一条完整链路。\n\n主要层级：\n\n1. **底座层**  \n   40+ 模型与工具接入，配置 17 个 AI 智能体员工。\n\n2. **诊断层**  \n   主动提问，帮助企业梳理业务目标、资源和问题。\n\n3. **立项层**  \n   生成行业研究、实施方案、运营策划与风险防控。\n\n4. **管理层**  \n   把长期目标拆到季度、月度、看板和每日任务。\n\n5. **生产层**  \n   生产文案、图片、视频、数字人、广告片和 PPT。\n\n6. **分发层**  \n   多平台同步发布，评论抓取、互动回复与客户管理。\n\n7. **资产层**  \n   AI 法…"
+          },
+          "templateMode": "single-template",
+          "templateId": "ppt169_glassmorphism_demo"
+        },
+        "isZh": true
+      },
+      "result": {
+        "conversation_id": "462",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_KaLAvcrZmoa6U9PP2dyT3623",
+        "stage": "variant_generating",
+        "stageLabel": "正在重新生成预览方向",
+        "progressCurrent": 2,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783617287,
+        "previewSessionId": null,
+        "toolResult": {
+          "ok": false,
+          "error": {
+            "code": "ppt_tool_failed",
+            "message": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed"
+          }
+        },
+        "errorCode": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+        "errorMessage": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+        "error": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "后台任务已创建",
+            "status": "running",
+            "at": 1783616628426
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "正在准备生成环境",
+            "status": "running",
+            "at": 1783616628430
+          },
+          {
+            "type": "background_generation_running",
+            "label": "正在后台生成 SVG 预览（导出时再生成 PPTX）",
+            "status": "running",
+            "at": 1783616628435
+          },
+          {
+            "type": "background_generation_retry",
+            "label": "后台生成失败，正在自动重试（1/2）",
+            "detail": "ppt_master_runtime_slide_generation_failed:swiss-grid:10_comparison:ppt_master_runtime_provider_timeout:minimax:MiniMax-M2.7-highspeed",
+            "status": "running",
+            "at": 1783617287049
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1125,
+      "user_id": 1,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 1,
+        "conversationId": "459",
+        "conversationScope": "consulting",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_NCtmAMbYvdWZkfm79XuE1139",
+        "input": {
+          "prompt": "Generate a 4-slide Chinese editable PPT sales deck about 宇算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace). \n\nThe deck is for executive leadership audience, goal is sales decision sync. Tone: concise, professional, executive-ready.\n\nSlide structure:\n1. 封面 (Cover): 宇算智能 | 企业AI业务工作空间 — 让AI成为业务增长的引擎. Subtitle: 面向决策者的智能工作空间解决方案.\n\n2. 核心价值主张 (Core Value Proposition): 企业AI业务工作空间 = 本地优先的智能体平台 + 业务场景深度集成. Three pillars: ① 用户主导的AI协作模式 ② 实用主义：从业务痛点出发 ③ 回归本质：降本增效可量化. Key message: Not just another AI tool — it's your team's AI-native operating system.\n\n3. 产品能力与场景 (Product Capabilities & Scenarios): Wino Studio — 本地优先的智能体工作空间. Capabilities: AI智能体定制、业务知识库接入、多模型调度、Rust技术栈带来的性能与安全优势. Use cases: 销售提案自动生成、运营数据分析、客户洞察报告、代码与文档协作.\n\n4. 合作路径 (Partnership & Next Steps): 快速启动路径 — ① 业务诊断工作坊 (1周) ② 试点场景部署 (2-4周) ③ 规模化推广. CTA: 立即预约企业AI工作空间演示. Contact placeholder.\n\nResearch grounding: 杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发，核心产品Wino Studio定位为本地优先的智能体工作空间，核心理念为用户主导、实用主义、回归本质。\nStructured brief:\nAudience: executive leadership\nGoal: sales deck and decision sync\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 4\nTone: Concise, professional, executive-ready",
+          "sourcePrompt": "Please generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4. Directly generate the editable PPT preview.",
+          "audience": "executive leadership",
+          "goal": "sales deck and decision sync",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "Concise, professional, executive-ready",
+          "researchBrief": "{\"topic\": \"宇算智能企业AI业务工作空间\", \"keyFacts\": [\"杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发\", \"核心产品Wino Studio定位为本地优先的智能体工作空间\", \"产品理念：用户主导、实用主义、回归本质\", \"技术栈基于Rust，面向AI编码时代\", \"目标用户为未来超级个体与企业决策者\"], \"sourceNotes\": [\"https://wino.cosmoduli.com/\", \"https://www.aiproducthome.com/products/mGJEA2wUW5qQCda3MW\"]}"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "459",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_NCtmAMbYvdWZkfm79XuE1139",
+        "stage": "session_persisting",
+        "stageLabel": "Preview completed",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783614166,
+        "finishedAt": 1783614166,
+        "previewSessionId": "77e4bc12-c7bd-453a-a48d-04ffb29dbee1",
+        "resultSummary": "PPT preview generated:\n- Title: Generate a 4-slide Chinese editable PPT sales deck about 宇算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace). \n\nThe deck is for executive leadership audience, goal is sales decision sync. Tone: concise, professional, executive-ready.\n\nSlide structure:\n1. 封面 (Cover): 宇算智能 | 企业AI业务工作空间 — 让AI成为业务增长的引擎. Subtitle: 面向决策者的智能工作空间解决方案.\n\n2. 核心价值主张 (Core Value Proposition): 企业AI业务工作空间 = 本地优先的智能体平台 + 业务场景深度集成. Three pillars: ① 用户主导的AI协作模式 ② 实用主义：从业务痛点出发 ③ 回归本质：降本增效可量化. Key message: Not just another AI tool — it's your team's AI-native operating system.\n\n3. 产品能力与场景 (Product Capabilities & Scenarios): Wino Studio — 本地优先的智能体工作空间. Capabilities: AI智能体定制、业务知识库接入、多模型调度、Rust技术栈带来的性能与安全优势. Use cases: 销售提案自动生成、运营数据分析、客户洞察报告、代码与文档协作.\n\n4. 合作路径 (Partnership & Next Steps): 快速启动路径 — ① 业务诊断工作坊 (1周) ② 试点场景部署 (2-4周) ③ 规模化推广. CTA: 立即预约企业AI工作空间演示. Contact placeholder.\n\nResearch grounding: 杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发，核心产品Wino Studio定位为本地优先的智能体工作空间，核心理念为用户主导、实用主义、回归本质。\nStructured brief:\nAudience: executive leadership\nGoal: sales deck and decision sync\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 4\nTone: Concise, professional, executive-ready\nStructured brief:\nAudience: executive leadership\nGoal: sales deck and decision sync\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 4\nTone: Concise, professional, executive-ready\n- Variant count: 4\n- Default recommended variant: Long Table (anthropic-brand)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Selected template for this run: 藏拙 (ppt169_cangzhuo)\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"77e4bc12-c7bd-453a-a48d-04ffb29dbee1\",\"defaultVariantKey\":\"anthropic-brand\",\"variantKeys\":[\"anthropic-brand\",\"attention-is-all-you-need\",\"ai-ops\",\"swiss-grid\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "77e4bc12-c7bd-453a-a48d-04ffb29dbee1",
+          "generatedAt": "2026-07-09T16:20:33.219Z",
+          "recommendedVariantKey": "anthropic-brand",
+          "recommendedVariantName": "Long Table",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "ppt169_cangzhuo",
+              "templateLabel": "藏拙",
+              "styleKey": "ppt169_cangzhuo",
+              "styleName": "藏拙",
+              "summary": "Reading-share deck on the wisdom of restraint, rendered in ink-wash neutrals with generous whitespace and traditional Chinese typography. Tone: Chinese Ink Aesthetic / creative"
+            },
+            {
+              "rank": 2,
+              "templateId": "ppt169_global_ai_capital_2026",
+              "templateLabel": "Global AI Capital 2026",
+              "styleKey": "ppt169_global_ai_capital_2026",
+              "styleName": "Global AI Capital 2026",
+              "summary": "Year-in-review on global AI capital flows in the dense data-journalism style of Bloomberg and The Economist — multi-column layouts, micro-charts, editorial sidebars. Tone: Bloomberg Editorial / consulting"
+            },
+            {
+              "rank": 3,
+              "templateId": "ai_ops",
+              "templateLabel": "ai_ops",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "ai_ops",
+              "summary": "Telecom AI operations architecture, IT system overviews, digital transformation proposals, smart infrastructure reports."
+            },
+            {
+              "rank": 4,
+              "templateId": "google",
+              "templateLabel": "google",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "google",
+              "summary": "Google brand identity — multi-product corporate decks, developer events (Google I/O style), education and training in the Google ecosystem"
+            }
+          ],
+          "selectedTemplateId": "ppt169_cangzhuo",
+          "title": "Generate a 4-slide Chinese editable PPT sales deck about 宇算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace). \n\nThe deck is for executive leadership audience, goal is sales decision sync. Tone: concise, professional, executive-ready.\n\nSlide structure:\n1. 封面 (Cover): 宇算智能 | 企业AI业务工作空间 — 让AI成为业务增长的引擎. Subtitle: 面向决策者的智能工作空间解决方案.\n\n2. 核心价值主张 (Core Value Proposition): 企业AI业务工作空间 = 本地优先的智能体平台 + 业务场景深度集成. Three pillars: ① 用户主导的AI协作模式 ② 实用主义：从业务痛点出发 ③ 回归本质：降本增效可量化. Key message: Not just another AI tool — it's your team's AI-native operating system.\n\n3. 产品能力与场景 (Product Capabilities & Scenarios): Wino Studio — 本地优先的智能体工作空间. Capabilities: AI智能体定制、业务知识库接入、多模型调度、Rust技术栈带来的性能与安全优势. Use cases: 销售提案自动生成、运营数据分析、客户洞察报告、代码与文档协作.\n\n4. 合作路径 (Partnership & Next Steps): 快速启动路径 — ① 业务诊断工作坊 (1周) ② 试点场景部署 (2-4周) ③ 规模化推广. CTA: 立即预约企业AI工作空间演示. Contact placeholder.\n\nResearch grounding: 杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发，核心产品Wino Studio定位为本地优先的智能体工作空间，核心理念为用户主导、实用主义、回归本质。\nStructured brief:\nAudience: executive leadership\nGoal: sales deck and decision sync\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 4\nTone: Concise, professional, executive-ready\nStructured brief:\nAudience: executive leadership\nGoal: sales deck and decision sync\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 4\nTone: Concise, professional, executive-ready",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "anthropic-brand",
+              "name": "Long Table",
+              "summary": "frontend-slides 的长桌纪要模板，规则线、分栏和议题感最强，适合董事会汇报、策略复盘和结构化叙事。",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "templateId": "anthropic-brand",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "宇算智能·企业AI业务工作空间"
+            },
+            {
+              "key": "attention-is-all-you-need",
+              "name": "Attention Research",
+              "summary": "来自 ppt-master 的研究论文风格，更强调方法图解、实验结果和学术答辩式证明链路。",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "templateId": "attention-is-all-you-need",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "宇算智能：企业AI业务工作空间的实证研究"
+            },
+            {
+              "key": "ai-ops",
+              "name": "Effective Agents",
+              "summary": "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制。",
+              "styleKey": "ppt169_building_effective_agents",
+              "templateId": "ai-ops",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "宇算智能企业AI业务工作空间"
+            },
+            {
+              "key": "swiss-grid",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "swiss-grid",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "宇算智能·企业AI业务工作空间"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 253,
+            "previewArtifactId": 229,
+            "toolRunId": 253
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: Generate a 4-slide Chinese editable PPT sales deck about 宇算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace). \n\nThe deck is for executive leadership audience, goal is sales decision sync. Tone: concise, professional, executive-ready.\n\nSlide structure:\n1. 封面 (Cover): 宇算智能 | 企业AI业务工作空间 — 让AI成为业务增长的引擎. Subtitle: 面向决策者的智能工作空间解决方案.\n\n2. 核心价值主张 (Core Value Proposition): 企业AI业务工作空间 = 本地优先的智能体平台 + 业务场景深度集成. Three pillars: ① 用户主导的AI协作模式 ② 实用主义：从业务痛点出发 ③ 回归本质：降本增效可量化. Key message: Not just another AI tool — it's your team's AI-native operating system.\n\n3. 产品能力与场景 (Product Capabilities & Scenarios): Wino Studio — 本地优先的智能体工作空间. Capabilities: AI智能体定制、业务知识库接入、多模型调度、Rust技术栈带来的性能与安全优势. Use cases: 销售提案自动生成、运营数据分析、客户洞察报告、代码与文档协作.\n\n4. 合作路径 (Partnership & Next Steps): 快速启动路径 — ① 业务诊断工作坊 (1周) ② 试点场景部署 (2-4周) ③ 规模化推广. CTA: 立即预约企业AI工作空间演示. Contact placeholder.\n\nResearch grounding: 杭州宇算科技成立于2024年5月，专注新一代信息技术及AI基础软件研发，核心产品Wino Studio定位为本地优先的智能体工作空间，核心理念为用户主导、实用主义、回归本质。\nStructured brief:\nAudience: executive leadership\nGoal: sales deck and decision sync\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 4\nTone: Concise, professional, executive-ready\nStructured brief:\nAudience: executive leadership\nGoal: sales deck and decision sync\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 4\nTone: Concise, professional, executive-ready\n- Variant count: 4\n- Default recommended variant: Long Table (anthropic-brand)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Selected template for this run: 藏拙 (ppt169_cangzhuo)\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"77e4bc12-c7bd-453a-a48d-04ffb29dbee1\",\"defaultVariantKey\":\"anthropic-brand\",\"variantKeys\":[\"anthropic-brand\",\"attention-is-all-you-need\",\"ai-ops\",\"swiss-grid\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783613981350
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "Preparing generation runtime",
+            "status": "running",
+            "at": 1783613981356
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating SVG preview in background (PPTX on export)",
+            "status": "running",
+            "at": 1783613981362
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "Rendering preview",
+            "status": "running",
+            "at": 1783614166642
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783614166687
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1123,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "457",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_8syJY5p9Nzf8ssYm6EhC0661",
+        "input": {
+          "prompt": "写一份介绍屿算智能公司和业务的PPT，用于管理层内部培训讲解与统一认知。内容基于已提供的屿算智能PPT信息提取文件。\n\n主题：屿算智能 —— 企业专属AI业务工作台\n副标题：实用AI大于AI概念\n\n内容结构（12页）：\n\n第1页：封面 —— 屿算智能：企业专属AI业务工具，核心主张\"实用AI大于AI概念，让AI进入企业的岗位、流程和结果\"。\n\n第2页：AI时代的企业经营痛点 —— 老板面临的5个核心问题：客户从哪里来？内容怎么持续做？团队怎么执行？数据怎么沉淀？AI到底怎么用？结论：企业需要的不是更多工具，而是一套能把问题变成流程的系统。\n\n第3页：企业AI落地的三大真实卡点 —— 不会问（不知道如何描述业务、拆解问题）、不会用/不好用（AI接不进真实工作流程）、不能沉淀（结果留不进企业知识体系）。核心判断：企业真正缺的是一条从问题走到执行、从执行走到结果的业务路径。\n\n第4页：屿算智脑产品定义 —— 不是再给企业一个AI工具，而是把大模型、数字员工、业务流程和应用工具组合成企业专属AI业务能力。三层进入：进入岗位（17个AI智能体员工）、进入流程（从业务梳理到资产沉淀）、进入结果（降低试错成本，扩大内容产能，推动获客转化增长）。\n\n第5页：产品形态升级对比 —— 传统单点AI工具 vs 屿算智脑工作台。传统：工具分散、依赖员工自己会提问、结果留在个人账号。屿算：按业务路径组织能力、角色场景主动引导、形成业务闭环、结果进入企业资产库。\n\n第6页：七层业务闭环全景图 —— 底座层（40+模型与工具接入）、诊断层（主动提问梳理业务）、立项层（生成行业研究与实施方案）、管理层（目标拆解到看板和每日任务）、生产层（文案图片视频数字人PPT）、分发层（多平台发布评论抓取客户管理）、资产层（AI法务审查知识沉淀）。\n\n第7页：阶段一·业务梳理 —— 系统主动提问，帮助企业梳理业务目标、资源现状、关键断点、行动计划。典型问题：今年最想提升获客/转化/复购还是品牌？当前有什么资源？断点在哪里？先帮企业问清楚，再进入立项和执行。\n\n第8页：阶段二·立项与执行管理 —— 生成深度方案、行业研究报告、落地实施方案、运营总策划、风险防控方案。进入目标看板，拆成每日任务。立项不是填表，而是让AI把业务想法变成可推进的项目系统。\n\n第9页：阶段三·生产与分发 —— 营销内容增长流水线：选题方向→生产文案图片视频数字人→AI法务审查→多平台发布→评论抓取互动回复→客户跟进→资产沉淀。让内容、获客和成交形成闭环。\n\n第10页：阶段四·风控与资产沉淀 —— AI风控（素材合规、数字人使用边界）+ 资产入库（企业知识库、内容资产、项目资料、工作流资产）。真正值钱的不是一次结果，而是企业越用越完整的知识、流程和内容资产。\n\n第11页：AI智能体员工矩阵 —— 四类岗位：内容策略类（编导、选题专家、提示词工程师）、成交私域类（获客导师、精准线索专家、数字人专家、私域运营）、组织裂变类（合伙人导师、招商策划师）、专业支持类（合同专家、法务老师、财务）。真实岗位而非通用角色，覆盖诊断到风控全流程。\n\n第12页：客户价值总结与行动号召 —— 四类业务结果：降成本、提效率、强执行、促增长。产品套餐（入门版¥19,800 / 标准版¥39,800 / 增长版¥59,800 / 超脑定制方案）。合作入口：预约演示、合作沟通、定制化部署评估。核心理念：实用AI大于AI概念。\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 17个AI智能体员工; 七层业务闭环; 产品套餐与价格体系; AI时代企业经营痛点; 风控与资产沉淀",
+          "sourcePrompt": "写一份介绍预算智能公司和业务的 ppt",
+          "audience": "管理层汇报",
+          "goal": "培训讲解与统一认知",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "客户从哪里来？",
+            "17个AI智能体员工",
+            "七层业务闭环",
+            "产品套餐与价格体系",
+            "AI时代企业经营痛点",
+            "风控与资产沉淀"
+          ],
+          "researchBrief": {
+            "topic": "《屿算智能》PPT 信息提取",
+            "keyFacts": [
+              "**实用 AI 大于 AI 概念**。",
+              "不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。",
+              "通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。",
+              "目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。",
+              "实用 AI 大于 AI 概念。"
+            ],
+            "rawSummary": "# 《屿算智能》PPT 信息提取\n\n> 说明：该 PPT 每页为整页图片，以下内容基于图片 OCR 识别并人工整理。个别小字、二维码、细节标签可能存在漏识或轻微误差。\n\n## 整体主题\n\n该 PPT 是“屿算智能 / 屿算智脑 / 屿算超脑”的企业 AI 业务工具介绍稿。核心主张是：\n\n- **实用 AI 大于 AI 概念**。\n- 不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。\n- 通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\n- 目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。\n\n---\n\n## 第 1 页：封面\n\n**标题：企业专属 AI 业务工具**\n\n核心口号：\n\n- 实用 AI 大于 AI 概念。\n- 不是追逐概念热度，而是把 AI 真正用进业务流程与增长。\n- 让 AI 进入企业的岗位、流程和结果。\n\n---\n\n## 第 2 页：AI 时代的企业经营焦虑\n\n**核心观点：每一个老板的脑海里都有 100 个问题。**\n\n企业面临的问题包括：\n\n- 客户从哪里来？\n- 内容怎么持续做？\n- 团队怎么执行？\n- 数据怎么沉淀？\n- AI 到底怎么用？\n\n结论：\n\n- 问题越来越多，工具越来越多，但真正能落到业务里的答案越来越少。\n- 企业需要的不是更多工具，而是一套能把问题变成流程的系统。\n\n---\n\n## 第 3 页：企业 AI 落地的真实卡点\n\n**核心观点：企业听懂了 AI，却很难把 AI 用进业务。**\n\n真实卡点：\n\n1. **不会问**  \n   打开大模型后，不知道如何描述业务、拆解问题、提出有效需求。\n\n2. **不会用 / 不好用**  \n   知道 AI 能写文案、做图片和视频，但接不进真实工作流程。\n\n3. **不能沉淀**  \n   员工零散使用工具，结果留不进企业知识、项目和资产体系。\n\n核心判断：\n\n- 很多企业已经不缺 AI 认知，真正缺的是一条能从问题走到执行、从执行走到结果的业务路径。\n\n---\n\n## 第 4 页：屿算智脑是什么\n\n**标题：屿算智脑：让 AI 进入企业的岗位、流程和结果。**\n\n产品定义：\n\n- 不是再给企业一个 AI 工具。\n- 而是把大模型、数字员工、业务流程和应用工具组合成一套企业专属 AI 业务能力。\n\n三层进入：\n\n1. **进入岗位**  \n   配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\n\n2. **进入流程**  \n   从业务梳理、立项规划、每日任务，到内容生产、发布获客和资产沉淀。\n\n3. **进入结果**  \n   降低试错成本，扩大内容产能，推动获客、转化与增长。\n\n最终价值：\n\n- 企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。\n\n---\n\n## 第 5 页：产品形态升级\n\n**标题：从单点 AI 工具，到企业专属的 AI 业务工作台。**\n\n核心观点：\n\n- 真正的企业 AI，不是让员工多打开几个工具，而是让业务问题、岗位角色、执行流程和结果资产在同一个系统里协同运转。\n\n对比关系：\n\n### 传统单点 AI 工具\n\n- 按工具分散使用，能力散落在不同入口。\n- 依赖员工自己会提问、会选工具、会拼流程。\n- 生成了内容，但不一定进入项目、任务和客户跟进。\n- 结果留在个人账号和聊天记录里，难以复用。\n\n### 屿算智脑工作台\n\n- 按企业真实业务路径组织能力，先流程，后工具。\n- 由角色、场景和任务主动引导，降低 AI 使用门槛。\n- 从业务梳理到每日任务、内容生产、客户跟进形成闭环。\n- 方案、内容、知识和流程进入企业资产库，越用越完整。\n\n---\n\n## 第 6 页：七层业务闭环\n\n**标题：一张图看屿算智脑的七层业务闭环。**\n\n核心逻辑：\n\n- 从 AI 能力接入，到业务梳理、项目执行、内容分发，再到风控和资产沉淀。\n- 把企业 AI 落地做成一条完整链路。\n\n主要层级：\n\n1. **底座层**  \n   40+ 模型与工具接入，配置 17 个 AI 智能体员工。\n\n2. **诊断层**  \n   主动提问，帮助企业梳理业务目标、资源和问题。\n\n3. **立项层**  \n   生成行业研究、实施方案、运营策划与风险防控。\n\n4. **管理层**  \n   把长期目标拆到季度、月度、看板和每日任务。\n\n5. **生产层**  \n   生产文案、图片、视频、数字人、广告片和 PPT。\n\n6. **分发层**  \n   多平台同步发布，评论抓取、互动回复与客户管理。\n\n7. **资产层**  \n   AI 法…"
+          }
+        },
+        "isZh": true
+      },
+      "result": {
+        "conversation_id": "457",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_8syJY5p9Nzf8ssYm6EhC0661",
+        "stage": "session_persisting",
+        "stageLabel": "预览已完成",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783609668,
+        "finishedAt": 1783609668,
+        "previewSessionId": "23d173d5-f819-4e73-b315-7bddbb9e3769",
+        "resultSummary": "已生成 PPT 预览：\n- 标题: 《屿算智能》PPT 信息提取\n- 预览方案数: 4\n- 默认推荐版本: Cangzhuo (cangzhuo)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"23d173d5-f819-4e73-b315-7bddbb9e3769\",\"defaultVariantKey\":\"cangzhuo\",\"variantKeys\":[\"cangzhuo\",\"government-blue\",\"swiss-grid\",\"ai-ops\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "23d173d5-f819-4e73-b315-7bddbb9e3769",
+          "generatedAt": "2026-07-09T14:58:05.458Z",
+          "recommendedVariantKey": "cangzhuo",
+          "recommendedVariantName": "Cangzhuo",
+          "recommendedTemplates": [],
+          "selectedTemplateId": null,
+          "title": "《屿算智能》PPT 信息提取",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "resolvedPageCount": 12,
+          "variants": [
+            {
+              "key": "cangzhuo",
+              "name": "Cangzhuo",
+              "summary": "来自 ppt-master 的中文管理层纪要风格，议题清单、条线复盘和执行部署感更强。",
+              "styleKey": "ppt169_cangzhuo",
+              "templateId": "cangzhuo",
+              "narrativeAngle": null,
+              "slideCount": 12,
+              "coverTitle": "屿算智能：实用AI大于AI概念"
+            },
+            {
+              "key": "government-blue",
+              "name": "Long Table",
+              "summary": "frontend-slides 的长桌纪要模板，规则线、分栏和议题感最强，适合董事会汇报、策略复盘和结构化叙事。",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "templateId": "government-blue",
+              "narrativeAngle": null,
+              "slideCount": 12,
+              "coverTitle": "屿算智能：企业专属AI业务工作台"
+            },
+            {
+              "key": "swiss-grid",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "swiss-grid",
+              "narrativeAngle": null,
+              "slideCount": 12,
+              "coverTitle": "屿算智能：企业专属AI业务工作台"
+            },
+            {
+              "key": "ai-ops",
+              "name": "Effective Agents",
+              "summary": "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制。",
+              "styleKey": "ppt169_building_effective_agents",
+              "templateId": "ai-ops",
+              "narrativeAngle": null,
+              "slideCount": 12,
+              "coverTitle": "屿算智能"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 251,
+            "previewArtifactId": 227,
+            "toolRunId": 251
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "已生成 PPT 预览：\n- 标题: 《屿算智能》PPT 信息提取\n- 预览方案数: 4\n- 默认推荐版本: Cangzhuo (cangzhuo)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"23d173d5-f819-4e73-b315-7bddbb9e3769\",\"defaultVariantKey\":\"cangzhuo\",\"variantKeys\":[\"cangzhuo\",\"government-blue\",\"swiss-grid\",\"ai-ops\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "后台任务已创建",
+            "status": "running",
+            "at": 1783608887397
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "正在准备生成环境",
+            "status": "running",
+            "at": 1783608887403
+          },
+          {
+            "type": "background_generation_running",
+            "label": "正在后台生成 SVG 预览（导出时再生成 PPTX）",
+            "status": "running",
+            "at": 1783608887407
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "正在渲染预览",
+            "status": "running",
+            "at": 1783609668831
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "后台生成完成",
+            "status": "completed",
+            "at": 1783609668865
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1106,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "434",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "preview_ppt_deck",
+        "input": {
+          "prompt": "请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页，强调财务预算、关键决策与下一步计划。继续直接生成可编辑 PPT 预览。\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向",
+          "sourcePrompt": "请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页，强调财务预算、关键决策与下一步计划。继续直接生成可编辑 PPT 预览。",
+          "audience": "董事会和管理层",
+          "goal": "经营汇报与决策同步",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "tone": "简洁、专业、决策导向",
+          "templateMode": "single-template",
+          "templateId": "cangzhuo"
+        },
+        "isZh": true
+      },
+      "result": {
+        "conversation_id": "434",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "preview_ppt_deck",
+        "stage": "session_persisting",
+        "stageLabel": "预览已完成",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783528408,
+        "finishedAt": 1783528408,
+        "previewSessionId": "158236be-c1be-492c-b331-92e56865b3a2",
+        "resultSummary": "已生成 PPT 预览：\n- 标题: 请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页，强调财务预算、关键决策与下一步计划。继续直接生成可编辑 PPT 预览。\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\n- 预览方案数: 1\n- 默认推荐版本: Cangzhuo (cangzhuo-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 本次已采用模板: 苍桌纪要 (cangzhuo)\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"158236be-c1be-492c-b331-92e56865b3a2\",\"defaultVariantKey\":\"cangzhuo-executive-brief\",\"variantKeys\":[\"cangzhuo-executive-brief\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "158236be-c1be-492c-b331-92e56865b3a2",
+          "generatedAt": "2026-07-08T16:28:01.065Z",
+          "recommendedVariantKey": "cangzhuo-executive-brief",
+          "recommendedVariantName": "Cangzhuo",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "cangzhuo",
+              "templateLabel": "苍桌纪要",
+              "styleKey": "ppt169_cangzhuo",
+              "styleName": "Cangzhuo",
+              "summary": "偏中文管理层纪要、议题清单和执行部署。"
+            },
+            {
+              "rank": 2,
+              "templateId": "neo-brutalism",
+              "templateLabel": "新野蛮主义",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "styleName": "Long Table",
+              "summary": "偏硬朗标题、编辑栅格和纪要感。"
+            },
+            {
+              "rank": 3,
+              "templateId": "global-ai-capital-2026",
+              "templateLabel": "全球 AI 资本 2026",
+              "styleKey": "ppt169_global_ai_capital_2026",
+              "styleName": "Global AI Capital",
+              "summary": "偏资本市场、行业格局和高层判断纪要。"
+            },
+            {
+              "rank": 4,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            }
+          ],
+          "selectedTemplateId": "cangzhuo",
+          "title": "请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页，强调财务预算、关键决策与下一步计划。继续直接生成可编辑 PPT 预览。\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "pageCount": null,
+          "resolvedPageCount": 10,
+          "variants": [
+            {
+              "key": "cangzhuo-executive-brief",
+              "name": "Cangzhuo",
+              "summary": "来自 ppt-master 的中文管理层纪要风格，议题清单、条线复盘和执行部署感更强。",
+              "styleKey": "ppt169_cangzhuo",
+              "templateId": "cangzhuo",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 10,
+              "coverTitle": "2024经营复盘与2025风险诊断"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 237,
+            "previewArtifactId": 213,
+            "toolRunId": 237
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "已生成 PPT 预览：\n- 标题: 请生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景是 sales-deck，语言是中文，10 页，强调财务预算、关键决策与下一步计划。继续直接生成可编辑 PPT 预览。\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nTone: 简洁、专业、决策导向\n- 预览方案数: 1\n- 默认推荐版本: Cangzhuo (cangzhuo-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 本次已采用模板: 苍桌纪要 (cangzhuo)\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"158236be-c1be-492c-b331-92e56865b3a2\",\"defaultVariantKey\":\"cangzhuo-executive-brief\",\"variantKeys\":[\"cangzhuo-executive-brief\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "后台任务已创建",
+            "status": "running",
+            "at": 1783528027282
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "正在准备生成环境",
+            "status": "running",
+            "at": 1783528027286
+          },
+          {
+            "type": "background_generation_running",
+            "label": "正在后台生成 SVG 预览（导出时再生成 PPTX）",
+            "status": "running",
+            "at": 1783528027290
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "正在渲染预览",
+            "status": "running",
+            "at": 1783528408847
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "后台生成完成",
+            "status": "completed",
+            "at": 1783528408868
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1105,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "434",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_v84mKZSPJvZiDRL8OEPK1582",
+        "input": {
+          "prompt": "生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景为 sales-deck，语言为中文，10 页，语气简洁专业决策导向。\n\n必须包含以下内容：\n- 财务预算执行分析（预算 vs 实际偏差、关键财务比率）\n- 关键决策回顾与评估（得失复盘）\n- 下一步计划与资源部署（里程碑与优先级）\n\n10 页结构建议：\n1. 封面：年度/季度经营复盘与风险诊断汇报\n2. 经营全景概览：核心指标达成红黄绿灯\n3. 财务预算执行分析：预算 vs 实际偏差、关键比率\n4. 收入结构拆解：按业务线/产品线/区域\n5. 成本与费用分析：降本增效空间\n6. 关键风险诊断（外部）：市场、竞争、政策\n7. 关键风险诊断（内部）：运营、人才、现金流、交付\n8. 关键决策回顾与评估：得失复盘\n9. 下一步计划与资源部署：里程碑与优先级\n10. 结尾：决策待办与董事会决议事项\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 财务预算执行分析（预算 vs 实际偏差、关键财务比率）; 关键决策回顾与评估（得失复盘）; 下一步计划与资源部署（里程碑与优先级）",
+          "sourcePrompt": "继续生成",
+          "audience": "董事会和管理层",
+          "goal": "经营汇报与决策同步",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "财务预算执行分析（预算 vs 实际偏差、关键财务比率）",
+            "关键决策回顾与评估（得失复盘）",
+            "下一步计划与资源部署（里程碑与优先级）"
+          ],
+          "templateMode": "single-template",
+          "templateId": "cangzhuo"
+        },
+        "isZh": true
+      },
+      "result": {
+        "conversation_id": "434",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_v84mKZSPJvZiDRL8OEPK1582",
+        "stage": "session_persisting",
+        "stageLabel": "预览已完成",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783527787,
+        "finishedAt": 1783527787,
+        "previewSessionId": "8af9ad23-2a14-46ba-8f65-c854fde7b133",
+        "resultSummary": "已生成 PPT 预览：\n- 标题: 生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景为 sales-deck，语言为中文，10 页，语气简洁专业决策导向。\n\n必须包含以下内容：\n- 财务预算执行分析（预算 vs 实际偏差、关键财务比率）\n- 关键决策回顾与评估（得失复盘）\n- 下一步计划与资源部署（里程碑与优先级）\n\n10 页结构建议：\n1. 封面：年度/季度经营复盘与风险诊断汇报\n2. 经营全景概览：核心指标达成红黄绿灯\n3. 财务预算执行分析：预算 vs 实际偏差、关键比率\n4. 收入结构拆解：按业务线/产品线/区域\n5. 成本与费用分析：降本增效空间\n6. 关键风险诊断（外部）：市场、竞争、政策\n7. 关键风险诊断（内部）：运营、人才、现金流、交付\n8. 关键决策回顾与评估：得失复盘\n9. 下一步计划与资源部署：里程碑与优先级\n10. 结尾：决策待办与董事会决议事项\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 财务预算执行分析（预算 vs 实际偏差、关键财务比率）; 关键决策回顾与评估（得失复盘）; 下一步计划与资源部署（里程碑与优先级）\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 财务预算执行分析（预算 vs 实际偏差、关键财务比率）; 关键决策回顾与评估（得失复盘）; 下一步计划与资源部署（里程碑与优先级）\n- 预览方案数: 1\n- 默认推荐版本: Cangzhuo (cangzhuo-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 本次已采用模板: 苍桌纪要 (cangzhuo)\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"8af9ad23-2a14-46ba-8f65-c854fde7b133\",\"defaultVariantKey\":\"cangzhuo-executive-brief\",\"variantKeys\":[\"cangzhuo-executive-brief\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "8af9ad23-2a14-46ba-8f65-c854fde7b133",
+          "generatedAt": "2026-07-08T16:06:01.376Z",
+          "recommendedVariantKey": "cangzhuo-executive-brief",
+          "recommendedVariantName": "Cangzhuo",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "cangzhuo",
+              "templateLabel": "苍桌纪要",
+              "styleKey": "ppt169_cangzhuo",
+              "styleName": "Cangzhuo",
+              "summary": "偏中文管理层纪要、议题清单和执行部署。"
+            },
+            {
+              "rank": 2,
+              "templateId": "government-blue",
+              "templateLabel": "政务蓝",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "styleName": "Long Table",
+              "summary": "偏正式政务汇报、政策解读和工作部署。"
+            },
+            {
+              "rank": 3,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 4,
+              "templateId": "attention-is-all-you-need",
+              "templateLabel": "Attention 研究型",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏研究论文、方法图解和实验结论证明。"
+            }
+          ],
+          "selectedTemplateId": "cangzhuo",
+          "title": "生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景为 sales-deck，语言为中文，10 页，语气简洁专业决策导向。\n\n必须包含以下内容：\n- 财务预算执行分析（预算 vs 实际偏差、关键财务比率）\n- 关键决策回顾与评估（得失复盘）\n- 下一步计划与资源部署（里程碑与优先级）\n\n10 页结构建议：\n1. 封面：年度/季度经营复盘与风险诊断汇报\n2. 经营全景概览：核心指标达成红黄绿灯\n3. 财务预算执行分析：预算 vs 实际偏差、关键比率\n4. 收入结构拆解：按业务线/产品线/区域\n5. 成本与费用分析：降本增效空间\n6. 关键风险诊断（外部）：市场、竞争、政策\n7. 关键风险诊断（内部）：运营、人才、现金流、交付\n8. 关键决策回顾与评估：得失复盘\n9. 下一步计划与资源部署：里程碑与优先级\n10. 结尾：决策待办与董事会决议事项\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 财务预算执行分析（预算 vs 实际偏差、关键财务比率）; 关键决策回顾与评估（得失复盘）; 下一步计划与资源部署（里程碑与优先级）\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 财务预算执行分析（预算 vs 实际偏差、关键财务比率）; 关键决策回顾与评估（得失复盘）; 下一步计划与资源部署（里程碑与优先级）",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "resolvedPageCount": 10,
+          "variants": [
+            {
+              "key": "cangzhuo-executive-brief",
+              "name": "Cangzhuo",
+              "summary": "来自 ppt-master 的中文管理层纪要风格，议题清单、条线复盘和执行部署感更强。",
+              "styleKey": "ppt169_cangzhuo",
+              "templateId": "cangzhuo",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 10,
+              "coverTitle": "年度经营复盘与风险诊断"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 236,
+            "previewArtifactId": 212,
+            "toolRunId": 236
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "已生成 PPT 预览：\n- 标题: 生成一份董事会经营复盘与风险诊断汇报 PPT。受众是董事会和管理层，目标是经营汇报与决策同步，场景为 sales-deck，语言为中文，10 页，语气简洁专业决策导向。\n\n必须包含以下内容：\n- 财务预算执行分析（预算 vs 实际偏差、关键财务比率）\n- 关键决策回顾与评估（得失复盘）\n- 下一步计划与资源部署（里程碑与优先级）\n\n10 页结构建议：\n1. 封面：年度/季度经营复盘与风险诊断汇报\n2. 经营全景概览：核心指标达成红黄绿灯\n3. 财务预算执行分析：预算 vs 实际偏差、关键比率\n4. 收入结构拆解：按业务线/产品线/区域\n5. 成本与费用分析：降本增效空间\n6. 关键风险诊断（外部）：市场、竞争、政策\n7. 关键风险诊断（内部）：运营、人才、现金流、交付\n8. 关键决策回顾与评估：得失复盘\n9. 下一步计划与资源部署：里程碑与优先级\n10. 结尾：决策待办与董事会决议事项\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 财务预算执行分析（预算 vs 实际偏差、关键财务比率）; 关键决策回顾与评估（得失复盘）; 下一步计划与资源部署（里程碑与优先级）\nStructured brief:\nAudience: 董事会和管理层\nGoal: 经营汇报与决策同步\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 财务预算执行分析（预算 vs 实际偏差、关键财务比率）; 关键决策回顾与评估（得失复盘）; 下一步计划与资源部署（里程碑与优先级）\n- 预览方案数: 1\n- 默认推荐版本: Cangzhuo (cangzhuo-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 本次已采用模板: 苍桌纪要 (cangzhuo)\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"8af9ad23-2a14-46ba-8f65-c854fde7b133\",\"defaultVariantKey\":\"cangzhuo-executive-brief\",\"variantKeys\":[\"cangzhuo-executive-brief\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "后台任务已创建",
+            "status": "running",
+            "at": 1783526707299
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "正在准备生成环境",
+            "status": "running",
+            "at": 1783526707303
+          },
+          {
+            "type": "background_generation_running",
+            "label": "正在后台生成 SVG 预览（导出时再生成 PPTX）",
+            "status": "running",
+            "at": 1783526707307
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "正在渲染预览",
+            "status": "running",
+            "at": 1783527727171
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "后台生成完成",
+            "status": "completed",
+            "at": 1783527787370
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1103,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "434",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_WJeq4PC8l6WBECDD0PBM8109",
+        "input": {
+          "prompt": "写一份介绍屿算智能（屿算智脑 / 屿算超脑）公司及业务的 PPT，用于管理层内部培训与统一认知。核心信息如下：\n\n**公司定位**：屿算智能是一套面向传统企业的 AI 业务工作台，核心产品包括屿算智脑（标准SaaS）和屿算超脑（定制化独立部署）。主张\"实用 AI 大于 AI 概念\"，让 AI 进入企业的岗位、流程和结果。\n\n**核心内容结构**：\n1. 封面：企业专属 AI 业务工具，实用 AI 大于 AI 概念\n2. 企业 AI 时代的经营焦虑：老板的 100 个问题（客户从哪来、内容怎么做、团队怎么执行、数据怎么沉淀、AI 怎么用）\n3. 企业 AI 落地的真实卡点：不会问、不会用/不好用、不能沉淀\n4. 屿算智脑是什么：把大模型、数字员工、业务流程和应用工具组合成企业专属 AI 业务能力，三层进入（进入岗位、进入流程、进入结果）\n5. 产品形态升级：从单点 AI 工具到企业专属 AI 业务工作台的对比\n6. 七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层\n7. 业务四阶段：业务梳理→立项与执行管理→生产与分发→风控与资产沉淀\n8. AI 智能体员工矩阵：17 个 AI 智能体员工覆盖内容策略、成交私域、组织裂变、专业支持等关键岗位\n9. AI 底座与工具聚合：40+ 模型接入、10+ 内容发布触点、全链路业务流程编排\n10. 客户最终买到什么：降成本、提效率、强执行、促增长\n11. 产品套餐与价格体系：入门版 ¥19,800 / 标准版 ¥39,800 / 增长版 ¥59,800 / 屿算超脑定制方案\n12. 结尾：感谢聆听，期待合作，预约演示与定制化部署评估\n\n**关键卖点**：\n- 帮企业从\"不知道怎么问 AI\"变成\"系统主动帮企业梳理业务\"\n- 从\"单次生成内容\"变成\"内容生产、分发、获客、跟进闭环\"\n- 从\"员工零散试用工具\"变成\"岗位化 AI 员工协同执行\"\n- 从\"结果留在聊天记录\"变成\"知识、内容、项目、流程沉淀为企业资产\"\n- 帮传统企业完成 AI 营销执行与科技化升级\n\n**一句话定位**：屿算智脑是一套面向传统企业的 AI 业务工作台，通过 17 个 AI 智能体员工、40+ 模型工具接入和完整业务流程，把 AI 从单点工具升级为可执行、可管理、可沉淀的企业增长系统。\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 实用 AI 大于 AI 概念; 七层业务闭环; 17个AI智能体员工; 产品套餐与价格体系",
+          "audience": "管理层汇报",
+          "goal": "培训讲解与统一认知",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "客户从哪里来？",
+            "实用 AI 大于 AI 概念",
+            "七层业务闭环",
+            "17个AI智能体员工",
+            "产品套餐与价格体系"
+          ],
+          "templateMode": "single-template",
+          "templateId": "cangzhuo"
+        },
+        "isZh": true
+      },
+      "result": {
+        "conversation_id": "434",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_WJeq4PC8l6WBECDD0PBM8109",
+        "stage": "session_persisting",
+        "stageLabel": "预览已完成",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783523196,
+        "finishedAt": 1783523196,
+        "previewSessionId": "5ec6cf3f-3db3-4a05-961e-a62ea6b80dbc",
+        "resultSummary": "已生成 PPT 预览：\n- 标题: 写一份介绍屿算智能（屿算智脑 / 屿算超脑）公司及业务的 PPT，用于管理层内部培训与统一认知。核心信息如下：\n\n**公司定位**：屿算智能是一套面向传统企业的 AI 业务工作台，核心产品包括屿算智脑（标准SaaS）和屿算超脑（定制化独立部署）。主张\"实用 AI 大于 AI 概念\"，让 AI 进入企业的岗位、流程和结果。\n\n**核心内容结构**：\n1. 封面：企业专属 AI 业务工具，实用 AI 大于 AI 概念\n2. 企业 AI 时代的经营焦虑：老板的 100 个问题（客户从哪来、内容怎么做、团队怎么执行、数据怎么沉淀、AI 怎么用）\n3. 企业 AI 落地的真实卡点：不会问、不会用/不好用、不能沉淀\n4. 屿算智脑是什么：把大模型、数字员工、业务流程和应用工具组合成企业专属 AI 业务能力，三层进入（进入岗位、进入流程、进入结果）\n5. 产品形态升级：从单点 AI 工具到企业专属 AI 业务工作台的对比\n6. 七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层\n7. 业务四阶段：业务梳理→立项与执行管理→生产与分发→风控与资产沉淀\n8. AI 智能体员工矩阵：17 个 AI 智能体员工覆盖内容策略、成交私域、组织裂变、专业支持等关键岗位\n9. AI 底座与工具聚合：40+ 模型接入、10+ 内容发布触点、全链路业务流程编排\n10. 客户最终买到什么：降成本、提效率、强执行、促增长\n11. 产品套餐与价格体系：入门版 ¥19,800 / 标准版 ¥39,800 / 增长版 ¥59,800 / 屿算超脑定制方案\n12. 结尾：感谢聆听，期待合作，预约演示与定制化部署评估\n\n**关键卖点**：\n- 帮企业从\"不知道怎么问 AI\"变成\"系统主动帮企业梳理业务\"\n- 从\"单次生成内容\"变成\"内容生产、分发、获客、跟进闭环\"\n- 从\"员工零散试用工具\"变成\"岗位化 AI 员工协同执行\"\n- 从\"结果留在聊天记录\"变成\"知识、内容、项目、流程沉淀为企业资产\"\n- 帮传统企业完成 AI 营销执行与科技化升级\n\n**一句话定位**：屿算智脑是一套面向传统企业的 AI 业务工作台，通过 17 个 AI 智能体员工、40+ 模型工具接入和完整业务流程，把 AI 从单点工具升级为可执行、可管理、可沉淀的企业增长系统。\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 实用 AI 大于 AI 概念; 七层业务闭环; 17个AI智能体员工; 产品套餐与价格体系\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 实用 AI 大于 AI 概念; 七层业务闭环; 17个AI智能体员工; 产品套餐与价格体系\n- 预览方案数: 1\n- 默认推荐版本: Cangzhuo (cangzhuo-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 模板推荐: 1.苍桌纪要 / 2.政务蓝 / 3.高效 Agent 构建 / 4.瑞士网格\n- 本次已采用模板: cangzhuo\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"5ec6cf3f-3db3-4a05-961e-a62ea6b80dbc\",\"defaultVariantKey\":\"cangzhuo-executive-brief\",\"variantKeys\":[\"cangzhuo-executive-brief\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "5ec6cf3f-3db3-4a05-961e-a62ea6b80dbc",
+          "generatedAt": "2026-07-08T15:00:52.299Z",
+          "recommendedVariantKey": "cangzhuo-executive-brief",
+          "recommendedVariantName": "Cangzhuo",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "cangzhuo",
+              "templateLabel": "苍桌纪要",
+              "styleKey": "ppt169_cangzhuo",
+              "styleName": "Cangzhuo",
+              "summary": "偏中文管理层纪要、议题清单和执行部署。"
+            },
+            {
+              "rank": 2,
+              "templateId": "government-blue",
+              "templateLabel": "政务蓝",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "styleName": "Long Table",
+              "summary": "偏正式政务汇报、政策解读和工作部署。"
+            },
+            {
+              "rank": 3,
+              "templateId": "building-effective-agents",
+              "templateLabel": "高效 Agent 构建",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏 Agent 系统设计、编排链路和能力拆解。"
+            },
+            {
+              "rank": 4,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            }
+          ],
+          "selectedTemplateId": "cangzhuo",
+          "title": "写一份介绍屿算智能（屿算智脑 / 屿算超脑）公司及业务的 PPT，用于管理层内部培训与统一认知。核心信息如下：\n\n**公司定位**：屿算智能是一套面向传统企业的 AI 业务工作台，核心产品包括屿算智脑（标准SaaS）和屿算超脑（定制化独立部署）。主张\"实用 AI 大于 AI 概念\"，让 AI 进入企业的岗位、流程和结果。\n\n**核心内容结构**：\n1. 封面：企业专属 AI 业务工具，实用 AI 大于 AI 概念\n2. 企业 AI 时代的经营焦虑：老板的 100 个问题（客户从哪来、内容怎么做、团队怎么执行、数据怎么沉淀、AI 怎么用）\n3. 企业 AI 落地的真实卡点：不会问、不会用/不好用、不能沉淀\n4. 屿算智脑是什么：把大模型、数字员工、业务流程和应用工具组合成企业专属 AI 业务能力，三层进入（进入岗位、进入流程、进入结果）\n5. 产品形态升级：从单点 AI 工具到企业专属 AI 业务工作台的对比\n6. 七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层\n7. 业务四阶段：业务梳理→立项与执行管理→生产与分发→风控与资产沉淀\n8. AI 智能体员工矩阵：17 个 AI 智能体员工覆盖内容策略、成交私域、组织裂变、专业支持等关键岗位\n9. AI 底座与工具聚合：40+ 模型接入、10+ 内容发布触点、全链路业务流程编排\n10. 客户最终买到什么：降成本、提效率、强执行、促增长\n11. 产品套餐与价格体系：入门版 ¥19,800 / 标准版 ¥39,800 / 增长版 ¥59,800 / 屿算超脑定制方案\n12. 结尾：感谢聆听，期待合作，预约演示与定制化部署评估\n\n**关键卖点**：\n- 帮企业从\"不知道怎么问 AI\"变成\"系统主动帮企业梳理业务\"\n- 从\"单次生成内容\"变成\"内容生产、分发、获客、跟进闭环\"\n- 从\"员工零散试用工具\"变成\"岗位化 AI 员工协同执行\"\n- 从\"结果留在聊天记录\"变成\"知识、内容、项目、流程沉淀为企业资产\"\n- 帮传统企业完成 AI 营销执行与科技化升级\n\n**一句话定位**：屿算智脑是一套面向传统企业的 AI 业务工作台，通过 17 个 AI 智能体员工、40+ 模型工具接入和完整业务流程，把 AI 从单点工具升级为可执行、可管理、可沉淀的企业增长系统。\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 实用 AI 大于 AI 概念; 七层业务闭环; 17个AI智能体员工; 产品套餐与价格体系\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 实用 AI 大于 AI 概念; 七层业务闭环; 17个AI智能体员工; 产品套餐与价格体系",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "resolvedPageCount": 10,
+          "variants": [
+            {
+              "key": "cangzhuo-executive-brief",
+              "name": "Cangzhuo",
+              "summary": "来自 ppt-master 的中文管理层纪要风格，议题清单、条线复盘和执行部署感更强。",
+              "styleKey": "ppt169_cangzhuo",
+              "templateId": "cangzhuo",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 10,
+              "coverTitle": "屿算智能·管理层纪要"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 235,
+            "previewArtifactId": 211,
+            "toolRunId": 235
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "已生成 PPT 预览：\n- 标题: 写一份介绍屿算智能（屿算智脑 / 屿算超脑）公司及业务的 PPT，用于管理层内部培训与统一认知。核心信息如下：\n\n**公司定位**：屿算智能是一套面向传统企业的 AI 业务工作台，核心产品包括屿算智脑（标准SaaS）和屿算超脑（定制化独立部署）。主张\"实用 AI 大于 AI 概念\"，让 AI 进入企业的岗位、流程和结果。\n\n**核心内容结构**：\n1. 封面：企业专属 AI 业务工具，实用 AI 大于 AI 概念\n2. 企业 AI 时代的经营焦虑：老板的 100 个问题（客户从哪来、内容怎么做、团队怎么执行、数据怎么沉淀、AI 怎么用）\n3. 企业 AI 落地的真实卡点：不会问、不会用/不好用、不能沉淀\n4. 屿算智脑是什么：把大模型、数字员工、业务流程和应用工具组合成企业专属 AI 业务能力，三层进入（进入岗位、进入流程、进入结果）\n5. 产品形态升级：从单点 AI 工具到企业专属 AI 业务工作台的对比\n6. 七层业务闭环：底座层→诊断层→立项层→管理层→生产层→分发层→资产层\n7. 业务四阶段：业务梳理→立项与执行管理→生产与分发→风控与资产沉淀\n8. AI 智能体员工矩阵：17 个 AI 智能体员工覆盖内容策略、成交私域、组织裂变、专业支持等关键岗位\n9. AI 底座与工具聚合：40+ 模型接入、10+ 内容发布触点、全链路业务流程编排\n10. 客户最终买到什么：降成本、提效率、强执行、促增长\n11. 产品套餐与价格体系：入门版 ¥19,800 / 标准版 ¥39,800 / 增长版 ¥59,800 / 屿算超脑定制方案\n12. 结尾：感谢聆听，期待合作，预约演示与定制化部署评估\n\n**关键卖点**：\n- 帮企业从\"不知道怎么问 AI\"变成\"系统主动帮企业梳理业务\"\n- 从\"单次生成内容\"变成\"内容生产、分发、获客、跟进闭环\"\n- 从\"员工零散试用工具\"变成\"岗位化 AI 员工协同执行\"\n- 从\"结果留在聊天记录\"变成\"知识、内容、项目、流程沉淀为企业资产\"\n- 帮传统企业完成 AI 营销执行与科技化升级\n\n**一句话定位**：屿算智脑是一套面向传统企业的 AI 业务工作台，通过 17 个 AI 智能体员工、40+ 模型工具接入和完整业务流程，把 AI 从单点工具升级为可执行、可管理、可沉淀的企业增长系统。\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 实用 AI 大于 AI 概念; 七层业务闭环; 17个AI智能体员工; 产品套餐与价格体系\nStructured brief:\nAudience: 管理层汇报\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 客户从哪里来？; 实用 AI 大于 AI 概念; 七层业务闭环; 17个AI智能体员工; 产品套餐与价格体系\n- 预览方案数: 1\n- 默认推荐版本: Cangzhuo (cangzhuo-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 模板推荐: 1.苍桌纪要 / 2.政务蓝 / 3.高效 Agent 构建 / 4.瑞士网格\n- 本次已采用模板: cangzhuo\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"5ec6cf3f-3db3-4a05-961e-a62ea6b80dbc\",\"defaultVariantKey\":\"cangzhuo-executive-brief\",\"variantKeys\":[\"cangzhuo-executive-brief\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "后台任务已创建",
+            "status": "running",
+            "at": 1783522800804
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "正在准备生成环境",
+            "status": "running",
+            "at": 1783522800809
+          },
+          {
+            "type": "background_generation_running",
+            "label": "正在后台生成 SVG 预览（导出时再生成 PPTX）",
+            "status": "running",
+            "at": 1783522800814
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "正在渲染预览",
+            "status": "running",
+            "at": 1783523196024
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "后台生成完成",
+            "status": "completed",
+            "at": 1783523196054
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1102,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "433",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_rhGj5LFCfsMMMCEgzsqg7309",
+        "input": {
+          "prompt": "生成一份4页中文产品方案PPT，主题是\"企业AI营销工作台\"。\n\n第1页（封面）：产品名称\"企业AI营销工作台\"，副标题突出核心价值主张——用AI驱动营销全链路，从内容生产到效果优化一站式闭环。视觉风格简洁专业、科技感。\n\n第2页（产品定位与痛点）：梳理企业营销当前面临的3-4个核心痛点——内容生产成本高、多平台分发效率低、数据分散难以驱动决策、团队协作割裂。引出AI营销工作台的定位：统一的智能营销中枢，连接创意、执行、数据三大环节。\n\n第3页（能力结构/产品架构）：展示产品核心能力模块，包括AI内容生成（文案/图片/视频脚本）、智能投放优化、多渠道分发管理、实时数据看板、团队协作工作流。用模块化方式呈现，突出\"一体化\"和\"AI原生\"两个关键词。\n\n第4页（落地价值与行动号召）：总结3个关键价值指标——营销效率提升、内容产能翻倍、ROI可量化。结尾给出下一步行动：预约演示/PoC试点/团队培训。语气简洁有力，决策导向。\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "企业管理层",
+          "goal": "帮助管理层快速理解产品定位、能力结构和落地价值",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "templateMode": "single-template",
+          "templateId": "ai-ops"
+        },
+        "isZh": true
+      },
+      "result": {
+        "conversation_id": "433",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_rhGj5LFCfsMMMCEgzsqg7309",
+        "stage": "session_persisting",
+        "stageLabel": "预览已完成",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783521522,
+        "finishedAt": 1783521522,
+        "previewSessionId": "e1dbeb89-8cf6-41cf-8dc7-20b4a316a342",
+        "resultSummary": "已生成 PPT 预览：\n- 标题: 生成一份4页中文产品方案PPT，主题是\"企业AI营销工作台\"。\n\n第1页（封面）：产品名称\"企业AI营销工作台\"，副标题突出核心价值主张——用AI驱动营销全链路，从内容生产到效果优化一站式闭环。视觉风格简洁专业、科技感。\n\n第2页（产品定位与痛点）：梳理企业营销当前面临的3-4个核心痛点——内容生产成本高、多平台分发效率低、数据分散难以驱动决策、团队协作割裂。引出AI营销工作台的定位：统一的智能营销中枢，连接创意、执行、数据三大环节。\n\n第3页（能力结构/产品架构）：展示产品核心能力模块，包括AI内容生成（文案/图片/视频脚本）、智能投放优化、多渠道分发管理、实时数据看板、团队协作工作流。用模块化方式呈现，突出\"一体化\"和\"AI原生\"两个关键词。\n\n第4页（落地价值与行动号召）：总结3个关键价值指标——营销效率提升、内容产能翻倍、ROI可量化。结尾给出下一步行动：预约演示/PoC试点/团队培训。语气简洁有力，决策导向。\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- 预览方案数: 1\n- 默认推荐版本: Effective Agents (ai-ops-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 模板推荐: 1.AI 运维 / 2.Kubernetes 蓝图 2026 / 3.极光玻璃 / 4.瑞士网格\n- 本次已采用模板: ai-ops\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"e1dbeb89-8cf6-41cf-8dc7-20b4a316a342\",\"defaultVariantKey\":\"ai-ops-executive-brief\",\"variantKeys\":[\"ai-ops-executive-brief\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "e1dbeb89-8cf6-41cf-8dc7-20b4a316a342",
+          "generatedAt": "2026-07-08T14:35:57.976Z",
+          "recommendedVariantKey": "ai-ops-executive-brief",
+          "recommendedVariantName": "Effective Agents",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "ai-ops",
+              "templateLabel": "AI 运维",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏平台架构、Agent 编排和运维指标。"
+            },
+            {
+              "rank": 2,
+              "templateId": "kubernetes-blueprint-2026",
+              "templateLabel": "Kubernetes 蓝图 2026",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "styleName": "Kubernetes Blueprint",
+              "summary": "偏云原生架构、平台蓝图和技术治理。"
+            },
+            {
+              "rank": 3,
+              "templateId": "aurora-glass",
+              "templateLabel": "极光玻璃",
+              "styleKey": "ppt169_glassmorphism_demo",
+              "styleName": "Glassmorphism Demo",
+              "summary": "偏 AI 系统、玻璃质感和指标面板。"
+            },
+            {
+              "rank": 4,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            }
+          ],
+          "selectedTemplateId": "ai-ops",
+          "title": "生成一份4页中文产品方案PPT，主题是\"企业AI营销工作台\"。\n\n第1页（封面）：产品名称\"企业AI营销工作台\"，副标题突出核心价值主张——用AI驱动营销全链路，从内容生产到效果优化一站式闭环。视觉风格简洁专业、科技感。\n\n第2页（产品定位与痛点）：梳理企业营销当前面临的3-4个核心痛点——内容生产成本高、多平台分发效率低、数据分散难以驱动决策、团队协作割裂。引出AI营销工作台的定位：统一的智能营销中枢，连接创意、执行、数据三大环节。\n\n第3页（能力结构/产品架构）：展示产品核心能力模块，包括AI内容生成（文案/图片/视频脚本）、智能投放优化、多渠道分发管理、实时数据看板、团队协作工作流。用模块化方式呈现，突出\"一体化\"和\"AI原生\"两个关键词。\n\n第4页（落地价值与行动号召）：总结3个关键价值指标——营销效率提升、内容产能翻倍、ROI可量化。结尾给出下一步行动：预约演示/PoC试点/团队培训。语气简洁有力，决策导向。\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "ai-ops-executive-brief",
+              "name": "Effective Agents",
+              "summary": "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制。",
+              "styleKey": "ppt169_building_effective_agents",
+              "templateId": "ai-ops",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 233,
+            "previewArtifactId": 209,
+            "toolRunId": 233
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "已生成 PPT 预览：\n- 标题: 生成一份4页中文产品方案PPT，主题是\"企业AI营销工作台\"。\n\n第1页（封面）：产品名称\"企业AI营销工作台\"，副标题突出核心价值主张——用AI驱动营销全链路，从内容生产到效果优化一站式闭环。视觉风格简洁专业、科技感。\n\n第2页（产品定位与痛点）：梳理企业营销当前面临的3-4个核心痛点——内容生产成本高、多平台分发效率低、数据分散难以驱动决策、团队协作割裂。引出AI营销工作台的定位：统一的智能营销中枢，连接创意、执行、数据三大环节。\n\n第3页（能力结构/产品架构）：展示产品核心能力模块，包括AI内容生成（文案/图片/视频脚本）、智能投放优化、多渠道分发管理、实时数据看板、团队协作工作流。用模块化方式呈现，突出\"一体化\"和\"AI原生\"两个关键词。\n\n第4页（落地价值与行动号召）：总结3个关键价值指标——营销效率提升、内容产能翻倍、ROI可量化。结尾给出下一步行动：预约演示/PoC试点/团队培训。语气简洁有力，决策导向。\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- 预览方案数: 1\n- 默认推荐版本: Effective Agents (ai-ops-executive-brief)\n- 下一步: 回复“确认导出”即可导出当前推荐版本；若要换版本或改内容，请直接说明。\n- 模板推荐: 1.AI 运维 / 2.Kubernetes 蓝图 2026 / 3.极光玻璃 / 4.瑞士网格\n- 本次已采用模板: ai-ops\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"e1dbeb89-8cf6-41cf-8dc7-20b4a316a342\",\"defaultVariantKey\":\"ai-ops-executive-brief\",\"variantKeys\":[\"ai-ops-executive-brief\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "后台任务已创建",
+            "status": "running",
+            "at": 1783521327440
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "正在准备生成环境",
+            "status": "running",
+            "at": 1783521328105
+          },
+          {
+            "type": "background_generation_running",
+            "label": "正在后台生成 SVG 预览（导出时再生成 PPTX）",
+            "status": "running",
+            "at": 1783521328496
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "正在渲染预览",
+            "status": "running",
+            "at": 1783521520409
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "后台生成完成",
+            "status": "completed",
+            "at": 1783521522367
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1101,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "432",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_VruojBHMGArHwGG8gfGc7758",
+        "input": {
+          "prompt": "生成一个4页中文产品PPT预览，主题为\"企业AI营销工作台\"。面向企业管理者，用于产品发布场景,帮助管理层快速理解产品定位、能力结构和落地价值。页面结构：第1页封面-产品名称与核心定位语；第2页-产品定位与市场机会（企业营销AI化的趋势与痛点）；第3页-核心能力架构（模块化展示：智能内容生成、全渠道投放优化、客户洞察分析、营销自动化、ROI归因等）；第4页-落地价值与行动建议（效率提升、成本优化、决策赋能等量化价值，以及部署路径）。\nStructured brief:\nAudience: 企业管理者\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "企业管理者",
+          "goal": "帮助管理层快速理解产品定位、能力结构和落地价值",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "432",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_VruojBHMGArHwGG8gfGc7758",
+        "stage": "session_persisting",
+        "stageLabel": "Preview completed",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783521040,
+        "finishedAt": 1783521040,
+        "previewSessionId": "dc48383a-0974-4921-adad-d22fc9cf497e",
+        "resultSummary": "PPT preview generated:\n- Title: 生成一个4页中文产品PPT预览，主题为\"企业AI营销工作台\"。面向企业管理者，用于产品发布场景,帮助管理层快速理解产品定位、能力结构和落地价值。页面结构：第1页封面-产品名称与核心定位语；第2页-产品定位与市场机会（企业营销AI化的趋势与痛点）；第3页-核心能力架构（模块化展示：智能内容生成、全渠道投放优化、客户洞察分析、营销自动化、ROI归因等）；第4页-落地价值与行动建议（效率提升、成本优化、决策赋能等量化价值，以及部署路径）。\nStructured brief:\nAudience: 企业管理者\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理者\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 4\n- Default recommended variant: Effective Agents (building-effective-agents)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.高效 Agent 构建 / 2.Kubernetes 蓝图 2026 / 3.瑞士网格 / 4.Attention 研究型\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"dc48383a-0974-4921-adad-d22fc9cf497e\",\"defaultVariantKey\":\"building-effective-agents\",\"variantKeys\":[\"building-effective-agents\",\"kubernetes-blueprint-2026\",\"swiss-grid\",\"attention-is-all-you-need\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "dc48383a-0974-4921-adad-d22fc9cf497e",
+          "generatedAt": "2026-07-08T14:21:27.167Z",
+          "recommendedVariantKey": "building-effective-agents",
+          "recommendedVariantName": "Effective Agents",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "building-effective-agents",
+              "templateLabel": "高效 Agent 构建",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏 Agent 系统设计、编排链路和能力拆解。"
+            },
+            {
+              "rank": 2,
+              "templateId": "kubernetes-blueprint-2026",
+              "templateLabel": "Kubernetes 蓝图 2026",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "styleName": "Kubernetes Blueprint",
+              "summary": "偏云原生架构、平台蓝图和技术治理。"
+            },
+            {
+              "rank": 3,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 4,
+              "templateId": "attention-is-all-you-need",
+              "templateLabel": "Attention 研究型",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏研究论文、方法图解和实验结论证明。"
+            }
+          ],
+          "selectedTemplateId": null,
+          "title": "生成一个4页中文产品PPT预览，主题为\"企业AI营销工作台\"。面向企业管理者，用于产品发布场景,帮助管理层快速理解产品定位、能力结构和落地价值。页面结构：第1页封面-产品名称与核心定位语；第2页-产品定位与市场机会（企业营销AI化的趋势与痛点）；第3页-核心能力架构（模块化展示：智能内容生成、全渠道投放优化、客户洞察分析、营销自动化、ROI归因等）；第4页-落地价值与行动建议（效率提升、成本优化、决策赋能等量化价值，以及部署路径）。\nStructured brief:\nAudience: 企业管理者\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理者\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "building-effective-agents",
+              "name": "Effective Agents",
+              "summary": "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制。",
+              "styleKey": "ppt169_building_effective_agents",
+              "templateId": "building-effective-agents",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            },
+            {
+              "key": "kubernetes-blueprint-2026",
+              "name": "Kubernetes Blueprint",
+              "summary": "来自 ppt-master 的 Kubernetes 蓝图风格，更适合云原生平台、基础设施架构和技术治理型 deck。",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "templateId": "kubernetes-blueprint-2026",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "营销智能体平台·企业级AI营销工作台"
+            },
+            {
+              "key": "swiss-grid",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "swiss-grid",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            },
+            {
+              "key": "attention-is-all-you-need",
+              "name": "Attention Research",
+              "summary": "来自 ppt-master 的研究论文风格，更强调方法图解、实验结果和学术答辩式证明链路。",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "templateId": "attention-is-all-you-need",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 232,
+            "previewArtifactId": 208,
+            "toolRunId": 232
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 生成一个4页中文产品PPT预览，主题为\"企业AI营销工作台\"。面向企业管理者，用于产品发布场景,帮助管理层快速理解产品定位、能力结构和落地价值。页面结构：第1页封面-产品名称与核心定位语；第2页-产品定位与市场机会（企业营销AI化的趋势与痛点）；第3页-核心能力架构（模块化展示：智能内容生成、全渠道投放优化、客户洞察分析、营销自动化、ROI归因等）；第4页-落地价值与行动建议（效率提升、成本优化、决策赋能等量化价值，以及部署路径）。\nStructured brief:\nAudience: 企业管理者\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理者\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 4\n- Default recommended variant: Effective Agents (building-effective-agents)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.高效 Agent 构建 / 2.Kubernetes 蓝图 2026 / 3.瑞士网格 / 4.Attention 研究型\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"dc48383a-0974-4921-adad-d22fc9cf497e\",\"defaultVariantKey\":\"building-effective-agents\",\"variantKeys\":[\"building-effective-agents\",\"kubernetes-blueprint-2026\",\"swiss-grid\",\"attention-is-all-you-need\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783520432801
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "Preparing generation runtime",
+            "status": "running",
+            "at": 1783520432806
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating SVG preview in background (PPTX on export)",
+            "status": "running",
+            "at": 1783520432811
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "Rendering preview",
+            "status": "running",
+            "at": 1783521040031
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783521040065
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1100,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "431",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_DxU1mgiFetwYQeGTRbLm4466",
+        "input": {
+          "prompt": "生成一份4页中文产品发布PPT预览，主题为\"企业AI营销工作台\"。目标受众为企业管理层，场景为产品发布，目标是在4页内帮助管理层快速理解产品定位、能力架构和落地价值。语言为中文(zh-CN)，风格简洁、专业、决策导向。\n\n页面结构建议：\n第1页：封面 - 产品名称\"企业AI营销工作台\"，副标题体现核心定位（如：一站式智能营销决策平台）\n第2页：产品定位 - 市场痛点、产品定位声明、与现有营销工具的差异化价值\n第3页：能力架构 - 核心功能模块（如：智能内容生成、客户洞察分析、自动化营销编排、效果归因与优化），以结构化方式呈现\n第4页：落地价值与行动号召 - 预期业务成果（效率提升、成本降低、收入增长等关键指标），下一步行动建议\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "企业管理层",
+          "goal": "帮助管理层快速理解产品定位、能力结构和落地价值",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "431",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_DxU1mgiFetwYQeGTRbLm4466",
+        "stage": "session_persisting",
+        "stageLabel": "Preview completed",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783518681,
+        "finishedAt": 1783518681,
+        "previewSessionId": "1cc52f63-97a9-4171-958b-2aa67b502917",
+        "resultSummary": "PPT preview generated:\n- Title: 生成一份4页中文产品发布PPT预览，主题为\"企业AI营销工作台\"。目标受众为企业管理层，场景为产品发布，目标是在4页内帮助管理层快速理解产品定位、能力架构和落地价值。语言为中文(zh-CN)，风格简洁、专业、决策导向。\n\n页面结构建议：\n第1页：封面 - 产品名称\"企业AI营销工作台\"，副标题体现核心定位（如：一站式智能营销决策平台）\n第2页：产品定位 - 市场痛点、产品定位声明、与现有营销工具的差异化价值\n第3页：能力架构 - 核心功能模块（如：智能内容生成、客户洞察分析、自动化营销编排、效果归因与优化），以结构化方式呈现\n第4页：落地价值与行动号召 - 预期业务成果（效率提升、成本降低、收入增长等关键指标），下一步行动建议\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 4\n- Default recommended variant: Effective Agents (building-effective-agents)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.高效 Agent 构建 / 2.Kubernetes 蓝图 2026 / 3.瑞士网格 / 4.极光玻璃\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"1cc52f63-97a9-4171-958b-2aa67b502917\",\"defaultVariantKey\":\"building-effective-agents\",\"variantKeys\":[\"building-effective-agents\",\"kubernetes-blueprint-2026\",\"swiss-grid\",\"aurora-glass\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "1cc52f63-97a9-4171-958b-2aa67b502917",
+          "generatedAt": "2026-07-08T13:48:17.597Z",
+          "recommendedVariantKey": "building-effective-agents",
+          "recommendedVariantName": "Effective Agents",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "building-effective-agents",
+              "templateLabel": "高效 Agent 构建",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏 Agent 系统设计、编排链路和能力拆解。"
+            },
+            {
+              "rank": 2,
+              "templateId": "kubernetes-blueprint-2026",
+              "templateLabel": "Kubernetes 蓝图 2026",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "styleName": "Kubernetes Blueprint",
+              "summary": "偏云原生架构、平台蓝图和技术治理。"
+            },
+            {
+              "rank": 3,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 4,
+              "templateId": "aurora-glass",
+              "templateLabel": "极光玻璃",
+              "styleKey": "ppt169_glassmorphism_demo",
+              "styleName": "Glassmorphism Demo",
+              "summary": "偏 AI 系统、玻璃质感和指标面板。"
+            }
+          ],
+          "selectedTemplateId": null,
+          "title": "生成一份4页中文产品发布PPT预览，主题为\"企业AI营销工作台\"。目标受众为企业管理层，场景为产品发布，目标是在4页内帮助管理层快速理解产品定位、能力架构和落地价值。语言为中文(zh-CN)，风格简洁、专业、决策导向。\n\n页面结构建议：\n第1页：封面 - 产品名称\"企业AI营销工作台\"，副标题体现核心定位（如：一站式智能营销决策平台）\n第2页：产品定位 - 市场痛点、产品定位声明、与现有营销工具的差异化价值\n第3页：能力架构 - 核心功能模块（如：智能内容生成、客户洞察分析、自动化营销编排、效果归因与优化），以结构化方式呈现\n第4页：落地价值与行动号召 - 预期业务成果（效率提升、成本降低、收入增长等关键指标），下一步行动建议\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "building-effective-agents",
+              "name": "Effective Agents",
+              "summary": "来自 ppt-master 的 Agent 系统风格，强调能力分层、编排链路和运行机制。",
+              "styleKey": "ppt169_building_effective_agents",
+              "templateId": "building-effective-agents",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            },
+            {
+              "key": "kubernetes-blueprint-2026",
+              "name": "Kubernetes Blueprint",
+              "summary": "来自 ppt-master 的 Kubernetes 蓝图风格，更适合云原生平台、基础设施架构和技术治理型 deck。",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "templateId": "kubernetes-blueprint-2026",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            },
+            {
+              "key": "swiss-grid",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "swiss-grid",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            },
+            {
+              "key": "aurora-glass",
+              "name": "Glassmorphism Demo",
+              "summary": "来自 ppt-master 的玻璃拟态演示风格，半透明面板、柔和高光和产品级仪表盘感更强，适合 AI 工具和 SaaS 展示。",
+              "styleKey": "ppt169_glassmorphism_demo",
+              "templateId": "aurora-glass",
+              "narrativeAngle": null,
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 231,
+            "previewArtifactId": 207,
+            "toolRunId": 231
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 生成一份4页中文产品发布PPT预览，主题为\"企业AI营销工作台\"。目标受众为企业管理层，场景为产品发布，目标是在4页内帮助管理层快速理解产品定位、能力架构和落地价值。语言为中文(zh-CN)，风格简洁、专业、决策导向。\n\n页面结构建议：\n第1页：封面 - 产品名称\"企业AI营销工作台\"，副标题体现核心定位（如：一站式智能营销决策平台）\n第2页：产品定位 - 市场痛点、产品定位声明、与现有营销工具的差异化价值\n第3页：能力架构 - 核心功能模块（如：智能内容生成、客户洞察分析、自动化营销编排、效果归因与优化），以结构化方式呈现\n第4页：落地价值与行动号召 - 预期业务成果（效率提升、成本降低、收入增长等关键指标），下一步行动建议\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 帮助管理层快速理解产品定位、能力结构和落地价值\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 4\n- Default recommended variant: Effective Agents (building-effective-agents)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.高效 Agent 构建 / 2.Kubernetes 蓝图 2026 / 3.瑞士网格 / 4.极光玻璃\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"1cc52f63-97a9-4171-958b-2aa67b502917\",\"defaultVariantKey\":\"building-effective-agents\",\"variantKeys\":[\"building-effective-agents\",\"kubernetes-blueprint-2026\",\"swiss-grid\",\"aurora-glass\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783518442241
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "Preparing generation runtime",
+            "status": "running",
+            "at": 1783518442247
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating SVG preview in background (PPTX on export)",
+            "status": "running",
+            "at": 1783518442251
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "Rendering preview",
+            "status": "running",
+            "at": 1783518681341
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783518681373
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1099,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "430",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_kTRqQYdUK3G6gVvOsAVH7095",
+        "input": {
+          "prompt": "为屿算智能制作一份面向潜在客户的产品方案介绍PPT，10页，简洁专业、决策导向。\n\n公司核心定位：屿算智能——让企业AI落地，实用AI > AI概念。\n\n页面结构建议：\n\n第1页 封面：屿算智能 | 企业专属AI业务工作台，副标题\"实用AI > AI概念\"\n\n第2页 企业AI落地三大卡点：1) 通用AI不懂业务 2) 数据散落难以打通 3) 模型无法嵌入流程。引出屿算智能的解决方案。\n\n第3页 屿算智脑产品定义：三层进入——岗位、流程、结果。企业AI不是聊天工具，而是能上岗的AI员工。\n\n第4页 七层业务闭环：从数据接入→知识构建→模型训练→智能体编排→业务流嵌入→效果评估→持续优化，形成完整闭环。\n\n第5页 四大业务阶段：1) 梳理诊断 2) 立项执行 3) 生产分发 4) 风控与资产管理。每个阶段说明客户获得的价值。\n\n第6页 AI智能体员工矩阵：按岗位和职能展示屿算可部署的AI智能体类型（客服、销售、运营、数据分析等），强调\"让AI真正上岗\"。\n\n第7页 产品体系：屿算智脑（企业AI业务工作台）vs 屿算超脑（大规模AI基础设施），分别说明适用场景和目标客户。\n\n第8页 客户最终买到的业务结果：降本、提效、增收、风控——四个维度的量化价值主张。\n\n第9页 套餐与价格体系：简要呈现不同规模企业的适配方案（轻量版/专业版/企业版）。\n\n第10页 合作入口与下一步：联系我们、预约演示、POC试点，结尾强调\"让AI真正为业务工作\"。\nStructured brief:\nAudience: 潜在客户（企业老板、业务负责人、决策者）\nGoal: 产品方案介绍与销售提案\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 实用AI > AI概念; 三层进入：岗位、流程、结果; 七层业务闭环; 四大业务阶段; AI智能体员工矩阵; 屿算智脑 vs 屿算超脑; 套餐与价格体系",
+          "audience": "潜在客户（企业老板、业务负责人、决策者）",
+          "goal": "产品方案介绍与销售提案",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "实用AI > AI概念",
+            "三层进入：岗位、流程、结果",
+            "七层业务闭环",
+            "四大业务阶段",
+            "AI智能体员工矩阵",
+            "屿算智脑 vs 屿算超脑",
+            "套餐与价格体系"
+          ],
+          "templateMode": "single-template",
+          "templateId": "deck-catarc-business"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "430",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_kTRqQYdUK3G6gVvOsAVH7095",
+        "stage": "session_persisting",
+        "stageLabel": "Preview completed",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783515586,
+        "finishedAt": 1783515586,
+        "previewSessionId": "53adbd19-9ded-4c28-b3d3-0c7fd1413927",
+        "resultSummary": "PPT preview generated:\n- Title: 为屿算智能制作一份面向潜在客户的产品方案介绍PPT，10页，简洁专业、决策导向。\n\n公司核心定位：屿算智能——让企业AI落地，实用AI > AI概念。\n\n页面结构建议：\n\n第1页 封面：屿算智能 | 企业专属AI业务工作台，副标题\"实用AI > AI概念\"\n\n第2页 企业AI落地三大卡点：1) 通用AI不懂业务 2) 数据散落难以打通 3) 模型无法嵌入流程。引出屿算智能的解决方案。\n\n第3页 屿算智脑产品定义：三层进入——岗位、流程、结果。企业AI不是聊天工具，而是能上岗的AI员工。\n\n第4页 七层业务闭环：从数据接入→知识构建→模型训练→智能体编排→业务流嵌入→效果评估→持续优化，形成完整闭环。\n\n第5页 四大业务阶段：1) 梳理诊断 2) 立项执行 3) 生产分发 4) 风控与资产管理。每个阶段说明客户获得的价值。\n\n第6页 AI智能体员工矩阵：按岗位和职能展示屿算可部署的AI智能体类型（客服、销售、运营、数据分析等），强调\"让AI真正上岗\"。\n\n第7页 产品体系：屿算智脑（企业AI业务工作台）vs 屿算超脑（大规模AI基础设施），分别说明适用场景和目标客户。\n\n第8页 客户最终买到的业务结果：降本、提效、增收、风控——四个维度的量化价值主张。\n\n第9页 套餐与价格体系：简要呈现不同规模企业的适配方案（轻量版/专业版/企业版）。\n\n第10页 合作入口与下一步：联系我们、预约演示、POC试点，结尾强调\"让AI真正为业务工作\"。\nStructured brief:\nAudience: 潜在客户（企业老板、业务负责人、决策者）\nGoal: 产品方案介绍与销售提案\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 实用AI > AI概念; 三层进入：岗位、流程、结果; 七层业务闭环; 四大业务阶段; AI智能体员工矩阵; 屿算智脑 vs 屿算超脑; 套餐与价格体系\nStructured brief:\nAudience: 潜在客户（企业老板、业务负责人、决策者）\nGoal: 产品方案介绍与销售提案\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 实用AI > AI概念; 三层进入：岗位、流程、结果; 七层业务闭环; 四大业务阶段; AI智能体员工矩阵; 屿算智脑 vs 屿算超脑; 套餐与价格体系\n- Variant count: 1\n- Default recommended variant: Long Table (deck-catarc-business-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.高效 Agent 构建 / 2.Attention 研究型 / 3.瑞士网格 / 4.苍桌纪要\n- Selected template for this run: deck-catarc-business\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"53adbd19-9ded-4c28-b3d3-0c7fd1413927\",\"defaultVariantKey\":\"deck-catarc-business-executive-brief\",\"variantKeys\":[\"deck-catarc-business-executive-brief\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "53adbd19-9ded-4c28-b3d3-0c7fd1413927",
+          "generatedAt": "2026-07-08T12:54:52.650Z",
+          "recommendedVariantKey": "deck-catarc-business-executive-brief",
+          "recommendedVariantName": "Long Table",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "building-effective-agents",
+              "templateLabel": "高效 Agent 构建",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏 Agent 系统设计、编排链路和能力拆解。"
+            },
+            {
+              "rank": 2,
+              "templateId": "attention-is-all-you-need",
+              "templateLabel": "Attention 研究型",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏研究论文、方法图解和实验结论证明。"
+            },
+            {
+              "rank": 3,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 4,
+              "templateId": "cangzhuo",
+              "templateLabel": "苍桌纪要",
+              "styleKey": "ppt169_cangzhuo",
+              "styleName": "Cangzhuo",
+              "summary": "偏中文管理层纪要、议题清单和执行部署。"
+            }
+          ],
+          "selectedTemplateId": "deck-catarc-business",
+          "title": "为屿算智能制作一份面向潜在客户的产品方案介绍PPT，10页，简洁专业、决策导向。\n\n公司核心定位：屿算智能——让企业AI落地，实用AI > AI概念。\n\n页面结构建议：\n\n第1页 封面：屿算智能 | 企业专属AI业务工作台，副标题\"实用AI > AI概念\"\n\n第2页 企业AI落地三大卡点：1) 通用AI不懂业务 2) 数据散落难以打通 3) 模型无法嵌入流程。引出屿算智能的解决方案。\n\n第3页 屿算智脑产品定义：三层进入——岗位、流程、结果。企业AI不是聊天工具，而是能上岗的AI员工。\n\n第4页 七层业务闭环：从数据接入→知识构建→模型训练→智能体编排→业务流嵌入→效果评估→持续优化，形成完整闭环。\n\n第5页 四大业务阶段：1) 梳理诊断 2) 立项执行 3) 生产分发 4) 风控与资产管理。每个阶段说明客户获得的价值。\n\n第6页 AI智能体员工矩阵：按岗位和职能展示屿算可部署的AI智能体类型（客服、销售、运营、数据分析等），强调\"让AI真正上岗\"。\n\n第7页 产品体系：屿算智脑（企业AI业务工作台）vs 屿算超脑（大规模AI基础设施），分别说明适用场景和目标客户。\n\n第8页 客户最终买到的业务结果：降本、提效、增收、风控——四个维度的量化价值主张。\n\n第9页 套餐与价格体系：简要呈现不同规模企业的适配方案（轻量版/专业版/企业版）。\n\n第10页 合作入口与下一步：联系我们、预约演示、POC试点，结尾强调\"让AI真正为业务工作\"。\nStructured brief:\nAudience: 潜在客户（企业老板、业务负责人、决策者）\nGoal: 产品方案介绍与销售提案\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 实用AI > AI概念; 三层进入：岗位、流程、结果; 七层业务闭环; 四大业务阶段; AI智能体员工矩阵; 屿算智脑 vs 屿算超脑; 套餐与价格体系\nStructured brief:\nAudience: 潜在客户（企业老板、业务负责人、决策者）\nGoal: 产品方案介绍与销售提案\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 实用AI > AI概念; 三层进入：岗位、流程、结果; 七层业务闭环; 四大业务阶段; AI智能体员工矩阵; 屿算智脑 vs 屿算超脑; 套餐与价格体系",
+          "scenario": "sales-deck",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "resolvedPageCount": 10,
+          "variants": [
+            {
+              "key": "deck-catarc-business-executive-brief",
+              "name": "Long Table",
+              "summary": "frontend-slides 的长桌纪要模板，规则线、分栏和议题感最强，适合董事会汇报、策略复盘和结构化叙事。",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "templateId": "deck-catarc-business",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 10,
+              "coverTitle": "屿算智能｜企业AI落地执行摘要"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 229,
+            "previewArtifactId": 204,
+            "toolRunId": 229
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 为屿算智能制作一份面向潜在客户的产品方案介绍PPT，10页，简洁专业、决策导向。\n\n公司核心定位：屿算智能——让企业AI落地，实用AI > AI概念。\n\n页面结构建议：\n\n第1页 封面：屿算智能 | 企业专属AI业务工作台，副标题\"实用AI > AI概念\"\n\n第2页 企业AI落地三大卡点：1) 通用AI不懂业务 2) 数据散落难以打通 3) 模型无法嵌入流程。引出屿算智能的解决方案。\n\n第3页 屿算智脑产品定义：三层进入——岗位、流程、结果。企业AI不是聊天工具，而是能上岗的AI员工。\n\n第4页 七层业务闭环：从数据接入→知识构建→模型训练→智能体编排→业务流嵌入→效果评估→持续优化，形成完整闭环。\n\n第5页 四大业务阶段：1) 梳理诊断 2) 立项执行 3) 生产分发 4) 风控与资产管理。每个阶段说明客户获得的价值。\n\n第6页 AI智能体员工矩阵：按岗位和职能展示屿算可部署的AI智能体类型（客服、销售、运营、数据分析等），强调\"让AI真正上岗\"。\n\n第7页 产品体系：屿算智脑（企业AI业务工作台）vs 屿算超脑（大规模AI基础设施），分别说明适用场景和目标客户。\n\n第8页 客户最终买到的业务结果：降本、提效、增收、风控——四个维度的量化价值主张。\n\n第9页 套餐与价格体系：简要呈现不同规模企业的适配方案（轻量版/专业版/企业版）。\n\n第10页 合作入口与下一步：联系我们、预约演示、POC试点，结尾强调\"让AI真正为业务工作\"。\nStructured brief:\nAudience: 潜在客户（企业老板、业务负责人、决策者）\nGoal: 产品方案介绍与销售提案\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 实用AI > AI概念; 三层进入：岗位、流程、结果; 七层业务闭环; 四大业务阶段; AI智能体员工矩阵; 屿算智脑 vs 屿算超脑; 套餐与价格体系\nStructured brief:\nAudience: 潜在客户（企业老板、业务负责人、决策者）\nGoal: 产品方案介绍与销售提案\nScenario: sales-deck\nLanguage: zh-CN\nPage count: 10\nTone: 简洁、专业、决策导向\nMust include: 实用AI > AI概念; 三层进入：岗位、流程、结果; 七层业务闭环; 四大业务阶段; AI智能体员工矩阵; 屿算智脑 vs 屿算超脑; 套餐与价格体系\n- Variant count: 1\n- Default recommended variant: Long Table (deck-catarc-business-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.高效 Agent 构建 / 2.Attention 研究型 / 3.瑞士网格 / 4.苍桌纪要\n- Selected template for this run: deck-catarc-business\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"53adbd19-9ded-4c28-b3d3-0c7fd1413927\",\"defaultVariantKey\":\"deck-catarc-business-executive-brief\",\"variantKeys\":[\"deck-catarc-business-executive-brief\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783515203205
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "Preparing generation runtime",
+            "status": "running",
+            "at": 1783515203211
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating SVG preview in background (PPTX on export)",
+            "status": "running",
+            "at": 1783515203217
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "Rendering preview",
+            "status": "running",
+            "at": 1783515586663
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783515586695
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1098,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "429",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_lZHHK0kyDn0JMymYo0z58338",
+        "input": {
+          "prompt": "为初级军事爱好者（50人课堂讲解）制作一份关于日本近期频繁地震现状的培训PPT，共约12页。\n\n内容结构：\n1. 封面：日本近期频繁地震现状与战略影响分析\n2. 目录/议程页\n3. 日本地震背景：板块构造位置（太平洋板块、菲律宾海板块、欧亚板块交界），全球地震多发区概况\n4. 2025年关键地震事件时间线：能登半岛7.6级（2024.1.1）、吐噶喇群岛群震474次（2025.6月起）、北海道/青森7.6级（2025.12.8）、堪察加8.8级（2025年全球最大）\n5. 数据页面：日本近10年震级4级以上地震超10576次，年均约1057次；2025年全球16次大地震、约8000人死亡\n6. JMA数据：2025年11月以来日本北部海域地震频率显著上升\n7. 南海海槽大地震风险：日本专家警告未来可能发生百年一遇超级地震\n8. 军事/战略视角分析：地震对自卫队部署的影响、灾害响应能力、基础设施脆弱性\n9. 防灾体系简介：日本地震预警系统、建筑抗震标准、民众防灾演练\n10. 对地区安全格局的潜在影响\n11. 总结与关键认知\n12. 问答页\n\n每页要点简洁，适合课堂讲解节奏，数据可视化友好，保留关键数字。\nStructured brief:\nAudience: 初级军事爱好者，50人课堂\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向",
+          "audience": "初级军事爱好者，50人课堂",
+          "goal": "培训讲解与统一认知",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "tone": "简洁、专业、决策导向",
+          "researchBrief": "{\"topic\":\"日本 2025 年 最近 地震 频发 现状 数据\",\"keyFacts\":[\"2024年1月1日能登半岛7.6级地震\",\"2025年12月8日北海道/青森东部海域7.6级地震，震源深度50公里，青森八户市观测到最大震度6强\",\"日本气象厅数据显示2025年11月以来北部海域地震频率显著上升\",\"吐噶喇群岛2025年6月21日起发生群震474次，最大达M5.1\",\"2025年全球发生16次大地震，约8000人死亡，堪察加8.8级为年度最大\",\"日本近10年震级4级以上地震超10576次，年均约1057次\",\"日本专家担忧南海海槽未来可能发生百年一遇超级地震\",\"北海道等地未来一周发生里氏8级地震可能性比平时翻10倍\"],\"sourceNotes\":[\"央视新闻\",\"BBC中文\",\"中国地震台网\",\"台湾气象署\",\"nippon.com\",\"earthquakelist.org\"],\"rawSummary\":\"2025年日本地震活动显著增强，2025年12月8日北海道海域发生7.6级强震，吐噶喇群岛出现474次群震，JMA数据显示北部海域地震频率自2025年11月起明显上升。专家警告南海海槽存在百年一遇大地震风险。近10年日本M4以上地震超1万次，年均超千次。\"}",
+          "templateMode": "single-template",
+          "templateId": "government-blue"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "429",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_lZHHK0kyDn0JMymYo0z58338",
+        "stage": "session_persisting",
+        "stageLabel": "Preview completed",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783514377,
+        "finishedAt": 1783514377,
+        "previewSessionId": "007ce134-c514-4019-a74b-2124b00fa6f9",
+        "resultSummary": "PPT preview generated:\n- Title: 为初级军事爱好者（50人课堂讲解）制作一份关于日本近期频繁地震现状的培训PPT，共约12页。\n\n内容结构：\n1. 封面：日本近期频繁地震现状与战略影响分析\n2. 目录/议程页\n3. 日本地震背景：板块构造位置（太平洋板块、菲律宾海板块、欧亚板块交界），全球地震多发区概况\n4. 2025年关键地震事件时间线：能登半岛7.6级（2024.1.1）、吐噶喇群岛群震474次（2025.6月起）、北海道/青森7.6级（2025.12.8）、堪察加8.8级（2025年全球最大）\n5. 数据页面：日本近10年震级4级以上地震超10576次，年均约1057次；2025年全球16次大地震、约8000人死亡\n6. JMA数据：2025年11月以来日本北部海域地震频率显著上升\n7. 南海海槽大地震风险：日本专家警告未来可能发生百年一遇超级地震\n8. 军事/战略视角分析：地震对自卫队部署的影响、灾害响应能力、基础设施脆弱性\n9. 防灾体系简介：日本地震预警系统、建筑抗震标准、民众防灾演练\n10. 对地区安全格局的潜在影响\n11. 总结与关键认知\n12. 问答页\n\n每页要点简洁，适合课堂讲解节奏，数据可视化友好，保留关键数字。\nStructured brief:\nAudience: 初级军事爱好者，50人课堂\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 初级军事爱好者，50人课堂\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\n- Variant count: 1\n- Default recommended variant: Long Table (government-blue-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.政务蓝 / 2.全球 AI 资本 2026 / 3.苍桌纪要 / 4.瑞士网格\n- Selected template for this run: government-blue\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"007ce134-c514-4019-a74b-2124b00fa6f9\",\"defaultVariantKey\":\"government-blue-executive-brief\",\"variantKeys\":[\"government-blue-executive-brief\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "007ce134-c514-4019-a74b-2124b00fa6f9",
+          "generatedAt": "2026-07-08T12:31:17.896Z",
+          "recommendedVariantKey": "government-blue-executive-brief",
+          "recommendedVariantName": "Long Table",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "government-blue",
+              "templateLabel": "政务蓝",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "styleName": "Long Table",
+              "summary": "偏正式政务汇报、政策解读和工作部署。"
+            },
+            {
+              "rank": 2,
+              "templateId": "global-ai-capital-2026",
+              "templateLabel": "全球 AI 资本 2026",
+              "styleKey": "ppt169_global_ai_capital_2026",
+              "styleName": "Global AI Capital",
+              "summary": "偏资本市场、行业格局和高层判断纪要。"
+            },
+            {
+              "rank": 3,
+              "templateId": "cangzhuo",
+              "templateLabel": "苍桌纪要",
+              "styleKey": "ppt169_cangzhuo",
+              "styleName": "Cangzhuo",
+              "summary": "偏中文管理层纪要、议题清单和执行部署。"
+            },
+            {
+              "rank": 4,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            }
+          ],
+          "selectedTemplateId": "government-blue",
+          "title": "为初级军事爱好者（50人课堂讲解）制作一份关于日本近期频繁地震现状的培训PPT，共约12页。\n\n内容结构：\n1. 封面：日本近期频繁地震现状与战略影响分析\n2. 目录/议程页\n3. 日本地震背景：板块构造位置（太平洋板块、菲律宾海板块、欧亚板块交界），全球地震多发区概况\n4. 2025年关键地震事件时间线：能登半岛7.6级（2024.1.1）、吐噶喇群岛群震474次（2025.6月起）、北海道/青森7.6级（2025.12.8）、堪察加8.8级（2025年全球最大）\n5. 数据页面：日本近10年震级4级以上地震超10576次，年均约1057次；2025年全球16次大地震、约8000人死亡\n6. JMA数据：2025年11月以来日本北部海域地震频率显著上升\n7. 南海海槽大地震风险：日本专家警告未来可能发生百年一遇超级地震\n8. 军事/战略视角分析：地震对自卫队部署的影响、灾害响应能力、基础设施脆弱性\n9. 防灾体系简介：日本地震预警系统、建筑抗震标准、民众防灾演练\n10. 对地区安全格局的潜在影响\n11. 总结与关键认知\n12. 问答页\n\n每页要点简洁，适合课堂讲解节奏，数据可视化友好，保留关键数字。\nStructured brief:\nAudience: 初级军事爱好者，50人课堂\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 初级军事爱好者，50人课堂\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "resolvedPageCount": 12,
+          "variants": [
+            {
+              "key": "government-blue-executive-brief",
+              "name": "Long Table",
+              "summary": "frontend-slides 的长桌纪要模板，规则线、分栏和议题感最强，适合董事会汇报、策略复盘和结构化叙事。",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "templateId": "government-blue",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 12,
+              "coverTitle": "日本近期地震态势与战略影响"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 226,
+            "previewArtifactId": 200,
+            "toolRunId": 226
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 为初级军事爱好者（50人课堂讲解）制作一份关于日本近期频繁地震现状的培训PPT，共约12页。\n\n内容结构：\n1. 封面：日本近期频繁地震现状与战略影响分析\n2. 目录/议程页\n3. 日本地震背景：板块构造位置（太平洋板块、菲律宾海板块、欧亚板块交界），全球地震多发区概况\n4. 2025年关键地震事件时间线：能登半岛7.6级（2024.1.1）、吐噶喇群岛群震474次（2025.6月起）、北海道/青森7.6级（2025.12.8）、堪察加8.8级（2025年全球最大）\n5. 数据页面：日本近10年震级4级以上地震超10576次，年均约1057次；2025年全球16次大地震、约8000人死亡\n6. JMA数据：2025年11月以来日本北部海域地震频率显著上升\n7. 南海海槽大地震风险：日本专家警告未来可能发生百年一遇超级地震\n8. 军事/战略视角分析：地震对自卫队部署的影响、灾害响应能力、基础设施脆弱性\n9. 防灾体系简介：日本地震预警系统、建筑抗震标准、民众防灾演练\n10. 对地区安全格局的潜在影响\n11. 总结与关键认知\n12. 问答页\n\n每页要点简洁，适合课堂讲解节奏，数据可视化友好，保留关键数字。\nStructured brief:\nAudience: 初级军事爱好者，50人课堂\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 初级军事爱好者，50人课堂\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\n- Variant count: 1\n- Default recommended variant: Long Table (government-blue-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.政务蓝 / 2.全球 AI 资本 2026 / 3.苍桌纪要 / 4.瑞士网格\n- Selected template for this run: government-blue\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"007ce134-c514-4019-a74b-2124b00fa6f9\",\"defaultVariantKey\":\"government-blue-executive-brief\",\"variantKeys\":[\"government-blue-executive-brief\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783513836467
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "Preparing generation runtime",
+            "status": "running",
+            "at": 1783513836473
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating SVG preview in background (PPTX on export)",
+            "status": "running",
+            "at": 1783513836478
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "Rendering preview",
+            "status": "running",
+            "at": 1783514377704
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783514377738
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1096,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "422",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_UCCbut3wLaUsgSAnS1yJ7650",
+        "input": {
+          "prompt": "请生成一份 4 页中文产品方案 PPT，主题是\"企业 AI 营销工作台\"。该产品面向企业管理层，是一款 AI 驱动的营销自动化与智能决策平台。核心定位：帮助企业市场团队利用大模型和智能体技术，实现从内容生成、用户触达、数据分析到策略优化的全链路营销提效。\n\n4 页结构如下：\n- 第 1 页：封面——产品名\"企业 AI 营销工作台\"，副标题体现核心价值主张\"AI 驱动，营销全链路智能化\"\n- 第 2 页：产品定位与市场机会——为什么企业营销需要 AI 工作台？行业痛点（内容生产慢、投放不精准、数据割裂、人工成本高）\n- 第 3 页：产品核心能力——三大模块：智能内容引擎（AI 文案/图片/视频生成）、精准触达引擎（用户画像与自动化投放）、数据决策引擎（实时看板与策略建议）\n- 第 4 页：商业价值与下一步——ROI 量化（效率提升、成本降低、收入增长），结尾行动号召\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "企业管理层",
+          "goal": "产品介绍",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "templateMode": "single-template",
+          "templateId": "deck-catarc-modern"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "422",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_UCCbut3wLaUsgSAnS1yJ7650",
+        "stage": "session_persisting",
+        "stageLabel": "Preview completed",
+        "progressCurrent": 5,
+        "progressTotal": 5,
+        "lastHeartbeatAt": 1783511834,
+        "finishedAt": 1783511834,
+        "previewSessionId": "5f2e1378-be2a-471f-81e7-ae15483fd7b1",
+        "resultSummary": "PPT preview generated:\n- Title: 请生成一份 4 页中文产品方案 PPT，主题是\"企业 AI 营销工作台\"。该产品面向企业管理层，是一款 AI 驱动的营销自动化与智能决策平台。核心定位：帮助企业市场团队利用大模型和智能体技术，实现从内容生成、用户触达、数据分析到策略优化的全链路营销提效。\n\n4 页结构如下：\n- 第 1 页：封面——产品名\"企业 AI 营销工作台\"，副标题体现核心价值主张\"AI 驱动，营销全链路智能化\"\n- 第 2 页：产品定位与市场机会——为什么企业营销需要 AI 工作台？行业痛点（内容生产慢、投放不精准、数据割裂、人工成本高）\n- 第 3 页：产品核心能力——三大模块：智能内容引擎（AI 文案/图片/视频生成）、精准触达引擎（用户画像与自动化投放）、数据决策引擎（实时看板与策略建议）\n- 第 4 页：商业价值与下一步——ROI 量化（效率提升、成本降低、收入增长），结尾行动号召\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 1\n- Default recommended variant: Neo-Grid Bold (deck-catarc-modern-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.瑞士网格 / 2.AI 运维 / 3.Attention 研究型 / 4.Kubernetes 蓝图 2026\n- Selected template for this run: deck-catarc-modern\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"5f2e1378-be2a-471f-81e7-ae15483fd7b1\",\"defaultVariantKey\":\"deck-catarc-modern-executive-brief\",\"variantKeys\":[\"deck-catarc-modern-executive-brief\"]} -->",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "5f2e1378-be2a-471f-81e7-ae15483fd7b1",
+          "generatedAt": "2026-07-08T11:55:13.660Z",
+          "recommendedVariantKey": "deck-catarc-modern-executive-brief",
+          "recommendedVariantName": "Neo-Grid Bold",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 2,
+              "templateId": "ai-ops",
+              "templateLabel": "AI 运维",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏平台架构、Agent 编排和运维指标。"
+            },
+            {
+              "rank": 3,
+              "templateId": "attention-is-all-you-need",
+              "templateLabel": "Attention 研究型",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏研究论文、方法图解和实验结论证明。"
+            },
+            {
+              "rank": 4,
+              "templateId": "kubernetes-blueprint-2026",
+              "templateLabel": "Kubernetes 蓝图 2026",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "styleName": "Kubernetes Blueprint",
+              "summary": "偏云原生架构、平台蓝图和技术治理。"
+            }
+          ],
+          "selectedTemplateId": "deck-catarc-modern",
+          "title": "请生成一份 4 页中文产品方案 PPT，主题是\"企业 AI 营销工作台\"。该产品面向企业管理层，是一款 AI 驱动的营销自动化与智能决策平台。核心定位：帮助企业市场团队利用大模型和智能体技术，实现从内容生成、用户触达、数据分析到策略优化的全链路营销提效。\n\n4 页结构如下：\n- 第 1 页：封面——产品名\"企业 AI 营销工作台\"，副标题体现核心价值主张\"AI 驱动，营销全链路智能化\"\n- 第 2 页：产品定位与市场机会——为什么企业营销需要 AI 工作台？行业痛点（内容生产慢、投放不精准、数据割裂、人工成本高）\n- 第 3 页：产品核心能力——三大模块：智能内容引擎（AI 文案/图片/视频生成）、精准触达引擎（用户画像与自动化投放）、数据决策引擎（实时看板与策略建议）\n- 第 4 页：商业价值与下一步——ROI 量化（效率提升、成本降低、收入增长），结尾行动号召\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "deck-catarc-modern-executive-brief",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "deck-catarc-modern",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 223,
+            "previewArtifactId": 196,
+            "toolRunId": 223
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 请生成一份 4 页中文产品方案 PPT，主题是\"企业 AI 营销工作台\"。该产品面向企业管理层，是一款 AI 驱动的营销自动化与智能决策平台。核心定位：帮助企业市场团队利用大模型和智能体技术，实现从内容生成、用户触达、数据分析到策略优化的全链路营销提效。\n\n4 页结构如下：\n- 第 1 页：封面——产品名\"企业 AI 营销工作台\"，副标题体现核心价值主张\"AI 驱动，营销全链路智能化\"\n- 第 2 页：产品定位与市场机会——为什么企业营销需要 AI 工作台？行业痛点（内容生产慢、投放不精准、数据割裂、人工成本高）\n- 第 3 页：产品核心能力——三大模块：智能内容引擎（AI 文案/图片/视频生成）、精准触达引擎（用户画像与自动化投放）、数据决策引擎（实时看板与策略建议）\n- 第 4 页：商业价值与下一步——ROI 量化（效率提升、成本降低、收入增长），结尾行动号召\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 1\n- Default recommended variant: Neo-Grid Bold (deck-catarc-modern-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.瑞士网格 / 2.AI 运维 / 3.Attention 研究型 / 4.Kubernetes 蓝图 2026\n- Selected template for this run: deck-catarc-modern\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"5f2e1378-be2a-471f-81e7-ae15483fd7b1\",\"defaultVariantKey\":\"deck-catarc-modern-executive-brief\",\"variantKeys\":[\"deck-catarc-modern-executive-brief\"]} -->",
+        "errorCode": null,
+        "errorMessage": null,
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783511676369
+          },
+          {
+            "type": "background_generation_preparing",
+            "label": "Preparing generation runtime",
+            "status": "running",
+            "at": 1783511676375
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating SVG preview in background (PPTX on export)",
+            "status": "running",
+            "at": 1783511676387
+          },
+          {
+            "type": "background_preview_rendering",
+            "label": "Rendering preview",
+            "status": "running",
+            "at": 1783511834792
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783511834821
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1093,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "425",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_MQOVc8fx59JDh7he5kd68242",
+        "input": {
+          "prompt": "制作一份关于\"克里米亚现状\"的培训讲解PPT，面向50人课堂的初级军事爱好者，目标是在12页内完成清晰、专业、结构化的认知统一。\n\n整体逻辑：从历史背景切入 → 地缘战略价值 → 2014年关键转折 → 当前军事部署态势（2025-2026）→ 乌克兰的反制行动 → 国际博弈格局 → 趋势研判与总结。\n\n页面规划（共12页）：\n1. 封面：克里米亚现状——地缘与军事态势全景\n2. 目录/议程\n3. 克里米亚地理与战略位置：黑海十字路口，控制黑海与亚速海的关键节点\n4. 历史溯源（一）：从克里米亚汗国到苏联时期，赫鲁晓夫1954年划归乌克兰\n5. 历史溯源（二）：2014年克里米亚危机——公投与俄联邦并入\n6. 俄罗斯军事部署现状：克里米亚作为俄黑海舰队核心基地，部署先进导弹系统（如S-400、K-300P堡垒），刻赤海峡大桥的战略运输功能\n7. 俄罗斯掌控强化：基础设施建设、驻军扩大、核威慑能力部署（可涉及加里宁格勒对比）\n8. 乌克兰反制行动：远程无人机打击、对黑海舰队舰艇的持续袭击、刻赤海峡后勤线施压\n9. 克里米亚作为俄罗斯\"最强堡垒与最脆弱环节\"：黑海舰队家属撤离迹象、后方压力上升\n10. 国际博弈：北约东翼增兵、美国对乌军援、黑海军事平衡变化\n11. 未来趋势研判：停战斡旋前景、克里米亚地位问题的博弈走向\n12. 总结与互动提问\n\n整体要求：地图示意图优先、时间线清晰、数据可量化处标注来源、避免情绪化表述，保持军事分析的冷静与客观。\nStructured brief:\nAudience: 初级军事爱好者\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向",
+          "audience": "初级军事爱好者",
+          "goal": "培训讲解与统一认知",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "tone": "简洁、专业、决策导向",
+          "researchBrief": "{\"topic\":\"克里米亚 2025-2026 军事部署 现状 地缘政治\",\"keyFacts\":[\"克里米亚是俄罗斯在黑海的关键军事枢纽，自2014年以来莫斯科持续强化军事部署\",\"俄罗斯在克里米亚部署S-400防空系统、K-300P堡垒反舰导弹等先进武器系统\",\"乌克兰对克里米亚展开大规模无人机打击和远程精确攻击，进入\"孤立克里米亚\"新阶段\",\"黑海舰队高级军官家属已从克里米亚撤离（乌克兰游击队组织Atesh报告）\",\"乌克兰军队正实施打击战役，阻断俄罗斯跨越刻赤海峡的后勤与燃料运输\",\"北约东翼军事部署加强，美国在东欧增派兵力\",\"2025年全球地缘格局剧烈转型，俄乌停战斡旋仍是焦点\",\"俄罗斯对克里米亚的掌控在逐步加强，乌克兰收回克里米亚目标更遥远\",\"克里米亚同时是俄罗斯最坚固的堡垒和最脆弱的环节\"],\"implications\":[\"克里米亚控制权是俄乌冲突的核心博弈点之一\",\"黑海军事平衡正在因乌克兰的非对称打击策略而改变\",\"克里米亚的未来地位将是任何停战谈判中最棘手的问题之一\"],\"sourceNotes\":[\"Carnegie Endowment - The Changing Military Balance in the Black Sea (2026.04)\",\"ISW - Russian Offensive Campaign Assessment (2026.06)\",\"中国国际问题研究院 - 2025年国际形势与中国外交\",\"台湾国防安全研究院 - 2025全球政经格局\"],\"rawSummary\":\"克里米亚当前处于俄罗斯的实际军事控制之下，作为黑海舰队核心基地持续强化部署。同时乌克兰通过无人机和远程打击持续施压，试图孤立并削弱克里米亚的军事后勤功能。国际上北约东翼军事部署增强，停战谈判前景不明。克里米亚既是俄罗斯的强大堡垒，也是其最脆弱的战略环节。\"}",
+          "templateMode": "single-template",
+          "templateId": "academic-defense"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "425",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_MQOVc8fx59JDh7he5kd68242",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "17b91003-0295-42f4-b7fe-fac29866f0ad",
+          "generatedAt": "2026-07-08T02:22:52.102Z",
+          "recommendedVariantKey": "academic-defense-executive-brief",
+          "recommendedVariantName": "Attention Research",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "anthropic-brand",
+              "templateLabel": "Anthropic 品牌",
+              "styleKey": "ppt169_brutalist_ai_newspaper_2026",
+              "styleName": "Long Table",
+              "summary": "偏研究型 AI 品牌、克制和判断清晰。"
+            },
+            {
+              "rank": 2,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 3,
+              "templateId": "global-ai-capital-2026",
+              "templateLabel": "全球 AI 资本 2026",
+              "styleKey": "ppt169_global_ai_capital_2026",
+              "styleName": "Global AI Capital",
+              "summary": "偏资本市场、行业格局和高层判断纪要。"
+            },
+            {
+              "rank": 4,
+              "templateId": "academic-defense",
+              "templateLabel": "学术答辩",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏论文答辩、研究汇报和结论证明。"
+            }
+          ],
+          "selectedTemplateId": "academic-defense",
+          "title": "制作一份关于\"克里米亚现状\"的培训讲解PPT，面向50人课堂的初级军事爱好者，目标是在12页内完成清晰、专业、结构化的认知统一。\n\n整体逻辑：从历史背景切入 → 地缘战略价值 → 2014年关键转折 → 当前军事部署态势（2025-2026）→ 乌克兰的反制行动 → 国际博弈格局 → 趋势研判与总结。\n\n页面规划（共12页）：\n1. 封面：克里米亚现状——地缘与军事态势全景\n2. 目录/议程\n3. 克里米亚地理与战略位置：黑海十字路口，控制黑海与亚速海的关键节点\n4. 历史溯源（一）：从克里米亚汗国到苏联时期，赫鲁晓夫1954年划归乌克兰\n5. 历史溯源（二）：2014年克里米亚危机——公投与俄联邦并入\n6. 俄罗斯军事部署现状：克里米亚作为俄黑海舰队核心基地，部署先进导弹系统（如S-400、K-300P堡垒），刻赤海峡大桥的战略运输功能\n7. 俄罗斯掌控强化：基础设施建设、驻军扩大、核威慑能力部署（可涉及加里宁格勒对比）\n8. 乌克兰反制行动：远程无人机打击、对黑海舰队舰艇的持续袭击、刻赤海峡后勤线施压\n9. 克里米亚作为俄罗斯\"最强堡垒与最脆弱环节\"：黑海舰队家属撤离迹象、后方压力上升\n10. 国际博弈：北约东翼增兵、美国对乌军援、黑海军事平衡变化\n11. 未来趋势研判：停战斡旋前景、克里米亚地位问题的博弈走向\n12. 总结与互动提问\n\n整体要求：地图示意图优先、时间线清晰、数据可量化处标注来源、避免情绪化表述，保持军事分析的冷静与客观。\nStructured brief:\nAudience: 初级军事爱好者\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 初级军事爱好者\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 12,
+          "resolvedPageCount": 12,
+          "variants": [
+            {
+              "key": "academic-defense-executive-brief",
+              "name": "Attention Research",
+              "summary": "来自 ppt-master 的研究论文风格，更强调方法图解、实验结果和学术答辩式证明链路。",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "templateId": "academic-defense",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 12,
+              "coverTitle": "克里米亚现状研究"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 221,
+            "previewArtifactId": 193,
+            "toolRunId": 221
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 制作一份关于\"克里米亚现状\"的培训讲解PPT，面向50人课堂的初级军事爱好者，目标是在12页内完成清晰、专业、结构化的认知统一。\n\n整体逻辑：从历史背景切入 → 地缘战略价值 → 2014年关键转折 → 当前军事部署态势（2025-2026）→ 乌克兰的反制行动 → 国际博弈格局 → 趋势研判与总结。\n\n页面规划（共12页）：\n1. 封面：克里米亚现状——地缘与军事态势全景\n2. 目录/议程\n3. 克里米亚地理与战略位置：黑海十字路口，控制黑海与亚速海的关键节点\n4. 历史溯源（一）：从克里米亚汗国到苏联时期，赫鲁晓夫1954年划归乌克兰\n5. 历史溯源（二）：2014年克里米亚危机——公投与俄联邦并入\n6. 俄罗斯军事部署现状：克里米亚作为俄黑海舰队核心基地，部署先进导弹系统（如S-400、K-300P堡垒），刻赤海峡大桥的战略运输功能\n7. 俄罗斯掌控强化：基础设施建设、驻军扩大、核威慑能力部署（可涉及加里宁格勒对比）\n8. 乌克兰反制行动：远程无人机打击、对黑海舰队舰艇的持续袭击、刻赤海峡后勤线施压\n9. 克里米亚作为俄罗斯\"最强堡垒与最脆弱环节\"：黑海舰队家属撤离迹象、后方压力上升\n10. 国际博弈：北约东翼增兵、美国对乌军援、黑海军事平衡变化\n11. 未来趋势研判：停战斡旋前景、克里米亚地位问题的博弈走向\n12. 总结与互动提问\n\n整体要求：地图示意图优先、时间线清晰、数据可量化处标注来源、避免情绪化表述，保持军事分析的冷静与客观。\nStructured brief:\nAudience: 初级军事爱好者\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 初级军事爱好者\nGoal: 培训讲解与统一认知\nScenario: training\nLanguage: zh-CN\nPage count: 12\nTone: 简洁、专业、决策导向\n- Variant count: 1\n- Default recommended variant: Attention Research (academic-defense-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.Anthropic 品牌 / 2.瑞士网格 / 3.全球 AI 资本 2026 / 4.学术答辩\n- Selected template for this run: academic-defense\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"17b91003-0295-42f4-b7fe-fac29866f0ad\",\"defaultVariantKey\":\"academic-defense-executive-brief\",\"variantKeys\":[\"academic-defense-executive-brief\"]} -->",
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783477262240
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783477262246
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783478462467
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1092,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "420",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_F7OW5BDWCJnZEOJ3eazO2746",
+        "input": {
+          "prompt": "请做一份 4 页产品方案 PPT，主题是「企业AI营销工作台」。\n\n页面结构：\n- 第1页：封面 — 产品名称「企业AI营销工作台」，副标题点明核心价值主张\n- 第2页：产品价值 — 3 个核心价值主张，分别覆盖效率提升、决策智能、增长驱动\n- 第3页：产品架构 — 简要展示核心能力模块（内容生成、数据分析、客户洞察、自动化运营）\n- 第4页：落地路径 — 3 阶段落地路线图（试点验证→规模化推广→持续优化），每一阶段标注关键里程碑\n\n受众：管理层\n场景：产品发布\n目标：帮助管理层快速理解产品价值和落地路径\n语言：zh-CN\n风格：简洁、专业、决策导向，Swiss Grid 干净利落的排版风格\nStructured brief:\nAudience: 管理层\nGoal: 帮助管理层快速理解产品价值和落地路径\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "管理层",
+          "goal": "帮助管理层快速理解产品价值和落地路径",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "templateMode": "single-template",
+          "templateId": "swiss-grid"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "420",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_F7OW5BDWCJnZEOJ3eazO2746",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "0c0d0c05-47ce-415a-ac93-13560febf787",
+          "generatedAt": "2026-07-07T15:16:39.989Z",
+          "recommendedVariantKey": "swiss-grid-executive-brief",
+          "recommendedVariantName": "Neo-Grid Bold",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 2,
+              "templateId": "building-effective-agents",
+              "templateLabel": "高效 Agent 构建",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏 Agent 系统设计、编排链路和能力拆解。"
+            },
+            {
+              "rank": 3,
+              "templateId": "kubernetes-blueprint-2026",
+              "templateLabel": "Kubernetes 蓝图 2026",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "styleName": "Kubernetes Blueprint",
+              "summary": "偏云原生架构、平台蓝图和技术治理。"
+            },
+            {
+              "rank": 4,
+              "templateId": "attention-is-all-you-need",
+              "templateLabel": "Attention 研究型",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏研究论文、方法图解和实验结论证明。"
+            }
+          ],
+          "selectedTemplateId": "swiss-grid",
+          "title": "请做一份 4 页产品方案 PPT，主题是「企业AI营销工作台」。\n\n页面结构：\n- 第1页：封面 — 产品名称「企业AI营销工作台」，副标题点明核心价值主张\n- 第2页：产品价值 — 3 个核心价值主张，分别覆盖效率提升、决策智能、增长驱动\n- 第3页：产品架构 — 简要展示核心能力模块（内容生成、数据分析、客户洞察、自动化运营）\n- 第4页：落地路径 — 3 阶段落地路线图（试点验证→规模化推广→持续优化），每一阶段标注关键里程碑\n\n受众：管理层\n场景：产品发布\n目标：帮助管理层快速理解产品价值和落地路径\n语言：zh-CN\n风格：简洁、专业、决策导向，Swiss Grid 干净利落的排版风格\nStructured brief:\nAudience: 管理层\nGoal: 帮助管理层快速理解产品价值和落地路径\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 管理层\nGoal: 帮助管理层快速理解产品价值和落地路径\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "swiss-grid-executive-brief",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "swiss-grid",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 220,
+            "previewArtifactId": 192,
+            "toolRunId": 220
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 请做一份 4 页产品方案 PPT，主题是「企业AI营销工作台」。\n\n页面结构：\n- 第1页：封面 — 产品名称「企业AI营销工作台」，副标题点明核心价值主张\n- 第2页：产品价值 — 3 个核心价值主张，分别覆盖效率提升、决策智能、增长驱动\n- 第3页：产品架构 — 简要展示核心能力模块（内容生成、数据分析、客户洞察、自动化运营）\n- 第4页：落地路径 — 3 阶段落地路线图（试点验证→规模化推广→持续优化），每一阶段标注关键里程碑\n\n受众：管理层\n场景：产品发布\n目标：帮助管理层快速理解产品价值和落地路径\n语言：zh-CN\n风格：简洁、专业、决策导向，Swiss Grid 干净利落的排版风格\nStructured brief:\nAudience: 管理层\nGoal: 帮助管理层快速理解产品价值和落地路径\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 管理层\nGoal: 帮助管理层快速理解产品价值和落地路径\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 1\n- Default recommended variant: Neo-Grid Bold (swiss-grid-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.瑞士网格 / 2.高效 Agent 构建 / 3.Kubernetes 蓝图 2026 / 4.Attention 研究型\n- Selected template for this run: swiss-grid\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"0c0d0c05-47ce-415a-ac93-13560febf787\",\"defaultVariantKey\":\"swiss-grid-executive-brief\",\"variantKeys\":[\"swiss-grid-executive-brief\"]} -->",
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783437264332
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783437264343
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783437549984
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1091,
+      "user_id": 96,
+      "status": "failed",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "419",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_VG6zACyhVU9mFTK4Bp3w5193",
+        "input": {
+          "prompt": "制作一份4页产品方案PPT，主题为「企业AI营销工作台」。按以下结构展开：\n\n第1页 - 封面：标题「企业AI营销工作台」，副标题「让营销团队效率翻倍的AI工作台」，标注\"产品发布 · 管理层简报\"。\n\n第2页 - 问题与机会：指出当前企业营销三大核心痛点——①内容生产效率低（重复劳动占比高）②数据洞察滞后（决策靠经验而非数据）③团队协作碎片化（工具割裂、信息孤岛）。引出AI营销工作台的市场机会和解决方向。\n\n第3页 - 产品方案与核心价值：展示产品三大核心模块——①AI内容引擎（智能文案、素材生成、A/B测试）②数据决策中心（实时看板、用户画像、ROI追踪）③协同工作流（任务编排、审批链路、效果复盘）。用一句话概括价值主张：\"一站式AI营销工作台，让策略到执行快10倍\"。\n\n第4页 - 落地路径：分三步走——Phase 1 试点导入（2周，选1个业务线跑通核心流程）→ Phase 2 规模推广（4周，全团队上线+定制训练）→ Phase 3 持续优化（数据飞轮+模型迭代）。附关键成功指标：内容产出效率提升50%+、营销ROI提升30%+。\nStructured brief:\nAudience: 管理层\nGoal: 帮助管理层快速理解产品价值和落地路径\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "管理层",
+          "goal": "帮助管理层快速理解产品价值和落地路径",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "templateMode": "single-template",
+          "templateId": "swiss-grid"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "419",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_VG6zACyhVU9mFTK4Bp3w5193",
+        "toolResult": {
+          "ok": false,
+          "error": {
+            "code": "ppt_research_brief_required",
+            "message": "This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+            "rawMessage": "ppt_research_brief_required"
+          }
+        },
+        "assistantMessage": "Editable PPT background generation failed: This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+        "error": "This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783436874334
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783436874342
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation failed",
+            "detail": "This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+            "status": "failed",
+            "at": 1783436874386
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1090,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "416",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_mpgPcBU1nQkoIj1FB6NS8049",
+        "input": {
+          "prompt": "生成一份4页中文产品方案PPT，主题是企业AI营销工作台。这是一款面向企业管理层的AI驱动营销工具，帮助企业在内容生成、客户洞察、营销自动化和数据分析方面提效。受众=企业管理层；场景=产品发布；目标=产品介绍。\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "企业管理层",
+          "goal": "产品介绍",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "templateMode": "single-template",
+          "templateId": "swiss-grid"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "416",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_mpgPcBU1nQkoIj1FB6NS8049",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "22f11d62-146e-445d-81d2-c2e134801d3e",
+          "generatedAt": "2026-07-07T14:07:28.898Z",
+          "recommendedVariantKey": "swiss-grid-executive-brief",
+          "recommendedVariantName": "Neo-Grid Bold",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 2,
+              "templateId": "building-effective-agents",
+              "templateLabel": "高效 Agent 构建",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏 Agent 系统设计、编排链路和能力拆解。"
+            },
+            {
+              "rank": 3,
+              "templateId": "kubernetes-blueprint-2026",
+              "templateLabel": "Kubernetes 蓝图 2026",
+              "styleKey": "ppt169_kubernetes_blueprint_2026",
+              "styleName": "Kubernetes Blueprint",
+              "summary": "偏云原生架构、平台蓝图和技术治理。"
+            },
+            {
+              "rank": 4,
+              "templateId": "attention-is-all-you-need",
+              "templateLabel": "Attention 研究型",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏研究论文、方法图解和实验结论证明。"
+            }
+          ],
+          "selectedTemplateId": "swiss-grid",
+          "title": "生成一份4页中文产品方案PPT，主题是企业AI营销工作台。这是一款面向企业管理层的AI驱动营销工具，帮助企业在内容生成、客户洞察、营销自动化和数据分析方面提效。受众=企业管理层；场景=产品发布；目标=产品介绍。\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "swiss-grid-executive-brief",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "swiss-grid",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 219,
+            "previewArtifactId": 191,
+            "toolRunId": 219
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 生成一份4页中文产品方案PPT，主题是企业AI营销工作台。这是一款面向企业管理层的AI驱动营销工具，帮助企业在内容生成、客户洞察、营销自动化和数据分析方面提效。受众=企业管理层；场景=产品发布；目标=产品介绍。\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\n- Variant count: 1\n- Default recommended variant: Neo-Grid Bold (swiss-grid-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.瑞士网格 / 2.高效 Agent 构建 / 3.Kubernetes 蓝图 2026 / 4.Attention 研究型\n- Selected template for this run: swiss-grid\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"22f11d62-146e-445d-81d2-c2e134801d3e\",\"defaultVariantKey\":\"swiss-grid-executive-brief\",\"variantKeys\":[\"swiss-grid-executive-brief\"]} -->",
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783433174578
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783433174588
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783433413723
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1089,
+      "user_id": 96,
+      "status": "failed",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "413",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_Te8GEgHTYl9thi3ixAm51762",
+        "input": {
+          "prompt": "生成一份4页中文产品方案PPT，主题是企业AI营销工作台。面向企业管理层，用于产品发布场景下的产品介绍。内容需简洁、专业、决策导向。4页结构：第1页封面（产品名称与价值主张），第2页市场痛点与产品定位，第3页核心功能与竞争优势，第4页商业价值与下一步行动。\nStructured brief:\nAudience: 企业管理层\nGoal: 产品介绍\nScenario: product-launch\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向",
+          "audience": "企业管理层",
+          "goal": "产品介绍",
+          "scenario": "product-launch",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "templateMode": "single-template",
+          "templateId": "swiss-grid"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "413",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_Te8GEgHTYl9thi3ixAm51762",
+        "toolResult": {
+          "ok": false,
+          "error": {
+            "code": "ppt_research_brief_required",
+            "message": "This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+            "rawMessage": "ppt_research_brief_required"
+          }
+        },
+        "assistantMessage": "Editable PPT background generation failed: This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+        "error": "This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783416337403
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783416337410
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation failed",
+            "detail": "This PPT request needs fresh factual grounding before preview. Call web_search first, then provide the researchBrief to preview_ppt_deck.",
+            "status": "failed",
+            "at": 1783416337441
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1087,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "406",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_00_oMTxtxAOj5PfJgoUidI41578",
+        "input": {
+          "prompt": "制作一份关于\"克里米亚现状：战略价值与历史分析\"的课堂讲解PPT，面向50名初级军事爱好者。10页，语言为中文。\n\n主线结构：\n1. 封面：克里米亚——黑海锁钥的战略博弈\n2. 克里米亚地理概览：黑海北岸的战略支点，连接欧洲与中东的十字路口\n3. 历史脉络（上）：从克里米亚汗国到沙俄吞并，1853-1856克里米亚战争的关键意义\n4. 历史脉络（下）：苏联时期的克里米亚，1954年赫鲁晓夫将克里米亚划归乌克兰的历史决定\n5. 2014年转折点：俄军\"小绿人\"行动、公投与并入俄罗斯联邦\n6. 塞瓦斯托波尔——黑海舰队的心脏：不冻港的战略价值，黑海舰队的历史与现状（至2025年已损失约三分之一战力，被迫从塞瓦斯托波尔部分撤离）\n7. 克里米亚大桥：战略生命线——连接俄罗斯本土与克里米亚的唯一陆路通道，2022年、2023年、2025年三次遭袭，2025年6月3日乌克兰国安局水下袭击事件，大桥在关闭两个多小时后恢复通行\n8. 俄乌冲突中的克里米亚（2022-2025）：乌军无人机\"后勤绞杀战\"，对克里米亚形成战略\"物理隔离\"，俄军在克里米亚部署先进导弹系统作为反制\n9. 战略价值总结：黑海制海权、北约东翼压力、能源通道、核威慑前沿\n10. 展望与思考：克里米亚问题的长期性，对地区安全格局的影响\n\n风格要求：客观中立、通俗易懂、适合大屏投影的课堂讲解。每页要点精炼，适合讲师展开讲解。\nStructured brief:\nAudience: 初级军事爱好者，50人课堂讲解\nGoal: 知识科普，建立对克里米亚地缘战略价值的系统认知\nScenario: training\nLanguage: zh-CN\nPage count: 10\nTone: 客观中立、通俗但有深度，课堂讲解风格",
+          "audience": "初级军事爱好者，50人课堂讲解",
+          "goal": "知识科普，建立对克里米亚地缘战略价值的系统认知",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "tone": "客观中立、通俗但有深度，课堂讲解风格",
+          "researchBrief": {
+            "topic": "克里米亚现状：战略价值与历史分析（2025最新）",
+            "keyFacts": [
+              "克里米亚位于黑海北岸，是连接欧洲与中东的战略十字路口，拥有天然不冻港塞瓦斯托波尔",
+              "1853-1856年克里米亚战争是近代史上关键冲突，英法奥斯曼联军对抗沙俄",
+              "1954年赫鲁晓夫将克里米亚从俄罗斯苏维埃联邦划归乌克兰苏维埃社会主义共和国",
+              "2014年俄罗斯以'小绿人'（无标识蒙面部队）占领克里米亚战略要地，随后通过公投并入俄罗斯联邦",
+              "黑海舰队至2025年已损失约三分之一战力，被迫从塞瓦斯托波尔母港部分撤离",
+              "克里米亚大桥（刻赤海峡大桥）是连接俄罗斯本土与克里米亚的唯一陆路通道，2025年6月3日遭乌克兰国安局水下特别行动第三次袭击，大桥关闭两个多小时后恢复通行",
+              "乌军以无人机主导'后勤绞杀战'，对克里米亚形成战略'物理隔离'效果",
+              "俄军在克里米亚部署先进导弹系统作为反制，强化核威慑前沿部署",
+              "美国2025年外泄的俄乌战争草案曾提出视克里米亚为俄罗斯实际控制领土，引发争议",
+              "黑海军事平衡自俄乌全面战争以来发生深刻变化，乌克兰逐步'去军事化'克里米亚"
+            ],
+            "implications": [
+              "课堂讲解需要最新事实支撑，特别是2025年克里米亚大桥第三次遭袭和黑海舰队战力变化",
+              "初级爱好者需要历史脉络清晰，从克里米亚战争到2014年到当前冲突形成完整认知链"
+            ],
+            "sourceNotes": [
+              "Wikipedia - 俄罗斯联邦吞并克里米亚",
+              "Carnegie Endowment (2026.04) - The Changing Military Balance in the Black Sea",
+              "BBC中文 - 美国终止俄乌战争草案外泄",
+              "央广网 - 克里米亚大桥2025.06.03恢复通行",
+              "Chatham House (2025.07) - Understanding Russia's Black Sea Strategy",
+              "RUSI - Black Sea Significance to European Security"
+            ]
+          },
+          "templateMode": "single-template",
+          "templateId": "cangzhuo"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "406",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_00_oMTxtxAOj5PfJgoUidI41578",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "93d2c961-a570-4522-a220-3bb893c68e11",
+          "generatedAt": "2026-07-07T04:06:06.310Z",
+          "recommendedVariantKey": "cangzhuo-executive-brief",
+          "recommendedVariantName": "Cangzhuo",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 2,
+              "templateId": "attention-is-all-you-need",
+              "templateLabel": "Attention 研究型",
+              "styleKey": "ppt169_attention_is_all_you_need",
+              "styleName": "Attention Research",
+              "summary": "偏研究论文、方法图解和实验结论证明。"
+            },
+            {
+              "rank": 3,
+              "templateId": "image-text-showcase",
+              "templateLabel": "图文陈列",
+              "styleKey": "ppt169_image_text_showcase",
+              "styleName": "Image Text Showcase",
+              "summary": "偏作品展示、图文并置和画册式节奏。"
+            },
+            {
+              "rank": 4,
+              "templateId": "building-effective-agents",
+              "templateLabel": "高效 Agent 构建",
+              "styleKey": "ppt169_building_effective_agents",
+              "styleName": "Effective Agents",
+              "summary": "偏 Agent 系统设计、编排链路和能力拆解。"
+            }
+          ],
+          "selectedTemplateId": "cangzhuo",
+          "title": "克里米亚现状：战略价值与历史分析（2025最新）",
+          "scenario": "training",
+          "language": "zh-CN",
+          "pageCount": 10,
+          "resolvedPageCount": 10,
+          "variants": [
+            {
+              "key": "cangzhuo-executive-brief",
+              "name": "Cangzhuo",
+              "summary": "来自 ppt-master 的中文管理层纪要风格，议题清单、条线复盘和执行部署感更强。",
+              "styleKey": "ppt169_cangzhuo",
+              "templateId": "cangzhuo",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 10,
+              "coverTitle": "克里米亚：黑海锁钥的战略博弈"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 218,
+            "previewArtifactId": 190,
+            "toolRunId": 218
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 克里米亚现状：战略价值与历史分析（2025最新）\n- Variant count: 1\n- Default recommended variant: Cangzhuo (cangzhuo-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.瑞士网格 / 2.Attention 研究型 / 3.图文陈列 / 4.高效 Agent 构建\n- Selected template for this run: cangzhuo\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"93d2c961-a570-4522-a220-3bb893c68e11\",\"defaultVariantKey\":\"cangzhuo-executive-brief\",\"variantKeys\":[\"cangzhuo-executive-brief\"]} -->",
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783396524318
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783396524325
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783397489571
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1086,
+      "user_id": 96,
+      "status": "success",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "404",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_il2fqeunr6oJCuEbeF1JRePe",
+        "input": {
+          "prompt": "请生成一份 4 页中文可编辑 PPT，主题是“企业 AI 营销工作台”。受众是企业管理层，场景是 20 分钟内部汇报。模板使用 swiss-grid，整体风格简洁、专业、决策导向。内容应适合管理层快速理解业务价值、应用方式与落地重点。\nStructured brief:\nAudience: 管理层汇报\nGoal: 20分钟内部汇报，介绍企业 AI 营销工作台的价值、应用场景与落地路径\nScenario: marketing-campaign\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nMust include: 企业 AI 营销工作台的定义与定位; 核心业务价值：提效、线索转化、数据闭环; 典型应用场景：内容生成、投放优化、销售协同; 落地建议与下一步行动",
+          "audience": "管理层汇报",
+          "goal": "20分钟内部汇报，介绍企业 AI 营销工作台的价值、应用场景与落地路径",
+          "scenario": "marketing-campaign",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "企业 AI 营销工作台的定义与定位",
+            "核心业务价值：提效、线索转化、数据闭环",
+            "典型应用场景：内容生成、投放优化、销售协同",
+            "落地建议与下一步行动"
+          ],
+          "templateMode": "single-template",
+          "templateId": "swiss-grid"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "404",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_il2fqeunr6oJCuEbeF1JRePe",
+        "toolResult": {
+          "ok": true,
+          "previewSessionId": "c0566ed2-9020-44c8-9357-b7030e98e1a0",
+          "generatedAt": "2026-07-06T15:10:26.923Z",
+          "recommendedVariantKey": "swiss-grid-executive-brief",
+          "recommendedVariantName": "Neo-Grid Bold",
+          "recommendedTemplates": [
+            {
+              "rank": 1,
+              "templateId": "swiss-grid",
+              "templateLabel": "瑞士网格",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "styleName": "Neo-Grid Bold",
+              "summary": "偏理性咨询、强网格和模块化信息。"
+            },
+            {
+              "rank": 2,
+              "templateId": "cangzhuo",
+              "templateLabel": "苍桌纪要",
+              "styleKey": "ppt169_cangzhuo",
+              "styleName": "Cangzhuo",
+              "summary": "偏中文管理层纪要、议题清单和执行部署。"
+            },
+            {
+              "rank": 3,
+              "templateId": "global-ai-capital-2026",
+              "templateLabel": "全球 AI 资本 2026",
+              "styleKey": "ppt169_global_ai_capital_2026",
+              "styleName": "Global AI Capital",
+              "summary": "偏资本市场、行业格局和高层判断纪要。"
+            },
+            {
+              "rank": 4,
+              "templateId": "image-text-showcase",
+              "templateLabel": "图文陈列",
+              "styleKey": "ppt169_image_text_showcase",
+              "styleName": "Image Text Showcase",
+              "summary": "偏作品展示、图文并置和画册式节奏。"
+            }
+          ],
+          "selectedTemplateId": "swiss-grid",
+          "title": "请生成一份 4 页中文可编辑 PPT，主题是“企业 AI 营销工作台”。受众是企业管理层，场景是 20 分钟内部汇报。模板使用 swiss-grid，整体风格简洁、专业、决策导向。内容应适合管理层快速理解业务价值、应用方式与落地重点。\nStructured brief:\nAudience: 管理层汇报\nGoal: 20分钟内部汇报，介绍企业 AI 营销工作台的价值、应用场景与落地路径\nScenario: marketing-campaign\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nMust include: 企业 AI 营销工作台的定义与定位; 核心业务价值：提效、线索转化、数据闭环; 典型应用场景：内容生成、投放优化、销售协同; 落地建议与下一步行动\nStructured brief:\nAudience: 管理层汇报\nGoal: 20分钟内部汇报，介绍企业 AI 营销工作台的价值、应用场景与落地路径\nScenario: marketing-campaign\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nMust include: 企业 AI 营销工作台的定义与定位; 核心业务价值：提效、线索转化、数据闭环; 典型应用场景：内容生成、投放优化、销售协同; 落地建议与下一步行动",
+          "scenario": "marketing-campaign",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "resolvedPageCount": 4,
+          "variants": [
+            {
+              "key": "swiss-grid-executive-brief",
+              "name": "Neo-Grid Bold",
+              "summary": "frontend-slides 的新网格粗体模板，可见网格、强对比模块和现代策略界面感最强，适合产品、咨询和分析型 deck。",
+              "styleKey": "ppt169_swiss_grid_systems",
+              "templateId": "swiss-grid",
+              "narrativeAngle": "executive-brief",
+              "slideCount": 4,
+              "coverTitle": "企业AI营销工作台"
+            }
+          ],
+          "validation": {
+            "ok": true,
+            "checks": [
+              {
+                "code": "variants_present",
+                "ok": true,
+                "message": "Preview deck returned at least one variant."
+              }
+            ]
+          },
+          "platform": {
+            "previewRunId": 217,
+            "previewArtifactId": 189,
+            "toolRunId": 217
+          },
+          "nextStep": "Review the recommended variant first, then call export_ppt_deck to save the downloadable deck artifact to the work library."
+        },
+        "assistantMessage": "PPT preview generated:\n- Title: 请生成一份 4 页中文可编辑 PPT，主题是“企业 AI 营销工作台”。受众是企业管理层，场景是 20 分钟内部汇报。模板使用 swiss-grid，整体风格简洁、专业、决策导向。内容应适合管理层快速理解业务价值、应用方式与落地重点。\nStructured brief:\nAudience: 管理层汇报\nGoal: 20分钟内部汇报，介绍企业 AI 营销工作台的价值、应用场景与落地路径\nScenario: marketing-campaign\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nMust include: 企业 AI 营销工作台的定义与定位; 核心业务价值：提效、线索转化、数据闭环; 典型应用场景：内容生成、投放优化、销售协同; 落地建议与下一步行动\nStructured brief:\nAudience: 管理层汇报\nGoal: 20分钟内部汇报，介绍企业 AI 营销工作台的价值、应用场景与落地路径\nScenario: marketing-campaign\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nMust include: 企业 AI 营销工作台的定义与定位; 核心业务价值：提效、线索转化、数据闭环; 典型应用场景：内容生成、投放优化、销售协同; 落地建议与下一步行动\n- Variant count: 1\n- Default recommended variant: Neo-Grid Bold (swiss-grid-executive-brief)\n- Next step: Reply with \"confirm export\" to export the recommended variant, or describe any changes first.\n- Template recommendations: 1.瑞士网格 / 2.苍桌纪要 / 3.全球 AI 资本 2026 / 4.图文陈列\n- Selected template for this run: swiss-grid\n<!-- ai-entry-ppt-preview-context:{\"previewSessionId\":\"c0566ed2-9020-44c8-9357-b7030e98e1a0\",\"defaultVariantKey\":\"swiss-grid-executive-brief\",\"variantKeys\":[\"swiss-grid-executive-brief\"]} -->",
+        "error": null,
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783350571302
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783350571307
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation completed",
+            "status": "completed",
+            "at": 1783350777899
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    },
+    {
+      "id": 1085,
+      "user_id": 96,
+      "status": "failed",
+      "workflow_name": "ai_entry_ppt_preview",
+      "payload": {
+        "kind": "ai_entry_ppt_preview",
+        "userId": 96,
+        "conversationId": "403",
+        "conversationScope": "chat",
+        "agentId": "executive-ppt",
+        "toolCallId": "call_JlRuTg0R3aMRR7HPP44jI2dS",
+        "input": {
+          "prompt": "请生成一份 4 页中文可编辑 PPT，主题是“企业 AI 营销工作台”。受众是企业管理层，场景是 20 分钟内部汇报。采用 swiss-grid 模板。整体风格简洁、专业、决策导向。内容应适合内部经营讨论，突出业务价值、落地路径与管理关注点。\nStructured brief:\nAudience: 企业管理层\nGoal: 20分钟内部汇报，介绍“企业 AI 营销工作台”并支持管理层讨论投入方向与落地优先级\nScenario: marketing-campaign\nLanguage: zh-CN\nPage count: 4\nTone: 简洁、专业、决策导向\nMust include: 企业 AI 营销工作台的定义与价值主张; 典型应用场景：内容生成、线索运营、投放优化、销售协同; 对管理层的关键收益：提效、降本、可度量、可治理; 建议的落地路径：试点范围、阶段目标、关键里程碑",
+          "audience": "企业管理层",
+          "goal": "20分钟内部汇报，介绍“企业 AI 营销工作台”并支持管理层讨论投入方向与落地优先级",
+          "scenario": "marketing-campaign",
+          "language": "zh-CN",
+          "pageCount": 4,
+          "tone": "简洁、专业、决策导向",
+          "mustInclude": [
+            "企业 AI 营销工作台的定义与价值主张",
+            "典型应用场景：内容生成、线索运营、投放优化、销售协同",
+            "对管理层的关键收益：提效、降本、可度量、可治理",
+            "建议的落地路径：试点范围、阶段目标、关键里程碑"
+          ],
+          "templateMode": "single-template",
+          "templateId": "swiss-grid"
+        },
+        "isZh": false
+      },
+      "result": {
+        "conversation_id": "403",
+        "toolName": "preview_ppt_deck",
+        "toolCallId": "call_JlRuTg0R3aMRR7HPP44jI2dS",
+        "toolResult": {
+          "ok": false,
+          "error": {
+            "code": "ppt_master_runtime_unavailable",
+            "message": "PPT runtime is currently unavailable. Please try again later.",
+            "rawMessage": "ppt_master_repo_missing"
+          }
+        },
+        "assistantMessage": "Editable PPT background generation failed: PPT runtime is currently unavailable. Please try again later.",
+        "error": "PPT runtime is currently unavailable. Please try again later.",
+        "events": [
+          {
+            "type": "background_task_queued",
+            "label": "Background task queued",
+            "status": "running",
+            "at": 1783349302552
+          },
+          {
+            "type": "background_generation_running",
+            "label": "Generating editable PPT in background",
+            "status": "running",
+            "at": 1783349302557
+          },
+          {
+            "type": "background_generation_finished",
+            "label": "Background generation failed",
+            "detail": "PPT runtime is currently unavailable. Please try again later.",
+            "status": "failed",
+            "at": 1783349409514
+          }
+        ]
+      },
+      "created_at": {},
+      "updated_at": {}
+    }
+  ]
+}

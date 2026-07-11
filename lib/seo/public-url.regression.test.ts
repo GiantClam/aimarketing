@@ -184,6 +184,26 @@ test("localized tool pages emit locale-prefixed canonical and language alternate
   )
 })
 
+test("CTR priority tool metadata matches search intent", () => {
+  withAppUrlEnv(
+    {
+      APP_URL: "https://aimarketingsite.com",
+    },
+    () => {
+      const titleMetadata = getLeadToolMetadata("en", "seo-title-generator")
+      const imageMetadata = getLeadToolMetadata("en", "ai-image")
+
+      assert.deepEqual(titleMetadata.title, {
+        absolute: "Free SEO Title Generator: Create SEO Titles from Any Keyword | AI Marketing",
+      })
+      assert.equal(titleMetadata.alternates?.canonical, "https://www.aimarketingsite.com/en/tools/seo-title-generator")
+      assert.deepEqual(imageMetadata.title, {
+        absolute: "AI Image Tool for Branding Teams | AI Marketing",
+      })
+    },
+  )
+})
+
 test("localized resource pages emit locale-prefixed canonical and language alternates", () => {
   const page = getSeoPage("resources", "what-is-a-content-brief")
   assert.ok(page)

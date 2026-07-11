@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "payload": {
+    "jobId": "6a26640d-5b6c-442c-99b3-0088436e50a1",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:building-effective-agents:01_cover:ppt_master_runtime_provider_timeout:deepseek:deepseek-v4-pro"
+  }
+}

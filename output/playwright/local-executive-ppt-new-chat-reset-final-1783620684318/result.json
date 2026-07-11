@@ -1,0 +1,12 @@
+[
+  {
+    "type": "chat_intercepted"
+  },
+  {
+    "type": "state_after_new_conversation",
+    "textareaDisabled": false,
+    "textareaEditable": true,
+    "sendDisabled": false,
+    "oldGeneratingVisible": false
+  }
+]

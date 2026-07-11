@@ -1,0 +1,15 @@
+{
+  "label": "gpt54-fit-guardrail",
+  "jobId": "6033cea3-0f2c-4548-87bd-40c341567a39",
+  "previewSessionId": "ff214b79-85d5-4188-a0a6-b1a877eb44a1",
+  "status": "completed",
+  "provider": "pptoken",
+  "previewModel": "gpt-5.4",
+  "previewEngine": "ppt-master-svg",
+  "logicalSlideCount": 8,
+  "exportStatus": 200,
+  "exportSlideCount": 8,
+  "variantKey": "ppt169_attention_is_all_you_need-executive-brief",
+  "fileName": "请生成一份-8-页中文可编辑-ppt主题是企业-ai-营销工作台面向企业-8p-ppt169attentionisa.pptx",
+  "bytes": 760338
+}

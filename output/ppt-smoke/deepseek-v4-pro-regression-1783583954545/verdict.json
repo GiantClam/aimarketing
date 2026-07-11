@@ -1,0 +1,8 @@
+{
+  "outDir": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/deepseek-v4-pro-regression-1783583954545",
+  "provider": "enterprise-openai-compatible",
+  "providerModel": "deepseek-v4-pro",
+  "pptxPath": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/deepseek-v4-pro-regression-1783583954545/yusuan-deepseek-v4-pro-12p-training-deck.pptx",
+  "bytes": 51430,
+  "slideCount": 12
+}

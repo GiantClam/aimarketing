@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="titleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A365D" />
+      <stop offset="100%" stop-color="#3182CE" />
+    </linearGradient>
+    <radialGradient id="bgDecor" cx="82%" cy="18%" r="52%">
+      <stop offset="0%" stop-color="#3182CE" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#3182CE" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+    <rect x="0" y="0" width="1280" height="720" fill="url(#bgDecor)" />
+    <line x1="60" y1="116" x2="1220" y2="116" stroke="#E2E8F0" stroke-width="1" />
+    <line x1="60" y1="650" x2="1220" y2="650" stroke="#E2E8F0" stroke-width="1" />
+    <line x1="60" y1="140" x2="1220" y2="140" stroke="#3182CE" stroke-width="2" />
+    <line x1="1042" y1="50" x2="1042" y2="670" stroke="#E2E8F0" stroke-width="1" />
+    <line x1="1088" y1="50" x2="1088" y2="670" stroke="#E2E8F0" stroke-width="1" />
+    <line x1="1134" y1="50" x2="1134" y2="670" stroke="#E2E8F0" stroke-width="1" />
+    <line x1="1180" y1="50" x2="1180" y2="670" stroke="#E2E8F0" stroke-width="1" />
+  </g>
+  <g id="chrome">
+    <text x="60" y="78" fill="#3182CE" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="14" letter-spacing="1.6">SIGNALCOUNT</text>
+    <text x="60" y="107" fill="url(#titleGradient)" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="36" font-weight="700">管理层关注的四个结果</text>
+    <text x="60" y="690" fill="#A0AEC0" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="11">企业 AI 营销工作台</text>
+    <text x="1210" y="690" text-anchor="end" fill="#A0AEC0" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="11">06</text>
+  </g>
+  <g id="content">
+    <path fill="#F5F7FA" stroke="#E2E8F0" stroke-width="1" d="M74,164 H1206 A14,14 0 0 1 1220,178 V240 A14,14 0 0 1 1206,254 H74 A14,14 0 0 1 60,240 V178 A14,14 0 0 1 74,164 Z" />
+    <rect x="60" y="164" width="6" height="90" fill="#3182CE" />
+    <text fill="#1A202C" font-size="20" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="92" y="200">该工作台的采购逻辑，应建立在效率提升、收入改善、治理增强和扩展可行四个结果上。</text><text fill="#4A5568" font-size="14" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="92" y="230">先看可见收益，再看组织承接能力</text><text fill="#4A5568" font-size="14" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="392" y="230">指标以试点可验证为准</text><text fill="#4A5568" font-size="14" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="654" y="230">关键数字</text><text fill="#4A5568" font-size="14" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="760" y="230">压力指标</text><path fill="#FFFFFF" stroke="#1A365D" stroke-width="1.5" d="M72,282 H616 A12,12 0 0 1 628,294 V430 A12,12 0 0 1 616,442 H72 A12,12 0 0 1 60,430 V294 A12,12 0 0 1 72,282 Z" />
+    <path fill="#EBF4FB" fill-opacity="0.32" d="M72,282 H616 A12,12 0 0 1 628,294 V430 A12,12 0 0 1 616,442 H72 A12,12 0 0 1 60,430 V294 A12,12 0 0 1 72,282 Z" />
+    <circle cx="104" cy="324" r="18" fill="none" stroke="#3182CE" stroke-width="2" />
+    <path d="M94 324 L102 332 L116 316" fill="none" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="136" y="322" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="16">效率提升</text>
+    <text x="92" y="378" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="40" font-weight="700">30%+</text>
+    <text x="212" y="378" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="24" font-weight="700">报表与复盘耗时下降</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="92" y="410">数据口径统一后，周报、活动复盘和预算审阅显著提速。</text><line x1="92" y1="346" x2="596" y2="346" stroke="#E2E8F0" stroke-width="1" />
+
+    <path fill="#FFFFFF" stroke="#1A365D" stroke-width="1.5" d="M664,282 H1208 A12,12 0 0 1 1220,294 V430 A12,12 0 0 1 1208,442 H664 A12,12 0 0 1 652,430 V294 A12,12 0 0 1 664,282 Z" />
+    <circle cx="696" cy="324" r="18" fill="none" stroke="#3182CE" stroke-width="2" />
+    <path d="M686 330 L696 320 L704 328 L716 314" fill="none" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="728" y="322" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="16">收入改善</text>
+    <text x="684" y="378" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="40" font-weight="700">2-3倍</text>
+    <text x="824" y="378" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="24" font-weight="700">策略迭代频率提升</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="684" y="410">AI分析与自动化任务联动后，营销动作从周级切到日级。</text><line x1="684" y1="346" x2="1188" y2="346" stroke="#E2E8F0" stroke-width="1" />
+
+    <path fill="#FFFFFF" stroke="#1A365D" stroke-width="1.5" d="M72,470 H616 A12,12 0 0 1 628,482 V618 A12,12 0 0 1 616,630 H72 A12,12 0 0 1 60,618 V482 A12,12 0 0 1 72,470 Z" />
+    <circle cx="104" cy="512" r="18" fill="none" stroke="#3182CE" stroke-width="2" />
+    <path d="M94 522 C101 510 111 506 118 498" fill="none" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M112 498 L118 498 L118 504" fill="none" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" />
+    <text x="136" y="510" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="16">扩展可行</text>
+    <text x="92" y="566" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="40" font-weight="700">10-20%</text>
+    <text x="252" y="566" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="24" font-weight="700">线索转化效率改善空间</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="92" y="598">通过客群细分、内容匹配和触达编排优化，优先改善中段转化。</text><line x1="92" y1="534" x2="596" y2="534" stroke="#E2E8F0" stroke-width="1" />
+
+    <path fill="#FFFFFF" stroke="#1A365D" stroke-width="1.5" d="M664,470 H1208 A12,12 0 0 1 1220,482 V618 A12,12 0 0 1 1208,630 H664 A12,12 0 0 1 652,618 V482 A12,12 0 0 1 664,470 Z" />
+    <path fill="#F5F7FA" fill-opacity="0.65" d="M664,470 H1208 A12,12 0 0 1 1220,482 V618 A12,12 0 0 1 1208,630 H664 A12,12 0 0 1 652,618 V482 A12,12 0 0 1 664,470 Z" />
+    <circle cx="696" cy="512" r="18" fill="none" stroke="#3182CE" stroke-width="2" />
+    <path fill="none" stroke="#3182CE" stroke-width="2" d="M690,503 H702 A3,3 0 0 1 705,506 V518 A3,3 0 0 1 702,521 H690 A3,3 0 0 1 687,518 V506 A3,3 0 0 1 690,503 Z" />
+    <path d="M691 512 L695 516 L702 509" fill="none" stroke="#3182CE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="728" y="510" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="16">治理增强</text>
+    <text x="684" y="566" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="40" font-weight="700">100%</text>
+    <text x="824" y="566" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="24" font-weight="700">关键动作可追踪</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="684" y="598">从洞察生成到执行回收形成日志链路，便于审计、复盘和权限治理。</text><line x1="684" y1="534" x2="1188" y2="534" stroke="#E2E8F0" stroke-width="1" />
+  </g>
+  <g id="annotations">
+    <path fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" d="M1100,164 H1208 A12,12 0 0 1 1220,176 V242 A12,12 0 0 1 1208,254 H1100 A12,12 0 0 1 1088,242 V176 A12,12 0 0 1 1100,164 Z" />
+    <text x="1104" y="192" fill="#A0AEC0" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="11">EXEC VIEW</text>
+    <text x="1104" y="219" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="22" font-weight="700">4</text>
+    <text x="1140" y="219" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14">结果维度</text>
+    <text x="1104" y="240" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="12">先收益，后扩展</text>
+  </g>
+</svg>

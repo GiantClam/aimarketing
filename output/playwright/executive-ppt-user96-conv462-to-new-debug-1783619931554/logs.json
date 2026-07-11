@@ -1,0 +1,179 @@
+[
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=462&limit=200&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "body": "{\"defaultAgentId\":\"general\",\"agents\":[{\"id\":\"general\",\"category\":\"general\",\"name\":{\"zh\":\"通用助手\",\"en\":\"General Assistant\"},\"description\":{\"zh\":\"默认 AI 对话助手，适合日常问答与任务协作。\",\"en\":\"Default AI chat assistant for everyday Q&A and task support.\"}},{\"id\":\"executive-diagnostic\",\"category\":\"executive\",\"name\":{\"zh\":\"经营诊断顾问\",\"en\":\"Executive Diagnostic Advisor\"},\"description\":{\"zh\":\"跨品牌、增长、销售、组织、运营、财务与法务风险的综合诊断。\",\"en\":\"Cross-functional diagnosis across strategy, growth, sales, org, ops, finance, and legal risk.\"}},{\"id\":\"executive-brand\",\"category\":\"executive\",\"name\":{\"zh\":\"品牌战略顾问\",\"en\":\"Brand Strategy Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦定位、价值主张、叙事结构和品牌决策优先级。\",\"en\":\"Focus on positioning, value proposition, narrative, and priority brand decisions.\"}},{\"id\":\"executive-growth\",\"category\":\"executive\",\"name\":{\"zh\":\"增长顾问\",\"en\":\"Growth Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦增长瓶颈诊断、实验优先级和执行节奏。\",\"en\":\"Focus on bottleneck diagnosis, experiment priority, and execution cadence.\"}},{\"id\":\"executive-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"可编辑 PPT 助手\",\"en\":\"Editable PPT Assistant\"},\"description\":{\"zh\":\"通过对话梳理目标、结构与风格，并直接生成可下载、可编辑的 PPTX 演示成品。\",\"en\":\"Use conversation to shape the goal, structure, and style, then generate a downloadable, editable PPTX presentation.\"}},{\"id\":\"executive-presentation-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"演讲型 PPT 助手\",\"en\":\"Presentation PPT Assistant\"},\"description\":{\"zh\":\"通过对话生成适合演讲展示的 HTML 演示稿，强调叙事节奏、现场表达与视觉张力。\",\"en\":\"Use conversation to generate a presentati"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=462&limit=200&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "body": "{\"providerId\":\"enterprise-openai-compatible\",\"providerBaseUrl\":\"https://api.deepseek.com\",\"selectedProviderId\":\"enterprise-openai-compatible\",\"selectedModelId\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\",\"modelId\":\"deepseek-v4-pro\",\"providerId\":\"enterprise-openai-compatible\",\"providerLabel\":\"OpenAI Compatible\",\"runtimeId\":\"deepseek-v4-pro\",\"canonicalId\":\"deepseek-v4-pro\",\"aliases\":[\"deepseek-v4-pro\",\"enterprise-openai-compatible/deepseek-v4-pro\",\"enterprise-openai-compatible::deepseek-v4-pro\"]},{\"id\":\"pptoken::gpt-5.4\",\"name\":\"PPToken / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"pptoken\",\"providerLabel\":\"PPToken\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"pptoken/gpt-5.4\",\"pptoken::gpt-5.4\"]},{\"id\":\"aiberm::gpt-5.4\",\"name\":\"AIBERM / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"aiberm\",\"providerLabel\":\"AIBERM\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"aiberm/gpt-5.4\",\"aiberm::gpt-5.4\"]},{\"id\":\"crazyroute::gpt-5.4\",\"name\":\"Crazyroute / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"crazyroute\",\"providerLabel\":\"Crazyroute\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"crazyroute/gpt-5.4\",\"crazyroute::gpt-5.4\"]}],\"modelGroups\":[{\"family\":\"enterprise-openai-compatible\",\"label\":\"OpenAI Compatible\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\","
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=462&limit=200&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"1166\",\"conversation_id\":\"462\",\"role\":\"user\",\"content\":\"写一份介绍预算智能公司和业务的 ppt \\n\\n[Uploaded file: 屿算智能_ppt信息提取.md / text/markdown]\\n# 《屿算智能》PPT 信息提取\\n\\n> 说明：该 PPT 每页为整页图片，以下内容基于图片 OCR 识别并人工整理。个别小字、二维码、细节标签可能存在漏识或轻微误差。\\n\\n## 整体主题\\n\\n该 PPT 是“屿算智能 / 屿算智脑 / 屿算超脑”的企业 AI 业务工具介绍稿。核心主张是：\\n\\n- **实用 AI 大于 AI 概念**。\\n- 不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。\\n- 通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\\n- 目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。\\n\\n---\\n\\n## 第 1 页：封面\\n\\n**标题：企业专属 AI 业务工具**\\n\\n核心口号：\\n\\n- 实用 AI 大于 AI 概念。\\n- 不是追逐概念热度，而是把 AI 真正用进业务流程与增长。\\n- 让 AI 进入企业的岗位、流程和结果。\\n\\n---\\n\\n## 第 2 页：AI 时代的企业经营焦虑\\n\\n**核心观点：每一个老板的脑海里都有 100 个问题。**\\n\\n企业面临的问题包括：\\n\\n- 客户从哪里来？\\n- 内容怎么持续做？\\n- 团队怎么执行？\\n- 数据怎么沉淀？\\n- AI 到底怎么用？\\n\\n结论：\\n\\n- 问题越来越多，工具越来越多，但真正能落到业务里的答案越来越少。\\n- 企业需要的不是更多工具，而是一套能把问题变成流程的系统。\\n\\n---\\n\\n## 第 3 页：企业 AI 落地的真实卡点\\n\\n**核心观点：企业听懂了 AI，却很难把 AI 用进业务。**\\n\\n真实卡点：\\n\\n1. **不会问**  \\n   打开大模型后，不知道如何描述业务、拆解问题、提出有效需求。\\n\\n2. **不会用 / 不好用**  \\n   知道 AI 能写文案、做图片和视频，但接不进真实工作流程。\\n\\n3. **不能沉淀**  \\n   员工零散使用工具，结果留不进企业知识、项目和资产体系。\\n\\n核心判断：\\n\\n- 很多企业已经不缺 AI 认知，真正缺的是一条能从问题走到执行、从执行走到结果的业务路径。\\n\\n---\\n\\n## 第 4 页：屿算智脑是什么\\n\\n**标题：屿算智脑：让 AI 进入企业的岗位、流程和结果。**\\n\\n产品定义：\\n\\n- 不是再给企业一个 AI 工具。\\n- 而是把大模型、数字员工、业务流程和应用工具组合成一套企业专属 AI 业务能力。\\n\\n三层进入：\\n\\n1. **进入岗位**  \\n   配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\\n\\n2. **进入流程**  \\n   从业务梳理、立项规划、每日任务，到内容生产、发布获客和资产沉淀。\\n\\n3. **进入结果**  \\n   降低试错成本，扩大内容产能，推动获客、转化与增长。\\n\\n最终价值：\\n\\n- 企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。\\n\\n---\\n\\n## 第 5 页：产品形态"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"465\",\"name\":\"测试：从 457 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619878,\"updated_at\":1783619878,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619878,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"462\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783616507,\"updated_at\":1783619833,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783619833,\"last_task_event_at\":1783619833,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"456\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783596306,\"updated_at\":1783596451,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783596451,\"last_task_event_at\":1783596451,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"429\",\"name\":\"做一个日本最近频繁地震现状的ppt，受众是初级军事爱好者，场景是50 人的课堂讲解\",\"status\":\"normal\",\"created_at\":1783513436,\"updated_at\":1783514377,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783514377,\"last_task_event_at\":1783514377,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"417\",\"name\":\"做一个OpenAI 2026 最新动态的ppt。受众=企业管理层；场景=战略汇报；目标=信息同步；语言=中文；页数=6；\",\"status\":\"normal\",\"created_at\":1"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=462&limit=200&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"1166\",\"conversation_id\":\"462\",\"role\":\"user\",\"content\":\"写一份介绍预算智能公司和业务的 ppt \\n\\n[Uploaded file: 屿算智能_ppt信息提取.md / text/markdown]\\n# 《屿算智能》PPT 信息提取\\n\\n> 说明：该 PPT 每页为整页图片，以下内容基于图片 OCR 识别并人工整理。个别小字、二维码、细节标签可能存在漏识或轻微误差。\\n\\n## 整体主题\\n\\n该 PPT 是“屿算智能 / 屿算智脑 / 屿算超脑”的企业 AI 业务工具介绍稿。核心主张是：\\n\\n- **实用 AI 大于 AI 概念**。\\n- 不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的**岗位、流程和结果**。\\n- 通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\\n- 目标客户主要是传统企业、老板、负责人、销售/运营/内容团队，以及需要定制化、独立部署和 AI 科技化升级的企业。\\n\\n---\\n\\n## 第 1 页：封面\\n\\n**标题：企业专属 AI 业务工具**\\n\\n核心口号：\\n\\n- 实用 AI 大于 AI 概念。\\n- 不是追逐概念热度，而是把 AI 真正用进业务流程与增长。\\n- 让 AI 进入企业的岗位、流程和结果。\\n\\n---\\n\\n## 第 2 页：AI 时代的企业经营焦虑\\n\\n**核心观点：每一个老板的脑海里都有 100 个问题。**\\n\\n企业面临的问题包括：\\n\\n- 客户从哪里来？\\n- 内容怎么持续做？\\n- 团队怎么执行？\\n- 数据怎么沉淀？\\n- AI 到底怎么用？\\n\\n结论：\\n\\n- 问题越来越多，工具越来越多，但真正能落到业务里的答案越来越少。\\n- 企业需要的不是更多工具，而是一套能把问题变成流程的系统。\\n\\n---\\n\\n## 第 3 页：企业 AI 落地的真实卡点\\n\\n**核心观点：企业听懂了 AI，却很难把 AI 用进业务。**\\n\\n真实卡点：\\n\\n1. **不会问**  \\n   打开大模型后，不知道如何描述业务、拆解问题、提出有效需求。\\n\\n2. **不会用 / 不好用**  \\n   知道 AI 能写文案、做图片和视频，但接不进真实工作流程。\\n\\n3. **不能沉淀**  \\n   员工零散使用工具，结果留不进企业知识、项目和资产体系。\\n\\n核心判断：\\n\\n- 很多企业已经不缺 AI 认知，真正缺的是一条能从问题走到执行、从执行走到结果的业务路径。\\n\\n---\\n\\n## 第 4 页：屿算智脑是什么\\n\\n**标题：屿算智脑：让 AI 进入企业的岗位、流程和结果。**\\n\\n产品定义：\\n\\n- 不是再给企业一个 AI 工具。\\n- 而是把大模型、数字员工、业务流程和应用工具组合成一套企业专属 AI 业务能力。\\n\\n三层进入：\\n\\n1. **进入岗位**  \\n   配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\\n\\n2. **进入流程**  \\n   从业务梳理、立项规划、每日任务，到内容生产、发布获客和资产沉淀。\\n\\n3. **进入结果**  \\n   降低试错成本，扩大内容产能，推动获客、转化与增长。\\n\\n最终价值：\\n\\n- 企业真正买到的是一套可执行、可管理、可沉淀的 AI 工作方式。\\n\\n---\\n\\n## 第 5 页：产品形态"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"465\",\"name\":\"测试：从 457 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619878,\"updated_at\":1783619878,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619878,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"462\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783616507,\"updated_at\":1783619833,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783619833,\"last_task_event_at\":1783619833,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"456\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783596306,\"updated_at\":1783596451,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783596451,\"last_task_event_at\":1783596451,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"429\",\"name\":\"做一个日本最近频繁地震现状的ppt，受众是初级军事爱好者，场景是50 人的课堂讲解\",\"status\":\"normal\",\"created_at\":1783513436,\"updated_at\":1783514377,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783514377,\"last_task_event_at\":1783514377,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"417\",\"name\":\"做一个OpenAI 2026 最新动态的ppt。受众=企业管理层；场景=战略汇报；目标=信息同步；语言=中文；页数=6；\",\"status\":\"normal\",\"created_at\":1"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"465\",\"name\":\"测试：从 457 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619878,\"updated_at\":1783619878,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619878,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"462\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783616507,\"updated_at\":1783619833,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783619833,\"last_task_event_at\":1783619833,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"456\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783596306,\"updated_at\":1783596451,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783596451,\"last_task_event_at\":1783596451,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"429\",\"name\":\"做一个日本最近频繁地震现状的ppt，受众是初级军事爱好者，场景是50 人的课堂讲解\",\"status\":\"normal\",\"created_at\":1783513436,\"updated_at\":1783514377,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783514377,\"last_task_event_at\":1783514377,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"417\",\"name\":\"做一个OpenAI 2026 最新动态的ppt。受众=企业管理层；场景=战略汇报；目标=信息同步；语言=中文；页数=6；\",\"status\":\"normal\",\"created_at\":1"
+  },
+  {
+    "type": "url-before-new",
+    "url": "https://www.aimarketingsite.com/dashboard/ai/462?agent=executive-ppt"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "body": "{\"defaultAgentId\":\"general\",\"agents\":[{\"id\":\"general\",\"category\":\"general\",\"name\":{\"zh\":\"通用助手\",\"en\":\"General Assistant\"},\"description\":{\"zh\":\"默认 AI 对话助手，适合日常问答与任务协作。\",\"en\":\"Default AI chat assistant for everyday Q&A and task support.\"}},{\"id\":\"executive-diagnostic\",\"category\":\"executive\",\"name\":{\"zh\":\"经营诊断顾问\",\"en\":\"Executive Diagnostic Advisor\"},\"description\":{\"zh\":\"跨品牌、增长、销售、组织、运营、财务与法务风险的综合诊断。\",\"en\":\"Cross-functional diagnosis across strategy, growth, sales, org, ops, finance, and legal risk.\"}},{\"id\":\"executive-brand\",\"category\":\"executive\",\"name\":{\"zh\":\"品牌战略顾问\",\"en\":\"Brand Strategy Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦定位、价值主张、叙事结构和品牌决策优先级。\",\"en\":\"Focus on positioning, value proposition, narrative, and priority brand decisions.\"}},{\"id\":\"executive-growth\",\"category\":\"executive\",\"name\":{\"zh\":\"增长顾问\",\"en\":\"Growth Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦增长瓶颈诊断、实验优先级和执行节奏。\",\"en\":\"Focus on bottleneck diagnosis, experiment priority, and execution cadence.\"}},{\"id\":\"executive-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"可编辑 PPT 助手\",\"en\":\"Editable PPT Assistant\"},\"description\":{\"zh\":\"通过对话梳理目标、结构与风格，并直接生成可下载、可编辑的 PPTX 演示成品。\",\"en\":\"Use conversation to shape the goal, structure, and style, then generate a downloadable, editable PPTX presentation.\"}},{\"id\":\"executive-presentation-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"演讲型 PPT 助手\",\"en\":\"Presentation PPT Assistant\"},\"description\":{\"zh\":\"通过对话生成适合演讲展示的 HTML 演示稿，强调叙事节奏、现场表达与视觉张力。\",\"en\":\"Use conversation to generate a presentati"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "body": "{\"providerId\":\"enterprise-openai-compatible\",\"providerBaseUrl\":\"https://api.deepseek.com\",\"selectedProviderId\":\"enterprise-openai-compatible\",\"selectedModelId\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\",\"modelId\":\"deepseek-v4-pro\",\"providerId\":\"enterprise-openai-compatible\",\"providerLabel\":\"OpenAI Compatible\",\"runtimeId\":\"deepseek-v4-pro\",\"canonicalId\":\"deepseek-v4-pro\",\"aliases\":[\"deepseek-v4-pro\",\"enterprise-openai-compatible/deepseek-v4-pro\",\"enterprise-openai-compatible::deepseek-v4-pro\"]},{\"id\":\"pptoken::gpt-5.4\",\"name\":\"PPToken / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"pptoken\",\"providerLabel\":\"PPToken\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"pptoken/gpt-5.4\",\"pptoken::gpt-5.4\"]},{\"id\":\"aiberm::gpt-5.4\",\"name\":\"AIBERM / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"aiberm\",\"providerLabel\":\"AIBERM\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"aiberm/gpt-5.4\",\"aiberm::gpt-5.4\"]},{\"id\":\"crazyroute::gpt-5.4\",\"name\":\"Crazyroute / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"crazyroute\",\"providerLabel\":\"Crazyroute\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"crazyroute/gpt-5.4\",\"crazyroute::gpt-5.4\"]}],\"modelGroups\":[{\"family\":\"enterprise-openai-compatible\",\"label\":\"OpenAI Compatible\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\","
+  },
+  {
+    "type": "url-after-new",
+    "url": "https://www.aimarketingsite.com/dashboard/ai?agent=executive-ppt"
+  },
+  {
+    "type": "textarea-state",
+    "disabled": false,
+    "editable": true
+  },
+  {
+    "type": "send-state-before",
+    "disabled": false
+  },
+  {
+    "type": "request",
+    "method": "POST",
+    "url": "https://www.aimarketingsite.com/api/ai/chat",
+    "postData": "{\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"测试：从 462 新建会话后发送\"}],\"attachments\":[],\"enterpriseKnowledge\":{\"enabled\":false,\"datasetIds\":[]},\"conversationId\":null,\"conversationScope\":\"chat\",\"modelConfig\":{\"providerId\":\"pptoken\",\"modelId\":\"gpt-5.4\"},\"agentConfig\":{\"agentId\":\"executive-ppt\",\"agentName\":\"Editable PPT Assistant\"}}"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"465\",\"name\":\"测试：从 457 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619878,\"updated_at\":1783619878,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619878,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"462\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783616507,\"updated_at\":1783619833,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783619833,\"last_task_event_at\":1783619833,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"456\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783596306,\"updated_at\":1783596451,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783596451,\"last_task_event_at\":1783596451,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"429\",\"name\":\"做一个日本最近频繁地震现状的ppt，受众是初级军事爱好者，场景是50 人的课堂讲解\",\"status\":\"normal\",\"created_at\":1783513436,\"updated_at\":1783514377,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783514377,\"last_task_event_at\":1783514377,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"417\",\"name\":\"做一个OpenAI 2026 最新动态的ppt。受众=企业管理层；场景=战略汇报；目标=信息同步；语言=中文；页数=6；\",\"status\":\"normal\",\"created_at\":1"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/chat",
+    "body": "data: {\"event\":\"conversation_init\",\"conversation_id\":\"466\"}\n\ndata: {\"event\":\"message\",\"conversation_id\":\"466\",\"answer\":\"还不能进入 PPT 预览，brief 还没补完整。\\n当前我已确认：目标=业务表达与结构化汇报；页数=10；语言=zh-CN；建议语气=简洁、专业、决策导向\\n请直接补充下面缺失的信息，我收到后会继续追问，直到 brief 完整再进入预览：\\n1. 这份 PPT 主要给谁看？建议：管理层汇报。\\n2. 这次更接近哪种场景？可选：战略汇报、营销方案、产品发布、销售提案、培训课件。\\n如果你回复“战略汇报 / 战略分析 / 研究汇报”，我会按战略汇报型 deck 继续。\\n你也可以直接按这个格式回复：受众=...；场景=...；目标=...；语言=中文/英文。\"}\n\ndata: {\"event\":\"message_end\",\"conversation_id\":\"466\",\"answer\":\"还不能进入 PPT 预览，brief 还没补完整。\\n当前我已确认：目标=业务表达与结构化汇报；页数=10；语言=zh-CN；建议语气=简洁、专业、决策导向\\n请直接补充下面缺失的信息，我收到后会继续追问，直到 brief 完整再进入预览：\\n1. 这份 PPT 主要给谁看？建议：管理层汇报。\\n2. 这次更接近哪种场景？可选：战略汇报、营销方案、产品发布、销售提案、培训课件。\\n如果你回复“战略汇报 / 战略分析 / 研究汇报”，我会按战略汇报型 deck 继续。\\n你也可以直接按这个格式回复：受众=...；场景=...；目标=...；语言=中文/英文。\"}\n\n"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"466\",\"name\":\"测试：从 462 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619950,\"updated_at\":1783619950,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619950,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"465\",\"name\":\"测试：从 457 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619878,\"updated_at\":1783619878,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619878,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"462\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783616507,\"updated_at\":1783619833,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783619833,\"last_task_event_at\":1783619833,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"456\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783596306,\"updated_at\":1783596451,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783596451,\"last_task_event_at\":1783596451,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"429\",\"name\":\"做一个日本最近频繁地震现状的ppt，受众是初级军事爱好者，场景是50 人的课堂讲解\",\"status\":\"normal\",\"created_at\":1783513436,\"updated_at\":1783514377,\"current_model_id\":\"enterprise-openai-compatib"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"466\",\"name\":\"测试：从 462 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619950,\"updated_at\":1783619950,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619950,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"465\",\"name\":\"测试：从 457 新建会话后发送\",\"status\":\"normal\",\"created_at\":1783619878,\"updated_at\":1783619878,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619878,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"462\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783616507,\"updated_at\":1783619833,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783619833,\"last_task_event_at\":1783619833,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"456\",\"name\":\"写一份介绍预算智能公司和业务的 ppt [Uploaded file: 屿算智能_ppt信息提取.md / text/m\",\"status\":\"normal\",\"created_at\":1783596306,\"updated_at\":1783596451,\"current_model_id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"last_message_at\":1783596451,\"last_task_event_at\":1783596451,\"has_unread\":false,\"unread_count\":0,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"429\",\"name\":\"做一个日本最近频繁地震现状的ppt，受众是初级军事爱好者，场景是50 人的课堂讲解\",\"status\":\"normal\",\"created_at\":1783513436,\"updated_at\":1783514377,\"current_model_id\":\"enterprise-openai-compatib"
+  },
+  {
+    "type": "url-after-send",
+    "url": "https://www.aimarketingsite.com/dashboard/ai?agent=executive-ppt"
+  }
+]

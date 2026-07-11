@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "payload": {
+    "jobId": "638a34a6-a777-4eda-87d1-951a22757852",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:deck-cmb:01_cover:ppt_master_runtime_provider_timeout:deepseek:deepseek-v4-pro"
+  }
+}

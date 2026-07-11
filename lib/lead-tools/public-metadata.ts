@@ -64,7 +64,18 @@ export function getLeadToolMetadata(locale: AppLocale, slug: string): Metadata {
     )
   }
 
-  return metadataForLeadToolPage(locale, tool.href, tool.name, tool.description)
+  const searchTitle =
+    locale === "en"
+      ? {
+          "seo-title-generator": "Free SEO Title Generator: Create SEO Titles from Any Keyword",
+          "ai-image": "AI Image Tool for Branding Teams",
+        }[slug]
+      : {
+          "seo-title-generator": "免费 SEO 标题生成器：从任意关键词生成 SEO 标题",
+          "ai-image": "面向品牌团队的 AI 图片工具",
+        }[slug]
+
+  return metadataForLeadToolPage(locale, tool.href, searchTitle ?? tool.name, tool.description)
 }
 
 export function getLeadToolExampleMetadata(locale: AppLocale, slug: string, exampleSlug: string): Metadata {

@@ -2,9 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import { buildPptExportFileName } from "@/lib/lead-tools/ppt-export-file-name"
 import type {
-  PptPreviewAsset,
   PptPreviewDeck,
-  PptPreviewSlide,
   PptPreviewStyleArchetype,
   PptPreviewStyleKey,
   PptPreviewVariant,
@@ -25,24 +23,15 @@ import {
   deriveNeoGridChartRows,
   deriveNeoGridProcessRows,
   deriveProcessRowsFromTemplateFallbacks,
-  getChartRows,
   getClosingRows,
   getComparisonRows,
   getContentsRows,
   getMetricRows,
-  getProcessRows,
   getSpotlightRows,
   getVariantSlideByIntent,
   getVariantSlideByLayout,
   partitionLongTableAgendaRows,
   repairVariantForRuntime,
-  type ChartRow,
-  type ClosingRow,
-  type ComparisonRow,
-  type ContentsRow,
-  type MetricRow,
-  type ProcessRow,
-  type SpotlightRow,
 } from "@/lib/lead-tools/ppt-engines/frontend-slides-structured-data"
 import { buildFrontendSlidesVariantCss } from "@/lib/lead-tools/ppt-engines/frontend-slides-variant-css"
 import { getFrontendSlidesTheme } from "@/lib/lead-tools/ppt-engines/frontend-slides-theme"

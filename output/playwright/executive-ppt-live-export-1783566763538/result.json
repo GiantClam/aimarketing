@@ -1,0 +1,18 @@
+{
+  "ok": false,
+  "runId": "executive-ppt-live-export-1783566763538",
+  "baseUrl": "http://127.0.0.1:3000",
+  "workingModel": {
+    "providerId": "enterprise-openai-compatible",
+    "modelId": "enterprise-openai-compatible::deepseek-v4-pro",
+    "attempts": []
+  },
+  "error": "chat_request_missing",
+  "chatRequests": [],
+  "chatResponses": [],
+  "exportRequests": [],
+  "exportResponses": [],
+  "previewSessionFetchCount": 0,
+  "previewSessionLast": null,
+  "consoleErrors": []
+}

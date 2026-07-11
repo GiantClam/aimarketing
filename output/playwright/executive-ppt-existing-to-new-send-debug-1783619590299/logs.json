@@ -1,0 +1,205 @@
+[
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=457&limit=200&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "body": "{\"defaultAgentId\":\"general\",\"agents\":[{\"id\":\"general\",\"category\":\"general\",\"name\":{\"zh\":\"通用助手\",\"en\":\"General Assistant\"},\"description\":{\"zh\":\"默认 AI 对话助手，适合日常问答与任务协作。\",\"en\":\"Default AI chat assistant for everyday Q&A and task support.\"}},{\"id\":\"executive-diagnostic\",\"category\":\"executive\",\"name\":{\"zh\":\"经营诊断顾问\",\"en\":\"Executive Diagnostic Advisor\"},\"description\":{\"zh\":\"跨品牌、增长、销售、组织、运营、财务与法务风险的综合诊断。\",\"en\":\"Cross-functional diagnosis across strategy, growth, sales, org, ops, finance, and legal risk.\"}},{\"id\":\"executive-brand\",\"category\":\"executive\",\"name\":{\"zh\":\"品牌战略顾问\",\"en\":\"Brand Strategy Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦定位、价值主张、叙事结构和品牌决策优先级。\",\"en\":\"Focus on positioning, value proposition, narrative, and priority brand decisions.\"}},{\"id\":\"executive-growth\",\"category\":\"executive\",\"name\":{\"zh\":\"增长顾问\",\"en\":\"Growth Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦增长瓶颈诊断、实验优先级和执行节奏。\",\"en\":\"Focus on bottleneck diagnosis, experiment priority, and execution cadence.\"}},{\"id\":\"executive-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"可编辑 PPT 助手\",\"en\":\"Editable PPT Assistant\"},\"description\":{\"zh\":\"通过对话梳理目标、结构与风格，并直接生成可下载、可编辑的 PPTX 演示成品。\",\"en\":\"Use conversation to shape the goal, structure, and style, then generate a downloadable, editable PPTX presentation.\"}},{\"id\":\"executive-presentation-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"演讲型 PPT 助手\",\"en\":\"Presentation PPT Assistant\"},\"description\":{\"zh\":\"通过对话生成适合演讲展示的 HTML 演示稿，强调叙事节奏、现场表达与视觉张力。\",\"en\":\"Use conversation to generate a presentati"
+  },
+  {
+    "type": "console",
+    "level": "error",
+    "text": "Failed to load resource: the server responded with a status of 404 ()"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=457&limit=200&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 404,
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=457&limit=200&agent=executive-ppt",
+    "body": "{\"error\":\"conversation_not_found\"}"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "body": "{\"providerId\":\"enterprise-openai-compatible\",\"providerBaseUrl\":\"https://api.deepseek.com\",\"selectedProviderId\":\"enterprise-openai-compatible\",\"selectedModelId\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\",\"modelId\":\"deepseek-v4-pro\",\"providerId\":\"enterprise-openai-compatible\",\"providerLabel\":\"OpenAI Compatible\",\"runtimeId\":\"deepseek-v4-pro\",\"canonicalId\":\"deepseek-v4-pro\",\"aliases\":[\"deepseek-v4-pro\",\"enterprise-openai-compatible/deepseek-v4-pro\",\"enterprise-openai-compatible::deepseek-v4-pro\"]},{\"id\":\"pptoken::gpt-5.4\",\"name\":\"PPToken / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"pptoken\",\"providerLabel\":\"PPToken\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"pptoken/gpt-5.4\",\"pptoken::gpt-5.4\"]},{\"id\":\"aiberm::gpt-5.4\",\"name\":\"AIBERM / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"aiberm\",\"providerLabel\":\"AIBERM\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"aiberm/gpt-5.4\",\"aiberm::gpt-5.4\"]},{\"id\":\"crazyroute::gpt-5.4\",\"name\":\"Crazyroute / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"crazyroute\",\"providerLabel\":\"Crazyroute\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"crazyroute/gpt-5.4\",\"crazyroute::gpt-5.4\"]}],\"modelGroups\":[{\"family\":\"enterprise-openai-compatible\",\"label\":\"OpenAI Compatible\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\","
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "console",
+    "level": "error",
+    "text": "Failed to load resource: the server responded with a status of 404 ()"
+  },
+  {
+    "type": "response",
+    "status": 404,
+    "url": "https://www.aimarketingsite.com/api/ai/messages?conversation_id=457&limit=200&agent=executive-ppt",
+    "body": "{\"error\":\"conversation_not_found\"}"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"463\",\"name\":\"测试：新建会话后能否发送？\",\"status\":\"normal\",\"created_at\":1783619545,\"updated_at\":1783619545,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619545,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"452\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582957,\"updated_at\":1783583622,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583622,\"last_task_event_at\":1783583622,\"has_unread\":true,\"unread_count\":4,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"451\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582731,\"updated_at\":1783583330,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583330,\"last_task_event_at\":1783583330,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"449\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582537,\"updated_at\":1783583230,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583230,\"last_task_event_at\":1783583230,\"has_unread\":true,\"unread_count\":2,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"450\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582632,\"updated_at\":1783583213,\"current_model_id\":\"pptoken::gpt-5.4\",\"l"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"463\",\"name\":\"测试：新建会话后能否发送？\",\"status\":\"normal\",\"created_at\":1783619545,\"updated_at\":1783619545,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619545,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"452\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582957,\"updated_at\":1783583622,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583622,\"last_task_event_at\":1783583622,\"has_unread\":true,\"unread_count\":4,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"451\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582731,\"updated_at\":1783583330,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583330,\"last_task_event_at\":1783583330,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"449\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582537,\"updated_at\":1783583230,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583230,\"last_task_event_at\":1783583230,\"has_unread\":true,\"unread_count\":2,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"450\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582632,\"updated_at\":1783583213,\"current_model_id\":\"pptoken::gpt-5.4\",\"l"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"463\",\"name\":\"测试：新建会话后能否发送？\",\"status\":\"normal\",\"created_at\":1783619545,\"updated_at\":1783619545,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619545,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"452\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582957,\"updated_at\":1783583622,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583622,\"last_task_event_at\":1783583622,\"has_unread\":true,\"unread_count\":4,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"451\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582731,\"updated_at\":1783583330,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583330,\"last_task_event_at\":1783583330,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"449\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582537,\"updated_at\":1783583230,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583230,\"last_task_event_at\":1783583230,\"has_unread\":true,\"unread_count\":2,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"450\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582632,\"updated_at\":1783583213,\"current_model_id\":\"pptoken::gpt-5.4\",\"l"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"463\",\"name\":\"测试：新建会话后能否发送？\",\"status\":\"normal\",\"created_at\":1783619545,\"updated_at\":1783619545,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619545,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"452\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582957,\"updated_at\":1783583622,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583622,\"last_task_event_at\":1783583622,\"has_unread\":true,\"unread_count\":4,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"451\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582731,\"updated_at\":1783583330,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583330,\"last_task_event_at\":1783583330,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"449\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582537,\"updated_at\":1783583230,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583230,\"last_task_event_at\":1783583230,\"has_unread\":true,\"unread_count\":2,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"450\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582632,\"updated_at\":1783583213,\"current_model_id\":\"pptoken::gpt-5.4\",\"l"
+  },
+  {
+    "type": "url-before-new",
+    "url": "https://www.aimarketingsite.com/dashboard/ai/457?agent=executive-ppt"
+  },
+  {
+    "type": "new-btn-count",
+    "count": 1
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/agents",
+    "body": "{\"defaultAgentId\":\"general\",\"agents\":[{\"id\":\"general\",\"category\":\"general\",\"name\":{\"zh\":\"通用助手\",\"en\":\"General Assistant\"},\"description\":{\"zh\":\"默认 AI 对话助手，适合日常问答与任务协作。\",\"en\":\"Default AI chat assistant for everyday Q&A and task support.\"}},{\"id\":\"executive-diagnostic\",\"category\":\"executive\",\"name\":{\"zh\":\"经营诊断顾问\",\"en\":\"Executive Diagnostic Advisor\"},\"description\":{\"zh\":\"跨品牌、增长、销售、组织、运营、财务与法务风险的综合诊断。\",\"en\":\"Cross-functional diagnosis across strategy, growth, sales, org, ops, finance, and legal risk.\"}},{\"id\":\"executive-brand\",\"category\":\"executive\",\"name\":{\"zh\":\"品牌战略顾问\",\"en\":\"Brand Strategy Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦定位、价值主张、叙事结构和品牌决策优先级。\",\"en\":\"Focus on positioning, value proposition, narrative, and priority brand decisions.\"}},{\"id\":\"executive-growth\",\"category\":\"executive\",\"name\":{\"zh\":\"增长顾问\",\"en\":\"Growth Advisor (Executive)\"},\"description\":{\"zh\":\"聚焦增长瓶颈诊断、实验优先级和执行节奏。\",\"en\":\"Focus on bottleneck diagnosis, experiment priority, and execution cadence.\"}},{\"id\":\"executive-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"可编辑 PPT 助手\",\"en\":\"Editable PPT Assistant\"},\"description\":{\"zh\":\"通过对话梳理目标、结构与风格，并直接生成可下载、可编辑的 PPTX 演示成品。\",\"en\":\"Use conversation to shape the goal, structure, and style, then generate a downloadable, editable PPTX presentation.\"}},{\"id\":\"executive-presentation-ppt\",\"category\":\"executive\",\"name\":{\"zh\":\"演讲型 PPT 助手\",\"en\":\"Presentation PPT Assistant\"},\"description\":{\"zh\":\"通过对话生成适合演讲展示的 HTML 演示稿，强调叙事节奏、现场表达与视觉张力。\",\"en\":\"Use conversation to generate a presentati"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/models",
+    "body": "{\"providerId\":\"enterprise-openai-compatible\",\"providerBaseUrl\":\"https://api.deepseek.com\",\"selectedProviderId\":\"enterprise-openai-compatible\",\"selectedModelId\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\",\"modelId\":\"deepseek-v4-pro\",\"providerId\":\"enterprise-openai-compatible\",\"providerLabel\":\"OpenAI Compatible\",\"runtimeId\":\"deepseek-v4-pro\",\"canonicalId\":\"deepseek-v4-pro\",\"aliases\":[\"deepseek-v4-pro\",\"enterprise-openai-compatible/deepseek-v4-pro\",\"enterprise-openai-compatible::deepseek-v4-pro\"]},{\"id\":\"pptoken::gpt-5.4\",\"name\":\"PPToken / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"pptoken\",\"providerLabel\":\"PPToken\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"pptoken/gpt-5.4\",\"pptoken::gpt-5.4\"]},{\"id\":\"aiberm::gpt-5.4\",\"name\":\"AIBERM / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"aiberm\",\"providerLabel\":\"AIBERM\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"aiberm/gpt-5.4\",\"aiberm::gpt-5.4\"]},{\"id\":\"crazyroute::gpt-5.4\",\"name\":\"Crazyroute / gpt-5.4\",\"modelId\":\"gpt-5.4\",\"providerId\":\"crazyroute\",\"providerLabel\":\"Crazyroute\",\"runtimeId\":\"gpt-5.4\",\"canonicalId\":\"gpt-5.4\",\"aliases\":[\"gpt-5.4\",\"crazyroute/gpt-5.4\",\"crazyroute::gpt-5.4\"]}],\"modelGroups\":[{\"family\":\"enterprise-openai-compatible\",\"label\":\"OpenAI Compatible\",\"models\":[{\"id\":\"enterprise-openai-compatible::deepseek-v4-pro\",\"name\":\"OpenAI Compatible / deepseek-v4-pro\","
+  },
+  {
+    "type": "url-after-new",
+    "url": "https://www.aimarketingsite.com/dashboard/ai?agent=executive-ppt"
+  },
+  {
+    "type": "textarea-state",
+    "disabled": false,
+    "editable": true
+  },
+  {
+    "type": "send-state-before",
+    "disabled": false
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "POST",
+    "url": "https://www.aimarketingsite.com/api/ai/chat",
+    "postData": "{\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"测试：从已有会话切到新会话后发送\"}],\"attachments\":[],\"enterpriseKnowledge\":{\"enabled\":false,\"datasetIds\":[]},\"conversationId\":null,\"conversationScope\":\"chat\",\"modelConfig\":{\"providerId\":\"pptoken\",\"modelId\":\"gpt-5.4\"},\"agentConfig\":{\"agentId\":\"executive-ppt\",\"agentName\":\"Editable PPT Assistant\"}}"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"463\",\"name\":\"测试：新建会话后能否发送？\",\"status\":\"normal\",\"created_at\":1783619545,\"updated_at\":1783619545,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619545,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"452\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582957,\"updated_at\":1783583622,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583622,\"last_task_event_at\":1783583622,\"has_unread\":true,\"unread_count\":4,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"451\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582731,\"updated_at\":1783583330,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583330,\"last_task_event_at\":1783583330,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"449\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582537,\"updated_at\":1783583230,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583230,\"last_task_event_at\":1783583230,\"has_unread\":true,\"unread_count\":2,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"450\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582632,\"updated_at\":1783583213,\"current_model_id\":\"pptoken::gpt-5.4\",\"l"
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "request",
+    "method": "GET",
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "postData": null
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/chat",
+    "body": "data: {\"event\":\"conversation_init\",\"conversation_id\":\"464\"}\n\ndata: {\"event\":\"message\",\"conversation_id\":\"464\",\"answer\":\"还不能进入 PPT 预览，brief 还没补完整。\\n当前我已确认：目标=业务表达与结构化汇报；页数=10；语言=zh-CN；建议语气=简洁、专业、决策导向\\n请直接补充下面缺失的信息，我收到后会继续追问，直到 brief 完整再进入预览：\\n1. 这份 PPT 主要给谁看？建议：管理层汇报。\\n2. 这次更接近哪种场景？可选：战略汇报、营销方案、产品发布、销售提案、培训课件。\\n如果你回复“战略汇报 / 战略分析 / 研究汇报”，我会按战略汇报型 deck 继续。\\n你也可以直接按这个格式回复：受众=...；场景=...；目标=...；语言=中文/英文。\"}\n\ndata: {\"event\":\"message_end\",\"conversation_id\":\"464\",\"answer\":\"还不能进入 PPT 预览，brief 还没补完整。\\n当前我已确认：目标=业务表达与结构化汇报；页数=10；语言=zh-CN；建议语气=简洁、专业、决策导向\\n请直接补充下面缺失的信息，我收到后会继续追问，直到 brief 完整再进入预览：\\n1. 这份 PPT 主要给谁看？建议：管理层汇报。\\n2. 这次更接近哪种场景？可选：战略汇报、营销方案、产品发布、销售提案、培训课件。\\n如果你回复“战略汇报 / 战略分析 / 研究汇报”，我会按战略汇报型 deck 继续。\\n你也可以直接按这个格式回复：受众=...；场景=...；目标=...；语言=中文/英文。\"}\n\n"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"464\",\"name\":\"测试：从已有会话切到新会话后发送\",\"status\":\"normal\",\"created_at\":1783619608,\"updated_at\":1783619608,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619608,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"463\",\"name\":\"测试：新建会话后能否发送？\",\"status\":\"normal\",\"created_at\":1783619545,\"updated_at\":1783619545,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619545,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"452\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582957,\"updated_at\":1783583622,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583622,\"last_task_event_at\":1783583622,\"has_unread\":true,\"unread_count\":4,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"451\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582731,\"updated_at\":1783583330,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583330,\"last_task_event_at\":1783583330,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"449\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582537,\"updated_at\":1783583230,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583230,\"last_task_event_at\":17"
+  },
+  {
+    "type": "response",
+    "status": 200,
+    "url": "https://www.aimarketingsite.com/api/ai/conversations?limit=30&agent=executive-ppt",
+    "body": "{\"data\":[{\"id\":\"464\",\"name\":\"测试：从已有会话切到新会话后发送\",\"status\":\"normal\",\"created_at\":1783619608,\"updated_at\":1783619608,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619608,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"463\",\"name\":\"测试：新建会话后能否发送？\",\"status\":\"normal\",\"created_at\":1783619545,\"updated_at\":1783619545,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783619545,\"last_task_event_at\":null,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"452\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582957,\"updated_at\":1783583622,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583622,\"last_task_event_at\":1783583622,\"has_unread\":true,\"unread_count\":4,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"451\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582731,\"updated_at\":1783583330,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583330,\"last_task_event_at\":1783583330,\"has_unread\":true,\"unread_count\":1,\"has_running_ppt_task\":false,\"running_ppt_task_count\":0},{\"id\":\"449\",\"name\":\"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。 [Uploaded file: yu\",\"status\":\"normal\",\"created_at\":1783582537,\"updated_at\":1783583230,\"current_model_id\":\"pptoken::gpt-5.4\",\"last_message_at\":1783583230,\"last_task_event_at\":17"
+  },
+  {
+    "type": "url-after-send",
+    "url": "https://www.aimarketingsite.com/dashboard/ai?agent=executive-ppt"
+  }
+]

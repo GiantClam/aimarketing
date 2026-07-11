@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "payload": {
+    "fileName": "build-a-6-slide-enterprise-ai-workfl-6p-building-effective.pptx",
+    "contentType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "slideCount": 6,
+    "variantName": "Effective Agents",
+    "bufferBase64": "<base64:84524>"
+  }
+}

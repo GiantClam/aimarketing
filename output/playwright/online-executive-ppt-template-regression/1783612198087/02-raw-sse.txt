@@ -1,0 +1,380 @@
+data: {"event":"conversation_init","conversation_id":"458","enabled_tools":["web_search","preview_ppt_deck"],"skills_enabled":true,"selected_skills":["ppt-master"],"persisted":true,"agent_id":"executive-ppt","agent_route":null}
+
+data: {"event":"skill_selected","conversation_id":"458","skill_id":"ppt-master"}
+
+data: {"event":"knowledge_query_start","conversation_id":"458","data":null}
+
+data: {"event":"knowledge_query_result","conversation_id":"458","data":{"status":"miss","snippetCount":0,"datasetCount":0}}
+
+data: {"event":"provider_selected","conversation_id":"458","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","provider_order":["enterprise-openai-compatible"],"provider_attempt":1,"provider_upgrade_probe":false}
+
+data: {"event":"tool_call","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_9pG1zz0HNefSs19h3DQq3539","args":{"query":"Yusuan Intelligence 语算智能 企业AI业务工作台","intent":"Research Yusuan Intelligence enterprise AI business workspace for a sales deck","maxResults":8}}}
+
+data: {"event":"tool_call_start","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_9pG1zz0HNefSs19h3DQq3539","args":{"query":"Yusuan Intelligence 语算智能 企业AI业务工作台","intent":"Research Yusuan Intelligence enterprise AI business workspace for a sales deck","maxResults":8}}}
+
+data: {"event":"tool_result","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_9pG1zz0HNefSs19h3DQq3539","result":{"query":"Yusuan Intelligence 语算智能 企业AI业务工作台","intent":"Research Yusuan Intelligence enterprise AI business workspace for a sales deck","searchedAt":"2026-07-09T15:50:08.959Z","results":[{"title":"智能工作台","url":"https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview","snippet":"智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...","provider":"serper"},{"title":"什么是企业人工智能？ - AWS","url":"https://aws.amazon.com/cn/what-is/enterprise-ai/","snippet":"企业人工智能（AI）是指在大���组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。","provider":"serper"},{"title":"Snowflake CoWork | 企业智能工作智能体","url":"https://www.snowflake.com/zh_cn/product/snowflake-cowork","snippet":"Snowflake CoWork 是面向知识工作者的企业智能工作智能体。原Snowflake Intelligence——在单一平台上实现有治理的分析、自动化与行动。","provider":"serper"},{"title":"AI 示例、AI应用场景，AI用例 - IBM","url":"https://www.ibm.com/cn-zh/think/topics/artificial-intelligence-business-use-cases","snippet":"AI 适用于几乎所有行业，可通过为任务和工具提供支持来提高效率和生产力。AI 可以带来智能自动化，帮助简化之前需要手动完成或在传统系统上运行的业务流程，这些流程可能 ...","provider":"serper"},{"title":"达沃斯洞察：利用神经符号AI将VUCA环境转化为价值 - o9 Solutions","url":"https://o9solutions.com/cn/articles/davos-insights-turning-vuca-into-value-with-neuro-symbolic-ai","snippet":"企业级AI 智能体(Agent)的本质及其・ 搭建了专属智能化平台・ 智能体相当于企业的数字化员工・ 业务工作均由高精准、可追溯的符号智能承载。 性的AI智能 ...","provider":"serper"},{"title":"[PDF] 中小型企业人工智能解决方案 - awsstatic.com","url":"https://d1.awsstatic.com/whitepapers/zh_cn__AWS_SMB_ML_AI_eBook_V6.pdf","snippet":"Artificial Intelligence for small and medium business … 中小型企业可以将智能聊天和语音机器人集成到联络中心,分析互动和事务以进 行改进和提供服务建议","provider":"serper"},{"title":"[PDF] 人工智能就绪度白皮书","url":"https://assets.kpmg.com/content/dam/kpmg/cn/pdf/zh/2025/06/artificial-intelligence-readiness-white-paper.pdf","snippet":"企业AI治理平台可基于大模型开发自然语言交互界面, 让业务人员直接参与治理,进一步打破业务与技术的沟通壁垒。","provider":"serper"},{"title":"什么是企业级AI？ - Red Hat","url":"https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai","snippet":"企业AI 是指将人工智能（AI）工具和机器学习软件集成到大规模运维和流程中。 几乎在每个行业，企业组织都在采用AI 技术来提高效率，利用现有的人员和资源 ...","provider":"serper"}]}}}
+
+data: {"event":"tool_call_done","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_9pG1zz0HNefSs19h3DQq3539","result":{"query":"Yusuan Intelligence 语算智能 企业AI业务工作台","intent":"Research Yusuan Intelligence enterprise AI business workspace for a sales deck","searchedAt":"2026-07-09T15:50:08.959Z","results":[{"title":"智能工作台","url":"https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview","snippet":"智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...","provider":"serper"},{"title":"什么是企业人工智能？ - AWS","url":"https://aws.amazon.com/cn/what-is/enterprise-ai/","snippet":"企业人工智能（AI）是指在大���组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。","provider":"serper"},{"title":"Snowflake CoWork | 企业智能工作智能体","url":"https://www.snowflake.com/zh_cn/product/snowflake-cowork","snippet":"Snowflake CoWork 是面向知识工作者的企业智能工作智能体。原Snowflake Intelligence——在单一平台上实现有治理的分析、自动化与行动。","provider":"serper"},{"title":"AI 示例、AI应用场景，AI用例 - IBM","url":"https://www.ibm.com/cn-zh/think/topics/artificial-intelligence-business-use-cases","snippet":"AI 适用于几乎所有行业，可通过为任务和工具提供支持来提高效率和生产力。AI 可以带来智能自动化，帮助简化之前需要手动完成或在传统系统上运行的业务流程，这些流程可能 ...","provider":"serper"},{"title":"达沃斯洞察：利用神经符号AI将VUCA环境转化为价值 - o9 Solutions","url":"https://o9solutions.com/cn/articles/davos-insights-turning-vuca-into-value-with-neuro-symbolic-ai","snippet":"企业级AI 智能体(Agent)的本质及其・ 搭建了专属智能化平台・ 智能体相当于企业的数字化员工・ 业务工作均由高精准、可追溯的符号智能承载。 性的AI智能 ...","provider":"serper"},{"title":"[PDF] 中小型企业人工智能解决方案 - awsstatic.com","url":"https://d1.awsstatic.com/whitepapers/zh_cn__AWS_SMB_ML_AI_eBook_V6.pdf","snippet":"Artificial Intelligence for small and medium business … 中小型企业可以将智能聊天和语音机器人集成到联络中心,分析互动和事务以进 行改进和提供服务建议","provider":"serper"},{"title":"[PDF] 人工智能就绪度白皮书","url":"https://assets.kpmg.com/content/dam/kpmg/cn/pdf/zh/2025/06/artificial-intelligence-readiness-white-paper.pdf","snippet":"企业AI治理平台可基于大模型开发自然语言交互界面, 让业务人员直接参与治理,进一步打破业务与技术的沟通壁垒。","provider":"serper"},{"title":"什么是企业级AI？ - Red Hat","url":"https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai","snippet":"企业AI 是指将人工智能（AI）工具和机器学习软件集成到大规模运维和流程中。 几乎在每个行业，企业组织都在采用AI 技术来提高效率，利用现有的人员和资源 ...","provider":"serper"}]}}}
+
+data: {"event":"tool_call","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_y3hEM549iVNb2DhcnDbI0007","args":{"query":"语算智能 Yusuan 企业AI 公司","intent":"Find specific company information about Yusuan Intelligence / 语算智能","maxResults":8}}}
+
+data: {"event":"tool_call_start","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_y3hEM549iVNb2DhcnDbI0007","args":{"query":"语算智能 Yusuan 企业AI 公司","intent":"Find specific company information about Yusuan Intelligence / 语算智能","maxResults":8}}}
+
+data: {"event":"tool_result","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_y3hEM549iVNb2DhcnDbI0007","result":{"query":"语算智能 Yusuan 企业AI 公司","intent":"Find specific company information about Yusuan Intelligence / 语算智能","searchedAt":"2026-07-09T15:50:13.332Z","results":[{"title":"什么是企业人工智能？","url":"https://aws.amazon.com/cn/what-is/enterprise-ai/","snippet":"企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。","provider":"serper"},{"title":"智能体AI时代的企业平台战略","url":"https://www.accenture.com/content/dam/accenture/final/accenture-com/document-fy26/q3/Accenture-New-Rules-Platform-Strategy-Age-Agentic-AI.pdf","snippet":"嵌入式智能体帮助西部糖业的财务运营转型成为智能、. 自协同的系统。通过在SAP S/4HANA Cloud Public Edition. 上使用SAP Ariba Central Invoice Management，该公司. 每年 ...","provider":"serper"},{"title":"行胜于言： 2025年“AI应用之星” （MINDS）实践洞察","url":"https://reports.weforum.org/docs/WEF_Proof_over_Promise_Insights_on_Real_World_AI_Adoption_from_2025_MINDS_Organizations_2026_CN.pdf","snippet":"企业正摒弃零散的解决方案，投资打造统一的AI平. 台与战略性工程能力，确保实现安全、敏捷且可扩展. 的AI应用。 洞察5：采取负责任实践，从容实现人工智能的. 规模化发展. 要 ...","provider":"serper"},{"title":"什么是企业级AI？","url":"https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai","snippet":"企业AI 是指将人工智能（AI）工具和机器学习软件集成到大规模运维和流程中。 几乎在每个行业，企业组织都在采用AI 技术来提高效率，利用现有的人员和资源 ...","provider":"serper"},{"title":"三家中国企业上榜全球十大最具影响力AI公司，一家来自长三角","url":"https://www.jfdaily.com/news/detail?id=1104217","snippet":"昨晚，《时代》周刊公布“2026年全球十大最具影响力人工智能公司”榜单，中国人工智能企业阿里巴巴、字节跳动、智谱三家入选，与欧美 ...","provider":"serper"},{"title":"预算案演辞","url":"https://www.budget.gov.hk/2026/sim/budget07.html","snippet":"35. 鉴于AI应用正迅速推动产业革新，新技术、新产业和新产品急速冒起，我会成立并主持「AI+与产业发展策略委员会」，为AI带动产业转型及发展订定策略，创造有利条件，并邀请专家 ...","provider":"serper"},{"title":"利用人工智能(AI) 译后编辑加速多语言内容交付","url":"https://www.lionbridge.com/zh-hans/ai-post-editing/","snippet":"Lionbridge 的AI 译后编辑解决方案可满足各种内容需求，并针对不同的语言、行业和质量要求提供可配置的工作流程。这种创新方法有助于企业：. 克服翻译障碍; 保持预期质量 ...","provider":"serper"},{"title":"什么是AI 智能体？定义、应用场景和类型","url":"https://cloud.google.com/discover/what-are-ai-agents?hl=zh-CN","snippet":"AI 智能体是使用AI 来实现目标并代表用户完成任务的软件系统。深入了解Google Cloud。","provider":"serper"}]}}}
+
+data: {"event":"tool_call_done","conversation_id":"458","data":{"toolName":"web_search","toolCallId":"call_00_y3hEM549iVNb2DhcnDbI0007","result":{"query":"语算智能 Yusuan 企业AI 公司","intent":"Find specific company information about Yusuan Intelligence / 语算智能","searchedAt":"2026-07-09T15:50:13.332Z","results":[{"title":"什么是企业人工智能？","url":"https://aws.amazon.com/cn/what-is/enterprise-ai/","snippet":"企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。","provider":"serper"},{"title":"智能体AI时代的企业平台战略","url":"https://www.accenture.com/content/dam/accenture/final/accenture-com/document-fy26/q3/Accenture-New-Rules-Platform-Strategy-Age-Agentic-AI.pdf","snippet":"嵌入式智能体帮助西部糖业的财务运营转型成为智能、. 自协同的系统。通过在SAP S/4HANA Cloud Public Edition. 上使用SAP Ariba Central Invoice Management，该公司. 每年 ...","provider":"serper"},{"title":"行胜于言： 2025年“AI应用之星” （MINDS）实践洞察","url":"https://reports.weforum.org/docs/WEF_Proof_over_Promise_Insights_on_Real_World_AI_Adoption_from_2025_MINDS_Organizations_2026_CN.pdf","snippet":"企业正摒弃零散的解决方案，投资打造统一的AI平. 台与战略性工程能力，确保实现安全、敏捷且可扩展. 的AI应用。 洞察5：采取负责任实践，从容实现人工智能的. 规模化发展. 要 ...","provider":"serper"},{"title":"什么是企业级AI？","url":"https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai","snippet":"企业AI 是指将人工智能（AI）工具和机器学习软件集成到大规模运维和流程中。 几乎在每个行业，企业组织都在采用AI 技术来提高效率，利用现有的人员和资源 ...","provider":"serper"},{"title":"三家中国企业上榜全球十大最具影响力AI公司，一家来自长三角","url":"https://www.jfdaily.com/news/detail?id=1104217","snippet":"昨晚，《时代》周刊公布“2026年全球十大最具影响力人工智能公司”榜单，中国人工智能企业阿里巴巴、字节跳动、智谱三家入选，与欧美 ...","provider":"serper"},{"title":"预算案演辞","url":"https://www.budget.gov.hk/2026/sim/budget07.html","snippet":"35. 鉴于AI应用正迅速推动产业革新，新技术、新产业和新产品急速冒起，我会成立并主持「AI+与产业发展策略委员会」，为AI带动产业转型及发展订定策略，创造有利条件，并邀请专家 ...","provider":"serper"},{"title":"利用人工智能(AI) 译后编辑加速多语言内容交付","url":"https://www.lionbridge.com/zh-hans/ai-post-editing/","snippet":"Lionbridge 的AI 译后编辑解决方案可满足各种内容需求，并针对不同的语言、行业和质量要求提供可配置的工作流程。这种创新方法有助于企业：. 克服翻译障碍; 保持预期质量 ...","provider":"serper"},{"title":"什么是AI 智能体？定义、应用场景和类型","url":"https://cloud.google.com/discover/what-are-ai-agents?hl=zh-CN","snippet":"AI 智能体是使用AI 来实现目标并代表用户完成任务的软件系统。深入了解Google Cloud。","provider":"serper"}]}}}
+
+data: {"event":"tool_call","conversation_id":"458","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_pDbab946avIbEwgKuzs71122","args":{"prompt":"Generate a 4-page Chinese sales deck about Yusuan Intelligence (语算智能) enterprise AI business workspace. The deck should introduce the company's AI-powered enterprise workspace platform, highlight its core value proposition for business decision-makers, and make the case for adoption.\n\nSlide 1: Cover - 语算智能企业AI业务工作台 - 让AI成为您的业务核心引擎\nSlide 2: 产品定位与核心能力 - AI-Powered Business Workspace - describe the platform as an all-in-one AI workspace for enterprise teams, covering intelligent workflow automation, data-driven decision support, knowledge management, and cross-department collaboration\nSlide 3: 为什么选择语算智能？ - Key differentiators: deep industry models, private deployment options, enterprise-grade security and compliance, rapid integration with existing systems, measurable ROI\nSlide 4: 下一步行动 - Call to action: schedule a demo, pilot program options, implementation roadmap","sourcePrompt":"Generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4.","audience":"executive leadership","goal":"sales deck and decision sync","scenario":"sales-deck","language":"zh-CN","templateMode":"auto-4","pageCount":4,"tone":"Concise, professional, executive-ready"}}}
+
+data: {"event":"tool_call_start","conversation_id":"458","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_pDbab946avIbEwgKuzs71122","args":{"prompt":"Generate a 4-page Chinese sales deck about Yusuan Intelligence (语算智能) enterprise AI business workspace. The deck should introduce the company's AI-powered enterprise workspace platform, highlight its core value proposition for business decision-makers, and make the case for adoption.\n\nSlide 1: Cover - 语算智能企业AI业务工作台 - 让AI成为您的业务核心引擎\nSlide 2: 产品定位与核心能力 - AI-Powered Business Workspace - describe the platform as an all-in-one AI workspace for enterprise teams, covering intelligent workflow automation, data-driven decision support, knowledge management, and cross-department collaboration\nSlide 3: 为什么选择语算智能？ - Key differentiators: deep industry models, private deployment options, enterprise-grade security and compliance, rapid integration with existing systems, measurable ROI\nSlide 4: 下一步行动 - Call to action: schedule a demo, pilot program options, implementation roadmap","sourcePrompt":"Generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4.","audience":"executive leadership","goal":"sales deck and decision sync","scenario":"sales-deck","language":"zh-CN","templateMode":"auto-4","pageCount":4,"tone":"Concise, professional, executive-ready"}}}
+
+data: {"event":"tool_result","conversation_id":"458","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_pDbab946avIbEwgKuzs71122","result":{"ok":true,"status":"queued","message":"PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.","backgroundTask":{"taskId":"1124","conversationId":"458","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"tool_call_done","conversation_id":"458","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_pDbab946avIbEwgKuzs71122","result":{"ok":true,"status":"queued","message":"PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.","backgroundTask":{"taskId":"1124","conversationId":"458","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"message","conversation_id":"458","answer":"PPT"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"预览"}
+
+data: {"event":"message","conversation_id":"458","answer":"正在"}
+
+data: {"event":"message","conversation_id":"458","answer":"生成"}
+
+data: {"event":"message","conversation_id":"458","answer":"中"}
+
+data: {"event":"message","conversation_id":"458","answer":"，"}
+
+data: {"event":"message","conversation_id":"458","answer":"系统"}
+
+data: {"event":"message","conversation_id":"458","answer":"正在"}
+
+data: {"event":"message","conversation_id":"458","answer":"为您"}
+
+data: {"event":"message","conversation_id":"458","answer":"渲染"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"4"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"页"}
+
+data: {"event":"message","conversation_id":"458","answer":"中文"}
+
+data: {"event":"message","conversation_id":"458","answer":"销售"}
+
+data: {"event":"message","conversation_id":"458","answer":"演示"}
+
+data: {"event":"message","conversation_id":"458","answer":"文稿"}
+
+data: {"event":"message","conversation_id":"458","answer":"。"}
+
+data: {"event":"message","conversation_id":"458","answer":"预计"}
+
+data: {"event":"message","conversation_id":"458","answer":"片刻"}
+
+data: {"event":"message","conversation_id":"458","answer":"即可"}
+
+data: {"event":"message","conversation_id":"458","answer":"完成"}
+
+data: {"event":"message","conversation_id":"458","answer":"，"}
+
+data: {"event":"message","conversation_id":"458","answer":"请"}
+
+data: {"event":"message","conversation_id":"458","answer":"稍"}
+
+data: {"event":"message","conversation_id":"458","answer":"候"}
+
+data: {"event":"message","conversation_id":"458","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"458","answer":"当前"}
+
+data: {"event":"message","conversation_id":"458","answer":"排"}
+
+data: {"event":"message","conversation_id":"458","answer":"队的"}
+
+data: {"event":"message","conversation_id":"458","answer":"预览"}
+
+data: {"event":"message","conversation_id":"458","answer":"内容"}
+
+data: {"event":"message","conversation_id":"458","answer":"概要"}
+
+data: {"event":"message","conversation_id":"458","answer":"：\n\n"}
+
+data: {"event":"message","conversation_id":"458","answer":"-"}
+
+data: {"event":"message","conversation_id":"458","answer":" **"}
+
+data: {"event":"message","conversation_id":"458","answer":"第"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"1"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"页"}
+
+data: {"event":"message","conversation_id":"458","answer":"**"}
+
+data: {"event":"message","conversation_id":"458","answer":" —"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"封面"}
+
+data: {"event":"message","conversation_id":"458","answer":"："}
+
+data: {"event":"message","conversation_id":"458","answer":"语"}
+
+data: {"event":"message","conversation_id":"458","answer":"算"}
+
+data: {"event":"message","conversation_id":"458","answer":"智能"}
+
+data: {"event":"message","conversation_id":"458","answer":"企业"}
+
+data: {"event":"message","conversation_id":"458","answer":" AI"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"业务"}
+
+data: {"event":"message","conversation_id":"458","answer":"工作"}
+
+data: {"event":"message","conversation_id":"458","answer":"台"}
+
+data: {"event":"message","conversation_id":"458","answer":"\n"}
+
+data: {"event":"message","conversation_id":"458","answer":"-"}
+
+data: {"event":"message","conversation_id":"458","answer":" **"}
+
+data: {"event":"message","conversation_id":"458","answer":"第"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"2"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"页"}
+
+data: {"event":"message","conversation_id":"458","answer":"**"}
+
+data: {"event":"message","conversation_id":"458","answer":" —"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"产品"}
+
+data: {"event":"message","conversation_id":"458","answer":"定位"}
+
+data: {"event":"message","conversation_id":"458","answer":"与"}
+
+data: {"event":"message","conversation_id":"458","answer":"核心"}
+
+data: {"event":"message","conversation_id":"458","answer":"能力"}
+
+data: {"event":"message","conversation_id":"458","answer":"（"}
+
+data: {"event":"message","conversation_id":"458","answer":"智能"}
+
+data: {"event":"message","conversation_id":"458","answer":"工作"}
+
+data: {"event":"message","conversation_id":"458","answer":"流"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"数据"}
+
+data: {"event":"message","conversation_id":"458","answer":"决策"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"知识"}
+
+data: {"event":"message","conversation_id":"458","answer":"管理"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"跨"}
+
+data: {"event":"message","conversation_id":"458","answer":"部门"}
+
+data: {"event":"message","conversation_id":"458","answer":"协同"}
+
+data: {"event":"message","conversation_id":"458","answer":"）\n"}
+
+data: {"event":"message","conversation_id":"458","answer":"-"}
+
+data: {"event":"message","conversation_id":"458","answer":" **"}
+
+data: {"event":"message","conversation_id":"458","answer":"第"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"3"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"页"}
+
+data: {"event":"message","conversation_id":"458","answer":"**"}
+
+data: {"event":"message","conversation_id":"458","answer":" —"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"差异化"}
+
+data: {"event":"message","conversation_id":"458","answer":"优势"}
+
+data: {"event":"message","conversation_id":"458","answer":"（"}
+
+data: {"event":"message","conversation_id":"458","answer":"行业"}
+
+data: {"event":"message","conversation_id":"458","answer":"深度"}
+
+data: {"event":"message","conversation_id":"458","answer":"模型"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"私有"}
+
+data: {"event":"message","conversation_id":"458","answer":"化"}
+
+data: {"event":"message","conversation_id":"458","answer":"部署"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"安全"}
+
+data: {"event":"message","conversation_id":"458","answer":"合规"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"快速"}
+
+data: {"event":"message","conversation_id":"458","answer":"集成"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"可"}
+
+data: {"event":"message","conversation_id":"458","answer":"量化"}
+
+data: {"event":"message","conversation_id":"458","answer":" ROI"}
+
+data: {"event":"message","conversation_id":"458","answer":"）\n"}
+
+data: {"event":"message","conversation_id":"458","answer":"-"}
+
+data: {"event":"message","conversation_id":"458","answer":" **"}
+
+data: {"event":"message","conversation_id":"458","answer":"第"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"4"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"页"}
+
+data: {"event":"message","conversation_id":"458","answer":"**"}
+
+data: {"event":"message","conversation_id":"458","answer":" —"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"下一步"}
+
+data: {"event":"message","conversation_id":"458","answer":"行动"}
+
+data: {"event":"message","conversation_id":"458","answer":"（"}
+
+data: {"event":"message","conversation_id":"458","answer":"预约"}
+
+data: {"event":"message","conversation_id":"458","answer":"演示"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"试点"}
+
+data: {"event":"message","conversation_id":"458","answer":"方案"}
+
+data: {"event":"message","conversation_id":"458","answer":"、"}
+
+data: {"event":"message","conversation_id":"458","answer":"实施"}
+
+data: {"event":"message","conversation_id":"458","answer":"路线"}
+
+data: {"event":"message","conversation_id":"458","answer":"图"}
+
+data: {"event":"message","conversation_id":"458","answer":"）\n\n"}
+
+data: {"event":"message","conversation_id":"458","answer":"预览"}
+
+data: {"event":"message","conversation_id":"458","answer":"就"}
+
+data: {"event":"message","conversation_id":"458","answer":"绪"}
+
+data: {"event":"message","conversation_id":"458","answer":"后"}
+
+data: {"event":"message","conversation_id":"458","answer":"我会"}
+
+data: {"event":"message","conversation_id":"458","answer":"立即"}
+
+data: {"event":"message","conversation_id":"458","answer":"呈现"}
+
+data: {"event":"message","conversation_id":"458","answer":"给您"}
+
+data: {"event":"message","conversation_id":"458","answer":"，"}
+
+data: {"event":"message","conversation_id":"458","answer":"届时"}
+
+data: {"event":"message","conversation_id":"458","answer":"您可以"}
+
+data: {"event":"message","conversation_id":"458","answer":"查看"}
+
+data: {"event":"message","conversation_id":"458","answer":"并"}
+
+data: {"event":"message","conversation_id":"458","answer":"选择"}
+
+data: {"event":"message","conversation_id":"458","answer":"偏"}
+
+data: {"event":"message","conversation_id":"458","answer":"好的"}
+
+data: {"event":"message","conversation_id":"458","answer":"样式"}
+
+data: {"event":"message","conversation_id":"458","answer":"，"}
+
+data: {"event":"message","conversation_id":"458","answer":"确认"}
+
+data: {"event":"message","conversation_id":"458","answer":"后"}
+
+data: {"event":"message","conversation_id":"458","answer":"即可"}
+
+data: {"event":"message","conversation_id":"458","answer":"导出"}
+
+data: {"event":"message","conversation_id":"458","answer":"可"}
+
+data: {"event":"message","conversation_id":"458","answer":"编辑"}
+
+data: {"event":"message","conversation_id":"458","answer":" PPT"}
+
+data: {"event":"message","conversation_id":"458","answer":"X"}
+
+data: {"event":"message","conversation_id":"458","answer":" "}
+
+data: {"event":"message","conversation_id":"458","answer":"文件"}
+
+data: {"event":"message","conversation_id":"458","answer":"。"}
+
+data: {"event":"reasoning_end","conversation_id":"458"}
+
+data: {"event":"message_end","conversation_id":"458","answer":"PPT 预览正在生成中，系统正在为您渲染 4 页中文销售演示文稿。预计片刻即可完成，请稍候。\n\n当前排队的预览内容概要：\n\n- **第 1 页** — 封面：语算智能企业 AI 业务工作台\n- **第 2 页** — 产品定位与核心能力（智能工作流、数据决策、知识管理、跨部门协同）\n- **第 3 页** — 差异化优势（行业深度模型、私有化部署、安全合规、快速集成、可量化 ROI）\n- **第 4 页** — 下一步行动（预约演示、试点方案、实施路线图）\n\n预览就绪后我会立即呈现给您，届时您可以查看并选择偏好的样式，确认后即可导出可编辑 PPTX 文件。<!-- ai-entry-research-brief:{\"topic\":\"Yusuan Intelligence 语算智能 企业AI业务工作台\",\"keyFacts\":[\"智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...\",\"企业人工智能（AI）是指在大���组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\",\"Snowflake CoWork 是面向知识工作者的企业智能工作智能体。原Snowflake Intelligence——在单一平台上实现有治理的分析、自动化与行动。\",\"AI 适用于几乎所有行业，可通过为任务和工具提供支持来提高效率和生产力。AI 可以带来智能自动化，帮助简化之前需要手动完成或在传统系统上运行的业务流程，这些流程可能 ...\"],\"sourceNotes\":[\"智能工作台 - https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview\",\"什么是企业人工智能？ - AWS - https://aws.amazon.com/cn/what-is/enterprise-ai/\",\"Snowflake CoWork | 企业智能工作智能体 - https://www.snowflake.com/zh_cn/product/snowflake-cowork\",\"AI 示例、AI应用场景，AI用例 - IBM - https://www.ibm.com/cn-zh/think/topics/artificial-intelligence-business-use-cases\"],\"implications\":[\"Research Yusuan Intelligence enterprise AI business workspace for a sales deck\"],\"rawSummary\":\"Topic: Yusuan Intelligence 语算智能 企业AI业务工作台\\nKey facts:\\n- 智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...\\n- 企业人工智能（AI）是指在大���组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\\n- Snowflake CoWork 是面向知识工作者的企业智能工作智能体。原Snowflake Intelligence——在单一平台上实现有治理的分析、自动化与行动。\\n- AI 适用于几乎所有行业，可通过为任务和工具提供支持来提高效率和生产力。AI 可以带来智能自动化，帮助简化之前需要手动完成或在传统系统上运行的业务流程，这些流程可能 ...\\nImplications:\\n- Research Yusuan Intelligence enterprise AI business workspace for a sales deck\\nSource notes:\\n- 智能工作台 - https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview\\n- 什么是企业人工智能？ - AWS - https://aws.amazon.com/cn/what-is/enterprise-ai/\\n- Snowflake CoWork | 企业智能工作智能体 - https://www.snowflake.com/zh_cn/product/snowflake-cowork\\n- AI 示例、AI应用场景，AI用例 - IBM - https://www.ibm.com/cn-zh/think/topics/artificial-intelligence-business-use-cases\"} --><!-- ai-entry-research-brief:{\"topic\":\"语算智能 Yusuan 企业AI 公司\",\"keyFacts\":[\"企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\",\"嵌入式智能体帮助西部糖业的财务运营转型成为智能、. 自协同的系统。通过在SAP S/4HANA Cloud Public Edition. 上使用SAP Ariba Central Invoice Management，该公司. 每年 ...\",\"企业正摒弃零散的解决方案，投资打造统一的AI平. 台与战略性工程能力，确保实现安全、敏捷且可扩展. 的AI应用。 洞察5：采取负责任实践，从容实现人工智能的. 规模化发展. 要 ...\",\"企业AI 是指将人工智能（AI）工具和机器学习软件集成到大规模运维和流程中。 几乎在每个行业，企业组织都在采用AI 技术来提高效率，利用现有的人员和资源 ...\"],\"sourceNotes\":[\"什么是企业人工智能？ - https://aws.amazon.com/cn/what-is/enterprise-ai/\",\"智能体AI时代的企业平台战略 - https://www.accenture.com/content/dam/accenture/final/accenture-com/document-fy26/q3/Accenture-New-Rules-Platform-Strategy-Age-Agentic-AI.pdf\",\"行胜于言： 2025年“AI应用之星” （MINDS）实践洞察 - https://reports.weforum.org/docs/WEF_Proof_over_Promise_Insights_on_Real_World_AI_Adoption_from_2025_MINDS_Organizations_2026_CN.pdf\",\"什么是企业级AI？ - https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai\"],\"implications\":[\"Find specific company information about Yusuan Intelligence / 语算智能\"],\"rawSummary\":\"Topic: 语算智能 Yusuan 企业AI 公司\\nKey facts:\\n- 企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\\n- 嵌入式智能体帮助西部糖业的财务运营转型成为智能、. 自协同的系统。通过在SAP S/4HANA Cloud Public Edition. 上使用SAP Ariba Central Invoice Management，该公司. 每年 ...\\n- 企业正摒弃零散的解决方案，投资打造统一的AI平. 台与战略性工程能力，确保实现安全、敏捷且可扩展. 的AI应用。 洞察5：采取负责任实践，从容实现人工智能的. 规模化发展. 要 ...\\n- 企业AI 是指将人工智能（AI）工具和机器学习软件集成到大规模运维和流程中。 几乎在每个行业，企业组织都在采用AI 技术来提高效率，利用现有的人员和资源 ...\\nImplications:\\n- Find specific company information about Yusuan Intelligence / 语算智能\\nSource notes:\\n- 什么是企业人工智能？ - https://aws.amazon.com/cn/what-is/enterprise-ai/\\n- 智能体AI时代的企业平台战略 - https://www.accenture.com/content/dam/accenture/final/accenture-com/document-fy26/q3/Accenture-New-Rules-Platform-Strategy-Age-Agentic-AI.pdf\\n- 行胜于言： 2025年“AI应用之星” （MINDS）实践洞察 - https://reports.weforum.org/docs/WEF_Proof_over_Promise_Insights_on_Real_World_AI_Adoption_from_2025_MINDS_Organizations_2026_CN.pdf\\n- 什么是企业级AI？ - https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai\"} -->\n\n已切换为后台生成：\n- 任务 ID: 1124\n- 状态: PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","agent_id":"executive-ppt","agent_route":null,"provider_order":["enterprise-openai-compatible"]}
+

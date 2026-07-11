@@ -1,0 +1,35 @@
+{
+  "status": 200,
+  "eventCount": 120,
+  "toolResult": {
+    "event": "tool_result",
+    "conversation_id": "442",
+    "data": {
+      "toolName": "preview_ppt_deck",
+      "toolCallId": "call_00_HzeA2LQ7QhnIacOxIgs99768",
+      "result": {
+        "ok": true,
+        "status": "queued",
+        "message": "PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。",
+        "backgroundTask": {
+          "taskId": "1112",
+          "conversationId": "442",
+          "toolName": "preview_ppt_deck",
+          "status": "queued"
+        }
+      }
+    }
+  },
+  "messageEnd": {
+    "event": "message_end",
+    "conversation_id": "442",
+    "answer": "简报已完整，直接生成预览。预览正在后台生成中，通常需要几十秒到一两分钟。\n\n在等待的同时，先说明一下接下来会发生什么：\n\n1. **预览完成后**，我会把系统推荐的方案变体展示给你，并建议最佳匹配版本。\n2. **你确认导出**后，我会立刻生成可编辑的 PPTX 下载文件。\n3. 整个过程无需引用外部数据，完全基于你提供的《屿算智能》内容。\n\n稍等片刻，预览结果回来后我马上同步你 👇\n\n已切换为后台生成：\n- 任务 ID: 1112\n- 状态: PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。",
+    "provider": "enterprise-openai-compatible",
+    "provider_model": "deepseek-v4-pro",
+    "agent_id": "executive-ppt",
+    "agent_route": null,
+    "provider_order": [
+      "enterprise-openai-compatible"
+    ]
+  }
+}

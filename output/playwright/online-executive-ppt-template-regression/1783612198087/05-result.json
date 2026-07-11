@@ -1,0 +1,86 @@
+{
+  "status": "FAILED",
+  "baseUrl": "https://www.aimarketingsite.com",
+  "testedAt": "2026-07-09T15:54:51.982Z",
+  "conversationId": "458",
+  "taskId": "1124",
+  "evidenceDir": "/Users/beihuang/Documents/github/aimarketing/output/playwright/online-executive-ppt-template-regression/1783612198087",
+  "selectedSkills": [
+    "ppt-master"
+  ],
+  "providerModel": "deepseek-v4-pro",
+  "previewToolArgs": {
+    "prompt": "Generate a 4-page Chinese sales deck about Yusuan Intelligence (语算智能) enterprise AI business workspace. The deck should introduce the company's AI-powered enterprise workspace platform, highlight its core value proposition for business decision-makers, and make the case for adoption.\n\nSlide 1: Cover - 语算智能企业AI业务工作台 - 让AI成为您的业务核心引擎\nSlide 2: 产品定位与核心能力 - AI-Powered Business Workspace - describe the platform as an all-in-one AI workspace for enterprise teams, covering intelligent workflow automation, data-driven decision support, knowledge management, and cross-department collaboration\nSlide 3: 为什么选择语算智能？ - Key differentiators: deep industry models, private deployment options, enterprise-grade security and compliance, rapid integration with existing systems, measurable ROI\nSlide 4: 下一步行动 - Call to action: schedule a demo, pilot program options, implementation roadmap",
+    "sourcePrompt": "Generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4.",
+    "audience": "executive leadership",
+    "goal": "sales deck and decision sync",
+    "scenario": "sales-deck",
+    "language": "zh-CN",
+    "templateMode": "auto-4",
+    "pageCount": 4,
+    "tone": "Concise, professional, executive-ready"
+  },
+  "previewToolResult": {
+    "ok": true,
+    "status": "queued",
+    "message": "PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.",
+    "backgroundTask": {
+      "taskId": "1124",
+      "conversationId": "458",
+      "toolName": "preview_ppt_deck",
+      "status": "queued"
+    }
+  },
+  "latestTask": {
+    "task_id": "1124",
+    "status": "running",
+    "task_type": "preview_ppt_deck",
+    "conversation_id": "458",
+    "agent_id": "executive-ppt",
+    "created_at": 1783612227,
+    "updated_at": 1783612465,
+    "started_at": 1783612227,
+    "stage": "variant_generating",
+    "stage_label": "Generating preview variants",
+    "progress_current": 2,
+    "progress_total": 5,
+    "last_heartbeat_at": 1783612335,
+    "finished_at": null,
+    "preview_session_id": null,
+    "request_label": "sales deck and decision sync",
+    "result_summary": null,
+    "selected_template_id": null,
+    "selected_template_label": null,
+    "error_code": null,
+    "error_message": null,
+    "error": null,
+    "events": [
+      {
+        "type": "background_task_queued",
+        "label": "Background task queued",
+        "status": "running",
+        "at": 1783612335
+      },
+      {
+        "type": "background_generation_preparing",
+        "label": "Preparing generation runtime",
+        "status": "running",
+        "at": 1783612335
+      },
+      {
+        "type": "background_generation_running",
+        "label": "Generating SVG preview in background (PPTX on export)",
+        "status": "running",
+        "at": 1783612335
+      }
+    ]
+  },
+  "staleTemplateIdsSeen": [
+    "auto-4"
+  ],
+  "failures": [
+    "preview tool args still contain templateMode:auto-4",
+    "preview tool_result does not include selectedTemplateId",
+    "background task selected_template_id is null"
+  ]
+}

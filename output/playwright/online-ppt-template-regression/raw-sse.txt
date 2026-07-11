@@ -1,0 +1,240 @@
+data: {"event":"conversation_init","conversation_id":"442","enabled_tools":["web_search","preview_ppt_deck"],"skills_enabled":true,"selected_skills":["ppt-master"],"persisted":true,"agent_id":"executive-ppt","agent_route":null}
+
+data: {"event":"skill_selected","conversation_id":"442","skill_id":"ppt-master"}
+
+data: {"event":"knowledge_query_start","conversation_id":"442","data":null}
+
+data: {"event":"knowledge_query_result","conversation_id":"442","data":{"status":"miss","snippetCount":0,"datasetCount":0}}
+
+data: {"event":"provider_selected","conversation_id":"442","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","provider_order":["enterprise-openai-compatible"],"provider_attempt":1,"provider_upgrade_probe":false}
+
+data: {"event":"message","conversation_id":"442","answer":"简报"}
+
+data: {"event":"message","conversation_id":"442","answer":"已"}
+
+data: {"event":"message","conversation_id":"442","answer":"完整"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"直接"}
+
+data: {"event":"message","conversation_id":"442","answer":"生成"}
+
+data: {"event":"message","conversation_id":"442","answer":"预览"}
+
+data: {"event":"message","conversation_id":"442","answer":"。"}
+
+data: {"event":"tool_call","conversation_id":"442","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_HzeA2LQ7QhnIacOxIgs99768","args":{"prompt":"# 屿算智能 — 企业专属 AI 业务工作台\n\n## 整体主题\n企业 AI 业务工具介绍，核心主张：**实用 AI > AI 概念**，让 AI 真正进入企业岗位、流程和结果。产品形态是企业专属 AI 业务工作台，面向老板、销售、运营、内容团队，强调解决方案能力、流程闭环、业务落地和资产沉淀。\n\n## 封面\n- 标题：屿算智能 — 企业专属 AI 业务工具\n- 副标题：实用 AI 大于 AI 概念\n\n## 核心内容\n\n### 核心理念\n不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的岗位、流程和结果。\n\n### 产品架构\n通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\n\n### AI 智能体员工\n配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\n\n### 业务闭环\n从业务梳理 → 立项规划 → 每日任务 → 内容生产 → 发布获客 → 资产沉淀，形成完整闭环。\n\n## 适用场景\n- 科技公司介绍\n- 业务介绍\n- 解决方案展示\n- 企业 AI 升级表达\n\n## 目标受众\n管理层，决策者\n\n## 风格\n简洁、专业、决策导向，商务感强","sourcePrompt":"写一份介绍屿算智能公司和业务的 ppt，核心主张实用 AI 大于 AI 概念，产品是企业专属 AI 业务工作台，配置17个AI智能体员工覆盖多角色，从业务梳理到资产沉淀形成闭环。","audience":"管理层汇报","goal":"产品发布与市场沟通","scenario":"sales-deck","language":"zh-CN","pageCount":10,"tone":"简洁、专业、决策导向","mustInclude":["实用AI大于AI概念","企业专属AI业务工作台","17个AI智能体员工覆盖策划/销售/客服/法务/财务/技术/运营","业务梳理到资产沉淀完整闭环","大模型+AI智能体+业务流程+生产工具+分发工具+风控与资产沉淀"]}}}
+
+data: {"event":"tool_call_start","conversation_id":"442","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_HzeA2LQ7QhnIacOxIgs99768","args":{"prompt":"# 屿算智能 — 企业专属 AI 业务工作台\n\n## 整体主题\n企业 AI 业务工具介绍，核心主张：**实用 AI > AI 概念**，让 AI 真正进入企业岗位、流程和结果。产品形态是企业专属 AI 业务工作台，面向老板、销售、运营、内容团队，强调解决方案能力、流程闭环、业务落地和资产沉淀。\n\n## 封面\n- 标题：屿算智能 — 企业专属 AI 业务工具\n- 副标题：实用 AI 大于 AI 概念\n\n## 核心内容\n\n### 核心理念\n不是再给企业一个单点 AI 工具，而是让 AI 真正进入企业的岗位、流程和结果。\n\n### 产品架构\n通过大模型、AI 智能体员工、业务流程、生产工具、分发工具、风控与资产沉淀，形成企业专属 AI 业务工作台。\n\n### AI 智能体员工\n配置 17 个 AI 智能体员工，覆盖策划、销售、客服、法务、财务、技术、运营等角色。\n\n### 业务闭环\n从业务梳理 → 立项规划 → 每日任务 → 内容生产 → 发布获客 → 资产沉淀，形成完整闭环。\n\n## 适用场景\n- 科技公司介绍\n- 业务介绍\n- 解决方案展示\n- 企业 AI 升级表达\n\n## 目标受众\n管理层，决策者\n\n## 风格\n简洁、专业、决策导向，商务感强","sourcePrompt":"写一份介绍屿算智能公司和业务的 ppt，核心主张实用 AI 大于 AI 概念，产品是企业专属 AI 业务工作台，配置17个AI智能体员工覆盖多角色，从业务梳理到资产沉淀形成闭环。","audience":"管理层汇报","goal":"产品发布与市场沟通","scenario":"sales-deck","language":"zh-CN","pageCount":10,"tone":"简洁、专业、决策导向","mustInclude":["实用AI大于AI概念","企业专属AI业务工作台","17个AI智能体员工覆盖策划/销售/客服/法务/财务/技术/运营","业务梳理到资产沉淀完整闭环","大模型+AI智能体+业务流程+生产工具+分发工具+风控与资产沉淀"]}}}
+
+data: {"event":"tool_result","conversation_id":"442","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_HzeA2LQ7QhnIacOxIgs99768","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1112","conversationId":"442","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"tool_call_done","conversation_id":"442","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_HzeA2LQ7QhnIacOxIgs99768","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1112","conversationId":"442","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"message","conversation_id":"442","answer":"预览"}
+
+data: {"event":"message","conversation_id":"442","answer":"正在"}
+
+data: {"event":"message","conversation_id":"442","answer":"后台"}
+
+data: {"event":"message","conversation_id":"442","answer":"生成"}
+
+data: {"event":"message","conversation_id":"442","answer":"中"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"通常"}
+
+data: {"event":"message","conversation_id":"442","answer":"需要"}
+
+data: {"event":"message","conversation_id":"442","answer":"几十"}
+
+data: {"event":"message","conversation_id":"442","answer":"秒"}
+
+data: {"event":"message","conversation_id":"442","answer":"到"}
+
+data: {"event":"message","conversation_id":"442","answer":"一两"}
+
+data: {"event":"message","conversation_id":"442","answer":"分钟"}
+
+data: {"event":"message","conversation_id":"442","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"442","answer":"在"}
+
+data: {"event":"message","conversation_id":"442","answer":"等待"}
+
+data: {"event":"message","conversation_id":"442","answer":"的同时"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"先"}
+
+data: {"event":"message","conversation_id":"442","answer":"说明"}
+
+data: {"event":"message","conversation_id":"442","answer":"一下"}
+
+data: {"event":"message","conversation_id":"442","answer":"接下来"}
+
+data: {"event":"message","conversation_id":"442","answer":"会发生"}
+
+data: {"event":"message","conversation_id":"442","answer":"什么"}
+
+data: {"event":"message","conversation_id":"442","answer":"：\n\n"}
+
+data: {"event":"message","conversation_id":"442","answer":"1"}
+
+data: {"event":"message","conversation_id":"442","answer":"."}
+
+data: {"event":"message","conversation_id":"442","answer":" **"}
+
+data: {"event":"message","conversation_id":"442","answer":"预览"}
+
+data: {"event":"message","conversation_id":"442","answer":"完成后"}
+
+data: {"event":"message","conversation_id":"442","answer":"**"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"我会"}
+
+data: {"event":"message","conversation_id":"442","answer":"把"}
+
+data: {"event":"message","conversation_id":"442","answer":"系统"}
+
+data: {"event":"message","conversation_id":"442","answer":"推荐的"}
+
+data: {"event":"message","conversation_id":"442","answer":"方案"}
+
+data: {"event":"message","conversation_id":"442","answer":"变"}
+
+data: {"event":"message","conversation_id":"442","answer":"体"}
+
+data: {"event":"message","conversation_id":"442","answer":"展示"}
+
+data: {"event":"message","conversation_id":"442","answer":"给你"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"并"}
+
+data: {"event":"message","conversation_id":"442","answer":"建议"}
+
+data: {"event":"message","conversation_id":"442","answer":"最佳"}
+
+data: {"event":"message","conversation_id":"442","answer":"匹配"}
+
+data: {"event":"message","conversation_id":"442","answer":"版本"}
+
+data: {"event":"message","conversation_id":"442","answer":"。\n"}
+
+data: {"event":"message","conversation_id":"442","answer":"2"}
+
+data: {"event":"message","conversation_id":"442","answer":"."}
+
+data: {"event":"message","conversation_id":"442","answer":" **"}
+
+data: {"event":"message","conversation_id":"442","answer":"你"}
+
+data: {"event":"message","conversation_id":"442","answer":"确认"}
+
+data: {"event":"message","conversation_id":"442","answer":"导出"}
+
+data: {"event":"message","conversation_id":"442","answer":"**"}
+
+data: {"event":"message","conversation_id":"442","answer":"后"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"我会"}
+
+data: {"event":"message","conversation_id":"442","answer":"立刻"}
+
+data: {"event":"message","conversation_id":"442","answer":"生成"}
+
+data: {"event":"message","conversation_id":"442","answer":"可"}
+
+data: {"event":"message","conversation_id":"442","answer":"编辑"}
+
+data: {"event":"message","conversation_id":"442","answer":"的"}
+
+data: {"event":"message","conversation_id":"442","answer":" PPT"}
+
+data: {"event":"message","conversation_id":"442","answer":"X"}
+
+data: {"event":"message","conversation_id":"442","answer":" "}
+
+data: {"event":"message","conversation_id":"442","answer":"下载"}
+
+data: {"event":"message","conversation_id":"442","answer":"文件"}
+
+data: {"event":"message","conversation_id":"442","answer":"。\n"}
+
+data: {"event":"message","conversation_id":"442","answer":"3"}
+
+data: {"event":"message","conversation_id":"442","answer":"."}
+
+data: {"event":"message","conversation_id":"442","answer":" "}
+
+data: {"event":"message","conversation_id":"442","answer":"整个过程"}
+
+data: {"event":"message","conversation_id":"442","answer":"无需"}
+
+data: {"event":"message","conversation_id":"442","answer":"引用"}
+
+data: {"event":"message","conversation_id":"442","answer":"外部"}
+
+data: {"event":"message","conversation_id":"442","answer":"数据"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"完全"}
+
+data: {"event":"message","conversation_id":"442","answer":"基于"}
+
+data: {"event":"message","conversation_id":"442","answer":"你"}
+
+data: {"event":"message","conversation_id":"442","answer":"提供的"}
+
+data: {"event":"message","conversation_id":"442","answer":"《"}
+
+data: {"event":"message","conversation_id":"442","answer":"屿"}
+
+data: {"event":"message","conversation_id":"442","answer":"算"}
+
+data: {"event":"message","conversation_id":"442","answer":"智能"}
+
+data: {"event":"message","conversation_id":"442","answer":"》"}
+
+data: {"event":"message","conversation_id":"442","answer":"内容"}
+
+data: {"event":"message","conversation_id":"442","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"442","answer":"稍"}
+
+data: {"event":"message","conversation_id":"442","answer":"等"}
+
+data: {"event":"message","conversation_id":"442","answer":"片刻"}
+
+data: {"event":"message","conversation_id":"442","answer":"，"}
+
+data: {"event":"message","conversation_id":"442","answer":"预览"}
+
+data: {"event":"message","conversation_id":"442","answer":"结果"}
+
+data: {"event":"message","conversation_id":"442","answer":"回来后"}
+
+data: {"event":"message","conversation_id":"442","answer":"我"}
+
+data: {"event":"message","conversation_id":"442","answer":"马上"}
+
+data: {"event":"message","conversation_id":"442","answer":"同步"}
+
+data: {"event":"message","conversation_id":"442","answer":"你"}
+
+data: {"event":"message","conversation_id":"442","answer":" 👇"}
+
+data: {"event":"reasoning_end","conversation_id":"442"}
+
+data: {"event":"message_end","conversation_id":"442","answer":"简报已完整，直接生成预览。预览正在后台生成中，通常需要几十秒到一两分钟。\n\n在等待的同时，先说明一下接下来会发生什么：\n\n1. **预览完成后**，我会把系统推荐的方案变体展示给你，并建议最佳匹配版本。\n2. **你确认导出**后，我会立刻生成可编辑的 PPTX 下载文件。\n3. 整个过程无需引用外部数据，完全基于你提供的《屿算智能》内容。\n\n稍等片刻，预览结果回来后我马上同步你 👇\n\n已切换为后台生成：\n- 任务 ID: 1112\n- 状态: PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","agent_id":"executive-ppt","agent_route":null,"provider_order":["enterprise-openai-compatible"]}
+

@@ -2808,10 +2808,153 @@ const rawSeoPages: SeoPage[] = [
   }),
 ]
 
-export const seoPages: SeoPage[] = rawSeoPages.map((page) => ({
-  ...page,
-  relatedLinks: normalizeSeoRelatedLinks(page),
-}))
+function applyCtrSeoOverrides(page: SeoPage): SeoPage {
+  if (page.group === "use-cases" && page.slug === "ai-workspace-for-marketing-teams") {
+    return {
+      ...page,
+      title: "AI Workspace for Marketing Teams: Content, Research, Visuals, and Workflows",
+      description:
+        "Give marketing teams one AI workspace for briefs, SEO content, campaign launches, visuals, and shared brand context instead of scattered AI subscriptions.",
+      h1: "AI Workspace for Marketing Teams",
+      intro:
+        "Give marketing teams one AI workspace for briefs, SEO content, campaign launches, visuals, and shared brand context instead of scattered AI subscriptions.",
+      sections: [
+        ...page.sections,
+        {
+          heading: "What marketing teams can do in one AI workspace",
+          body: [
+            "A shared workspace should connect the work that usually gets split across tools: SEO briefs, campaign launches, brand images, multi-model chat, shared brand context, and team review.",
+          ],
+          bullets: [
+            "Create SEO briefs, titles, and content directions from the same campaign context.",
+            "Move from research and positioning into website copy, launch assets, and brand visuals.",
+            "Let reviewers see the brief, decisions, and draft without buying another point-tool seat.",
+          ],
+        },
+        {
+          heading: "AI Marketing vs separate AI tools",
+          body: [
+            "Separate subscriptions can produce strong individual outputs, but the team still pays the context-switching cost between chat, writing, image, and review workflows. AI Marketing is designed to keep those jobs connected while preserving model choice.",
+          ],
+        },
+      ],
+      faqs: [
+        ...page.faqs,
+        {
+          question: "What should a marketing team move into one AI workspace first?",
+          answer: "Start with one recurring workflow that crosses research, content, visuals, or review, such as an SEO brief to article or a campaign launch brief to final assets.",
+        },
+      ],
+      relatedLinks: [
+        ...page.relatedLinks,
+        makeRelatedLink("/tools/seo-title-generator", "Generate SEO title directions for landing pages, tools, and comparison pages."),
+        makeRelatedLink("/tools/content-brief-generator", "Turn a topic and audience into a structured brief before drafting."),
+        makeRelatedLink("/tools/ai-image", "Create campaign visuals from a shared brand and campaign context."),
+        makeRelatedLink("/alternatives/typingmind-alternative", "Compare a marketing workspace with a flexible multi-model chat alternative."),
+      ],
+    }
+  }
+
+  if (page.group === "alternatives" && page.slug === "typingmind-alternative") {
+    return {
+      ...page,
+      title: "TypingMind Alternative for Marketing Teams That Need More Than Chat",
+      description:
+        "Compare TypingMind with AI Marketing for teams that need multi-model chat, shared brand context, marketing workflows, visuals, and campaign assets in one workspace.",
+      h1: "TypingMind Alternative for Marketing Teams That Need More Than Chat",
+      intro:
+        "TypingMind is a flexible multi-model chat interface. AI Marketing is a stronger fit when that model access must connect to shared brand context, specialist marketing agents, visuals, and campaign production.",
+      sections: [
+        ...page.sections,
+        {
+          heading: "TypingMind is strong for model exploration; teams may need more for production",
+          body: [
+            "TypingMind can be a good choice for power users who want flexible model switching and prompt control. The comparison changes when non-technical teammates need guided workflows, reviewers need shared context, and a campaign must produce more than chat responses.",
+          ],
+        },
+      ],
+      faqs: [
+        ...page.faqs,
+        {
+          question: "Is AI Marketing a full TypingMind replacement?",
+          answer: "Not for every power user. TypingMind can remain the better choice for flexible model exploration, while AI Marketing is better when the team needs shared marketing context and production workflows.",
+        },
+        {
+          question: "When should a team keep TypingMind?",
+          answer: "Keep it when advanced users mainly need its flexible chat layer and the surrounding team does not need shared campaign workflows, review visibility, or connected marketing assets.",
+        },
+        {
+          question: "What is the best TypingMind alternative for marketing teams?",
+          answer: "The best fit is the workspace that connects model choice with the team's real deliverables. AI Marketing is designed for multi-model chat plus brand context, marketing agents, visuals, and campaign workflows.",
+        },
+      ],
+      relatedLinks: [
+        ...page.relatedLinks,
+        makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "See the shared workspace workflow behind the comparison."),
+        makeRelatedLink("/resources/ai-subscription-cost-calculator", "Compare the cost of separate model and marketing subscriptions."),
+      ],
+    }
+  }
+
+  if (page.group === "compare" && page.slug === "chatgpt-vs-claude-for-marketing") {
+    return {
+      ...page,
+      title: "Claude vs ChatGPT for Marketing: Which AI Should Teams Use?",
+      description:
+        "Compare Claude and ChatGPT for marketing teams, then see when a multi-model workspace is better for planning, drafting, visuals, and campaign execution.",
+      h1: "Claude vs ChatGPT for Marketing",
+      intro:
+        "Claude and ChatGPT can both support marketing work, but they have different strengths. Compare long-form planning, fast ideation, review needs, and the workspace required to turn model output into campaign assets.",
+      sections: [
+        ...page.sections,
+        {
+          heading: "Claude is stronger for long-form planning",
+          body: [
+            "Claude can be a strong choice when a marketing task depends on long documents, nuanced reasoning, and deliberate review before the team commits to a direction.",
+          ],
+        },
+        {
+          heading: "ChatGPT is stronger for fast ideation",
+          body: [
+            "ChatGPT can be a strong choice when the team wants a familiar OpenAI-native workflow for quick drafting, ideation, and general campaign support.",
+          ],
+        },
+        {
+          heading: "When marketing teams should use both",
+          body: [
+            "If different jobs benefit from different models, the decision is less about choosing one permanent winner and more about keeping one brief, review history, and campaign context while the team compares outputs.",
+          ],
+        },
+      ],
+      faqs: [
+        ...page.faqs,
+        {
+          question: "Is Claude or ChatGPT better for marketing?",
+          answer: "It depends on the job. Claude can be stronger for long-form planning and document-heavy review, while ChatGPT can be stronger for fast ideation and a familiar general-purpose workflow.",
+        },
+        {
+          question: "Should a marketing team use both Claude and ChatGPT?",
+          answer: "Use both when the team benefits from comparing model strengths and can preserve the same brief, brand context, and review criteria across the workflow.",
+        },
+      ],
+      relatedLinks: [
+        ...page.relatedLinks,
+        makeRelatedLink("/use-cases/ai-workspace-for-marketing-teams", "Keep multiple models connected to one marketing workflow."),
+        makeRelatedLink("/use-cases/chatgpt-claude-gemini-in-one-workspace", "See how teams compare models without rebuilding the brief."),
+      ],
+    }
+  }
+
+  return page
+}
+
+export const seoPages: SeoPage[] = rawSeoPages.map((page) => {
+  const overriddenPage = applyCtrSeoOverrides(page)
+  return {
+    ...overriddenPage,
+    relatedLinks: normalizeSeoRelatedLinks(overriddenPage),
+  }
+})
 
 export function seoPathForPage(page: Pick<SeoPage, "group" | "slug">) {
   return `/${page.group}/${page.slug}`

@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "payload": {
+    "fileName": "build-a-6-slide-transaction-banking-6p-deck-cmb.pptx",
+    "contentType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "slideCount": 6,
+    "variantName": "Long Table",
+    "bufferBase64": "<base64:81412>"
+  }
+}

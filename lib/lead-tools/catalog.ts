@@ -151,10 +151,11 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
   },
   {
     slug: "ai-image",
-    name: "AI 绘图与设计助手入口",
-    shortName: "AI 绘图",
-    tagline: "从 public toolsite 进入图片设计、改图和素材引用工作台。",
-    description: "把现有 image-assistant 从企业页面能力，扩成普通用户也能理解并进入的公开产品入口。",
+    name: "AI Image Tool for Branding Teams",
+    shortName: "AI Image Tool",
+    tagline: "Create campaign visuals, brand references, and marketing images from one shared workspace.",
+    description:
+      "Create campaign visuals, brand references, and marketing images from one shared AI workspace built for branding and marketing teams.",
     category: "Image",
     icon: "image",
     media: "image",
@@ -167,17 +168,66 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     finalizeRequiresLogin: false,
     previewModel: "runninghub",
     finalModel: "image-assistant workspace runtime",
-    proofPoints: ["对齐图片任务层", "复用现有 image-assistant", "支持品牌素材与参考图流程"],
+    proofPoints: ["Create on-brand campaign visuals", "Reuse brand references and image prompts", "Continue in the shared image workspace"],
     faqs: [
       {
-        question: "这个入口会重做一套图片工作台吗？",
-        answer: "不会。它会优先复用现有 image-assistant runtime，只把入口、定位和转化链路放到 public toolsite。",
+        question: "What can branding teams create with this AI image tool?",
+        answer: "Use it for campaign visuals, brand references, image variations, and marketing assets that need the same brand context across a team.",
       },
       {
-        question: "为什么要单独做公开入口？",
-        answer: "因为普通用户更需要按“我要做图”来理解产品，而不是先理解企业后台结构。",
+        question: "Can I use brand references with the image tool?",
+        answer: "Yes. The public entry is designed to continue into the existing image-assistant workspace, where teams can keep references and task context together.",
+      },
+      {
+        question: "Is this an image generator or a full design workspace?",
+        answer: "It is the public entry to the existing image workspace, so teams can move from image generation into reference, editing, and review workflows instead of stopping at one prompt.",
       },
     ],
+    contentSections: [
+      {
+        heading: "Create on-brand campaign visuals",
+        body: [
+          "Start with the campaign goal, audience, format, and brand direction instead of a generic image prompt. This helps the team produce visuals that fit the launch rather than isolated images that need to be rebuilt later.",
+        ],
+      },
+      {
+        heading: "Use brand references and image prompts",
+        body: [
+          "Keep reference images, creative direction, and prompt decisions close to the task so designers and marketers can review the same visual context before publishing.",
+        ],
+      },
+      {
+        heading: "AI image tool vs generic image generators",
+        body: [
+          "A generic generator can create an image quickly. A team workspace becomes more useful when the output must stay connected to brand context, campaign assets, and the next review or editing step.",
+        ],
+      },
+    ],
+    relatedLinks: [
+      {
+        href: "/use-cases/ai-workspace-for-marketing-teams",
+        label: "AI Workspace for Marketing Teams",
+        description: "See how image work fits into a shared content, research, and campaign workflow.",
+      },
+      {
+        href: "/agents/image-generation-agent",
+        label: "Image Generation Agent",
+        description: "Use a structured agent workflow when the visual brief needs reusable brand context.",
+      },
+      {
+        href: "/pricing",
+        label: "AI Marketing pricing",
+        description: "Review the workspace path before consolidating image and marketing tools.",
+      },
+    ],
+    primaryCta: {
+      label: "Create campaign visuals",
+      href: "/dashboard/image-assistant",
+    },
+    secondaryCta: {
+      label: "See the marketing workspace",
+      href: "/use-cases/ai-workspace-for-marketing-teams",
+    },
   },
   {
     slug: "ai-video",
@@ -526,11 +576,11 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
   },
   {
     slug: "seo-title-generator",
-    name: "SEO Title Generator",
+    name: "Free SEO Title Generator",
     shortName: "SEO Title",
-    tagline: "Generate multiple SEO title directions from one keyword and page goal.",
+    tagline: "Create SEO title ideas from any keyword, page type, and audience.",
     description:
-      "Create title ideas for resource pages, tools, landing pages, and comparison pages without losing the original search intent.",
+      "Generate SEO title ideas for blog posts, landing pages, tools, and comparison pages. Enter a keyword and get copy-ready title options in seconds.",
     category: "SEO",
     icon: "seo",
     media: "seo",
@@ -543,15 +593,27 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
     finalizeRequiresLogin: false,
     previewModel: getLeadToolPreviewModel("ai-seo-meta-generator"),
     finalModel: getLeadToolFinalModel("ai-seo-meta-generator"),
-    proofPoints: ["Multiple title angles per keyword", "Fits resource, tool, and compare pages", "Pairs directly with meta and outline workflows"],
+    proofPoints: ["Multiple title angles per keyword", "Fits blog, tool, and compare pages", "Copy-ready titles, H1s, and meta directions"],
     faqs: [
       {
-        question: "How is this different from a generic headline generator?",
-        answer: "SEO titles need to balance search intent, clarity, and click appeal while still fitting the page type and business goal.",
+        question: "How long should an SEO title be?",
+        answer: "Aim for a clear, specific title that fits the page intent and usually stays close to the visible search result width. Review the final title in context rather than relying on a character count alone.",
       },
       {
-        question: "Should teams generate titles before or after the outline?",
-        answer: "Usually after the brief is clear but before the draft is finalized, so the title still reflects the intended structure and CTA.",
+        question: "Is an SEO title the same as a meta title?",
+        answer: "They usually refer to the same title-tag field shown to search engines, while the on-page H1 can be slightly different when the page needs a more natural reading headline.",
+      },
+      {
+        question: "How do I write an SEO title users will click?",
+        answer: "Match the search intent, make the outcome concrete, use the important keyword naturally, and give the searcher a specific reason to choose the result without overpromising.",
+      },
+      {
+        question: "How is this different from a generic headline generator?",
+        answer: "It generates title directions around search intent, page type, audience, and click clarity instead of optimizing only for a catchy headline.",
+      },
+      {
+        question: "Should I generate titles before or after the content brief?",
+        answer: "Generate them after the brief is clear but before the draft is finalized, so the title reflects the intended structure and next action.",
       },
     ],
     contentSections: [
@@ -564,7 +626,7 @@ export const leadToolsCatalog: LeadToolDefinition[] = [
       {
         heading: "How to use this with existing tools",
         body: [
-          "Use the AI SEO Meta Generator when you want titles and descriptions together, or start here when your team specifically needs title variants for programmatic pages and landing pages.",
+          "Use the AI SEO Meta Generator when you want titles and descriptions together, or start here when your team specifically needs SEO title variants for programmatic pages and landing pages.",
         ],
       },
     ],
@@ -819,19 +881,19 @@ const localizedLeadToolCopy: Record<
       faqs: leadToolsCatalog.find((tool) => tool.slug === "bio-generator")?.faqs ?? [],
     },
     "seo-title-generator": {
-      name: "SEO 标题生成器",
+      name: "免费 SEO 标题生成器",
       shortName: "SEO 标题",
-      tagline: "围绕关键词和页面目标快速生成多组 SEO 标题方向。",
-      description: "适合资源页、工具页、落地页和对比页的标题规划。",
-      proofPoints: ["一个关键词多种标题角度", "适合资源页与工具页", "可直接衔接 meta 工作流"],
+      tagline: "围绕关键词、页面类型和受众快速生成多组 SEO 标题方向。",
+      description: "输入关键词即可为文章、落地页、工具页和对比页生成可直接使用的 SEO 标题选项。",
+      proofPoints: ["一个关键词多种标题角度", "覆盖文章、工具与对比页", "可直接复制标题、H1 与 Meta 方向"],
       faqs: leadToolsCatalog.find((tool) => tool.slug === "seo-title-generator")?.faqs ?? [],
     },
     "ai-image": {
-      name: "AI 绘图与设计助手入口",
-      shortName: "AI 绘图",
-      tagline: "从 public toolsite 进入图片设计、改图和素材引用工作台。",
-      description: "把现有 image-assistant 从企业页面能力，扩成普通用户也能理解并进入的公开产品入口。",
-      proofPoints: ["对齐图片任务层", "复用现有 image-assistant", "支持品牌素材与参考图流程"],
+      name: "面向品牌团队的 AI 图片工具",
+      shortName: "AI 图片工具",
+      tagline: "在一个共享工作台中创建 campaign 视觉、品牌参考图和营销图片。",
+      description: "面向品牌与营销团队，在一个共享 AI 工作台中创建 campaign 视觉、品牌参考图和营销图片。",
+      proofPoints: ["创建符合品牌的 campaign 视觉", "复用品牌参考图与图片提示词", "继续进入共享图片工作台"],
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-image")?.faqs ?? [],
     },
     "ai-video": {
@@ -927,11 +989,11 @@ const localizedLeadToolCopy: Record<
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-seo-meta-generator")?.faqs ?? [],
     },
     "ai-image": {
-      name: "AI Image and Design Entry",
-      shortName: "AI Image",
-      tagline: "Use one public entry to reach image design, editing, and reference-based workflows.",
-      description: "Elevates the existing image assistant into a public-facing product entry while preserving the current workspace runtime.",
-      proofPoints: ["Aligned with the image task layer", "Reuses the current image assistant", "Supports brand assets and references"],
+      name: "AI Image Tool for Branding Teams",
+      shortName: "AI Image Tool",
+      tagline: "Create campaign visuals, brand references, and marketing images from one shared workspace.",
+      description: "Create campaign visuals, brand references, and marketing images from one shared AI workspace built for branding and marketing teams.",
+      proofPoints: ["Create on-brand campaign visuals", "Reuse brand references and image prompts", "Continue in the shared image workspace"],
       faqs: leadToolsCatalog.find((tool) => tool.slug === "ai-image")?.faqs ?? [],
     },
     "ai-video": {

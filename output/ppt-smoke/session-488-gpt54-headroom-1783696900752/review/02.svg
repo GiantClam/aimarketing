@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="titleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A365D" />
+      <stop offset="100%" stop-color="#3182CE" />
+    </linearGradient>
+    <linearGradient id="railGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F5F7FA" />
+    </linearGradient>
+  </defs>
+
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+    <circle cx="1090" cy="110" r="220" fill="#3182CE" fill-opacity="0.08" />
+    <circle cx="1180" cy="620" r="180" fill="#63B3ED" fill-opacity="0.06" />
+    <line x1="60" y1="118" x2="1220" y2="118" stroke="#3182CE" stroke-width="2" />
+    <line x1="60" y1="642" x2="1220" y2="642" stroke="#E2E8F0" stroke-width="1" />
+  </g>
+
+  <g id="chrome">
+    <text x="60" y="52" fill="#3182CE" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14" letter-spacing="1">模块目录</text>
+    <text x="1220" y="52" text-anchor="end" fill="#A0AEC0" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="12">02 / 08</text>
+    <text x="60" y="672" fill="#A0AEC0" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="11">Enterprise AI Marketing Workspace</text>
+    <text x="1220" y="672" text-anchor="end" fill="#A0AEC0" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="11">product-launch</text>
+  </g>
+
+  <g id="content">
+    <text x="60" y="96" fill="url(#titleGradient)" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="36" font-weight="700">决策框架</text>
+
+    <text font-weight="700" fill="#1A202C" font-size="22" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="60" y="168">本次简报聚焦为什么现在上、具体买到什么、</text><text font-weight="700" fill="#1A202C" font-size="22" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="60" y="198">以及如何低风险落地。</text><path fill="#F5F7FA" stroke="#E2E8F0" d="M72,238 H408 A12,12 0 0 1 420,250 V538 A12,12 0 0 1 408,550 H72 A12,12 0 0 1 60,538 V250 A12,12 0 0 1 72,238 Z" />
+    <text x="88" y="278" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="26" font-weight="700">阅读顺序</text>
+
+    <circle cx="94" cy="324" r="4" fill="#3182CE" />
+    <text x="112" y="331" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="20">先看经营约束与机会</text>
+
+    <circle cx="94" cy="378" r="4" fill="#3182CE" />
+    <text x="112" y="385" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="20">再看平台能力与证据</text>
+
+    <circle cx="94" cy="432" r="4" fill="#3182CE" />
+    <text x="112" y="439" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="20">最后明确试点范围与推进节奏</text>
+
+    <circle cx="94" cy="486" r="4" fill="#3182CE" />
+    <text x="112" y="493" fill="#1A202C" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="20">业务现状与判断</text>
+
+    <rect x="88" y="515" width="304" height="1" fill="#E2E8F0" />
+    <text x="88" y="542" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14">从问题、能力、价值到推进路径，按管理决策顺序展开。</text>
+
+    <path fill="url(#railGradient)" stroke="#E2E8F0" d="M484,156 H1146 A14,14 0 0 1 1160,170 V572 A14,14 0 0 1 1146,586 H484 A14,14 0 0 1 470,572 V170 A14,14 0 0 1 484,156 Z" />
+    <line x1="560" y1="222" x2="560" y2="532" stroke="#3182CE" stroke-width="3" />
+    <circle cx="560" cy="222" r="8" fill="#3182CE" />
+    <circle cx="560" cy="300" r="8" fill="#3182CE" />
+    <circle cx="560" cy="378" r="8" fill="#3182CE" />
+    <circle cx="560" cy="456" r="8" fill="#3182CE" />
+    <circle cx="560" cy="532" r="8" fill="#3182CE" />
+
+    <line x1="568" y1="222" x2="610" y2="222" stroke="#63B3ED" stroke-width="2" />
+    <line x1="568" y1="300" x2="610" y2="300" stroke="#63B3ED" stroke-width="2" />
+    <line x1="568" y1="378" x2="610" y2="378" stroke="#63B3ED" stroke-width="2" />
+    <line x1="568" y1="456" x2="610" y2="456" stroke="#63B3ED" stroke-width="2" />
+    <line x1="568" y1="532" x2="610" y2="532" stroke="#63B3ED" stroke-width="2" />
+
+    <path fill="#FFFFFF" stroke="#E2E8F0" d="M620,188 H1100 A10,10 0 0 1 1110,198 V246 A10,10 0 0 1 1100,256 H620 A10,10 0 0 1 610,246 V198 A10,10 0 0 1 620,188 Z" />
+    <text x="640" y="214" fill="#3182CE" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="18" font-weight="700">01</text>
+    <text x="700" y="214" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="24" font-weight="700">先看经营约束与机会</text>
+    <text x="700" y="240" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="16">明确增长压力、渠道分散与数据断点，为统一平台给出业务起点。</text>
+
+    <path fill="#FFFFFF" stroke="#E2E8F0" d="M620,266 H1100 A10,10 0 0 1 1110,276 V324 A10,10 0 0 1 1100,334 H620 A10,10 0 0 1 610,324 V276 A10,10 0 0 1 620,266 Z" />
+    <text x="640" y="292" fill="#3182CE" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="18" font-weight="700">02</text>
+    <text x="700" y="292" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="24" font-weight="700">再看平台能力与证据</text>
+    <text x="700" y="318" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="16">围绕数据整合、AI 分析、自动化执行与效果度量建立产品认知。</text>
+
+    <path fill="#EBF4FB" stroke="#3182CE" stroke-width="2" d="M620,344 H1100 A10,10 0 0 1 1110,354 V402 A10,10 0 0 1 1100,412 H620 A10,10 0 0 1 610,402 V354 A10,10 0 0 1 620,344 Z" />
+    <text x="640" y="370" fill="#3182CE" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="18" font-weight="700">03</text>
+    <text x="700" y="370" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="24" font-weight="700">最后明确试点范围与推进节奏</text>
+    <text x="700" y="396" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="16">用低风险试点验证价值，再按组织与场景逐步放大。</text>
+
+    <path fill="#FFFFFF" stroke="#E2E8F0" d="M620,422 H840 A10,10 0 0 1 850,432 V500 A10,10 0 0 1 840,510 H620 A10,10 0 0 1 610,500 V432 A10,10 0 0 1 620,422 Z" />
+    <text x="640" y="450" fill="#3182CE" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="18" font-weight="700">04</text>
+    <text x="640" y="478" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="22" font-weight="700">业务现状与判断</text>
+    <text x="640" y="500" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14">统一口径与决策依据</text>
+
+    <path fill="#FFFFFF" stroke="#E2E8F0" d="M880,422 H1100 A10,10 0 0 1 1110,432 V500 A10,10 0 0 1 1100,510 H880 A10,10 0 0 1 870,500 V432 A10,10 0 0 1 880,422 Z" />
+    <text x="900" y="450" fill="#3182CE" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="18" font-weight="700">05</text>
+    <text x="900" y="478" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="22" font-weight="700">关键模块与价值</text>
+    <text x="900" y="500" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14">能力闭环对应经营结果</text>
+
+    <path fill="#1A365D" d="M625,532 H1095 A15,15 0 0 1 1110,547 V547 A15,15 0 0 1 1095,562 H625 A15,15 0 0 1 610,547 V547 A15,15 0 0 1 625,532 Z" />
+    <text x="860" y="552" text-anchor="middle" fill="#FFFFFF" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14">问题识别 → 能力理解 → 试点验证 → 规模复制</text>
+  </g>
+
+  <g id="annotations">
+    <text x="470" y="132" fill="#A0AEC0" font-family="Consolas, &quot;Courier New&quot;, monospace" font-size="12">module_rail / executive flow</text>
+    <text x="1110" y="584" text-anchor="end" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14">核心判断：先统一底座，再引入智能，最后按试点扩张。</text>
+  </g>
+</svg>

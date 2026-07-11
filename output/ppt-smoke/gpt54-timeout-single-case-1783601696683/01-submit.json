@@ -1,0 +1,20 @@
+{
+  "status": 202,
+  "submit": {
+    "jobId": "09863153-5772-4e8c-9655-b52d52409362",
+    "status": "queued"
+  },
+  "body": {
+    "requestId": "gpt54-timeout-single-1783601696683",
+    "prompt": "Build a 4-slide enterprise AI workflow introduction deck",
+    "scenario": "sales-deck",
+    "language": "zh-CN",
+    "model": "deepseek-v4-pro",
+    "preferredProviderId": "enterprise-openai-compatible",
+    "templateMode": "single-template",
+    "templateId": "ppt169_building_effective_agents",
+    "pageCount": 4,
+    "allowMockFallback": false,
+    "runtimeProfile": "railway-linux"
+  }
+}

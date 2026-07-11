@@ -60,7 +60,7 @@ test("localized public path helpers add and strip locale prefixes for supported 
   assert.equal(localizePublicPath("/zh/pricing", "en"), "/en/pricing")
   assert.equal(localizePublicPath("/alternatives/chatgpt-team-alternative", "zh"), "/zh/alternatives/chatgpt-team-alternative")
   assert.equal(localizePublicPath("/prompts/seo-article-prompts", "zh"), "/zh/prompts/seo-article-prompts")
-  assert.equal(localizePublicPath("/alternatives/claude-team-alternative", "zh"), "/alternatives/claude-team-alternative")
+  assert.equal(localizePublicPath("/alternatives/claude-team-alternative", "zh"), "/zh/alternatives/claude-team-alternative")
 })
 
 test("localized public alternates are exposed only for supported localized pages", () => {

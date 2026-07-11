@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "outDir": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/online-regression-agents-deepseek-default-1783608169214",
+  "pptxPath": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/online-regression-agents-deepseek-default-1783608169214/屿算智能企业-ai-业务工具介绍-4p-swiss-grid.pptx",
+  "jobId": "63593fd3-d1d0-4ce0-b4d4-5fbf7304f6ee",
+  "previewSessionId": "4d8fb870-48cf-4a9a-8476-e94c56c2a73c",
+  "provider": "minimax",
+  "previewModel": "MiniMax-M2.7-highspeed",
+  "previewEngine": "ppt-master-svg",
+  "selectedVariantKey": "swiss-grid",
+  "slideCount": 4,
+  "exportFileName": "屿算智能企业-ai-业务工具介绍-4p-swiss-grid.pptx"
+}

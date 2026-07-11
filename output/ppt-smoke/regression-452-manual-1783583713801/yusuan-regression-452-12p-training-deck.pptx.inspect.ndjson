@@ -1,0 +1,147 @@
+{"kind":"deck","id":"pr/3r5hsw","name":"Deck"}
+{"kind":"layout","layoutId":"dbec0d4a-9cbe-4b8d-be74-1fe8ea3080bd","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"bcb826a4-b39d-461d-b0ff-f9cba08eb017","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/2dktv1","slide":1,"title":"内部培训","textShapes":7}
+{"kind":"shape","id":"sh/m1cfa9w3","slide":1,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/tsvu9kni","slide":1,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/47y1kre1","slide":1,"text":"内部培训","textPreview":"内部培训","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":1,"text":"屿算智能产品认知培训","textPreview":"屿算智能产品认知培训","textChars":10,"textLines":1,"bbox":[72,170,880,96]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":1,"text":"从“AI 概念”到“业务系统”，统一管理层认知与对外表达口径。","textPreview":"从“AI 概念”到“业务系统”，统一管理层认知与对外表达口径。","textChars":31,"textLines":1,"bbox":[72,280,780,120]}
+{"kind":"shape","id":"sh/tgfmlkjm","slide":1,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":1,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":1,"text":"• 主题聚焦：产品认知、价值主张、产品体系\n• 适用场景：管理层培训与统一认知\n• 版本：12 页培训讲解 deck","textPreview":"• 主题聚焦：产品认知、价值主张、产品体系 | • 适用场景：管理层培训与统一认知 | • 版本：12 页培训讲解 deck","textChars":58,"textLines":3,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":1,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/0z61032l","slide":1,"text":"培训课件 · 1/12","textPreview":"培训课件 · 1/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/2dktv1","slide":1,"text":""}
+{"kind":"slide","id":"sl/4gmzjy","slide":2,"title":"培训目标","textShapes":7}
+{"kind":"shape","id":"sh/bm58z25k","slide":2,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/47y1kre1","slide":2,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/tsvu9kni","slide":2,"text":"培训目标","textPreview":"培训目标","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":2,"text":"为什么需要这次培训","textPreview":"为什么需要这次培训","textChars":9,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":2,"text":"当前对外沟通中，大家对产品定位、能力边界和价值表达的理解并不完全一致。","textPreview":"当前对外沟通中，大家对产品定位、能力边界和价值表达的理解并不完全一致。","textChars":35,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/4vmtwra5","slide":2,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":2,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":2,"text":"• 统一管理层认知，减少口径偏差\n• 讲清“与通用大模型的区别”\n• 沉淀一套可复用的对外表达逻辑","textPreview":"• 统一管理层认知，减少口径偏差 | • 讲清“与通用大模型的区别” | • 沉淀一套可复用的对外表达逻辑","textChars":49,"textLines":3,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":2,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/f6dcbulw","slide":2,"text":"培训课件 · 2/12","textPreview":"培训课件 · 2/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/4gmzjy","slide":2,"text":""}
+{"kind":"slide","id":"sl/w7gukz","slide":3,"title":"需求锚点","textShapes":7}
+{"kind":"shape","id":"sh/nqxs72x4","slide":3,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/cbulwval","slide":3,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":3,"text":"需求锚点","textPreview":"需求锚点","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/ytsvu9kn","slide":3,"text":"客户从哪里来？企业到底焦虑什么","textPreview":"客户从哪里来？企业到底焦虑什么","textChars":15,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/neloj2t8","slide":3,"text":"“客户从哪里来”是企业经营焦虑的起点，也是后续产品逻辑成立的根本原因。","textPreview":"“客户从哪里来”是企业经营焦虑的起点，也是后续产品逻辑成立的根本原因。","textChars":35,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/czed8v6p","slide":3,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":3,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/yhgn29gr","slide":3,"text":"• 客户来源不稳定\n• 内容生产难持续\n• 团队执行断层\n• 数据与经验难沉淀\n• AI 不知道如何真正用进业务","textPreview":"• 客户来源不稳定 | • 内容生产难持续 | • 团队执行断层 | • 数据与经验难沉淀 | • AI 不知道如何真正用进业务","textChars":56,"textLines":5,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/n29gr2p8","slide":3,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/fyxobm58","slide":3,"text":"培训课件 · 3/12","textPreview":"培训课件 · 3/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/w7gukz","slide":3,"text":""}
+{"kind":"slide","id":"sl/us54n9","slide":4,"title":"真实卡点","textShapes":7}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":4,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/d8v6psfi","slide":4,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":4,"text":"真实卡点","textPreview":"真实卡点","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":4,"text":"企业 AI 落地的真实卡点","textPreview":"企业 AI 落地的真实卡点","textChars":13,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/6tovahoz","slide":4,"text":"企业不是不理解 AI，而是缺少从问题到执行再到结果的完整业务路径。","textPreview":"企业不是不理解 AI，而是缺少从问题到执行再到结果的完整业务路径。","textChars":33,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/dg7adsji","slide":4,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":4,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":4,"text":"• 不会问：难以描述业务需求\n• 不会用：接不进真实工作流\n• 不能沉淀：结果留不进企业资产","textPreview":"• 不会问：难以描述业务需求 | • 不会用：接不进真实工作流 | • 不能沉淀：结果留不进企业资产","textChars":46,"textLines":3,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/61032lsz","slide":4,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/wval87ed","slide":4,"text":"培训课件 · 4/12","textPreview":"培训课件 · 4/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/us54n9","slide":4,"text":""}
+{"kind":"slide","id":"sl/xqh6ou","slide":5,"title":"产品定义","textShapes":7}
+{"kind":"shape","id":"sh/9w3m94fu","slide":5,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/25kb6xkf","slide":5,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":5,"text":"产品定义","textPreview":"产品定义","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":5,"text":"屿算智脑是什么","textPreview":"屿算智脑是什么","textChars":7,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/9knih4by","slide":5,"text":"屿算智脑把大模型、数字员工、业务流程和应用工具组合成企业专属 AI 业务能力。","textPreview":"屿算智脑把大模型、数字员工、业务流程和应用工具组合成企业专属 AI 业务能力。","textChars":39,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/2t83itgf","slide":5,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":5,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":5,"text":"• 进入岗位：17 个 AI 智能体员工\n• 进入流程：从业务梳理到资产沉淀\n• 进入结果：降成本、提效率、强执行、促增长","textPreview":"• 进入岗位：17 个 AI 智能体员工 | • 进入流程：从业务梳理到资产沉淀 | • 进入结果：降成本、提效率、强执行、促增长","textChars":61,"textLines":3,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/9gr2p8nq","slide":5,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":5,"text":"培训课件 · 5/12","textPreview":"培训课件 · 5/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/xqh6ou","slide":5,"text":""}
+{"kind":"slide","id":"sl/dfoamh","slide":6,"title":"产品形态","textShapes":7}
+{"kind":"shape","id":"sh/b6xkf6dc","slide":6,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/0rqd4vmt","slide":6,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/tcj6tova","slide":6,"text":"产品形态","textPreview":"产品形态","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/idonyd0z","slide":6,"text":"从单点工具到业务工作台","textPreview":"从单点工具到业务工作台","textChars":11,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/byhgn29g","slide":6,"text":"屿算智脑的核心不是多一个工具入口，而是把岗位、流程、结果资产组织到同一系统。","textPreview":"屿算智脑的核心不是多一个工具入口，而是把岗位、流程、结果资产组织到同一系统。","textChars":38,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/0je9cvix","slide":6,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":6,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":6,"text":"• 传统单点 AI：工具分散、流程靠人拼接\n• 屿算工作台：按业务路径组织能力\n• 结果进入企业资产库，可复用、可管理","textPreview":"• 传统单点 AI：工具分散、流程靠人拼接 | • 屿算工作台：按业务路径组织能力 | • 结果进入企业资产库，可复用、可管理","textChars":59,"textLines":3,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/bulwval8","slide":6,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":6,"text":"培训课件 · 6/12","textPreview":"培训课件 · 6/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/dfoamh","slide":6,"text":""}
+{"kind":"slide","id":"sl/dake6x","slide":7,"title":"全景图","textShapes":7}
+{"kind":"shape","id":"sh/hgn29gr2","slide":7,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/ap4r65wj","slide":7,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/za1gvy90","slide":7,"text":"全景图","textPreview":"全景图","textChars":3,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/s36hcrmh","slide":7,"text":"七层业务闭环全景","textPreview":"七层业务闭环全景","textChars":8,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/hoza1gvy","slide":7,"text":"从模型接入到底层资产沉淀，形成企业 AI 落地的一条完整链路。","textPreview":"从模型接入到底层资产沉淀，形成企业 AI 落地的一条完整链路。","textChars":31,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/a1gvy90j","slide":7,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/zidonyd0","slide":7,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/s72x4nap","slide":7,"text":"• 底座层：40+ 模型与工具接入\n• 诊断层：业务梳理与问题澄清\n• 立项层：方案生成\n• 管理层：目标拆解与看板\n• 生产层 / 分发层 / 资产层闭环","textPreview":"• 底座层：40+ 模型与工具接入 | • 诊断层：业务梳理与问题澄清 | • 立项层：方案生成 | • 管理层：目标拆解与看板 | • 生产层 / 分发层 / 资产层闭环","textChars":78,"textLines":5,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":7,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":7,"text":"培训课件 · 7/12","textPreview":"培训课件 · 7/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/dake6x","slide":7,"text":""}
+{"kind":"slide","id":"sl/vu5gr3","slide":8,"title":"阶段拆解","textShapes":7}
+{"kind":"shape","id":"sh/wjudg7ad","slide":8,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":8,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":8,"text":"阶段拆解","textPreview":"阶段拆解","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":8,"text":"四个阶段如何跑通业务","textPreview":"四个阶段如何跑通业务","textChars":10,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/0bi9s36h","slide":8,"text":"系统以阶段化方式帮助企业从认知进入执行，并把执行结果沉淀为长期能力。","textPreview":"系统以阶段化方式帮助企业从认知进入执行，并把执行结果沉淀为长期能力。","textChars":34,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/7qpg3ex0","slide":8,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":8,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":8,"text":"• 阶段一：业务梳理\n• 阶段二：立项与执行管理\n• 阶段三：生产与分发\n• 阶段四：风控与资产沉淀","textPreview":"• 阶段一：业务梳理 | • 阶段二：立项与执行管理 | • 阶段三：生产与分发 | • 阶段四：风控与资产沉淀","textChars":50,"textLines":4,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/0z61032l","slide":8,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":8,"text":"培训课件 · 8/12","textPreview":"培训课件 · 8/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/vu5gr3","slide":8,"text":""}
+{"kind":"slide","id":"sl/17j0ss","slide":9,"title":"组织能力","textShapes":7}
+{"kind":"shape","id":"sh/a1gvy90j","slide":9,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/hoza1gvy","slide":9,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/s36hcrmh","slide":9,"text":"组织能力","textPreview":"组织能力","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/za1gvy90","slide":9,"text":"AI 智能体员工矩阵","textPreview":"AI 智能体员工矩阵","textChars":10,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/ap4r65wj","slide":9,"text":"17 个 AI 智能体员工不是抽象能力集合，而是进入真实岗位分工与协同流程。","textPreview":"17 个 AI 智能体员工不是抽象能力集合，而是进入真实岗位分工与协同流程。","textChars":38,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/hgn29gr2","slide":9,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/svu9knih","slide":9,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/3ylc7u54","slide":9,"text":"• 内容策略类\n• 成交与私域裂变类\n• 组织裂变类\n• 专业支持类","textPreview":"• 内容策略类 | • 成交与私域裂变类 | • 组织裂变类 | • 专业支持类","textChars":34,"textLines":4,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/adsji5sn","slide":9,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":9,"text":"培训课件 · 9/12","textPreview":"培训课件 · 9/12","textChars":11,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/17j0ss","slide":9,"text":""}
+{"kind":"slide","id":"sl/7mt46c","slide":10,"title":"业务价值","textShapes":7}
+{"kind":"shape","id":"sh/fu18jqh0","slide":10,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/4fu18jqh","slide":10,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":10,"text":"业务价值","textPreview":"业务价值","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":10,"text":"客户最终买到什么","textPreview":"客户最终买到什么","textChars":8,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/fil0rqd4","slide":10,"text":"客户买到的不是 AI 概念，而是可执行、可管理、可复用的业务能力。","textPreview":"客户买到的不是 AI 概念，而是可执行、可管理、可复用的业务能力。","textChars":33,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/83itgfml","slide":10,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":10,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/mtwra5gb","slide":10,"text":"• 降成本：减少咨询、制作、试错投入\n• 提效率：从等待变连续推进\n• 强执行：想法到任务闭环\n• 促增长：内容、获客、私域形成联动","textPreview":"• 降成本：减少咨询、制作、试错投入 | • 提效率：从等待变连续推进 | • 强执行：想法到任务闭环 | • 促增长：内容、获客、私域形成联动","textChars":66,"textLines":4,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/fepkzupw","slide":10,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":10,"text":"培训课件 · 10/12","textPreview":"培训课件 · 10/12","textChars":12,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/7mt46c","slide":10,"text":""}
+{"kind":"slide","id":"sl/b7ctq2","slide":11,"title":"产品体系","textShapes":7}
+{"kind":"shape","id":"sh/re1w7mp0","slide":11,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/kzupwb2h","slide":11,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/9knih4by","slide":11,"text":"产品体系","textPreview":"产品体系","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/25kb6xkf","slide":11,"text":"产品体系与套餐价格","textPreview":"产品体系与套餐价格","textChars":9,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":11,"text":"标准 SaaS 套餐与超脑定制方案共同构成完整产品边界，方便管理层对外准确推荐。","textPreview":"标准 SaaS 套餐与超脑定制方案共同构成完整产品边界，方便管理层对外准确推荐。","textChars":40,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/kb6xkf6d","slide":11,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":11,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":11,"text":"• 入门版 ¥19,800：先跑通一个业务场景\n• 标准版 ¥39,800：团队协同持续运营\n• 增长版 ¥59,800：多账号、多流程、多业务线规模化\n• 屿算超脑：定制化独立部署，一企一案","textPreview":"• 入门版 ¥19,800：先跑通一个业务场景 | • 标准版 ¥39,800：团队协同持续运营 | • 增长版 ¥59,800：多账号、多流程、多业务线规模化 | • 屿算超脑：定制化独立部署，一企一案","textChars":96,"textLines":4,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":11,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/7ed8bat4","slide":11,"text":"培训课件 · 11/12","textPreview":"培训课件 · 11/12","textChars":12,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/b7ctq2","slide":11,"text":""}
+{"kind":"slide","id":"sl/frd4l7","slide":12,"title":"统一口径","textShapes":7}
+{"kind":"shape","id":"sh/18jqh0fe","slide":12,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/qh0fepkz","slide":12,"bbox":[72,64,1136,40]}
+{"kind":"textbox","id":"sh/j2t83itg","slide":12,"text":"统一口径","textPreview":"统一口径","textChars":4,"textLines":1,"bbox":[84,71,520,24]}
+{"kind":"textbox","id":"sh/8bat47y1","slide":12,"text":"总结与统一对外口径","textPreview":"总结与统一对外口径","textChars":9,"textLines":1,"bbox":[72,120,880,96]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":12,"text":"屿算智脑面向传统企业，把 AI 从单点工具升级为可执行、可管理、可沉淀的增长系统。","textPreview":"屿算智脑面向传统企业，把 AI 从单点工具升级为可执行、可管理、可沉淀的增长系统。","textChars":41,"textLines":1,"bbox":[72,245,780,120]}
+{"kind":"shape","id":"sh/q5o7qpg3","slide":12,"bbox":[890,160,318,430]}
+{"kind":"textbox","id":"sh/jqh0fepk","slide":12,"text":"关键要点","textPreview":"关键要点","textChars":4,"textLines":1,"bbox":[918,192,262,28]}
+{"kind":"textbox","id":"sh/c3ylc7u5","slide":12,"text":"• 不是工具，是业务系统\n• 不是让员工学 AI，而是让 AI 进入岗位和流程\n• 从诊断到执行到沉淀，形成企业闭环","textPreview":"• 不是工具，是业务系统 | • 不是让员工学 AI，而是让 AI 进入岗位和流程 | • 从诊断到执行到沉淀，形成企业闭环","textChars":58,"textLines":3,"bbox":[918,236,248,260]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":12,"text":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textPreview":"屿算智能产品认知培训：从“AI 概念”到“业务系统”","textChars":26,"textLines":1,"bbox":[72,652,480,24]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":12,"text":"培训课件 · 12/12","textPreview":"培训课件 · 12/12","textChars":12,"textLines":1,"bbox":[968,652,240,24]}
+{"kind":"notes","id":"nt/frd4l7","slide":12,"text":""}

@@ -1,0 +1,10 @@
+{
+  "polledAt": "2026-07-09T14:12:51.981Z",
+  "pollCount": 7,
+  "status": 200,
+  "statusPayload": {
+    "jobId": "97a8727b-8a04-4b45-8989-50db2273bbdf",
+    "status": "failed",
+    "message": "Model \"deepseek-v4-pro\" is not supported by any configured account in this group"
+  }
+}

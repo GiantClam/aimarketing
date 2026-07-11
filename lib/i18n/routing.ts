@@ -33,15 +33,20 @@ const LOCALIZED_PUBLIC_PATHS = new Set([
   "/prompts/video-script-prompts",
   "/prompts/image-generation-prompts",
   "/resources/ai-subscription-cost-calculator",
+  "/compare/claude-vs-chatgpt-for-marketing",
 ])
 
 const LOCALIZED_PUBLIC_PREFIXES = [
   "/agents/",
+  "/alternatives/",
   "/capabilities/",
+  "/compare/",
   "/plugins/",
   "/mcp-services/",
+  "/prompts/",
   "/resources/",
   "/tools/",
+  "/use-cases/",
   "/workflows/",
 ] as const
 

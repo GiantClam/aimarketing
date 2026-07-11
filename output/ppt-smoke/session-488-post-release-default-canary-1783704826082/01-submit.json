@@ -1,0 +1,16 @@
+{
+  "body": {
+    "requestId": "post-release-default-canary-89ed963a-6e47-4f0d-8bdb-9282581efbc0",
+    "prompt": "请生成一份 4 页中文可编辑 PPT，主题是企业 AI 营销工作台，面向企业管理层，使用 ppt169_attention_is_all_you_need / Attention Is All You Need 模板，必须走 ppt-master 全流程，不得使用 auto-4 或 frontend-slides。 这是面向客户的 SaaS 方案。请覆盖数据整合、AI 分析、自动化执行、效果度量四个模块。",
+    "scenario": "product-launch",
+    "language": "zh-CN",
+    "templateMode": "single-template",
+    "templateId": "ppt169_attention_is_all_you_need",
+    "narrativeAngle": "executive-brief",
+    "pageCount": 4,
+    "allowMockFallback": false,
+    "runtimeProfile": "railway-linux"
+  },
+  "status": "queued",
+  "jobId": "d744652a-1a92-4b0e-9588-dfd1ba85990e"
+}

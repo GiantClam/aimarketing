@@ -77,8 +77,8 @@ nodeModule._load = function patchedModuleLoad(request: string, parent: unknown, 
 
   if (request === "@/lib/platform/minimax-audio") {
     return {
-      buildAttachmentContentDisposition: (title: string) => `attachment; filename=\"${title}\"`,
-      buildInlineContentDisposition: (title: string) => `inline; filename=\"${title}\"`,
+      buildAttachmentContentDisposition: (title: string) => `attachment; filename="${title}"`,
+      buildInlineContentDisposition: (title: string) => `inline; filename="${title}"`,
     }
   }
 

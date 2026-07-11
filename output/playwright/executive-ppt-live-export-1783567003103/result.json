@@ -1,0 +1,43 @@
+{
+  "ok": false,
+  "runId": "executive-ppt-live-export-1783567003103",
+  "baseUrl": "http://127.0.0.1:3000",
+  "workingModel": {
+    "providerId": "enterprise-openai-compatible",
+    "modelId": "enterprise-openai-compatible::deepseek-v4-pro",
+    "attempts": []
+  },
+  "error": "chat_response_missing",
+  "chatRequests": [
+    {
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "请直接生成可编辑 PPT 预览。\n主题：企业 AI 营销工作台产品发布演示\n受众：管理层\n目标：帮助管理层快速理解产品价值、核心能力和落地路径\n场景：产品发布\n语言：中文\n页数：6页\n风格：简洁、专业、决策导向\n必须包含：产品定位、核心能力、典型流程、商业价值、落地计划\n不要引用外部最新数据，直接完成预览并允许导出。"
+        }
+      ],
+      "attachments": [],
+      "enterpriseKnowledge": {
+        "enabled": false,
+        "datasetIds": []
+      },
+      "conversationId": null,
+      "conversationScope": "chat",
+      "modelConfig": {
+        "providerId": "enterprise-openai-compatible",
+        "modelId": "deepseek-v4-pro"
+      },
+      "agentConfig": {
+        "agentId": "executive-ppt",
+        "agentName": "Editable PPT Assistant"
+      }
+    }
+  ],
+  "chatResponses": [],
+  "exportRequests": [],
+  "exportResponses": [],
+  "previewSessionFetchCount": 0,
+  "previewSessionLast": null,
+  "consoleErrors": []
+}

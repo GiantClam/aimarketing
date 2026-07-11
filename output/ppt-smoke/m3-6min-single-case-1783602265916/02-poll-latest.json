@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "statusPayload": {
+    "jobId": "2a4c91cb-a653-4e47-80ba-c2e88cbbc1aa",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:kubernetes-blueprint-2026:01_cover:ppt_master_runtime_provider_timeout:minimax:MiniMax-M3"
+  }
+}

@@ -1,0 +1,28 @@
+[
+  {
+    "case": "deck-zhaoshang",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "d7a27f26-b199-416c-bbb5-418a9aa7834c",
+        "status": "failed",
+        "message": "Failed to deserialize the JSON body into the target type: messages[0].role: unknown variant `developer`, expected one of `system`, `user`, `assistant`, `tool`, `latest_reminder` at line 1 column 58"
+      }
+    }
+  },
+  {
+    "case": "example-effective-agents",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "dbad8d52-b218-4ef7-9277-9fac108eb205",
+        "status": "failed",
+        "message": "Failed to deserialize the JSON body into the target type: messages[0].role: unknown variant `developer`, expected one of `system`, `user`, `assistant`, `tool`, `latest_reminder` at line 1 column 58"
+      }
+    }
+  }
+]

@@ -1,0 +1,504 @@
+data: {"event":"conversation_init","conversation_id":"447","enabled_tools":["web_search","preview_ppt_deck"],"skills_enabled":true,"selected_skills":["ppt-master"],"persisted":true,"agent_id":"executive-ppt","agent_route":null}
+
+data: {"event":"skill_selected","conversation_id":"447","skill_id":"ppt-master"}
+
+data: {"event":"provider_selected","conversation_id":"447","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","provider_order":["enterprise-openai-compatible"],"provider_attempt":1,"provider_upgrade_probe":false}
+
+data: {"event":"message","conversation_id":"447","answer":"根据"}
+
+data: {"event":"message","conversation_id":"447","answer":"您"}
+
+data: {"event":"message","conversation_id":"447","answer":"上传"}
+
+data: {"event":"message","conversation_id":"447","answer":"的材料"}
+
+data: {"event":"message","conversation_id":"447","answer":"，"}
+
+data: {"event":"message","conversation_id":"447","answer":"信息"}
+
+data: {"event":"message","conversation_id":"447","answer":"已经"}
+
+data: {"event":"message","conversation_id":"447","answer":"非常"}
+
+data: {"event":"message","conversation_id":"447","answer":"完整"}
+
+data: {"event":"message","conversation_id":"447","answer":"。"}
+
+data: {"event":"message","conversation_id":"447","answer":"我现在"}
+
+data: {"event":"message","conversation_id":"447","answer":"直接"}
+
+data: {"event":"message","conversation_id":"447","answer":"为您"}
+
+data: {"event":"message","conversation_id":"447","answer":"生成"}
+
+data: {"event":"message","conversation_id":"447","answer":" PPT"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"预览"}
+
+data: {"event":"message","conversation_id":"447","answer":"。"}
+
+data: {"event":"tool_call","conversation_id":"447","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_OHjNps8XjHADCeqGiB3q0316","args":{"prompt":"为屿算智能（屿算智脑/屿算超脑）制作一份管理层培训讲解用PPT，用于统一团队对公司产品和业务的认知。\n\n整体定位：屿算智脑是一套面向传统企业的AI业务工作台，核心理念是\"实用AI大于AI概念\"，通过17个AI智能体员工、40+模型工具接入和完整业务流程，让AI进入企业的岗位、流程和结果。\n\n第1页-封面：企业专属AI业务工具，副标题：实用AI大于AI概念，让AI进入企业的岗位、流程和结果。\n\n第2页-AI时代的企业经营焦虑：每一个老板脑海里都有100个问题——客户从哪里来？内容怎么持续做？团队怎么执行？数据怎么沉淀？AI到底怎么用？结论：企业需要的不是更多工具，而是一套能把问题变成流程的系统。必须回应\"客户从哪里来？\"这个核心问题。\n\n第3页-企业AI落地的真实卡点：三个卡点——不会问（不知道如何描述业务、拆解问题）、不会用（接不进真实工作流程）、不能沉淀（结果留不进企业资产）。核心判断：企业不缺AI认知，缺的是从问题走到执行、从执行走到结果的业务路径。\n\n第4页-屿算智脑是什么：不是再给企业一个AI工具，而是把大模型、数字员工、业务流程和应用工具组合成企业专属AI业务能力。三层进入——进入岗位（17个AI智能体员工）、进入流程（从业务梳理到资产沉淀）、进入结果（降成本、提效率、强执行、促增长）。\n\n第5页-产品形态升级：从单点AI工具到企业专属AI业务工作台。传统方式依赖员工自己会提问、会选工具、会拼流程，结果留在个人账号；屿算智脑按业务路径组织能力，由角色和场景主动引导，方案、内容、知识进入企业资产库。\n\n第6页-七层业务闭环：底座层（40+模型、17个AI员工）→诊断层（主动提问梳理业务）→立项层（生成方案与策划）→管理层（目标拆到看板和每日任务）→生产层（文案、图片、视频、数字人、PPT）→分发层（多平台发布与客户互动）→资产层（法务审查、知识库与工作流沉淀）。\n\n第7页-阶段一：业务梳理。系统根据营销场景、岗位角色和业务流程主动提问，输出业务地图、目标、资源现状、关键断点和行动计划，帮企业先问清楚再进入立项执行。\n\n第8页-阶段二：立项与执行管理。生成深度方案（行业研究、实施方案、运营策划、风险防控），提供默认回复模板，进入目标看板，拆成每日任务。立项不是填表，是让AI把业务想法变成可推进的项目系统。\n\n第9页-阶段三：生产与分发。营销内容增长流水线——从选题方向、内容生产、AI法务审查、多平台发布、评论抓取与回复、客户跟进，形成闭环。\n\n第10页-阶段四：风控与资产沉淀。AI风控守住内容复刻、数字人使用、平台发布等边界；资产入库沉淀知识库、内容资产、项目资料、工作流资产。每次执行反哺下一次诊断和生产。\n\n第11页-AI智能体员工矩阵：覆盖四大类——内容策略类、成交和私域裂变类、组织裂变类、专业支持类（法务、财务、合同等），按营销增长流程协同工作。\n\n第12页-客户最终买到什么与价格体系：四类结果——降成本、提效率、强执行、促增长。三档套餐：入门版¥19,800、标准版¥39,800、增长版¥59,800。更高阶需求走屿算超脑定制方案。结尾：预约产品演示、合作沟通、定制化部署评估。","sourcePrompt":"写一份介绍屿算智能公司和业务的PPT，用于管理层培训讲解与统一认知。基于上传的屿算智能PPT信息文件。","audience":"管理层汇报","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":12,"tone":"简洁、专业、决策导向","mustInclude":["客户从哪里来？","实用AI大于AI概念","17个AI智能体员工","七层业务闭环","三档套餐价格"]}}}
+
+data: {"event":"tool_call_start","conversation_id":"447","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_OHjNps8XjHADCeqGiB3q0316","args":{"prompt":"为屿算智能（屿算智脑/屿算超脑）制作一份管理层培训讲解用PPT，用于统一团队对公司产品和业务的认知。\n\n整体定位：屿算智脑是一套面向传统企业的AI业务工作台，核心理念是\"实用AI大于AI概念\"，通过17个AI智能体员工、40+模型工具接入和完整业务流程，让AI进入企业的岗位、流程和结果。\n\n第1页-封面：企业专属AI业务工具，副标题：实用AI大于AI概念，让AI进入企业的岗位、流程和结果。\n\n第2页-AI时代的企业经营焦虑：每一个老板脑海里都有100个问题——客户从哪里来？内容怎么持续做？团队怎么执行？数据怎么沉淀？AI到底怎么用？结论：企业需要的不是更多工具，而是一套能把问题变成流程的系统。必须回应\"客户从哪里来？\"这个核心问题。\n\n第3页-企业AI落地的真实卡点：三个卡点——不会问（不知道如何描述业务、拆解问题）、不会用（接不进真实工作流程）、不能沉淀（结果留不进企业资产）。核心判断：企业不缺AI认知，缺的是从问题走到执行、从执行走到结果的业务路径。\n\n第4页-屿算智脑是什么：不是再给企业一个AI工具，而是把大模型、数字员工、业务流程和应用工具组合成企业专属AI业务能力。三层进入——进入岗位（17个AI智能体员工）、进入流程（从业务梳理到资产沉淀）、进入结果（降成本、提效率、强执行、促增长）。\n\n第5页-产品形态升级：从单点AI工具到企业专属AI业务工作台。传统方式依赖员工自己会提问、会选工具、会拼流程，结果留在个人账号；屿算智脑按业务路径组织能力，由角色和场景主动引导，方案、内容、知识进入企业资产库。\n\n第6页-七层业务闭环：底座层（40+模型、17个AI员工）→诊断层（主动提问梳理业务）→立项层（生成方案与策划）→管理层（目标拆到看板和每日任务）→生产层（文案、图片、视频、数字人、PPT）→分发层（多平台发布与客户互动）→资产层（法务审查、知识库与工作流沉淀）。\n\n第7页-阶段一：业务梳理。系统根据营销场景、岗位角色和业务流程主动提问，输出业务地图、目标、资源现状、关键断点和行动计划，帮企业先问清楚再进入立项执行。\n\n第8页-阶段二：立项与执行管理。生成深度方案（行业研究、实施方案、运营策划、风险防控），提供默认回复模板，进入目标看板，拆成每日任务。立项不是填表，是让AI把业务想法变成可推进的项目系统。\n\n第9页-阶段三：生产与分发。营销内容增长流水线——从选题方向、内容生产、AI法务审查、多平台发布、评论抓取与回复、客户跟进，形成闭环。\n\n第10页-阶段四：风控与资产沉淀。AI风控守住内容复刻、数字人使用、平台发布等边界；资产入库沉淀知识库、内容资产、项目资料、工作流资产。每次执行反哺下一次诊断和生产。\n\n第11页-AI智能体员工矩阵：覆盖四大类——内容策略类、成交和私域裂变类、组织裂变类、专业支持类（法务、财务、合同等），按营销增长流程协同工作。\n\n第12页-客户最终买到什么与价格体系：四类结果——降成本、提效率、强执行、促增长。三档套餐：入门版¥19,800、标准版¥39,800、增长版¥59,800。更高阶需求走屿算超脑定制方案。结尾：预约产品演示、合作沟通、定制化部署评估。","sourcePrompt":"写一份介绍屿算智能公司和业务的PPT，用于管理层培训讲解与统一认知。基于上传的屿算智能PPT信息文件。","audience":"管理层汇报","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":12,"tone":"简洁、专业、决策导向","mustInclude":["客户从哪里来？","实用AI大于AI概念","17个AI智能体员工","七层业务闭环","三档套餐价格"]}}}
+
+data: {"event":"tool_result","conversation_id":"447","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_OHjNps8XjHADCeqGiB3q0316","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1115","conversationId":"447","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"tool_call_done","conversation_id":"447","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_OHjNps8XjHADCeqGiB3q0316","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1115","conversationId":"447","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"message","conversation_id":"447","answer":"PPT"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"预览"}
+
+data: {"event":"message","conversation_id":"447","answer":"正在"}
+
+data: {"event":"message","conversation_id":"447","answer":"后台"}
+
+data: {"event":"message","conversation_id":"447","answer":"生成"}
+
+data: {"event":"message","conversation_id":"447","answer":"中"}
+
+data: {"event":"message","conversation_id":"447","answer":"，"}
+
+data: {"event":"message","conversation_id":"447","answer":"系统"}
+
+data: {"event":"message","conversation_id":"447","answer":"正在"}
+
+data: {"event":"message","conversation_id":"447","answer":"为您"}
+
+data: {"event":"message","conversation_id":"447","answer":"渲染"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"12"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"页"}
+
+data: {"event":"message","conversation_id":"447","answer":"培训"}
+
+data: {"event":"message","conversation_id":"447","answer":"讲解"}
+
+data: {"event":"message","conversation_id":"447","answer":" deck"}
+
+data: {"event":"message","conversation_id":"447","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"---\n\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"**"}
+
+data: {"event":"message","conversation_id":"447","answer":"当前"}
+
+data: {"event":"message","conversation_id":"447","answer":"生成"}
+
+data: {"event":"message","conversation_id":"447","answer":"概况"}
+
+data: {"event":"message","conversation_id":"447","answer":"："}
+
+data: {"event":"message","conversation_id":"447","answer":"**\n\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"|"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"项目"}
+
+data: {"event":"message","conversation_id":"447","answer":" |"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"内容"}
+
+data: {"event":"message","conversation_id":"447","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"|"}
+
+data: {"event":"message","conversation_id":"447","answer":"------"}
+
+data: {"event":"message","conversation_id":"447","answer":"|"}
+
+data: {"event":"message","conversation_id":"447","answer":"------"}
+
+data: {"event":"message","conversation_id":"447","answer":"|\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"|"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"主题"}
+
+data: {"event":"message","conversation_id":"447","answer":" |"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"屿"}
+
+data: {"event":"message","conversation_id":"447","answer":"算"}
+
+data: {"event":"message","conversation_id":"447","answer":"智能"}
+
+data: {"event":"message","conversation_id":"447","answer":"公司与"}
+
+data: {"event":"message","conversation_id":"447","answer":"业务"}
+
+data: {"event":"message","conversation_id":"447","answer":"介绍"}
+
+data: {"event":"message","conversation_id":"447","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"|"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"用途"}
+
+data: {"event":"message","conversation_id":"447","answer":" |"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"447","answer":"培训"}
+
+data: {"event":"message","conversation_id":"447","answer":"讲解"}
+
+data: {"event":"message","conversation_id":"447","answer":"与"}
+
+data: {"event":"message","conversation_id":"447","answer":"统一"}
+
+data: {"event":"message","conversation_id":"447","answer":"认知"}
+
+data: {"event":"message","conversation_id":"447","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"|"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"页"}
+
+data: {"event":"message","conversation_id":"447","answer":"数"}
+
+data: {"event":"message","conversation_id":"447","answer":" |"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"12"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"页"}
+
+data: {"event":"message","conversation_id":"447","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"|"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"风格"}
+
+data: {"event":"message","conversation_id":"447","answer":" |"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"简洁"}
+
+data: {"event":"message","conversation_id":"447","answer":"、"}
+
+data: {"event":"message","conversation_id":"447","answer":"专业"}
+
+data: {"event":"message","conversation_id":"447","answer":"、"}
+
+data: {"event":"message","conversation_id":"447","answer":"决策"}
+
+data: {"event":"message","conversation_id":"447","answer":"导向"}
+
+data: {"event":"message","conversation_id":"447","answer":" |\n\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"**"}
+
+data: {"event":"message","conversation_id":"447","answer":"覆盖"}
+
+data: {"event":"message","conversation_id":"447","answer":"的核心"}
+
+data: {"event":"message","conversation_id":"447","answer":"模块"}
+
+data: {"event":"message","conversation_id":"447","answer":"："}
+
+data: {"event":"message","conversation_id":"447","answer":"**\n\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"-"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"企业经营"}
+
+data: {"event":"message","conversation_id":"447","answer":"焦虑"}
+
+data: {"event":"message","conversation_id":"447","answer":" →"}
+
+data: {"event":"message","conversation_id":"447","answer":" AI"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"落地"}
+
+data: {"event":"message","conversation_id":"447","answer":"卡"}
+
+data: {"event":"message","conversation_id":"447","answer":"点"}
+
+data: {"event":"message","conversation_id":"447","answer":" →"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"屿"}
+
+data: {"event":"message","conversation_id":"447","answer":"算"}
+
+data: {"event":"message","conversation_id":"447","answer":"智"}
+
+data: {"event":"message","conversation_id":"447","answer":"脑"}
+
+data: {"event":"message","conversation_id":"447","answer":"产品"}
+
+data: {"event":"message","conversation_id":"447","answer":"定义"}
+
+data: {"event":"message","conversation_id":"447","answer":"\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"-"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"产品"}
+
+data: {"event":"message","conversation_id":"447","answer":"形态"}
+
+data: {"event":"message","conversation_id":"447","answer":"升级"}
+
+data: {"event":"message","conversation_id":"447","answer":"（"}
+
+data: {"event":"message","conversation_id":"447","answer":"单"}
+
+data: {"event":"message","conversation_id":"447","answer":"点"}
+
+data: {"event":"message","conversation_id":"447","answer":"工具"}
+
+data: {"event":"message","conversation_id":"447","answer":" vs"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"业务"}
+
+data: {"event":"message","conversation_id":"447","answer":"工作"}
+
+data: {"event":"message","conversation_id":"447","answer":"台"}
+
+data: {"event":"message","conversation_id":"447","answer":"）\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"-"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"七"}
+
+data: {"event":"message","conversation_id":"447","answer":"层"}
+
+data: {"event":"message","conversation_id":"447","answer":"业务"}
+
+data: {"event":"message","conversation_id":"447","answer":"闭环"}
+
+data: {"event":"message","conversation_id":"447","answer":"（"}
+
+data: {"event":"message","conversation_id":"447","answer":"底座"}
+
+data: {"event":"message","conversation_id":"447","answer":"→"}
+
+data: {"event":"message","conversation_id":"447","answer":"诊断"}
+
+data: {"event":"message","conversation_id":"447","answer":"→"}
+
+data: {"event":"message","conversation_id":"447","answer":"立项"}
+
+data: {"event":"message","conversation_id":"447","answer":"→"}
+
+data: {"event":"message","conversation_id":"447","answer":"管理"}
+
+data: {"event":"message","conversation_id":"447","answer":"→"}
+
+data: {"event":"message","conversation_id":"447","answer":"生产"}
+
+data: {"event":"message","conversation_id":"447","answer":"→"}
+
+data: {"event":"message","conversation_id":"447","answer":"分发"}
+
+data: {"event":"message","conversation_id":"447","answer":"→"}
+
+data: {"event":"message","conversation_id":"447","answer":"资产"}
+
+data: {"event":"message","conversation_id":"447","answer":"）\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"-"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"四"}
+
+data: {"event":"message","conversation_id":"447","answer":"阶段"}
+
+data: {"event":"message","conversation_id":"447","answer":"拆"}
+
+data: {"event":"message","conversation_id":"447","answer":"解"}
+
+data: {"event":"message","conversation_id":"447","answer":"："}
+
+data: {"event":"message","conversation_id":"447","answer":"业务"}
+
+data: {"event":"message","conversation_id":"447","answer":"梳理"}
+
+data: {"event":"message","conversation_id":"447","answer":" →"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"立项"}
+
+data: {"event":"message","conversation_id":"447","answer":"执行"}
+
+data: {"event":"message","conversation_id":"447","answer":" →"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"生产"}
+
+data: {"event":"message","conversation_id":"447","answer":"分发"}
+
+data: {"event":"message","conversation_id":"447","answer":" →"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"风"}
+
+data: {"event":"message","conversation_id":"447","answer":"控"}
+
+data: {"event":"message","conversation_id":"447","answer":"沉淀"}
+
+data: {"event":"message","conversation_id":"447","answer":"\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"-"}
+
+data: {"event":"message","conversation_id":"447","answer":" AI"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"智能"}
+
+data: {"event":"message","conversation_id":"447","answer":"体"}
+
+data: {"event":"message","conversation_id":"447","answer":"员工"}
+
+data: {"event":"message","conversation_id":"447","answer":"矩阵"}
+
+data: {"event":"message","conversation_id":"447","answer":"（"}
+
+data: {"event":"message","conversation_id":"447","answer":"17"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"个"}
+
+data: {"event":"message","conversation_id":"447","answer":"岗位"}
+
+data: {"event":"message","conversation_id":"447","answer":"角色"}
+
+data: {"event":"message","conversation_id":"447","answer":"）\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"-"}
+
+data: {"event":"message","conversation_id":"447","answer":" "}
+
+data: {"event":"message","conversation_id":"447","answer":"客户"}
+
+data: {"event":"message","conversation_id":"447","answer":"价值"}
+
+data: {"event":"message","conversation_id":"447","answer":"与"}
+
+data: {"event":"message","conversation_id":"447","answer":"三"}
+
+data: {"event":"message","conversation_id":"447","answer":"档"}
+
+data: {"event":"message","conversation_id":"447","answer":"套餐"}
+
+data: {"event":"message","conversation_id":"447","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"447","answer":"预览"}
+
+data: {"event":"message","conversation_id":"447","answer":"完成后"}
+
+data: {"event":"message","conversation_id":"447","answer":"我会"}
+
+data: {"event":"message","conversation_id":"447","answer":"第一时间"}
+
+data: {"event":"message","conversation_id":"447","answer":"把"}
+
+data: {"event":"message","conversation_id":"447","answer":"结果"}
+
+data: {"event":"message","conversation_id":"447","answer":"推"}
+
+data: {"event":"message","conversation_id":"447","answer":"送给"}
+
+data: {"event":"message","conversation_id":"447","answer":"您"}
+
+data: {"event":"message","conversation_id":"447","answer":"，"}
+
+data: {"event":"message","conversation_id":"447","answer":"届时"}
+
+data: {"event":"message","conversation_id":"447","answer":"您可以"}
+
+data: {"event":"message","conversation_id":"447","answer":"查看"}
+
+data: {"event":"message","conversation_id":"447","answer":"并"}
+
+data: {"event":"message","conversation_id":"447","answer":"选择"}
+
+data: {"event":"message","conversation_id":"447","answer":"偏"}
+
+data: {"event":"message","conversation_id":"447","answer":"好的"}
+
+data: {"event":"message","conversation_id":"447","answer":"变"}
+
+data: {"event":"message","conversation_id":"447","answer":"体"}
+
+data: {"event":"message","conversation_id":"447","answer":"，"}
+
+data: {"event":"message","conversation_id":"447","answer":"确认"}
+
+data: {"event":"message","conversation_id":"447","answer":"后"}
+
+data: {"event":"message","conversation_id":"447","answer":"即可"}
+
+data: {"event":"message","conversation_id":"447","answer":"导出"}
+
+data: {"event":"message","conversation_id":"447","answer":"可"}
+
+data: {"event":"message","conversation_id":"447","answer":"编辑"}
+
+data: {"event":"message","conversation_id":"447","answer":" PPT"}
+
+data: {"event":"message","conversation_id":"447","answer":"X"}
+
+data: {"event":"message","conversation_id":"447","answer":"。"}
+
+data: {"event":"message","conversation_id":"447","answer":"请"}
+
+data: {"event":"message","conversation_id":"447","answer":"稍"}
+
+data: {"event":"message","conversation_id":"447","answer":"候"}
+
+data: {"event":"message","conversation_id":"447","answer":"。"}
+
+data: {"event":"reasoning_end","conversation_id":"447"}
+
+data: {"event":"message_end","conversation_id":"447","answer":"根据您上传的材料，信息已经非常完整。我现在直接为您生成 PPT 预览。PPT 预览正在后台生成中，系统正在为您渲染 12 页培训讲解 deck。\n\n---\n\n**当前生成概况：**\n\n| 项目 | 内容 |\n|------|------|\n| 主题 | 屿算智能公司与业务介绍 |\n| 用途 | 管理层培训讲解与统一认知 |\n| 页数 | 12 页 |\n| 风格 | 简洁、专业、决策导向 |\n\n**覆盖的核心模块：**\n\n- 企业经营焦虑 → AI 落地卡点 → 屿算智脑产品定义\n- 产品形态升级（单点工具 vs 业务工作台）\n- 七层业务闭环（底座→诊断→立项→管理→生产→分发→资产）\n- 四阶段拆解：业务梳理 → 立项执行 → 生产分发 → 风控沉淀\n- AI 智能体员工矩阵（17 个岗位角色）\n- 客户价值与三档套餐\n\n预览完成后我会第一时间把结果推送给您，届时您可以查看并选择偏好的变体，确认后即可导出可编辑 PPTX。请稍候。\n\n已切换为后台生成：\n- 任务 ID: 1115\n- 状态: PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","agent_id":"executive-ppt","agent_route":null,"provider_order":["enterprise-openai-compatible"]}
+

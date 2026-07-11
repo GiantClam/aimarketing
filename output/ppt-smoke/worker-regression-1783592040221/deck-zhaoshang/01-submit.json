@@ -1,0 +1,20 @@
+{
+  "status": 202,
+  "payload": {
+    "jobId": "0c9103f4-8810-45d7-af70-8b383a6569f5",
+    "status": "queued"
+  },
+  "requestId": "deck-zhaoshang-1783592040222",
+  "body": {
+    "requestId": "deck-zhaoshang-1783592040222",
+    "prompt": "Build a 6-slide transaction banking solution deck",
+    "scenario": "sales-deck",
+    "language": "zh-CN",
+    "model": "deepseek-v4-pro",
+    "preferredProviderId": "enterprise-openai-compatible",
+    "templateMode": "single-template",
+    "templateId": "招商银行",
+    "allowMockFallback": false,
+    "runtimeProfile": "railway-linux"
+  }
+}

@@ -1,0 +1,27 @@
+[
+  {
+    "case": "deck-zhaoshang",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "68aad65c-4db3-4048-8f3d-977b580ccee2",
+        "status": "running"
+      }
+    }
+  },
+  {
+    "case": "example-effective-agents",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "a791bc52-aad3-43c7-bb04-25d20576ec46",
+        "status": "failed",
+        "message": "ppt_master_runtime_slide_generation_failed:building-effective-agents:05_evidence:Failed after 3 attempts. Last error: 已达到 Token Plan 用量上限：请升级 Token Plan 套餐或购买积分补充用量。 (2056)"
+      }
+    }
+  }
+]

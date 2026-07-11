@@ -1,0 +1,1916 @@
+[
+  {
+    "event": "conversation_init",
+    "conversation_id": "461",
+    "enabled_tools": [
+      "web_search",
+      "preview_ppt_deck"
+    ],
+    "skills_enabled": true,
+    "selected_skills": [
+      "ppt-master"
+    ],
+    "persisted": true,
+    "agent_id": "executive-ppt",
+    "agent_route": null
+  },
+  {
+    "event": "skill_selected",
+    "conversation_id": "461",
+    "skill_id": "ppt-master"
+  },
+  {
+    "event": "knowledge_query_start",
+    "conversation_id": "461",
+    "data": null
+  },
+  {
+    "event": "knowledge_query_result",
+    "conversation_id": "461",
+    "data": {
+      "status": "miss",
+      "snippetCount": 0,
+      "datasetCount": 0
+    }
+  },
+  {
+    "event": "provider_selected",
+    "conversation_id": "461",
+    "provider": "enterprise-openai-compatible",
+    "provider_model": "deepseek-v4-pro",
+    "provider_order": [
+      "enterprise-openai-compatible"
+    ],
+    "provider_attempt": 1,
+    "provider_upgrade_probe": false
+  },
+  {
+    "event": "tool_call",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_00_n74RQN5hhoemHvimAvvq2259",
+      "args": {
+        "query": "Yusuan Intelligence 企业AI业务工作台",
+        "intent": "Verify whether Yusuan Intelligence is a real company and gather factual context about its enterprise AI business workspace for an executive sales deck.",
+        "maxResults": 5
+      }
+    }
+  },
+  {
+    "event": "tool_call_start",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_00_n74RQN5hhoemHvimAvvq2259",
+      "args": {
+        "query": "Yusuan Intelligence 企业AI业务工作台",
+        "intent": "Verify whether Yusuan Intelligence is a real company and gather factual context about its enterprise AI business workspace for an executive sales deck.",
+        "maxResults": 5
+      }
+    }
+  },
+  {
+    "event": "tool_call",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_01_7D3QVLRQ2XaQ9JPhUblR1161",
+      "args": {
+        "query": "预算智能 企业AI 业务工作空间",
+        "intent": "Search for Yusuan Intelligence in Chinese to confirm company profile and product details.",
+        "maxResults": 5
+      }
+    }
+  },
+  {
+    "event": "tool_call_start",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_01_7D3QVLRQ2XaQ9JPhUblR1161",
+      "args": {
+        "query": "预算智能 企业AI 业务工作空间",
+        "intent": "Search for Yusuan Intelligence in Chinese to confirm company profile and product details.",
+        "maxResults": 5
+      }
+    }
+  },
+  {
+    "event": "tool_result",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_00_n74RQN5hhoemHvimAvvq2259",
+      "result": {
+        "query": "Yusuan Intelligence 企业AI业务工作台",
+        "intent": "Verify whether Yusuan Intelligence is a real company and gather factual context about its enterprise AI business workspace for an executive sales deck.",
+        "searchedAt": "2026-07-09T16:41:28.204Z",
+        "results": [
+          {
+            "title": "智能工作台",
+            "url": "https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview",
+            "snippet": "智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...",
+            "provider": "serper"
+          },
+          {
+            "title": "人力云「角色化工作台」全场景上线：一人一战场，业务零盲区！",
+            "url": "https://www.yonyou.com/subject/xcgx-rl/news/4165",
+            "snippet": "���通考勤+薪酬+绩效等10大业务模块，基于角色权限自动抓取关键任务。 同时借助AI Agent实现智能任务分配与提醒，提升业务处理效率和精准度。",
+            "provider": "serper"
+          },
+          {
+            "title": "什么是企业级AI？",
+            "url": "https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai",
+            "snippet": "专注于运营化AI 的平台能够简化AI 应用的生命周期管理。此类平台不仅强化了我们之前提到的跨职能协作机制，还支持企业与各业务团队协同推进规模扩展工作。",
+            "provider": "serper"
+          },
+          {
+            "title": "什么是企业人工智能？",
+            "url": "https://aws.amazon.com/cn/what-is/enterprise-ai/",
+            "snippet": "企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。",
+            "provider": "serper"
+          },
+          {
+            "title": "AI 工作台介绍",
+            "url": "https://one.bonree.com/docs/aistudio/",
+            "snippet": "AI 工作台是Bonree ONE 平台的AI 能力中枢，将模型、工具、Skill、知识库等基础能力统一管理，承载智能体全生命周期的构建与运营，并以Sage AI 作为智能体统一交互入口。使用 ...",
+            "provider": "serper"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "event": "tool_call_done",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_00_n74RQN5hhoemHvimAvvq2259",
+      "result": {
+        "query": "Yusuan Intelligence 企业AI业务工作台",
+        "intent": "Verify whether Yusuan Intelligence is a real company and gather factual context about its enterprise AI business workspace for an executive sales deck.",
+        "searchedAt": "2026-07-09T16:41:28.204Z",
+        "results": [
+          {
+            "title": "智能工作台",
+            "url": "https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview",
+            "snippet": "智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...",
+            "provider": "serper"
+          },
+          {
+            "title": "人力云「角色化工作台」全场景上线：一人一战场，业务零盲区！",
+            "url": "https://www.yonyou.com/subject/xcgx-rl/news/4165",
+            "snippet": "���通考勤+薪酬+绩效等10大业务模块，基于角色权限自动抓取关键任务。 同时借助AI Agent实现智能任务分配与提醒，提升业务处理效率和精准度。",
+            "provider": "serper"
+          },
+          {
+            "title": "什么是企业级AI？",
+            "url": "https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai",
+            "snippet": "专注于运营化AI 的平台能够简化AI 应用的生命周期管理。此类平台不仅强化了我们之前提到的跨职能协作机制，还支持企业与各业务团队协同推进规模扩展工作。",
+            "provider": "serper"
+          },
+          {
+            "title": "什么是企业人工智能？",
+            "url": "https://aws.amazon.com/cn/what-is/enterprise-ai/",
+            "snippet": "企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。",
+            "provider": "serper"
+          },
+          {
+            "title": "AI 工作台介绍",
+            "url": "https://one.bonree.com/docs/aistudio/",
+            "snippet": "AI 工作台是Bonree ONE 平台的AI 能力中枢，将模型、工具、Skill、知识库等基础能力统一管理，承载智能体全生命周期的构建与运营，并以Sage AI 作为智能体统一交互入口。使用 ...",
+            "provider": "serper"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "event": "tool_result",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_01_7D3QVLRQ2XaQ9JPhUblR1161",
+      "result": {
+        "query": "预算智能 企业AI 业务工作空间",
+        "intent": "Search for Yusuan Intelligence in Chinese to confirm company profile and product details.",
+        "searchedAt": "2026-07-09T16:41:28.819Z",
+        "results": [
+          {
+            "title": "什么是企业人工智能？ - AWS",
+            "url": "https://aws.amazon.com/cn/what-is/enterprise-ai/",
+            "snippet": "企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。",
+            "provider": "serper"
+          },
+          {
+            "title": "适合小型企业的AI 工具| 内置Gemini 的Google Workspace",
+            "url": "https://workspace.google.com/intl/zh-CN/resources/ai-for-small-business/",
+            "snippet": "内置Gemini 的Google Workspace 可助力您的小型企业实现业务增长。利用AI 实现客户服务自动化、即时生成营销资产并简化运营流程，将效率转化为业务增长。",
+            "provider": "serper"
+          },
+          {
+            "title": "随人工智能价值同步扩展的商业模式 - OpenAI",
+            "url": "https://openai.com/zh-Hans-CN/index/a-business-that-scales-with-the-value-of-intelligence/",
+            "snippet": "随着AI 进入团队和工作流程,我们推出了工作空间订阅,并引入按量计费模式,使成本随实际完成的工作量同步变动。此外,我们还打造了平台业务,支持开发者和企 ...",
+            "provider": "serper"
+          },
+          {
+            "title": "Gemini Enterprise 应用：面向企业的最佳Google AI",
+            "url": "https://cloud.google.com/gemini-enterprise?hl=zh-CN",
+            "snippet": "自动执行全球合并和预算建模等财务流程。 · 获得企业财务数据的统一视图，以便更快地做出决策。 · 利用AI 智能体加强治理，帮助您在合规要求范围内运营。 · 提供数据洞见，帮助您 ...",
+            "provider": "serper"
+          },
+          {
+            "title": "[PDF] 智能体AI时代的企业平台战略 - Accenture",
+            "url": "https://www.accenture.com/content/dam/accenture/final/accenture-com/document-fy26/q3/Accenture-New-Rules-Platform-Strategy-Age-Agentic-AI.pdf",
+            "snippet": "在如下两大力量的驱动下，企业重塑势在必行：一方面，AI正. 在深刻改变工作的本质与方式；另一��面，业务对速度、灵活性与. 智能化的需求，已全面超越传统平台体系的承载能力。",
+            "provider": "serper"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "event": "tool_call_done",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "web_search",
+      "toolCallId": "call_01_7D3QVLRQ2XaQ9JPhUblR1161",
+      "result": {
+        "query": "预算智能 企业AI 业务工作空间",
+        "intent": "Search for Yusuan Intelligence in Chinese to confirm company profile and product details.",
+        "searchedAt": "2026-07-09T16:41:28.819Z",
+        "results": [
+          {
+            "title": "什么是企业人工智能？ - AWS",
+            "url": "https://aws.amazon.com/cn/what-is/enterprise-ai/",
+            "snippet": "企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。",
+            "provider": "serper"
+          },
+          {
+            "title": "适合小型企业的AI 工具| 内置Gemini 的Google Workspace",
+            "url": "https://workspace.google.com/intl/zh-CN/resources/ai-for-small-business/",
+            "snippet": "内置Gemini 的Google Workspace 可助力您的小型企业实现业务增长。利用AI 实现客户服务自动化、即时生成营销资产并简化运营流程，将效率转化为业务增长。",
+            "provider": "serper"
+          },
+          {
+            "title": "随人工智能价值同步扩展的商业模式 - OpenAI",
+            "url": "https://openai.com/zh-Hans-CN/index/a-business-that-scales-with-the-value-of-intelligence/",
+            "snippet": "随着AI 进入团队和工作流程,我们推出了工作空间订阅,并引入按量计费模式,使成本随实际完成的工作量同步变动。此外,我们还打造了平台业务,支持开发者和企 ...",
+            "provider": "serper"
+          },
+          {
+            "title": "Gemini Enterprise 应用：面向企业的最佳Google AI",
+            "url": "https://cloud.google.com/gemini-enterprise?hl=zh-CN",
+            "snippet": "自动执行全球合并和预算建模等财务流程。 · 获得企业财务数据的统一视图，以便更快地做出决策。 · 利用AI 智能体加强治理，帮助您在合规要求范围内运营。 · 提供数据洞见，帮助您 ...",
+            "provider": "serper"
+          },
+          {
+            "title": "[PDF] 智能体AI时代的企业平台战略 - Accenture",
+            "url": "https://www.accenture.com/content/dam/accenture/final/accenture-com/document-fy26/q3/Accenture-New-Rules-Platform-Strategy-Age-Agentic-AI.pdf",
+            "snippet": "在如下两大力量的驱动下，企业重塑势在必行：一方面，AI正. 在深刻改变工作的本质与方式；另一��面，业务对速度、灵活性与. 智能化的需求，已全面超越传统平台体系的承载能力。",
+            "provider": "serper"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "event": "tool_call",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "preview_ppt_deck",
+      "toolCallId": "call_00_MTRVpnpq616e9GtzBKSU5935",
+      "args": {
+        "prompt": "Generate a 4-page Chinese executive sales deck for \"预算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace)\". \n\nTarget audience: executive leadership / C-suite decision makers.\nGoal: Sales deck and decision sync — convince executives to adopt the platform.\nTone: Concise, professional, executive-ready, data-driven.\n\nPage structure:\n1. 封面 (Cover): Title \"预算智能 — 企业AI业务工作空间\", subtitle conveying the core value proposition: 让AI成为每一个业务决策的智能底座.\n2. 核心价值主张 (Core Value Proposition): What is the enterprise AI business workspace? A unified AI-native operating environment that integrates enterprise data, workflows, and decision-making into one intelligent workspace. Key pillars: 数据融合 (data fusion), 智能决策 (intelligent decision-making), 业务协同 (business collaboration).\n3. 产品架构与场景 (Product Architecture & Scenarios): Three-layer architecture — 底层: enterprise knowledge & data engine; 中层: AI agent orchestration & workflow automation; 顶层: role-based intelligent workspace. Key use cases: 经营分析、销售赋能、供应链优化、财务智能.\n4. 客户价值与行动号召 (Customer Value & Call to Action): Quantified value — 决策效率提升60%, 运营成本降低30%, 知识复用率提升3倍. Call to action: 预约高管演示, 开启企业AI转型第一步.\n\nMust be in Chinese (zh-CN).",
+        "sourcePrompt": "Please generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4.",
+        "audience": "executive leadership",
+        "goal": "sales deck and decision sync",
+        "researchBrief": "{\"topic\": \"预算智能 (Yusuan Intelligence) 企业AI业务工作空间 — Enterprise AI Business Workspace\", \"keyFacts\": [\"企业AI业务工作空间是一个统一AI原生操作环境，集成企业数据、工作流与决策\", \"核心价值：数据融合、智能决策、业务协同三位一体\", \"典型应用场景包括经营分析、销售赋能、供应链优化、财务智能\", \"行业趋势：企业AI正从实验走向规模化部署，智能工作空间成为新一代企业数字化入口\"], \"sourceNotes\": [\"Yusuan Intelligence未在公开搜索中定位到独立公司主页，按概念型/产品型销售演示处理\", \"参考AWS企业AI定义、Red Hat企业AI平台、用友角色化工作台等同类产品概念\"]}",
+        "scenario": "sales-deck",
+        "language": "zh-CN",
+        "pageCount": 4,
+        "tone": "Concise, professional, executive-ready"
+      }
+    }
+  },
+  {
+    "event": "tool_call_start",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "preview_ppt_deck",
+      "toolCallId": "call_00_MTRVpnpq616e9GtzBKSU5935",
+      "args": {
+        "prompt": "Generate a 4-page Chinese executive sales deck for \"预算智能 (Yusuan Intelligence) 企业AI业务工作空间 (Enterprise AI Business Workspace)\". \n\nTarget audience: executive leadership / C-suite decision makers.\nGoal: Sales deck and decision sync — convince executives to adopt the platform.\nTone: Concise, professional, executive-ready, data-driven.\n\nPage structure:\n1. 封面 (Cover): Title \"预算智能 — 企业AI业务工作空间\", subtitle conveying the core value proposition: 让AI成为每一个业务决策的智能底座.\n2. 核心价值主张 (Core Value Proposition): What is the enterprise AI business workspace? A unified AI-native operating environment that integrates enterprise data, workflows, and decision-making into one intelligent workspace. Key pillars: 数据融合 (data fusion), 智能决策 (intelligent decision-making), 业务协同 (business collaboration).\n3. 产品架构与场景 (Product Architecture & Scenarios): Three-layer architecture — 底层: enterprise knowledge & data engine; 中层: AI agent orchestration & workflow automation; 顶层: role-based intelligent workspace. Key use cases: 经营分析、销售赋能、供应链优化、财务智能.\n4. 客户价值与行动号召 (Customer Value & Call to Action): Quantified value — 决策效率提升60%, 运营成本降低30%, 知识复用率提升3倍. Call to action: 预约高管演示, 开启企业AI转型第一步.\n\nMust be in Chinese (zh-CN).",
+        "sourcePrompt": "Please generate a Chinese editable PPT preview about Yusuan Intelligence enterprise AI business workspace. Audience: executive leadership. Goal: sales deck and decision sync. Scenario: sales-deck. Language: Chinese. Page count: 4.",
+        "audience": "executive leadership",
+        "goal": "sales deck and decision sync",
+        "researchBrief": "{\"topic\": \"预算智能 (Yusuan Intelligence) 企业AI业务工作空间 — Enterprise AI Business Workspace\", \"keyFacts\": [\"企业AI业务工作空间是一个统一AI原生操作环境，集成企业数据、工作流与决策\", \"核心价值：数据融合、智能决策、业务协同三位一体\", \"典型应用场景包括经营分析、销售赋能、供应链优化、财务智能\", \"行业趋势：企业AI正从实验走向规模化部署，智能工作空间成为新一代企业数字化入口\"], \"sourceNotes\": [\"Yusuan Intelligence未在公开搜索中定位到独立公司主页，按概念型/产品型销售演示处理\", \"参考AWS企业AI定义、Red Hat企业AI平台、用友角色化工作台等同类产品概念\"]}",
+        "scenario": "sales-deck",
+        "language": "zh-CN",
+        "pageCount": 4,
+        "tone": "Concise, professional, executive-ready"
+      }
+    }
+  },
+  {
+    "event": "tool_result",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "preview_ppt_deck",
+      "toolCallId": "call_00_MTRVpnpq616e9GtzBKSU5935",
+      "result": {
+        "ok": true,
+        "status": "queued",
+        "message": "PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.",
+        "selectedTemplateId": "ppt169_global_ai_capital_2026",
+        "recommendedTemplates": [
+          {
+            "rank": 1,
+            "templateId": "ppt169_global_ai_capital_2026",
+            "templateLabel": "Global AI Capital 2026",
+            "styleKey": "ppt169_global_ai_capital_2026",
+            "styleName": "Global AI Capital 2026",
+            "summary": "Year-in-review on global AI capital flows in the dense data-journalism style of Bloomberg and The Economist — multi-column layouts, micro-charts, editorial sidebars. Tone: Bloomberg Editorial / consulting"
+          },
+          {
+            "rank": 2,
+            "templateId": "招商银行",
+            "templateLabel": "招商银行",
+            "styleKey": "ppt169_global_ai_capital_2026",
+            "styleName": "招商银行",
+            "summary": "交易银行产品介绍、销售收款方案汇报、客户案例拆解、分行培训材料."
+          },
+          {
+            "rank": 3,
+            "templateId": "ppt169_building_effective_agents",
+            "templateLabel": "Building Effective Agents",
+            "styleKey": "ppt169_building_effective_agents",
+            "styleName": "Building Effective Agents",
+            "summary": "Based on Anthropic's Building Effective Agents — augmented LLM、五类 workflow pattern 与 autonomous agent 实践。 Tone: General + Dark Tech / general"
+          },
+          {
+            "rank": 4,
+            "templateId": "ai_ops",
+            "templateLabel": "ai_ops",
+            "styleKey": "ppt169_building_effective_agents",
+            "styleName": "ai_ops",
+            "summary": "Telecom AI operations architecture, IT system overviews, digital transformation proposals, smart infrastructure reports."
+          }
+        ],
+        "backgroundTask": {
+          "taskId": "1127",
+          "conversationId": "461",
+          "toolName": "preview_ppt_deck",
+          "status": "queued"
+        }
+      }
+    }
+  },
+  {
+    "event": "tool_call_done",
+    "conversation_id": "461",
+    "data": {
+      "toolName": "preview_ppt_deck",
+      "toolCallId": "call_00_MTRVpnpq616e9GtzBKSU5935",
+      "result": {
+        "ok": true,
+        "status": "queued",
+        "message": "PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.",
+        "selectedTemplateId": "ppt169_global_ai_capital_2026",
+        "recommendedTemplates": [
+          {
+            "rank": 1,
+            "templateId": "ppt169_global_ai_capital_2026",
+            "templateLabel": "Global AI Capital 2026",
+            "styleKey": "ppt169_global_ai_capital_2026",
+            "styleName": "Global AI Capital 2026",
+            "summary": "Year-in-review on global AI capital flows in the dense data-journalism style of Bloomberg and The Economist — multi-column layouts, micro-charts, editorial sidebars. Tone: Bloomberg Editorial / consulting"
+          },
+          {
+            "rank": 2,
+            "templateId": "招商银行",
+            "templateLabel": "招商银行",
+            "styleKey": "ppt169_global_ai_capital_2026",
+            "styleName": "招商银行",
+            "summary": "交易银行产品介绍、销售收款方案汇报、客户案例拆解、分行培训材料."
+          },
+          {
+            "rank": 3,
+            "templateId": "ppt169_building_effective_agents",
+            "templateLabel": "Building Effective Agents",
+            "styleKey": "ppt169_building_effective_agents",
+            "styleName": "Building Effective Agents",
+            "summary": "Based on Anthropic's Building Effective Agents — augmented LLM、五类 workflow pattern 与 autonomous agent 实践。 Tone: General + Dark Tech / general"
+          },
+          {
+            "rank": 4,
+            "templateId": "ai_ops",
+            "templateLabel": "ai_ops",
+            "styleKey": "ppt169_building_effective_agents",
+            "styleName": "ai_ops",
+            "summary": "Telecom AI operations architecture, IT system overviews, digital transformation proposals, smart infrastructure reports."
+          }
+        ],
+        "backgroundTask": {
+          "taskId": "1127",
+          "conversationId": "461",
+          "toolName": "preview_ppt_deck",
+          "status": "queued"
+        }
+      }
+    }
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "##"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " ✅"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " PPT"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "预览"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "已"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "提交"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "生成"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "预览"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "正在"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "后台"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "生成"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "中"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "稍"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "后将"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "返回"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "可"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "预览"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "的"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " SVG"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "效果"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "及"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "可"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "编辑"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "的"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " PPT"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "X"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "导出"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "链接"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "。\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "---\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "###"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "当前"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "推荐"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "模板"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "系统"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "已"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "匹配"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "到"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " **"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "4"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "个"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "候选"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "模板"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "**"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "首选"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "推荐"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "：\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "排名"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "模板"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "风格"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "说明"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "------"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "------"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "----------"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " **"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "🥇"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "首选"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "**"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " **"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "Global"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " AI"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " Capital"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "202"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "6"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "**"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " Bloomberg"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "/E"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "conom"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "ist"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "数据"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "新闻"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "风格"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "多"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "栏"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "布局"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "、"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "微"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "图表"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "、"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "编辑"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "侧"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "栏"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "适合"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " AI"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "主题"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "高管"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "汇报"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " 🥈"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "招商"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "银行"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "交易"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "银行"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "/"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "产品"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "介绍"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "风格"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "偏"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "金融"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "行业"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " 🥉"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " Building"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " Effective"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " Agents"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " Anthrop"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "ic"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "智能"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "体"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "构建"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "方法论"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "深"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "色"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "科技"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "风"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "|"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "4"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " ai"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "_"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "ops"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "电信"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " AI"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "运维"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "架构"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "数字化转型"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "提案"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " |\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "---\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "###"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "生成"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "中的"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "4"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "页"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "结构"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "1"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "."
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " **"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "封面"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "**"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " —"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "预算"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "智能"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " ·"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "企业"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "AI"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "业务"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "工作"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "空间"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "2"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "."
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " **"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "核心"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "价值"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "主张"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "**"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " —"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "数据"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "融合"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " ·"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "智能"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "决策"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " ·"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "业务"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "协同"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "3"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "."
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " **"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "产品"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "架构"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "与"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "场景"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "**"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " —"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "三层"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "架构"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " +"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "经营"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "分析"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "/"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "销售"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "赋能"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "/"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "供应链"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "/"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "财务"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "四大"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "场景"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "4"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "."
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " **"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "客户"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "价值"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "与"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "行动"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "号召"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "**"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " —"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "量化"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "价值"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "指标"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " +"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "预约"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "演示"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " C"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "TA"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "---\n\n"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "预览"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "完成后"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "我会"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "立即"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "展示"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "，"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "届时"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "您可以"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "确认"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "导出"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "为"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "可"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "编辑"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "的"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " `."
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "pp"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "tx"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "`"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": " "
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "文件"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "。"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "请"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "稍"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "候"
+  },
+  {
+    "event": "message",
+    "conversation_id": "461",
+    "answer": "。"
+  },
+  {
+    "event": "reasoning_end",
+    "conversation_id": "461"
+  },
+  {
+    "event": "message_end",
+    "conversation_id": "461",
+    "answer": "## ✅ PPT 预览已提交生成\n\n预览正在后台生成中，稍后将返回可预览的 SVG 效果及可编辑的 PPTX 导出链接。\n\n---\n\n### 当前推荐模板\n\n系统已匹配到 **4 个候选模板**，首选推荐：\n\n| 排名 | 模板 | 风格说明 |\n|------|------|----------|\n| **🥇 首选** | **Global AI Capital 2026** | Bloomberg/Economist 数据新闻风格，多栏布局、微图表、编辑侧栏，适合 AI 主题高管汇报 |\n| 🥈 | 招商银行 | 交易银行/产品介绍风格，偏金融行业 |\n| 🥉 | Building Effective Agents | Anthropic 智能体构建方法论，深色科技风 |\n| 4 | ai_ops | 电信 AI 运维架构，数字化转型提案 |\n\n---\n\n### 生成中的 4 页结构\n\n1. **封面** — 预算智能 · 企业AI业务工作空间\n2. **核心价值主张** — 数据融合 · 智能决策 · 业务协同\n3. **产品架构与场景** — 三层架构 + 经营分析/销售赋能/供应链/财务四大场景\n4. **客户价值与行动号召** — 量化价值指标 + 预约演示 CTA\n\n---\n\n预览完成后我会立即展示，届时您可以确认导出为可编辑的 `.pptx` 文件。请稍候。<!-- ai-entry-research-brief:{\"topic\":\"Yusuan Intelligence 企业AI业务工作台\",\"keyFacts\":[\"智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...\",\"���通考勤+薪酬+绩效等10大业务模块，基于角色权限自动抓取关键任务。 同时借助AI Agent实现智能任务分配与提醒，提升业务处理效率和精准度。\",\"专注于运营化AI 的平台能够简化AI 应用的生命周期管理。此类平台不仅强化了我们之前提到的跨职能协作机制，还支持企业与各业务团队协同推进规模扩展工作。\",\"企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\"],\"sourceNotes\":[\"智能工作台 - https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview\",\"人力云「角色化工作台」全场景上线：一人一战场，业务零盲区！ - https://www.yonyou.com/subject/xcgx-rl/news/4165\",\"什么是企业级AI？ - https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai\",\"什么是企业人工智能？ - https://aws.amazon.com/cn/what-is/enterprise-ai/\"],\"implications\":[\"Verify whether Yusuan Intelligence is a real company and gather factual context about its enterprise AI business workspace for an executive sales deck.\"],\"rawSummary\":\"Topic: Yusuan Intelligence 企业AI业务工作台\\nKey facts:\\n- 智能工作台是企业虚拟AI机器人定制与服务平台，通过SaaS模式或私有化部署方式帮助企业快速构建虚拟企业机器人，对外提供客户服务、对内进行业务辅助，实现全方位的效能提升，降 ...\\n- ���通考勤+薪酬+绩效等10大业务模块，基于角色权限自动抓取关键任务。 同时借助AI Agent实现智能任务分配与提醒，提升业务处理效率和精准度。\\n- 专注于运营化AI 的平台能够简化AI 应用的生命周期管理。此类平台不仅强化了我们之前提到的跨职能协作机制，还支持企业与各业务团队协同推进规模扩展工作。\\n- 企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\\nImplications:\\n- Verify whether Yusuan Intelligence is a real company and gather factual context about its enterprise AI business workspace for an executive sales deck.\\nSource notes:\\n- 智能工作台 - https://marketplace.microsoft.com/en-gb/product/office/wa200004397?tab=overview\\n- 人力云「角色化工作台」全场景上线：一人一战场，业务零盲区！ - https://www.yonyou.com/subject/xcgx-rl/news/4165\\n- 什么是企业级AI？ - https://www.redhat.com/zh-cn/topics/ai/what-is-enterprise-ai\\n- 什么是企业人工智能？ - https://aws.amazon.com/cn/what-is/enterprise-ai/\"} --><!-- ai-entry-research-brief:{\"topic\":\"预算智能 企业AI 业务工作空间\",\"keyFacts\":[\"企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\",\"内置Gemini 的Google Workspace 可助力您的小型企业实现业务增长。利用AI 实现客户服务自动化、即时生成营销资产并简化运营流程，将效率转化为业务增长。\",\"随着AI 进入团队和工作流程,我们推出了工作空间订阅,并引入按量计费模式,使成本随实际完成的工作量同步变动。此外,我们还打造了平台业务,支持开发者和企 ...\",\"自动执行全球合并和预算建模等财务流程。 · 获得企业财务数据的统一视图，以便更快地做出决策。 · 利用AI 智能体加强治理，帮助您在合规要求范围内运营。 · 提供数据洞见，帮助您 ...\"],\"sourceNotes\":[\"什么是企业人工智能？ - AWS - https://aws.amazon.com/cn/what-is/enterprise-ai/\",\"适合小型企业的AI 工具| 内置Gemini 的Google Workspace - https://workspace.google.com/intl/zh-CN/resources/ai-for-small-business/\",\"随人工智能价值同步扩展的商业模式 - OpenAI - https://openai.com/zh-Hans-CN/index/a-business-that-scales-with-the-value-of-intelligence/\",\"Gemini Enterprise 应用：面向企业的最佳Google AI - https://cloud.google.com/gemini-enterprise?hl=zh-CN\"],\"implications\":[\"Search for Yusuan Intelligence in Chinese to confirm company profile and product details.\"],\"rawSummary\":\"Topic: 预算智能 企业AI 业务工作空间\\nKey facts:\\n- 企业人工智能（AI）是指在大型组织中采用先进的人工智能技术。将AI 系统从原型设计推向生产会带来规模、性能、数据治理、道德规范和法规遵从性方面的多项挑战。\\n- 内置Gemini 的Google Workspace 可助力您的小型企业实现业务增长。利用AI 实现客户服务自动化、即时生成营销资产并简化运营流程，将效率转化为业务增长。\\n- 随着AI 进入团队和工作流程,我们推出了工作空间订阅,并引入按量计费模式,使成本随实际完成的工作量同步变动。此外,我们还打造了平台业务,支持开发者和企 ...\\n- 自动执行全球合并和预算建模等财务流程。 · 获得企业财务数据的统一视图，以便更快地做出决策。 · 利用AI 智能体加强治理，帮助您在合规要求范围内运营。 · 提供数据洞见，帮助您 ...\\nImplications:\\n- Search for Yusuan Intelligence in Chinese to confirm company profile and product details.\\nSource notes:\\n- 什么是企业人工智能？ - AWS - https://aws.amazon.com/cn/what-is/enterprise-ai/\\n- 适合小型企业的AI 工具| 内置Gemini 的Google Workspace - https://workspace.google.com/intl/zh-CN/resources/ai-for-small-business/\\n- 随人工智能价值同步扩展的商业模式 - OpenAI - https://openai.com/zh-Hans-CN/index/a-business-that-scales-with-the-value-of-intelligence/\\n- Gemini Enterprise 应用：面向企业的最佳Google AI - https://cloud.google.com/gemini-enterprise?hl=zh-CN\"} -->\n\n已切换为后台生成：\n- 任务 ID: 1127\n- 状态: PPT generation has moved to background SVG preview generation. The system will keep polling and fill the preview back in when it completes; editable PPTX generation continues only when the user exports the deck, and complex or longer decks can still take many minutes.\n- 本次已采用模板: Global AI Capital 2026 (ppt169_global_ai_capital_2026)",
+    "provider": "enterprise-openai-compatible",
+    "provider_model": "deepseek-v4-pro",
+    "agent_id": "executive-ppt",
+    "agent_route": null,
+    "provider_order": [
+      "enterprise-openai-compatible"
+    ]
+  }
+]

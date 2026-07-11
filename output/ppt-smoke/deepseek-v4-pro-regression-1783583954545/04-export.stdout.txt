@@ -1,0 +1,2 @@
+Inspect result written to file: /Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/deepseek-v4-pro-regression-1783583954545/yusuan-deepseek-v4-pro-12p-training-deck.pptx.inspect.ndjson
+/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/deepseek-v4-pro-regression-1783583954545/yusuan-deepseek-v4-pro-12p-training-deck.pptx

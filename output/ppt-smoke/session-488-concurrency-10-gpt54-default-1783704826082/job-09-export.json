@@ -1,0 +1,22 @@
+{
+  "index": 9,
+  "requestId": "tenant-same-concurrency-9-d76a1ccf-cf87-455b-a059-991b6b766e53",
+  "jobId": "6ca158d7-0850-4888-bab2-d7acef327067",
+  "status": "completed",
+  "httpStatus": 200,
+  "previewSessionId": "f36941d3-6628-47ac-8427-6c206f95f262",
+  "provider": "minimax",
+  "previewModel": "MiniMax-M2.7-highspeed",
+  "runtimeSlideProvider": null,
+  "runtimeSlideModel": null,
+  "previewEngine": "ppt-master-svg",
+  "logicalSlideCount": 8,
+  "variantKey": "ppt169_attention_is_all_you_need-executive-brief",
+  "startedAt": "2026-07-10T23:04:10.959Z",
+  "completedAt": "2026-07-10T23:15:43.846Z",
+  "exportStatus": 200,
+  "fileName": "job-09-请生成一份-8-页中文可编辑-ppt主题是企业-ai-营销工作台面向企业-8p-ppt169attentionisa.pptx",
+  "contentType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "slideCount": 8,
+  "variantName": "attention_is_all_you_need — Design Spec"
+}

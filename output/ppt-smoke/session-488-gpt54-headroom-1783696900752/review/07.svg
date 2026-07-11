@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="titleGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A365D" />
+      <stop offset="100%" stop-color="#3182CE" />
+    </linearGradient>
+    <linearGradient id="flowGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3182CE" />
+      <stop offset="100%" stop-color="#63B3ED" />
+    </linearGradient>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M1,1 L9,5 L1,9 Z" fill="#3182CE" />
+    </marker>
+    <marker id="arrowNavy" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M1,1 L9,5 L1,9 Z" fill="#1A365D" />
+    </marker>
+  </defs>
+
+  <g id="background">
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+    <rect x="0" y="0" width="1280" height="720" fill="url(#titleGradient)" fill-opacity="0.03" />
+    <circle cx="1030" cy="120" r="220" fill="#3182CE" fill-opacity="0.08" />
+    <circle cx="1170" cy="620" r="180" fill="#63B3ED" fill-opacity="0.06" />
+    <path d="M60 118 H1220" stroke="#3182CE" stroke-width="2" />
+    <path d="M60 670 H1220" stroke="#E2E8F0" stroke-width="1" />
+  </g>
+
+  <g id="chrome">
+    <text x="60" y="52" fill="#3182CE" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14" letter-spacing="2">SPREADMAP</text>
+    <text x="60" y="95" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="36" font-weight="700">四模块闭环</text>
+    <text x="60" y="130" fill="#4A5568" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="20">这不是四个并列功能，而是一条从数据进入到结果回流的增长操作链。</text>
+    <text x="60" y="694" fill="#A0AEC0" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="11">企业 AI 营销工作台</text>
+    <text x="1218" y="694" text-anchor="end" fill="#A0AEC0" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="11">07</text>
+  </g>
+
+  <g id="content">
+    <path fill="#F5F7FA" stroke="#E2E8F0" stroke-width="1" d="M86,164 H1194 A18,18 0 0 1 1212,182 V620 A18,18 0 0 1 1194,638 H86 A18,18 0 0 1 68,620 V182 A18,18 0 0 1 86,164 Z" />
+
+    <path d="M285 392 C380 305 492 255 640 255 C788 255 900 305 995 392" fill="none" stroke="#1A365D" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 0" />
+    <path d="M997 392 C908 490 794 548 640 548 C486 548 372 490 283 392" fill="none" stroke="url(#flowGradient)" stroke-width="8" stroke-linecap="round" marker-end="url(#arrowBlue)" />
+
+    <circle cx="640" cy="392" r="54" fill="#FFFFFF" stroke="#1A365D" stroke-width="2" />
+    <circle cx="640" cy="392" r="38" fill="#EBF4FB" stroke="#3182CE" stroke-width="2" />
+    <path d="M620 392 H660" stroke="#3182CE" stroke-width="3" stroke-linecap="round" />
+    <path d="M640 372 V412" stroke="#3182CE" stroke-width="3" stroke-linecap="round" />
+    <text x="640" y="458" text-anchor="middle" fill="#1A365D" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="18" font-weight="700">增长主轴</text>
+
+    <path fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" d="M124,238 H316 A14,14 0 0 1 330,252 V372 A14,14 0 0 1 316,386 H124 A14,14 0 0 1 110,372 V252 A14,14 0 0 1 124,238 Z" />
+    <path fill="#EBF4FB" stroke="#3182CE" stroke-width="1.5" d="M138,254 H166 A12,12 0 0 1 178,266 V294 A12,12 0 0 1 166,306 H138 A12,12 0 0 1 126,294 V266 A12,12 0 0 1 138,254 Z" />
+    <path d="M140 282 H164" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M152 270 V294" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" />
+    <circle cx="220" cy="312" r="20" fill="#3182CE" />
+    <text x="220" y="319" text-anchor="middle" fill="#FFFFFF" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="20" font-weight="700">1</text>
+    <text x="126" y="334" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="28" font-weight="700">数据整合</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="126" y="362">接入客户、渠道、内容、交易</text><text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="126" y="384">与行为数据，形成统一底座</text><path fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" d="M488,180 H792 A14,14 0 0 1 806,194 V302 A14,14 0 0 1 792,316 H488 A14,14 0 0 1 474,302 V194 A14,14 0 0 1 488,180 Z" />
+    <path fill="#EBF4FB" stroke="#3182CE" stroke-width="1.5" d="M504,198 H532 A12,12 0 0 1 544,210 V238 A12,12 0 0 1 532,250 H504 A12,12 0 0 1 492,238 V210 A12,12 0 0 1 504,198 Z" />
+    <path d="M504 224 C512 210 526 210 534 224 C526 238 512 238 504 224 Z" fill="none" stroke="#3182CE" stroke-width="2.5" />
+    <circle cx="640" cy="248" r="20" fill="#3182CE" />
+    <text x="640" y="255" text-anchor="middle" fill="#FFFFFF" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="20" font-weight="700">2</text>
+    <text x="492" y="276" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="28" font-weight="700">AI 分析</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="492" y="302">输出客群洞察、机会识别、</text><text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="492" y="324">异常预警与策略建议</text><path fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" d="M962,238 H1154 A14,14 0 0 1 1168,252 V372 A14,14 0 0 1 1154,386 H962 A14,14 0 0 1 948,372 V252 A14,14 0 0 1 962,238 Z" />
+    <path fill="#EBF4FB" stroke="#3182CE" stroke-width="1.5" d="M976,254 H1004 A12,12 0 0 1 1016,266 V294 A12,12 0 0 1 1004,306 H976 A12,12 0 0 1 964,294 V266 A12,12 0 0 1 976,254 Z" />
+    <path d="M978 268 H1002 V292 H978 Z" fill="none" stroke="#3182CE" stroke-width="2.5" />
+    <path d="M1006 280 H1018" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" />
+    <circle cx="1058" cy="312" r="20" fill="#3182CE" />
+    <text x="1058" y="319" text-anchor="middle" fill="#FFFFFF" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="20" font-weight="700">3</text>
+    <text x="964" y="334" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="28" font-weight="700">自动化执行</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="964" y="362">将分群、触达、任务、预算</text><text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="964" y="384">与内容动作自动编排</text><path fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" d="M488,472 H792 A14,14 0 0 1 806,486 V594 A14,14 0 0 1 792,608 H488 A14,14 0 0 1 474,594 V486 A14,14 0 0 1 488,472 Z" />
+    <path fill="#EBF4FB" stroke="#3182CE" stroke-width="1.5" d="M504,490 H532 A12,12 0 0 1 544,502 V530 A12,12 0 0 1 532,542 H504 A12,12 0 0 1 492,530 V502 A12,12 0 0 1 504,490 Z" />
+    <path d="M504 530 L514 520 L524 526 L536 510" fill="none" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M504 536 H536" stroke="#3182CE" stroke-width="2.5" stroke-linecap="round" />
+    <circle cx="640" cy="540" r="20" fill="#3182CE" />
+    <text x="640" y="547" text-anchor="middle" fill="#FFFFFF" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="20" font-weight="700">4</text>
+    <text x="492" y="568" fill="#1A365D" font-family="Georgia, &quot;Microsoft YaHei&quot;, serif" font-size="28" font-weight="700">效果度量</text>
+    <text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="492" y="594">回收活动、渠道、素材与人群</text><text fill="#4A5568" font-size="16" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="492" y="616">表现，反哺模型与策略</text><path d="M330 312 C388 282 430 270 474 258" fill="none" stroke="#1A365D" stroke-width="2.5" marker-end="url(#arrowNavy)" />
+    <path d="M806 258 C848 270 894 282 948 312" fill="none" stroke="#1A365D" stroke-width="2.5" marker-end="url(#arrowNavy)" />
+    <path d="M948 386 C882 446 844 470 806 500" fill="none" stroke="#3182CE" stroke-width="2.5" marker-end="url(#arrowBlue)" />
+    <path d="M474 500 C432 470 394 446 330 386" fill="none" stroke="#3182CE" stroke-width="2.5" marker-end="url(#arrowBlue)" />
+
+    <path fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" d="M156,492 H346 A12,12 0 0 1 358,504 V566 A12,12 0 0 1 346,578 H156 A12,12 0 0 1 144,566 V504 A12,12 0 0 1 156,492 Z" />
+    <text x="166" y="520" fill="#3182CE" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14" font-weight="700">主轴关系</text>
+    <text fill="#4A5568" font-size="15" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="166" y="546">前端接入越完整，</text><text fill="#4A5568" font-size="15" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="166" y="566">后端优化越持续</text><path fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" d="M932,492 H1122 A12,12 0 0 1 1134,504 V566 A12,12 0 0 1 1122,578 H932 A12,12 0 0 1 920,566 V504 A12,12 0 0 1 932,492 Z" />
+    <text x="942" y="520" fill="#3182CE" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="14" font-weight="700">外溢路径</text>
+    <text fill="#4A5568" font-size="15" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="942" y="546">执行与度量必须同源，</text><text fill="#4A5568" font-size="15" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" x="942" y="566">才能沉淀组织复用能力</text></g>
+
+  <g id="annotations">
+    <circle cx="220" cy="404" r="4" fill="#3182CE" />
+    <circle cx="640" cy="332" r="4" fill="#3182CE" />
+    <circle cx="1058" cy="404" r="4" fill="#3182CE" />
+    <circle cx="640" cy="468" r="4" fill="#3182CE" />
+
+    <text x="112" y="616" fill="#A0AEC0" font-family="Arial, &quot;Microsoft YaHei&quot;, &quot;PingFang SC&quot;, sans-serif" font-size="13">四个模块各占一环，但价值来自首尾相接的持续回流。</text>
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+{
+  "label": "gpt54",
+  "jobId": "51bb4377-66a1-4aa2-9298-40bec5a6b540",
+  "previewSessionId": "84c47ae7-2d22-46cd-9f7a-a4ee23a8df2f",
+  "status": "completed",
+  "provider": "pptoken",
+  "previewModel": "gpt-5.4",
+  "previewEngine": "ppt-master-svg",
+  "logicalSlideCount": 8,
+  "previewSlideCount": 8,
+  "exportStatus": 200,
+  "exportSlideCount": 8,
+  "variantKey": "ppt169_attention_is_all_you_need-executive-brief",
+  "slideRuns": []
+}

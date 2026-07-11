@@ -1,0 +1,15 @@
+{
+  "status": 400,
+  "payload": {
+    "message": "bad_request",
+    "issues": [
+      {
+        "code": "custom",
+        "message": "Unknown PPT template",
+        "path": [
+          "templateId"
+        ]
+      }
+    ]
+  }
+}

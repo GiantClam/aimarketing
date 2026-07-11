@@ -1,0 +1,240 @@
+data: {"event":"conversation_init","conversation_id":"452","enabled_tools":["web_search","preview_ppt_deck"],"skills_enabled":true,"selected_skills":["ppt-master"],"persisted":true,"agent_id":"executive-ppt","agent_route":null}
+
+data: {"event":"skill_selected","conversation_id":"452","skill_id":"ppt-master"}
+
+data: {"event":"provider_selected","conversation_id":"452","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","provider_order":["enterprise-openai-compatible"],"provider_attempt":1,"provider_upgrade_probe":false}
+
+data: {"event":"message","conversation_id":"452","answer":"收到"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"按"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"12"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"、"}
+
+data: {"event":"message","conversation_id":"452","answer":"保留"}
+
+data: {"event":"message","conversation_id":"452","answer":"套餐"}
+
+data: {"event":"message","conversation_id":"452","answer":"价格"}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"其他"}
+
+data: {"event":"message","conversation_id":"452","answer":"按"}
+
+data: {"event":"message","conversation_id":"452","answer":"推荐"}
+
+data: {"event":"message","conversation_id":"452","answer":" brief"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"执行"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"现在"}
+
+data: {"event":"message","conversation_id":"452","answer":"生成"}
+
+data: {"event":"message","conversation_id":"452","answer":"预览"}
+
+data: {"event":"message","conversation_id":"452","answer":"。"}
+
+data: {"event":"tool_call","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_0VeD1j9S6F9GVZbdaTrZ3472","args":{"prompt":"主题：《屿算智能产品认知培训：从\"AI 概念\"到\"业务系统\"》\n\n目标受众：内部管理层（核心高管与中层管理者）\n\n目标：培训讲解与统一认知——让管理层理解产品核心逻辑、价值主张、产品体系与对外统一沟通口径。\n\n语言：zh-CN\n场景类型：training\n页数：12页\n风格：简洁、专业、决策导向，减少营销文案感，强化逻辑说服力。\n\n必须包含的内容：\n1. 「客户从哪里来？」——作为企业经营焦虑的起点，须在早期页面出现并贯穿逻辑线。\n2. 套餐价格页完整保留——包含入门版¥19,800、标准版¥39,800、增长版¥59,800及屿算超脑定制方案说明。\n\n12页结构如下：\n\n第1页 | 封面\n- 标题：屿算智能产品认知培训\n- 副标题：从\"AI 概念\"到\"业务系统\"\n- 标注：内部培训\n\n第2页 | 为什么需要这次培训\n- 管理层统一认知的必要性\n- 当前对外沟通中常见的理解偏差（如：被问\"和ChatGPT有什么区别\"时口径不一）\n- 培训目标：理解产品逻辑 → 统一价值表达 → 对齐对外口径\n\n第3页 | 客户从哪里来？企业到底焦虑什么\n- 核心问题：「客户从哪里来？」引出5大经营焦虑：客户来源、内容持续性、团队执行、数据沉淀、AI怎么用\n- 结论：企业缺的不是更多工具，是一套把问题变成流程的系统\n- 本页作为后续所有产品逻辑的\"需求锚点\"\n\n第4页 | 企业AI落地的真实卡点\n- 三个卡点：不会问（不知如何描述业务需求）、不会用（接不进真实工作流）、不能沉淀（结果留不在企业资产里）\n- 核心判断：企业不缺AI认知，缺的是从问题→执行→结果的业务路径\n- 引出：屿算智脑因何而生\n\n第5页 | 屿算智脑是什么\n- 一句话定义：把大模型、数字员工、业务流程和应用工具组合成企业专属AI业务能力\n- 三层进入：进入岗位（17个AI智能体员工）→ 进入流程（业务梳理到资产沉淀）→ 进入结果（降成本、提效率、强执行、促增长）\n- 关键信息：不是再给企业一个AI工具\n\n第6页 | 产品形态差异：从单点工具到业务工作台\n- 左右对比结构：\n  - 传统单点AI工具：工具分散、依赖员工自己会提问和拼流程、结果留在个人账号\n  - 屿算智脑工作台：按业务路径组织能力、角色和场景主动引导、结果进入企业资产库\n- 一句话：让业务问题、岗位角色、执行流程和结果资产在同一个系统里协同运转\n\n第7页 | 七层业务闭环全景\n- 一张逻辑图讲清七层：底座层（40+模型工具接入）→ 诊断层（业务梳理）→ 立项层（方案生成）→ 管理层（目标拆解看板）→ 生产层（内容生产）→ 分发层（多平台发布与客户承接）→ 资产层（风控与知识沉淀）\n- 核心句：不是买一堆AI功能，而是把AI放进企业每天运转的流程里\n\n第8页 | 四个阶段拆解（合并呈现）\n- 阶段一：业务梳理 — 系统主动帮企业问清楚，输出业务地图与立项建议\n- 阶段二：立项与执行管理 — 想法变成方案、计划、每日任务，进度看板可视\n- 阶段三：生产与分发 — 内容策划→生产→合规审查→多平台发布→评论互动→客户跟进形成闭环\n- 阶段四：风控与资产沉淀 — AI守住风险边界，知识、内容、流程沉淀为企业资产，越用越完整\n- 每阶段一行核心输出，简洁有力\n\n第9页 | AI智能体员工矩阵\n- 17个AI智能体员工覆盖四类岗位：内容策略类、成交和私域裂变类、组织裂变类、专业支持类\n- 关键表述：真实岗位而非通用角色；从诊断到风控沉淀，每一步都有对应AI员工进入流程\n- 强调协同工作而非孤立使用\n\n第10页 | 客户最终买到什么\n- 四类业务结果：降成本（减少咨询、制作、试错投入）、提效率（从等待变连续推进）、强执行（想法→计划→任务→看板）、促增长（内容→获客→私域闭环）\n- 最终判断：客户买到的不是\"AI概念\"，是可执行、可管理、可复用的业务能力\n\n第11页 | 产品体系与套餐价格\n- 屿算智脑（标准SaaS）三档套餐：\n  - 入门版 ¥19,800 — 适合老板先跑通一个业务场景\n  - 标准版 ¥39,800 — 适合团队协同持续运营\n  - 增长版 ¥59,800 — 适合多账号、多流程、多业务线规模化\n- 屿算超脑（定制化独立部署）— 面向传统企业科技化升级，一企一案评估\n- 本页清晰呈现产品边界与适用场景，帮助管理层对外正确推荐\n\n第12页 | 总结与统一对外口径\n- 一句话定位回顾：屿算智脑是面向传统企业的AI业务工作台，通过17个AI智能体员工、40+模型工具接入和完整业务流程，把AI从单点工具升级为可执行、可管理、可沉淀的企业增长系统\n- 管理层对外沟通三要点：\n  1. 不是工具，是业务系统\n  2. 不是让员工学AI，是让AI进入岗位和流程\n  3. 从诊断到执行到沉淀，形成闭环\n- 结尾：让AI从概念进入企业的岗位、流程和结果\n\n整体设计调性：商务简洁风，深色或蓝灰为主色调，避免花哨装饰，每页信息密度适中，适合投屏讲解。","sourcePrompt":"12页PPT，管理层内部培训，主题为屿算智能产品认知培训，保留套餐价格页，必须包含\"客户从哪里来\"","audience":"内部管理层（核心高管与中层管理者）","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":12,"tone":"简洁、专业、决策导向，减少营销感，强化逻辑说服力","mustInclude":["客户从哪里来？","套餐价格页完整保留（入门版¥19,800 / 标准版¥39,800 / 增长版¥59,800 / 屿算超脑定制方案）"]}}}
+
+data: {"event":"tool_call_start","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_0VeD1j9S6F9GVZbdaTrZ3472","args":{"prompt":"主题：《屿算智能产品认知培训：从\"AI 概念\"到\"业务系统\"》\n\n目标受众：内部管理层（核心高管与中层管理者）\n\n目标：培训讲解与统一认知——让管理层理解产品核心逻辑、价值主张、产品体系与对外统一沟通口径。\n\n语言：zh-CN\n场景类型：training\n页数：12页\n风格：简洁、专业、决策导向，减少营销文案感，强化逻辑说服力。\n\n必须包含的内容：\n1. 「客户从哪里来？」——作为企业经营焦虑的起点，须在早期页面出现并贯穿逻辑线。\n2. 套餐价格页完整保留——包含入门版¥19,800、标准版¥39,800、增长版¥59,800及屿算超脑定制方案说明。\n\n12页结构如下：\n\n第1页 | 封面\n- 标题：屿算智能产品认知培训\n- 副标题：从\"AI 概念\"到\"业务系统\"\n- 标注：内部培训\n\n第2页 | 为什么需要这次培训\n- 管理层统一认知的必要性\n- 当前对外沟通中常见的理解偏差（如：被问\"和ChatGPT有什么区别\"时口径不一）\n- 培训目标：理解产品逻辑 → 统一价值表达 → 对齐对外口径\n\n第3页 | 客户从哪里来？企业到底焦虑什么\n- 核心问题：「客户从哪里来？」引出5大经营焦虑：客户来源、内容持续性、团队执行、数据沉淀、AI怎么用\n- 结论：企业缺的不是更多工具，是一套把问题变成流程的系统\n- 本页作为后续所有产品逻辑的\"需求锚点\"\n\n第4页 | 企业AI落地的真实卡点\n- 三个卡点：不会问（不知如何描述业务需求）、不会用（接不进真实工作流）、不能沉淀（结果留不在企业资产里）\n- 核心判断：企业不缺AI认知，缺的是从问题→执行→结果的业务路径\n- 引出：屿算智脑因何而生\n\n第5页 | 屿算智脑是什么\n- 一句话定义：把大模型、数字员工、业务流程和应用工具组合成企业专属AI业务能力\n- 三层进入：进入岗位（17个AI智能体员工）→ 进入流程（业务梳理到资产沉淀）→ 进入结果（降成本、提效率、强执行、促增长）\n- 关键信息：不是再给企业一个AI工具\n\n第6页 | 产品形态差异：从单点工具到业务工作台\n- 左右对比结构：\n  - 传统单点AI工具：工具分散、依赖员工自己会提问和拼流程、结果留在个人账号\n  - 屿算智脑工作台：按业务路径组织能力、角色和场景主动引导、结果进入企业资产库\n- 一句话：让业务问题、岗位角色、执行流程和结果资产在同一个系统里协同运转\n\n第7页 | 七层业务闭环全景\n- 一张逻辑图讲清七层：底座层（40+模型工具接入）→ 诊断层（业务梳理）→ 立项层（方案生成）→ 管理层（目标拆解看板）→ 生产层（内容生产）→ 分发层（多平台发布与客户承接）→ 资产层（风控与知识沉淀）\n- 核心句：不是买一堆AI功能，而是把AI放进企业每天运转的流程里\n\n第8页 | 四个阶段拆解（合并呈现）\n- 阶段一：业务梳理 — 系统主动帮企业问清楚，输出业务地图与立项建议\n- 阶段二：立项与执行管理 — 想法变成方案、计划、每日任务，进度看板可视\n- 阶段三：生产与分发 — 内容策划→生产→合规审查→多平台发布→评论互动→客户跟进形成闭环\n- 阶段四：风控与资产沉淀 — AI守住风险边界，知识、内容、流程沉淀为企业资产，越用越完整\n- 每阶段一行核心输出，简洁有力\n\n第9页 | AI智能体员工矩阵\n- 17个AI智能体员工覆盖四类岗位：内容策略类、成交和私域裂变类、组织裂变类、专业支持类\n- 关键表述：真实岗位而非通用角色；从诊断到风控沉淀，每一步都有对应AI员工进入流程\n- 强调协同工作而非孤立使用\n\n第10页 | 客户最终买到什么\n- 四类业务结果：降成本（减少咨询、制作、试错投入）、提效率（从等待变连续推进）、强执行（想法→计划→任务→看板）、促增长（内容→获客→私域闭环）\n- 最终判断：客户买到的不是\"AI概念\"，是可执行、可管理、可复用的业务能力\n\n第11页 | 产品体系与套餐价格\n- 屿算智脑（标准SaaS）三档套餐：\n  - 入门版 ¥19,800 — 适合老板先跑通一个业务场景\n  - 标准版 ¥39,800 — 适合团队协同持续运营\n  - 增长版 ¥59,800 — 适合多账号、多流程、多业务线规模化\n- 屿算超脑（定制化独立部署）— 面向传统企业科技化升级，一企一案评估\n- 本页清晰呈现产品边界与适用场景，帮助管理层对外正确推荐\n\n第12页 | 总结与统一对外口径\n- 一句话定位回顾：屿算智脑是面向传统企业的AI业务工作台，通过17个AI智能体员工、40+模型工具接入和完整业务流程，把AI从单点工具升级为可执行、可管理、可沉淀的企业增长系统\n- 管理层对外沟通三要点：\n  1. 不是工具，是业务系统\n  2. 不是让员工学AI，是让AI进入岗位和流程\n  3. 从诊断到执行到沉淀，形成闭环\n- 结尾：让AI从概念进入企业的岗位、流程和结果\n\n整体设计调性：商务简洁风，深色或蓝灰为主色调，避免花哨装饰，每页信息密度适中，适合投屏讲解。","sourcePrompt":"12页PPT，管理层内部培训，主题为屿算智能产品认知培训，保留套餐价格页，必须包含\"客户从哪里来\"","audience":"内部管理层（核心高管与中层管理者）","goal":"培训讲解与统一认知","scenario":"training","language":"zh-CN","pageCount":12,"tone":"简洁、专业、决策导向，减少营销感，强化逻辑说服力","mustInclude":["客户从哪里来？","套餐价格页完整保留（入门版¥19,800 / 标准版¥39,800 / 增长版¥59,800 / 屿算超脑定制方案）"]}}}
+
+data: {"event":"tool_result","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_0VeD1j9S6F9GVZbdaTrZ3472","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1121","conversationId":"452","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"tool_call_done","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"call_00_0VeD1j9S6F9GVZbdaTrZ3472","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1121","conversationId":"452","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"message","conversation_id":"452","answer":"PPT"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"预览"}
+
+data: {"event":"message","conversation_id":"452","answer":"已"}
+
+data: {"event":"message","conversation_id":"452","answer":"进入"}
+
+data: {"event":"message","conversation_id":"452","answer":"后台"}
+
+data: {"event":"message","conversation_id":"452","answer":"生成"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"任务"}
+
+data: {"event":"message","conversation_id":"452","answer":" ID"}
+
+data: {"event":"message","conversation_id":"452","answer":":"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"112"}
+
+data: {"event":"message","conversation_id":"452","answer":"1"}
+
+data: {"event":"message","conversation_id":"452","answer":"），"}
+
+data: {"event":"message","conversation_id":"452","answer":"12"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"结构"}
+
+data: {"event":"message","conversation_id":"452","answer":"按"}
+
+data: {"event":"message","conversation_id":"452","answer":"确认"}
+
+data: {"event":"message","conversation_id":"452","answer":"方案"}
+
+data: {"event":"message","conversation_id":"452","answer":"执行"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"套餐"}
+
+data: {"event":"message","conversation_id":"452","answer":"价格"}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"已"}
+
+data: {"event":"message","conversation_id":"452","answer":"保留"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"生成"}
+
+data: {"event":"message","conversation_id":"452","answer":"完成后"}
+
+data: {"event":"message","conversation_id":"452","answer":"我会"}
+
+data: {"event":"message","conversation_id":"452","answer":"回"}
+
+data: {"event":"message","conversation_id":"452","answer":"填"}
+
+data: {"event":"message","conversation_id":"452","answer":"预览"}
+
+data: {"event":"message","conversation_id":"452","answer":"结果"}
+
+data: {"event":"message","conversation_id":"452","answer":"供"}
+
+data: {"event":"message","conversation_id":"452","answer":"你"}
+
+data: {"event":"message","conversation_id":"452","answer":"审"}
+
+data: {"event":"message","conversation_id":"452","answer":"阅"}
+
+data: {"event":"message","conversation_id":"452","answer":"。"}
+
+data: {"event":"message","conversation_id":"452","answer":"届时"}
+
+data: {"event":"message","conversation_id":"452","answer":"你可以"}
+
+data: {"event":"message","conversation_id":"452","answer":"：\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"-"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"逐"}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"确认"}
+
+data: {"event":"message","conversation_id":"452","answer":"内容和"}
+
+data: {"event":"message","conversation_id":"452","answer":"逻辑"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"-"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"指出"}
+
+data: {"event":"message","conversation_id":"452","answer":"需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"调整"}
+
+data: {"event":"message","conversation_id":"452","answer":"的"}
+
+data: {"event":"message","conversation_id":"452","answer":"页面"}
+
+data: {"event":"message","conversation_id":"452","answer":"或"}
+
+data: {"event":"message","conversation_id":"452","answer":"表述"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"-"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"确认"}
+
+data: {"event":"message","conversation_id":"452","answer":"后"}
+
+data: {"event":"message","conversation_id":"452","answer":"我会"}
+
+data: {"event":"message","conversation_id":"452","answer":"导出"}
+
+data: {"event":"message","conversation_id":"452","answer":"可"}
+
+data: {"event":"message","conversation_id":"452","answer":"编辑"}
+
+data: {"event":"message","conversation_id":"452","answer":"的"}
+
+data: {"event":"message","conversation_id":"452","answer":" PPT"}
+
+data: {"event":"message","conversation_id":"452","answer":"X"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"文件"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"请"}
+
+data: {"event":"message","conversation_id":"452","answer":"稍"}
+
+data: {"event":"message","conversation_id":"452","answer":"候"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"复杂"}
+
+data: {"event":"message","conversation_id":"452","answer":" deck"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"可能需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"几分钟"}
+
+data: {"event":"message","conversation_id":"452","answer":"。"}
+
+data: {"event":"reasoning_end","conversation_id":"452"}
+
+data: {"event":"message_end","conversation_id":"452","answer":"收到，按 12 页、保留套餐价格页，其他按推荐 brief 执行，现在生成预览。PPT 预览已进入后台生成（任务 ID: 1121），12 页结构按确认方案执行，套餐价格页已保留。\n\n生成完成后我会回填预览结果供你审阅。届时你可以：\n\n- 逐页确认内容和逻辑\n- 指出需要调整的页面或表述\n- 确认后我会导出可编辑的 PPTX 文件\n\n请稍候，复杂 deck 可能需要几分钟。\n\n已切换为后台生成：\n- 任务 ID: 1121\n- 状态: PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","agent_id":"executive-ppt","agent_route":null,"provider_order":["enterprise-openai-compatible"]}
+

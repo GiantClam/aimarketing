@@ -1,0 +1,3 @@
+ERROR: Slides with content overflowing original canvas (1-based indexing): 5
+Rendered images with grey paddings for problematic slides are available at: 
+/var/folders/z_/bq49_j7s03j97t1vz5b87q1m0000gn/T/tmpgcphww9c/imgs/slide-5.png

@@ -1,0 +1,1892 @@
+data: {"event":"conversation_init","conversation_id":"452","enabled_tools":["web_search","preview_ppt_deck"],"skills_enabled":true,"selected_skills":["ppt-master"],"persisted":true,"agent_id":"executive-ppt","agent_route":null}
+
+data: {"event":"skill_selected","conversation_id":"452","skill_id":"ppt-master"}
+
+data: {"event":"provider_selected","conversation_id":"452","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","provider_order":["enterprise-openai-compatible"],"provider_attempt":1,"provider_upgrade_probe":false}
+
+data: {"event":"message","conversation_id":"452","answer":"#"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"推荐"}
+
+data: {"event":"message","conversation_id":"452","answer":" Brief"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"草案"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"以下是"}
+
+data: {"event":"message","conversation_id":"452","answer":"基于"}
+
+data: {"event":"message","conversation_id":"452","answer":"附件"}
+
+data: {"event":"message","conversation_id":"452","answer":"内容"}
+
+data: {"event":"message","conversation_id":"452","answer":"整理的"}
+
+data: {"event":"message","conversation_id":"452","answer":"推荐"}
+
+data: {"event":"message","conversation_id":"452","answer":" brief"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"已"}
+
+data: {"event":"message","conversation_id":"452","answer":"标注"}
+
+data: {"event":"message","conversation_id":"452","answer":"假设"}
+
+data: {"event":"message","conversation_id":"452","answer":"项"}
+
+data: {"event":"message","conversation_id":"452","answer":"和"}
+
+data: {"event":"message","conversation_id":"452","answer":"待"}
+
+data: {"event":"message","conversation_id":"452","answer":"确认"}
+
+data: {"event":"message","conversation_id":"452","answer":"项"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"---\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"##"}
+
+data: {"event":"message","conversation_id":"452","answer":" 📋"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"建议"}
+
+data: {"event":"message","conversation_id":"452","answer":"采用的"}
+
+data: {"event":"message","conversation_id":"452","answer":" Brief"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"维度"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"建议"}
+
+data: {"event":"message","conversation_id":"452","answer":"值"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|---|---"}
+
+data: {"event":"message","conversation_id":"452","answer":"|\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"主题"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" 《"}
+
+data: {"event":"message","conversation_id":"452","answer":"屿"}
+
+data: {"event":"message","conversation_id":"452","answer":"算"}
+
+data: {"event":"message","conversation_id":"452","answer":"智能"}
+
+data: {"event":"message","conversation_id":"452","answer":"产品"}
+
+data: {"event":"message","conversation_id":"452","answer":"认知"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"："}
+
+data: {"event":"message","conversation_id":"452","answer":"从"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"AI"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"概念"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"到"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"业务"}
+
+data: {"event":"message","conversation_id":"452","answer":"系统"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"》"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"目标"}
+
+data: {"event":"message","conversation_id":"452","answer":"受众"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"内部"}
+
+data: {"event":"message","conversation_id":"452","answer":"）"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"目标"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"讲解"}
+
+data: {"event":"message","conversation_id":"452","answer":"与"}
+
+data: {"event":"message","conversation_id":"452","answer":"统一"}
+
+data: {"event":"message","conversation_id":"452","answer":"认知"}
+
+data: {"event":"message","conversation_id":"452","answer":"——"}
+
+data: {"event":"message","conversation_id":"452","answer":"让"}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"理解"}
+
+data: {"event":"message","conversation_id":"452","answer":"产品"}
+
+data: {"event":"message","conversation_id":"452","answer":"逻辑"}
+
+data: {"event":"message","conversation_id":"452","answer":"、"}
+
+data: {"event":"message","conversation_id":"452","answer":"核心"}
+
+data: {"event":"message","conversation_id":"452","answer":"价值"}
+
+data: {"event":"message","conversation_id":"452","answer":"与"}
+
+data: {"event":"message","conversation_id":"452","answer":"对外"}
+
+data: {"event":"message","conversation_id":"452","answer":"沟通"}
+
+data: {"event":"message","conversation_id":"452","answer":"口径"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"语言"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" zh"}
+
+data: {"event":"message","conversation_id":"452","answer":"-C"}
+
+data: {"event":"message","conversation_id":"452","answer":"N"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"场景"}
+
+data: {"event":"message","conversation_id":"452","answer":"类型"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" training"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"数"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"约"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"12"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"风格"}
+
+data: {"event":"message","conversation_id":"452","answer":"/"}
+
+data: {"event":"message","conversation_id":"452","answer":"语调"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"简洁"}
+
+data: {"event":"message","conversation_id":"452","answer":"、"}
+
+data: {"event":"message","conversation_id":"452","answer":"专业"}
+
+data: {"event":"message","conversation_id":"452","answer":"、"}
+
+data: {"event":"message","conversation_id":"452","answer":"决策"}
+
+data: {"event":"message","conversation_id":"452","answer":"导向"}
+
+data: {"event":"message","conversation_id":"452","answer":"；"}
+
+data: {"event":"message","conversation_id":"452","answer":"减少"}
+
+data: {"event":"message","conversation_id":"452","answer":"营销"}
+
+data: {"event":"message","conversation_id":"452","answer":"文案"}
+
+data: {"event":"message","conversation_id":"452","answer":"感"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"强化"}
+
+data: {"event":"message","conversation_id":"452","answer":"逻辑"}
+
+data: {"event":"message","conversation_id":"452","answer":"说服"}
+
+data: {"event":"message","conversation_id":"452","answer":"力"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"|"}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"必须"}
+
+data: {"event":"message","conversation_id":"452","answer":"包含"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" |"}
+
+data: {"event":"message","conversation_id":"452","answer":" 「"}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"从哪里"}
+
+data: {"event":"message","conversation_id":"452","answer":"来"}
+
+data: {"event":"message","conversation_id":"452","answer":"？」"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"源于"}
+
+data: {"event":"message","conversation_id":"452","answer":"第"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"2"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"企业经营"}
+
+data: {"event":"message","conversation_id":"452","answer":"焦虑"}
+
+data: {"event":"message","conversation_id":"452","answer":"）"}
+
+data: {"event":"message","conversation_id":"452","answer":" |\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"###"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"建议"}
+
+data: {"event":"message","conversation_id":"452","answer":"页面"}
+
+data: {"event":"message","conversation_id":"452","answer":"结构"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"12"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"）\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"1"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"封面"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"标题"}
+
+data: {"event":"message","conversation_id":"452","answer":" +"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"一句"}
+
+data: {"event":"message","conversation_id":"452","answer":"核心"}
+
+data: {"event":"message","conversation_id":"452","answer":"定位"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"2"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"为什么"}
+
+data: {"event":"message","conversation_id":"452","answer":"做"}
+
+data: {"event":"message","conversation_id":"452","answer":"这个"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"统一"}
+
+data: {"event":"message","conversation_id":"452","answer":"认知"}
+
+data: {"event":"message","conversation_id":"452","answer":"的必要"}
+
+data: {"event":"message","conversation_id":"452","answer":"性"}
+
+data: {"event":"message","conversation_id":"452","answer":" &"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"当前"}
+
+data: {"event":"message","conversation_id":"452","answer":"常见"}
+
+data: {"event":"message","conversation_id":"452","answer":"理解"}
+
+data: {"event":"message","conversation_id":"452","answer":"偏差"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"3"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"从哪里"}
+
+data: {"event":"message","conversation_id":"452","answer":"来"}
+
+data: {"event":"message","conversation_id":"452","answer":"？"}
+
+data: {"event":"message","conversation_id":"452","answer":"企业"}
+
+data: {"event":"message","conversation_id":"452","answer":"到底"}
+
+data: {"event":"message","conversation_id":"452","answer":"焦虑"}
+
+data: {"event":"message","conversation_id":"452","answer":"什么"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"回"}
+
+data: {"event":"message","conversation_id":"452","answer":"扣"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"从哪里"}
+
+data: {"event":"message","conversation_id":"452","answer":"来"}
+
+data: {"event":"message","conversation_id":"452","answer":"\"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"展开"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"5"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"大"}
+
+data: {"event":"message","conversation_id":"452","answer":"焦虑"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"指向"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"缺"}
+
+data: {"event":"message","conversation_id":"452","answer":"的是"}
+
+data: {"event":"message","conversation_id":"452","answer":"系统"}
+
+data: {"event":"message","conversation_id":"452","answer":"不是"}
+
+data: {"event":"message","conversation_id":"452","answer":"工具"}
+
+data: {"event":"message","conversation_id":"452","answer":"\"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"4"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"企业"}
+
+data: {"event":"message","conversation_id":"452","answer":" AI"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"落"}
+
+data: {"event":"message","conversation_id":"452","answer":"地的"}
+
+data: {"event":"message","conversation_id":"452","answer":"真实"}
+
+data: {"event":"message","conversation_id":"452","answer":"卡"}
+
+data: {"event":"message","conversation_id":"452","answer":"点"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"不会"}
+
+data: {"event":"message","conversation_id":"452","answer":"问"}
+
+data: {"event":"message","conversation_id":"452","answer":" /"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"不会"}
+
+data: {"event":"message","conversation_id":"452","answer":"用"}
+
+data: {"event":"message","conversation_id":"452","answer":" /"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"不能"}
+
+data: {"event":"message","conversation_id":"452","answer":"沉淀"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"引出"}
+
+data: {"event":"message","conversation_id":"452","answer":"产品"}
+
+data: {"event":"message","conversation_id":"452","answer":"存在的"}
+
+data: {"event":"message","conversation_id":"452","answer":"理由"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"5"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"屿"}
+
+data: {"event":"message","conversation_id":"452","answer":"算"}
+
+data: {"event":"message","conversation_id":"452","answer":"智"}
+
+data: {"event":"message","conversation_id":"452","answer":"脑"}
+
+data: {"event":"message","conversation_id":"452","answer":"是什么"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"一句话"}
+
+data: {"event":"message","conversation_id":"452","answer":"定义"}
+
+data: {"event":"message","conversation_id":"452","answer":" +"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"三层"}
+
+data: {"event":"message","conversation_id":"452","answer":"进入"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"岗位"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"流程"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"结果"}
+
+data: {"event":"message","conversation_id":"452","answer":"）\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"6"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"产品"}
+
+data: {"event":"message","conversation_id":"452","answer":"形态"}
+
+data: {"event":"message","conversation_id":"452","answer":"差异"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"传统"}
+
+data: {"event":"message","conversation_id":"452","answer":"单"}
+
+data: {"event":"message","conversation_id":"452","answer":"点"}
+
+data: {"event":"message","conversation_id":"452","answer":"工具"}
+
+data: {"event":"message","conversation_id":"452","answer":" vs"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"屿"}
+
+data: {"event":"message","conversation_id":"452","answer":"算"}
+
+data: {"event":"message","conversation_id":"452","answer":"智"}
+
+data: {"event":"message","conversation_id":"452","answer":"脑"}
+
+data: {"event":"message","conversation_id":"452","answer":"工作"}
+
+data: {"event":"message","conversation_id":"452","answer":"台"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"一张"}
+
+data: {"event":"message","conversation_id":"452","answer":"对比"}
+
+data: {"event":"message","conversation_id":"452","answer":"图"}
+
+data: {"event":"message","conversation_id":"452","answer":"讲"}
+
+data: {"event":"message","conversation_id":"452","answer":"清"}
+
+data: {"event":"message","conversation_id":"452","answer":"差异"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"7"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"七"}
+
+data: {"event":"message","conversation_id":"452","answer":"层"}
+
+data: {"event":"message","conversation_id":"452","answer":"业务"}
+
+data: {"event":"message","conversation_id":"452","answer":"闭环"}
+
+data: {"event":"message","conversation_id":"452","answer":"全景"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"一"}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"讲"}
+
+data: {"event":"message","conversation_id":"452","answer":"清"}
+
+data: {"event":"message","conversation_id":"452","answer":"底座"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"诊断"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"立项"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"管理"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"生产"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"分发"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"资产"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"8"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"四个"}
+
+data: {"event":"message","conversation_id":"452","answer":"阶段"}
+
+data: {"event":"message","conversation_id":"452","answer":"拆"}
+
+data: {"event":"message","conversation_id":"452","answer":"解"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"合并"}
+
+data: {"event":"message","conversation_id":"452","answer":"呈现"}
+
+data: {"event":"message","conversation_id":"452","answer":"）"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"业务"}
+
+data: {"event":"message","conversation_id":"452","answer":"梳理"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"立项"}
+
+data: {"event":"message","conversation_id":"452","answer":"执行"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"生产"}
+
+data: {"event":"message","conversation_id":"452","answer":"分发"}
+
+data: {"event":"message","conversation_id":"452","answer":"→"}
+
+data: {"event":"message","conversation_id":"452","answer":"风"}
+
+data: {"event":"message","conversation_id":"452","answer":"控"}
+
+data: {"event":"message","conversation_id":"452","answer":"沉淀"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"每"}
+
+data: {"event":"message","conversation_id":"452","answer":"阶段"}
+
+data: {"event":"message","conversation_id":"452","answer":"一句话"}
+
+data: {"event":"message","conversation_id":"452","answer":" +"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"一个"}
+
+data: {"event":"message","conversation_id":"452","answer":"关键"}
+
+data: {"event":"message","conversation_id":"452","answer":"输出"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"9"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"AI"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"智能"}
+
+data: {"event":"message","conversation_id":"452","answer":"体"}
+
+data: {"event":"message","conversation_id":"452","answer":"员工"}
+
+data: {"event":"message","conversation_id":"452","answer":"矩阵"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"17"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"个"}
+
+data: {"event":"message","conversation_id":"452","answer":"岗位"}
+
+data: {"event":"message","conversation_id":"452","answer":"角色"}
+
+data: {"event":"message","conversation_id":"452","answer":"总"}
+
+data: {"event":"message","conversation_id":"452","answer":"览"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"强调"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"真实"}
+
+data: {"event":"message","conversation_id":"452","answer":"岗位"}
+
+data: {"event":"message","conversation_id":"452","answer":"而非"}
+
+data: {"event":"message","conversation_id":"452","answer":"通用"}
+
+data: {"event":"message","conversation_id":"452","answer":"角色"}
+
+data: {"event":"message","conversation_id":"452","answer":"\"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"10"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"最终"}
+
+data: {"event":"message","conversation_id":"452","answer":"买到"}
+
+data: {"event":"message","conversation_id":"452","answer":"什么"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"降"}
+
+data: {"event":"message","conversation_id":"452","answer":"成本"}
+
+data: {"event":"message","conversation_id":"452","answer":" /"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"提"}
+
+data: {"event":"message","conversation_id":"452","answer":"效率"}
+
+data: {"event":"message","conversation_id":"452","answer":" /"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"强"}
+
+data: {"event":"message","conversation_id":"452","answer":"执行"}
+
+data: {"event":"message","conversation_id":"452","answer":" /"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"促"}
+
+data: {"event":"message","conversation_id":"452","answer":"增长"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"四个"}
+
+data: {"event":"message","conversation_id":"452","answer":"结果"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"11"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"产品"}
+
+data: {"event":"message","conversation_id":"452","answer":"体系"}
+
+data: {"event":"message","conversation_id":"452","answer":"与"}
+
+data: {"event":"message","conversation_id":"452","answer":"边界"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"屿"}
+
+data: {"event":"message","conversation_id":"452","answer":"算"}
+
+data: {"event":"message","conversation_id":"452","answer":"智"}
+
+data: {"event":"message","conversation_id":"452","answer":"脑"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"S"}
+
+data: {"event":"message","conversation_id":"452","answer":"aaS"}
+
+data: {"event":"message","conversation_id":"452","answer":"）"}
+
+data: {"event":"message","conversation_id":"452","answer":"vs"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"屿"}
+
+data: {"event":"message","conversation_id":"452","answer":"算"}
+
+data: {"event":"message","conversation_id":"452","answer":"超"}
+
+data: {"event":"message","conversation_id":"452","answer":"脑"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"定制"}
+
+data: {"event":"message","conversation_id":"452","answer":"部署"}
+
+data: {"event":"message","conversation_id":"452","answer":"），"}
+
+data: {"event":"message","conversation_id":"452","answer":"套餐"}
+
+data: {"event":"message","conversation_id":"452","answer":"梯度"}
+
+data: {"event":"message","conversation_id":"452","answer":"与"}
+
+data: {"event":"message","conversation_id":"452","answer":"适用"}
+
+data: {"event":"message","conversation_id":"452","answer":"场景"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"12"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"总结"}
+
+data: {"event":"message","conversation_id":"452","answer":"与"}
+
+data: {"event":"message","conversation_id":"452","answer":"统一"}
+
+data: {"event":"message","conversation_id":"452","answer":"对外"}
+
+data: {"event":"message","conversation_id":"452","answer":"口径"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"一句话"}
+
+data: {"event":"message","conversation_id":"452","answer":"定位"}
+
+data: {"event":"message","conversation_id":"452","answer":"回顾"}
+
+data: {"event":"message","conversation_id":"452","answer":" +"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"对外"}
+
+data: {"event":"message","conversation_id":"452","answer":"沟通"}
+
+data: {"event":"message","conversation_id":"452","answer":"要点"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"---\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"##"}
+
+data: {"event":"message","conversation_id":"452","answer":" 🔧"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"当前"}
+
+data: {"event":"message","conversation_id":"452","answer":"假设"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"以下"}
+
+data: {"event":"message","conversation_id":"452","answer":"内容"}
+
+data: {"event":"message","conversation_id":"452","answer":"我"}
+
+data: {"event":"message","conversation_id":"452","answer":"基于"}
+
+data: {"event":"message","conversation_id":"452","answer":"附件"}
+
+data: {"event":"message","conversation_id":"452","answer":"做了"}
+
+data: {"event":"message","conversation_id":"452","answer":"推断"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"请"}
+
+data: {"event":"message","conversation_id":"452","answer":"核实"}
+
+data: {"event":"message","conversation_id":"452","answer":"：\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"1"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"受众"}
+
+data: {"event":"message","conversation_id":"452","answer":"是"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"内部"}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"而非"}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"附件"}
+
+data: {"event":"message","conversation_id":"452","answer":"内容"}
+
+data: {"event":"message","conversation_id":"452","answer":"本身"}
+
+data: {"event":"message","conversation_id":"452","answer":"是一"}
+
+data: {"event":"message","conversation_id":"452","answer":"份"}
+
+data: {"event":"message","conversation_id":"452","answer":"面向"}
+
+data: {"event":"message","conversation_id":"452","answer":"外部"}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"的产品"}
+
+data: {"event":"message","conversation_id":"452","answer":"介绍"}
+
+data: {"event":"message","conversation_id":"452","answer":"稿"}
+
+data: {"event":"message","conversation_id":"452","answer":"；"}
+
+data: {"event":"message","conversation_id":"452","answer":"我"}
+
+data: {"event":"message","conversation_id":"452","answer":"假设"}
+
+data: {"event":"message","conversation_id":"452","answer":"本次"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"是把"}
+
+data: {"event":"message","conversation_id":"452","answer":"这份"}
+
+data: {"event":"message","conversation_id":"452","answer":"材料"}
+
+data: {"event":"message","conversation_id":"452","answer":"转化为"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":"内部"}
+
+data: {"event":"message","conversation_id":"452","answer":"管理"}
+
+data: {"event":"message","conversation_id":"452","answer":"层的"}
+
+data: {"event":"message","conversation_id":"452","answer":"认知"}
+
+data: {"event":"message","conversation_id":"452","answer":"对齐"}
+
+data: {"event":"message","conversation_id":"452","answer":"工具"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"目的是"}
+
+data: {"event":"message","conversation_id":"452","answer":"让"}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"自己"}
+
+data: {"event":"message","conversation_id":"452","answer":"先"}
+
+data: {"event":"message","conversation_id":"452","answer":"吃"}
+
+data: {"event":"message","conversation_id":"452","answer":"透"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"再"}
+
+data: {"event":"message","conversation_id":"452","answer":"向外"}
+
+data: {"event":"message","conversation_id":"452","answer":"传递"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"2"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"对象"}
+
+data: {"event":"message","conversation_id":"452","answer":"不"}
+
+data: {"event":"message","conversation_id":"452","answer":"直接"}
+
+data: {"event":"message","conversation_id":"452","answer":"操作"}
+
+data: {"event":"message","conversation_id":"452","answer":"产品"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"重点"}
+
+data: {"event":"message","conversation_id":"452","answer":"放在"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"理解"}
+
+data: {"event":"message","conversation_id":"452","answer":"逻辑"}
+
+data: {"event":"message","conversation_id":"452","answer":"、"}
+
+data: {"event":"message","conversation_id":"452","answer":"统一"}
+
+data: {"event":"message","conversation_id":"452","answer":"认知"}
+
+data: {"event":"message","conversation_id":"452","answer":"、"}
+
+data: {"event":"message","conversation_id":"452","answer":"对外"}
+
+data: {"event":"message","conversation_id":"452","answer":"口径"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"而非"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"系统"}
+
+data: {"event":"message","conversation_id":"452","answer":"操作"}
+
+data: {"event":"message","conversation_id":"452","answer":" SOP"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"3"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"原"}
+
+data: {"event":"message","conversation_id":"452","answer":"稿"}
+
+data: {"event":"message","conversation_id":"452","answer":"第"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"16"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"价格"}
+
+data: {"event":"message","conversation_id":"452","answer":"体系"}
+
+data: {"event":"message","conversation_id":"452","answer":"）"}
+
+data: {"event":"message","conversation_id":"452","answer":"在"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"中"}
+
+data: {"event":"message","conversation_id":"452","answer":"保留"}
+
+data: {"event":"message","conversation_id":"452","answer":"但"}
+
+data: {"event":"message","conversation_id":"452","answer":"简化"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"知道"}
+
+data: {"event":"message","conversation_id":"452","answer":"套餐"}
+
+data: {"event":"message","conversation_id":"452","answer":"边界"}
+
+data: {"event":"message","conversation_id":"452","answer":"和"}
+
+data: {"event":"message","conversation_id":"452","answer":"定价"}
+
+data: {"event":"message","conversation_id":"452","answer":"逻辑"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"但"}
+
+data: {"event":"message","conversation_id":"452","answer":"不需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"逐"}
+
+data: {"event":"message","conversation_id":"452","answer":"条"}
+
+data: {"event":"message","conversation_id":"452","answer":"念"}
+
+data: {"event":"message","conversation_id":"452","answer":"价格"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"4"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"行业"}
+
+data: {"event":"message","conversation_id":"452","answer":"案例"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"原"}
+
+data: {"event":"message","conversation_id":"452","answer":"第"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"14"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"）"}
+
+data: {"event":"message","conversation_id":"452","answer":"保持"}
+
+data: {"event":"message","conversation_id":"452","answer":"方向"}
+
+data: {"event":"message","conversation_id":"452","answer":"性"}
+
+data: {"event":"message","conversation_id":"452","answer":"描述"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"不"}
+
+data: {"event":"message","conversation_id":"452","answer":"点名"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"与"}
+
+data: {"event":"message","conversation_id":"452","answer":"原文"}
+
+data: {"event":"message","conversation_id":"452","answer":"一致"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"5"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"从哪里"}
+
+data: {"event":"message","conversation_id":"452","answer":"来"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"作为"}
+
+data: {"event":"message","conversation_id":"452","answer":"贯穿"}
+
+data: {"event":"message","conversation_id":"452","answer":"线"}
+
+data: {"event":"message","conversation_id":"452","answer":"而非"}
+
+data: {"event":"message","conversation_id":"452","answer":"单独"}
+
+data: {"event":"message","conversation_id":"452","answer":"一"}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":" —"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"将它"}
+
+data: {"event":"message","conversation_id":"452","answer":"放在"}
+
+data: {"event":"message","conversation_id":"452","answer":"第"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"3"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"作为"}
+
+data: {"event":"message","conversation_id":"452","answer":"焦虑"}
+
+data: {"event":"message","conversation_id":"452","answer":"的"}
+
+data: {"event":"message","conversation_id":"452","answer":"起点"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"并在"}
+
+data: {"event":"message","conversation_id":"452","answer":"后续"}
+
+data: {"event":"message","conversation_id":"452","answer":"页面"}
+
+data: {"event":"message","conversation_id":"452","answer":"回"}
+
+data: {"event":"message","conversation_id":"452","answer":"扣"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"---\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"##"}
+
+data: {"event":"message","conversation_id":"452","answer":" ❓"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"你"}
+
+data: {"event":"message","conversation_id":"452","answer":"确认"}
+
+data: {"event":"message","conversation_id":"452","answer":"的"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"4"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"项"}
+
+data: {"event":"message","conversation_id":"452","answer":"\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"1"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"对象"}
+
+data: {"event":"message","conversation_id":"452","answer":"角色"}
+
+data: {"event":"message","conversation_id":"452","answer":"范围"}
+
+data: {"event":"message","conversation_id":"452","answer":"？"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":"  \n"}
+
+data: {"event":"message","conversation_id":"452","answer":"   "}
+
+data: {"event":"message","conversation_id":"452","answer":"是"}
+
+data: {"event":"message","conversation_id":"452","answer":"仅"}
+
+data: {"event":"message","conversation_id":"452","answer":"限"}
+
+data: {"event":"message","conversation_id":"452","answer":"核心"}
+
+data: {"event":"message","conversation_id":"452","answer":"高管"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"还是"}
+
+data: {"event":"message","conversation_id":"452","answer":"包括"}
+
+data: {"event":"message","conversation_id":"452","answer":"中层"}
+
+data: {"event":"message","conversation_id":"452","answer":"/"}
+
+data: {"event":"message","conversation_id":"452","answer":"区域"}
+
+data: {"event":"message","conversation_id":"452","answer":"负责人"}
+
+data: {"event":"message","conversation_id":"452","answer":"/"}
+
+data: {"event":"message","conversation_id":"452","answer":"销售"}
+
+data: {"event":"message","conversation_id":"452","answer":"管理者"}
+
+data: {"event":"message","conversation_id":"452","answer":"？"}
+
+data: {"event":"message","conversation_id":"452","answer":"这"}
+
+data: {"event":"message","conversation_id":"452","answer":"会影响"}
+
+data: {"event":"message","conversation_id":"452","answer":"内容"}
+
+data: {"event":"message","conversation_id":"452","answer":"深度"}
+
+data: {"event":"message","conversation_id":"452","answer":"和"}
+
+data: {"event":"message","conversation_id":"452","answer":"案例"}
+
+data: {"event":"message","conversation_id":"452","answer":"侧"}
+
+data: {"event":"message","conversation_id":"452","answer":"重点"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"2"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"是否需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"加入"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"常见"}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"疑问"}
+
+data: {"event":"message","conversation_id":"452","answer":" &"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"应答"}
+
+data: {"event":"message","conversation_id":"452","answer":"要点"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"板块"}
+
+data: {"event":"message","conversation_id":"452","answer":"？"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":"  \n"}
+
+data: {"event":"message","conversation_id":"452","answer":"   "}
+
+data: {"event":"message","conversation_id":"452","answer":"如果"}
+
+data: {"event":"message","conversation_id":"452","answer":"管理层"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"后"}
+
+data: {"event":"message","conversation_id":"452","answer":"要"}
+
+data: {"event":"message","conversation_id":"452","answer":"对外"}
+
+data: {"event":"message","conversation_id":"452","answer":"统一"}
+
+data: {"event":"message","conversation_id":"452","answer":"口径"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"建议"}
+
+data: {"event":"message","conversation_id":"452","answer":"加"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"1"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"页"}
+
+data: {"event":"message","conversation_id":"452","answer":"典型"}
+
+data: {"event":"message","conversation_id":"452","answer":"客户"}
+
+data: {"event":"message","conversation_id":"452","answer":"质疑"}
+
+data: {"event":"message","conversation_id":"452","answer":"（"}
+
+data: {"event":"message","conversation_id":"452","answer":"如"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"和"}
+
+data: {"event":"message","conversation_id":"452","answer":" ChatGPT"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"有什么区别"}
+
+data: {"event":"message","conversation_id":"452","answer":"\"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"我们"}
+
+data: {"event":"message","conversation_id":"452","answer":"已经有"}
+
+data: {"event":"message","conversation_id":"452","answer":"工具"}
+
+data: {"event":"message","conversation_id":"452","answer":"了"}
+
+data: {"event":"message","conversation_id":"452","answer":"为什么"}
+
+data: {"event":"message","conversation_id":"452","answer":"还要"}
+
+data: {"event":"message","conversation_id":"452","answer":"这个"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"）"}
+
+data: {"event":"message","conversation_id":"452","answer":"及"}
+
+data: {"event":"message","conversation_id":"452","answer":"建议"}
+
+data: {"event":"message","conversation_id":"452","answer":"应答"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"3"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"价格"}
+
+data: {"event":"message","conversation_id":"452","answer":"体系"}
+
+data: {"event":"message","conversation_id":"452","answer":"是否需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"完整"}
+
+data: {"event":"message","conversation_id":"452","answer":"展示"}
+
+data: {"event":"message","conversation_id":"452","answer":"？"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":"  \n"}
+
+data: {"event":"message","conversation_id":"452","answer":"   "}
+
+data: {"event":"message","conversation_id":"452","answer":"原"}
+
+data: {"event":"message","conversation_id":"452","answer":"稿"}
+
+data: {"event":"message","conversation_id":"452","answer":"含"}
+
+data: {"event":"message","conversation_id":"452","answer":" ¥"}
+
+data: {"event":"message","conversation_id":"452","answer":"19"}
+
+data: {"event":"message","conversation_id":"452","answer":","}
+
+data: {"event":"message","conversation_id":"452","answer":"800"}
+
+data: {"event":"message","conversation_id":"452","answer":" /"}
+
+data: {"event":"message","conversation_id":"452","answer":" ¥"}
+
+data: {"event":"message","conversation_id":"452","answer":"39"}
+
+data: {"event":"message","conversation_id":"452","answer":","}
+
+data: {"event":"message","conversation_id":"452","answer":"800"}
+
+data: {"event":"message","conversation_id":"452","answer":" /"}
+
+data: {"event":"message","conversation_id":"452","answer":" ¥"}
+
+data: {"event":"message","conversation_id":"452","answer":"59"}
+
+data: {"event":"message","conversation_id":"452","answer":","}
+
+data: {"event":"message","conversation_id":"452","answer":"800"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"三"}
+
+data: {"event":"message","conversation_id":"452","answer":"档"}
+
+data: {"event":"message","conversation_id":"452","answer":"。"}
+
+data: {"event":"message","conversation_id":"452","answer":"内部"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"中是"}
+
+data: {"event":"message","conversation_id":"452","answer":"保留"}
+
+data: {"event":"message","conversation_id":"452","answer":"概要"}
+
+data: {"event":"message","conversation_id":"452","answer":"即可"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"还是"}
+
+data: {"event":"message","conversation_id":"452","answer":"需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"详细"}
+
+data: {"event":"message","conversation_id":"452","answer":"拆"}
+
+data: {"event":"message","conversation_id":"452","answer":"解"}
+
+data: {"event":"message","conversation_id":"452","answer":"每"}
+
+data: {"event":"message","conversation_id":"452","answer":"档"}
+
+data: {"event":"message","conversation_id":"452","answer":"的功能"}
+
+data: {"event":"message","conversation_id":"452","answer":"边界"}
+
+data: {"event":"message","conversation_id":"452","answer":"与"}
+
+data: {"event":"message","conversation_id":"452","answer":"推荐"}
+
+data: {"event":"message","conversation_id":"452","answer":"场景"}
+
+data: {"event":"message","conversation_id":"452","answer":"？\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"4"}
+
+data: {"event":"message","conversation_id":"452","answer":"."}
+
+data: {"event":"message","conversation_id":"452","answer":" **"}
+
+data: {"event":"message","conversation_id":"452","answer":"封面"}
+
+data: {"event":"message","conversation_id":"452","answer":"是否需要"}
+
+data: {"event":"message","conversation_id":"452","answer":"标注"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"内部"}
+
+data: {"event":"message","conversation_id":"452","answer":"培训"}
+
+data: {"event":"message","conversation_id":"452","answer":"·"}
+
+data: {"event":"message","conversation_id":"452","answer":"保密"}
+
+data: {"event":"message","conversation_id":"452","answer":"\""}
+
+data: {"event":"message","conversation_id":"452","answer":"或"}
+
+data: {"event":"message","conversation_id":"452","answer":"类似"}
+
+data: {"event":"message","conversation_id":"452","answer":"标识"}
+
+data: {"event":"message","conversation_id":"452","answer":"？"}
+
+data: {"event":"message","conversation_id":"452","answer":"**"}
+
+data: {"event":"message","conversation_id":"452","answer":"  \n"}
+
+data: {"event":"message","conversation_id":"452","answer":"   "}
+
+data: {"event":"message","conversation_id":"452","answer":"影响"}
+
+data: {"event":"message","conversation_id":"452","answer":"封面"}
+
+data: {"event":"message","conversation_id":"452","answer":"设计和"}
+
+data: {"event":"message","conversation_id":"452","answer":"整体"}
+
+data: {"event":"message","conversation_id":"452","answer":"调"}
+
+data: {"event":"message","conversation_id":"452","answer":"性"}
+
+data: {"event":"message","conversation_id":"452","answer":"。\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":"---\n\n"}
+
+data: {"event":"message","conversation_id":"452","answer":">"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"以上"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"4"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"项"}
+
+data: {"event":"message","conversation_id":"452","answer":"确认"}
+
+data: {"event":"message","conversation_id":"452","answer":"后"}
+
+data: {"event":"message","conversation_id":"452","answer":"，"}
+
+data: {"event":"message","conversation_id":"452","answer":"我"}
+
+data: {"event":"message","conversation_id":"452","answer":"即刻"}
+
+data: {"event":"message","conversation_id":"452","answer":"生成"}
+
+data: {"event":"message","conversation_id":"452","answer":" PPT"}
+
+data: {"event":"message","conversation_id":"452","answer":" "}
+
+data: {"event":"message","conversation_id":"452","answer":"预览"}
+
+data: {"event":"message","conversation_id":"452","answer":"供"}
+
+data: {"event":"message","conversation_id":"452","answer":"你"}
+
+data: {"event":"message","conversation_id":"452","answer":"审"}
+
+data: {"event":"message","conversation_id":"452","answer":"阅"}
+
+data: {"event":"message","conversation_id":"452","answer":"。"}
+
+data: {"event":"tool_call","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"auto-preview-ppt","args":{"prompt":"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。"}}}
+
+data: {"event":"tool_call_start","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"auto-preview-ppt","args":{"prompt":"基于附件先给我一个推荐 brief，并列出需要我确认的项；先不要直接生成 PPT。"}}}
+
+data: {"event":"tool_result","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"auto-preview-ppt","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1120","conversationId":"452","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"tool_call_done","conversation_id":"452","data":{"toolName":"preview_ppt_deck","toolCallId":"auto-preview-ppt","result":{"ok":true,"status":"queued","message":"PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","backgroundTask":{"taskId":"1120","conversationId":"452","toolName":"preview_ppt_deck","status":"queued"}}}}
+
+data: {"event":"reasoning_end","conversation_id":"452"}
+
+data: {"event":"message_end","conversation_id":"452","answer":"# 推荐 Brief 草案\n\n以下是基于附件内容整理的推荐 brief，已标注假设项和待确认项。\n\n---\n\n## 📋 建议采用的 Brief\n\n| 维度 | 建议值 |\n|---|---|\n| **主题** | 《屿算智能产品认知培训：从\"AI 概念\"到\"业务系统\"》 |\n| **目标受众** | 管理层（内部） |\n| **目标** | 培训讲解与统一认知——让管理层理解产品逻辑、核心价值与对外沟通口径 |\n| **语言** | zh-CN |\n| **场景类型** | training |\n| **页数** | 约 12 页 |\n| **风格/语调** | 简洁、专业、决策导向；减少营销文案感，强化逻辑说服力 |\n| **必须包含** | 「客户从哪里来？」（源于第 2 页企业经营焦虑） |\n\n### 建议页面结构（12 页）\n\n1. **封面** — 标题 + 一句核心定位\n2. **为什么做这个培训** — 管理层统一认知的必要性 & 当前常见理解偏差\n3. **客户从哪里来？企业到底焦虑什么** — 回扣\"客户从哪里来\"，展开 5 大焦虑，指向\"缺的是系统不是工具\"\n4. **企业 AI 落地的真实卡点** — 不会问 / 不会用 / 不能沉淀，引出产品存在的理由\n5. **屿算智脑是什么** — 一句话定义 + 三层进入（岗位→流程→结果）\n6. **产品形态差异** — 传统单点工具 vs 屿算智脑工作台，一张对比图讲清差异\n7. **七层业务闭环全景** — 一页讲清底座→诊断→立项→管理→生产→分发→资产\n8. **四个阶段拆解（合并呈现）** — 业务梳理→立项执行→生产分发→风控沉淀，每阶段一句话 + 一个关键输出\n9. **AI 智能体员工矩阵** — 17 个岗位角色总览，强调\"真实岗位而非通用角色\"\n10. **客户最终买到什么** — 降成本 / 提效率 / 强执行 / 促增长，四个结果\n11. **产品体系与边界** — 屿算智脑（SaaS）vs 屿算超脑（定制部署），套餐梯度与适用场景\n12. **总结与统一对外口径** — 一句话定位回顾 + 管理层对外沟通要点\n\n---\n\n## 🔧 当前假设\n\n以下内容我基于附件做了推断，请核实：\n\n1. **受众是\"内部管理层\"而非客户** — 附件内容本身是一份面向外部客户的产品介绍稿；我假设本次培训是把这份材料转化为**内部管理层的认知对齐工具**，目的是让管理层自己先吃透，再向外传递。\n2. **培训对象不直接操作产品** — 重点放在\"理解逻辑、统一认知、对外口径\"而非\"系统操作 SOP\"。\n3. **原稿第 16 页（价格体系）在培训中保留但简化** — 管理层需要知道套餐边界和定价逻辑，但不需要逐条念价格。\n4. **行业案例（原第 14 页）保持方向性描述，不点名** — 与原文一致。\n5. **\"客户从哪里来\"作为贯穿线而非单独一页** — 将它放在第 3 页作为焦虑的起点，并在后续页面回扣。\n\n---\n\n## ❓ 需要你确认的 4 项\n\n1. **培训对象角色范围？**  \n   是仅限核心高管，还是包括中层/区域负责人/销售管理者？这会影响内容深度和案例侧重点。\n\n2. **是否需要加入\"常见客户疑问 & 应答要点\"板块？**  \n   如果管理层培训后要对外统一口径，建议加 1 页典型客户质疑（如\"和 ChatGPT 有什么区别\"\"我们已经有工具了为什么还要这个\"）及建议应答。\n\n3. **价格体系是否需要完整展示？**  \n   原稿含 ¥19,800 / ¥39,800 / ¥59,800 三档。内部培训中是保留概要即可，还是需要详细拆解每档的功能边界与推荐场景？\n\n4. **封面是否需要标注\"内部培训·保密\"或类似标识？**  \n   影响封面设计和整体调性。\n\n---\n\n> 以上 4 项确认后，我即刻生成 PPT 预览供你审阅。\n\n已切换为后台生成：\n- 任务 ID: 1120\n- 状态: PPT 已切换为后台生成 SVG 预览。系统会继续轮询并在完成后回填预览结果；只有在导出下载时才会继续生成可编辑 PPTX，复杂或长页数 deck 可能需要十几分钟。","provider":"enterprise-openai-compatible","provider_model":"deepseek-v4-pro","agent_id":"executive-ppt","agent_route":null,"provider_order":["enterprise-openai-compatible"]}
+

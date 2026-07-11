@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "ok": true,
+  "hasCookie": true,
+  "bodySample": "{\"user\":{\"id\":1,\"email\":\"demo@example.com\",\"name\":\"体验用户\",\"isDemo\":true,\"enterpriseId\":1,\"enterpriseCode\":\"experience-enterprise\",\"enterpriseName\":\"体验企业\",\"enterpriseRole\":\"admin\",\"enterpriseStatus\":\"active\",\"permissions\":{\"expert_advisor\":true,\"customer_profile_entry\":true,\"website_generation\":true,\"video_generation\":true,\"copywriting_generation\":true,\"image_design_generation\":true}}}"
+}

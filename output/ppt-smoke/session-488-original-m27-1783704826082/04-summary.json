@@ -1,0 +1,15 @@
+{
+  "label": "m27",
+  "jobId": "31ab4b5f-78b4-4112-8819-de22290c7b00",
+  "previewSessionId": "b5201115-c8e4-491d-b570-142d4bbd4057",
+  "status": "completed",
+  "provider": "minimax",
+  "previewModel": "MiniMax-M2.7-highspeed",
+  "previewEngine": "ppt-master-svg",
+  "logicalSlideCount": 8,
+  "previewSlideCount": 8,
+  "exportStatus": 200,
+  "exportSlideCount": 8,
+  "variantKey": "ppt169_attention_is_all_you_need-executive-brief",
+  "slideRuns": []
+}

@@ -1,0 +1,4 @@
+{
+  "message": "terminated",
+  "stack": "TypeError: terminated\n    at Fetch.onAborted (node:internal/deps/undici/undici:11132:53)\n    at Fetch.emit (node:events:519:28)\n    at Fetch.terminate (node:internal/deps/undici/undici:10290:14)\n    at Object.onError (node:internal/deps/undici/undici:11253:38)\n    at Request.onError (node:internal/deps/undici/undici:2094:31)\n    at Object.errorRequest (node:internal/deps/undici/undici:1591:17)\n    at TLSSocket.<anonymous> (node:internal/deps/undici/undici:6319:16)\n    at TLSSocket.emit (node:events:531:35)\n    at node:net:346:12\n    at TCP.done (node:_tls_wrap:650:7)"
+}

@@ -1,0 +1,20 @@
+{
+  "status": 202,
+  "payload": {
+    "jobId": "6a26640d-5b6c-442c-99b3-0088436e50a1",
+    "status": "queued"
+  },
+  "requestId": "example-effective-agents-1783592722011",
+  "body": {
+    "requestId": "example-effective-agents-1783592722011",
+    "prompt": "Build a 6-slide enterprise AI workflow introduction deck",
+    "scenario": "sales-deck",
+    "language": "zh-CN",
+    "model": "deepseek-v4-pro",
+    "preferredProviderId": "enterprise-openai-compatible",
+    "templateMode": "single-template",
+    "templateId": "ppt169_building_effective_agents",
+    "allowMockFallback": false,
+    "runtimeProfile": "railway-linux"
+  }
+}

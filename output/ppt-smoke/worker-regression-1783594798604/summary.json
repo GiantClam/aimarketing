@@ -1,0 +1,26 @@
+[
+  {
+    "case": "deck-zhaoshang",
+    "ok": true,
+    "jobId": "4f640b66-ddb6-4e67-bc44-1fd9c6bba158",
+    "previewSessionId": "952cb19b-4b0e-4fb6-88a8-8429f4aed7d6",
+    "selectedVariantKey": "deck-cmb",
+    "provider": "minimax",
+    "previewModel": "MiniMax-M2.7-highspeed",
+    "previewEngine": "ppt-master-svg",
+    "slideCount": 6,
+    "pptxPath": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/worker-regression-1783594798604/deck-zhaoshang/build-a-6-slide-transaction-banking-6p-deck-cmb.pptx"
+  },
+  {
+    "case": "example-effective-agents",
+    "ok": true,
+    "jobId": "ce5f7b4f-d6f3-496b-9a01-1984a00dc512",
+    "previewSessionId": "0202379f-fccb-44c7-83ef-4d04d42e292f",
+    "selectedVariantKey": "building-effective-agents",
+    "provider": "minimax",
+    "previewModel": "MiniMax-M2.7-highspeed",
+    "previewEngine": "ppt-master-svg",
+    "slideCount": 6,
+    "pptxPath": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/worker-regression-1783594798604/example-effective-agents/build-a-6-slide-enterprise-ai-workfl-6p-building-effective.pptx"
+  }
+]

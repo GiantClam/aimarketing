@@ -1,0 +1,28 @@
+[
+  {
+    "case": "deck-zhaoshang",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "638a34a6-a777-4eda-87d1-951a22757852",
+        "status": "failed",
+        "message": "ppt_master_runtime_slide_generation_failed:deck-cmb:01_cover:ppt_master_runtime_provider_timeout:deepseek:deepseek-v4-pro"
+      }
+    }
+  },
+  {
+    "case": "example-effective-agents",
+    "stage": "poll",
+    "ok": false,
+    "detail": {
+      "status": 200,
+      "payload": {
+        "jobId": "6a26640d-5b6c-442c-99b3-0088436e50a1",
+        "status": "failed",
+        "message": "ppt_master_runtime_slide_generation_failed:building-effective-agents:01_cover:ppt_master_runtime_provider_timeout:deepseek:deepseek-v4-pro"
+      }
+    }
+  }
+]

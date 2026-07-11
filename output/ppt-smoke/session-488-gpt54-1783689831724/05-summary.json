@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "jobId": "8aa336da-fa44-4b16-aa76-dedc3a4d4d49",
+  "previewSessionId": "0576fbe1-847a-4e7d-93f8-70f93bb39066",
+  "provider": "pptoken",
+  "previewModel": "gpt-5.4",
+  "previewEngine": "ppt-master-svg",
+  "runtimeProvider": null,
+  "runtimeModel": null,
+  "selectedVariantKey": "ppt169_attention_is_all_you_need-executive-brief",
+  "slideCount": 4,
+  "pptxPath": "/Users/beihuang/Documents/github/aimarketing/output/ppt-smoke/session-488-gpt54-1783689831724/请生成一份-8-页中文可编辑-ppt主题是企业-ai-营销工作台面向企业-8p-ppt169attentionisa.pptx",
+  "titles": [
+    "企业AI营销工作台",
+    "决策导览",
+    "核心判断",
+    "两种运营模式",
+    "价值证据",
+    "首期成效",
+    "闭环飞轮",
+    "下一步"
+  ]
+}

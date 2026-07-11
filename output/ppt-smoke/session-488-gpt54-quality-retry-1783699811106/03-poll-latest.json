@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "payload": {
+    "jobId": "8224dc51-15a2-4bcc-8b95-94a9075b1bc1",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:ppt169_attention_is_all_you_need-executive-brief:02_agenda:ppt_master_runtime_slide_timeout",
+    "updatedAt": "2026-07-10T16:34:00.460Z",
+    "attemptCount": 2
+  }
+}
