@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  allowLeadToolPptRuntimeProviderFallback,
   allowPptMasterEmergencyFallback,
   getLeadToolPptExecutionTransport,
   getLeadToolPreviewModel,
@@ -9,6 +10,8 @@ import {
   getLeadToolPptPreviewProvider,
   getLeadToolPptRuntimeSlideModel,
   getLeadToolPptRuntimeSlideProvider,
+  getLeadToolPptRuntimeFallbackModel,
+  getLeadToolPptRuntimeFallbackProvider,
   getPptMasterSlideTimeoutMs,
   resolvePptMasterSlideTimeoutMs,
   getPptWorkerBaseUrl,
@@ -346,5 +349,35 @@ test("ppt preview provider accepts deepseek explicit override", () => {
     } else {
       process.env.LEAD_TOOLS_PPT_PREVIEW_PROVIDER = previousPreviewProvider
     }
+  }
+})
+
+test("ppt runtime provider fallback defaults to MiniMax and can be disabled", () => {
+  const previousEnabled = process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
+  const previousProvider = process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_PROVIDER
+  const previousModel = process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_MODEL
+
+  try {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_PROVIDER
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_MODEL
+
+    assert.equal(allowLeadToolPptRuntimeProviderFallback(), true)
+    assert.equal(getLeadToolPptRuntimeFallbackProvider(), "minimax")
+    assert.equal(getLeadToolPptRuntimeFallbackModel(), "MiniMax-M2.7-highspeed")
+
+    process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED = "false"
+    process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_PROVIDER = "pptoken"
+    process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_MODEL = "custom-model"
+    assert.equal(allowLeadToolPptRuntimeProviderFallback(), false)
+    assert.equal(getLeadToolPptRuntimeFallbackProvider(), "minimax")
+    assert.equal(getLeadToolPptRuntimeFallbackModel(), "custom-model")
+  } finally {
+    if (previousEnabled === undefined) delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
+    else process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED = previousEnabled
+    if (previousProvider === undefined) delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_PROVIDER
+    else process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_PROVIDER = previousProvider
+    if (previousModel === undefined) delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_MODEL
+    else process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_MODEL = previousModel
   }
 })

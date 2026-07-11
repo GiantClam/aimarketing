@@ -270,15 +270,53 @@ test("emergency runtime svg renders agenda slide while timeouts remain retryable
   assert.match(svg, /agenda-row-1/u)
 })
 
+test("runtime provider fallback only matches transient provider failures", () => {
+  assert.equal(__testables__.isAutomaticRuntimeProviderFallbackFailure(new Error("ppt_master_runtime_slide_timeout")), true)
+  assert.equal(
+    __testables__.isAutomaticRuntimeProviderFallbackFailure(
+      "ppt_master_runtime_provider_headers_timeout:pptoken:gpt-5.4",
+    ),
+    true,
+  )
+  assert.equal(
+    __testables__.isAutomaticRuntimeProviderFallbackFailure(
+      "ppt_master_runtime_provider_connect_failed:pptoken:gpt-5.4",
+    ),
+    true,
+  )
+  assert.equal(__testables__.isAutomaticRuntimeProviderFallbackFailure("ppt_master_runtime_slide_quality_check_failed"), false)
+  assert.equal(__testables__.isAutomaticRuntimeProviderFallbackFailure("ppt_master_runtime_slide_validation_failed"), false)
+
+  const previousEnabled = process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
+  try {
+    delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
+    assert.deepEqual(
+      __testables__.getRuntimeProviderFallback({
+        runtimeSlideProvider: "pptoken",
+        runtimeSlideModel: "gpt-5.4",
+      } as any),
+      { provider: "minimax", model: "MiniMax-M2.7-highspeed" },
+    )
+
+    process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED = "false"
+    assert.equal(__testables__.getRuntimeProviderFallback({} as any), null)
+  } finally {
+    if (previousEnabled === undefined) delete process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
+    else process.env.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED = previousEnabled
+  }
+})
+
 test("runtime retries provider timeouts and then fails the variant without continuing", async () => {
   const mutableEnv = process.env as Record<string, string | undefined>
   const previousRepoDir = mutableEnv.PPT_MASTER_REPO_DIR
   const previousStore = mutableEnv.PPT_MASTER_SESSION_STORE
   const previousFallback = mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK
+  const previousProviderFallback = mutableEnv.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
 
   mutableEnv.PPT_MASTER_REPO_DIR = path.resolve(process.cwd(), ".cache", "ppt-master-upstream")
   mutableEnv.PPT_MASTER_SESSION_STORE = "filesystem"
   mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK = "false"
+  mutableEnv.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED = "false"
 
   try {
     const calls: number[] = []
@@ -384,6 +422,12 @@ test("runtime retries provider timeouts and then fails the variant without conti
       delete mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK
     } else {
       mutableEnv.PPT_MASTER_ALLOW_EMERGENCY_FALLBACK = previousFallback
+    }
+
+    if (previousProviderFallback === undefined) {
+      delete mutableEnv.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED
+    } else {
+      mutableEnv.LEAD_TOOLS_PPT_RUNTIME_FALLBACK_ENABLED = previousProviderFallback
     }
   }
 })

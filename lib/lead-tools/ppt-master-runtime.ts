@@ -5,7 +5,12 @@ import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
-import { allowPptMasterEmergencyFallback } from "@/lib/lead-tools/config"
+import {
+  allowLeadToolPptRuntimeProviderFallback,
+  allowPptMasterEmergencyFallback,
+  getLeadToolPptRuntimeFallbackModel,
+  getLeadToolPptRuntimeFallbackProvider,
+} from "@/lib/lead-tools/config"
 import {
   createPptMasterSessionArchive,
   getConfiguredPptMasterSessionStore,
@@ -56,6 +61,7 @@ type StoredVariant = {
   slideCount: number
   runtimeDiagnostics?: {
     materializeMs: number
+    fallbackReason?: string | null
     slideRuns: Array<{
       slideId: string
       layout: PptPreviewSlide["layout"]
@@ -835,6 +841,29 @@ function isRecoverableRuntimeSlideFailure(detail: string) {
     detail === "ppt_master_runtime_slide_timeout" ||
     detail.startsWith("ppt_master_runtime_provider_timeout:")
   )
+}
+
+function isAutomaticRuntimeProviderFallbackFailure(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error)
+  return (
+    detail.includes("ppt_master_runtime_slide_timeout") ||
+    detail.includes("ppt_master_runtime_provider_timeout:") ||
+    detail.includes("ppt_master_runtime_provider_headers_timeout:") ||
+    detail.includes("ppt_master_runtime_provider_connect_failed:")
+  )
+}
+
+function getRuntimeProviderFallback(deck: PptPreviewDeck) {
+  if (!allowLeadToolPptRuntimeProviderFallback()) return null
+
+  const provider = getLeadToolPptRuntimeFallbackProvider()
+  const model = getLeadToolPptRuntimeFallbackModel()
+  const currentProvider = deck.runtimeSlideProvider?.trim().toLowerCase()
+  const currentModel = deck.runtimeSlideModel?.trim()
+
+  if (currentProvider === provider && currentModel === model) return null
+
+  return { provider, model }
 }
 
 function formatFailedRuntimeSlideRuns(slideRuns: StoredVariantSlideRun[]) {
@@ -1920,6 +1949,7 @@ async function materializeVariantProject(params: {
   repoDir: string
   sessionDir: string
   variant: PptPreviewVariant
+  fallbackReason?: string | null
 }) {
   const { deck, options, repoDir, sessionDir, variant } = params
   const projectDir = path.join(sessionDir, variant.key)
@@ -2128,6 +2158,7 @@ async function materializeVariantProject(params: {
       slideCount: slideAssets.length,
       runtimeDiagnostics: {
         materializeMs: Date.now() - materializeStartedAt,
+        fallbackReason: params.fallbackReason ?? null,
         slideRuns,
       },
     } satisfies StoredVariant,
@@ -2140,6 +2171,37 @@ async function materializeVariantProject(params: {
         slides: slideAssets,
       },
     },
+  }
+}
+
+async function materializeVariantProjectWithFallback(params: {
+  deck: PptPreviewDeck
+  options: PptMasterPreviewRuntimeOptions
+  repoDir: string
+  sessionDir: string
+  variant: PptPreviewVariant
+}) {
+  try {
+    return await materializeVariantProject(params)
+  } catch (error) {
+    if (!isAutomaticRuntimeProviderFallbackFailure(error)) throw error
+
+    const fallback = getRuntimeProviderFallback(params.deck)
+    if (!fallback) throw error
+
+    const originalDetail = error instanceof Error ? error.message : String(error)
+    const fallbackReason = `${originalDetail} -> ${fallback.provider}:${fallback.model}`
+    const fallbackDeck: PptPreviewDeck = {
+      ...params.deck,
+      runtimeSlideProvider: fallback.provider,
+      runtimeSlideModel: fallback.model,
+    }
+
+    return materializeVariantProject({
+      ...params,
+      deck: fallbackDeck,
+      fallbackReason,
+    })
   }
 }
 
@@ -2164,7 +2226,9 @@ export async function materializePptMasterPreviewDeck(deck: PptPreviewDeck, opti
   const runtimeDeck = normalizeRuntimeDeckCopy(deck)
 
   const variantResults = await Promise.all(
-    runtimeDeck.variants.map((variant) => materializeVariantProject({ deck: runtimeDeck, options, repoDir, sessionDir, variant })),
+    runtimeDeck.variants.map((variant) =>
+      materializeVariantProjectWithFallback({ deck: runtimeDeck, options, repoDir, sessionDir, variant }),
+    ),
   )
 
   const materializedDeck = {
@@ -2173,6 +2237,8 @@ export async function materializePptMasterPreviewDeck(deck: PptPreviewDeck, opti
     previewModel: variantResults[0]?.runtimeModel ?? runtimeDeck.previewModel,
     previewSessionId: sessionId,
     provider: variantResults[0]?.runtimeProvider ?? runtimeDeck.provider,
+    runtimeSlideModel: variantResults[0]?.runtimeModel ?? runtimeDeck.runtimeSlideModel,
+    runtimeSlideProvider: variantResults[0]?.runtimeProvider ?? runtimeDeck.runtimeSlideProvider,
     variants: variantResults.map((item) => item.variant),
   }
   const storedSession = {
@@ -2276,6 +2342,8 @@ export const __testables__ = {
   shouldFallbackForGeneratedSvg,
   shouldUseDeterministicRuntimeSvg,
   isRecoverableRuntimeSlideFailure,
+  isAutomaticRuntimeProviderFallbackFailure,
+  getRuntimeProviderFallback,
   getPptMasterSessionVariant,
   runPptMasterSvgQualityCheck,
 }
