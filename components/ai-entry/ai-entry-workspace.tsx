@@ -85,6 +85,7 @@ import {
   isConsultingAdvisorEntryMode,
   pickConsultingModelId,
   pickPptAssistantDefaultModelId,
+  resolvePptAssistantModelSelection,
   shouldLockConsultingAdvisorModel,
 } from "@/lib/ai-entry/model-policy"
 import { resolveEquivalentModelId } from "@/lib/ai-entry/model-id-registry"
@@ -1959,16 +1960,17 @@ export function AiEntryWorkspace({
             return consultingModelFallback
           }
 
-          if (pptAssistantDefaultModelId) {
-            return pptAssistantDefaultModelId
-          }
-
           const normalizedCurrent =
             typeof current === "string" && current.trim() ? current.trim() : null
-          if (normalizedCurrent) {
-            const resolvedCurrent = resolveDisplayModelId(normalizedCurrent, normalizedModels)
-            if (resolvedCurrent) return resolvedCurrent
-          }
+          const resolvedCurrent = normalizedCurrent
+            ? resolveDisplayModelId(normalizedCurrent, normalizedModels)
+            : null
+          const resolvedPptModel = resolvePptAssistantModelSelection({
+            currentModelId: resolvedCurrent,
+            availableModelIds: normalizedModels.map((item) => item.id),
+            defaultModelId: pptAssistantDefaultModelId,
+          })
+          if (resolvedPptModel) return resolvedPptModel
 
           if (SHOULD_PREFER_CATALOG_MODEL_DEFAULT && catalogDefaultModelId) {
             return catalogDefaultModelId

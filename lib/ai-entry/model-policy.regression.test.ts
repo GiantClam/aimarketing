@@ -14,6 +14,7 @@ import {
   pickConsultingModelId,
   pickPptAssistantDefaultModelId,
   pickSonnet46ModelId,
+  resolvePptAssistantModelSelection,
   resolveConsultingModelMode,
   shouldLockConsultingAdvisorModel,
 } from "./model-policy"
@@ -68,6 +69,25 @@ test("pickPptAssistantDefaultModelId defaults PPT assistant to DeepSeek V4 Pro",
   ])
 
   assert.equal(selected, "deepseek::deepseek-v4-pro")
+})
+
+test("PPT assistant keeps the current conversation model before applying its default", () => {
+  assert.equal(
+    resolvePptAssistantModelSelection({
+      currentModelId: "pptoken::gpt-5.4",
+      availableModelIds: ["deepseek::deepseek-v4-pro", "pptoken::gpt-5.4"],
+      defaultModelId: "deepseek::deepseek-v4-pro",
+    }),
+    "pptoken::gpt-5.4",
+  )
+  assert.equal(
+    resolvePptAssistantModelSelection({
+      currentModelId: null,
+      availableModelIds: ["deepseek::deepseek-v4-pro", "pptoken::gpt-5.4"],
+      defaultModelId: "deepseek::deepseek-v4-pro",
+    }),
+    "deepseek::deepseek-v4-pro",
+  )
 })
 
 test("resolveConsultingModelMode always keeps consulting advisor on quality", () => {

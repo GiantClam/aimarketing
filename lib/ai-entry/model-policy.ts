@@ -191,6 +191,19 @@ export function pickPptAssistantDefaultModelId(models: ModelCandidate[]) {
   return matched[0]?.id || null
 }
 
+export function resolvePptAssistantModelSelection(input: {
+  currentModelId?: string | null
+  availableModelIds: string[]
+  defaultModelId?: string | null
+}) {
+  const currentModelId = normalizeText(input.currentModelId)
+  if (currentModelId && input.availableModelIds.includes(currentModelId)) {
+    return currentModelId
+  }
+
+  return normalizeText(input.defaultModelId) || input.availableModelIds[0] || null
+}
+
 export function isConsultingAdvisorEntryMode(value: unknown) {
   return (
     typeof value === "string" &&
