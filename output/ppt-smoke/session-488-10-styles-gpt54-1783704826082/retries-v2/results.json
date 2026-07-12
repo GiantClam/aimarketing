@@ -1,0 +1,92 @@
+[
+  {
+    "index": 2,
+    "style": "技术蓝图 / Technical Blueprint",
+    "templateId": "ppt169_lora_hu_2021",
+    "requestId": "sretry-2-903edc90-bf87-49ff-b176-6b148b40a5e5",
+    "jobId": "fba3330d-5348-4622-9557-c85128d57940",
+    "status": "failed",
+    "message": "ppt_master_runtime_provider_timeout:pptoken:gpt-5.4"
+  },
+  {
+    "index": 3,
+    "style": "粗野主义 AI 报纸 / Brutalist Newspaper",
+    "templateId": "ppt169_brutalist_ai_newspaper_2026",
+    "requestId": "sretry-3-29ddc170-75d0-4956-a199-d681a0e05592",
+    "jobId": "2253f610-cdf7-42bb-a459-502019355ae2",
+    "status": "completed",
+    "previewSessionId": "bb415ccd-1b84-4baa-86f0-3ecb27e86b4d",
+    "provider": "pptoken",
+    "previewModel": "gpt-5.4",
+    "runtimeSlideProvider": "pptoken",
+    "runtimeSlideModel": "gpt-5.4",
+    "logicalSlideCount": 8,
+    "variantKey": "ppt169_brutalist_ai_newspaper_2026-executive-brief"
+  },
+  {
+    "index": 4,
+    "style": "建筑社论 / Architecture Editorial",
+    "templateId": "ppt169_pritzker_2026",
+    "requestId": "sretry-4-446658bf-df1c-4192-a49c-b79182b17d7f",
+    "jobId": "33e8264b-b54b-42aa-a0dc-790b7a05cf18",
+    "status": "completed",
+    "previewSessionId": "99a48cc3-96bb-43e4-ae43-9496165c9422",
+    "provider": "pptoken",
+    "previewModel": "gpt-5.4",
+    "runtimeSlideProvider": "pptoken",
+    "runtimeSlideModel": "gpt-5.4",
+    "logicalSlideCount": 8,
+    "variantKey": "ppt169_pritzker_2026-executive-brief"
+  },
+  {
+    "index": 5,
+    "style": "财经数据社论 / Bloomberg Editorial",
+    "templateId": "ppt169_global_ai_capital_2026",
+    "requestId": "sretry-5-66577ace-2cbe-41d4-b300-3adb56681a07",
+    "jobId": "52ad16c1-3e21-4147-8bd6-f646e196d591",
+    "status": "completed",
+    "previewSessionId": "cf1f5898-f81c-4a39-bb5d-19bbe8768f57",
+    "provider": "pptoken",
+    "previewModel": "gpt-5.4",
+    "runtimeSlideProvider": "pptoken",
+    "runtimeSlideModel": "gpt-5.4",
+    "logicalSlideCount": 8,
+    "variantKey": "ppt169_global_ai_capital_2026-executive-brief"
+  },
+  {
+    "index": 6,
+    "style": "瑞士网格 / Swiss Typographic",
+    "templateId": "ppt169_swiss_grid_systems",
+    "requestId": "sretry-6-6aa971db-613a-46ec-8c85-2579bd957659",
+    "jobId": "d84ce614-90e2-4dbb-b72e-6e43afb9c5c7",
+    "status": "failed",
+    "message": "ppt_master_runtime_provider_timeout:pptoken:gpt-5.4"
+  },
+  {
+    "index": 7,
+    "style": "玻璃拟态 SaaS / Glassmorphism",
+    "templateId": "ppt169_glassmorphism_demo",
+    "requestId": "sretry-7-5f211a74-5135-4036-b834-031de7c0c891",
+    "jobId": "c0bd629e-e126-4e14-966a-8460a39c8ef9",
+    "status": "failed",
+    "message": "ppt_master_runtime_provider_timeout:pptoken:gpt-5.4"
+  },
+  {
+    "index": 8,
+    "style": "孟菲斯波普 / Sugar Rush Memphis",
+    "templateId": "ppt169_sugar_rush_memphis",
+    "requestId": "sretry-8-fccbc3e2-0f32-4718-a3fd-539bfc2eb536",
+    "jobId": "a3c5474c-cf12-4106-9587-1635cb3b2256",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:ppt169_sugar_rush_memphis-executive-brief:01_cover:ppt_master_runtime_slide_timeout"
+  },
+  {
+    "index": 9,
+    "style": "Risograph Zine / 独立书店",
+    "templateId": "ppt169_indie_bookstore_zine_guide",
+    "requestId": "sretry-9-2c7ee79e-b6b6-41c2-b003-63e907a5cb84",
+    "jobId": "5f10fd9f-b0f6-4cb3-b783-f0dd403d4a3a",
+    "status": "failed",
+    "message": "ppt_master_runtime_slide_generation_failed:ppt169_indie_bookstore_zine_guide-executive-brief:01_cover:ppt_master_runtime_slide_timeout"
+  }
+]

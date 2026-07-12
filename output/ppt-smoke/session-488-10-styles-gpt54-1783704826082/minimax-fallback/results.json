@@ -1,0 +1,71 @@
+[
+  {
+    "index": 2,
+    "style": "技术蓝图 / Technical Blueprint",
+    "templateId": "ppt169_lora_hu_2021",
+    "requestId": "mretry-2-bc0214d5-a76f-4a33-baeb-324aaec70750",
+    "jobId": "facf6ffa-9d3b-4c98-b199-1569d9dc442c",
+    "status": "failed",
+    "message": "ppt_preview_json_missing"
+  },
+  {
+    "index": 6,
+    "style": "瑞士网格 / Swiss Typographic",
+    "templateId": "ppt169_swiss_grid_systems",
+    "requestId": "mretry-6-198181ad-3994-403c-a667-d72702884fda",
+    "jobId": "56604f3d-1144-417c-b1bd-6955f69c1747",
+    "status": "completed",
+    "previewSessionId": "01f88c4c-c603-42e7-8ac8-bf04e84d3d93",
+    "provider": "minimax",
+    "previewModel": "MiniMax-M2.7-highspeed",
+    "runtimeSlideProvider": "minimax",
+    "runtimeSlideModel": "MiniMax-M2.7-highspeed",
+    "logicalSlideCount": 8,
+    "variantKey": "ppt169_swiss_grid_systems-executive-brief"
+  },
+  {
+    "index": 7,
+    "style": "玻璃拟态 SaaS / Glassmorphism",
+    "templateId": "ppt169_glassmorphism_demo",
+    "requestId": "mretry-7-c2e3577d-b77d-41d7-b3ba-f81f548fa9ee",
+    "jobId": "70e647ec-7d7f-4733-bfd8-2f324725b762",
+    "status": "completed",
+    "previewSessionId": "9a717d57-2e0b-4f45-a966-5573aeb71e03",
+    "provider": "minimax",
+    "previewModel": "MiniMax-M2.7-highspeed",
+    "runtimeSlideProvider": "minimax",
+    "runtimeSlideModel": "MiniMax-M2.7-highspeed",
+    "logicalSlideCount": 8,
+    "variantKey": "ppt169_glassmorphism_demo-executive-brief"
+  },
+  {
+    "index": 8,
+    "style": "孟菲斯波普 / Sugar Rush Memphis",
+    "templateId": "ppt169_sugar_rush_memphis",
+    "requestId": "mretry-8-314459ae-bf5e-45e0-a1bd-dfbc7d531f02",
+    "jobId": "2c58ecbb-c847-437e-b5ec-bad69e30769f",
+    "status": "completed",
+    "previewSessionId": "c111ec61-3ea4-40bd-b9ae-91a394c072a5",
+    "provider": "minimax",
+    "previewModel": "MiniMax-M2.7-highspeed",
+    "runtimeSlideProvider": "minimax",
+    "runtimeSlideModel": "MiniMax-M2.7-highspeed",
+    "logicalSlideCount": 8,
+    "variantKey": "ppt169_sugar_rush_memphis-executive-brief"
+  },
+  {
+    "index": 9,
+    "style": "Risograph Zine / 独立书店",
+    "templateId": "ppt169_indie_bookstore_zine_guide",
+    "requestId": "mretry-9-29366430-ba3b-4871-9739-2bd38fb29dba",
+    "jobId": "3dedec2f-9d77-4af4-bb48-76e7453c80ba",
+    "status": "completed",
+    "previewSessionId": "7bc11fd5-1073-474a-9551-83d7ca1a4a45",
+    "provider": "minimax",
+    "previewModel": "MiniMax-M2.7-highspeed",
+    "runtimeSlideProvider": "minimax",
+    "runtimeSlideModel": "MiniMax-M2.7-highspeed",
+    "logicalSlideCount": 8,
+    "variantKey": "ppt169_indie_bookstore_zine_guide-executive-brief"
+  }
+]

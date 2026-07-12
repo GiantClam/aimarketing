@@ -1,0 +1,7 @@
+{
+  "jobId": "5f10fd9f-b0f6-4cb3-b783-f0dd403d4a3a",
+  "status": "failed",
+  "message": "ppt_master_runtime_slide_generation_failed:ppt169_indie_bookstore_zine_guide-executive-brief:01_cover:ppt_master_runtime_slide_timeout",
+  "updatedAt": "2026-07-11T09:12:32.751Z",
+  "attemptCount": 1
+}

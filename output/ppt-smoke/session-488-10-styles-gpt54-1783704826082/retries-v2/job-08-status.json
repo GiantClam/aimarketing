@@ -1,0 +1,7 @@
+{
+  "jobId": "a3c5474c-cf12-4106-9587-1635cb3b2256",
+  "status": "failed",
+  "message": "ppt_master_runtime_slide_generation_failed:ppt169_sugar_rush_memphis-executive-brief:01_cover:ppt_master_runtime_slide_timeout",
+  "updatedAt": "2026-07-11T09:12:44.470Z",
+  "attemptCount": 1
+}

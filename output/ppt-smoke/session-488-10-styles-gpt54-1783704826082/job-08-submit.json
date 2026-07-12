@@ -1,0 +1,21 @@
+{
+  "body": {
+    "scenario": "product-launch",
+    "language": "zh-CN",
+    "model": "gpt-5.4",
+    "preferredProviderId": "pptoken",
+    "runtimeSlideModel": "gpt-5.4",
+    "runtimeSlideProvider": "pptoken",
+    "templateMode": "single-template",
+    "narrativeAngle": "executive-brief",
+    "pageCount": 8,
+    "allowMockFallback": false,
+    "runtimeProfile": "railway-linux",
+    "requestId": "tenant-same-10-styles-8-2089d43b-b63a-4e7a-b843-c269a77137d3",
+    "prompt": "请生成一份 8 页中文可编辑 PPT，主题是企业 AI 营销工作台，面向企业管理层，必须走 ppt-master 全流程，不得使用 auto-4 或 frontend-slides。这是面向客户的 SaaS 方案，覆盖数据整合、AI 分析、自动化执行、效果度量四个模块，不需要竞品对标。",
+    "templateId": "ppt169_sugar_rush_memphis"
+  },
+  "jobId": "e27ac58d-e923-4313-8657-24ff3bce9690",
+  "status": "queued",
+  "httpStatus": 202
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "index": 2,
+    "style": "技术蓝图 / Technical Blueprint",
+    "templateId": "ppt169_lora_hu_2021",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  },
+  {
+    "index": 3,
+    "style": "粗野主义 AI 报纸 / Brutalist Newspaper",
+    "templateId": "ppt169_brutalist_ai_newspaper_2026",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  },
+  {
+    "index": 4,
+    "style": "建筑社论 / Architecture Editorial",
+    "templateId": "ppt169_pritzker_2026",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  },
+  {
+    "index": 5,
+    "style": "财经数据社论 / Bloomberg Editorial",
+    "templateId": "ppt169_global_ai_capital_2026",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  },
+  {
+    "index": 6,
+    "style": "瑞士网格 / Swiss Typographic",
+    "templateId": "ppt169_swiss_grid_systems",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  },
+  {
+    "index": 7,
+    "style": "玻璃拟态 SaaS / Glassmorphism",
+    "templateId": "ppt169_glassmorphism_demo",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  },
+  {
+    "index": 8,
+    "style": "孟菲斯波普 / Sugar Rush Memphis",
+    "templateId": "ppt169_sugar_rush_memphis",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  },
+  {
+    "index": 9,
+    "style": "Risograph Zine / 独立书店",
+    "templateId": "ppt169_indie_bookstore_zine_guide",
+    "status": "submit_failed",
+    "message": "value too long for type character varying(64)"
+  }
+]

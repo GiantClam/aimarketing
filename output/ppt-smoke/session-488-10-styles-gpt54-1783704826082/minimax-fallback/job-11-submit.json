@@ -1,0 +1,21 @@
+{
+  "body": {
+    "requestId": "mretry-11-9f17453c-618a-4e0f-97e4-28b759ae6bcb",
+    "prompt": "请生成一份 8 页中文可编辑 PPT，主题是企业 AI 营销工作台，面向企业管理层，必须走 ppt-master 全流程，不得使用 auto-4 或 frontend-slides。这是面向客户的 SaaS 方案，覆盖数据整合、AI 分析、自动化执行、效果度量四个模块，不需要竞品对标。",
+    "scenario": "product-launch",
+    "language": "zh-CN",
+    "model": "MiniMax-M2.7-highspeed",
+    "preferredProviderId": "minimax",
+    "runtimeSlideModel": "MiniMax-M2.7-highspeed",
+    "runtimeSlideProvider": "minimax",
+    "templateMode": "single-template",
+    "templateId": "ppt169_kubernetes_blueprint_2026",
+    "narrativeAngle": "executive-brief",
+    "pageCount": 8,
+    "allowMockFallback": false,
+    "runtimeProfile": "railway-linux"
+  },
+  "httpStatus": 202,
+  "jobId": "4855c53e-e3e8-4d11-8e19-61bf0dc21df2",
+  "status": "queued"
+}

@@ -2,6 +2,8 @@ import type {
   AiEntryProviderConfig,
   AiEntryProviderId,
 } from "@/lib/ai-entry/provider-routing"
+import { getConfiguredAiEntryProviders } from "@/lib/ai-entry/provider-routing"
+import { mergeEnterpriseTextProviderConfigs } from "@/lib/platform/enterprise-runtime-provider-config"
 import type {
   OpenAiCompatibleImageProviderConfig,
   OpenAiCompatibleImageProviderId,
@@ -544,10 +546,16 @@ export async function getEnterpriseTextRuntimeProviderConfigsForUser(
       ]
     : configuredProviders
 
+  const enterpriseProviderConfigs = ordered.map((entry) => entry.runtimeConfig)
+  const providerConfigs = mergeEnterpriseTextProviderConfigs({
+    enterpriseProviderConfigs,
+    platformProviderConfigs: getConfiguredAiEntryProviders(),
+  })
+
   return {
-    selectedProviderId: ordered[0]?.runtimeConfig.id || null,
-    selectedModelId: ordered[0]?.runtimeConfig.model || null,
-    providerConfigs: ordered.map((entry) => entry.runtimeConfig),
+    selectedProviderId: enterpriseProviderConfigs[0]?.id || null,
+    selectedModelId: enterpriseProviderConfigs[0]?.model || null,
+    providerConfigs,
   }
 }
 

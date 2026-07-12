@@ -1,0 +1,7 @@
+{
+  "jobId": "fba3330d-5348-4622-9557-c85128d57940",
+  "status": "failed",
+  "message": "ppt_master_runtime_provider_timeout:pptoken:gpt-5.4",
+  "updatedAt": "2026-07-11T08:30:45.038Z",
+  "attemptCount": 1
+}
