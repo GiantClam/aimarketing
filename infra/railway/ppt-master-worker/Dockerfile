@@ -25,6 +25,13 @@ COPY infra/railway/ppt-master-worker ./infra/railway/ppt-master-worker
 
 RUN git clone --depth 1 https://github.com/hugohe3/ppt-master.git /opt/ppt-master
 
+# The production API sends this official example template. Fail the image build
+# if the upstream checkout is incomplete, instead of starting a worker that can
+# only discover the missing contract after a user request.
+RUN test -f /opt/ppt-master/skills/ppt-master/SKILL.md \
+  && test -f /opt/ppt-master/examples/ppt169_building_effective_agents/design_spec.md \
+  && test -f /opt/ppt-master/examples/ppt169_building_effective_agents/spec_lock.md
+
 RUN python3 -m venv /opt/ppt-master-venv \
   && for attempt in 1 2 3; do \
     /opt/ppt-master-venv/bin/pip install --no-cache-dir --retries 10 --timeout 120 -r /opt/ppt-master/requirements.txt && exit 0; \
