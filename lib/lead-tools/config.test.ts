@@ -177,11 +177,15 @@ test("vercel production defaults to the canonical Railway PPT worker", () => {
   const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
   const previousVercel = process.env.VERCEL
   const previousVercelEnv = process.env.VERCEL_ENV
+  const previousTransport = process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
+  const previousPreviewRuntime = process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME
 
   try {
     delete process.env.PPT_WORKER_BASE_URL
     process.env.VERCEL = "1"
     delete process.env.VERCEL_ENV
+    process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
+    process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "frontend-slides-agent"
 
     assert.equal(getPptWorkerBaseUrl(), "https://ppt-master-worker-production.up.railway.app")
     assert.equal(getPptWorkerRuntimeProfile(), "railway-linux")
@@ -204,6 +208,18 @@ test("vercel production defaults to the canonical Railway PPT worker", () => {
       delete process.env.VERCEL_ENV
     } else {
       process.env.VERCEL_ENV = previousVercelEnv
+    }
+
+    if (previousTransport === undefined) {
+      delete process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
+    } else {
+      process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = previousTransport
+    }
+
+    if (previousPreviewRuntime === undefined) {
+      delete process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME
+    } else {
+      process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = previousPreviewRuntime
     }
   }
 })
