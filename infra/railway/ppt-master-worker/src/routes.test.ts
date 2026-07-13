@@ -14,7 +14,11 @@ test("worker health route returns ok", async () => {
   assert.equal(response.status, 200)
 
   const payload = await response.json()
-  assert.deepEqual(payload, { ok: true, service: "ppt-master-worker" })
+  assert.equal(payload.ok, true)
+  assert.equal(payload.service, "ppt-master-worker")
+  assert.equal(payload.readiness.repoConfigured, false)
+  assert.equal(payload.readiness.repoReady, false)
+  assert.equal(payload.readiness.productionTemplateReady, false)
 })
 
 test("worker fonts route returns injected font status", async () => {

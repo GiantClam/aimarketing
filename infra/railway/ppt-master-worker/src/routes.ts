@@ -1,3 +1,6 @@
+import { access } from "node:fs/promises"
+import path from "node:path"
+
 import { ZodError } from "zod"
 
 import { checkFonts } from "./fonts.js"
@@ -18,6 +21,30 @@ function json(data: unknown, status = 200) {
   })
 }
 
+async function isReadableFile(filePath: string) {
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function getRuntimeReadiness() {
+  const repoDir = process.env.PPT_MASTER_REPO_DIR?.trim() || ""
+
+  return {
+    repoConfigured: Boolean(repoDir),
+    repoReady: repoDir ? await isReadableFile(path.join(repoDir, "skills", "ppt-master", "SKILL.md")) : false,
+    productionTemplateReady: repoDir
+      ? await Promise.all([
+          isReadableFile(path.join(repoDir, "examples", "ppt169_building_effective_agents", "design_spec.md")),
+          isReadableFile(path.join(repoDir, "examples", "ppt169_building_effective_agents", "spec_lock.md")),
+        ]).then(([designSpec, specLock]) => designSpec && specLock)
+      : false,
+  }
+}
+
 function validateAuthorization(request: Request) {
   const token = process.env.PPT_WORKER_INTERNAL_TOKEN?.trim()
 
@@ -36,7 +63,7 @@ export async function routeRequest(request: Request) {
   const url = new URL(request.url)
 
   if (request.method === "GET" && url.pathname === "/health") {
-    return json({ ok: true, service: "ppt-master-worker" })
+    return json({ ok: true, service: "ppt-master-worker", readiness: await getRuntimeReadiness() })
   }
 
   if (request.method === "GET" && url.pathname === "/fonts/check") {
