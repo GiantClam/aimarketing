@@ -2,7 +2,12 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { PptWorkerPreviewRequest } from "./ppt-worker-types"
-import { requestPptWorkerExport, requestPptWorkerPreview, requestPptWorkerPreviewSubmit } from "./ppt-worker-client"
+import {
+  normalizePptWorkerPreviewModel,
+  requestPptWorkerExport,
+  requestPptWorkerPreview,
+  requestPptWorkerPreviewSubmit,
+} from "./ppt-worker-client"
 
 test("ppt worker transport types are importable", () => {
   const request: PptWorkerPreviewRequest = {
@@ -16,6 +21,38 @@ test("ppt worker transport types are importable", () => {
   }
 
   assert.equal(request.runtimeProfile, "railway-linux")
+})
+
+test("ppt worker normalizes unsupported OpenAI model aliases before transport", () => {
+  const previousPreviewModel = process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL
+  const previousDeepSeekModel = process.env.LEAD_TOOLS_DEEPSEEK_MODEL
+  const previousMiniMaxModel = process.env.LEAD_TOOLS_MINIMAX_MODEL
+
+  try {
+    delete process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL
+    delete process.env.LEAD_TOOLS_DEEPSEEK_MODEL
+    delete process.env.LEAD_TOOLS_MINIMAX_MODEL
+
+    assert.equal(normalizePptWorkerPreviewModel("openai/gpt-5.4-mini"), "deepseek-v4-pro")
+  } finally {
+    if (previousPreviewModel === undefined) {
+      delete process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL
+    } else {
+      process.env.LEAD_TOOLS_PPT_PREVIEW_MODEL = previousPreviewModel
+    }
+
+    if (previousDeepSeekModel === undefined) {
+      delete process.env.LEAD_TOOLS_DEEPSEEK_MODEL
+    } else {
+      process.env.LEAD_TOOLS_DEEPSEEK_MODEL = previousDeepSeekModel
+    }
+
+    if (previousMiniMaxModel === undefined) {
+      delete process.env.LEAD_TOOLS_MINIMAX_MODEL
+    } else {
+      process.env.LEAD_TOOLS_MINIMAX_MODEL = previousMiniMaxModel
+    }
+  }
 })
 
 test("ppt worker preview posts runtime profile, fallback mode, and auth token", async () => {

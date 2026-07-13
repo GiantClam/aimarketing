@@ -13,6 +13,7 @@ const DEFAULT_PPT_WORKER_PREVIEW_MAX_ATTEMPTS = 2
 const DEFAULT_PPT_WORKER_PREVIEW_RETRY_DELAY_MS = 3000
 const DEFAULT_PPT_MASTER_SLIDE_TIMEOUT_MS = 12 * 60 * 1000
 const MIN_PPT_MASTER_PPTOKEN_GPT54_SLIDE_TIMEOUT_MS = 6 * 60 * 1000
+const DEFAULT_PRODUCTION_PPT_WORKER_BASE_URL = "https://ppt-master-worker-production.up.railway.app"
 
 function pickFirstNonEmpty(values: Array<string | undefined>, fallback: string) {
   for (const value of values) {
@@ -89,7 +90,17 @@ export function getLeadToolPptExecutionTransport() {
 }
 
 export function getPptWorkerBaseUrl() {
-  return process.env.PPT_WORKER_BASE_URL?.trim() || ""
+  const configuredBaseUrl = process.env.PPT_WORKER_BASE_URL?.trim()
+  if (configuredBaseUrl) return configuredBaseUrl
+
+  // Vercel production must use the Railway worker. Without this default,
+  // missing env configuration silently sends editable PPT requests into the
+  // local runtime, which cannot access the ppt-master repository.
+  if (process.env.VERCEL_ENV === "production") {
+    return DEFAULT_PRODUCTION_PPT_WORKER_BASE_URL
+  }
+
+  return ""
 }
 
 export function getPptWorkerInternalToken() {

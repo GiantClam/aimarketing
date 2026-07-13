@@ -67,6 +67,38 @@ test("worker preview schema accepts pptoken GPT-5.4 as a remote worker model", (
   assert.equal(parsed.model, "gpt-5.4")
 })
 
+test("worker preview schema accepts DeepSeek v4 flash", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_deepseek_v4_flash",
+    prompt: "Build a tech company introduction deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    model: "deepseek-v4-flash",
+    templateMode: "single-template",
+    templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.model, "deepseek-v4-flash")
+})
+
+test("worker preview schema normalizes the legacy OpenAI mini model alias", () => {
+  const parsed = previewRequestSchema.parse({
+    requestId: "req_openai_gpt_5_4_mini",
+    prompt: "Build a tech company introduction deck",
+    scenario: "sales-deck",
+    language: "zh-CN",
+    model: "openai/gpt-5.4-mini",
+    templateMode: "single-template",
+    templateId: "ppt169_general_dark_tech_claude_code_auto_mode",
+    allowMockFallback: false,
+    runtimeProfile: "railway-linux",
+  })
+
+  assert.equal(parsed.model, "deepseek-v4-pro")
+})
+
 test("worker preview schema accepts explicit runtime slide overrides", () => {
   const parsed = previewRequestSchema.parse({
     requestId: "req_runtime_slide_override",

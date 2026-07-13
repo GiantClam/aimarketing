@@ -22,6 +22,7 @@ const PPT_WORKER_SUPPORTED_MODELS: PptWorkerModelValue[] = [
   "MiniMax-M2.7-highspeed",
   "MiniMax-M3",
   "deepseek-v4-pro",
+  "deepseek-v4-flash",
   "gpt-5.4",
   "gpt-5.6-sol",
   "gpt-5.6-terra",

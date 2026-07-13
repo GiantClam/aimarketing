@@ -6,6 +6,17 @@ const pptWorkerCapabilities = (
   "default" in pptWorkerCapabilitiesModule ? pptWorkerCapabilitiesModule.default : pptWorkerCapabilitiesModule
 ) as typeof pptWorkerCapabilitiesModule
 
+function normalizeWorkerModelAlias(value: unknown) {
+  if (typeof value !== "string") return value
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "openai/gpt-5.4-mini" || normalized === "gpt-5.4-mini") {
+    return "deepseek-v4-pro"
+  }
+
+  return value.trim()
+}
+
 export const previewRequestSchema = z.object({
   requestId: z.string().min(1),
   prompt: z.string().min(1),
@@ -25,18 +36,20 @@ export const previewRequestSchema = z.object({
     .optional(),
   scenario: z.enum(["marketing-campaign", "product-launch", "sales-deck", "training"]),
   language: z.enum(["zh-CN", "en-US"]),
-  model: z
-    .enum([
+  model: z.preprocess(
+    normalizeWorkerModelAlias,
+    z.enum([
       "MiniMax-M2.7-highspeed",
       "MiniMax-M3",
       "deepseek-v4-pro",
+      "deepseek-v4-flash",
       "gpt-5.4",
       "gpt-5.6-sol",
       "gpt-5.6-terra",
       "gpt-5.6-luna",
       "step-3.7-flash",
-    ])
-    .optional(),
+    ]),
+  ).optional(),
   runtimeSlideModel: z.string().trim().min(1).optional(),
   runtimeSlideProvider: z.string().trim().min(1).optional(),
   preferredProviderId: z.string().trim().min(1).optional(),
