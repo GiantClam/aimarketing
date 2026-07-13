@@ -174,7 +174,9 @@ test("ppt worker config reads base url token and runtime profile", () => {
 })
 
 test("vercel production defaults to the canonical Railway PPT worker", () => {
+  const mutableEnv = process.env as Record<string, string | undefined>
   const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousNodeEnv = process.env.NODE_ENV
   const previousVercel = process.env.VERCEL
   const previousVercelEnv = process.env.VERCEL_ENV
   const previousTransport = process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT
@@ -182,7 +184,8 @@ test("vercel production defaults to the canonical Railway PPT worker", () => {
 
   try {
     delete process.env.PPT_WORKER_BASE_URL
-    process.env.VERCEL = "1"
+    mutableEnv.NODE_ENV = "production"
+    delete process.env.VERCEL
     delete process.env.VERCEL_ENV
     process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "local"
     process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "frontend-slides-agent"
@@ -196,6 +199,12 @@ test("vercel production defaults to the canonical Railway PPT worker", () => {
       delete process.env.PPT_WORKER_BASE_URL
     } else {
       process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+
+    if (previousNodeEnv === undefined) {
+      delete mutableEnv.NODE_ENV
+    } else {
+      mutableEnv.NODE_ENV = previousNodeEnv
     }
 
     if (previousVercel === undefined) {

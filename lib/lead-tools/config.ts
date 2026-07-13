@@ -24,8 +24,12 @@ function pickFirstNonEmpty(values: Array<string | undefined>, fallback: string) 
   return fallback
 }
 
-function isVercelRuntime() {
-  return process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production"
+function isProductionPptRuntime() {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL === "1" ||
+    process.env.VERCEL_ENV === "production"
+  )
 }
 
 export function getLeadToolPreviewModel(slug: string) {
@@ -67,7 +71,7 @@ export function getLeadToolFinalModel(slug: string) {
 export function getLeadToolPptPreviewRuntime(slug: string) {
   if (slug === "ai-ppt-preview") {
     const explicitRuntime = process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME?.trim() || process.env.LEAD_TOOLS_PREVIEW_RUNTIME?.trim()
-    if (isVercelRuntime()) return "ppt-master-agent"
+    if (isProductionPptRuntime()) return "ppt-master-agent"
     if (explicitRuntime) return explicitRuntime
     if (getPptWorkerBaseUrl()) return "ppt-master-agent"
     return DEFAULT_PPT_PREVIEW_RUNTIME
@@ -88,7 +92,7 @@ export function getLeadToolPptExportRuntime(slug: string) {
 }
 
 export function getLeadToolPptExecutionTransport() {
-  if (isVercelRuntime()) return "remote-worker"
+  if (isProductionPptRuntime()) return "remote-worker"
 
   const explicitTransport = process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT?.trim()
   if (explicitTransport) return explicitTransport
@@ -103,7 +107,7 @@ export function getPptWorkerBaseUrl() {
   // Vercel production must use the Railway worker. Without this default,
   // missing env configuration silently sends editable PPT requests into the
   // local runtime, which cannot access the ppt-master repository.
-  if (isVercelRuntime()) {
+  if (isProductionPptRuntime()) {
     return DEFAULT_PRODUCTION_PPT_WORKER_BASE_URL
   }
 
