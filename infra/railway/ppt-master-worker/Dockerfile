@@ -25,6 +25,13 @@ COPY infra/railway/ppt-master-worker ./infra/railway/ppt-master-worker
 
 RUN git clone --depth 1 https://github.com/hugohe3/ppt-master.git /opt/ppt-master
 
+# The upstream example predates the release checker requirement for an
+# explicit structure mode. This example is a template/layout deck, so record
+# the intended contract in the cloned lock file before running the worker.
+RUN if ! grep -q '^## pptx_structure$' /opt/ppt-master/examples/ppt169_building_effective_agents/spec_lock.md; then \
+    printf '\n## pptx_structure\n- mode: structured\n' >> /opt/ppt-master/examples/ppt169_building_effective_agents/spec_lock.md; \
+  fi
+
 # The production API sends this official example template. Fail the image build
 # if the upstream checkout is incomplete, instead of starting a worker that can
 # only discover the missing contract after a user request.
