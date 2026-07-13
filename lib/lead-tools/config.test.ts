@@ -175,11 +175,13 @@ test("ppt worker config reads base url token and runtime profile", () => {
 
 test("vercel production defaults to the canonical Railway PPT worker", () => {
   const previousBaseUrl = process.env.PPT_WORKER_BASE_URL
+  const previousVercel = process.env.VERCEL
   const previousVercelEnv = process.env.VERCEL_ENV
 
   try {
     delete process.env.PPT_WORKER_BASE_URL
-    process.env.VERCEL_ENV = "production"
+    process.env.VERCEL = "1"
+    delete process.env.VERCEL_ENV
 
     assert.equal(getPptWorkerBaseUrl(), "https://ppt-master-worker-production.up.railway.app")
     assert.equal(getPptWorkerRuntimeProfile(), "railway-linux")
@@ -190,6 +192,12 @@ test("vercel production defaults to the canonical Railway PPT worker", () => {
       delete process.env.PPT_WORKER_BASE_URL
     } else {
       process.env.PPT_WORKER_BASE_URL = previousBaseUrl
+    }
+
+    if (previousVercel === undefined) {
+      delete process.env.VERCEL
+    } else {
+      process.env.VERCEL = previousVercel
     }
 
     if (previousVercelEnv === undefined) {

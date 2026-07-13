@@ -96,7 +96,7 @@ export function getPptWorkerBaseUrl() {
   // Vercel production must use the Railway worker. Without this default,
   // missing env configuration silently sends editable PPT requests into the
   // local runtime, which cannot access the ppt-master repository.
-  if (process.env.VERCEL_ENV === "production") {
+  if (process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production") {
     return DEFAULT_PRODUCTION_PPT_WORKER_BASE_URL
   }
 
