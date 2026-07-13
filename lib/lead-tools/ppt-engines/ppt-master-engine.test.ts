@@ -266,6 +266,53 @@ test("ppt-master engine uses remote worker for DeepSeek v4 pro when configured",
   assert.equal(result.meta.previewRuntime, "ppt-master-agent")
 })
 
+test("ppt-master engine routes unsupported preview model aliases to the remote worker", async () => {
+  process.env.LEAD_TOOLS_PPT_EXECUTION_TRANSPORT = "remote-worker"
+  process.env.LEAD_TOOLS_PPT_PREVIEW_RUNTIME = "ppt-master-agent"
+  let remoteCalled = false
+  let seenModel: string | null = null
+
+  const remoteDeck = {
+    ...htmlDeck,
+    previewEngine: "ppt-master-project" as const,
+    previewSessionId: "session-remote-model-alias",
+  }
+
+  setPptWorkerTransportForTests({
+    preview: async (request) => {
+      remoteCalled = true
+      seenModel = request.model ?? null
+      return {
+        previewSessionId: "session-remote-model-alias",
+        generatedAt: "2026-06-25T00:00:00.000Z",
+        deck: remoteDeck,
+      }
+    },
+  })
+
+  const engines = getPptMasterEngines()
+  const result = await engines.preview.buildPreview(
+    {
+      prompt: "Build a deck with a legacy model alias",
+      scenario: "sales-deck",
+      language: "zh-CN",
+      model: "openai/gpt-5.4-mini",
+    } as any,
+    {
+      allowMockFallback: false,
+      resolvedModels: {
+        previewModel: "openai/gpt-5.4-mini",
+        finalModel: "openai/gpt-5.4-mini",
+      },
+    },
+  )
+
+  assert.equal(remoteCalled, true)
+  assert.equal(seenModel, "openai/gpt-5.4-mini")
+  assert.equal(result.previewSessionId, "session-remote-model-alias")
+  assert.equal(result.meta.previewRuntime, "ppt-master-agent")
+})
+
 test("ppt-master engine auto-selects remote worker preview when worker base url is configured", async () => {
   process.env.PPT_WORKER_BASE_URL = "https://ppt-worker.example.com/"
   let remoteCalled = false
