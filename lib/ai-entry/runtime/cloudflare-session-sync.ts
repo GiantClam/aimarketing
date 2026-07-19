@@ -60,9 +60,9 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     for (const artifact of artifacts) {
       if (typeof artifact.contentBase64 !== "string" || typeof artifact.path !== "string" || seen.has(artifact.path)) continue
       const validated = validateRuntimeArtifactPayload(artifact as RuntimeArtifactPayload, {
-        maxArtifacts: 8,
+        maxArtifacts: 24,
         maxArtifactBytes: 4 * 1024 * 1024,
-        maxArtifactTotalBytes: 8 * 1024 * 1024,
+        maxArtifactTotalBytes: 16 * 1024 * 1024,
         allowedExtensions: [".md", ".markdown", ".txt", ".json", ".csv", ".html", ".pdf", ".docx", ".xlsx", ".pptx", ".svg", ".png", ".jpg", ".jpeg", ".webp"],
       })
       const saved = await savePlatformArtifact({
