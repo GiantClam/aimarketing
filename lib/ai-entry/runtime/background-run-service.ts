@@ -1,0 +1,55 @@
+import type { AuthUser } from "@/lib/auth/session"
+import type { AgentRuntimeInput, AgentRuntimeInputV2, OpenCodeProviderConfig } from "@/lib/ai-runtime/contracts"
+import { buildAgentRuntimeSessionKey } from "@/lib/ai-runtime/session-key"
+import { createPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
+import { createOpenCodeRuntimeRun, updateOpenCodeRuntimeRun } from "@/lib/platform/opencode-runtime-store"
+import { enqueueRailwaySessionRun } from "./railway-session-client"
+import type { BillingReservation } from "@/lib/billing/runtime"
+
+export async function createBackgroundOpenCodeRun(input: {
+  currentUser: AuthUser
+  runtimeInput: AgentRuntimeInput
+  functionId?: string | null
+  selectedSkillIds?: string[]
+  selectedMcpServerIds?: string[]
+  traceId: string
+  billingReservation: BillingReservation | null
+  provider: OpenCodeProviderConfig
+}) {
+  if (!input.currentUser.enterpriseId) throw new Error("opencode_runtime_enterprise_required")
+  const sessionKey = await buildAgentRuntimeSessionKey({ enterpriseId: input.currentUser.enterpriseId, userId: input.currentUser.id, conversationId: input.runtimeInput.conversationId, agentId: input.runtimeInput.agentId })
+  const v2Input: AgentRuntimeInputV2 = {
+    ...input.runtimeInput,
+    protocolVersion: 2,
+    sessionKey,
+    functionId: input.functionId || null,
+    selectedSkillIds: [...new Set(input.selectedSkillIds || [])],
+    selectedMcpServerIds: [...new Set(input.selectedMcpServerIds || [])],
+    attachmentObjects: [],
+    checkpoint: null,
+  }
+  const runtimeProvider = process.env.OPENCODE_PROVIDER_PROXY_URL?.trim() && process.env.RUNTIME_PROXY_TOKEN?.trim()
+    ? { ...input.provider, apiKey: `proxy:${input.provider.providerId}` }
+    : input.provider
+  const request = { runId: input.runtimeInput.runId, sessionKey, input: v2Input, provider: runtimeProvider }
+  const taskRun = await createPlatformTaskRun({
+    enterpriseId: input.currentUser.enterpriseId,
+    userId: input.currentUser.id,
+    kind: "agent",
+    itemType: "ai_entry_opencode",
+    itemSlug: input.runtimeInput.conversationId || input.runtimeInput.runId,
+    status: "queued",
+    externalSystem: "opencode-v2",
+    externalRunId: input.runtimeInput.runId,
+    inputPayload: { conversationId: input.runtimeInput.conversationId, agentId: input.runtimeInput.agentId, traceId: input.traceId, billingReservation: input.billingReservation },
+  })
+  await createOpenCodeRuntimeRun({ backend: "railway-opencode", taskRunId: taskRun.id, runtimeRunId: request.runId, sessionKey, conversationId: request.input.conversationId, agentId: request.input.agentId, functionId: request.input.functionId, deadlineAt: new Date(Date.now() + 3_600_000), billingPayload: input.billingReservation })
+  try {
+    await enqueueRailwaySessionRun(request)
+  } catch (error) {
+    await updateOpenCodeRuntimeRun(request.runId, { status: "failed", lastErrorCode: "dispatch_failed", lastErrorMessage: error instanceof Error ? error.message : String(error), finishedAt: new Date(), clearLease: true })
+    await updatePlatformTaskRun(taskRun.id, { status: "failed", normalizedResult: { error: "dispatch_failed" }, finishedAt: new Date() })
+    throw error
+  }
+  return { taskRunId: taskRun.id, runtimeRunId: request.runId, sessionKey, status: "queued" as const }
+}

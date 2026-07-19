@@ -1,7 +1,12 @@
 {
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "crons": [
     {
       "path": "/api/internal/assistant-task-runner",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/platform-task-sync",
       "schedule": "* * * * *"
     }
   ]
