@@ -543,6 +543,32 @@ test("provider order: non-openai models skip pptoken and use aiberm then crazyro
   )
 })
 
+test("provider order: grok-4.5 routes through pptoken", async () => {
+  await withProviderEnv(
+    {
+      AI_ENTRY_NORMAL_DEFAULT_MODEL: "grok-4.5",
+      AI_ENTRY_PPTOKEN_API_KEY: "test-key-p",
+      AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+      AI_ENTRY_PPTOKEN_MODEL: "grok-4.5",
+      AI_ENTRY_AIBERM_API_KEY: "test-key-a",
+      AI_ENTRY_AIBERM_BASE_URL: "https://aiberm.example/v1",
+      AI_ENTRY_AIBERM_MODEL: "grok-4.5",
+    },
+    async () => {
+      const attempts: string[] = []
+
+      const result = await executeAiEntryWithProviderFailover(async (params) => {
+        attempts.push(`${params.providerId}:${params.model}`)
+        return params.providerOrder
+      })
+
+      assert.equal(result.providerId, "pptoken")
+      assert.deepEqual(result.result, ["pptoken", "aiberm"])
+      assert.deepEqual(attempts, ["pptoken:grok-4.5"])
+    },
+  )
+})
+
 test("force model across providers: gpt-image-2 matches equivalent provider model ids", async () => {
   await withProviderEnv(
     {

@@ -137,6 +137,7 @@ const AI_ENTRY_PENDING_TASK_MAX_POLL_ERRORS = 5
 const AI_ENTRY_PENDING_TASK_MAX_AGE_MS = 70 * 60 * 1000
 const AI_ENTRY_PENDING_TASK_HISTORY_REFRESH_CADENCE = 4
 const AI_ENTRY_STREAM_RECOVERY_POLL_INTERVAL_MS = 3000
+const AI_ENTRY_AGENT_PREWARM_TIMEOUT_MS = 15_000
 
 type ChatAttachment = {
   id: string
@@ -2179,6 +2180,7 @@ export function AiEntryWorkspace({
     if (prewarmedRuntimeKeyRef.current === runtimeKey) return
     prewarmedRuntimeKeyRef.current = runtimeKey
     const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), AI_ENTRY_AGENT_PREWARM_TIMEOUT_MS)
     void fetch("/api/ai/shared-agent-prewarm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2194,6 +2196,9 @@ export function AiEntryWorkspace({
     })
       .then(async (response) => {
         if (!response.ok || controller.signal.aborted) {
+          if (!controller.signal.aborted) {
+            setSessionReadyError(isZh ? "会话预热失败，将直接尝试发送。" : "Session prewarm failed; sending will try the direct runtime.")
+          }
           if (prewarmedRuntimeKeyRef.current === runtimeKey) prewarmedRuntimeKeyRef.current = null
           return
         }
@@ -2214,7 +2219,13 @@ export function AiEntryWorkspace({
         setSessionReadyError(isZh ? "无法连接持久会话运行时。" : "Unable to connect to the persistent session runtime.")
         if (prewarmedRuntimeKeyRef.current === runtimeKey) prewarmedRuntimeKeyRef.current = null
       })
-    return () => controller.abort()
+      .finally(() => {
+        window.clearTimeout(timeoutId)
+      })
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
   }, [conversationId, isConsultingEntry, isZh, modelProviderId, modelsLoading, selectedAgentId, selectedModel, selectedModelId])
 
   useEffect(() => {
@@ -2903,7 +2914,7 @@ export function AiEntryWorkspace({
   const handleSend = useCallback(async () => {
     const prompt = input.trim()
     if ((!prompt && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments) return
-    if (selectedAgentId?.startsWith("business-") && !sessionReady) {
+    if (selectedAgentId?.startsWith("business-") && !sessionReady && !sessionReadyError) {
       setErrorMessage(sessionReadyError || (isZh ? "正在预热业务 Agent 会话，请稍候。" : "The business Agent session is warming up. Please wait."))
       return
     }
@@ -4324,7 +4335,7 @@ export function AiEntryWorkspace({
                 <div className="flex min-w-0 items-center gap-2">
                   {renderSelectors("h-9")}
                   <PromptInputAction tooltip={copy.send}>
-                    <Button type="button" size="sm" className="send-button shrink-0 px-5" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments || modelsLoading || (selectedAgentId?.startsWith("business-") === true && !sessionReady)}>
+                    <Button type="button" size="sm" className="send-button shrink-0 px-5" onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || isResponseLoading || isConversationLoading || isPreparingAttachments || modelsLoading || (selectedAgentId?.startsWith("business-") === true && !sessionReady && !sessionReadyError)}>
                       {isResponseLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                       {copy.send}
                     </Button>

@@ -234,8 +234,14 @@ function extractErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error.trim()) return error.trim()
   if (error && typeof error === "object") {
-    const candidate = (error as { message?: unknown }).message
+    const record = error as { message?: unknown; code?: unknown; name?: unknown; status?: unknown }
+    const candidate = record.message
     if (typeof candidate === "string" && candidate.trim()) return candidate.trim()
+    for (const key of ["code", "name", "status"] as const) {
+      const value = record[key]
+      if (typeof value === "string" && value.trim()) return value.trim()
+      if (typeof value === "number" && Number.isFinite(value)) return String(value)
+    }
   }
   return "ai_entry_stream_failed"
 }

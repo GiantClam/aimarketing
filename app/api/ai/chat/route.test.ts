@@ -852,6 +852,43 @@ test("presentation PPT queues Cloudflare OpenCode and never enters the legacy PP
   }
 })
 
+test("editable PPT always queues the Railway OpenCode task when its runtime is enabled", async () => {
+  const previous = { ...process.env }
+  Object.assign(process.env, {
+    AI_ENTRY_SAAS_OPENCODE_ENABLED: "true",
+    AI_ENTRY_PPT_RAILWAY_ENABLED: "true",
+    AI_ENTRY_OPENCODE_SESSION_ENABLED: "true",
+    RAILWAY_OPENCODE_RUNTIME_URL: "https://runner.example.com",
+    RAILWAY_OPENCODE_RUNTIME_TOKEN: "test-secret",
+    AI_ENTRY_PPTOKEN_API_KEY: "pptoken-app-key",
+    AI_ENTRY_PPTOKEN_BASE_URL: "https://pptoken.example/v1",
+  })
+  delete process.env.AI_ENTRY_OPENCODE_ASYNC_ENABLED
+  try {
+    const response = await POST({
+      json: async () => ({
+        messages: [{ role: "user", content: "生成一页中文可编辑 PPT 预览。" }],
+        stream: true,
+        agentConfig: { agentId: "executive-ppt" },
+      }),
+      nextUrl: { origin: "https://example.com" },
+    })
+    const text = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(text, /"event":"background_task_queued"/u)
+    assert.equal(backgroundRunCalls.length, 1)
+    assert.equal(
+      (backgroundRunCalls[0]?.runtimeInput as { agentId?: string } | undefined)?.agentId,
+      "executive-ppt",
+    )
+    assert.equal(lastOpenCodeOptions, null)
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
+})
+
 test("presentation PPT uses OpenRouter only when explicitly selected", async () => {
   const previous = { ...process.env }
   Object.assign(process.env, {
