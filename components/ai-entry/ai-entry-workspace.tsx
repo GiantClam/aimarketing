@@ -34,6 +34,7 @@ import {
   applySseEvent,
 } from "@/lib/ai-entry/message-parts/reducer"
 import type { ArtifactPart, MessagePart } from "@/lib/ai-entry/message-parts/types"
+import { buildConversationArtifactParts } from "@/lib/ai-entry/conversation-artifacts"
 import {
   isPendingAssistantTaskStoreStorageKey,
   listAiEntryPendingTasks,
@@ -278,6 +279,12 @@ type MessageApiResponse = {
   } | null
   task_runs?: Array<MessageApiPendingTask>
   conversation_state?: {
+    artifacts?: Array<{
+      artifactId?: number
+      title?: string
+      kind?: string
+      summary?: string
+    }>
     ppt?: {
       phase?: "idle" | "preview-ready" | "preview-invalidated" | "exported"
       latestPreview?: {
@@ -841,12 +848,17 @@ function mapPendingAiEntryTask(
   return normalizeMessageApiTaskRun(payload?.pending_task)
 }
 
-function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiTaskRun[]) {
-  if (taskRuns.length === 0) return messages
+function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiTaskRun[], conversationArtifacts: ArtifactPart[] = []) {
+  if (taskRuns.length === 0 && conversationArtifacts.length === 0) return messages
 
   const taskRunMap = new Map(taskRuns.map((taskRun) => [taskRun.task_id, taskRun] as const))
+  const latestSuccessfulTask = taskRuns
+    .filter((taskRun) => taskRun.task_type === "opencode_agent_run" && taskRun.status === "success")
+    .sort((left, right) => right.updated_at - left.updated_at)[0] || null
+  const artifactPartsForTask = (taskRun: MessageApiTaskRun) =>
+    latestSuccessfulTask?.task_id === taskRun.task_id ? conversationArtifacts : []
   const attachedTaskRunIds = new Set<string>()
-  const nextMessages = messages.map((message) => {
+  const mappedMessages = messages.map((message) => {
     if (message.role !== "assistant") return message
     const queuedTaskContext = extractQueuedPptBackgroundTaskContext(message.content)
     const taskRun =
@@ -867,6 +879,7 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
           id: `task-run:${taskRun.task_id}`,
           taskRun,
         } satisfies MessagePart,
+        ...artifactPartsForTask(taskRun),
       ],
     }
   })
@@ -884,12 +897,23 @@ function attachTaskRunsToMessages(messages: ChatMessage[], taskRuns: MessageApiT
           id: `task-run:${taskRun.task_id}`,
           taskRun,
         } satisfies MessagePart,
+        ...artifactPartsForTask(taskRun),
       ],
     }))
 
-  return normalizeConversationMessageOrder(
-    [...nextMessages, ...syntheticTaskRunMessages],
+  const nextMessages = normalizeConversationMessageOrder(
+    [...mappedMessages, ...syntheticTaskRunMessages],
   )
+  if (conversationArtifacts.length > 0 && !latestSuccessfulTask) {
+    nextMessages.push({
+      id: "conversation-artifacts",
+      role: "assistant",
+      content: "",
+      createdAt: Math.floor(Date.now() / 1000),
+      parts: conversationArtifacts,
+    })
+  }
+  return nextMessages
 }
 
 function saveAiEntryPendingTasks(taskRuns: MessageApiTaskRun[], fallback: {
@@ -1548,8 +1572,8 @@ export function AiEntryWorkspace({
       return messages
     }
 
-    return attachTaskRunsToMessages(messages, taskRuns)
-  }, [isConversationLoading, messages, taskRuns])
+    return attachTaskRunsToMessages(messages, taskRuns, buildConversationArtifactParts(conversationState?.artifacts))
+  }, [conversationState?.artifacts, isConversationLoading, messages, taskRuns])
   const fetchConversationMessages = useCallback(
     async (targetConversationId: string) => {
       const params = new URLSearchParams({ conversation_id: targetConversationId, limit: "200" })
