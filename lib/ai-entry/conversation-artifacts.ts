@@ -41,7 +41,9 @@ export function buildConversationArtifactParts(value: unknown): ArtifactPart[] {
       artifactId,
       title,
       fileName: artifactFileName({ artifactId, title, kind, summary }),
-      previewUrl: `/api/platform/artifacts/${artifactId}`,
+      // The artifact detail route returns JSON metadata. Use the content route
+      // for previews so HTML artifacts render instead of displaying metadata.
+      previewUrl: `/api/platform/artifacts/${artifactId}/download`,
       downloadUrl: `/api/platform/artifacts/${artifactId}/download?download=1`,
       workHref: null,
       status: "created",
