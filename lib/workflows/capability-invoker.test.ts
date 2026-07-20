@@ -1542,7 +1542,7 @@ test("agent-platform forwards the selected model config for builtin agents", asy
       config: {
         agentId: "executive-brand",
         selectedProviderId: "openrouter",
-        selectedModelId: "gpt-5.4",
+        selectedModelId: "openrouter::gpt-5.4",
       },
     },
     input: {

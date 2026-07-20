@@ -13,6 +13,7 @@ import { POST as videoWorkflowPost } from "@/app/api/video-agent/workflow/route"
 import { POST as writerChatStreamPost } from "@/app/api/writer/chat/stream/route"
 import { isAiEntryAgentId } from "@/lib/ai-entry/agent-catalog"
 import { resolveAiEntryAgentRuntimePolicy } from "@/lib/ai-entry/agent-runtime-policy"
+import { parseAiEntryModelSelection } from "@/lib/ai-entry/model-selection"
 import { applyInternalServiceAuthHeader, type AuthUser } from "@/lib/auth/session"
 import { extractChatAttachmentText } from "@/lib/chat-attachments/extract"
 import { ChatAttachmentError, type ExtractedChatAttachmentText } from "@/lib/chat-attachments/types"
@@ -239,6 +240,17 @@ function normalizeOptionalText(value: unknown) {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function resolveWorkflowModelConfig(config: WorkflowDefinitionNode["config"]) {
+  const selectedProviderId = normalizeOptionalText(config.selectedProviderId)
+  const rawModelId = normalizeOptionalText(config.selectedModelId)
+  const parsedSelection = parseAiEntryModelSelection(rawModelId)
+
+  return {
+    providerId: selectedProviderId || parsedSelection?.providerId || null,
+    modelId: parsedSelection?.modelId || rawModelId,
+  }
 }
 
 function normalizeWorkflowPptScenario(value: unknown) {
@@ -1277,8 +1289,9 @@ export function createWorkflowCapabilityInvoker(options: WorkflowCapabilityInvok
     return withTimeout(
       (async (): Promise<WorkflowNodeExecutionResult> => {
         if (params.capabilitySlug === "ai-chat" || params.capabilitySlug === "agent-platform") {
-          const selectedProviderId = normalizeOptionalText(params.node.config.selectedProviderId)
-          const selectedModelId = normalizeOptionalText(params.node.config.selectedModelId)
+          const selectedModelConfig = resolveWorkflowModelConfig(params.node.config)
+          const selectedProviderId = selectedModelConfig.providerId
+          const selectedModelId = selectedModelConfig.modelId
           const configuredSystemPrompt = normalizeOptionalText(params.node.config.systemPrompt)
           const workflowExecutionSystemPrompt = composeWorkflowExecutionSystemPrompt(configuredSystemPrompt)
           const workflowAgentWebSearchEnabled = params.node.config.webSearchEnabled === true

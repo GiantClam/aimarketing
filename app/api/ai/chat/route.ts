@@ -518,6 +518,7 @@ async function resolveModelConfig(
     forceConsultingModel?: boolean
     preferAgentDefaultModel?: boolean
     consultingModelMode?: AiEntryConsultingModelMode
+    allowUnavailableRequestedModelFallback?: boolean
   },
 ) {
   const requestedProviderId = input?.providerId || null
@@ -586,11 +587,24 @@ async function resolveModelConfig(
       }) || null
     )
   }
+  const catalogModelsForRequestedProvider = effectiveRequestedProviderId
+    ? catalog.models.filter((item) => {
+        const optionProviderId =
+          item.providerId || parseAiEntryModelSelection(item.id)?.providerId || null
+        return optionProviderId === effectiveRequestedProviderId
+      })
+    : catalog.models
   const agentDefaultModelId = options?.preferAgentDefaultModel
-    ? pickAgentDefaultModelId(catalog.models)
+    ? pickAgentDefaultModelId(catalogModelsForRequestedProvider)
     : null
+  const providerScopedFallbackModelId =
+    catalogModelsForRequestedProvider[0]?.id ||
+    catalogModelsForRequestedProvider[0]?.modelId ||
+    null
   const catalogFallbackModelId =
-    agentDefaultModelId || catalog.selectedModelId || catalog.models[0]?.id || null
+    agentDefaultModelId ||
+    providerScopedFallbackModelId ||
+    (effectiveRequestedProviderId ? null : catalog.selectedModelId || catalog.models[0]?.id || null)
   const requestedModelId = requestedSelection?.modelId || input?.modelId || null
   if (options?.forceConsultingModel) {
     const lockedModelId =
@@ -637,8 +651,15 @@ async function resolveModelConfig(
   )
   const requestedModelOption =
     findCatalogModelOption(normalizedRequestedModelId || input?.modelId || requestedModelId) || null
-  if (requestedModelId && !requestedModelOption) {
+  if (requestedModelId && !requestedModelOption && !options?.allowUnavailableRequestedModelFallback) {
     throw new Error("ai_entry_model_unavailable_for_provider")
+  }
+  if (requestedModelId && !requestedModelOption && options?.allowUnavailableRequestedModelFallback) {
+    console.warn("ai-entry.chat.workflow.model.unavailable.fallback", {
+      requestedModelId,
+      providerId: effectiveRequestedProviderId,
+      fallbackModelId: catalogFallbackModelId,
+    })
   }
   const fallbackModelOption = findCatalogModelOption(catalogFallbackModelId) || null
   const resolvedModelId =
@@ -842,6 +863,7 @@ export async function POST(request: NextRequest) {
       preferAgentDefaultModel:
         conversationScope === "consulting" || Boolean(agentConfig.agentId),
       consultingModelMode: agentConfig.consultingModelMode,
+      allowUnavailableRequestedModelFallback: body.executionContext === "workflow",
     })
     if (attachments.some((attachment) => attachment.mediaType.startsWith("image/"))) {
       const resolvedModelId = modelConfig?.providerModelId || modelConfig?.modelId || null
