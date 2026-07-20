@@ -411,6 +411,7 @@ export function WorkflowListPage({
   const [runStatusFilter, setRunStatusFilter] = useState("all")
   const [runDateFilter, setRunDateFilter] = useState("7d")
   const [nowMs, setNowMs] = useState<number | null>(null)
+  const [isHydrated, setIsHydrated] = useState(false)
 
   const copy =
     locale === "zh"
@@ -656,6 +657,7 @@ export function WorkflowListPage({
 
   useEffect(() => {
     setNowMs(Date.now())
+    setIsHydrated(true)
   }, [])
 
   const totalRunsPages = Math.max(1, Math.ceil(filteredRuns.length / RECENT_RUNS_PER_PAGE))
@@ -845,6 +847,10 @@ export function WorkflowListPage({
 
   const runsStart = filteredRuns.length === 0 ? 0 : (runsPage - 1) * RECENT_RUNS_PER_PAGE + 1
   const runsEnd = Math.min(filteredRuns.length, runsPage * RECENT_RUNS_PER_PAGE)
+
+  if (!isHydrated) {
+    return <main className="min-h-screen bg-[#f7f7f2]" aria-busy="true" />
+  }
 
   return (
     <div className="h-full overflow-auto bg-transparent">
