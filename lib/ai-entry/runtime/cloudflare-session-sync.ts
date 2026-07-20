@@ -5,7 +5,7 @@ import { getOpenCodeRuntimeRunByTaskRunId, getRailwayOpenCodeRuntimeState, updat
 import { appendPlatformRunEvent, getPlatformTaskRun, updatePlatformTaskRun } from "@/lib/platform/task-run-store"
 import { savePlatformArtifact } from "@/lib/platform/task-run-store"
 import { validateRuntimeArtifactPayload, validateRuntimeArtifactReference } from "./artifact-detector"
-import { runtimeArtifactExtensions } from "./artifact-policy"
+import { resolveRuntimeArtifactLimits, runtimeArtifactExtensions } from "./artifact-policy"
 import type { RuntimeArtifactPayload, RuntimeArtifactReference } from "@/lib/ai-runtime/contracts"
 
 type RuntimeEvent = { event?: string; delta?: string; message?: string; code?: string; artifact?: Record<string, unknown> }
@@ -49,6 +49,16 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     .join("")
   const previous = (platformRun.normalizedResult || {}) as Record<string, unknown>
   const taskInput = (platformRun.inputPayload || {}) as Record<string, unknown>
+  const taskArtifactContract = taskInput.artifactContract && typeof taskInput.artifactContract === "object"
+    ? taskInput.artifactContract as Record<string, unknown>
+    : {}
+  const artifactLimits = resolveRuntimeArtifactLimits({
+    agentId: taskInput.agentId,
+    selectedSkillIds: taskInput.selectedSkillIds,
+    maxArtifacts: Number.isInteger(taskArtifactContract.maxArtifacts) ? Number(taskArtifactContract.maxArtifacts) : 24,
+    maxArtifactBytes: Number.isInteger(taskArtifactContract.maxArtifactBytes) ? Number(taskArtifactContract.maxArtifactBytes) : 4 * 1024 * 1024,
+    maxArtifactTotalBytes: Number.isInteger(taskArtifactContract.maxArtifactTotalBytes) ? Number(taskArtifactContract.maxArtifactTotalBytes) : 16 * 1024 * 1024,
+  })
   const allowedArtifactExtensions = runtimeArtifactExtensions(taskInput.agentId, taskInput.selectedSkillIds)
   const conversationId = typeof taskInput.conversationId === "string" ? taskInput.conversationId : null
   const artifacts = events
@@ -62,9 +72,9 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     for (const artifact of artifacts) {
       if (typeof artifact.contentBase64 !== "string" || typeof artifact.path !== "string" || seen.has(artifact.path)) continue
       const validated = validateRuntimeArtifactPayload(artifact as RuntimeArtifactPayload, {
-        maxArtifacts: 24,
-        maxArtifactBytes: 4 * 1024 * 1024,
-        maxArtifactTotalBytes: 16 * 1024 * 1024,
+        maxArtifacts: artifactLimits.maxArtifacts,
+        maxArtifactBytes: artifactLimits.maxArtifactBytes,
+        maxArtifactTotalBytes: artifactLimits.maxArtifactTotalBytes,
         allowedExtensions: allowedArtifactExtensions,
       })
       const saved = await savePlatformArtifact({
@@ -95,9 +105,9 @@ export async function reconcileOpenCodeRuntimeTask(taskRunId: number, userId: nu
     for (const artifact of artifacts) {
       if (typeof artifact.contentBase64 === "string" || typeof artifact.key !== "string" || seen.has(artifact.key)) continue
       const validated = validateRuntimeArtifactReference(artifact as RuntimeArtifactReference, {
-        maxArtifacts: 24,
-        maxArtifactBytes: 4 * 1024 * 1024,
-        maxArtifactTotalBytes: 16 * 1024 * 1024,
+        maxArtifacts: artifactLimits.maxArtifacts,
+        maxArtifactBytes: artifactLimits.maxArtifactBytes,
+        maxArtifactTotalBytes: artifactLimits.maxArtifactTotalBytes,
         allowedExtensions: allowedArtifactExtensions,
       }, totalBytes)
       totalBytes += validated.sizeBytes

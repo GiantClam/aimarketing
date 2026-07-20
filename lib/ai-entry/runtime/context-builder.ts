@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import type { AgentRuntimeInput, RuntimeProjectSnapshot, SharedSkillSetSelection, WorkflowContext } from "@/lib/ai-runtime/contracts"
-import { runtimeArtifactExtensions } from "./artifact-policy"
+import { resolveRuntimeArtifactLimits, runtimeArtifactExtensions } from "./artifact-policy"
 import { isAiEntryOpenCodeArtifactContextEnabled } from "./profile-store"
 
 export const DEFAULT_MAX_CONTEXT_CHARS = 60_000
@@ -119,6 +119,14 @@ export function buildAgentRuntimeInput(input: {
     content: `${currentUserContent}${attachmentBlock}`.trim(),
   }
 
+  const artifactContract = resolveRuntimeArtifactLimits({
+    agentId: input.agentId,
+    selectedSkillIds: input.selectedSkillIds,
+    maxArtifacts: input.profileLimits?.maxArtifacts || 8,
+    maxArtifactBytes: input.profileLimits?.maxArtifactBytes || 2 * 1024 * 1024,
+    maxArtifactTotalBytes: input.profileLimits?.maxArtifactTotalBytes || 4 * 1024 * 1024,
+  })
+
   const baseInput = {
     runId: input.runId,
     ...(input.sessionKey ? { sessionKey: input.sessionKey } : {}),
@@ -141,9 +149,9 @@ export function buildAgentRuntimeInput(input: {
     artifactContract: {
       manifestPath: "artifact-manifest.json" as const,
       artifactDir: "artifacts" as const,
-      maxArtifacts: input.profileLimits?.maxArtifacts || 8,
-      maxArtifactBytes: input.profileLimits?.maxArtifactBytes || 2 * 1024 * 1024,
-      maxArtifactTotalBytes: input.profileLimits?.maxArtifactTotalBytes || 4 * 1024 * 1024,
+      maxArtifacts: artifactContract.maxArtifacts,
+      maxArtifactBytes: artifactContract.maxArtifactBytes,
+      maxArtifactTotalBytes: artifactContract.maxArtifactTotalBytes,
       allowedExtensions: runtimeArtifactExtensions(input.agentId, input.selectedSkillIds),
     },
     policy: {
